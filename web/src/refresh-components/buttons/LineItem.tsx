@@ -160,11 +160,21 @@ export default function LineItem({
   const emphasisKey = emphasized ? "emphasized" : "normal";
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (e.key === "Enter" || e.key === " ") {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      (e.currentTarget as HTMLDivElement).click();
+    } else if (e.key === " ") {
+      e.preventDefault();
+    }
+    props.onKeyDown?.(e);
+  };
+
+  const handleKeyUp = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === " ") {
       e.preventDefault();
       (e.currentTarget as HTMLDivElement).click();
     }
-    props.onKeyDown?.(e);
+    props.onKeyUp?.(e);
   };
 
   const content = (
@@ -180,6 +190,7 @@ export default function LineItem({
       data-selected={selected}
       {...props}
       onKeyDown={handleKeyDown}
+      onKeyUp={handleKeyUp}
     >
       {Icon && (
         <div
