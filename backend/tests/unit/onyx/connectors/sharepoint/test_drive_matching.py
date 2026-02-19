@@ -126,7 +126,7 @@ def test_fetch_driveitems_matches_international_drive_names(
         ("Documentos compartidos", "Documentos"),
     ],
 )
-def test_get_drive_items_for_drive_name_matches_map(
+def test_get_drive_items_for_drive_id_matches_map(
     requested_drive_name: str,
     graph_drive_name: str,
     monkeypatch: pytest.MonkeyPatch,
@@ -198,7 +198,7 @@ def test_load_from_checkpoint_maps_drive_name(monkeypatch: pytest.MonkeyPatch) -
 
     monkeypatch.setattr(
         SharepointConnector,
-        "_get_drive_items_for_drive_name",
+        "_get_drive_items_for_drive_id",
         fake_get_drive_items,
     )
     monkeypatch.setattr(
