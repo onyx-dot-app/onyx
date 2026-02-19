@@ -376,14 +376,14 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     setTabReadingEnabled(next);
     if (!next) {
       setCurrentTabUrl(null);
-    }
+    const targetOrigin = window.location.origin;
     window.parent.postMessage(
       {
         type: next
           ? CHROME_MESSAGE.TAB_READING_ENABLED
           : CHROME_MESSAGE.TAB_READING_DISABLED,
       },
-      "*"
+      targetOrigin
     );
   }, [tabReadingEnabled]);
 
