@@ -183,7 +183,7 @@ export default function LineItem({
       role="button"
       tabIndex={0}
       className={cn(
-        "flex flex-row w-full items-start p-2 rounded-08 group/LineItem gap-2 cursor-pointer",
+        "flex flex-row w-full items-start p-2 rounded-08 group/LineItem gap-2",
         !!(children && description) ? "items-start" : "items-center",
         buttonClassNames[variant][emphasisKey]
       )}
