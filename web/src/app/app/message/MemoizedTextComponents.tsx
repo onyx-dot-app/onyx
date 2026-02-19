@@ -2,7 +2,11 @@ import {
   QuestionCardProps,
   DocumentCardProps,
 } from "@/components/search/results/Citation";
-import { LoadedOnyxDocument, OnyxDocument } from "@/lib/search/interfaces";
+import {
+  LoadedOnyxDocument,
+  MinimalOnyxDocument,
+  OnyxDocument,
+} from "@/lib/search/interfaces";
 import React, { memo, JSX, useMemo, useCallback } from "react";
 import { SourceIcon } from "@/components/SourceIcon";
 import { WebResultIcon } from "@/components/WebResultIcon";
@@ -46,7 +50,7 @@ export const MemoizedAnchor = memo(
     docs?: OnyxDocument[] | null;
     userFiles?: ProjectFile[] | null;
     citations?: CitationMap;
-    updatePresentingDocument: (doc: OnyxDocument) => void;
+    updatePresentingDocument: (doc: MinimalOnyxDocument) => void;
     href?: string;
     children: React.ReactNode;
   }): JSX.Element => {
@@ -199,7 +203,7 @@ export const MemoizedLink = memo(
             updatePresentingDocument({
               document_id: fileId,
               semantic_identifier: filename,
-            } as OnyxDocument)
+            })
           }
           className="cursor-pointer text-link hover:text-link-hover"
         >
