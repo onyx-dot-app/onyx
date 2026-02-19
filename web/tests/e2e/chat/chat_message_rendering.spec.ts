@@ -1,5 +1,5 @@
 import { expect, Page, test } from "@playwright/test";
-import { loginAs } from "@tests/e2e/utils/auth";
+import { loginAsWorkerUser } from "@tests/e2e/utils/auth";
 import { sendMessage } from "@tests/e2e/utils/chatActions";
 import { THEMES, setThemeBeforeNavigation } from "@tests/e2e/utils/theme";
 import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
@@ -290,11 +290,11 @@ async function screenshotChatContainerTopAndBottom(
 
 for (const theme of THEMES) {
   test.describe(`Chat Message Rendering (${theme} mode)`, () => {
-    test.beforeEach(async ({ page }) => {
+    test.beforeEach(async ({ page }, testInfo) => {
       turnCounter = 0;
       await page.context().clearCookies();
       await setThemeBeforeNavigation(page, theme);
-      await loginAs(page, "user");
+      await loginAsWorkerUser(page, testInfo.workerIndex);
     });
 
     test.describe("Short Messages", () => {
@@ -465,6 +465,49 @@ for (const theme of THEMES) {
     });
 
     test.describe("Web Search with Citations", () => {
+      const TOOLBAR_BUTTONS = [
+        "AgentMessage/copy-button",
+        "AgentMessage/like-button",
+        "AgentMessage/dislike-button",
+      ] as const;
+
+      async function screenshotToolbarButtonHoverStates(
+        page: Page,
+        namePrefix: string
+      ): Promise<void> {
+        const aiMessage = page.getByTestId("onyx-ai-message").first();
+        const toolbar = aiMessage.getByTestId("AgentMessage/toolbar");
+        await expect(toolbar).toBeVisible({ timeout: 10000 });
+
+        for (const buttonTestId of TOOLBAR_BUTTONS) {
+          const button = aiMessage.getByTestId(buttonTestId);
+          await button.hover();
+          const buttonSlug = buttonTestId.split("/")[1];
+          await expectElementScreenshot(toolbar, {
+            name: `${namePrefix}-toolbar-${buttonSlug}-hover-${theme}`,
+          });
+        }
+
+        // Sources tag is located by role+name since SourceTag has no testid.
+        const sourcesButton = toolbar.getByRole("button", { name: "Sources" });
+        if (await sourcesButton.isVisible()) {
+          await sourcesButton.hover();
+          await expectElementScreenshot(toolbar, {
+            name: `${namePrefix}-toolbar-sources-hover-${theme}`,
+          });
+        }
+
+        // LLMPopover trigger is only rendered when the regenerate action is
+        // available (requires onRegenerate + parentMessage + llmManager props).
+        const llmTrigger = aiMessage.getByTestId("llm-popover-trigger");
+        if (await llmTrigger.isVisible()) {
+          await llmTrigger.hover();
+          await expectElementScreenshot(toolbar, {
+            name: `${namePrefix}-toolbar-llm-popover-hover-${theme}`,
+          });
+        }
+      }
+
       const WEB_SEARCH_DOCUMENTS: MockDocument[] = [
         {
           document_id: "web-doc-1",
@@ -542,6 +585,8 @@ Key advantages include:
           page,
           `chat-web-search-with-citations-${theme}`
         );
+
+        await screenshotToolbarButtonHoverStates(page, "chat-web-search");
       });
 
       test("internal document search response renders correctly", async ({
@@ -608,6 +653,8 @@ The platform architecture document provides additional context on how these impr
           page,
           `chat-internal-search-with-citations-${theme}`
         );
+
+        await screenshotToolbarButtonHoverStates(page, "chat-internal-search");
       });
     });
 

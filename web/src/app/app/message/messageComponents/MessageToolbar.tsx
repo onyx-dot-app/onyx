@@ -209,7 +209,10 @@ export default function MessageToolbar({
         <FeedbackModal {...feedbackModalProps!} />
       </modal.Provider>
 
-      <div className="flex md:flex-row justify-between items-center w-full transition-transform duration-300 ease-in-out transform opacity-100 pl-1">
+      <div
+        data-testid="AgentMessage/toolbar"
+        className="flex md:flex-row justify-between items-center w-full transition-transform duration-300 ease-in-out transform opacity-100 pl-1"
+      >
         <TooltipGroup>
           <div className="flex items-center">
             {includeMessageSwitcher && (

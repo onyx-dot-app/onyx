@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import {
   TEST_ADMIN_CREDENTIALS,
-  TEST_USER_CREDENTIALS,
+  workerUserCredentials,
 } from "@tests/e2e/constants";
 import { expectScreenshot } from "@tests/e2e/utils/visualRegression";
 
@@ -48,7 +48,7 @@ test.describe("Login flow", () => {
     await page.goto("/auth/login");
     await page.waitForLoadState("networkidle");
 
-    await page.getByTestId("email").fill(TEST_USER_CREDENTIALS.email);
+    await page.getByTestId("email").fill(workerUserCredentials(0).email);
     await page.getByTestId("password").fill("WrongPassword123!");
     await page.getByRole("button", { name: "Sign In" }).click();
 

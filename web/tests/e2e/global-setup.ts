@@ -2,7 +2,8 @@ import { FullConfig, request } from "@playwright/test";
 import {
   TEST_ADMIN_CREDENTIALS,
   TEST_ADMIN2_CREDENTIALS,
-  TEST_USER_CREDENTIALS,
+  WORKER_USER_POOL_SIZE,
+  workerUserCredentials,
 } from "@tests/e2e/constants";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 
@@ -158,7 +159,7 @@ async function globalSetup(config: FullConfig) {
 
   // ── Provision test users via API ─────────────────────────────────────
   // The first user registered becomes the admin automatically.
-  // Order matters: admin first, then user, then admin2.
+  // Order matters: admin first, then admin2, then worker users.
   await ensureUserExists(
     baseURL,
     TEST_ADMIN_CREDENTIALS.email,
@@ -166,14 +167,14 @@ async function globalSetup(config: FullConfig) {
   );
   await ensureUserExists(
     baseURL,
-    TEST_USER_CREDENTIALS.email,
-    TEST_USER_CREDENTIALS.password
-  );
-  await ensureUserExists(
-    baseURL,
     TEST_ADMIN2_CREDENTIALS.email,
     TEST_ADMIN2_CREDENTIALS.password
   );
+
+  for (let i = 0; i < WORKER_USER_POOL_SIZE; i++) {
+    const { email, password } = workerUserCredentials(i);
+    await ensureUserExists(baseURL, email, password);
+  }
 
   // ── Login via API and save storage state ───────────────────────────
   await apiLoginAndSaveState(
@@ -192,17 +193,33 @@ async function globalSetup(config: FullConfig) {
 
   await apiLoginAndSaveState(
     baseURL,
-    TEST_USER_CREDENTIALS.email,
-    TEST_USER_CREDENTIALS.password,
-    "user_auth.json"
-  );
-
-  await apiLoginAndSaveState(
-    baseURL,
     TEST_ADMIN2_CREDENTIALS.email,
     TEST_ADMIN2_CREDENTIALS.password,
     "admin2_auth.json"
   );
+
+  for (let i = 0; i < WORKER_USER_POOL_SIZE; i++) {
+    const { email, password } = workerUserCredentials(i);
+    const storageStatePath = `worker${i}_auth.json`;
+    await apiLoginAndSaveState(baseURL, email, password, storageStatePath);
+
+    const workerCtx = await request.newContext({
+      baseURL,
+      storageState: storageStatePath,
+    });
+    try {
+      const res = await workerCtx.patch("/api/user/personalization", {
+        data: { name: "worker" },
+      });
+      if (!res.ok()) {
+        console.warn(
+          `[global-setup] Failed to set display name for ${email}: ${res.status()}`
+        );
+      }
+    } finally {
+      await workerCtx.dispose();
+    }
+  }
 
   // ── Ensure a public LLM provider exists ───────────────────────────
   // Many tests depend on a default LLM being configured (file uploads,

@@ -481,7 +481,42 @@ def construct_message_history(
     if reminder_message:
         result.append(reminder_message)
 
-    return result
+    return _drop_orphaned_tool_call_responses(result)
+
+
+def _drop_orphaned_tool_call_responses(
+    messages: list[ChatMessageSimple],
+) -> list[ChatMessageSimple]:
+    """Drop tool response messages whose tool_call_id is not in prior assistant tool calls.
+
+    This can happen when history truncation drops an ASSISTANT tool-call message but
+    leaves a later TOOL_CALL_RESPONSE message in context. Some providers (e.g. Ollama)
+    reject such history with an "unexpected tool call id" error.
+    """
+    known_tool_call_ids: set[str] = set()
+    sanitized: list[ChatMessageSimple] = []
+
+    for msg in messages:
+        if msg.message_type == MessageType.ASSISTANT and msg.tool_calls:
+            for tool_call in msg.tool_calls:
+                known_tool_call_ids.add(tool_call.tool_call_id)
+            sanitized.append(msg)
+            continue
+
+        if msg.message_type == MessageType.TOOL_CALL_RESPONSE:
+            if msg.tool_call_id and msg.tool_call_id in known_tool_call_ids:
+                sanitized.append(msg)
+            else:
+                logger.debug(
+                    "Dropping orphaned tool response with tool_call_id=%s while "
+                    "constructing message history",
+                    msg.tool_call_id,
+                )
+            continue
+
+        sanitized.append(msg)
+
+    return sanitized
 
 
 def _create_file_tool_metadata_message(

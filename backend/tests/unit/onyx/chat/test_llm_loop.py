@@ -416,6 +416,70 @@ class TestConstructMessageHistory:
         assert result[2] == assistant_with_tool
         assert result[3] == tool_response
 
+    def test_truncation_drops_orphaned_tool_response(self) -> None:
+        """If truncation drops an assistant tool call, its orphaned tool response is removed."""
+        system_prompt = create_message("System", MessageType.SYSTEM, 10)
+        user_msg1 = create_message("First", MessageType.USER, 10)
+        assistant_with_tool = create_assistant_with_tool_call("tc_1", "tool", 25)
+        tool_response = create_tool_response("tc_1", "tool_response", 5)
+        assistant_msg1 = create_message("Used the tool above", MessageType.ASSISTANT, 5)
+        user_msg2 = create_message("Latest question", MessageType.USER, 10)
+
+        simple_chat_history = [
+            user_msg1,
+            assistant_with_tool,
+            tool_response,
+            assistant_msg1,
+            user_msg2,
+        ]
+        project_files = create_project_files()
+
+        # Remaining history budget is 10 tokens (30 total - 10 system - 10 last user):
+        # keeps [tool_response, assistant_msg1] from history_before_last_user,
+        # but drops assistant_with_tool, making tool_response orphaned.
+        result = construct_message_history(
+            system_prompt=system_prompt,
+            custom_agent_prompt=None,
+            simple_chat_history=simple_chat_history,
+            reminder_message=None,
+            project_files=project_files,
+            available_tokens=30,
+        )
+
+        # Orphaned tool response should be removed from final history.
+        assert len(result) == 3
+        assert result[0] == system_prompt
+        assert result[1] == assistant_msg1
+        assert result[2] == user_msg2
+
+    def test_preserves_non_orphaned_tool_response(self) -> None:
+        """Tool responses remain when their assistant tool call is present."""
+        system_prompt = create_message("System", MessageType.SYSTEM, 10)
+        user_msg1 = create_message("First", MessageType.USER, 10)
+        assistant_with_tool = create_assistant_with_tool_call("tc_1", "tool", 20)
+        tool_response = create_tool_response("tc_1", "tool_response", 5)
+        user_msg2 = create_message("Latest question", MessageType.USER, 10)
+
+        simple_chat_history = [user_msg1, assistant_with_tool, tool_response, user_msg2]
+        project_files = create_project_files()
+
+        # Remaining history budget is 25 tokens (45 total - 10 system - 10 last user):
+        # keeps both assistant_with_tool and tool_response in history_before_last_user.
+        result = construct_message_history(
+            system_prompt=system_prompt,
+            custom_agent_prompt=None,
+            simple_chat_history=simple_chat_history,
+            reminder_message=None,
+            project_files=project_files,
+            available_tokens=45,
+        )
+
+        assert len(result) == 4
+        assert result[0] == system_prompt
+        assert result[1] == assistant_with_tool
+        assert result[2] == tool_response
+        assert result[3] == user_msg2
+
     def test_empty_history(self) -> None:
         """Test handling of empty chat history."""
         system_prompt = create_message("System", MessageType.SYSTEM, 10)

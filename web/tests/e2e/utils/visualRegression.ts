@@ -105,6 +105,33 @@ interface ElementScreenshotOptions {
 }
 
 /**
+ * Wait for all running CSS animations and transitions on the page to finish
+ * before proceeding.  This prevents screenshot tests from being non-deterministic
+ * when animated elements (e.g. slide-in cards) are still mid-flight.
+ *
+ * The implementation:
+ *   1. Yields one animation frame so that any pending animations have a chance
+ *      to register with the Web Animations API.
+ *   2. Calls `Promise.allSettled` on every active animation's `.finished`
+ *      promise so we wait for completion (or cancellation) of all of them.
+ */
+export async function waitForAnimations(page: Page): Promise<void> {
+  await page.evaluate(async () => {
+    // Allow any freshly-scheduled animations to start
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => resolve())
+    );
+    // Wait for every currently-registered animation to finish (or be cancelled)
+    const animations = document
+      .getAnimations()
+      .filter(
+        (animation) => animation.effect?.getTiming().iterations !== Infinity
+      );
+    await Promise.allSettled(animations.map((animation) => animation.finished));
+  });
+}
+
+/**
  * Take a screenshot and optionally assert it matches the stored baseline.
  *
  * Behavior depends on the `VISUAL_REGRESSION` environment variable:
@@ -133,6 +160,11 @@ export async function expectScreenshot(
     maxDiffPixelRatio,
     threshold,
   } = options;
+
+  // Wait for any in-flight CSS animations / transitions to settle so that
+  // screenshots are deterministic (e.g. slide-in card animations on the
+  // onboarding flow).
+  await waitForAnimations(page);
 
   // Merge default hide selectors with per-call selectors
   const allHideSelectors = [...DEFAULT_HIDE_SELECTORS, ...hide];
@@ -216,6 +248,10 @@ export async function expectElementScreenshot(
   const { name, mask = [], hide = [], maxDiffPixelRatio, threshold } = options;
 
   const page = locator.page();
+
+  // Wait for any in-flight CSS animations / transitions to settle so that
+  // element screenshots are deterministic (same reasoning as expectScreenshot).
+  await waitForAnimations(page);
 
   // Merge default hide selectors with per-call selectors
   const allHideSelectors = [...DEFAULT_HIDE_SELECTORS, ...hide];
