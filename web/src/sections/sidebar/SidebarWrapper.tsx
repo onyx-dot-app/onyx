@@ -29,14 +29,8 @@ function LogoSection({ folded, onFoldClick }: LogoSectionProps) {
   return (
     <div
       className={cn(
-        // # Note
-        //
-        // The `px-3.5` was chosen carefully to make the logo sit in the center of the folded + unfolded sidebar view.
-        // If you want to modify it, you'll also have to modify the size of the sidebar (located at the bottom of this file, annotated with `@HERE`).
-        //
-        // - @raunakab
-        "flex flex-row items-center py-1 gap-1 h-[3.5rem] px-3.5",
-        folded ? "justify-start" : "justify-between"
+        "flex px-2 py-1 min-h-[3.25rem] gap-1",
+        folded ? "justify-center" : "justify-between"
       )}
     >
       {folded === undefined ? (
@@ -76,10 +70,6 @@ export default function SidebarWrapper({
       <div
         className={cn(
           "h-screen flex flex-col bg-background-tint-02 py-2 gap-4 group/SidebarWrapper transition-width duration-200 ease-in-out",
-
-          // @HERE (size of sidebar)
-          //
-          // - @raunakab
           folded ? "w-[3.25rem]" : "w-[15rem]"
         )}
       >
