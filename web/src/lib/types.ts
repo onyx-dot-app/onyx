@@ -300,6 +300,7 @@ export interface OAuthConfluenceFinalizeResponse {
 export interface CCPairBasicInfo {
   has_successful_run: boolean;
   source: ValidSources;
+  status: ConnectorCredentialPairStatus;
 }
 
 export type ConnectorSummary = {
