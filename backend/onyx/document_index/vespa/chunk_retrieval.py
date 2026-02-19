@@ -374,6 +374,8 @@ def get_all_chunks_paginated(
     total_slices = len(continuation_token_map)
     if total_slices < 1:
         raise ValueError("continuation_token_map must have at least one entry.")
+    # We want to guarantee that these invocations are ordered by slice_id,
+    # because we read in the same order below when parsing parallel_results.
     functions_with_args: list[tuple[Callable, tuple]] = [
         (
             _get_all_chunks_paginated_for_slice,
@@ -386,7 +388,7 @@ def get_all_chunks_paginated(
                 page_size,
             ),
         )
-        for slice_id, continuation_token in continuation_token_map.items()
+        for slice_id, continuation_token in sorted(continuation_token_map.items())
     ]
 
     parallel_results = run_functions_tuples_in_parallel(
