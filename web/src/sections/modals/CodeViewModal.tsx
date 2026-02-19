@@ -1,17 +1,17 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
-import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
-import "@/app/app/message/custom-code-styles.css";
-import Button from "@/refresh-components/buttons/Button";
-import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
+import Modal from "@/refresh-components/Modal";
 import Text from "@/refresh-components/texts/Text";
-import { SvgFileText } from "@opal/icons";
+import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
+import DownloadIconButton from "@/refresh-components/buttons/DownloadIconButton";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
-import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
 import { Section } from "@/layouts/general-layouts";
 import { getCodeLanguage } from "@/lib/languages";
+import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
+import { CodeBlock } from "@/app/app/message/CodeBlock";
+import { extractCodeText } from "@/app/app/message/codeUtils";
 
 export interface CodeViewProps {
   presentingDocument: MinimalOnyxDocument;
@@ -31,6 +31,28 @@ export default function CodeViewModal({
   const language =
     getCodeLanguage(presentingDocument.semantic_identifier || "") ||
     "plaintext";
+
+  const lineCount = useMemo(() => {
+    if (!fileContent) return 0;
+    return fileContent.split("\n").length;
+  }, [fileContent]);
+
+  const fileSize = useMemo(() => {
+    if (!fileContent) return "";
+    const bytes = new TextEncoder().encode(fileContent).length;
+    if (bytes < 1024) return `${bytes} B`;
+    const kb = bytes / 1024;
+    if (kb < 1024) return `${kb.toFixed(2)} KB`;
+    const mb = kb / 1024;
+    return `${mb.toFixed(2)} MB`;
+  }, [fileContent]);
+
+  const headerDescription = useMemo(() => {
+    if (!fileContent) return "";
+    return `${language} - ${lineCount} ${
+      lineCount === 1 ? "line" : "lines"
+    } · ${fileSize}`;
+  }, [fileContent, language, lineCount, fileSize]);
 
   const fetchFile = useCallback(
     async (signal?: AbortSignal) => {
@@ -121,13 +143,13 @@ export default function CodeViewModal({
     >
       <Modal.Content
         width="md"
-        height="fit"
+        height="lg"
         preventAccidentalClose={false}
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
         <Modal.Header
-          icon={SvgFileText}
           title={fileName || "Code"}
+          description={headerDescription}
           onClose={onClose}
         />
 
@@ -144,23 +166,54 @@ export default function CodeViewModal({
                 </Text>
               </Section>
             ) : (
-              <ScrollIndicatorDiv
-                className="flex-1 min-h-0 w-full"
-                variant="shadow"
-              >
-                <MinimalMarkdown
-                  content={`\`\`\`${language}\n${fileContent}\n\`\`\``}
-                  className="w-full h-full break-words"
-                />
-              </ScrollIndicatorDiv>
+              <MinimalMarkdown
+                content={`\`\`\`${language}\n${fileContent}\n\`\`\``}
+                className="w-full h-full break-words"
+                components={{
+                  code: ({
+                    node,
+                    className: codeClassName,
+                    children,
+                    ...props
+                  }: any) => {
+                    const codeText = extractCodeText(
+                      node,
+                      fileContent,
+                      children
+                    );
+                    return (
+                      <CodeBlock className="" codeText={codeText}>
+                        {children}
+                      </CodeBlock>
+                    );
+                  },
+                }}
+              />
             )}
           </Section>
         </Modal.Body>
-
         <Modal.Footer>
-          <BasicModalFooter
-            submit={<Button onClick={handleDownload}>Download File</Button>}
-          />
+          <Section
+            flexDirection="row"
+            justifyContent="between"
+            alignItems="center"
+          >
+            <Text text03 mainContentMuted>
+              {lineCount} {lineCount === 1 ? "line" : "lines"}
+            </Text>
+            <Section flexDirection="row" gap={0.5} width="fit">
+              <CopyIconButton
+                getCopyText={() => fileContent}
+                tooltip="Copy code"
+                size="sm"
+              />
+              <DownloadIconButton
+                onClick={handleDownload}
+                tooltip="Download"
+                size="sm"
+              />
+            </Section>
+          </Section>
         </Modal.Footer>
       </Modal.Content>
     </Modal>
