@@ -56,6 +56,7 @@ from onyx.document_index.vespa_constants import CONTENT_SUMMARY
 from onyx.document_index.vespa_constants import DOCUMENT_ID
 from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
 from onyx.document_index.vespa_constants import NUM_THREADS
+from onyx.document_index.vespa_constants import SEARCH_ENDPOINT
 from onyx.document_index.vespa_constants import VESPA_TIMEOUT
 from onyx.document_index.vespa_constants import YQL_BASE
 from onyx.indexing.models import DocMetadataAwareIndexChunk
@@ -702,3 +703,32 @@ class VespaDocumentIndex(DocumentIndex):
                     json={"fields": chunk},
                 )
                 response.raise_for_status()
+
+    def get_chunk_count(self) -> int:
+        """Returns the exact number of document chunks in Vespa for this tenant.
+
+        Uses the Vespa Search API with `limit 0` and `ranking.profile=unranked`
+        to get an exact count without fetching any document data.
+
+        Includes large chunks. There is no way to filter these out using the
+        Search API.
+        """
+        where_clause = (
+            f'tenant_id contains "{self._tenant_id}"' if self._multitenant else "true"
+        )
+        yql = (
+            f"select documentid from {self._index_name} "
+            f"where {where_clause} "
+            f"limit 0"
+        )
+        params: dict[str, str | int] = {
+            "yql": yql,
+            "ranking.profile": "unranked",
+            "timeout": VESPA_TIMEOUT,
+        }
+
+        with get_vespa_http_client() as http_client:
+            response = http_client.post(SEARCH_ENDPOINT, json=params)
+            response.raise_for_status()
+            response_data = response.json()
+        return response_data["root"]["fields"]["totalCount"]

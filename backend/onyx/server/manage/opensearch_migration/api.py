@@ -26,13 +26,17 @@ def get_opensearch_migration_status(
     _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> OpenSearchMigrationStatusResponse:
-    total_chunks_migrated, created_at, migration_completed_at = (
-        get_opensearch_migration_state(db_session)
-    )
+    (
+        total_chunks_migrated,
+        created_at,
+        migration_completed_at,
+        approx_chunk_count_in_vespa,
+    ) = get_opensearch_migration_state(db_session)
     return OpenSearchMigrationStatusResponse(
         total_chunks_migrated=total_chunks_migrated,
         created_at=created_at,
         migration_completed_at=migration_completed_at,
+        approx_chunk_count_in_vespa=approx_chunk_count_in_vespa,
     )
 
 

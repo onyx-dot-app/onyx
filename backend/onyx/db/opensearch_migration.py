@@ -277,6 +277,7 @@ def update_vespa_visit_progress_with_commit(
     continuation_token_map: dict[int, str | None],
     chunks_processed: int,
     chunks_errored: int,
+    approx_chunk_count_in_vespa: int | None,
 ) -> None:
     """Updates the Vespa migration progress and commits.
 
@@ -290,6 +291,8 @@ def update_vespa_visit_progress_with_commit(
             the running total).
         chunks_errored: Number of chunks errored in this batch (added to the
             running errored total).
+        approx_chunk_count_in_vespa: Approximate number of chunks in Vespa. If
+            None, the existing value is used.
     """
     record = db_session.query(OpenSearchTenantMigrationRecord).first()
     if record is None:
@@ -297,6 +300,11 @@ def update_vespa_visit_progress_with_commit(
     record.vespa_visit_continuation_token = json.dumps(continuation_token_map)
     record.total_chunks_migrated += chunks_processed
     record.total_chunks_errored += chunks_errored
+    record.approx_chunk_count_in_vespa = (
+        approx_chunk_count_in_vespa
+        if approx_chunk_count_in_vespa is not None
+        else record.approx_chunk_count_in_vespa
+    )
     db_session.commit()
 
 
@@ -364,25 +372,27 @@ def build_sanitized_to_original_doc_id_mapping(
 
 def get_opensearch_migration_state(
     db_session: Session,
-) -> tuple[int, datetime | None, datetime | None]:
+) -> tuple[int, datetime | None, datetime | None, int | None]:
     """Returns the state of the Vespa to OpenSearch migration.
 
     If the tenant migration record is not found, returns defaults of 0, None,
-    None.
+    None, None.
 
     Args:
         db_session: SQLAlchemy session.
 
     Returns:
-        Tuple of (total_chunks_migrated, created_at, migration_completed_at).
+        Tuple of (total_chunks_migrated, created_at, migration_completed_at,
+            approx_chunk_count_in_vespa).
     """
     record = db_session.query(OpenSearchTenantMigrationRecord).first()
     if record is None:
-        return 0, None, None
+        return 0, None, None, None
     return (
         record.total_chunks_migrated,
         record.created_at,
         record.migration_completed_at,
+        record.approx_chunk_count_in_vespa,
     )
 
 
