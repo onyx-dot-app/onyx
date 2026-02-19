@@ -15,7 +15,10 @@ from sqlalchemy.orm import Session
 from ee.onyx.server.scim.models import ScimGroupResource
 from ee.onyx.server.scim.models import ScimName
 from ee.onyx.server.scim.models import ScimUserResource
+from ee.onyx.server.scim.providers.base import ScimProvider
+from ee.onyx.server.scim.providers.okta import OktaProvider
 from onyx.db.models import ScimToken
+from onyx.db.models import ScimUserMapping
 from onyx.db.models import User
 from onyx.db.models import UserGroup
 from onyx.db.models import UserRole
@@ -36,6 +39,12 @@ def mock_token() -> MagicMock:
 
 
 @pytest.fixture
+def provider() -> ScimProvider:
+    """An OktaProvider instance for endpoint tests."""
+    return OktaProvider()
+
+
+@pytest.fixture
 def mock_dal() -> Generator[MagicMock, None, None]:
     """Patch ScimDAL construction in api module and yield the mock instance."""
     with patch("ee.onyx.server.scim.api.ScimDAL") as cls:
@@ -53,6 +62,9 @@ def mock_dal() -> Generator[MagicMock, None, None]:
         dal.get_group_mapping_by_external_id.return_value = None
         dal.get_group_members.return_value = []
         dal.list_groups.return_value = ([], 0)
+        # User-group relationship defaults
+        dal.get_user_groups.return_value = []
+        dal.get_users_groups_batch.return_value = {}
         yield dal
 
 
@@ -94,6 +106,16 @@ def make_db_group(**kwargs: Any) -> MagicMock:
     group.is_up_for_deletion = kwargs.get("is_up_for_deletion", False)
     group.is_up_to_date = kwargs.get("is_up_to_date", True)
     return group
+
+
+def make_user_mapping(**kwargs: Any) -> MagicMock:
+    """Build a mock ScimUserMapping ORM object with configurable attributes."""
+    mapping = MagicMock(spec=ScimUserMapping)
+    mapping.id = kwargs.get("id", 1)
+    mapping.external_id = kwargs.get("external_id", "ext-default")
+    mapping.user_id = kwargs.get("user_id", uuid4())
+    mapping.scim_username = kwargs.get("scim_username", None)
+    return mapping
 
 
 def assert_scim_error(result: object, expected_status: int) -> None:

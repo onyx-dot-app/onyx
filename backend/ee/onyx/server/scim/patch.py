@@ -41,8 +41,14 @@ _MEMBER_FILTER_RE = re.compile(
 def apply_user_patch(
     operations: list[ScimPatchOperation],
     current: ScimUserResource,
+    ignored_paths: frozenset[str] = frozenset(),
 ) -> ScimUserResource:
     """Apply SCIM PATCH operations to a user resource.
+
+    Args:
+        operations: The PATCH operations to apply.
+        current: The current user resource state.
+        ignored_paths: SCIM attribute paths to silently skip (from provider).
 
     Returns a new ``ScimUserResource`` with the modifications applied.
     The original object is not mutated.
@@ -55,9 +61,9 @@ def apply_user_patch(
 
     for op in operations:
         if op.op == ScimPatchOperationType.REPLACE:
-            _apply_user_replace(op, data, name_data)
+            _apply_user_replace(op, data, name_data, ignored_paths)
         elif op.op == ScimPatchOperationType.ADD:
-            _apply_user_replace(op, data, name_data)
+            _apply_user_replace(op, data, name_data, ignored_paths)
         else:
             raise ScimPatchError(
                 f"Unsupported operation '{op.op.value}' on User resource"
@@ -71,6 +77,7 @@ def _apply_user_replace(
     op: ScimPatchOperation,
     data: dict,
     name_data: dict,
+    ignored_paths: frozenset[str],
 ) -> None:
     """Apply a replace/add operation to user data."""
     path = (op.path or "").lower()
@@ -79,12 +86,12 @@ def _apply_user_replace(
         # No path — value is a dict of top-level attributes to set
         if isinstance(op.value, dict):
             for key, val in op.value.items():
-                _set_user_field(key.lower(), val, data, name_data)
+                _set_user_field(key.lower(), val, data, name_data, ignored_paths)
         else:
             raise ScimPatchError("Replace without path requires a dict value")
         return
 
-    _set_user_field(path, op.value, data, name_data)
+    _set_user_field(path, op.value, data, name_data, ignored_paths)
 
 
 def _set_user_field(
@@ -92,9 +99,12 @@ def _set_user_field(
     value: str | bool | dict | list | None,
     data: dict,
     name_data: dict,
+    ignored_paths: frozenset[str],
 ) -> None:
     """Set a single field on user data by SCIM path."""
-    if path == "active":
+    if path in ignored_paths:
+        return
+    elif path == "active":
         data["active"] = value
     elif path == "username":
         data["userName"] = value
@@ -107,7 +117,7 @@ def _set_user_field(
     elif path == "name.formatted":
         name_data["formatted"] = value
     elif path == "displayname":
-        # Some IdPs send displayName on users; map to formatted name
+        data["displayName"] = value
         name_data["formatted"] = value
     else:
         raise ScimPatchError(f"Unsupported path '{path}' for User PATCH")
@@ -116,8 +126,14 @@ def _set_user_field(
 def apply_group_patch(
     operations: list[ScimPatchOperation],
     current: ScimGroupResource,
+    ignored_paths: frozenset[str] = frozenset(),
 ) -> tuple[ScimGroupResource, list[str], list[str]]:
     """Apply SCIM PATCH operations to a group resource.
+
+    Args:
+        operations: The PATCH operations to apply.
+        current: The current group resource state.
+        ignored_paths: SCIM attribute paths to silently skip (from provider).
 
     Returns:
         A tuple of (modified group, added member IDs, removed member IDs).
@@ -133,7 +149,9 @@ def apply_group_patch(
 
     for op in operations:
         if op.op == ScimPatchOperationType.REPLACE:
-            _apply_group_replace(op, data, current_members, added_ids, removed_ids)
+            _apply_group_replace(
+                op, data, current_members, added_ids, removed_ids, ignored_paths
+            )
         elif op.op == ScimPatchOperationType.ADD:
             _apply_group_add(op, current_members, added_ids)
         elif op.op == ScimPatchOperationType.REMOVE:
@@ -154,6 +172,7 @@ def _apply_group_replace(
     current_members: list[dict],
     added_ids: list[str],
     removed_ids: list[str],
+    ignored_paths: frozenset[str],
 ) -> None:
     """Apply a replace operation to group data."""
     path = (op.path or "").lower()
@@ -164,7 +183,7 @@ def _apply_group_replace(
                 if key.lower() == "members":
                     _replace_members(val, current_members, added_ids, removed_ids)
                 else:
-                    _set_group_field(key.lower(), val, data)
+                    _set_group_field(key.lower(), val, data, ignored_paths)
         else:
             raise ScimPatchError("Replace without path requires a dict value")
         return
@@ -173,7 +192,7 @@ def _apply_group_replace(
         _replace_members(op.value, current_members, added_ids, removed_ids)
         return
 
-    _set_group_field(path, op.value, data)
+    _set_group_field(path, op.value, data, ignored_paths)
 
 
 def _replace_members(
@@ -199,9 +218,12 @@ def _set_group_field(
     path: str,
     value: str | bool | dict | list | None,
     data: dict,
+    ignored_paths: frozenset[str],
 ) -> None:
     """Set a single field on group data by SCIM path."""
-    if path == "displayname":
+    if path in ignored_paths:
+        return
+    elif path == "displayname":
         data["displayName"] = value
     elif path == "externalid":
         data["externalId"] = value
