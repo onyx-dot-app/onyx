@@ -466,8 +466,9 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
           <Section
             alignItems="start"
             gap={0}
-            justifyContent="between"
+            padding={0}
             flexDirection="row"
+            justifyContent="between"
           >
             <Section alignItems="start" padding={0} gap={0}>
               <DialogPrimitive.Title asChild>
