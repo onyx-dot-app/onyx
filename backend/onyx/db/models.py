@@ -1066,6 +1066,7 @@ class OpenSearchTenantMigrationRecord(Base):
     enable_opensearch_retrieval: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
     )
+    approx_chunk_count_in_vespa: Mapped[int] = mapped_column(Integer, nullable=True)
 
 
 class KGEntityType(Base):

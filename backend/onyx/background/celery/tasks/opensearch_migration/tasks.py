@@ -169,6 +169,19 @@ def migrate_chunks_from_vespa_to_opensearch_task(
                 f"in {time.monotonic() - sanitized_doc_start_time:.3f} seconds."
             )
 
+            approx_chunk_count_in_vespa: int | None = None
+            get_chunk_count_start_time = time.monotonic()
+            try:
+                approx_chunk_count_in_vespa = vespa_document_index.get_chunk_count()
+            except Exception:
+                task_logger.exception(
+                    "Error getting approximate chunk count in Vespa. Moving on..."
+                )
+            task_logger.debug(
+                f"Took {time.monotonic() - get_chunk_count_start_time:.3f} seconds to attempt to get "
+                f"approximate chunk count in Vespa. Got {approx_chunk_count_in_vespa}."
+            )
+
             while (
                 time.monotonic() - task_start_time < MIGRATION_TASK_SOFT_TIME_LIMIT_S
                 and lock.owned()
@@ -231,6 +244,7 @@ def migrate_chunks_from_vespa_to_opensearch_task(
                     continuation_token_map=next_continuation_token_map,
                     chunks_processed=len(opensearch_document_chunks),
                     chunks_errored=len(errored_chunks),
+                    approx_chunk_count_in_vespa=approx_chunk_count_in_vespa,
                 )
     except Exception:
         traceback.print_exc()

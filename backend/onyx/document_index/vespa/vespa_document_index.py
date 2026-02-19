@@ -713,9 +713,12 @@ class VespaDocumentIndex(DocumentIndex):
         Includes large chunks. There is no way to filter these out using the
         Search API.
         """
+        where_clause = (
+            f'tenant_id contains "{self._tenant_id}"' if self._multitenant else "true"
+        )
         yql = (
             f"select documentid from {self._index_name} "
-            f'where tenant_id contains "{self._tenant_id}" '
+            f"where {where_clause} "
             f"limit 0"
         )
         params: dict[str, str | int] = {
@@ -724,9 +727,8 @@ class VespaDocumentIndex(DocumentIndex):
             "timeout": VESPA_TIMEOUT,
         }
 
-        with self._httpx_client_context as http_client:
+        with get_vespa_http_client() as http_client:
             response = http_client.post(SEARCH_ENDPOINT, json=params)
             response.raise_for_status()
-
-        response_data = response.json()
+            response_data = response.json()
         return response_data["root"]["fields"]["totalCount"]

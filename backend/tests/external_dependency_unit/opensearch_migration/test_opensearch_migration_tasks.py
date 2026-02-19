@@ -460,6 +460,7 @@ class TestMigrateChunksFromVespaToOpenSearchTask:
             json.loads(tenant_record.vespa_visit_continuation_token)
         )
         assert tenant_record.migration_completed_at is not None
+        assert tenant_record.approx_chunk_count_in_vespa == len(all_chunks)
 
         # Verify chunks were indexed in OpenSearch.
         for document in test_documents:
@@ -541,6 +542,7 @@ class TestMigrateChunksFromVespaToOpenSearchTask:
         # least one must be.
         assert any(json.loads(tenant_record.vespa_visit_continuation_token).values())
         assert tenant_record.migration_completed_at is None
+        assert tenant_record.approx_chunk_count_in_vespa is not None
 
         # Under test.
         # Run the remainder of the migration.
@@ -564,6 +566,7 @@ class TestMigrateChunksFromVespaToOpenSearchTask:
             json.loads(tenant_record.vespa_visit_continuation_token)
         )
         assert tenant_record.migration_completed_at is not None
+        assert tenant_record.approx_chunk_count_in_vespa == len(all_chunks)
 
         # Verify chunks were indexed in OpenSearch.
         for document in test_documents:
@@ -608,6 +611,7 @@ class TestMigrateChunksFromVespaToOpenSearchTask:
         )
         # Mark migration as completed even for empty Vespa.
         assert tenant_record.migration_completed_at is not None
+        assert tenant_record.approx_chunk_count_in_vespa == 0
 
     def test_chunk_migration_updates_existing_chunks(
         self,
@@ -688,6 +692,7 @@ class TestMigrateChunksFromVespaToOpenSearchTask:
             json.loads(tenant_record.vespa_visit_continuation_token)
         )
         assert tenant_record.migration_completed_at is not None
+        assert tenant_record.approx_chunk_count_in_vespa == len(all_chunks)
 
         # Verify chunks were indexed in OpenSearch.
         for document in test_documents:
@@ -756,6 +761,7 @@ class TestMigrateChunksFromVespaToOpenSearchTask:
             json.loads(tenant_record.vespa_visit_continuation_token)
         )
         assert tenant_record.migration_completed_at is not None
+        assert tenant_record.approx_chunk_count_in_vespa == len(all_chunks)
 
         # Verify chunks were indexed in OpenSearch.
         for document in test_documents:
@@ -790,6 +796,7 @@ class TestMigrateChunksFromVespaToOpenSearchTask:
             json.loads(tenant_record.vespa_visit_continuation_token)
         )
         assert tenant_record.migration_completed_at is not None
+        assert tenant_record.approx_chunk_count_in_vespa == len(all_chunks)
 
         # Verify chunks were indexed in OpenSearch.
         for document in test_documents:
