@@ -1,8 +1,8 @@
 """add approx_chunk_count_in_vespa to opensearch tenant migration
 
-Revision ID: 8cdd5e822017
-Revises: 19c0ccb01687
-Create Date: 2026-02-18 18:41:40.452149
+Revision ID: 631fd2504136
+Revises: c7f2e1b4a9d3
+Create Date: 2026-02-18 21:07:52.831215
 
 """
 
@@ -11,8 +11,8 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = "8cdd5e822017"
-down_revision = "19c0ccb01687"
+revision = "631fd2504136"
+down_revision = "c7f2e1b4a9d3"
 branch_labels = None
 depends_on = None
 
