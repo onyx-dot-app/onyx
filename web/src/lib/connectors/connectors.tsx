@@ -185,30 +185,49 @@ export const connectorConfigs: Record<
     description: "Configure GitHub connector",
     values: [
       {
-        type: "text",
-        query: "Enter the GitHub username or organization:",
-        label: "Repository Owner",
-        name: "repo_owner",
-        optional: false,
-      },
-      {
         type: "tab",
         name: "github_mode",
         label: "What should we index from GitHub?",
-        optional: true,
+        optional: false,
         tabs: [
           {
-            value: "repo",
-            label: "Specific Repository",
+            value: "specific_repos",
+            label: "Specific Repositories",
             fields: [
               {
                 type: "text",
-                query: "Enter the repository name(s):",
-                label: "Repository Name(s)",
-                name: "repositories",
+                query: "Enter repository URL(s):",
+                label: "Repository URLs",
+                name: "repository_urls",
                 optional: false,
                 description:
-                  "For multiple repositories, enter comma-separated names (e.g., repo1,repo2,repo3)",
+                  "Enter one or more repositories to index. You can use any of these formats:\n\n" +
+                  "• Full GitHub URL: https://github.com/microsoft/vscode\n" +
+                  "• Owner/repo format: microsoft/vscode\n" +
+                  "• Multiple repos (comma-separated): https://github.com/microsoft/vscode, microsoft/typescript\n\n" +
+                  "Examples:\n" +
+                  "• https://github.com/microsoft/vscode\n" +
+                  "• microsoft/vscode, microsoft/typescript\n" +
+                  "• https://github.com/vercel/next.js",
+              },
+            ],
+          },
+          {
+            value: "owner_all_repos",
+            label: "All Repositories from Owner",
+            fields: [
+              {
+                type: "text",
+                query: "Enter GitHub owner or URL:",
+                label: "Owner",
+                name: "owner_url",
+                optional: false,
+                description:
+                  "Enter the GitHub username or organization. You can use:\n\n" +
+                  "• Organization/username: microsoft\n" +
+                  "• GitHub URL: https://github.com/microsoft\n" +
+                  "• Org URL: https://github.com/microsoft/\n\n" +
+                  "This will index ALL repositories from this owner that the credentials have access to.",
               },
             ],
           },
@@ -221,7 +240,7 @@ export const connectorConfigs: Record<
                 label: "Everything",
                 name: "everything",
                 description:
-                  "This connector will index all repositories the provided credentials have access to!",
+                  "This connector will index all repositories the provided credentials have access to across all organizations and users!",
               },
             ],
           },

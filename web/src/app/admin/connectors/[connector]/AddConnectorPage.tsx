@@ -62,6 +62,11 @@ import Text from "@/refresh-components/texts/Text";
 import { SvgKey, SvgAlertCircle } from "@opal/icons";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import Link from "next/link";
+import {
+  parseGithubUrl,
+  parseGithubRepositories,
+  isGithubUrl,
+} from "@/lib/connectors/githubUtils";
 
 export interface AdvancedConfig {
   refreshFreq: number;
@@ -328,6 +333,89 @@ export default function AddConnector({
           },
           {} as Record<string, any>
         );
+
+        // GitHub-specific URL parsing transformation
+        if (connector === "github") {
+          const githubMode = transformedConnectorSpecificConfig.github_mode;
+
+          if (githubMode === "specific_repos") {
+            // User selected "Specific Repositories" tab
+            const repositoryUrls =
+              transformedConnectorSpecificConfig.repository_urls?.trim();
+
+            if (!repositoryUrls) {
+              toast.error("Please enter at least one repository URL");
+              return;
+            }
+
+            // Parse repository URLs to owner/repo format
+            const parsedRepos = parseGithubRepositories(repositoryUrls);
+
+            if ("error" in parsedRepos) {
+              toast.error(`Invalid repository format: ${parsedRepos.error}`);
+              return;
+            }
+
+            if (parsedRepos.length === 0) {
+              toast.error("No valid repositories found");
+              return;
+            }
+
+            // Validate all repos belong to same owner and extract components
+            const repoComponents = parsedRepos.map((repo) => {
+              const [owner, repoName] = repo.split("/");
+              return { owner, repoName };
+            });
+
+            const firstOwner = repoComponents[0].owner;
+            const hasDifferentOwners = repoComponents.some(
+              ({ owner }) => owner !== firstOwner
+            );
+
+            if (hasDifferentOwners) {
+              toast.error(
+                "All repositories must belong to the same owner/organization"
+              );
+              return;
+            }
+
+            // Set backend fields
+            transformedConnectorSpecificConfig.repo_owner = firstOwner;
+            transformedConnectorSpecificConfig.repositories = repoComponents
+              .map(({ repoName }) => repoName)
+              .join(",");
+          } else if (githubMode === "owner_all_repos") {
+            // User selected "All Repositories from Owner" tab
+            const ownerUrl =
+              transformedConnectorSpecificConfig.owner_url?.trim();
+
+            if (!ownerUrl) {
+              toast.error("Please enter a GitHub owner or URL");
+              return;
+            }
+
+            const parsed = parseGithubUrl(ownerUrl);
+
+            if ("error" in parsed) {
+              toast.error(`Invalid GitHub owner: ${parsed.error}`);
+              return;
+            }
+
+            // Set backend fields (empty repositories means "all repos from owner")
+            transformedConnectorSpecificConfig.repo_owner = parsed.owner;
+            transformedConnectorSpecificConfig.repositories = "";
+          } else if (githubMode === "everything") {
+            // User selected "Everything" tab (empty values mean "index everything")
+            transformedConnectorSpecificConfig.repo_owner = "";
+            transformedConnectorSpecificConfig.repositories = "";
+          }
+
+          // Clean up temporary UI fields
+          delete transformedConnectorSpecificConfig.repository_urls;
+          delete transformedConnectorSpecificConfig.owner_url;
+          delete transformedConnectorSpecificConfig.everything;
+          delete transformedConnectorSpecificConfig.github_mode;
+        }
 
         // Apply advanced configuration-specific transforms.
         const advancedConfiguration: any = {

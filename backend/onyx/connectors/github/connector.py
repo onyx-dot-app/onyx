@@ -7,6 +7,7 @@ from datetime import timezone
 from enum import Enum
 from typing import Any
 from typing import cast
+from urllib.parse import urlparse
 
 from github import Github
 from github import RateLimitExceededException
@@ -68,6 +69,78 @@ SLIM_BATCH_SIZE = 100
 
 class DocMetadata(BaseModel):
     repo: str
+
+
+def parse_github_url_if_needed(
+    repo_owner: str, repositories: str | None
+) -> tuple[str, str | None]:
+    """
+    Parse GitHub URL if present in repo_owner, otherwise return as-is.
+
+    This is a defensive helper that handles cases where users might paste a full
+    GitHub URL instead of just the owner name. The frontend should parse URLs,
+    but this provides a safety net.
+
+    Args:
+        repo_owner: Either an owner name (e.g., "octocat") or a full GitHub URL
+        repositories: Comma-separated repository names, or None for all repos
+
+    Returns:
+        Tuple of (parsed_owner, parsed_repositories)
+
+    Examples:
+        >>> parse_github_url_if_needed("octocat", "repo1")
+        ("octocat", "repo1")
+
+        >>> parse_github_url_if_needed("https://github.com/octocat", None)
+        ("octocat", None)
+
+        >>> parse_github_url_if_needed("https://github.com/octocat/repo1", None)
+        ("octocat", "repo1")
+
+        >>> parse_github_url_if_needed("https://github.com/octocat/repo1", "repo2,repo3")
+        ("octocat", "repo2,repo3")
+    """
+    # If repo_owner doesn't look like a URL, return as-is
+    if not repo_owner or "github.com" not in repo_owner:
+        return (repo_owner, repositories)
+
+    try:
+        # Add protocol if missing for proper URL parsing
+        url_to_parse = repo_owner
+        if not url_to_parse.startswith(("http://", "https://")):
+            url_to_parse = "https://" + url_to_parse
+
+        parsed = urlparse(url_to_parse)
+
+        # Verify this is actually a GitHub URL
+        if "github.com" not in parsed.netloc:
+            return (repo_owner, repositories)
+
+        # Extract path components, removing empty strings and leading/trailing slashes
+        path_parts = [part for part in parsed.path.strip("/").split("/") if part]
+
+        if not path_parts:
+            # URL with no path, can't extract owner
+            return (repo_owner, repositories)
+
+        # First part of path is the owner
+        extracted_owner = path_parts[0]
+
+        # If there's a second part (repo name) and repositories is not specified, use it
+        if len(path_parts) >= 2 and repositories is None:
+            extracted_repo = path_parts[1]
+            return (extracted_owner, extracted_repo)
+
+        # Otherwise, just return the extracted owner with the original repositories
+        return (extracted_owner, repositories)
+
+    except Exception as e:
+        # If parsing fails for any reason, return original values
+        logger.warning(
+            f"Failed to parse potential GitHub URL '{repo_owner}': {e}. Using as-is."
+        )
+        return (repo_owner, repositories)
 
 
 def get_nextUrl_key(pag_list: PaginatedList[PullRequest | Issue]) -> str:
@@ -436,8 +509,12 @@ class GithubConnector(CheckpointedConnectorWithPermSync[GithubConnectorCheckpoin
         include_prs: bool = True,
         include_issues: bool = False,
     ) -> None:
-        self.repo_owner = repo_owner
-        self.repositories = repositories
+        # Defensive URL parsing: handle cases where URLs might be submitted directly
+        parsed_owner, parsed_repositories = parse_github_url_if_needed(
+            repo_owner, repositories
+        )
+        self.repo_owner = parsed_owner
+        self.repositories = parsed_repositories
         self.state_filter = state_filter
         self.include_prs = include_prs
         self.include_issues = include_issues
