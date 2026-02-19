@@ -264,6 +264,15 @@ async function screenshotChatContainer(
 ): Promise<void> {
   const container = page.locator("[data-main-container]");
   await expect(container).toBeVisible();
+
+  // Normalize scroll to the top so the screenshot is deterministic regardless
+  // of where auto-scroll left the viewport after message streaming.
+  const scrollContainer = page.getByTestId("chat-scroll-container");
+  await scrollContainer.evaluate(async (el) => {
+    el.scrollTo({ top: 0 });
+    await new Promise<void>((r) => requestAnimationFrame(() => r()));
+  });
+
   await expectElementScreenshot(container, { name });
 }
 
@@ -281,10 +290,16 @@ async function screenshotChatContainerTopAndBottom(
   await expect(container).toBeVisible();
   const scrollContainer = page.getByTestId("chat-scroll-container");
 
-  await scrollContainer.evaluate((el) => el.scrollTo({ top: 0 }));
+  await scrollContainer.evaluate(async (el) => {
+    el.scrollTo({ top: 0 });
+    await new Promise<void>((r) => requestAnimationFrame(() => r()));
+  });
   await expectElementScreenshot(container, { name: `${name}-top` });
 
-  await scrollContainer.evaluate((el) => el.scrollTo({ top: el.scrollHeight }));
+  await scrollContainer.evaluate(async (el) => {
+    el.scrollTo({ top: el.scrollHeight });
+    await new Promise<void>((r) => requestAnimationFrame(() => r()));
+  });
   await expectElementScreenshot(container, { name: `${name}-bottom` });
 }
 
@@ -478,6 +493,13 @@ for (const theme of THEMES) {
         const aiMessage = page.getByTestId("onyx-ai-message").first();
         const toolbar = aiMessage.getByTestId("AgentMessage/toolbar");
         await expect(toolbar).toBeVisible({ timeout: 10000 });
+
+        // Scroll the toolbar into view so hover screenshots are stable
+        // regardless of where auto-scroll left the viewport.
+        await toolbar.scrollIntoViewIfNeeded();
+        await page.evaluate(
+          () => new Promise<void>((r) => requestAnimationFrame(() => r()))
+        );
 
         for (const buttonTestId of TOOLBAR_BUTTONS) {
           const button = aiMessage.getByTestId(buttonTestId);
