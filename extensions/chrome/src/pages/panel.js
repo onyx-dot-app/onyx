@@ -76,6 +76,8 @@ import {
   }
 
   function handleMessage(event) {
+    // Only trust messages from the Onyx app iframe
+    if (event.source !== iframe.contentWindow) return;
     if (event.data.type === CHROME_MESSAGE.ONYX_APP_LOADED) {
       clearTimeout(iframeLoadTimeout);
       iframeLoaded = true;
