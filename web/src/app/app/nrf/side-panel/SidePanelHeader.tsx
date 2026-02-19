@@ -6,11 +6,16 @@ import { SvgEditBig, SvgExternalLink } from "@opal/icons";
 
 interface SidePanelHeaderProps {
   onNewChat: () => void;
+  chatSessionId?: string | null;
 }
 
-export default function SidePanelHeader({ onNewChat }: SidePanelHeaderProps) {
+export default function SidePanelHeader({
+  onNewChat,
+  chatSessionId,
+}: SidePanelHeaderProps) {
   const handleOpenInOnyx = () => {
-    window.open(`${window.location.origin}/app`, "_blank");
+    const path = chatSessionId ? `/app?chatId=${chatSessionId}` : "/app";
+    window.open(`${window.location.origin}${path}`, "_blank");
   };
 
   return (

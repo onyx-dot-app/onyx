@@ -138,6 +138,9 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   const setCurrentSession = useChatSessionStore(
     (state) => state.setCurrentSession
   );
+  const currentSessionId = useChatSessionStore(
+    (state) => state.currentSessionId
+  );
 
   // Memoized callback for closing document sidebar
   const handleDocumentSidebarClose = useCallback(() => {
@@ -410,7 +413,12 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       )}
 
       {/* Side panel header */}
-      {isSidePanel && <SidePanelHeader onNewChat={handleNewChat} />}
+      {isSidePanel && (
+        <SidePanelHeader
+          onNewChat={handleNewChat}
+          chatSessionId={currentSessionId}
+        />
+      )}
 
       {/* Settings button */}
       {!isSidePanel && (
