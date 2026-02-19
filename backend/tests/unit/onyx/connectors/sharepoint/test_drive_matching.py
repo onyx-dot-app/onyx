@@ -168,18 +168,25 @@ def test_load_from_checkpoint_maps_drive_name(monkeypatch: pytest.MonkeyPatch) -
         drive_id="fake-drive-id",
     )
 
-    def fake_get_drive_items(
+    def fake_resolve_drive(
         self: SharepointConnector,  # noqa: ARG001
         site_descriptor: SiteDescriptor,  # noqa: ARG001
         drive_name: str,
-        start: datetime | None,  # noqa: ARG001
-        end: datetime | None,  # noqa: ARG001
-    ) -> tuple[list[DriveItemData], str | None]:
+    ) -> tuple[str, str | None]:
         assert drive_name == "Documents"
         return (
-            [sample_item],
+            "fake-drive-id",
             "https://example.sharepoint.com/sites/sample/Documents",
         )
+
+    def fake_get_drive_items(
+        self: SharepointConnector,  # noqa: ARG001
+        site_descriptor: SiteDescriptor,  # noqa: ARG001
+        drive_id: str,  # noqa: ARG001
+        start: datetime | None,  # noqa: ARG001
+        end: datetime | None,  # noqa: ARG001
+    ) -> Generator[DriveItemData, None, None]:
+        yield sample_item
 
     def fake_convert(
         driveitem: DriveItemData,  # noqa: ARG001
@@ -196,6 +203,11 @@ def test_load_from_checkpoint_maps_drive_name(monkeypatch: pytest.MonkeyPatch) -
     def fake_get_access_token(self: SharepointConnector) -> str:  # noqa: ARG001
         return "fake-access-token"
 
+    monkeypatch.setattr(
+        SharepointConnector,
+        "_resolve_drive",
+        fake_resolve_drive,
+    )
     monkeypatch.setattr(
         SharepointConnector,
         "_get_drive_items_for_drive_id",

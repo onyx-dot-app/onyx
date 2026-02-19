@@ -1040,12 +1040,13 @@ class SharepointConnector(
 
             if site_descriptor.drive_name:
                 drives = [
-                    d
-                    for d in drives
-                    if d.name == site_descriptor.drive_name
+                    drive
+                    for drive in drives
+                    if drive.name == site_descriptor.drive_name
                     or (
-                        d.name in SHARED_DOCUMENTS_MAP
-                        and SHARED_DOCUMENTS_MAP[d.name] == site_descriptor.drive_name
+                        drive.name in SHARED_DOCUMENTS_MAP
+                        and SHARED_DOCUMENTS_MAP[drive.name]
+                        == site_descriptor.drive_name
                     )
                 ]
                 if not drives:
