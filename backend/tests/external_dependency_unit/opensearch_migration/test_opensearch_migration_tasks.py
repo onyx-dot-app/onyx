@@ -601,9 +601,13 @@ class TestMigrateChunksFromVespaToOpenSearchTask:
         tenant_record = db_session.query(OpenSearchTenantMigrationRecord).first()
         assert tenant_record is not None
         assert tenant_record.total_chunks_migrated == 0
-        assert tenant_record.vespa_visit_continuation_token is None
-        # We do not mark the migration as completed for empty Vespa.
-        assert tenant_record.migration_completed_at is None
+        # Visit is complete so continuation token should be marked as done for all slices.
+        assert tenant_record.vespa_visit_continuation_token is not None
+        assert is_continuation_token_done_for_all_slices(
+            json.loads(tenant_record.vespa_visit_continuation_token)
+        )
+        # Mark migration as completed even for empty Vespa.
+        assert tenant_record.migration_completed_at is not None
 
     def test_chunk_migration_updates_existing_chunks(
         self,
