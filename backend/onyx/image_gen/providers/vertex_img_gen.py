@@ -139,12 +139,10 @@ class VertexImageGenerationProvider(ImageGenerationProvider):
         model_name = model.replace("vertex_ai/", "")
         response = client.models.generate_content(
             model=model_name,
-            contents=[
-                genai_types.Content(
-                    role="user",
-                    parts=parts,
-                )
-            ],
+            contents=genai_types.Content(
+                role="user",
+                parts=parts,
+            ),
             config=config,
         )
 
