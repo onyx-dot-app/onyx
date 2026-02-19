@@ -261,36 +261,4 @@ describe("Email/Password Signup Workflow", () => {
       ).toBeInTheDocument();
     });
   });
-
-  test("redirects to signup blocked page when seat expectations are exceeded", async () => {
-    const user = setupUser();
-
-    fetchSpy.mockResolvedValueOnce({
-      ok: false,
-      status: 402,
-      json: async () => ({
-        detail: {
-          code: "REGISTER_SEAT_EXPECTATION_EXCEEDED",
-          reason: "Seat expectations exceeded",
-        },
-      }),
-    } as Response);
-
-    render(<EmailPasswordForm isSignup={true} />);
-
-    const emailInput = screen.getByPlaceholderText(/email@yourcompany.com/i);
-    const passwordInput = screen.getByPlaceholderText(/∗/);
-
-    await user.type(emailInput, "user@example.com");
-    await user.type(passwordInput, "password123");
-
-    const signupButton = screen.getByRole("button", {
-      name: /create account/i,
-    });
-    await user.click(signupButton);
-
-    await waitFor(() => {
-      expect(window.location.href).toBe("/auth/signup-blocked");
-    });
-  });
 });

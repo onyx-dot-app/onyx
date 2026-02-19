@@ -118,7 +118,6 @@ from onyx.db.models import OAuthAccount
 from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.db.pat import fetch_user_for_pat
-from onyx.db.users import get_all_users
 from onyx.db.users import get_user_by_email
 from onyx.redis.redis_pool import get_async_redis_connection
 from onyx.redis.redis_pool import get_redis_client
@@ -140,7 +139,6 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 
 REGISTER_INVITE_ONLY_CODE = "REGISTER_INVITE_ONLY"
-REGISTER_SEAT_EXPECTATION_EXCEEDED_CODE = "REGISTER_SEAT_EXPECTATION_EXCEEDED"
 
 
 def is_user_admin(user: User) -> bool:
@@ -317,54 +315,6 @@ def enforce_seat_limit(db_session: Session, seats_needed: int = 1) -> None:
         raise HTTPException(status_code=402, detail=result.error_message)
 
 
-def _count_reserved_invite_seats(
-    db_session: Session, invited_users: set[str] | None = None
-) -> int:
-    if invited_users is None:
-        invited_users = {email.lower() for email in get_invited_users()}
-
-    if not invited_users:
-        return 0
-
-    existing_users = {user.email.lower() for user in get_all_users(db_session)}
-    return sum(
-        1 for invited_email in invited_users if invited_email not in existing_users
-    )
-
-
-def enforce_invite_reservation_seat_limit(
-    db_session: Session, signup_email: str
-) -> None:
-    """Block non-invited signups when seats are already reserved for invited users.
-
-    No-op for multi-tenant and for users already on the invite list.
-    """
-    if MULTI_TENANT:
-        return
-
-    invited_users = {email.lower() for email in get_invited_users()}
-    if signup_email.lower() in invited_users:
-        return
-
-    reserved_invite_seats = _count_reserved_invite_seats(db_session, invited_users)
-    if reserved_invite_seats == 0:
-        return
-
-    result = fetch_ee_implementation_or_noop(
-        "onyx.db.license", "check_seat_availability", None
-    )(db_session, seats_needed=reserved_invite_seats + 1)
-
-    if result is not None and not result.available:
-        raise HTTPException(
-            status_code=402,
-            detail={
-                "code": REGISTER_SEAT_EXPECTATION_EXCEEDED_CODE,
-                "reason": "This workspace has already allocated seats to current and invited users. "
-                "Please contact your admin to review seats in Plans & Billing.",
-            },
-        )
-
-
 class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     reset_password_token_secret = USER_AUTH_SECRET
     verification_token_secret = USER_AUTH_SECRET
@@ -499,9 +449,6 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     existing = get_user_by_email(user_create.email, sync_db)
                     if existing is None:
                         enforce_seat_limit(sync_db)
-                        enforce_invite_reservation_seat_limit(
-                            sync_db, user_create.email
-                        )
 
                 user_created = False
                 try:
@@ -715,7 +662,6 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     # Check seat availability before creating (single-tenant only)
                     with get_session_with_current_tenant() as sync_db:
                         enforce_seat_limit(sync_db)
-                        enforce_invite_reservation_seat_limit(sync_db, account_email)
 
                     password = self.password_helper.generate()
                     user_dict = {
@@ -1880,14 +1826,6 @@ def get_oauth_router(
                 associate_by_email=associate_by_email,
                 is_verified_by_default=is_verified_by_default,
             )
-        except HTTPException as e:
-            if (
-                e.status_code == 402
-                and isinstance(e.detail, dict)
-                and e.detail.get("code") == REGISTER_SEAT_EXPECTATION_EXCEEDED_CODE
-            ):
-                return RedirectResponse("/auth/signup-blocked", status_code=302)
-            raise
         except UserAlreadyExists:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
