@@ -587,10 +587,10 @@ class OnyxCeleryTask:
         "check_for_documents_for_opensearch_migration_task"
     )
     MIGRATE_DOCUMENTS_FROM_VESPA_TO_OPENSEARCH_TASK = (
-        "migrate_documents_from_vespa_to_opensearch_task"
+        "migrate_documents_from_VESPA_to_opensearch_task"
     )
     MIGRATE_CHUNKS_FROM_VESPA_TO_OPENSEARCH_TASK = (
-        "migrate_chunks_from_vespa_to_opensearch_task"
+        "migrate_chunks_from_VESPA_to_opensearch_task"
     )
 
 
@@ -663,17 +663,16 @@ project management, and collaboration tools into a single, customizable platform
     DocumentSource.R2: "r2",
     DocumentSource.GOOGLE_CLOUD_STORAGE: "google_cloud_storage - cloud storage",
     DocumentSource.OCI_STORAGE: "oci_storage - cloud storage",
-    XENFORO : "xenforo"
-    NOT_APPLICABLE : "not_applicable"
-    DISCORD : "discord"
-    FRESHDESK : "freshdesk"
-    FIREFLIES : "fireflies"
-    EGNYTE : "egnyte"
-    AIRTABLE : "airtable"
-    HIGHSPOT : "highspot"
-    DRUPAL_WIKI : "drupal_wiki"
-
-    IMAP : "imap"
-    BITBUCKET : "bitbucket"
-    TESTRAIL : "testrail"
+    DocumentSource.XENFORO: "xenforo - forum data",
+    DocumentSource.NOT_APPLICABLE: "not_applicable",
+    DocumentSource.DISCORD: "discord - chat and collaboration",
+    DocumentSource.FRESHDESK: "freshdesk - customer support data",
+    DocumentSource.FIREFLIES: "fireflies - call transcripts",
+    DocumentSource.EGNYTE: "egnyte - files",
+    DocumentSource.AIRTABLE: "airtable - database",
+    DocumentSource.HIGHSPOT: "highspot - CRM data",
+    DocumentSource.DRUPAL_WIKI: "drupal wiki - knowledge base content (pages, spaces, attachments)",
+    DocumentSource.IMAP: "imap - email data",
+    DocumentSource.BITBUCKET: "bitbucket data",
+    DocumentSource.TESTRAIL: "testrail - test case management tool for QA processes",
 }
