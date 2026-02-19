@@ -1,6 +1,11 @@
 """Tests for llm_step.py, specifically sanitization and argument parsing."""
 
+from typing import Any
+
+from onyx.chat.llm_step import _extract_tool_call_kickoffs
+from onyx.chat.llm_step import _increment_turns
 from onyx.chat.llm_step import _parse_tool_args_to_dict
+from onyx.chat.llm_step import _resolve_tool_arguments
 from onyx.chat.llm_step import _sanitize_llm_output
 from onyx.chat.llm_step import _XmlToolCallContentFilter
 from onyx.chat.llm_step import extract_tool_calls_from_response_text
@@ -248,6 +253,78 @@ class TestExtractToolCallsFromResponseText:
         assert len(tool_calls) == 0
 
 
+class TestExtractToolCallKickoffs:
+    """Tests for the _extract_tool_call_kickoffs function."""
+
+    def test_valid_tool_call(self) -> None:
+        tool_call_map = {
+            0: {
+                "id": "call_123",
+                "name": "internal_search",
+                "arguments": '{"queries": ["test"]}',
+            }
+        }
+        result = _extract_tool_call_kickoffs(tool_call_map, turn_index=0)
+        assert len(result) == 1
+        assert result[0].tool_name == "internal_search"
+        assert result[0].tool_args == {"queries": ["test"]}
+
+    def test_invalid_json_arguments_returns_empty_dict(self) -> None:
+        """Verify that malformed JSON arguments produce an empty dict
+        rather than raising an exception. This confirms the dead try/except
+        around _parse_tool_args_to_dict was safe to remove."""
+        tool_call_map = {
+            0: {
+                "id": "call_bad",
+                "name": "internal_search",
+                "arguments": "not valid json {{{",
+            }
+        }
+        result = _extract_tool_call_kickoffs(tool_call_map, turn_index=0)
+        assert len(result) == 1
+        assert result[0].tool_args == {}
+
+    def test_none_arguments_returns_empty_dict(self) -> None:
+        tool_call_map = {
+            0: {
+                "id": "call_none",
+                "name": "internal_search",
+                "arguments": None,
+            }
+        }
+        result = _extract_tool_call_kickoffs(tool_call_map, turn_index=0)
+        assert len(result) == 1
+        assert result[0].tool_args == {}
+
+    def test_skips_entries_missing_id_or_name(self) -> None:
+        tool_call_map: dict[int, dict[str, Any]] = {
+            0: {"id": None, "name": "internal_search", "arguments": "{}"},
+            1: {"id": "call_1", "name": None, "arguments": "{}"},
+            2: {"id": "call_2", "name": "internal_search", "arguments": "{}"},
+        }
+        result = _extract_tool_call_kickoffs(tool_call_map, turn_index=0)
+        assert len(result) == 1
+        assert result[0].tool_call_id == "call_2"
+
+    def test_tab_index_auto_increments(self) -> None:
+        tool_call_map = {
+            0: {"id": "c1", "name": "tool_a", "arguments": "{}"},
+            1: {"id": "c2", "name": "tool_b", "arguments": "{}"},
+        }
+        result = _extract_tool_call_kickoffs(tool_call_map, turn_index=0)
+        assert result[0].placement.tab_index == 0
+        assert result[1].placement.tab_index == 1
+
+    def test_tab_index_override(self) -> None:
+        tool_call_map = {
+            0: {"id": "c1", "name": "tool_a", "arguments": "{}"},
+            1: {"id": "c2", "name": "tool_b", "arguments": "{}"},
+        }
+        result = _extract_tool_call_kickoffs(tool_call_map, turn_index=0, tab_index=5)
+        assert result[0].placement.tab_index == 5
+        assert result[1].placement.tab_index == 5
+
+
 class TestXmlToolCallContentFilter:
     def test_strips_function_calls_block_single_chunk(self) -> None:
         f = _XmlToolCallContentFilter()
@@ -288,3 +365,56 @@ class TestXmlToolCallContentFilter:
         assert (
             output == "A <function_calls_v2><invoke>noop</invoke></function_calls_v2> B"
         )
+
+
+class TestIncrementTurns:
+    """Tests for the _increment_turns helper used by _close_reasoning_if_active."""
+
+    def test_increments_turn_index_when_no_sub_turn(self) -> None:
+        turn, sub = _increment_turns(0, None)
+        assert turn == 1
+        assert sub is None
+
+    def test_increments_sub_turn_when_present(self) -> None:
+        turn, sub = _increment_turns(3, 0)
+        assert turn == 3
+        assert sub == 1
+
+    def test_increments_sub_turn_from_nonzero(self) -> None:
+        turn, sub = _increment_turns(5, 2)
+        assert turn == 5
+        assert sub == 3
+
+
+class TestResolveToolArguments:
+    """Tests for the _resolve_tool_arguments helper."""
+
+    def test_dict_arguments(self) -> None:
+        obj = {"arguments": {"queries": ["test"]}}
+        assert _resolve_tool_arguments(obj) == {"queries": ["test"]}
+
+    def test_dict_parameters(self) -> None:
+        """Falls back to 'parameters' key when 'arguments' is missing."""
+        obj = {"parameters": {"queries": ["test"]}}
+        assert _resolve_tool_arguments(obj) == {"queries": ["test"]}
+
+    def test_arguments_takes_precedence_over_parameters(self) -> None:
+        obj = {"arguments": {"a": 1}, "parameters": {"b": 2}}
+        assert _resolve_tool_arguments(obj) == {"a": 1}
+
+    def test_json_string_arguments(self) -> None:
+        obj = {"arguments": '{"queries": ["test"]}'}
+        assert _resolve_tool_arguments(obj) == {"queries": ["test"]}
+
+    def test_invalid_json_string_returns_empty_dict(self) -> None:
+        obj = {"arguments": "not valid json"}
+        assert _resolve_tool_arguments(obj) == {}
+
+    def test_no_arguments_or_parameters_returns_empty_dict(self) -> None:
+        obj = {"name": "some_tool"}
+        assert _resolve_tool_arguments(obj) == {}
+
+    def test_non_dict_non_string_arguments_returns_none(self) -> None:
+        """When arguments resolves to a list or int, returns None."""
+        assert _resolve_tool_arguments({"arguments": [1, 2, 3]}) is None
+        assert _resolve_tool_arguments({"arguments": 42}) is None

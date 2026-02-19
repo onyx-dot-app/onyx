@@ -380,14 +380,7 @@ def _extract_tool_call_kickoffs(
     tab_index_calculated = 0
     for tool_call_data in id_to_tool_call_map.values():
         if tool_call_data.get("id") and tool_call_data.get("name"):
-            try:
-                tool_args = _parse_tool_args_to_dict(tool_call_data.get("arguments"))
-            except json.JSONDecodeError:
-                # If parsing fails, try empty dict, most tools would fail though
-                logger.error(
-                    f"Failed to parse tool call arguments: {tool_call_data['arguments']}"
-                )
-                tool_args = {}
+            tool_args = _parse_tool_args_to_dict(tool_call_data.get("arguments"))
 
             tool_calls.append(
                 ToolCallKickoff(
@@ -567,6 +560,23 @@ def _parse_xml_parameter_value(raw_value: str, string_attr: str | None) -> Any:
         return value
 
 
+def _resolve_tool_arguments(obj: dict[str, Any]) -> dict[str, Any] | None:
+    """Extract and parse an arguments/parameters value from a tool-call-like object.
+
+    Looks for "arguments" or "parameters" keys, handles JSON-string values,
+    and returns a dict if successful, or None otherwise.
+    """
+    arguments = obj.get("arguments", obj.get("parameters", {}))
+    if isinstance(arguments, str):
+        try:
+            arguments = json.loads(arguments)
+        except json.JSONDecodeError:
+            arguments = {}
+    if isinstance(arguments, dict):
+        return arguments
+    return None
+
+
 def _try_match_json_to_tool(
     json_obj: dict[str, Any],
     tool_name_to_def: dict[str, dict],
@@ -589,13 +599,8 @@ def _try_match_json_to_tool(
     # Format 1: Direct tool call format {"name": "...", "arguments": {...}}
     if "name" in json_obj and json_obj["name"] in tool_name_to_def:
         tool_name = json_obj["name"]
-        arguments = json_obj.get("arguments", json_obj.get("parameters", {}))
-        if isinstance(arguments, str):
-            try:
-                arguments = json.loads(arguments)
-            except json.JSONDecodeError:
-                arguments = {}
-        if isinstance(arguments, dict):
+        arguments = _resolve_tool_arguments(json_obj)
+        if arguments is not None:
             return (tool_name, arguments)
 
     # Format 2: Function call format {"function": {"name": "...", "arguments": {...}}}
@@ -603,13 +608,8 @@ def _try_match_json_to_tool(
         func_obj = json_obj["function"]
         if "name" in func_obj and func_obj["name"] in tool_name_to_def:
             tool_name = func_obj["name"]
-            arguments = func_obj.get("arguments", func_obj.get("parameters", {}))
-            if isinstance(arguments, str):
-                try:
-                    arguments = json.loads(arguments)
-                except json.JSONDecodeError:
-                    arguments = {}
-            if isinstance(arguments, dict):
+            arguments = _resolve_tool_arguments(func_obj)
+            if arguments is not None:
                 return (tool_name, arguments)
 
     # Format 3: Tool name as key {"tool_name": {...arguments...}}
@@ -925,8 +925,15 @@ def run_llm_step_pkt_generator(
     tab_index = placement.tab_index
     sub_turn_index = placement.sub_turn_index
 
+    def _current_placement() -> Placement:
+        return Placement(
+            turn_index=turn_index,
+            tab_index=tab_index,
+            sub_turn_index=sub_turn_index,
+        )
+
     llm_msg_history = translate_history_to_llm_format(history, llm.config)
-    has_reasoned = 0
+    has_reasoned = False
 
     if LOG_ONYX_MODEL_INTERACTIONS:
         logger.debug(
@@ -956,12 +963,56 @@ def run_llm_step_pkt_generator(
         stream_start_time = time.monotonic()
         first_action_recorded = False
 
+        def _emit_citation_results(
+            results: Generator[str | CitationInfo, None, None],
+        ) -> Generator[Packet, None, None]:
+            """Yield packets for citation processor results (str or CitationInfo)."""
+            nonlocal accumulated_answer
+
+            for result in results:
+                if isinstance(result, str):
+                    accumulated_answer += result
+                    if state_container:
+                        state_container.set_answer_tokens(accumulated_answer)
+                    yield Packet(
+                        placement=_current_placement(),
+                        obj=AgentResponseDelta(content=result),
+                    )
+                elif isinstance(result, CitationInfo):
+                    yield Packet(
+                        placement=_current_placement(),
+                        obj=result,
+                    )
+                    if state_container:
+                        state_container.add_emitted_citation(result.citation_number)
+
+        def _close_reasoning_if_active() -> Generator[Packet, None, None]:
+            """Emit ReasoningDone and increment turns if reasoning is in progress."""
+            nonlocal reasoning_start
+            nonlocal has_reasoned
+            nonlocal turn_index
+            nonlocal sub_turn_index
+
+            if reasoning_start:
+                yield Packet(
+                    placement=Placement(
+                        turn_index=turn_index,
+                        tab_index=tab_index,
+                        sub_turn_index=sub_turn_index,
+                    ),
+                    obj=ReasoningDone(),
+                )
+                has_reasoned = True
+                turn_index, sub_turn_index = _increment_turns(
+                    turn_index, sub_turn_index
+                )
+                reasoning_start = False
+
         def _emit_content_chunk(content_chunk: str) -> Generator[Packet, None, None]:
             nonlocal accumulated_answer
             nonlocal accumulated_reasoning
             nonlocal answer_start
             nonlocal reasoning_start
-            nonlocal has_reasoned
             nonlocal turn_index
             nonlocal sub_turn_index
 
@@ -974,39 +1025,18 @@ def run_llm_step_pkt_generator(
                     state_container.set_reasoning_tokens(accumulated_reasoning)
                 if not reasoning_start:
                     yield Packet(
-                        placement=Placement(
-                            turn_index=turn_index,
-                            tab_index=tab_index,
-                            sub_turn_index=sub_turn_index,
-                        ),
+                        placement=_current_placement(),
                         obj=ReasoningStart(),
                     )
                 yield Packet(
-                    placement=Placement(
-                        turn_index=turn_index,
-                        tab_index=tab_index,
-                        sub_turn_index=sub_turn_index,
-                    ),
+                    placement=_current_placement(),
                     obj=ReasoningDelta(reasoning=content_chunk),
                 )
                 reasoning_start = True
                 return
 
             # Normal flow for AUTO or NONE tool choice
-            if reasoning_start:
-                yield Packet(
-                    placement=Placement(
-                        turn_index=turn_index,
-                        tab_index=tab_index,
-                        sub_turn_index=sub_turn_index,
-                    ),
-                    obj=ReasoningDone(),
-                )
-                has_reasoned = 1
-                turn_index, sub_turn_index = _increment_turns(
-                    turn_index, sub_turn_index
-                )
-                reasoning_start = False
+            yield from _close_reasoning_if_active()
 
             if not answer_start:
                 # Store pre-answer processing time in state container for save_chat
@@ -1016,11 +1046,7 @@ def run_llm_step_pkt_generator(
                     )
 
                 yield Packet(
-                    placement=Placement(
-                        turn_index=turn_index,
-                        tab_index=tab_index,
-                        sub_turn_index=sub_turn_index,
-                    ),
+                    placement=_current_placement(),
                     obj=AgentResponseStart(
                         final_documents=final_documents,
                         pre_answer_processing_seconds=pre_answer_processing_time,
@@ -1029,43 +1055,16 @@ def run_llm_step_pkt_generator(
                 answer_start = True
 
             if citation_processor:
-                for result in citation_processor.process_token(content_chunk):
-                    if isinstance(result, str):
-                        accumulated_answer += result
-                        # Save answer incrementally to state container
-                        if state_container:
-                            state_container.set_answer_tokens(accumulated_answer)
-                        yield Packet(
-                            placement=Placement(
-                                turn_index=turn_index,
-                                tab_index=tab_index,
-                                sub_turn_index=sub_turn_index,
-                            ),
-                            obj=AgentResponseDelta(content=result),
-                        )
-                    elif isinstance(result, CitationInfo):
-                        yield Packet(
-                            placement=Placement(
-                                turn_index=turn_index,
-                                tab_index=tab_index,
-                                sub_turn_index=sub_turn_index,
-                            ),
-                            obj=result,
-                        )
-                        # Track emitted citation for saving
-                        if state_container:
-                            state_container.add_emitted_citation(result.citation_number)
+                yield from _emit_citation_results(
+                    citation_processor.process_token(content_chunk)
+                )
             else:
                 accumulated_answer += content_chunk
                 # Save answer incrementally to state container
                 if state_container:
                     state_container.set_answer_tokens(accumulated_answer)
                 yield Packet(
-                    placement=Placement(
-                        turn_index=turn_index,
-                        tab_index=tab_index,
-                        sub_turn_index=sub_turn_index,
-                    ),
+                    placement=_current_placement(),
                     obj=AgentResponseDelta(content=content_chunk),
                 )
 
@@ -1127,19 +1126,11 @@ def run_llm_step_pkt_generator(
                     state_container.set_reasoning_tokens(accumulated_reasoning)
                 if not reasoning_start:
                     yield Packet(
-                        placement=Placement(
-                            turn_index=turn_index,
-                            tab_index=tab_index,
-                            sub_turn_index=sub_turn_index,
-                        ),
+                        placement=_current_placement(),
                         obj=ReasoningStart(),
                     )
                 yield Packet(
-                    placement=Placement(
-                        turn_index=turn_index,
-                        tab_index=tab_index,
-                        sub_turn_index=sub_turn_index,
-                    ),
+                    placement=_current_placement(),
                     obj=ReasoningDelta(reasoning=delta.reasoning_content),
                 )
                 reasoning_start = True
@@ -1153,20 +1144,7 @@ def run_llm_step_pkt_generator(
                     yield from _emit_content_chunk(filtered_content)
 
             if delta.tool_calls:
-                if reasoning_start:
-                    yield Packet(
-                        placement=Placement(
-                            turn_index=turn_index,
-                            tab_index=tab_index,
-                            sub_turn_index=sub_turn_index,
-                        ),
-                        obj=ReasoningDone(),
-                    )
-                    has_reasoned = 1
-                    turn_index, sub_turn_index = _increment_turns(
-                        turn_index, sub_turn_index
-                    )
-                    reasoning_start = False
+                yield from _close_reasoning_if_active()
 
                 for tool_call_delta in delta.tool_calls:
                     _update_tool_call_with_delta(id_to_tool_call_map, tool_call_delta)
@@ -1231,50 +1209,14 @@ def run_llm_step_pkt_generator(
 
     # This may happen if the custom token processor is used to modify other packets into reasoning
     # Then there won't necessarily be anything else to come after the reasoning tokens
-    if reasoning_start:
-        yield Packet(
-            placement=Placement(
-                turn_index=turn_index,
-                tab_index=tab_index,
-                sub_turn_index=sub_turn_index,
-            ),
-            obj=ReasoningDone(),
-        )
-        has_reasoned = 1
-        turn_index, sub_turn_index = _increment_turns(turn_index, sub_turn_index)
-        reasoning_start = False
+    yield from _close_reasoning_if_active()
 
     # Flush any remaining content from citation processor
     # Reasoning is always first so this should use the post-incremented value of turn_index
     # Note that this doesn't need to handle any sub-turns as those docs will not have citations
     # as clickable items and will be stripped out instead.
     if citation_processor:
-        for result in citation_processor.process_token(None):
-            if isinstance(result, str):
-                accumulated_answer += result
-                # Save answer incrementally to state container
-                if state_container:
-                    state_container.set_answer_tokens(accumulated_answer)
-                yield Packet(
-                    placement=Placement(
-                        turn_index=turn_index,
-                        tab_index=tab_index,
-                        sub_turn_index=sub_turn_index,
-                    ),
-                    obj=AgentResponseDelta(content=result),
-                )
-            elif isinstance(result, CitationInfo):
-                yield Packet(
-                    placement=Placement(
-                        turn_index=turn_index,
-                        tab_index=tab_index,
-                        sub_turn_index=sub_turn_index,
-                    ),
-                    obj=result,
-                )
-                # Track emitted citation for saving
-                if state_container:
-                    state_container.add_emitted_citation(result.citation_number)
+        yield from _emit_citation_results(citation_processor.process_token(None))
 
     # Note: Content (AgentResponseDelta) doesn't need an explicit end packet - OverallStop handles it
     # Tool calls are handled by tool execution code and emit their own packets (e.g., SectionEnd)
@@ -1298,7 +1240,7 @@ def run_llm_step_pkt_generator(
             tool_calls=tool_calls if tool_calls else None,
             raw_answer=accumulated_raw_answer if accumulated_raw_answer else None,
         ),
-        bool(has_reasoned),
+        has_reasoned,
     )
 
 
@@ -1353,4 +1295,4 @@ def run_llm_step(
             emitter.emit(packet)
         except StopIteration as e:
             llm_step_result, has_reasoned = e.value
-            return llm_step_result, bool(has_reasoned)
+            return llm_step_result, has_reasoned
