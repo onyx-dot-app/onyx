@@ -643,7 +643,9 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       ? "0fr auto 1fr"
       : appFocus.isChat()
         ? "1fr auto 0fr"
-        : "1fr auto 1fr",
+        : appFocus.isProject()
+          ? "auto auto 1fr"
+          : "1fr auto 1fr",
   };
 
   if (!isReady) return <OnyxInitializingLoader />;
@@ -698,7 +700,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
       <FederatedOAuthModal />
 
-      <AppLayouts.Root enableBackground>
+      <AppLayouts.Root enableBackground={!appFocus.isProject()}>
         <Dropzone
           onDrop={(acceptedFiles) =>
             handleMessageSpecificFileUpload(acceptedFiles)
@@ -751,11 +753,13 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
                   {/* ProjectUI */}
                   {appFocus.isProject() && (
-                    <ProjectContextPanel
-                      projectTokenCount={projectContextTokenCount}
-                      availableContextTokens={availableContextTokens}
-                      setPresentingDocument={setPresentingDocument}
-                    />
+                    <div className="w-full max-h-[50vh] overflow-y-auto overscroll-y-none">
+                      <ProjectContextPanel
+                        projectTokenCount={projectContextTokenCount}
+                        availableContextTokens={availableContextTokens}
+                        setPresentingDocument={setPresentingDocument}
+                      />
+                    </div>
                   )}
 
                   {/* WelcomeMessageUI */}
@@ -872,19 +876,18 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         )}
                       />
                     </div>
-
-                    {/* ProjectChatSessionsUI */}
-                    {appFocus.isProject() && (
-                      <>
-                        <Spacer rem={0.5} />
-                        <ProjectChatSessionList />
-                      </>
-                    )}
                   </div>
                 </div>
 
-                {/* ── Bottom: SearchResults + SourceFilter / Suggestions ── */}
+                {/* ── Bottom: SearchResults + SourceFilter / Suggestions / ProjectChatList ── */}
                 <div className="row-start-3 min-h-0 overflow-hidden flex flex-col items-center w-full">
+                  {/* ProjectChatSessionList */}
+                  {appFocus.isProject() && (
+                    <div className="w-full max-w-[var(--app-page-main-content-width)] h-full overflow-y-auto overscroll-y-none mx-auto">
+                      <ProjectChatSessionList />
+                    </div>
+                  )}
+
                   {/* SuggestionsUI */}
                   <Fade
                     show={

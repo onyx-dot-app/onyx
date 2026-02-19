@@ -22,7 +22,7 @@ import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import { useAppMode } from "@/providers/AppModeProvider";
 import useAppFocus from "@/hooks/useAppFocus";
 import { getFormattedDateRangeString } from "@/lib/dateUtils";
-import { truncateString, cn } from "@/lib/utils";
+import { truncateString, cn, isImageFile } from "@/lib/utils";
 import { Disabled } from "@/refresh-components/Disabled";
 import { useUser } from "@/providers/UserProvider";
 import { SettingsContext } from "@/providers/SettingsProvider";
@@ -382,6 +382,11 @@ const AppInputBar = React.memo(
     const shouldCompactImages = useMemo(() => {
       return currentMessageFiles.length > 1;
     }, [currentMessageFiles]);
+
+    const hasImageFiles = useMemo(
+      () => currentMessageFiles.some((f) => isImageFile(f.name)),
+      [currentMessageFiles]
+    );
 
     // Check if the assistant has search tools available (internal search or web search)
     // AND if deep research is globally enabled in admin settings
@@ -754,7 +759,7 @@ const AppInputBar = React.memo(
                 >
                   <LLMPopover
                     llmManager={llmManager}
-                    requiresImageGeneration={false}
+                    requiresImageInput={hasImageFiles}
                     disabled={disabled}
                   />
                 </div>
