@@ -53,16 +53,18 @@ def sharepoint_group_sync(
 
     msal_app = connector.msal_app
     sp_tenant_domain = connector.sp_tenant_domain
+    sp_domain_suffix = connector.sharepoint_domain_suffix
     for site_descriptor in site_descriptors:
         logger.debug(f"Processing site: {site_descriptor.url}")
 
         ctx = ClientContext(site_descriptor.url).with_access_token(
-            lambda: acquire_token_for_rest(msal_app, sp_tenant_domain)
+            lambda: acquire_token_for_rest(msal_app, sp_tenant_domain, sp_domain_suffix)
         )
 
         external_groups = get_sharepoint_external_groups(
             ctx,
             connector.graph_client,
+            graph_api_base=connector.graph_api_base,
             get_access_token=connector._get_graph_access_token,
             enumerate_all_ad_groups=enumerate_all,
         )
