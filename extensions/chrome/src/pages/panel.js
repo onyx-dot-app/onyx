@@ -127,7 +127,7 @@ import {
       if (iframe.contentWindow) {
         iframe.contentWindow.postMessage(
           { type: CHROME_MESSAGE.TAB_URL_UPDATED, url: request.url },
-          "*",
+          new URL(iframe.src).origin,
         );
       }
     }
