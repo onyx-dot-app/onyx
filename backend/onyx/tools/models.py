@@ -199,6 +199,12 @@ class PythonToolOverrideKwargs(BaseModel):
     chat_files: list[ChatFile] = []
 
 
+class ImageGenerationToolOverrideKwargs(BaseModel):
+    """Override kwargs for image generation tool calls."""
+
+    recent_generated_image_file_ids: list[str] = []
+
+
 class SearchToolRunContext(BaseModel):
     emitter: Emitter
 
