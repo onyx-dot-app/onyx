@@ -60,7 +60,6 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.jira.connector",
         class_name="JiraConnector",
     ),
-    # AGREGADO: Registro del nuevo conector de Jira Service Management
     DocumentSource.JIRA_SERVICE_MANAGEMENT: ConnectorMapping(
         module_path="onyx.connectors.jira_service_management.connector",
         class_name="JiraServiceManagementConnector",

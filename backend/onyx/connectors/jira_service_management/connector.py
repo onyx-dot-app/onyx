@@ -13,7 +13,7 @@ from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_t
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync, CheckpointOutput, SecondsSinceUnixEpoch, SlimConnectorWithPermSync
 from onyx.connectors.jira_service_management.utils import build_jira_client, build_jira_url, extract_text_from_adf, get_comment_strs
-from onyx.connectors.models import ConnectorCheckpoint, ConnectorMissingCredentialError, Document, HierarchyNode, SlimDocument, TextSection
+from onyx.connectors.models import ConnectorCheckpoint, ConnectorMissingCredentialError, Document, SlimDocument, TextSection
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -35,14 +35,16 @@ def _perform_jql_search(
         )
     except Exception as e:
         if hasattr(e, "status_code") and e.status_code == 401:
-            raise CredentialExpiredError("Invalid Token")
+            raise CredentialExpiredError("Invalid Jira Token")
         raise e
 
 def process_jira_issue(jira_base_url: str, issue: Issue) -> Document | None:
     raw_desc = getattr(issue.fields, "description", "")
     description = raw_desc if isinstance(raw_desc, str) else extract_text_from_adf(raw_desc)
+    
     comments = get_comment_strs(issue)
     content = f"{description}\n" + "\n".join([f"Comment: {c}" for c in comments if c])
+    
     page_url = build_jira_url(jira_base_url, issue.key)
     
     return Document(
@@ -89,10 +91,10 @@ class JiraServiceManagementConnector(
     def load_from_checkpoint_with_perm_sync(
         self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch, checkpoint: JiraServiceManagementConnectorCheckpoint
     ) -> CheckpointOutput[JiraServiceManagementConnectorCheckpoint]:
-        # Fix: JQL query now includes both start and end time bounds
         start_date = datetime.fromtimestamp(start, tz=timezone.utc).strftime("%Y-%m-%d %H:%M")
         end_date = datetime.fromtimestamp(end, tz=timezone.utc).strftime("%Y-%m-%d %H:%M")
         
+        # JQL with time bounds
         jql = f"updated >= '{start_date}' AND updated <= '{end_date}'"
         
         current_offset = checkpoint.offset
@@ -106,12 +108,12 @@ class JiraServiceManagementConnector(
                 yield doc
             current_offset += 1
 
-        # Fix: Using deepcopy to avoid mutating the input checkpoint in place
+        # Use deepcopy for safety
         new_checkpoint = copy.deepcopy(checkpoint)
         new_checkpoint.offset = current_offset
         new_checkpoint.has_more = found_any and len(issues) >= _JIRA_FULL_PAGE_SIZE
         
-        # Fix: Returning the checkpoint as required by the CheckpointOutput contract (not yielding)
+        # Return the checkpoint (critical fix)
         return new_checkpoint
 
     @override

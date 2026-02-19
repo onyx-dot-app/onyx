@@ -663,14 +663,17 @@ project management, and collaboration tools into a single, customizable platform
     DocumentSource.R2: "r2",
     DocumentSource.GOOGLE_CLOUD_STORAGE: "google_cloud_storage - cloud storage",
     DocumentSource.OCI_STORAGE: "oci_storage - cloud storage",
-    DocumentSource.XENFORO: "xenforo - forum data",
-    DocumentSource.DISCORD: "discord - chat and collaboration",
-    DocumentSource.FRESHDESK: "freshdesk - customer support data",
-    DocumentSource.FIREFLIES: "fireflies - call transcripts",
-    DocumentSource.EGNYTE: "egnyte - files",
-    DocumentSource.AIRTABLE: "airtable - database",
-    DocumentSource.HIGHSPOT: "highspot - CRM data",
-    DocumentSource.DRUPAL_WIKI: "drupal wiki - knowledge base content (pages, spaces, attachments)",
-    DocumentSource.IMAP: "imap - email data",
-    DocumentSource.TESTRAIL: "testrail - test case management tool for QA processes",
+    XENFORO = "xenforo"
+    NOT_APPLICABLE = "not_applicable"
+    DISCORD = "discord"
+    FRESHDESK = "freshdesk"
+    FIREFLIES = "fireflies"
+    EGNYTE = "egnyte"
+    AIRTABLE = "airtable"
+    HIGHSPOT = "highspot"
+    DRUPAL_WIKI = "drupal_wiki"
+
+    IMAP = "imap"
+    BITBUCKET = "bitbucket"
+    TESTRAIL = "testrail"
 }
