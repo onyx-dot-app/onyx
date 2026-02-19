@@ -51,7 +51,7 @@ interface ShareAgentFormContentProps {
 function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
   const { values, setFieldValue, handleSubmit, dirty } =
     useFormikContext<ShareAgentFormValues>();
-  const { data: usersData } = useShareableUsers({ includeApiKeys: false });
+  const { data: usersData } = useShareableUsers({ includeApiKeys: true });
   const { data: groupsData } = useShareableGroups();
   const { user: currentUser } = useUser();
   const { agent: fullAgent } = useAgent(agentId ?? null);
