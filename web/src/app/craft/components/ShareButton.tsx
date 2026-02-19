@@ -33,11 +33,6 @@ const SCOPE_OPTIONS: {
     label: "Organization",
     description: "Anyone logged into your Onyx can view this app.",
   },
-  {
-    value: "public_global",
-    label: "Public",
-    description: "Anyone with the link can view this app.",
-  },
 ];
 
 export default function ShareButton({
