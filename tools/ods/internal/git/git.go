@@ -192,23 +192,28 @@ func GetGitDir() (string, error) {
 // IsCommitAppliedOnBranch checks if a commit (or its cherry-picked equivalent) exists on a branch.
 // First tries exact SHA match, then falls back to matching by commit subject line.
 func IsCommitAppliedOnBranch(commitSHA, branchName string) bool {
-	// Try exact SHA match first
 	if CommitExistsOnBranch(commitSHA, branchName) {
 		return true
 	}
 
-	// Fall back to subject-line matching for cherry-picks (different SHA, same content)
 	subject, err := GetCommitMessage(commitSHA)
 	if err != nil || subject == "" {
 		return false
 	}
 
-	cmd := exec.Command("git", "log", "--grep", subject, "--fixed-strings", "--format=%H", branchName)
+	// List subject lines on the branch and compare exactly, avoiding false positives
+	// from --grep matching inside commit bodies.
+	cmd := exec.Command("git", "log", "--format=%s", branchName)
 	output, err := cmd.Output()
 	if err != nil {
 		return false
 	}
-	return strings.TrimSpace(string(output)) != ""
+	for _, line := range strings.Split(string(output), "\n") {
+		if line == subject {
+			return true
+		}
+	}
+	return false
 }
 
 // RunCherryPickContinue runs git cherry-pick --continue --no-edit
