@@ -276,8 +276,8 @@ REWRITABLE_CONTENT_TYPES = {
 }
 
 
-def _get_sandbox_url(session_id: UUID, db_session: Session) -> str:
-    """Get the internal URL for a session's Next.js server.
+def _get_sandbox_url(session_id: UUID, db_session: Session) -> tuple[str, UUID]:
+    """Get the internal URL and sandbox ID for a session's Next.js server.
 
     Uses the sandbox manager to get the correct URL for both local and
     Kubernetes environments.
@@ -287,7 +287,7 @@ def _get_sandbox_url(session_id: UUID, db_session: Session) -> str:
         db_session: Database session
 
     Returns:
-        The internal URL to proxy requests to
+        Tuple of (internal URL to proxy requests to, sandbox ID for heartbeat)
 
     Raises:
         HTTPException: If session not found, port not allocated, or sandbox not found
@@ -301,21 +301,23 @@ def _get_sandbox_url(session_id: UUID, db_session: Session) -> str:
     if session.user_id is None:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Get the user's sandbox to get the sandbox_id
     sandbox = get_sandbox_by_user_id(db_session, session.user_id)
     if sandbox is None:
         raise HTTPException(status_code=404, detail="Sandbox not found")
 
-    # Use sandbox manager to get the correct internal URL
     sandbox_manager = get_sandbox_manager()
-    return sandbox_manager.get_webapp_url(sandbox.id, session.nextjs_port)
+    return sandbox_manager.get_webapp_url(sandbox.id, session.nextjs_port), sandbox.id
 
 
 def _proxy_request(
     path: str, request: Request, session_id: UUID, db_session: Session
 ) -> StreamingResponse | Response:
-    """Proxy a request to the sandbox's Next.js server."""
-    base_url = _get_sandbox_url(session_id, db_session)
+    """Proxy a request to the sandbox's Next.js server.
+
+    Updates the sandbox heartbeat on success to keep the sandbox alive
+    while the webapp is being viewed.
+    """
+    base_url, sandbox_id = _get_sandbox_url(session_id, db_session)
 
     # Build the target URL
     target_url = f"{base_url}/{path.lstrip('/')}"
@@ -357,12 +359,15 @@ def _proxy_request(
                     media_type=content_type,
                 )
 
-            return StreamingResponse(
+            result: StreamingResponse | Response = StreamingResponse(
                 content=_stream_response(response),
                 status_code=response.status_code,
                 headers=response_headers,
                 media_type=content_type or None,
             )
+
+        update_sandbox_heartbeat(db_session, sandbox_id)
+        return result
 
     except httpx.TimeoutException:
         logger.error(f"Timeout while proxying request to {target_url}")
@@ -429,14 +434,7 @@ def get_webapp(
     """
     _check_webapp_access(session_id, user, db_session)
     try:
-        result = _proxy_request(path, request, session_id, db_session)
-        # Update sandbox heartbeat — webapp access is user activity that keeps sandbox alive
-        session = db_session.get(BuildSession, session_id)
-        if session and session.user_id:
-            sandbox = get_sandbox_by_user_id(db_session, session.user_id)
-            if sandbox:
-                update_sandbox_heartbeat(db_session, sandbox.id)
-        return result
+        return _proxy_request(path, request, session_id, db_session)
     except HTTPException as e:
         if e.status_code in (502, 503, 504):
             return _offline_html_response()
