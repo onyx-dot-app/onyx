@@ -5,7 +5,7 @@ export const THEMES = {
 
 export const DEFAULT_ONYX_DOMAIN = "http://localhost:3000";
 
-export const SIDE_PANEL_PATH = "/chat/nrf/side-panel";
+export const SIDE_PANEL_PATH = "/app/nrf/side-panel";
 
 export const ACTIONS = {
   GET_SELECTED_TEXT: "getSelectedText",
@@ -18,6 +18,8 @@ export const ACTIONS = {
   OPEN_ONYX_WITH_INPUT: "openOnyxWithInput",
   CLOSE_SIDE_PANEL: "closeSidePanel",
   TAB_URL_UPDATED: "tabUrlUpdated",
+  TAB_READING_ENABLED: "tabReadingEnabled",
+  TAB_READING_DISABLED: "tabReadingDisabled",
 };
 
 export const CHROME_SPECIFIC_STORAGE_KEYS = {
