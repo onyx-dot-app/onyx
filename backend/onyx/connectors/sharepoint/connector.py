@@ -305,10 +305,8 @@ def _create_entity_failure(
     )
 
 
-def _get_download_url(driveitem: DriveItem | DriveItemData) -> str | None:
+def _get_download_url(driveitem: Any) -> str | None:
     """Best-effort retrieval of the Microsoft Graph download URL."""
-    if isinstance(driveitem, DriveItemData):
-        return driveitem.download_url
 
     try:
         additional_data = getattr(driveitem, "additional_data", None)
@@ -1000,8 +998,8 @@ class SharepointConnector(
         """Yield drive items lazily for a given drive name.
 
         Returns:
-            A tuple of (iterable of DriveItemData, drive_web_url).
-            The iterable paginates through the Graph API so items are never
+            A generator of DriveItemData.
+            The generator paginates through the Graph API so items are never
             all held in memory at once.
         """
         try:
