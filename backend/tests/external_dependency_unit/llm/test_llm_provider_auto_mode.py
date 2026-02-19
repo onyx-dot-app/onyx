@@ -690,7 +690,7 @@ class TestAutoModeMissingFlows:
             # Step 4: The provider must appear in fetch_existing_llm_providers
             listed_providers = fetch_existing_llm_providers(
                 db_session=db_session,
-                flow_types=[LLMModelFlowType.CHAT],
+                flow_type_filter=[LLMModelFlowType.CHAT],
             )
             listed_provider_names = {p.name for p in listed_providers}
             assert provider_name in listed_provider_names, (
