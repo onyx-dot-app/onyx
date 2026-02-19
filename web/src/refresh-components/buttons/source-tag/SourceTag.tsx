@@ -32,6 +32,9 @@ const sizeClasses = {
     container: "rounded-04 p-0.5 gap-0.5",
   },
   tag: {
+    container: "rounded-08 p-1 gap-1",
+  },
+  button: {
     container: "rounded-08 h-[2.25rem] min-w-[2.25rem] p-2 gap-1",
   },
 } as const;
@@ -271,8 +274,8 @@ const QueryText = ({
  * Props for the SourceTag component.
  */
 export interface SourceTagProps {
-  /** Use inline citation size (smaller, for use within text) */
-  inlineCitation?: boolean;
+  /** Sizing variant: "inlineCitation" for compact in-text use, "button" for interactive contexts, "tag" (default) for standard display */
+  variant?: "inlineCitation" | "tag" | "button";
 
   /** Display name shown on the tag (e.g., "Google Drive", "Business Insider") */
   displayName: string;
@@ -314,7 +317,7 @@ export interface SourceTagProps {
  * - Shows stacked source icons + display name
  * - Hovering opens a details card with source navigation
  *
- * **Inline Citation** (`inlineCitation`):
+ * **Inline Citation** (`variant="inlineCitation"`):
  * - Compact size for use within text content
  * - Shows "+N" count for multiple sources
  *
@@ -341,7 +344,7 @@ export interface SourceTagProps {
  *
  * // Inline citation within text
  * <SourceTag
- *   inlineCitation
+ *   variant="inlineCitation"
  *   displayName="Source 1"
  *   sources={multipleSources}
  * />
@@ -355,7 +358,7 @@ export interface SourceTagProps {
  * ```
  */
 const SourceTagInner = ({
-  inlineCitation,
+  variant = "tag",
   displayName,
   displayUrl,
   sources,
@@ -367,6 +370,8 @@ const SourceTagInner = ({
   toggleSource,
   tooltipText,
 }: SourceTagProps) => {
+  const inlineCitation = variant === "inlineCitation";
+
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -383,7 +388,7 @@ const SourceTagInner = ({
 
   const extraCount = sources.length - 1;
 
-  const size = inlineCitation ? "inlineCitation" : "tag";
+  const size = variant;
   const styles = sizeClasses[size];
 
   // Shared text styling props
