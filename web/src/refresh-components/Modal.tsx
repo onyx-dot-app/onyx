@@ -481,7 +481,7 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
                 </DialogPrimitive.Description>
               )}
             </Section>
-            {!Icon ? closeButton : null}
+            {!Icon && closeButton}
           </Section>
         </Section>
         {children}
