@@ -258,12 +258,24 @@ async function mockChatEndpointSequence(
   });
 }
 
+async function scrollChatTo(
+  page: Page,
+  position: "top" | "bottom"
+): Promise<void> {
+  const scrollContainer = page.getByTestId("chat-scroll-container");
+  await scrollContainer.evaluate(async (el, pos) => {
+    el.scrollTo({ top: pos === "top" ? 0 : el.scrollHeight });
+    await new Promise<void>((r) => requestAnimationFrame(() => r()));
+  }, position);
+}
+
 async function screenshotChatContainer(
   page: Page,
   name: string
 ): Promise<void> {
   const container = page.locator("[data-main-container]");
   await expect(container).toBeVisible();
+  await scrollChatTo(page, "bottom");
   await expectElementScreenshot(container, { name });
 }
 
@@ -279,12 +291,11 @@ async function screenshotChatContainerTopAndBottom(
 ): Promise<void> {
   const container = page.locator("[data-main-container]");
   await expect(container).toBeVisible();
-  const scrollContainer = page.getByTestId("chat-scroll-container");
 
-  await scrollContainer.evaluate((el) => el.scrollTo({ top: 0 }));
+  await scrollChatTo(page, "top");
   await expectElementScreenshot(container, { name: `${name}-top` });
 
-  await scrollContainer.evaluate((el) => el.scrollTo({ top: el.scrollHeight }));
+  await scrollChatTo(page, "bottom");
   await expectElementScreenshot(container, { name: `${name}-bottom` });
 }
 
@@ -478,6 +489,11 @@ for (const theme of THEMES) {
         const aiMessage = page.getByTestId("onyx-ai-message").first();
         const toolbar = aiMessage.getByTestId("AgentMessage/toolbar");
         await expect(toolbar).toBeVisible({ timeout: 10000 });
+
+        await toolbar.scrollIntoViewIfNeeded();
+        await page.evaluate(
+          () => new Promise<void>((r) => requestAnimationFrame(() => r()))
+        );
 
         for (const buttonTestId of TOOLBAR_BUTTONS) {
           const button = aiMessage.getByTestId(buttonTestId);
