@@ -20,6 +20,16 @@ import {
 import { openDocument } from "@/lib/search/utils";
 import { ensureHrefProtocol } from "@/lib/utils";
 
+function isSameOriginUrl(url: string): boolean {
+  if (!url.startsWith("http")) return true;
+  try {
+    if (typeof window === "undefined") return false;
+    return new URL(url).origin === window.location.origin;
+  } catch {
+    return false;
+  }
+}
+
 export const MemoizedAnchor = memo(
   ({
     docs,
@@ -177,6 +187,26 @@ export const MemoizedLink = memo(
     }
 
     const url = ensureHrefProtocol(href);
+
+    // Check if the link is to a file on the backend
+    const isChatFile = url?.includes("/api/chat/file/") && isSameOriginUrl(url);
+    if (isChatFile && updatePresentingDocument) {
+      const fileId = url!.split("/api/chat/file/")[1]?.split(/[?#]/)[0] || "";
+      const filename = value?.toString() || "download";
+      return (
+        <a
+          onClick={() =>
+            updatePresentingDocument({
+              document_id: fileId,
+              semantic_identifier: filename,
+            } as OnyxDocument)
+          }
+          className="cursor-pointer text-link hover:text-link-hover"
+        >
+          {rest.children}
+        </a>
+      );
+    }
 
     return (
       <a
