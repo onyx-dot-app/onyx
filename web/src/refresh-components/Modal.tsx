@@ -463,32 +463,25 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
             </Section>
           )}
 
-          <Section alignItems="start" gap={0}>
-            {!Icon ? (
-              <Section
-                gap={0}
-                padding={0}
-                flexDirection="row"
-                justifyContent="between"
-                alignItems="center"
-              >
-                <DialogPrimitive.Title asChild>
-                  <Text headingH3>{title}</Text>
-                </DialogPrimitive.Title>
-                {closeButton}
-              </Section>
-            ) : (
+          <Section
+            alignItems="start"
+            gap={0}
+            justifyContent="between"
+            flexDirection="row"
+          >
+            <Section alignItems="start" padding={0} gap={0}>
               <DialogPrimitive.Title asChild>
                 <Text headingH3>{title}</Text>
               </DialogPrimitive.Title>
-            )}
-            {description && (
-              <DialogPrimitive.Description asChild>
-                <Text secondaryBody text03>
-                  {description}
-                </Text>
-              </DialogPrimitive.Description>
-            )}
+              {description && (
+                <DialogPrimitive.Description asChild>
+                  <Text secondaryBody text03>
+                    {description}
+                  </Text>
+                </DialogPrimitive.Description>
+              )}
+            </Section>
+            {!Icon ? closeButton : null}
           </Section>
         </Section>
         {children}
