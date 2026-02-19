@@ -1,6 +1,8 @@
 from datetime import datetime
 from datetime import timezone
 
+import pytest
+
 from onyx.llm.well_known_providers.auto_update_models import (
     LLMProviderRecommendation,
 )
@@ -32,7 +34,7 @@ def _build_recommendations(
 
 
 def test_model_configurations_vertex_are_sorted_by_name(
-    monkeypatch: object,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
         "onyx.llm.well_known_providers.llm_provider_options.fetch_models_for_provider",
@@ -70,7 +72,7 @@ def test_model_configurations_vertex_are_sorted_by_name(
 
 
 def test_model_configurations_non_vertex_preserve_provider_order(
-    monkeypatch: object,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
         "onyx.llm.well_known_providers.llm_provider_options.fetch_models_for_provider",
