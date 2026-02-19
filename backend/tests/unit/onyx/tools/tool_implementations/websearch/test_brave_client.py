@@ -86,6 +86,35 @@ def test_search_caps_count_to_brave_max(monkeypatch: pytest.MonkeyPatch) -> None
     assert captured_count == "20"
 
 
+def test_search_includes_optional_params(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = BraveClient(
+        api_key="test-key",
+        num_results=5,
+        country="us",
+        search_lang="en",
+        ui_lang="en-US",
+        safesearch="moderate",
+        freshness="pw",
+    )
+    captured_params: dict[str, str] | None = None
+
+    def _mock_get(*args: Any, **kwargs: Any) -> DummyResponse:  # noqa: ARG001
+        nonlocal captured_params
+        captured_params = kwargs["params"]
+        return DummyResponse(status_code=200, payload={"web": {"results": []}})
+
+    monkeypatch.setattr(brave_module.requests, "get", _mock_get)
+
+    client.search("onyx")
+
+    assert captured_params is not None
+    assert captured_params["country"] == "US"
+    assert captured_params["search_lang"] == "en"
+    assert captured_params["ui_lang"] == "en-US"
+    assert captured_params["safesearch"] == "moderate"
+    assert captured_params["freshness"] == "pw"
+
+
 def test_search_raises_descriptive_error_on_http_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -101,6 +130,44 @@ def test_search_raises_descriptive_error_on_http_failure(
 
     with pytest.raises(ValueError, match="status 401"):
         client.search("onyx")
+
+
+def test_search_does_not_retry_non_retryable_http_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = BraveClient(api_key="test-key", num_results=5)
+    calls = 0
+
+    def _mock_get(*args: Any, **kwargs: Any) -> DummyResponse:  # noqa: ARG001
+        nonlocal calls
+        calls += 1
+        return DummyResponse(
+            status_code=401,
+            payload={"error": {"message": "Unauthorized"}},
+        )
+
+    monkeypatch.setattr(brave_module.requests, "get", _mock_get)
+
+    with pytest.raises(ValueError, match="status 401"):
+        client.search("onyx")
+    assert calls == 1
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "expected_error"),
+    [
+        ({"country": "USA"}, "country"),
+        ({"safesearch": "invalid"}, "safesearch"),
+        ({"freshness": "invalid"}, "freshness"),
+        ({"timeout_seconds": 0}, "timeout_seconds"),
+    ],
+)
+def test_constructor_rejects_invalid_config_values(
+    kwargs: dict[str, Any],
+    expected_error: str,
+) -> None:
+    with pytest.raises(ValueError, match=expected_error):
+        BraveClient(api_key="test-key", **kwargs)
 
 
 def test_test_connection_maps_invalid_key_errors() -> None:
