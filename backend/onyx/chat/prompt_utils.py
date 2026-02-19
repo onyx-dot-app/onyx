@@ -10,6 +10,7 @@ from onyx.db.user_file import calculate_user_files_token_count
 from onyx.file_store.models import FileDescriptor
 from onyx.prompts.chat_prompts import CITATION_REMINDER
 from onyx.prompts.chat_prompts import DEFAULT_SYSTEM_PROMPT
+from onyx.prompts.chat_prompts import FILE_REMINDER
 from onyx.prompts.chat_prompts import LAST_CYCLE_CITATION_REMINDER
 from onyx.prompts.chat_prompts import REQUIRE_CITATION_GUIDANCE
 from onyx.prompts.prompt_utils import get_company_context
@@ -125,6 +126,7 @@ def calculate_reserved_tokens(
 def build_reminder_message(
     reminder_text: str | None,
     include_citation_reminder: bool,
+    include_file_reminder: bool,
     is_last_cycle: bool,
 ) -> str | None:
     reminder = reminder_text.strip() if reminder_text else ""
@@ -132,6 +134,8 @@ def build_reminder_message(
         reminder += "\n\n" + LAST_CYCLE_CITATION_REMINDER
     if include_citation_reminder:
         reminder += "\n\n" + CITATION_REMINDER
+    if include_file_reminder:
+        reminder += "\n\n" + FILE_REMINDER
     reminder = reminder.strip()
     return reminder if reminder else None
 
