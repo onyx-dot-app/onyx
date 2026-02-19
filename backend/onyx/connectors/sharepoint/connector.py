@@ -82,7 +82,11 @@ SHARED_DOCUMENTS_MAP_REVERSE = {v: k for k, v in SHARED_DOCUMENTS_MAP.items()}
 
 ASPX_EXTENSION = ".aspx"
 
-GRAPH_API_BASE = "https://graph.microsoft.com/v1.0"
+DEFAULT_AUTHORITY_HOST = "https://login.microsoftonline.com"
+DEFAULT_GRAPH_API_HOST = "https://graph.microsoft.com"
+DEFAULT_SHAREPOINT_DOMAIN_SUFFIX = "sharepoint.com"
+
+GRAPH_API_BASE = f"{DEFAULT_GRAPH_API_HOST}/v1.0"
 GRAPH_API_MAX_RETRIES = 5
 GRAPH_API_RETRYABLE_STATUSES = frozenset({429, 500, 502, 503, 504})
 
@@ -284,10 +288,12 @@ def load_certificate_from_pfx(pfx_data: bytes, password: str) -> CertificateData
 
 
 def acquire_token_for_rest(
-    msal_app: msal.ConfidentialClientApplication, sp_tenant_domain: str
+    msal_app: msal.ConfidentialClientApplication,
+    sp_tenant_domain: str,
+    sharepoint_domain_suffix: str,
 ) -> TokenResponse:
     token = msal_app.acquire_token_for_client(
-        scopes=[f"https://{sp_tenant_domain}.sharepoint.com/.default"]
+        scopes=[f"https://{sp_tenant_domain}.{sharepoint_domain_suffix}/.default"]
     )
     return TokenResponse.from_json(token)
 
@@ -402,12 +408,13 @@ def _download_via_graph_api(
     drive_id: str,
     item_id: str,
     bytes_allowed: int,
+    graph_api_base: str,
 ) -> bytes:
     """Download a drive item via the Graph API /content endpoint with a byte cap.
 
     Raises SizeCapExceeded if the cap is exceeded.
     """
-    url = f"{GRAPH_API_BASE}/drives/{drive_id}/items/{item_id}/content"
+    url = f"{graph_api_base}/drives/{drive_id}/items/{item_id}/content"
     headers = {"Authorization": f"Bearer {access_token}"}
     with requests.get(
         url, headers=headers, stream=True, timeout=REQUEST_TIMEOUT_SECONDS
@@ -428,6 +435,7 @@ def _convert_driveitem_to_document_with_permissions(
     drive_name: str,
     ctx: ClientContext | None,
     graph_client: GraphClient,
+    graph_api_base: str,
     include_permissions: bool = False,
     parent_hierarchy_raw_node_id: str | None = None,
     access_token: str | None = None,
@@ -484,6 +492,7 @@ def _convert_driveitem_to_document_with_permissions(
                 driveitem.drive_id,
                 driveitem.id,
                 SHAREPOINT_CONNECTOR_SIZE_THRESHOLD,
+                graph_api_base=graph_api_base,
             )
         except SizeCapExceeded:
             logger.warning(
@@ -803,6 +812,9 @@ class SharepointConnector(
         sites: list[str] = [],
         include_site_pages: bool = True,
         include_site_documents: bool = True,
+        authority_host: str = DEFAULT_AUTHORITY_HOST,
+        graph_api_host: str = DEFAULT_GRAPH_API_HOST,
+        sharepoint_domain_suffix: str = DEFAULT_SHAREPOINT_DOMAIN_SUFFIX,
     ) -> None:
         self.batch_size = batch_size
         self.sites = list(sites)
@@ -818,6 +830,10 @@ class SharepointConnector(
         self._cached_rest_ctx: ClientContext | None = None
         self._cached_rest_ctx_url: str | None = None
         self._cached_rest_ctx_created_at: float = 0.0
+        self.authority_host = authority_host.rstrip("/")
+        self.graph_api_host = graph_api_host.rstrip("/")
+        self.graph_api_base = f"{self.graph_api_host}/v1.0"
+        self.sharepoint_domain_suffix = sharepoint_domain_suffix
 
     def validate_connector_settings(self) -> None:
         # Validate that at least one content type is enabled
@@ -874,8 +890,9 @@ class SharepointConnector(
 
         msal_app = self.msal_app
         sp_tenant_domain = self.sp_tenant_domain
+        sp_domain_suffix = self.sharepoint_domain_suffix
         self._cached_rest_ctx = ClientContext(site_url).with_access_token(
-            lambda: acquire_token_for_rest(msal_app, sp_tenant_domain)
+            lambda: acquire_token_for_rest(msal_app, sp_tenant_domain, sp_domain_suffix)
         )
         self._cached_rest_ctx_url = site_url
         self._cached_rest_ctx_created_at = time.monotonic()
@@ -1147,7 +1164,7 @@ class SharepointConnector(
         site_id = site.id
 
         page_url: str | None = (
-            f"{GRAPH_API_BASE}/sites/{site_id}" f"/pages/microsoft.graph.sitePage"
+            f"{self.graph_api_base}/sites/{site_id}" f"/pages/microsoft.graph.sitePage"
         )
         params: dict[str, str] | None = {"$expand": "canvasLayout"}
         total_yielded = 0
@@ -1174,7 +1191,7 @@ class SharepointConnector(
             raise RuntimeError("MSAL app is not initialized")
 
         token = self.msal_app.acquire_token_for_client(
-            scopes=["https://graph.microsoft.com/.default"]
+            scopes=[f"{self.graph_api_host}/.default"]
         )
         return token
 
@@ -1247,7 +1264,7 @@ class SharepointConnector(
         Performs BFS folder traversal manually, fetching one page of children
         at a time so that memory usage stays bounded regardless of drive size.
         """
-        base = f"{GRAPH_API_BASE}/drives/{drive_id}"
+        base = f"{self.graph_api_base}/drives/{drive_id}"
         if folder_path:
             start_url = f"{base}/root:/{folder_path}:/children"
         else:
@@ -1308,7 +1325,7 @@ class SharepointConnector(
         EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
         use_timestamp_token = start is not None and start > EPOCH
 
-        initial_url = f"{GRAPH_API_BASE}/drives/{drive_id}/root/delta"
+        initial_url = f"{self.graph_api_base}/drives/{drive_id}/root/delta"
         if use_timestamp_token:
             assert start is not None  # purely for mypy
             token = quote(start.strftime("%Y-%m-%dT%H:%M:%SZ"))
@@ -1353,7 +1370,7 @@ class SharepointConnector(
                         drive_id,
                     )
                     yield from self._iter_delta_pages(
-                        initial_url=f"{GRAPH_API_BASE}/drives/{drive_id}/root/delta",
+                        initial_url=f"{self.graph_api_base}/drives/{drive_id}/root/delta",
                         drive_id=drive_id,
                         start=start,
                         end=end,
@@ -1470,7 +1487,7 @@ class SharepointConnector(
         sp_private_key = credentials.get("sp_private_key")
         sp_certificate_password = credentials.get("sp_certificate_password")
 
-        authority_url = f"https://login.microsoftonline.com/{sp_directory_id}"
+        authority_url = f"{self.authority_host}/{sp_directory_id}"
 
         if auth_method == SharepointAuthMethod.CERTIFICATE.value:
             logger.info("Using certificate authentication")
@@ -1511,7 +1528,7 @@ class SharepointConnector(
                 raise ConnectorValidationError("MSAL app is not initialized")
 
             token = self.msal_app.acquire_token_for_client(
-                scopes=["https://graph.microsoft.com/.default"]
+                scopes=[f"{self.graph_api_host}/.default"]
             )
             if token is None:
                 raise ConnectorValidationError("Failed to acquire token for graph")
@@ -1940,6 +1957,7 @@ class SharepointConnector(
                         self.graph_client,
                         include_permissions=include_permissions,
                         parent_hierarchy_raw_node_id=parent_hierarchy_url,
+                        graph_api_base=self.graph_api_base,
                         access_token=access_token,
                     )
 

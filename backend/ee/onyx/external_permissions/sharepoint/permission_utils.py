@@ -20,7 +20,6 @@ from onyx.access.models import ExternalAccess
 from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.sharepoint.connector import GRAPH_API_BASE
 from onyx.connectors.sharepoint.connector import GRAPH_API_MAX_RETRIES
 from onyx.connectors.sharepoint.connector import GRAPH_API_RETRYABLE_STATUSES
 from onyx.connectors.sharepoint.connector import SHARED_DOCUMENTS_MAP_REVERSE
@@ -647,13 +646,14 @@ def get_external_access_from_sharepoint(
 def _enumerate_ad_groups_paginated(
     get_access_token: Callable[[], str],
     already_resolved: set[str],
+    graph_api_base: str,
 ) -> Generator[ExternalUserGroup, None, None]:
     """Paginate through all Azure AD groups and yield ExternalUserGroup for each.
 
     Skips groups whose suffixed name is already in *already_resolved*.
     Stops early if the number of groups exceeds AD_GROUP_ENUMERATION_THRESHOLD.
     """
-    groups_url = f"{GRAPH_API_BASE}/groups"
+    groups_url = f"{graph_api_base}/groups"
     groups_params: dict[str, str] = {"$select": "id,displayName", "$top": "999"}
     total_groups = 0
 
@@ -679,7 +679,7 @@ def _enumerate_ad_groups_paginated(
             continue
 
         member_emails: list[str] = []
-        members_url = f"{GRAPH_API_BASE}/groups/{group_id}/members"
+        members_url = f"{graph_api_base}/groups/{group_id}/members"
         members_params: dict[str, str] = {
             "$select": "userPrincipalName,mail",
             "$top": "999",
@@ -699,6 +699,7 @@ def _enumerate_ad_groups_paginated(
 def get_sharepoint_external_groups(
     client_context: ClientContext,
     graph_client: GraphClient,
+    graph_api_base: str,
     get_access_token: Callable[[], str] | None = None,
     enumerate_all_ad_groups: bool = False,
 ) -> list[ExternalUserGroup]:
@@ -769,7 +770,9 @@ def get_sharepoint_external_groups(
         return external_user_groups
 
     already_resolved = set(groups_and_members.groups_to_emails.keys())
-    for group in _enumerate_ad_groups_paginated(get_access_token, already_resolved):
+    for group in _enumerate_ad_groups_paginated(
+        get_access_token, already_resolved, graph_api_base
+    ):
         external_user_groups.append(group)
 
     return external_user_groups
