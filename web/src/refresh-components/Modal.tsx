@@ -390,6 +390,7 @@ ModalContent.displayName = DialogPrimitive.Content.displayName;
  *
  * When `icon` is omitted the header renders a minimal variant: just the
  * title + description with the close button inline to the right of the title.
+ * This is JUST to be used for preview windows
  *
  * @example
  * ```tsx
