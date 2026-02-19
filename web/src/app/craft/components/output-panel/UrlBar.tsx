@@ -122,7 +122,7 @@ export default function UrlBar({
           </div>
         )}
         {/* URL display */}
-        <div className="flex-1 flex items-center px-3 py-1.5 bg-background-tint-02 rounded-full gap-2 min-h-[2.25rem]">
+        <div className="flex-1 min-w-0 flex items-center px-3 py-1.5 bg-background-tint-02 rounded-full gap-2 min-h-[2.25rem]">
           {/* Download raw file button */}
           {onDownloadRaw && (
             <SimpleTooltip tooltip={downloadRawTooltip} delayDuration={200}>
@@ -147,7 +147,7 @@ export default function UrlBar({
               </button>
             </SimpleTooltip>
           )}
-          <Text secondaryBody text03 className="truncate">
+          <Text secondaryBody text03 className="min-w-0 flex-1 truncate">
             {displayUrl}
           </Text>
         </div>

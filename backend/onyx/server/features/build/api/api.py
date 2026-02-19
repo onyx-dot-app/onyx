@@ -8,6 +8,7 @@ from fastapi import Depends
 from fastapi import HTTPException
 from fastapi import Request
 from fastapi import Response
+from fastapi.responses import RedirectResponse
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -432,7 +433,12 @@ def get_webapp(
     Accessible without authentication when sharing_scope is public_global.
     Returns a friendly offline page when the sandbox is not running.
     """
-    _check_webapp_access(session_id, user, db_session)
+    try:
+        _check_webapp_access(session_id, user, db_session)
+    except HTTPException as e:
+        if e.status_code == 401:
+            return RedirectResponse(url="/auth/login", status_code=302)
+        raise
     try:
         return _proxy_request(path, request, session_id, db_session)
     except HTTPException as e:
