@@ -33,7 +33,6 @@ from onyx.server.features.build.api.rate_limit import get_user_rate_limit_status
 from onyx.server.features.build.api.sessions_api import router as sessions_router
 from onyx.server.features.build.api.user_library import router as user_library_router
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
-from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
 from onyx.server.features.build.sandbox import get_sandbox_manager
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.utils import is_onyx_craft_enabled
@@ -277,8 +276,8 @@ REWRITABLE_CONTENT_TYPES = {
 }
 
 
-def _get_sandbox_url(session_id: UUID, db_session: Session) -> tuple[str, UUID]:
-    """Get the internal URL and sandbox ID for a session's Next.js server.
+def _get_sandbox_url(session_id: UUID, db_session: Session) -> str:
+    """Get the internal URL for a session's Next.js server.
 
     Uses the sandbox manager to get the correct URL for both local and
     Kubernetes environments.
@@ -288,7 +287,7 @@ def _get_sandbox_url(session_id: UUID, db_session: Session) -> tuple[str, UUID]:
         db_session: Database session
 
     Returns:
-        Tuple of (internal URL to proxy requests to, sandbox ID for heartbeat)
+        Internal URL to proxy requests to
 
     Raises:
         HTTPException: If session not found, port not allocated, or sandbox not found
@@ -307,18 +306,14 @@ def _get_sandbox_url(session_id: UUID, db_session: Session) -> tuple[str, UUID]:
         raise HTTPException(status_code=404, detail="Sandbox not found")
 
     sandbox_manager = get_sandbox_manager()
-    return sandbox_manager.get_webapp_url(sandbox.id, session.nextjs_port), sandbox.id
+    return sandbox_manager.get_webapp_url(sandbox.id, session.nextjs_port)
 
 
 def _proxy_request(
     path: str, request: Request, session_id: UUID, db_session: Session
 ) -> StreamingResponse | Response:
-    """Proxy a request to the sandbox's Next.js server.
-
-    Updates the sandbox heartbeat on success to keep the sandbox alive
-    while the webapp is being viewed.
-    """
-    base_url, sandbox_id = _get_sandbox_url(session_id, db_session)
+    """Proxy a request to the sandbox's Next.js server."""
+    base_url = _get_sandbox_url(session_id, db_session)
 
     # Build the target URL
     target_url = f"{base_url}/{path.lstrip('/')}"
@@ -360,15 +355,12 @@ def _proxy_request(
                     media_type=content_type,
                 )
 
-            result: StreamingResponse | Response = StreamingResponse(
+            return StreamingResponse(
                 content=_stream_response(response),
                 status_code=response.status_code,
                 headers=response_headers,
                 media_type=content_type or None,
             )
-
-        update_sandbox_heartbeat(db_session, sandbox_id)
-        return result
 
     except httpx.TimeoutException:
         logger.error(f"Timeout while proxying request to {target_url}")
