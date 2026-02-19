@@ -52,6 +52,7 @@ from onyx.configs.app_configs import USER_AUTH_SECRET
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import AuthType
 from onyx.configs.constants import POSTGRES_WEB_APP_NAME
+from onyx.db.engine.async_sql_engine import get_sqlalchemy_async_engine
 from onyx.db.engine.connection_warmup import warm_up_connections
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.sql_engine import SqlEngine
@@ -114,13 +115,16 @@ from onyx.server.manage.users import router as user_router
 from onyx.server.manage.web_search.api import (
     admin_router as web_search_admin_router,
 )
+from onyx.server.metrics.postgres_connection_pool import (
+    setup_postgres_connection_pool_metrics,
+)
+from onyx.server.metrics.prometheus_setup import setup_prometheus_metrics
 from onyx.server.middleware.latency_logging import add_latency_logging_middleware
 from onyx.server.middleware.rate_limiting import close_auth_limiter
 from onyx.server.middleware.rate_limiting import get_auth_rate_limiters
 from onyx.server.middleware.rate_limiting import setup_auth_limiter
 from onyx.server.onyx_api.ingestion import router as onyx_api_router
 from onyx.server.pat.api import router as pat_router
-from onyx.server.prometheus_instrumentation import setup_prometheus_metrics
 from onyx.server.query_and_chat.chat_backend import router as chat_router
 from onyx.server.query_and_chat.query_backend import (
     admin_router as admin_query_router,
@@ -138,6 +142,7 @@ from onyx.setup import setup_onyx
 from onyx.tracing.setup import setup_tracing
 from onyx.utils.logger import setup_logger
 from onyx.utils.logger import setup_uvicorn_logger
+from onyx.utils.middleware import add_endpoint_context_middleware
 from onyx.utils.middleware import add_onyx_request_id_middleware
 from onyx.utils.telemetry import get_or_generate_uuid
 from onyx.utils.telemetry import optional_telemetry
@@ -264,6 +269,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
     SqlEngine.init_readonly_engine(
         pool_size=POSTGRES_API_SERVER_READ_ONLY_POOL_SIZE,
         max_overflow=POSTGRES_API_SERVER_READ_ONLY_POOL_OVERFLOW,
+    )
+
+    # Register pool metrics now that engines are created.
+    # HTTP instrumentation is set up earlier in get_application() since it
+    # adds middleware (which Starlette forbids after the app has started).
+    setup_postgres_connection_pool_metrics(
+        engines={
+            "sync": SqlEngine.get_engine(),
+            "async": get_sqlalchemy_async_engine(),
+            "readonly": SqlEngine.get_readonly_engine(),
+        },
     )
 
     verify_auth = fetch_versioned_implementation(
@@ -560,11 +576,17 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
 
     add_onyx_request_id_middleware(application, "API", logger)
 
+    # Set endpoint context for per-endpoint DB pool attribution metrics.
+    # Must be registered after all routes are added.
+    add_endpoint_context_middleware(application)
+
+    # HTTP request metrics (latency histograms, in-progress gauge, slow request
+    # counter). Must be called here — before the app starts — because the
+    # instrumentator adds middleware via app.add_middleware().
+    setup_prometheus_metrics(application)
+
     # Ensure all routes have auth enabled or are explicitly marked as public
     check_router_auth(application)
-
-    # Initialize and instrument the app with production Prometheus config
-    setup_prometheus_metrics(application)
 
     use_route_function_names_as_operation_ids(application)
 
