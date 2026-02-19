@@ -222,6 +222,9 @@ def _make_mock_response(
     else:
         resp.content = content
 
+    resp.apparent_encoding = None
+    resp.encoding = None
+
     return resp
 
 
