@@ -4,12 +4,74 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
+// testRepo wraps a temporary git repo with convenience methods for tests.
+type testRepo struct {
+	t      *testing.T
+	Dir    string
+	origWd string
+}
+
+func newTestRepo(t *testing.T) *testRepo {
+	t.Helper()
+	dir := t.TempDir()
+	origWd, _ := os.Getwd()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+
+	r := &testRepo{t: t, Dir: dir, origWd: origWd}
+	t.Cleanup(r.cleanup)
+
+	r.Git("init", "-b", "main")
+	r.Git("config", "user.email", "test@test.com")
+	r.Git("config", "user.name", "Test")
+	r.Commit("initial commit", "README.md", "init")
+
+	return r
+}
+
+func (r *testRepo) cleanup() {
+	_ = os.Chdir(r.origWd)
+}
+
+// Git runs a git command, failing the test on error.
+func (r *testRepo) Git(args ...string) string {
+	r.t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = r.Dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		r.t.Fatalf("git %s failed: %v\n%s", strings.Join(args, " "), err, out)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// Commit creates a file, stages it, and commits with the given message.
+func (r *testRepo) Commit(msg, filename, content string) string {
+	r.t.Helper()
+	path := filepath.Join(r.Dir, filename)
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		r.t.Fatal(err)
+	}
+	r.Git("add", filename)
+	r.Git("commit", "-m", msg)
+	return r.HEAD()
+}
+
+// HEAD returns the SHA of the current HEAD.
+func (r *testRepo) HEAD() string {
+	r.t.Helper()
+	return r.Git("rev-parse", "HEAD")
+}
+
+// --- State file tests ---
+
 func TestCherryPickStateRoundTrip(t *testing.T) {
-	_, cleanup := initTestRepo(t)
-	defer cleanup()
+	newTestRepo(t)
 
 	state := &CherryPickState{
 		OriginalBranch: "main",
@@ -47,76 +109,24 @@ func TestCherryPickStateRoundTrip(t *testing.T) {
 
 	CleanCherryPickState()
 
-	_, err = LoadCherryPickState()
-	if err == nil {
+	if _, err = LoadCherryPickState(); err == nil {
 		t.Error("LoadCherryPickState after clean should fail")
 	}
 }
 
 func TestLoadCherryPickStateMissing(t *testing.T) {
-	_, cleanup := initTestRepo(t)
-	defer cleanup()
+	newTestRepo(t)
 
-	_, err := LoadCherryPickState()
-	if err == nil {
+	if _, err := LoadCherryPickState(); err == nil {
 		t.Error("expected error for missing state file")
 	}
 }
 
-func writeFile(t *testing.T, path, content string) {
-	t.Helper()
-	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
-		t.Fatal(err)
-	}
-}
-
-// initTestRepo creates a real git repo in a temp dir with an initial commit,
-// changes into it, and returns a cleanup function.
-func initTestRepo(t *testing.T) (repoDir string, cleanup func()) {
-	t.Helper()
-	dir := t.TempDir()
-
-	origDir, _ := os.Getwd()
-	if err := os.Chdir(dir); err != nil {
-		t.Fatal(err)
-	}
-
-	run := func(args ...string) {
-		t.Helper()
-		cmd := exec.Command("git", args...)
-		cmd.Dir = dir
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("git %v failed: %v\n%s", args, err, out)
-		}
-	}
-
-	run("init", "-b", "main")
-	run("config", "user.email", "test@test.com")
-	run("config", "user.name", "Test")
-
-	f := filepath.Join(dir, "README.md")
-	writeFile(t, f, "init")
-	run("add", "README.md")
-	run("commit", "-m", "initial commit")
-
-	return dir, func() {
-		_ = os.Chdir(origDir)
-	}
-}
+// --- IsCommitAppliedOnBranch tests ---
 
 func TestIsCommitAppliedOnBranch_ExactSHA(t *testing.T) {
-	dir, cleanup := initTestRepo(t)
-	defer cleanup()
-
-	// Get the SHA of HEAD
-	cmd := exec.Command("git", "rev-parse", "HEAD")
-	cmd.Dir = dir
-	out, err := cmd.Output()
-	if err != nil {
-		t.Fatal(err)
-	}
-	sha := string(out[:len(out)-1])
+	repo := newTestRepo(t)
+	sha := repo.HEAD()
 
 	if !IsCommitAppliedOnBranch(sha, "main") {
 		t.Error("expected commit to be found on main by exact SHA")
@@ -124,45 +134,18 @@ func TestIsCommitAppliedOnBranch_ExactSHA(t *testing.T) {
 }
 
 func TestIsCommitAppliedOnBranch_SubjectMatch(t *testing.T) {
-	dir, cleanup := initTestRepo(t)
-	defer cleanup()
+	repo := newTestRepo(t)
 
-	run := func(args ...string) {
-		t.Helper()
-		cmd := exec.Command("git", args...)
-		cmd.Dir = dir
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("git %v failed: %v\n%s", args, err, out)
-		}
-	}
+	repo.Git("checkout", "-b", "feature")
+	featureSHA := repo.Commit("feat: add feature", "feature.txt", "feature")
 
-	// Create a feature branch with a commit
-	run("checkout", "-b", "feature")
-	writeFile(t, filepath.Join(dir, "feature.txt"), "feature")
-	run("add", "feature.txt")
-	run("commit", "-m", "feat: add feature")
+	// Diverge main so the feature SHA isn't reachable from it
+	repo.Git("checkout", "main")
+	repo.Commit("chore: diverge main", "diverge.txt", "diverge")
+	repo.Git("cherry-pick", featureSHA)
 
-	cmd := exec.Command("git", "rev-parse", "HEAD")
-	cmd.Dir = dir
-	out, err := cmd.Output()
-	if err != nil {
-		t.Fatal(err)
-	}
-	featureSHA := string(out[:len(out)-1])
-
-	// Make main diverge so the feature SHA isn't reachable from main
-	run("checkout", "main")
-	writeFile(t, filepath.Join(dir, "diverge.txt"), "diverge")
-	run("add", "diverge.txt")
-	run("commit", "-m", "chore: diverge main")
-
-	// Cherry-pick onto main (creates new SHA, same subject)
-	run("cherry-pick", featureSHA)
-
-	// The original SHA should NOT be on main (different history)
 	if CommitExistsOnBranch(featureSHA, "main") {
-		t.Skip("exact SHA is on main (unexpected), skipping subject-line test")
+		t.Skip("exact SHA reachable from main, cannot test subject-line fallback")
 	}
 
 	if !IsCommitAppliedOnBranch(featureSHA, "main") {
@@ -171,32 +154,10 @@ func TestIsCommitAppliedOnBranch_SubjectMatch(t *testing.T) {
 }
 
 func TestIsCommitAppliedOnBranch_NoMatch(t *testing.T) {
-	dir, cleanup := initTestRepo(t)
-	defer cleanup()
+	repo := newTestRepo(t)
 
-	run := func(args ...string) {
-		t.Helper()
-		cmd := exec.Command("git", args...)
-		cmd.Dir = dir
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("git %v failed: %v\n%s", args, err, out)
-		}
-	}
-
-	// Create a commit only on a feature branch
-	run("checkout", "-b", "feature")
-	writeFile(t, filepath.Join(dir, "only-feature.txt"), "only")
-	run("add", "only-feature.txt")
-	run("commit", "-m", "feat: only on feature branch")
-
-	cmd := exec.Command("git", "rev-parse", "HEAD")
-	cmd.Dir = dir
-	out, err := cmd.Output()
-	if err != nil {
-		t.Fatal(err)
-	}
-	featureSHA := string(out[:len(out)-1])
+	repo.Git("checkout", "-b", "feature")
+	featureSHA := repo.Commit("feat: only on feature branch", "only-feature.txt", "only")
 
 	if IsCommitAppliedOnBranch(featureSHA, "main") {
 		t.Error("expected commit NOT to be found on main")
@@ -204,38 +165,14 @@ func TestIsCommitAppliedOnBranch_NoMatch(t *testing.T) {
 }
 
 func TestIsCommitAppliedOnBranch_NoFalsePositiveFromBody(t *testing.T) {
-	dir, cleanup := initTestRepo(t)
-	defer cleanup()
+	repo := newTestRepo(t)
 
-	run := func(args ...string) {
-		t.Helper()
-		cmd := exec.Command("git", args...)
-		cmd.Dir = dir
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("git %v failed: %v\n%s", args, err, out)
-		}
-	}
+	repo.Git("checkout", "-b", "feature")
+	featureSHA := repo.Commit("unique subject for test", "f.txt", "f")
 
-	// Create a commit on feature with a unique subject
-	run("checkout", "-b", "feature")
-	writeFile(t, filepath.Join(dir, "f.txt"), "f")
-	run("add", "f.txt")
-	run("commit", "-m", "unique subject for test")
-
-	cmd := exec.Command("git", "rev-parse", "HEAD")
-	cmd.Dir = dir
-	out, err := cmd.Output()
-	if err != nil {
-		t.Fatal(err)
-	}
-	featureSHA := string(out[:len(out)-1])
-
-	// On main, create a commit whose BODY contains the subject, but subject differs
-	run("checkout", "main")
-	writeFile(t, filepath.Join(dir, "g.txt"), "g")
-	run("add", "g.txt")
-	run("commit", "-m", "different subject\n\nunique subject for test")
+	// On main, create a commit whose body contains the subject but whose subject differs
+	repo.Git("checkout", "main")
+	repo.Commit("different subject\n\nunique subject for test", "g.txt", "g")
 
 	if IsCommitAppliedOnBranch(featureSHA, "main") {
 		t.Error("should NOT match when subject only appears in body of another commit")
