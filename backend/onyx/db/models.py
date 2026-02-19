@@ -77,6 +77,7 @@ from onyx.db.enums import (
     ThemePreference,
     DefaultAppMode,
     SwitchoverType,
+    SharingScope,
 )
 from onyx.configs.constants import NotificationType
 from onyx.configs.constants import SearchFeedbackType
@@ -4711,6 +4712,12 @@ class BuildSession(Base):
     nextjs_port: Mapped[int | None] = mapped_column(Integer, nullable=True)
     demo_data_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("true")
+    )
+    sharing_scope: Mapped[SharingScope] = mapped_column(
+        String,
+        nullable=False,
+        default=SharingScope.PRIVATE,
+        server_default="private",
     )
 
     # Relationships
