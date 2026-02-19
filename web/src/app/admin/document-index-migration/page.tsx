@@ -65,7 +65,7 @@ function MigrationStatusSection() {
   // total chunks.
   const shouldShowProgress = isOngoing && approxTotalChunks;
   const progressPercentage = shouldShowProgress
-    ? Math.min(100, (totalChunksMigrated / approxTotalChunks) * 100)
+    ? Math.min(99, (totalChunksMigrated / approxTotalChunks) * 100)
     : null;
 
   return (
