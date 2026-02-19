@@ -20,6 +20,7 @@ from onyx.configs.app_configs import PROMPT_CACHE_CHAT_HISTORY
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.file_store.models import ChatFileType
+from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LanguageModelInput
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
@@ -676,6 +677,107 @@ def _extract_nested_arguments_obj(
     return None
 
 
+def _build_structured_assistant_message(msg: ChatMessageSimple) -> AssistantMessage:
+    tool_calls_list: list[ToolCall] | None = None
+    if msg.tool_calls:
+        tool_calls_list = [
+            ToolCall(
+                id=tc.tool_call_id,
+                type="function",
+                function=FunctionCall(
+                    name=tc.tool_name,
+                    arguments=json.dumps(tc.tool_arguments),
+                ),
+            )
+            for tc in msg.tool_calls
+        ]
+
+    return AssistantMessage(
+        role="assistant",
+        content=msg.message or None,
+        tool_calls=tool_calls_list,
+    )
+
+
+def _build_structured_tool_response_message(msg: ChatMessageSimple) -> ToolMessage:
+    if not msg.tool_call_id:
+        raise ValueError(
+            "Tool call response message encountered but tool_call_id is not available. "
+            f"Message: {msg}"
+        )
+
+    return ToolMessage(
+        role="tool",
+        content=msg.message,
+        tool_call_id=msg.tool_call_id,
+    )
+
+
+class _HistoryMessageFormatter:
+    def format_assistant_message(self, msg: ChatMessageSimple) -> AssistantMessage:
+        raise NotImplementedError
+
+    def format_tool_response_message(
+        self, msg: ChatMessageSimple
+    ) -> ToolMessage | UserMessage:
+        raise NotImplementedError
+
+
+class _DefaultHistoryMessageFormatter(_HistoryMessageFormatter):
+    def format_assistant_message(self, msg: ChatMessageSimple) -> AssistantMessage:
+        return _build_structured_assistant_message(msg)
+
+    def format_tool_response_message(self, msg: ChatMessageSimple) -> ToolMessage:
+        return _build_structured_tool_response_message(msg)
+
+
+class _OllamaHistoryMessageFormatter(_HistoryMessageFormatter):
+    def format_assistant_message(self, msg: ChatMessageSimple) -> AssistantMessage:
+        if not msg.tool_calls:
+            return _build_structured_assistant_message(msg)
+
+        tool_call_lines = [
+            (
+                f"[Tool Call] name={tc.tool_name} "
+                f"id={tc.tool_call_id} args={json.dumps(tc.tool_arguments)}"
+            )
+            for tc in msg.tool_calls
+        ]
+        assistant_content = (
+            "\n".join([msg.message, *tool_call_lines])
+            if msg.message
+            else "\n".join(tool_call_lines)
+        )
+        return AssistantMessage(
+            role="assistant",
+            content=assistant_content,
+            tool_calls=None,
+        )
+
+    def format_tool_response_message(self, msg: ChatMessageSimple) -> UserMessage:
+        if not msg.tool_call_id:
+            raise ValueError(
+                "Tool call response message encountered but tool_call_id is not available. "
+                f"Message: {msg}"
+            )
+
+        return UserMessage(
+            role="user",
+            content=f"[Tool Result] id={msg.tool_call_id}\n{msg.message}",
+        )
+
+
+_DEFAULT_HISTORY_MESSAGE_FORMATTER = _DefaultHistoryMessageFormatter()
+_OLLAMA_HISTORY_MESSAGE_FORMATTER = _OllamaHistoryMessageFormatter()
+
+
+def _get_history_message_formatter(llm_config: LLMConfig) -> _HistoryMessageFormatter:
+    if llm_config.model_provider == LlmProviderNames.OLLAMA_CHAT:
+        return _OLLAMA_HISTORY_MESSAGE_FORMATTER
+
+    return _DEFAULT_HISTORY_MESSAGE_FORMATTER
+
+
 def translate_history_to_llm_format(
     history: list[ChatMessageSimple],
     llm_config: LLMConfig,
@@ -686,6 +788,10 @@ def translate_history_to_llm_format(
     handling different message types and image files for multimodal support.
     """
     messages: list[ChatCompletionMessage] = []
+    history_message_formatter = _get_history_message_formatter(llm_config)
+    # Note: cacheability is computed from pre-translation ChatMessageSimple types.
+    # Some providers flatten tool history into plain assistant/user text, so this split
+    # may be less semantically meaningful, but it remains safe and order-preserving.
     last_cacheable_msg_idx = -1
     all_previous_msgs_cacheable = True
 
@@ -767,39 +873,10 @@ def translate_history_to_llm_format(
             messages.append(reminder_msg)
 
         elif msg.message_type == MessageType.ASSISTANT:
-            tool_calls_list: list[ToolCall] | None = None
-            if msg.tool_calls:
-                tool_calls_list = [
-                    ToolCall(
-                        id=tc.tool_call_id,
-                        type="function",
-                        function=FunctionCall(
-                            name=tc.tool_name,
-                            arguments=json.dumps(tc.tool_arguments),
-                        ),
-                    )
-                    for tc in msg.tool_calls
-                ]
-
-            assistant_msg = AssistantMessage(
-                role="assistant",
-                content=msg.message or None,
-                tool_calls=tool_calls_list,
-            )
-            messages.append(assistant_msg)
+            messages.append(history_message_formatter.format_assistant_message(msg))
 
         elif msg.message_type == MessageType.TOOL_CALL_RESPONSE:
-            if not msg.tool_call_id:
-                raise ValueError(
-                    f"Tool call response message encountered but tool_call_id is not available. Message: {msg}"
-                )
-
-            tool_msg = ToolMessage(
-                role="tool",
-                content=msg.message,
-                tool_call_id=msg.tool_call_id,
-            )
-            messages.append(tool_msg)
+            messages.append(history_message_formatter.format_tool_response_message(msg))
 
         else:
             logger.warning(

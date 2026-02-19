@@ -2,6 +2,8 @@
 
 from typing import Any
 
+import pytest
+
 from onyx.chat.llm_step import _extract_tool_call_kickoffs
 from onyx.chat.llm_step import _increment_turns
 from onyx.chat.llm_step import _parse_tool_args_to_dict
@@ -9,6 +11,15 @@ from onyx.chat.llm_step import _resolve_tool_arguments
 from onyx.chat.llm_step import _sanitize_llm_output
 from onyx.chat.llm_step import _XmlToolCallContentFilter
 from onyx.chat.llm_step import extract_tool_calls_from_response_text
+from onyx.chat.llm_step import translate_history_to_llm_format
+from onyx.chat.models import ChatMessageSimple
+from onyx.chat.models import ToolCallSimple
+from onyx.configs.constants import MessageType
+from onyx.llm.constants import LlmProviderNames
+from onyx.llm.interfaces import LLMConfig
+from onyx.llm.models import AssistantMessage
+from onyx.llm.models import ToolMessage
+from onyx.llm.models import UserMessage
 from onyx.server.query_and_chat.placement import Placement
 
 
@@ -418,3 +429,121 @@ class TestResolveToolArguments:
         """When arguments resolves to a list or int, returns None."""
         assert _resolve_tool_arguments({"arguments": [1, 2, 3]}) is None
         assert _resolve_tool_arguments({"arguments": 42}) is None
+
+
+class TestTranslateHistoryToLlmFormat:
+    @staticmethod
+    def _llm_config(provider: str) -> LLMConfig:
+        return LLMConfig(
+            model_provider=provider,
+            model_name="test-model",
+            temperature=0,
+            max_input_tokens=8192,
+        )
+
+    @staticmethod
+    def _tool_history() -> list[ChatMessageSimple]:
+        return [
+            ChatMessageSimple(
+                message="",
+                token_count=5,
+                message_type=MessageType.ASSISTANT,
+                tool_calls=[
+                    ToolCallSimple(
+                        tool_call_id="51381e0b0",
+                        tool_name="internal_search",
+                        tool_arguments={"queries": ["alpha"]},
+                    )
+                ],
+            ),
+            ChatMessageSimple(
+                message="tool result body",
+                token_count=5,
+                message_type=MessageType.TOOL_CALL_RESPONSE,
+                tool_call_id="51381e0b0",
+            ),
+        ]
+
+    def test_preserves_structured_tool_history_for_non_ollama(self) -> None:
+        translated = translate_history_to_llm_format(
+            history=self._tool_history(),
+            llm_config=self._llm_config(LlmProviderNames.OPENAI),
+        )
+        assert isinstance(translated, list)
+
+        assert isinstance(translated[0], AssistantMessage)
+        assert translated[0].tool_calls is not None
+        assert translated[0].tool_calls[0].id == "51381e0b0"
+        assert isinstance(translated[1], ToolMessage)
+        assert translated[1].tool_call_id == "51381e0b0"
+
+    def test_flattens_tool_history_for_ollama(self) -> None:
+        translated = translate_history_to_llm_format(
+            history=self._tool_history(),
+            llm_config=self._llm_config(LlmProviderNames.OLLAMA_CHAT),
+        )
+        assert isinstance(translated, list)
+
+        assert isinstance(translated[0], AssistantMessage)
+        assert translated[0].tool_calls is None
+        assert translated[0].content is not None
+        assert "51381e0b0" in translated[0].content
+
+        assert isinstance(translated[1], UserMessage)
+        assert "51381e0b0" in translated[1].content
+        assert "tool result body" in translated[1].content
+
+    def test_flattens_multiple_assistant_tool_calls_for_ollama(self) -> None:
+        history = [
+            ChatMessageSimple(
+                message="I will use tools now.",
+                token_count=5,
+                message_type=MessageType.ASSISTANT,
+                tool_calls=[
+                    ToolCallSimple(
+                        tool_call_id="call-a",
+                        tool_name="internal_search",
+                        tool_arguments={"queries": ["alpha"]},
+                    ),
+                    ToolCallSimple(
+                        tool_call_id="call-b",
+                        tool_name="internal_search",
+                        tool_arguments={"queries": ["beta"]},
+                    ),
+                ],
+            )
+        ]
+        translated = translate_history_to_llm_format(
+            history=history,
+            llm_config=self._llm_config(LlmProviderNames.OLLAMA_CHAT),
+        )
+
+        assert isinstance(translated, list)
+        assert isinstance(translated[0], AssistantMessage)
+        assert translated[0].tool_calls is None
+        assert translated[0].content == (
+            "I will use tools now.\n"
+            '[Tool Call] name=internal_search id=call-a args={"queries": ["alpha"]}\n'
+            '[Tool Call] name=internal_search id=call-b args={"queries": ["beta"]}'
+        )
+
+    @pytest.mark.parametrize(
+        "provider",
+        [
+            LlmProviderNames.OPENAI,
+            LlmProviderNames.OLLAMA_CHAT,
+        ],
+    )
+    def test_tool_call_response_requires_tool_call_id(self, provider: str) -> None:
+        with pytest.raises(ValueError, match="tool_call_id is not available"):
+            translate_history_to_llm_format(
+                history=[
+                    ChatMessageSimple(
+                        message="tool result body",
+                        token_count=5,
+                        message_type=MessageType.TOOL_CALL_RESPONSE,
+                        tool_call_id=None,
+                    )
+                ],
+                llm_config=self._llm_config(provider),
+            )
