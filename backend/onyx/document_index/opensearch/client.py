@@ -54,6 +54,9 @@ class SearchHit(BaseModel, Generic[SchemaDocumentModel]):
     # Maps schema property name to a list of highlighted snippets with match
     # terms wrapped in tags (e.g. "something <hi>keyword</hi> other thing").
     match_highlights: dict[str, list[str]] = {}
+    # Score explanation from OpenSearch when "explain": true is set in the query.
+    # Contains detailed breakdown of how the score was calculated.
+    explanation: dict[str, Any] | None = None
 
 
 def get_new_body_without_vectors(body: dict[str, Any]) -> dict[str, Any]:
@@ -706,10 +709,12 @@ class OpenSearchClient:
                 )
             document_chunk_score = hit.get("_score", None)
             match_highlights: dict[str, list[str]] = hit.get("highlight", {})
+            explanation: dict[str, Any] | None = hit.get("_explanation", None)
             search_hit = SearchHit[DocumentChunk](
                 document_chunk=DocumentChunk.model_validate(document_chunk_source),
                 score=document_chunk_score,
                 match_highlights=match_highlights,
+                explanation=explanation,
             )
             search_hits.append(search_hit)
         logger.debug(

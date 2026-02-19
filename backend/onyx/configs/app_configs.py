@@ -263,6 +263,18 @@ OPENSEARCH_PROFILING_DISABLED = (
     os.environ.get("OPENSEARCH_PROFILING_DISABLED", "").lower() == "true"
 )
 
+# When enabled, OpenSearch returns detailed score breakdowns for each hit.
+# Useful for debugging and tuning search relevance. Has ~10-30% performance overhead according to documentation.
+# Seems for Hybrid Search in practice, the impact is actually more like 1000x slower.
+OPENSEARCH_EXPLAIN_ENABLED = (
+    os.environ.get("OPENSEARCH_EXPLAIN_ENABLED", "").lower() == "true"
+)
+
+# Analyzer used for full-text fields (title, content). Use OpenSearch built-in analyzer
+# names (e.g. "english", "standard", "german"). Affects stemming and tokenization;
+# existing indices need reindexing after a change.
+OPENSEARCH_TEXT_ANALYZER = os.environ.get("OPENSEARCH_TEXT_ANALYZER") or "english"
+
 # This is the "base" config for now, the idea is that at least for our dev
 # environments we always want to be dual indexing into both OpenSearch and Vespa
 # to stress test the new codepaths. Only enable this if there is some instance

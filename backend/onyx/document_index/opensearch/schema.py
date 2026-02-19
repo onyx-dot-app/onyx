@@ -11,6 +11,7 @@ from pydantic import model_serializer
 from pydantic import model_validator
 from pydantic import SerializerFunctionWrapHandler
 
+from onyx.configs.app_configs import OPENSEARCH_TEXT_ANALYZER
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.constants import DEFAULT_MAX_CHUNK_SIZE
 from onyx.document_index.opensearch.constants import EF_CONSTRUCTION
@@ -52,6 +53,11 @@ PRIMARY_OWNERS_FIELD_NAME = "primary_owners"
 SECONDARY_OWNERS_FIELD_NAME = "secondary_owners"
 # Hierarchy filtering - list of ancestor hierarchy node IDs
 ANCESTOR_HIERARCHY_NODE_IDS_FIELD_NAME = "ancestor_hierarchy_node_ids"
+
+
+# Faiss was also tried but it didn't have any benefits
+# NMSLIB is deprecated, not recommended
+OPENSEARCH_KNN_ENGINE = "lucene"
 
 
 def get_opensearch_doc_chunk_id(
@@ -343,6 +349,9 @@ class DocumentSchema:
             "properties": {
                 TITLE_FIELD_NAME: {
                     "type": "text",
+                    # Language analyzer (e.g. english) stems at index and search time for variant matching.
+                    # Configure via OPENSEARCH_TEXT_ANALYZER. Existing indices need reindexing after a change.
+                    "analyzer": OPENSEARCH_TEXT_ANALYZER,
                     "fields": {
                         # Subfield accessed as title.keyword. Not indexed for
                         # values longer than 256 chars.
@@ -357,9 +366,7 @@ class DocumentSchema:
                 CONTENT_FIELD_NAME: {
                     "type": "text",
                     "store": True,
-                    # This makes highlighting text during queries more efficient
-                    # at the cost of disk space. See
-                    # https://docs.opensearch.org/latest/search-plugins/searching-data/highlight/#methods-of-obtaining-offsets
+                    "analyzer": OPENSEARCH_TEXT_ANALYZER,
                     "index_options": "offsets",
                 },
                 TITLE_VECTOR_FIELD_NAME: {
@@ -368,7 +375,7 @@ class DocumentSchema:
                     "method": {
                         "name": "hnsw",
                         "space_type": "cosinesimil",
-                        "engine": "lucene",
+                        "engine": OPENSEARCH_KNN_ENGINE,
                         "parameters": {"ef_construction": EF_CONSTRUCTION, "m": M},
                     },
                 },
@@ -380,7 +387,7 @@ class DocumentSchema:
                     "method": {
                         "name": "hnsw",
                         "space_type": "cosinesimil",
-                        "engine": "lucene",
+                        "engine": OPENSEARCH_KNN_ENGINE,
                         "parameters": {"ef_construction": EF_CONSTRUCTION, "m": M},
                     },
                 },
