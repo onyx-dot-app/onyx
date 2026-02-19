@@ -17,9 +17,11 @@ spec:
   {{- if hasKey .Values.celery_worker_monitoring.autoscaling "idleReplicaCount" }}
   idleReplicaCount: {{ .Values.celery_worker_monitoring.autoscaling.idleReplicaCount }}
   {{- end }}
+  {{- if .Values.celery_worker_monitoring.autoscaling.customTriggers }}
   fallback:
     failureThreshold: {{ .Values.celery_worker_monitoring.autoscaling.failureThreshold | default 3 }}
     replicas: {{ .Values.celery_worker_monitoring.autoscaling.fallbackReplicas | default 1 }}
+  {{- end }}
   triggers:
     {{- if .Values.celery_worker_monitoring.autoscaling.targetCPUUtilizationPercentage }}
     - type: cpu
