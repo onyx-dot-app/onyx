@@ -121,7 +121,7 @@ class DriveItemData(BaseModel):
             web_url=item.get("webUrl", ""),
             size=item.get("size"),
             mime_type=item.get("file", {}).get("mimeType"),
-            download_url=_get_download_url(item),
+            download_url=item.get("@microsoft.graph.downloadUrl"),
             last_modified_datetime=last_mod,
             last_modified_by_display_name=last_modified_by.get("displayName"),
             last_modified_by_email=(
@@ -303,28 +303,6 @@ def _create_entity_failure(
         failure_message=f"SharePoint entity '{entity_id}': {error_message}",
         exception=exception,
     )
-
-
-def _get_download_url(driveitem: Any) -> str | None:
-    """Best-effort retrieval of the Microsoft Graph download URL."""
-
-    try:
-        additional_data = getattr(driveitem, "additional_data", None)
-        if isinstance(additional_data, dict):
-            url = additional_data.get("@microsoft.graph.downloadUrl")
-            if isinstance(url, str) and url:
-                return url
-    except Exception as e:
-        logger.debug(f"Failed to get download url from additional data: {e}")
-
-    try:
-        driveitem_json = driveitem.to_json()
-        url = driveitem_json.get("@microsoft.graph.downloadUrl")
-        if isinstance(url, str) and url:
-            return url
-    except Exception as e:
-        logger.debug(f"Failed to get download url from driveitem json: {e}")
-    return None
 
 
 def _probe_remote_size(url: str, timeout: int) -> int | None:
