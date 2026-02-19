@@ -86,7 +86,7 @@ class BraveClient(WebSearchProvider):
                 )
         except HTTPException:
             raise
-        except Exception as e:
+        except (ValueError, requests.RequestException) as e:
             error_msg = str(e)
             lower = error_msg.lower()
             if (

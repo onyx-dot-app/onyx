@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+from typing import cast
 
 import pytest
 import requests
@@ -26,10 +27,9 @@ class DummyResponse:
 
     def raise_for_status(self) -> None:
         if self.status_code >= 400:
-            raise requests.HTTPError(
-                f"{self.status_code} Client Error",
-                response=self,
-            )
+            http_error = requests.HTTPError(f"{self.status_code} Client Error")
+            http_error.response = cast(requests.Response, self)
+            raise http_error
 
     def json(self) -> dict[str, Any]:
         if self._payload is None:
@@ -109,7 +109,7 @@ def test_test_connection_maps_invalid_key_errors() -> None:
     def _mock_search(query: str) -> list[Any]:  # noqa: ARG001
         raise ValueError("Brave search failed (status 401): Unauthorized")
 
-    client.search = _mock_search  # type: ignore[assignment]
+    client.search = _mock_search  # type: ignore[method-assign]
 
     with pytest.raises(HTTPException, match="Invalid Brave API key"):
         client.test_connection()
@@ -121,7 +121,19 @@ def test_test_connection_maps_rate_limit_errors() -> None:
     def _mock_search(query: str) -> list[Any]:  # noqa: ARG001
         raise ValueError("Brave search failed (status 429): Too many requests")
 
-    client.search = _mock_search  # type: ignore[assignment]
+    client.search = _mock_search  # type: ignore[method-assign]
 
     with pytest.raises(HTTPException, match="rate limit exceeded"):
+        client.test_connection()
+
+
+def test_test_connection_propagates_unexpected_errors() -> None:
+    client = BraveClient(api_key="test-key")
+
+    def _mock_search(query: str) -> list[Any]:  # noqa: ARG001
+        raise RuntimeError("unexpected parsing bug")
+
+    client.search = _mock_search  # type: ignore[method-assign]
+
+    with pytest.raises(RuntimeError, match="unexpected parsing bug"):
         client.test_connection()
