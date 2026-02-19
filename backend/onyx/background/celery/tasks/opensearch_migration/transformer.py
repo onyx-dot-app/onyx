@@ -61,8 +61,9 @@ FIELDS_NEEDED_FOR_TRANSFORMATION: list[str] = [
     PRIMARY_OWNERS,
     SECONDARY_OWNERS,
     ACCESS_CONTROL_LIST,
-    TENANT_ID,
 ]
+if MULTI_TENANT:
+    FIELDS_NEEDED_FOR_TRANSFORMATION.append(TENANT_ID)
 
 
 def _extract_content_vector(embeddings: Any) -> list[float]:

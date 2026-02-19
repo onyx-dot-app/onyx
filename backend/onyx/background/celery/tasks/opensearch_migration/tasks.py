@@ -9,6 +9,9 @@ from redis.lock import Lock as RedisLock
 
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.tasks.opensearch_migration.constants import (
+    FINISHED_VISITING_SLICE_CONTINUATION_TOKEN,
+)
+from onyx.background.celery.tasks.opensearch_migration.constants import (
     GET_VESPA_CHUNKS_PAGE_SIZE,
 )
 from onyx.background.celery.tasks.opensearch_migration.constants import (
@@ -50,11 +53,11 @@ from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
 
-def is_continuation_token_none_for_all_slices(
+def is_continuation_token_done_for_all_slices(
     continuation_token_map: dict[int, str | None],
 ) -> bool:
     return all(
-        continuation_token is None
+        continuation_token == FINISHED_VISITING_SLICE_CONTINUATION_TOKEN
         for continuation_token in continuation_token_map.values()
     )
 
@@ -174,10 +177,7 @@ def migrate_chunks_from_vespa_to_opensearch_task(
                     continuation_token_map,
                     total_chunks_migrated,
                 ) = get_vespa_visit_state(db_session)
-                if (
-                    is_continuation_token_none_for_all_slices(continuation_token_map)
-                    and total_chunks_migrated > 0
-                ):
+                if is_continuation_token_done_for_all_slices(continuation_token_map):
                     task_logger.info(
                         f"OpenSearch migration COMPLETED for tenant {tenant_id}. "
                         f"Total chunks migrated: {total_chunks_migrated}."
@@ -234,7 +234,7 @@ def migrate_chunks_from_vespa_to_opensearch_task(
                 )
 
                 if (
-                    is_continuation_token_none_for_all_slices(
+                    is_continuation_token_done_for_all_slices(
                         next_continuation_token_map
                     )
                     and len(raw_vespa_chunks) == 0

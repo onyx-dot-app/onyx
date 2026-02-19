@@ -18,7 +18,7 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.tasks.opensearch_migration.tasks import (
-    is_continuation_token_none_for_all_slices,
+    is_continuation_token_done_for_all_slices,
 )
 from onyx.background.celery.tasks.opensearch_migration.tasks import (
     migrate_chunks_from_vespa_to_opensearch_task,
@@ -456,7 +456,7 @@ class TestMigrateChunksFromVespaToOpenSearchTask:
         assert tenant_record.total_chunks_migrated == len(all_chunks)
         # Visit is complete so continuation token should be None.
         assert tenant_record.vespa_visit_continuation_token is not None
-        assert is_continuation_token_none_for_all_slices(
+        assert is_continuation_token_done_for_all_slices(
             json.loads(tenant_record.vespa_visit_continuation_token)
         )
         assert tenant_record.migration_completed_at is not None
@@ -560,7 +560,7 @@ class TestMigrateChunksFromVespaToOpenSearchTask:
         assert tenant_record.total_chunks_migrated == len(all_chunks)
         # Visit is complete so continuation token should be None.
         assert tenant_record.vespa_visit_continuation_token is not None
-        assert is_continuation_token_none_for_all_slices(
+        assert is_continuation_token_done_for_all_slices(
             json.loads(tenant_record.vespa_visit_continuation_token)
         )
         assert tenant_record.migration_completed_at is not None
@@ -680,7 +680,7 @@ class TestMigrateChunksFromVespaToOpenSearchTask:
         assert tenant_record.total_chunks_migrated == len(all_chunks)
         # Visit is complete so continuation token should be None.
         assert tenant_record.vespa_visit_continuation_token is not None
-        assert is_continuation_token_none_for_all_slices(
+        assert is_continuation_token_done_for_all_slices(
             json.loads(tenant_record.vespa_visit_continuation_token)
         )
         assert tenant_record.migration_completed_at is not None
@@ -748,7 +748,7 @@ class TestMigrateChunksFromVespaToOpenSearchTask:
         assert tenant_record.total_chunks_migrated == len(all_chunks)
         # Visit is complete so continuation token should be None.
         assert tenant_record.vespa_visit_continuation_token is not None
-        assert is_continuation_token_none_for_all_slices(
+        assert is_continuation_token_done_for_all_slices(
             json.loads(tenant_record.vespa_visit_continuation_token)
         )
         assert tenant_record.migration_completed_at is not None
@@ -782,7 +782,7 @@ class TestMigrateChunksFromVespaToOpenSearchTask:
         assert tenant_record.total_chunks_migrated == len(all_chunks)
         # Visit is complete so continuation token should be None.
         assert tenant_record.vespa_visit_continuation_token is not None
-        assert is_continuation_token_none_for_all_slices(
+        assert is_continuation_token_done_for_all_slices(
             json.loads(tenant_record.vespa_visit_continuation_token)
         )
         assert tenant_record.migration_completed_at is not None

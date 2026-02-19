@@ -10,6 +10,9 @@ from typing import cast
 import httpx
 from retry import retry
 
+from onyx.background.celery.tasks.opensearch_migration.constants import (
+    FINISHED_VISITING_SLICE_CONTINUATION_TOKEN,
+)
 from onyx.background.celery.tasks.opensearch_migration.transformer import (
     FIELDS_NEEDED_FOR_TRANSFORMATION,
 )
@@ -309,6 +312,12 @@ def get_all_chunks_paginated(
         continuation_token: str | None,
         page_size: int,
     ) -> tuple[list[dict], str | None]:
+        if continuation_token == FINISHED_VISITING_SLICE_CONTINUATION_TOKEN:
+            logger.debug(
+                f"Slice {slice_id} has finished visiting. Returning empty list and {FINISHED_VISITING_SLICE_CONTINUATION_TOKEN}."
+            )
+            return [], FINISHED_VISITING_SLICE_CONTINUATION_TOKEN
+
         url = DOCUMENT_ID_ENDPOINT.format(index_name=index_name)
 
         selection: str = f"{index_name}.large_chunk_reference_ids == null"
@@ -328,6 +337,7 @@ def get_all_chunks_paginated(
         if continuation_token is not None:
             params["continuation"] = continuation_token
 
+        response: httpx.Response | None = None
         try:
             with get_vespa_http_client() as http_client:
                 response = http_client.get(url, params=params)
@@ -339,13 +349,27 @@ def get_all_chunks_paginated(
                 f"Request Headers: {e.request.headers}\n"
                 f"Request Payload: {params}\n"
             )
+            error_message = (
+                response.json().get("message") if response else "No response"
+            )
+            logger.error("Error message from response: %s", error_message)
             raise httpx.HTTPError(error_base) from e
 
         response_data = response.json()
 
-        return [
-            chunk["fields"] for chunk in response_data.get("documents", [])
-        ], response_data.get("continuation") or None
+        # NOTE: If we see a falsey value for "continuation" in the response we
+        # assume we are done and return
+        # FINISHED_VISITING_SLICE_CONTINUATION_TOKEN instead.
+        next_continuation_token = (
+            response_data.get("continuation")
+            or FINISHED_VISITING_SLICE_CONTINUATION_TOKEN
+        )
+        chunks = [chunk["fields"] for chunk in response_data.get("documents", [])]
+        if next_continuation_token == FINISHED_VISITING_SLICE_CONTINUATION_TOKEN:
+            logger.debug(
+                f"Slice {slice_id} has finished visiting. Returning {len(chunks)} chunks and {next_continuation_token}."
+            )
+        return chunks, next_continuation_token
 
     total_slices = len(continuation_token_map)
     if total_slices < 1:

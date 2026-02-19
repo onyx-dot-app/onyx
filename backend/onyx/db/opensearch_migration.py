@@ -263,9 +263,12 @@ def get_vespa_visit_state(
             slice_id: None for slice_id in range(GET_VESPA_CHUNKS_SLICE_COUNT)
         }
     else:
-        continuation_token_map: dict[int, str | None] = json.loads(
+        json_loaded_continuation_token_map = json.loads(
             record.vespa_visit_continuation_token
         )
+        continuation_token_map: dict[int, str | None] = {
+            int(key): value for key, value in json_loaded_continuation_token_map.items()
+        }
     return continuation_token_map, record.total_chunks_migrated
 
 

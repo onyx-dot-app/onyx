@@ -46,3 +46,9 @@ TOTAL_ALLOWABLE_DOC_MIGRATION_ATTEMPTS_BEFORE_PERMANENT_FAILURE = 15
 # be made to OpenSearchTenantMigrationRecord.
 GET_VESPA_CHUNKS_PAGE_SIZE = 500
 GET_VESPA_CHUNKS_SLICE_COUNT = 4
+
+# String used to indicate in the vespa_visit_continuation_token mapping that the
+# slice has finished and there is nothing left to visit.
+FINISHED_VISITING_SLICE_CONTINUATION_TOKEN = (
+    "FINISHED_VISITING_SLICE_CONTINUATION_TOKEN"
+)
