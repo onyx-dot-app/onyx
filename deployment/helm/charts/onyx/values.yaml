@@ -857,7 +857,7 @@ mcpServer:
   tolerations: []
   affinity: {}
 
-celery_worker`_docfetching:
+celery_worker_docfetching:
   replicaCount: 1
   logLevel: INFO
   autoscaling:
