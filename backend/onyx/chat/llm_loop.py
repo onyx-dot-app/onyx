@@ -57,6 +57,7 @@ from onyx.tools.tool_implementations.images.models import (
     FinalImageGenerationResponse,
 )
 from onyx.tools.tool_implementations.memory.models import MemoryToolResponse
+from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.utils import extract_url_snippet_map
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
@@ -651,6 +652,7 @@ def run_llm_loop(
         ran_image_gen: bool = False
         just_ran_web_search: bool = False
         has_called_search_tool: bool = False
+        code_interpreter_file_generated: bool = False
         fallback_extraction_attempted: bool = False
         citation_mapping: dict[int, str] = {}  # Maps citation_num -> document_id/URL
 
@@ -761,6 +763,7 @@ def run_llm_loop(
                     ),
                     include_citation_reminder=should_cite_documents
                     or always_cite_documents,
+                    include_file_reminder=code_interpreter_file_generated,
                     is_last_cycle=out_of_cycles,
                 )
 
@@ -899,6 +902,18 @@ def run_llm_loop(
                 # Track if search tool was called (for skipping query expansion on subsequent calls)
                 if tool_call.tool_name == SearchTool.NAME:
                     has_called_search_tool = True
+
+                # Track if code interpreter generated files with download links
+                if (
+                    tool_call.tool_name == PythonTool.NAME
+                    and not code_interpreter_file_generated
+                ):
+                    try:
+                        parsed = json.loads(tool_response.llm_facing_response)
+                        if parsed.get("generated_files"):
+                            code_interpreter_file_generated = True
+                    except (json.JSONDecodeError, AttributeError):
+                        pass
 
                 # Build a mapping of tool names to tool objects for getting tool_id
                 tools_by_name = {tool.name: tool for tool in final_tools}
