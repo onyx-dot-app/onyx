@@ -212,12 +212,8 @@ def anonymous_user_enabled(*, tenant_id: str | None = None) -> bool:
 
 
 def workspace_invite_only_enabled() -> bool:
-    try:
-        settings = load_settings()
-        return settings.invite_only_enabled
-    except Exception:
-        logger.exception("Failed to load workspace settings for invite-only check")
-        return False
+    settings = load_settings()
+    return settings.invite_only_enabled
 
 
 def verify_email_is_invited(email: str) -> None:
