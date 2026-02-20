@@ -2,7 +2,11 @@ import {
   QuestionCardProps,
   DocumentCardProps,
 } from "@/components/search/results/Citation";
-import { LoadedOnyxDocument, OnyxDocument } from "@/lib/search/interfaces";
+import {
+  LoadedOnyxDocument,
+  MinimalOnyxDocument,
+  OnyxDocument,
+} from "@/lib/search/interfaces";
 import React, { memo, JSX, useMemo, useCallback } from "react";
 import { SourceIcon } from "@/components/SourceIcon";
 import { WebResultIcon } from "@/components/WebResultIcon";
@@ -36,7 +40,7 @@ export const MemoizedAnchor = memo(
     docs?: OnyxDocument[] | null;
     userFiles?: ProjectFile[] | null;
     citations?: CitationMap;
-    updatePresentingDocument: (doc: OnyxDocument) => void;
+    updatePresentingDocument: (doc: MinimalOnyxDocument) => void;
     href?: string;
     children: React.ReactNode;
   }): JSX.Element => {
@@ -177,6 +181,28 @@ export const MemoizedLink = memo(
     }
 
     const url = ensureHrefProtocol(href);
+
+    // Check if the link is to a file on the backend
+    const isChatFile = url?.includes("/api/chat/file/");
+    if (isChatFile && updatePresentingDocument) {
+      const fileId = url!.split("/api/chat/file/")[1]?.split(/[?#]/)[0] || "";
+      const filename = value?.toString() || "download";
+      return (
+        <a
+          href="#"
+          onClick={(e) => {
+            e.preventDefault();
+            updatePresentingDocument({
+              document_id: fileId,
+              semantic_identifier: filename,
+            });
+          }}
+          className="cursor-pointer text-link hover:text-link-hover"
+        >
+          {rest.children}
+        </a>
+      );
+    }
 
     return (
       <a
