@@ -33,13 +33,13 @@ function LogoSection({ folded, onFoldClick }: LogoSectionProps) {
   return (
     <div
       className={cn(
-        "flex p-2 min-h-[3.25rem]",
+        "flex px-2.5 py-2 min-h-[3.25rem]",
         folded ? "justify-center" : "justify-between",
         applicationName ? "min-h-[3.75rem]" : "min-h-[3.25rem]"
       )}
     >
       {folded === undefined ? (
-        <div className="p-1.5">{logo()}</div>
+        <div className="p-1">{logo()}</div>
       ) : folded ? (
         <>
           <div className="group-hover/SidebarWrapper:hidden pt-1.5">
@@ -51,7 +51,7 @@ function LogoSection({ folded, onFoldClick }: LogoSectionProps) {
         </>
       ) : (
         <>
-          <div className="p-1.5"> {logo()}</div>
+          <div className="p-1"> {logo()}</div>
           {closeButton(true)}
         </>
       )}
