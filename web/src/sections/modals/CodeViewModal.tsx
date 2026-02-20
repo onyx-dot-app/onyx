@@ -5,8 +5,9 @@ import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import Modal from "@/refresh-components/Modal";
 import Text from "@/refresh-components/texts/Text";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
-import DownloadIconButton from "@/refresh-components/buttons/DownloadIconButton";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
+import { Button } from "@opal/components";
+import { SvgDownload } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import { getCodeLanguage } from "@/lib/languages";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
@@ -207,10 +208,12 @@ export default function CodeViewModal({
                 tooltip="Copy code"
                 size="sm"
               />
-              <DownloadIconButton
+              <Button
+                icon={SvgDownload}
                 onClick={handleDownload}
                 tooltip="Download"
                 size="sm"
+                prominence="tertiary"
               />
             </Section>
           </Section>
