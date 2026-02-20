@@ -1284,6 +1284,8 @@ def test_code_interpreter_replay_packets_include_code_and_output(
         db_session=db_session,
     )
 
+    assert len(mock_ci_server.get_requests(method="POST", path="/v1/execute")) == 1
+
     # The response contains `packets` — a list of packet-lists, one per
     # assistant message. We should have exactly one assistant message.
     assert (
