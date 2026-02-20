@@ -61,26 +61,32 @@ export function ProviderContextProvider({
   const [defaultCheckSuccessful, setDefaultCheckSuccessful] =
     useState<boolean>(true);
 
-  // Only test default provider once per session
-  useEffect(() => {
+  // Test the default provider - only runs if test hasn't passed yet
+  const testDefaultProvider = useCallback(async () => {
     const shouldCheck =
       !checkDefaultLLMProviderTestComplete() &&
       (!user || user.role === "admin");
 
     if (shouldCheck) {
-      fetch("/api/admin/llm/test/default", { method: "POST" })
-        .then((response) => {
-          const success = response?.ok || false;
-          setDefaultCheckSuccessful(success);
-          if (success) {
-            setDefaultLLMProviderTestComplete();
-          }
-        })
-        .catch(() => {
-          setDefaultCheckSuccessful(false);
+      try {
+        const response = await fetch("/api/admin/llm/test/default", {
+          method: "POST",
         });
+        const success = response?.ok || false;
+        setDefaultCheckSuccessful(success);
+        if (success) {
+          setDefaultLLMProviderTestComplete();
+        }
+      } catch {
+        setDefaultCheckSuccessful(false);
+      }
     }
   }, [user]);
+
+  // Test default provider on mount
+  useEffect(() => {
+    testDefaultProvider();
+  }, [testDefaultProvider]);
 
   const hasProviders = (llmProviders?.length ?? 0) > 0;
   const validProviderExists = hasProviders && defaultCheckSuccessful;
@@ -89,8 +95,13 @@ export function ProviderContextProvider({
     !validProviderExists && (providerOptions?.length ?? 0) > 0;
 
   const refreshProviderInfo = useCallback(async () => {
-    await Promise.all([refetchProviders(), refetchOptions()]);
-  }, [refetchProviders, refetchOptions]);
+    // Refetch provider lists and re-test default provider if needed
+    await Promise.all([
+      refetchProviders(),
+      refetchOptions(),
+      testDefaultProvider(),
+    ]);
+  }, [refetchProviders, refetchOptions, testDefaultProvider]);
 
   return (
     <ProviderContext.Provider
