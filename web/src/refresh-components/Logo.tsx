@@ -58,10 +58,10 @@ export default function Logo({ folded, size, className }: LogoProps) {
     includeName: boolean;
   }) => {
     return (
-      <div className="flex min-w-0 gap-1">
-        {opts.includeLogo && <div className="p-1.5">{logo}</div>}
+      <div className="flex min-w-0 gap-2">
+        {opts.includeLogo && logo}
         {!folded && (
-          <div className="flex flex-1 flex-col items-centermin-w-0 pt-1">
+          <div className="flex flex-1 flex-col items-centermin-w-0 -mt-0.5">
             {opts.includeName && (
               <Truncated headingH3>{applicationName}</Truncated>
             )}
