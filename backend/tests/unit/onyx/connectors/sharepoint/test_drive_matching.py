@@ -280,7 +280,7 @@ def test_load_from_checkpoint_maps_drive_name(monkeypatch: pytest.MonkeyPatch) -
 def test_get_drive_items_uses_delta_when_no_folder_path(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """When folder_path is None, _get_drive_items_for_drive_name should use delta."""
+    """When folder_path is None, _get_drive_items_for_drive_id should use delta."""
     connector = _build_connector([_FakeDrive("Documents")])
     site = SiteDescriptor(
         url="https://example.sharepoint.com/sites/sample",
@@ -314,7 +314,7 @@ def test_get_drive_items_uses_delta_when_no_folder_path(
     monkeypatch.setattr(SharepointConnector, "_iter_drive_items_delta", fake_delta)
     monkeypatch.setattr(SharepointConnector, "_iter_drive_items_paged", fake_paged)
 
-    items, _ = connector._get_drive_items_for_drive_name(site, "Documents")
+    items = connector._get_drive_items_for_drive_id(site, "fake-drive-id")
     list(items)
 
     assert called_method == ["delta"]
@@ -323,7 +323,7 @@ def test_get_drive_items_uses_delta_when_no_folder_path(
 def test_get_drive_items_uses_paged_when_folder_path_set(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """When folder_path is set, _get_drive_items_for_drive_name should use BFS."""
+    """When folder_path is set, _get_drive_items_for_drive_id should use BFS."""
     connector = _build_connector([_FakeDrive("Documents")])
     site = SiteDescriptor(
         url="https://example.sharepoint.com/sites/sample",
@@ -357,7 +357,7 @@ def test_get_drive_items_uses_paged_when_folder_path_set(
     monkeypatch.setattr(SharepointConnector, "_iter_drive_items_delta", fake_delta)
     monkeypatch.setattr(SharepointConnector, "_iter_drive_items_paged", fake_paged)
 
-    items, _ = connector._get_drive_items_for_drive_name(site, "Documents")
+    items = connector._get_drive_items_for_drive_id(site, "fake-drive-id")
     list(items)
 
     assert called_method == ["paged"]
