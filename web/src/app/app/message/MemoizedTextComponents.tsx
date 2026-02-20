@@ -13,7 +13,7 @@ import { WebResultIcon } from "@/components/WebResultIcon";
 import { SubQuestionDetail, CitationMap } from "../interfaces";
 import { ValidSources } from "@/lib/types";
 import { ProjectFile } from "../projects/projectsService";
-import { BlinkingDot } from "./BlinkingDot";
+import { BlinkingBar } from "./BlinkingBar";
 import Text from "@/refresh-components/texts/Text";
 import SourceTag from "@/refresh-components/buttons/source-tag/SourceTag";
 import {
@@ -157,7 +157,7 @@ export const MemoizedLink = memo(
     }, [document, updatePresentingDocument, question, openQuestion]);
 
     if (value?.toString().startsWith("*")) {
-      return <BlinkingDot addMargin />;
+      return <BlinkingBar addMargin />;
     } else if (value?.toString().startsWith("[")) {
       const sourceInfo = documentSourceInfo || questionSourceInfo;
       if (!sourceInfo) {
