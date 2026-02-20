@@ -1,6 +1,7 @@
 "use client";
 
 import type { IconFunctionComponent } from "@opal/types";
+import { cn } from "@opal/utils";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -92,7 +93,10 @@ function BodyLayout({
     >
       {Icon && (
         <div
-          className={`opal-content-body-icon-container shrink-0 ${config.iconContainerPadding}`}
+          className={cn(
+            "opal-content-body-icon-container shrink-0",
+            config.iconContainerPadding
+          )}
           style={{ minHeight: config.lineHeight }}
         >
           <Icon
@@ -103,7 +107,11 @@ function BodyLayout({
       )}
 
       <span
-        className={`opal-content-body-title ${config.titleFont} ${titleColorClass}`}
+        className={cn(
+          "opal-content-body-title",
+          config.titleFont,
+          titleColorClass
+        )}
         style={{ height: config.lineHeight }}
       >
         {title}

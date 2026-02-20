@@ -4,6 +4,7 @@ import { Button } from "@opal/components/buttons/Button/components";
 import type { InteractiveContainerHeightVariant } from "@opal/core";
 import SvgEdit from "@opal/icons/edit";
 import type { IconFunctionComponent } from "@opal/types";
+import { cn } from "@opal/utils";
 import { useRef, useState } from "react";
 
 // ---------------------------------------------------------------------------
@@ -117,7 +118,10 @@ function HeadingLayout({
     >
       {Icon && (
         <div
-          className={`opal-content-heading-icon-container shrink-0 ${config.iconContainerPadding}`}
+          className={cn(
+            "opal-content-heading-icon-container shrink-0",
+            config.iconContainerPadding
+          )}
           style={{ minHeight: config.lineHeight }}
         >
           <Icon
@@ -132,13 +136,20 @@ function HeadingLayout({
           {editing ? (
             <div className="opal-content-heading-input-sizer">
               <span
-                className={`opal-content-heading-input-mirror ${config.titleFont}`}
+                className={cn(
+                  "opal-content-heading-input-mirror",
+                  config.titleFont
+                )}
               >
                 {editValue || "\u00A0"}
               </span>
               <input
                 ref={inputRef}
-                className={`opal-content-heading-input ${config.titleFont} text-text-04`}
+                className={cn(
+                  "opal-content-heading-input",
+                  config.titleFont,
+                  "text-text-04"
+                )}
                 value={editValue}
                 onChange={(e) => setEditValue(e.target.value)}
                 size={1}
@@ -147,16 +158,22 @@ function HeadingLayout({
                 onBlur={commit}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") commit();
-                  if (e.key === "Escape") setEditing(false);
+                  if (e.key === "Escape") {
+                    setEditValue(title);
+                    setEditing(false);
+                  }
                 }}
                 style={{ height: config.lineHeight }}
               />
             </div>
           ) : (
             <span
-              className={`opal-content-heading-title ${
-                config.titleFont
-              } text-text-04${editable ? " cursor-pointer" : ""}`}
+              className={cn(
+                "opal-content-heading-title",
+                config.titleFont,
+                "text-text-04",
+                editable && "cursor-pointer"
+              )}
               onClick={editable ? startEditing : undefined}
               style={{ height: config.lineHeight }}
             >
@@ -166,7 +183,10 @@ function HeadingLayout({
 
           {editable && !editing && (
             <div
-              className={`opal-content-heading-edit-button ${config.editButtonPadding}`}
+              className={cn(
+                "opal-content-heading-edit-button",
+                config.editButtonPadding
+              )}
             >
               <Button
                 icon={SvgEdit}

@@ -8,6 +8,7 @@ import SvgAlertTriangle from "@opal/icons/alert-triangle";
 import SvgEdit from "@opal/icons/edit";
 import SvgXOctagon from "@opal/icons/x-octagon";
 import type { IconFunctionComponent } from "@opal/types";
+import { cn } from "@opal/utils";
 import { useRef, useState } from "react";
 
 // ---------------------------------------------------------------------------
@@ -150,11 +151,14 @@ function LabelLayout({
     <div className="opal-content-label" style={{ gap: config.gap }}>
       {Icon && (
         <div
-          className={`opal-content-label-icon-container shrink-0 ${config.iconContainerPadding}`}
+          className={cn(
+            "opal-content-label-icon-container shrink-0",
+            config.iconContainerPadding
+          )}
           style={{ minHeight: config.lineHeight }}
         >
           <Icon
-            className={`opal-content-label-icon ${config.iconColorClass}`}
+            className={cn("opal-content-label-icon", config.iconColorClass)}
             style={{ width: config.iconSize, height: config.iconSize }}
           />
         </div>
@@ -165,13 +169,20 @@ function LabelLayout({
           {editing ? (
             <div className="opal-content-label-input-sizer">
               <span
-                className={`opal-content-label-input-mirror ${config.titleFont}`}
+                className={cn(
+                  "opal-content-label-input-mirror",
+                  config.titleFont
+                )}
               >
                 {editValue || "\u00A0"}
               </span>
               <input
                 ref={inputRef}
-                className={`opal-content-label-input ${config.titleFont} text-text-04`}
+                className={cn(
+                  "opal-content-label-input",
+                  config.titleFont,
+                  "text-text-04"
+                )}
                 value={editValue}
                 onChange={(e) => setEditValue(e.target.value)}
                 size={1}
@@ -180,16 +191,22 @@ function LabelLayout({
                 onBlur={commit}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") commit();
-                  if (e.key === "Escape") setEditing(false);
+                  if (e.key === "Escape") {
+                    setEditValue(title);
+                    setEditing(false);
+                  }
                 }}
                 style={{ height: config.lineHeight }}
               />
             </div>
           ) : (
             <span
-              className={`opal-content-label-title ${
-                config.titleFont
-              } text-text-04${editable ? " cursor-pointer" : ""}`}
+              className={cn(
+                "opal-content-label-title",
+                config.titleFont,
+                "text-text-04",
+                editable && "cursor-pointer"
+              )}
               onClick={editable ? startEditing : undefined}
               style={{ height: config.lineHeight }}
             >
@@ -199,7 +216,7 @@ function LabelLayout({
 
           {optional && (
             <span
-              className={`${config.optionalFont} text-text-03 shrink-0`}
+              className={cn(config.optionalFont, "text-text-03 shrink-0")}
               style={{ height: config.lineHeight }}
             >
               (Optional)
@@ -229,7 +246,10 @@ function LabelLayout({
 
           {editable && !editing && (
             <div
-              className={`opal-content-label-edit-button ${config.editButtonPadding}`}
+              className={cn(
+                "opal-content-label-edit-button",
+                config.editButtonPadding
+              )}
             >
               <Button
                 icon={SvgEdit}
