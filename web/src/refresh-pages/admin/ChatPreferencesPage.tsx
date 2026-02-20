@@ -145,26 +145,24 @@ function MCPServerCard({
       </ActionsLayouts.Header>
       {tools.length > 0 && filteredTools.length > 0 && (
         <ActionsLayouts.Content>
-          <Disabled disabled={!serverEnabled}>
-            <div className="flex flex-col gap-2">
-              {filteredTools.map((tool) => (
-                <ActionsLayouts.Tool
-                  key={tool.id}
-                  title={tool.name}
-                  description={tool.description}
-                  icon={tool.icon}
-                  rightChildren={
-                    <Switch
-                      checked={isToolEnabled(tool.id)}
-                      onCheckedChange={(checked) =>
-                        onToggleTool(tool.id, checked)
-                      }
-                    />
-                  }
-                />
-              ))}
-            </div>
-          </Disabled>
+          <div className="flex flex-col gap-2">
+            {filteredTools.map((tool) => (
+              <ActionsLayouts.Tool
+                key={tool.id}
+                title={tool.name}
+                description={tool.description}
+                icon={tool.icon}
+                rightChildren={
+                  <Switch
+                    checked={isToolEnabled(tool.id)}
+                    onCheckedChange={(checked) =>
+                      onToggleTool(tool.id, checked)
+                    }
+                  />
+                }
+              />
+            ))}
+          </div>
         </ActionsLayouts.Content>
       )}
     </ExpandableCard.Root>
