@@ -1,11 +1,12 @@
 name: Post-Merge Beta Cherry-Pick
 concurrency:
-  group: Post-Merge-Beta-Cherry-Pick-${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  group: Post-Merge-Beta-Cherry-Pick-${{ github.workflow }}-${{ github.ref_name }}-${{ github.run_id }}
   cancel-in-progress: true
 
 on:
-  pull_request:
-    types: [closed]
+  push:
+    branches:
+      - main
 
 permissions:
   contents: write
@@ -13,23 +14,34 @@ permissions:
 
 jobs:
   cherry-pick-to-latest-release:
-    if: ${{ github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - name: Check PR body for beta cherry-pick checkbox
+      - name: Resolve merged PR and checkbox state
         id: gate
         env:
-          PR_BODY: ${{ github.event.pull_request.body || '' }}
+          GH_TOKEN: ${{ github.token }}
+          COMMIT_SHA: ${{ github.sha }}
         run: |
-          if echo "$PR_BODY" | grep -qiE "\\[x\\][[:space:]]*(\\[[^]]+\\][[:space:]]*)?I have considered whether this PR needs to be cherry[- ]picked to the latest beta branch"; then
+          pr_number="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${COMMIT_SHA}/pulls" --jq '.[] | select(.merged_at != null and .base.ref == "main") | .number' | head -n 1)"
+
+          if [ -z "$pr_number" ]; then
+            echo "No merged PR associated with commit ${COMMIT_SHA}; skipping."
+            echo "should_cherrypick=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          pr_body="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq '.body // ""')"
+          echo "pr_number=$pr_number" >> "$GITHUB_OUTPUT"
+
+          if echo "$pr_body" | grep -qiE "\\[x\\][[:space:]]*(\\[[^]]+\\][[:space:]]*)?I have considered whether this PR needs to be cherry[- ]picked to the latest beta branch"; then
             echo "should_cherrypick=true" >> "$GITHUB_OUTPUT"
-            echo "Cherry-pick checkbox checked."
+            echo "Cherry-pick checkbox checked for PR #${pr_number}."
             exit 0
           fi
 
           echo "should_cherrypick=false" >> "$GITHUB_OUTPUT"
-          echo "Cherry-pick checkbox not checked. Skipping."
+          echo "Cherry-pick checkbox not checked for PR #${pr_number}. Skipping."
 
       - name: Checkout repository
         if: steps.gate.outputs.should_cherrypick == 'true'
@@ -56,17 +68,17 @@ jobs:
         id: commits
         env:
           GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          MERGE_COMMIT_SHA: ${{ github.event.pull_request.merge_commit_sha || '' }}
+          PR_NUMBER: ${{ steps.gate.outputs.pr_number }}
         run: |
+          merge_commit_sha="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq '.merge_commit_sha // ""')"
           commit_shas="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/commits" --paginate --jq '.[] | select((.parents | length) == 1) | .sha' | tr '\n' ' ' | sed -E 's/[[:space:]]+$//')"
 
           if [ -z "$commit_shas" ]; then
-            if [ -z "$MERGE_COMMIT_SHA" ]; then
+            if [ -z "$merge_commit_sha" ]; then
               echo "::error::Unable to determine commits to cherry-pick for PR #${PR_NUMBER}."
               exit 1
             fi
-            commit_shas="$MERGE_COMMIT_SHA"
+            commit_shas="$merge_commit_sha"
           fi
 
           echo "commit_shas=$commit_shas" >> "$GITHUB_OUTPUT"
