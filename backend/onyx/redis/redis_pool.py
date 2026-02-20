@@ -109,6 +109,7 @@ class TenantRedis(redis.Redis):
             "unlock",
             "get",
             "set",
+            "setex",
             "delete",
             "exists",
             "incrby",
