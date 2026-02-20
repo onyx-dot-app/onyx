@@ -43,6 +43,7 @@ import {
   SvgCalendar,
   SvgFiles,
   SvgFileText,
+  SvgGlobe,
   SvgHourglass,
   SvgPlus,
   SvgPlusCircle,
@@ -128,6 +129,10 @@ export interface AppInputBarProps {
   toggleDeepResearch: () => void;
   disabled: boolean;
   ref?: React.Ref<AppInputBarHandle>;
+  // Side panel tab reading
+  tabReadingEnabled?: boolean;
+  currentTabUrl?: string | null;
+  onToggleTabReading?: () => void;
 }
 
 const AppInputBar = React.memo(
@@ -153,6 +158,9 @@ const AppInputBar = React.memo(
     setPresentingDocument,
     disabled,
     ref,
+    tabReadingEnabled,
+    currentTabUrl,
+    onToggleTabReading,
   }: AppInputBarProps) => {
     // Internal message state - kept local to avoid parent re-renders on every keystroke
     const [message, setMessage] = useState(initialMessage);
@@ -708,17 +716,40 @@ const AppInputBar = React.memo(
                       disabled={disabled}
                     />
                   )}
-                  {showDeepResearch && (
+                  {onToggleTabReading ? (
                     <Button
-                      icon={SvgHourglass}
-                      onClick={toggleDeepResearch}
+                      icon={SvgGlobe}
+                      onClick={onToggleTabReading}
                       variant="select"
-                      selected={deepResearchEnabled}
-                      foldable={!deepResearchEnabled}
+                      selected={tabReadingEnabled}
+                      foldable={!tabReadingEnabled}
                       disabled={disabled}
                     >
-                      Deep Research
+                      {tabReadingEnabled
+                        ? currentTabUrl
+                          ? (() => {
+                              try {
+                                return new URL(currentTabUrl).hostname;
+                              } catch {
+                                return currentTabUrl;
+                              }
+                            })()
+                          : "Reading tab..."
+                        : "Read this tab"}
                     </Button>
+                  ) : (
+                    showDeepResearch && (
+                      <Button
+                        icon={SvgHourglass}
+                        onClick={toggleDeepResearch}
+                        variant="select"
+                        selected={deepResearchEnabled}
+                        foldable={!deepResearchEnabled}
+                        disabled={disabled}
+                      >
+                        Deep Research
+                      </Button>
+                    )
                   )}
 
                   {selectedAssistant &&
