@@ -195,21 +195,33 @@ def check_user_file_processing(self: Task, *, tenant_id: str) -> None:
             for user_file_id in user_file_ids:
                 # --- Protection 2: per-file queued guard ---
                 queued_key = _user_file_queued_key(user_file_id)
-                if redis_client.exists(queued_key):
+                guard_set = redis_client.set(
+                    queued_key,
+                    1,
+                    ex=CELERY_USER_FILE_PROCESSING_TASK_EXPIRES,
+                    nx=True,
+                )
+                if not guard_set:
                     skipped_guard += 1
                     continue
 
-                # --- Protection 3: task expiry + set guard ---
-                self.app.send_task(
-                    OnyxCeleryTask.PROCESS_SINGLE_USER_FILE,
-                    kwargs={"user_file_id": str(user_file_id), "tenant_id": tenant_id},
-                    queue=OnyxCeleryQueues.USER_FILE_PROCESSING,
-                    priority=OnyxCeleryPriority.HIGH,
-                    expires=CELERY_USER_FILE_PROCESSING_TASK_EXPIRES,
-                )
-                redis_client.setex(
-                    queued_key, CELERY_USER_FILE_PROCESSING_TASK_EXPIRES, 1
-                )
+                # --- Protection 3: task expiry ---
+                # If task submission fails, clear the guard immediately so the
+                # next beat cycle can retry enqueuing this file.
+                try:
+                    self.app.send_task(
+                        OnyxCeleryTask.PROCESS_SINGLE_USER_FILE,
+                        kwargs={
+                            "user_file_id": str(user_file_id),
+                            "tenant_id": tenant_id,
+                        },
+                        queue=OnyxCeleryQueues.USER_FILE_PROCESSING,
+                        priority=OnyxCeleryPriority.HIGH,
+                        expires=CELERY_USER_FILE_PROCESSING_TASK_EXPIRES,
+                    )
+                except Exception:
+                    redis_client.delete(queued_key)
+                    raise
                 enqueued += 1
 
     finally:
