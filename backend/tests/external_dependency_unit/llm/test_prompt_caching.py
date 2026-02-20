@@ -282,11 +282,12 @@ def test_anthropic_prompt_caching_reduces_costs(
     Anthropic requires explicit cache_control parameters.
     """
     # Create Anthropic LLM
-    # NOTE: prompt caching support is model-specific.
+    # NOTE: prompt caching support is model-specific; claude-3-5-sonnet-latest
+    # is a non-retired model that reliably exposes cache usage metrics.
     llm = LitellmLLM(
         api_key=os.environ["ANTHROPIC_API_KEY"],
         model_provider="anthropic",
-        model_name="claude-haiku-4-5-20251001",
+        model_name="claude-3-5-sonnet-latest",
         max_input_tokens=200000,
     )
 
@@ -317,7 +318,10 @@ def test_anthropic_prompt_caching_reduces_costs(
     # First call - creates cache
     print("\n=== First call (cache creation) ===")
     question1: list[ChatCompletionMessage] = [
-        UserMessage(role="user", content="What are the main topics discussed?")
+        UserMessage(
+            role="user",
+            content="Summarize the main topics in one short sentence.",
+        )
     ]
 
     # Apply prompt caching
@@ -344,7 +348,10 @@ def test_anthropic_prompt_caching_reduces_costs(
     # Second call with same context - should use cache
     print("\n=== Second call (cache read) ===")
     question2: list[ChatCompletionMessage] = [
-        UserMessage(role="user", content="Can you elaborate on neural networks?")
+        UserMessage(
+            role="user",
+            content="Describe neural networks in one short sentence.",
+        )
     ]
 
     # Apply prompt caching (same cacheable prefix)
