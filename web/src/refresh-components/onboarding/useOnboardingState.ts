@@ -12,6 +12,7 @@ import { updateUserPersonalization } from "@/lib/userSettings";
 import { useUser } from "@/providers/UserProvider";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
+import { useLLMProviderOptions } from "@/lib/hooks/useLLMProviderOptions";
 
 export function useOnboardingState(liveAssistant?: MinimalPersonaSnapshot): {
   state: OnboardingState;
@@ -32,31 +33,14 @@ export function useOnboardingState(liveAssistant?: MinimalPersonaSnapshot): {
   );
   const hasLlmProviders = (llmProviders?.length ?? 0) > 0;
   const userName = user?.personalization?.name;
-  const [llmDescriptors, setLlmDescriptors] = useState<
-    WellKnownLLMProviderDescriptor[]
-  >([]);
+
+  // Use SWR hook instead of raw fetch for provider options
+  const { llmProviderOptions } = useLLMProviderOptions();
+  const llmDescriptors = llmProviderOptions ?? [];
+
   const nameUpdateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
   );
-
-  useEffect(() => {
-    refreshLlmProviders();
-    const fetchLlmDescriptors = async () => {
-      try {
-        const response = await fetch("/api/admin/llm/built-in/options");
-        if (!response.ok) {
-          setLlmDescriptors([]);
-          return;
-        }
-        const data = await response.json();
-        setLlmDescriptors(Array.isArray(data) ? data : []);
-      } catch (_e) {
-        setLlmDescriptors([]);
-      }
-    };
-
-    fetchLlmDescriptors();
-  }, []);
 
   // Navigate to the earliest incomplete step in the onboarding flow.
   // Step order: Welcome -> Name -> LlmSetup -> Complete

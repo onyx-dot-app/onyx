@@ -8,18 +8,32 @@ import React, {
   useCallback,
 } from "react";
 import { useUser } from "@/providers/UserProvider";
-import { useRouter } from "next/navigation";
-import { checkLlmProvider } from "../initialSetup/welcome/lib";
+import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
+import { useLLMProviderOptions } from "@/lib/hooks/useLLMProviderOptions";
 
 interface ProviderContextType {
   shouldShowConfigurationNeeded: boolean;
   providerOptions: WellKnownLLMProviderDescriptor[];
-  refreshProviderInfo: () => Promise<void>; // Add this line
+  refreshProviderInfo: () => Promise<void>;
 }
 
 const ProviderContext = createContext<ProviderContextType | undefined>(
   undefined
 );
+
+const DEFAULT_LLM_PROVIDER_TEST_COMPLETE_KEY = "defaultLlmProviderTestComplete";
+
+function checkDefaultLLMProviderTestComplete() {
+  if (typeof window === "undefined") return true;
+  return (
+    localStorage.getItem(DEFAULT_LLM_PROVIDER_TEST_COMPLETE_KEY) === "true"
+  );
+}
+
+function setDefaultLLMProviderTestComplete() {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(DEFAULT_LLM_PROVIDER_TEST_COMPLETE_KEY, "true");
+}
 
 export function ProviderContextProvider({
   children,
@@ -27,38 +41,52 @@ export function ProviderContextProvider({
   children: React.ReactNode;
 }) {
   const { user } = useUser();
-  const router = useRouter();
 
-  const [validProviderExists, setValidProviderExists] = useState<boolean>(true);
-  const [providerOptions, setProviderOptions] = useState<
-    WellKnownLLMProviderDescriptor[]
-  >([]);
+  // Use SWR hooks instead of raw fetch
+  const { llmProviders, refetch: refetchProviders } = useLLMProviders();
+  const { llmProviderOptions: providerOptions, refetch: refetchOptions } =
+    useLLMProviderOptions();
 
-  const fetchProviderInfo = useCallback(async () => {
-    const { providers, options, defaultCheckSuccessful } =
-      await checkLlmProvider(user);
+  const [defaultCheckSuccessful, setDefaultCheckSuccessful] =
+    useState<boolean>(true);
 
-    setValidProviderExists(providers.length > 0 && defaultCheckSuccessful);
-    setProviderOptions(options);
-  }, [user, setValidProviderExists, setProviderOptions]);
-
+  // Only test default provider once per session
   useEffect(() => {
-    fetchProviderInfo();
-  }, [router, user, fetchProviderInfo]);
+    const shouldCheck =
+      !checkDefaultLLMProviderTestComplete() &&
+      (!user || user.role === "admin");
+
+    if (shouldCheck) {
+      fetch("/api/admin/llm/test/default", { method: "POST" })
+        .then((response) => {
+          const success = response?.ok || false;
+          setDefaultCheckSuccessful(success);
+          if (success) {
+            setDefaultLLMProviderTestComplete();
+          }
+        })
+        .catch(() => {
+          setDefaultCheckSuccessful(false);
+        });
+    }
+  }, [user]);
+
+  const validProviderExists =
+    (llmProviders?.length ?? 0) > 0 && defaultCheckSuccessful;
 
   const shouldShowConfigurationNeeded =
-    !validProviderExists && providerOptions.length > 0;
+    !validProviderExists && (providerOptions?.length ?? 0) > 0;
 
-  const refreshProviderInfo = async () => {
-    await fetchProviderInfo();
-  };
+  const refreshProviderInfo = useCallback(async () => {
+    await Promise.all([refetchProviders(), refetchOptions()]);
+  }, [refetchProviders, refetchOptions]);
 
   return (
     <ProviderContext.Provider
       value={{
         shouldShowConfigurationNeeded,
-        providerOptions,
-        refreshProviderInfo, // Add this line
+        providerOptions: providerOptions ?? [],
+        refreshProviderInfo,
       }}
     >
       {children}
