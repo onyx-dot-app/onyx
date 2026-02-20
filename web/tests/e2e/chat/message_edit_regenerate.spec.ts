@@ -1,6 +1,9 @@
 import { test, expect } from "@playwright/test";
 import { loginAsRandomUser } from "@tests/e2e/utils/auth";
-import { sendMessage, switchModel } from "@tests/e2e/utils/chatActions";
+import {
+  sendMessage,
+  selectModelFromInputPopover,
+} from "@tests/e2e/utils/chatActions";
 
 test.describe("Message Edit and Regenerate Tests", () => {
   test.beforeEach(async ({ page }) => {
@@ -140,9 +143,12 @@ test.describe("Message Edit and Regenerate Tests", () => {
   });
 
   test("Message regeneration with model selection", async ({ page }) => {
-    // make sure we're using something other than GPT-4o Mini, otherwise the below
-    // will fail since we need to switch to a different model for the test
-    await switchModel(page, "GPT-4.1");
+    // Select any available model so we have a known starting model.
+    await selectModelFromInputPopover(page, [
+      "GPT-4.1",
+      "GPT-4o Mini",
+      "GPT-4o",
+    ]);
 
     // Send initial message
     await sendMessage(page, "hi! Respond with no more than a sentence");
@@ -160,15 +166,20 @@ test.describe("Message Edit and Regenerate Tests", () => {
     const regenerateButton = aiMessage.getByTestId("AgentMessage/regenerate");
     await regenerateButton.click();
 
-    // Wait for dropdown to appear and select GPT-4o Mini
+    // Wait for dropdown to appear
     await page.waitForSelector('[role="dialog"]', { state: "visible" });
 
-    // Look for the GPT-4o Mini option in the dropdown
-    const gpt4oMiniOption = page
-      .locator('[role="dialog"]')
-      .getByText("GPT-4o Mini", { exact: true })
+    const regenerateDialog = page.locator('[role="dialog"]');
+    const alternateModelOption = regenerateDialog
+      .locator('[data-selected="false"]')
       .first();
-    await gpt4oMiniOption.click();
+
+    test.skip(
+      (await regenerateDialog.locator('[data-selected="false"]').count()) === 0,
+      "Regenerate model picker requires at least two runtime model options"
+    );
+
+    await alternateModelOption.click();
 
     // Wait for regeneration to complete by waiting for feedback buttons to appear
     // The feedback buttons (copy, like, dislike, regenerate) appear when streaming is complete
