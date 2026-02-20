@@ -1148,7 +1148,7 @@ class SharepointConnector(
         site_id = site.id
 
         page_url: str | None = (
-            f"{GRAPH_API_BASE}/sites/{site_id}" f"/pages/microsoft.graph.sitePage"
+            f"{GRAPH_API_BASE}/sites/{site_id}/pages/microsoft.graph.sitePage"
         )
         params: dict[str, str] | None = {"$expand": "canvasLayout"}
         total_yielded = 0

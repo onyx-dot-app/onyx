@@ -5,7 +5,6 @@ from collections.abc import Generator
 from collections.abc import Sequence
 from datetime import datetime
 from datetime import timezone
-from types import SimpleNamespace
 from typing import Any
 
 import pytest
