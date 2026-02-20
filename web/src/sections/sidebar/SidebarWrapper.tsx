@@ -46,7 +46,7 @@ function LogoSection({ folded, onFoldClick }: LogoSectionProps) {
           <div
             className={cn(
               "group-hover/SidebarWrapper:hidden",
-              folded && !applicationName && "pt-1.5"
+              folded && "pt-1.5"
             )}
           >
             {logo()}
@@ -57,7 +57,7 @@ function LogoSection({ folded, onFoldClick }: LogoSectionProps) {
         </>
       ) : (
         <>
-          {applicationName ? logo() : <div className="pt-1.5">{logo()}</div>}
+          <div className="pt-1.5">{logo()}</div>
           {closeButton(true)}
         </>
       )}
