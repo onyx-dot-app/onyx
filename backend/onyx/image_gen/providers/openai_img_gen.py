@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 from onyx.image_gen.interfaces import ImageGenerationProvider
 from onyx.image_gen.interfaces import ImageGenerationProviderCredentials
+from onyx.image_gen.interfaces import ReferenceImage
 
 if TYPE_CHECKING:
     from onyx.image_gen.interfaces import ImageGenerationResponse
@@ -45,6 +46,7 @@ class OpenAIImageGenerationProvider(ImageGenerationProvider):
         size: str,
         n: int,
         quality: str | None = None,
+        reference_images: list[ReferenceImage] | None = None,  # noqa: ARG002
         **kwargs: Any,
     ) -> ImageGenerationResponse:
         from litellm import image_generation
