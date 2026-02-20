@@ -6,6 +6,13 @@ import { useRouter } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 import { updateSlackBotField } from "@/lib/updateSlackBotField";
 import { SlackTokensForm } from "./SlackTokensForm";
+import { SourceIcon } from "@/components/SourceIcon";
+import { EditableStringFieldDisplay } from "@/components/EditableStringFieldDisplay";
+import { deleteSlackBot } from "./new/lib";
+import GenericConfirmModal from "@/components/modals/GenericConfirmModal";
+import Button from "@/refresh-components/buttons/Button";
+import { cn } from "@/lib/utils";
+import { SvgChevronDownSmall, SvgTrash } from "@opal/icons";
 
 function Checkbox({
   label,
@@ -28,13 +35,6 @@ function Checkbox({
     </label>
   );
 }
-import { SourceIcon } from "@/components/SourceIcon";
-import { EditableStringFieldDisplay } from "@/components/EditableStringFieldDisplay";
-import { deleteSlackBot } from "./new/lib";
-import GenericConfirmModal from "@/components/modals/GenericConfirmModal";
-import Button from "@/refresh-components/buttons/Button";
-import { cn } from "@/lib/utils";
-import { SvgChevronDownSmall, SvgTrash } from "@opal/icons";
 
 export const ExistingSlackBotForm = ({
   existingSlackBot,

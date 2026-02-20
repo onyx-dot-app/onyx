@@ -104,7 +104,7 @@ function SettingsRoot({ width = "md", ...props }: SettingsRootProps) {
  * - Sticky positioning at the top of the page
  * - Icon display (1.75rem size)
  * - Title (headingH2 style)
- * - Optional description (supports any React node for dynamic content)
+ * - Optional description (string)
  * - Optional right-aligned action buttons via rightChildren
  * - Optional children content below title/description
  * - Optional back button
@@ -154,17 +154,11 @@ function SettingsRoot({ width = "md", ...props }: SettingsRootProps) {
  *   backButton
  * />
  *
- * // With dynamic description content
+ * // With string description
  * <SettingsLayouts.Header
  *   icon={SvgDatabase}
  *   title="API Keys"
- *   description={
- *     <div>
- *       <Text as="p" secondaryBody text03>
- *         Manage your API keys. Last updated: {lastUpdated}
- *       </Text>
- *     </div>
- *   }
+ *   description="Manage your API keys"
  * />
  * ```
  */
