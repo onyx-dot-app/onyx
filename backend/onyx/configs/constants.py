@@ -157,6 +157,15 @@ CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT = 300  # 5 min
 
 CELERY_USER_FILE_PROCESSING_LOCK_TIMEOUT = 30 * 60  # 30 minutes (in seconds)
 
+# How long a queued user-file-project-sync task remains valid.
+# Should be short enough to discard stale queue entries under load while still
+# allowing workers enough time to pick up new tasks.
+CELERY_USER_FILE_PROJECT_SYNC_TASK_EXPIRES = 60  # 1 minute (in seconds)
+
+# Max queue depth before user-file-project-sync producers stop enqueuing.
+# This applies backpressure when workers are falling behind.
+USER_FILE_PROJECT_SYNC_MAX_QUEUE_DEPTH = 500
+
 CELERY_USER_FILE_PROJECT_SYNC_LOCK_TIMEOUT = 5 * 60  # 5 minutes (in seconds)
 
 CELERY_SANDBOX_FILE_SYNC_LOCK_TIMEOUT = 5 * 60  # 5 minutes (in seconds)
@@ -445,6 +454,7 @@ class OnyxRedisLocks:
     USER_FILE_PROCESSING_LOCK_PREFIX = "da_lock:user_file_processing"
     USER_FILE_PROJECT_SYNC_BEAT_LOCK = "da_lock:check_user_file_project_sync_beat"
     USER_FILE_PROJECT_SYNC_LOCK_PREFIX = "da_lock:user_file_project_sync"
+    USER_FILE_PROJECT_SYNC_QUEUED_PREFIX = "da_lock:user_file_project_sync_queued"
     USER_FILE_DELETE_BEAT_LOCK = "da_lock:check_user_file_delete_beat"
     USER_FILE_DELETE_LOCK_PREFIX = "da_lock:user_file_delete"
 
