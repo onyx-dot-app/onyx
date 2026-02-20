@@ -24,17 +24,6 @@ import {
 import { openDocument } from "@/lib/search/utils";
 import { ensureHrefProtocol } from "@/lib/utils";
 
-function isSameOriginUrl(url: string): boolean {
-  try {
-    if (typeof window === "undefined") return false;
-    return (
-      new URL(url, window.location.origin).origin === window.location.origin
-    );
-  } catch {
-    return false;
-  }
-}
-
 export const MemoizedAnchor = memo(
   ({
     docs,
@@ -194,7 +183,7 @@ export const MemoizedLink = memo(
     const url = ensureHrefProtocol(href);
 
     // Check if the link is to a file on the backend
-    const isChatFile = url?.includes("/api/chat/file/") && isSameOriginUrl(url);
+    const isChatFile = url?.includes("/api/chat/file/");
     if (isChatFile && updatePresentingDocument) {
       const fileId = url!.split("/api/chat/file/")[1]?.split(/[?#]/)[0] || "";
       const filename = value?.toString() || "download";
