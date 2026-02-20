@@ -71,6 +71,7 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 SLIM_BATCH_SIZE = 1000
+_EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 
 
 SHARED_DOCUMENTS_MAP = {
@@ -1326,8 +1327,7 @@ class SharepointConnector(
 
         Falls back to full enumeration if the API returns 410 Gone (expired token).
         """
-        EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
-        use_timestamp_token = start is not None and start > EPOCH
+        use_timestamp_token = start is not None and start > _EPOCH
 
         initial_url = f"{GRAPH_API_BASE}/drives/{drive_id}/root/delta"
         if use_timestamp_token:
