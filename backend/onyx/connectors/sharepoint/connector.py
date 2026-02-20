@@ -1365,6 +1365,7 @@ class SharepointConnector(
             try:
                 data = self._graph_api_get_json(page_url, params)
             except requests.HTTPError as e:
+                # 410 means the delta token expired, so we need to fall back to full enumeration
                 if e.response is not None and e.response.status_code == 410:
                     if not allow_full_resync:
                         raise
