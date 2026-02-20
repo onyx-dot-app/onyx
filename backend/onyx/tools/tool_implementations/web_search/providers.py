@@ -38,6 +38,28 @@ from shared_configs.enums import WebSearchProviderType
 logger = setup_logger()
 
 
+def _parse_positive_int_config(
+    *,
+    raw_value: str | None,
+    default: int,
+    provider_name: str,
+    config_key: str,
+) -> int:
+    if not raw_value:
+        return default
+    try:
+        value = int(raw_value)
+    except ValueError as exc:
+        raise ValueError(
+            f"{provider_name} provider config '{config_key}' must be an integer."
+        ) from exc
+    if value <= 0:
+        raise ValueError(
+            f"{provider_name} provider config '{config_key}' must be greater than 0."
+        )
+    return value
+
+
 def build_search_provider_from_config(
     provider_type: WebSearchProviderType,
     api_key: str,
@@ -52,7 +74,17 @@ def build_search_provider_from_config(
         return BraveClient(
             api_key=api_key,
             num_results=num_results,
-            timeout_seconds=int(config.get("timeout_seconds") or 10),
+            timeout_seconds=_parse_positive_int_config(
+                raw_value=config.get("timeout_seconds"),
+                default=10,
+                provider_name="Brave",
+                config_key="timeout_seconds",
+            ),
+            country=config.get("country"),
+            search_lang=config.get("search_lang"),
+            ui_lang=config.get("ui_lang"),
+            safesearch=config.get("safesearch"),
+            freshness=config.get("freshness"),
         )
     if provider_type == WebSearchProviderType.SERPER:
         return SerperClient(api_key=api_key, num_results=num_results)

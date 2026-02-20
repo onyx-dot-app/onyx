@@ -1,5 +1,8 @@
 import pytest
 
+from onyx.tools.tool_implementations.web_search.clients.brave_client import (
+    BraveClient,
+)
 from onyx.tools.tool_implementations.web_search.providers import (
     build_search_provider_from_config,
 )
@@ -55,6 +58,37 @@ def test_build_brave_provider_requires_api_key() -> None:
             provider_type=WebSearchProviderType.BRAVE,
             api_key=None,
             config={},
+        )
+
+
+def test_build_brave_provider_with_optional_config() -> None:
+    provider = build_search_provider_from_config(
+        provider_type=WebSearchProviderType.BRAVE,
+        api_key="test-api-key",
+        config={
+            "country": "us",
+            "search_lang": "en",
+            "ui_lang": "en-US",
+            "safesearch": "strict",
+            "freshness": "pm",
+            "timeout_seconds": "12",
+        },
+    )
+    assert isinstance(provider, BraveClient)
+    assert provider._country == "US"  # noqa: SLF001
+    assert provider._search_lang == "en"  # noqa: SLF001
+    assert provider._ui_lang == "en-US"  # noqa: SLF001
+    assert provider._safesearch == "strict"  # noqa: SLF001
+    assert provider._freshness == "pm"  # noqa: SLF001
+    assert provider._timeout_seconds == 12  # noqa: SLF001
+
+
+def test_build_brave_provider_rejects_invalid_timeout() -> None:
+    with pytest.raises(ValueError, match="timeout_seconds"):
+        build_search_provider_from_config(
+            provider_type=WebSearchProviderType.BRAVE,
+            api_key="test-api-key",
+            config={"timeout_seconds": "not-an-int"},
         )
 
 
