@@ -38,7 +38,6 @@ import {
   SvgArrowExchange,
   SvgImage,
   SvgKey,
-  SvgOnyxLogo,
   SvgOnyxOctagon,
   SvgSearch,
   SvgServer,
@@ -188,11 +187,6 @@ const collections = (
           {
             name: "Configuration",
             items: [
-              {
-                name: "Default Assistant",
-                icon: SvgOnyxLogo,
-                link: "/admin/configuration/default-assistant",
-              },
               {
                 name: "Chat Preferences",
                 icon: SvgBubbleText,
