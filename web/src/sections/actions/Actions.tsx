@@ -1,7 +1,7 @@
 "use client";
 import { ActionStatus } from "@/lib/tools/interfaces";
 import React from "react";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button as OpalButton } from "@opal/components";
 import Button from "@/refresh-components/buttons/Button";
 import {
   SvgArrowExchange,
@@ -62,20 +62,20 @@ const Actions = React.memo(
                     : "opacity-0 translate-x-2 pointer-events-none"
                 )}
               >
-                <IconButton
+                <OpalButton
                   icon={SvgUnplug}
                   tooltip="Disconnect Server"
-                  tertiary
+                  prominence="tertiary"
                   onClick={onDisconnect}
                   aria-label={`Disconnect ${serverName} server`}
                 />
               </div>
             )}
             {onManage && (
-              <IconButton
+              <OpalButton
                 icon={SvgSettings}
                 tooltip="Manage Server"
-                tertiary
+                prominence="tertiary"
                 onClick={onManage}
                 aria-label={`Manage ${serverName} server`}
               />
@@ -120,19 +120,19 @@ const Actions = React.memo(
             )}
           >
             {onDelete && (
-              <IconButton
+              <OpalButton
                 icon={SvgTrash}
                 tooltip="Delete Server"
-                tertiary
+                prominence="tertiary"
                 onClick={onDelete}
                 aria-label={`Delete ${serverName} server`}
               />
             )}
             {onManage && (
-              <IconButton
+              <OpalButton
                 icon={SvgSettings}
                 tooltip="Manage Server"
-                tertiary
+                prominence="tertiary"
                 onClick={onManage}
                 aria-label={`Manage ${serverName} server`}
               />
@@ -157,10 +157,10 @@ const Actions = React.memo(
             </Button>
           )}
           {onManage && (
-            <IconButton
+            <OpalButton
               icon={SvgSettings}
               tooltip="Manage Server"
-              tertiary
+              prominence="tertiary"
               onClick={onManage}
               aria-label={`Manage ${serverName} server`}
             />

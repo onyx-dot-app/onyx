@@ -17,6 +17,7 @@ from onyx.configs.model_configs import GEN_AI_MAX_TOKENS
 from onyx.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 from onyx.configs.model_configs import GEN_AI_NUM_RESERVED_OUTPUT_TOKENS
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import LLMModelFlowType
 from onyx.db.models import LLMProvider
 from onyx.db.models import ModelConfiguration
 from onyx.llm.constants import LlmProviderNames
@@ -689,8 +690,11 @@ def model_supports_image_input(model_name: str, model_provider: str) -> bool:
                     LLMProvider.provider == model_provider,
                 )
             )
-            if model_config and model_config.supports_image_input is not None:
-                return model_config.supports_image_input
+            if (
+                model_config
+                and LLMModelFlowType.VISION in model_config.llm_model_flow_types
+            ):
+                return True
     except Exception as e:
         logger.warning(
             f"Failed to query database for {model_provider} model {model_name} image support: {e}"

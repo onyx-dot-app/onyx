@@ -5,7 +5,7 @@ metadata:
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
 data:
-  INTERNAL_URL: "http://{{ include "onyx.fullname" . }}-api-service:{{ .Values.api.service.port | default 8080 }}"
+  INTERNAL_URL: "http://{{ include "onyx.fullname" . }}-api-service:{{ .Values.api.service.servicePort | default 8080 }}"
   {{- if .Values.postgresql.enabled }}
   POSTGRES_HOST: {{ .Release.Name }}-{{ default "postgresql" .Values.postgresql.nameOverride }}-rw
   {{- end }}
@@ -22,7 +22,12 @@ data:
   REDIS_HOST: {{ .Values.redis.redisStandalone.name | default .Release.Name }}-master
   {{- end }}
   MODEL_SERVER_HOST: "{{ include "onyx.fullname" . }}-inference-model-service"
+  {{- if .Values.vectorDB.enabled }}
   INDEXING_MODEL_SERVER_HOST: "{{ include "onyx.fullname" . }}-indexing-model-service"
+  DISABLE_VECTOR_DB: "false"
+  {{- else }}
+  DISABLE_VECTOR_DB: "true"
+  {{- end }}
 {{- range $key, $value := .Values.configMap }}
 {{- if not (empty $value) }}
   {{ $key }}: "{{ $value }}"

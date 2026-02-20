@@ -1,7 +1,7 @@
-import { test, expect } from "@chromatic-com/playwright";
+import { test, expect } from "@playwright/test";
 import { Page } from "@playwright/test";
-import { loginAsRandomUser, loginAs } from "../utils/auth";
-import { OnyxApiClient } from "../utils/onyxApiClient";
+import { loginAsRandomUser, loginAs } from "@tests/e2e/utils/auth";
+import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 
 /**
  * This test verifies that LLM Provider RBAC works correctly in the assistant editor.
@@ -50,7 +50,7 @@ test("Restricted LLM Provider should not appear for unauthorized users", async (
   let groupId: number | null = null;
   let providerId: number | null = null;
 
-  const client = new OnyxApiClient(page);
+  const client = new OnyxApiClient(page.request);
 
   try {
     groupId = await client.createUserGroup(restrictedGroupName);

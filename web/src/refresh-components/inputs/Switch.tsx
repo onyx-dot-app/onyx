@@ -53,19 +53,24 @@ const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
         type="button"
         role="switch"
         aria-checked={checked}
-        data-state={checked ? "checked" : "unchecked"}
         className={cn(
           "peer inline-flex h-[1.125rem] w-[2rem] shrink-0 cursor-pointer items-center rounded-full transition-colors focus-visible:outline-none",
-          disabled ? "switch-disabled" : "switch-normal"
+          disabled
+            ? checked
+              ? "switch-disabled-checked"
+              : "switch-disabled"
+            : checked
+              ? "switch-normal-checked"
+              : "switch-normal"
         )}
         disabled={disabled}
         onClick={handleClick}
         {...props}
       >
         <span
-          data-state={checked ? "checked" : "unchecked"}
           className={cn(
-            "pointer-events-none block h-[0.875rem] w-[0.875rem] rounded-full ring-0 transition-transform data-[state=checked]:translate-x-[15px] data-[state=unchecked]:translate-x-[1px]",
+            "pointer-events-none block h-[0.875rem] w-[0.875rem] rounded-full ring-0 transition-transform",
+            checked ? "translate-x-[15px]" : "translate-x-[1px]",
             disabled ? "switch-thumb-disabled" : "switch-thumb"
           )}
         />

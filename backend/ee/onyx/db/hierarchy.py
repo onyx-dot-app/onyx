@@ -5,8 +5,10 @@ It filters hierarchy nodes based on user email and external group membership.
 """
 
 from sqlalchemy import any_
+from sqlalchemy import cast
 from sqlalchemy import or_
 from sqlalchemy import select
+from sqlalchemy import String
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
@@ -32,7 +34,7 @@ def _build_hierarchy_access_filter(
     if external_group_ids:
         access_filters.append(
             HierarchyNode.external_user_group_ids.overlap(
-                postgresql.array(external_group_ids)
+                cast(postgresql.array(external_group_ids), postgresql.ARRAY(String))
             )
         )
     return or_(*access_filters)

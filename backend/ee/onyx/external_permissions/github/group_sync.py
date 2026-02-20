@@ -12,13 +12,18 @@ logger = setup_logger()
 
 
 def github_group_sync(
-    tenant_id: str,
+    tenant_id: str,  # noqa: ARG001
     cc_pair: ConnectorCredentialPair,
 ) -> Generator[ExternalUserGroup, None, None]:
     github_connector: GithubConnector = GithubConnector(
         **cc_pair.connector.connector_specific_config
     )
-    github_connector.load_credentials(cc_pair.credential.credential_json)
+    credential_json = (
+        cc_pair.credential.credential_json.get_value(apply_mask=False)
+        if cc_pair.credential.credential_json
+        else {}
+    )
+    github_connector.load_credentials(credential_json)
     if not github_connector.github_client:
         raise ValueError("github_client is required")
 

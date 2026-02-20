@@ -3,7 +3,7 @@
   --z-base: 0;
   --z-content: 1;
   --z-settings-header: 8;
-  --z-app-header: 9;
+  --z-app-layout: 9;
   --z-sticky: 10;
 
   /* Interactive overlays */
@@ -24,8 +24,8 @@
 .z-settings-header {
   z-index: var(--z-settings-header);
 }
-.z-app-header {
-  z-index: var(--z-app-header);
+.z-app-layout {
+  z-index: var(--z-app-layout);
 }
 .z-sticky {
   z-index: var(--z-sticky);

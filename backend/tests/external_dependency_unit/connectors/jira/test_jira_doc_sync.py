@@ -80,6 +80,8 @@ def test_jira_doc_sync(
         )
         db_session.add(credential)
         db_session.flush()
+        # Expire the credential so it reloads from DB with SensitiveValue wrapper
+        db_session.expire(credential)
 
         cc_pair = ConnectorCredentialPair(
             connector_id=connector.id,
@@ -95,7 +97,7 @@ def test_jira_doc_sync(
 
         # Mock functions - we don't have existing docs in the test DB
         def fetch_all_existing_docs_fn(
-            sort_order: SortOrder | None = None,
+            sort_order: SortOrder | None = None,  # noqa: ARG001
         ) -> list[DocumentRow]:
             return []
 
@@ -176,6 +178,8 @@ def test_jira_doc_sync_with_specific_permissions(
         )
         db_session.add(credential)
         db_session.flush()
+        # Expire the credential so it reloads from DB with SensitiveValue wrapper
+        db_session.expire(credential)
 
         cc_pair = ConnectorCredentialPair(
             connector_id=connector.id,
@@ -191,7 +195,7 @@ def test_jira_doc_sync_with_specific_permissions(
 
         # Mock functions
         def fetch_all_existing_docs_fn(
-            sort_order: SortOrder | None = None,
+            sort_order: SortOrder | None = None,  # noqa: ARG001
         ) -> list[DocumentRow]:
             return []
 

@@ -1,6 +1,6 @@
 import { test, expect, Page, Locator } from "@playwright/test";
-import { loginAs } from "../../utils/auth";
-import { OnyxApiClient } from "../../utils/onyxApiClient";
+import { loginAs } from "@tests/e2e/utils/auth";
+import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 
 const IMAGE_GENERATION_URL =
   "http://localhost:3000/admin/configuration/image-generation";
@@ -89,7 +89,7 @@ test.describe("Image Generation Provider Configuration", () => {
 
     test.afterEach(async ({ page }) => {
       // Clean up the image generation config created during the test
-      const apiClient = new OnyxApiClient(page);
+      const apiClient = new OnyxApiClient(page.request);
       try {
         await apiClient.deleteImageGenerationConfig("openai_dalle_3");
         console.log("[image-gen-test] Cleaned up DALL-E 3 config");

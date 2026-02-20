@@ -146,6 +146,11 @@ export const formatDateShort = (dateStr: string | null | undefined): string => {
   });
 };
 
+export function formatMmDdYyyy(d: string): string {
+  const date = new Date(d);
+  return `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`;
+}
+
 export const getFormattedDateTime = (date: Date | null) => {
   if (!date) return null;
 

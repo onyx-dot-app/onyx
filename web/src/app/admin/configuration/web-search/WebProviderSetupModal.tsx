@@ -125,6 +125,7 @@ export const WebProviderSetupModal = memo(
                 <FormField.Label>API Key</FormField.Label>
                 <FormField.Control asChild>
                   <PasswordInputTypeIn
+                    data-testid="web-provider-api-key-input"
                     placeholder="Enter API key"
                     value={apiKeyValue}
                     autoFocus={apiKeyAutoFocus}

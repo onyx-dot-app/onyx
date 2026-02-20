@@ -1,11 +1,11 @@
 import { test, expect } from "@playwright/test";
-import { loginAs } from "../utils/auth";
+import { loginAs } from "@tests/e2e/utils/auth";
 import {
   TOOL_IDS,
   waitForUnifiedGreeting,
   openActionManagement,
-} from "../utils/tools";
-import { OnyxApiClient } from "../utils/onyxApiClient";
+} from "@tests/e2e/utils/tools";
+import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 
 test.describe("Default Assistant Admin Page", () => {
   let testCcPairId: number | null = null;
@@ -17,7 +17,7 @@ test.describe("Default Assistant Admin Page", () => {
     await page.context().clearCookies();
     await loginAs(page, "admin");
 
-    const apiClient = new OnyxApiClient(page);
+    const apiClient = new OnyxApiClient(page.request);
 
     // Create a connector so Internal Search tool becomes available
     testCcPairId = await apiClient.createFileConnector(
@@ -83,7 +83,7 @@ test.describe("Default Assistant Admin Page", () => {
   });
 
   test.afterEach(async ({ page }) => {
-    const apiClient = new OnyxApiClient(page);
+    const apiClient = new OnyxApiClient(page.request);
 
     // Clean up the test connector
     if (testCcPairId !== null) {

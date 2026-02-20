@@ -186,7 +186,7 @@ class TeamsConnector(
     def load_from_checkpoint(
         self,
         start: SecondsSinceUnixEpoch,
-        end: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,  # noqa: ARG002
         checkpoint: TeamsCheckpoint,
     ) -> CheckpointOutput[TeamsCheckpoint]:
         if self.graph_client is None:

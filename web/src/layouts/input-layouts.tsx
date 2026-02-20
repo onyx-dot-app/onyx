@@ -255,7 +255,7 @@ function ErrorLayout({ name }: ErrorLayoutProps) {
 
 export type ErrorTextType = "error" | "warning";
 interface ErrorTextLayoutProps {
-  children?: string;
+  children?: React.ReactNode;
   type?: ErrorTextType;
 }
 function ErrorTextLayout({ children, type = "error" }: ErrorTextLayoutProps) {

@@ -25,7 +25,7 @@ DOCX_FILE_NAME = "three_images.docx"
 
 
 def test_image_indexing(
-    reset: None,
+    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
     vespa_client: vespa_fixture,
 ) -> None:
@@ -71,7 +71,7 @@ def test_image_indexing(
         connector_specific_config={
             "file_locations": file_paths,
             "file_names": [FILE_NAME],
-            "zip_metadata": {},
+            "zip_metadata_file_id": None,
         },
         access_type=AccessType.PUBLIC,
         groups=[],
@@ -118,7 +118,7 @@ def test_image_indexing(
 
 
 def test_docx_image_indexing(
-    reset: None,
+    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
     vespa_client: vespa_fixture,
 ) -> None:
@@ -167,7 +167,7 @@ def test_docx_image_indexing(
         connector_specific_config={
             "file_locations": file_paths,
             "file_names": [DOCX_FILE_NAME],
-            "zip_metadata": {},
+            "zip_metadata_file_id": None,
         },
         access_type=AccessType.PUBLIC,
         groups=[],

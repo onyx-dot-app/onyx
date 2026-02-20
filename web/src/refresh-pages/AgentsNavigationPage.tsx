@@ -9,7 +9,7 @@ import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
-import CounterSeparator from "@/refresh-components/CounterSeparator";
+import TextSeparator from "@/refresh-components/TextSeparator";
 import Tabs from "@/refresh-components/Tabs";
 import FilterButton from "@/refresh-components/buttons/FilterButton";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
@@ -426,7 +426,7 @@ export default function AgentsNavigationPage() {
       <SettingsLayouts.Header
         icon={SvgOnyxOctagon}
         title="Agents & Assistants"
-        description="Customize AI behavior and knowledge for you and your team’s use cases."
+        description="Customize AI behavior and knowledge for you and your team's use cases."
         rightChildren={
           <div data-testid="AgentsPage/new-agent-button">
             <Button href="/app/agents/create" leftIcon={SvgPlus}>
@@ -660,7 +660,7 @@ export default function AgentsNavigationPage() {
               agents={featuredAgents}
             />
             <AgentsSection title="All Agents" agents={allAgents} />
-            <CounterSeparator
+            <TextSeparator
               count={agentCount}
               text={agentCount === 1 ? "Agent" : "Agents"}
             />

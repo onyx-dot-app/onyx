@@ -4,31 +4,26 @@ from collections.abc import Callable
 from typing import cast
 from uuid import UUID
 
-from fastapi import HTTPException
 from fastapi.datastructures import Headers
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import is_user_admin
+from onyx.chat.models import ChatHistoryResult
 from onyx.chat.models import ChatLoadedFile
 from onyx.chat.models import ChatMessageSimple
-from onyx.chat.models import PersonaOverrideConfig
+from onyx.chat.models import FileToolMetadata
+from onyx.chat.models import ToolCallSimple
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import TMP_DRALPHA_PERSONA_NAME
-from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.chat import create_chat_session
 from onyx.db.chat import get_chat_messages_by_session
 from onyx.db.chat import get_or_create_root_message
 from onyx.db.kg_config import get_kg_config_settings
 from onyx.db.kg_config import is_kg_config_settings_enabled_valid
-from onyx.db.llm import fetch_existing_doc_sets
-from onyx.db.llm import fetch_existing_tools
 from onyx.db.models import ChatMessage
 from onyx.db.models import ChatSession
 from onyx.db.models import Persona
 from onyx.db.models import SearchDoc as DbSearchDoc
-from onyx.db.models import Tool
-from onyx.db.models import User
 from onyx.db.models import UserFile
 from onyx.db.projects import check_project_ownership
 from onyx.file_processing.extract_file_text import extract_file_text
@@ -45,15 +40,13 @@ from onyx.prompts.tool_prompts import TOOL_CALL_FAILURE_PROMPT
 from onyx.server.query_and_chat.models import ChatSessionCreationRequest
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.tools.models import ToolCallKickoff
-from onyx.tools.tool_implementations.custom.custom_tool import (
-    build_custom_tools_from_openapi_schema_and_headers,
-)
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from onyx.utils.timing import log_function_time
 
 
 logger = setup_logger()
+IMAGE_GENERATION_TOOL_NAME = "generate_image"
 
 
 def create_chat_session_from_request(
@@ -276,72 +269,8 @@ def extract_headers(
     return extracted_headers
 
 
-def create_temporary_persona(
-    persona_config: PersonaOverrideConfig, db_session: Session, user: User
-) -> Persona:
-    if not is_user_admin(user):
-        raise HTTPException(
-            status_code=403,
-            detail="User is not authorized to create a persona in one shot queries",
-        )
-
-    """Create a temporary Persona object from the provided configuration."""
-    persona = Persona(
-        name=persona_config.name,
-        description=persona_config.description,
-        num_chunks=persona_config.num_chunks,
-        llm_relevance_filter=persona_config.llm_relevance_filter,
-        llm_filter_extraction=persona_config.llm_filter_extraction,
-        recency_bias=RecencyBiasSetting.BASE_DECAY,
-        llm_model_provider_override=persona_config.llm_model_provider_override,
-        llm_model_version_override=persona_config.llm_model_version_override,
-    )
-
-    if persona_config.prompts:
-        # Use the first prompt from the override config for embedded prompt fields
-        first_prompt = persona_config.prompts[0]
-        persona.system_prompt = first_prompt.system_prompt
-        persona.task_prompt = first_prompt.task_prompt
-        persona.datetime_aware = first_prompt.datetime_aware
-
-    persona.tools = []
-    if persona_config.custom_tools_openapi:
-        from onyx.chat.emitter import get_default_emitter
-
-        for schema in persona_config.custom_tools_openapi:
-            tools = cast(
-                list[Tool],
-                build_custom_tools_from_openapi_schema_and_headers(
-                    tool_id=0,  # dummy tool id
-                    openapi_schema=schema,
-                    emitter=get_default_emitter(),
-                ),
-            )
-            persona.tools.extend(tools)
-
-    if persona_config.tools:
-        tool_ids = [tool.id for tool in persona_config.tools]
-        persona.tools.extend(
-            fetch_existing_tools(db_session=db_session, tool_ids=tool_ids)
-        )
-
-    if persona_config.tool_ids:
-        persona.tools.extend(
-            fetch_existing_tools(
-                db_session=db_session, tool_ids=persona_config.tool_ids
-            )
-        )
-
-    fetched_docs = fetch_existing_doc_sets(
-        db_session=db_session, doc_ids=persona_config.document_set_ids
-    )
-    persona.document_sets = fetched_docs
-
-    return persona
-
-
 def process_kg_commands(
-    message: str, persona_name: str, tenant_id: str, db_session: Session
+    message: str, persona_name: str, tenant_id: str, db_session: Session  # noqa: ARG001
 ) -> None:
     # Temporarily, until we have a draft UI for the KG Operations/Management
     # TODO: move to api endpoint once we get frontend
@@ -495,6 +424,40 @@ def convert_chat_history_basic(
     return list(reversed(trimmed_reversed))
 
 
+def _build_tool_call_response_history_message(
+    tool_name: str,
+    generated_images: list[dict] | None,
+    tool_call_response: str | None,
+) -> str:
+    if tool_name != IMAGE_GENERATION_TOOL_NAME:
+        return TOOL_CALL_RESPONSE_CROSS_MESSAGE
+
+    if generated_images:
+        llm_image_context: list[dict[str, str]] = []
+        for image in generated_images:
+            file_id = image.get("file_id")
+            revised_prompt = image.get("revised_prompt")
+            if not isinstance(file_id, str):
+                continue
+
+            llm_image_context.append(
+                {
+                    "file_id": file_id,
+                    "revised_prompt": (
+                        revised_prompt if isinstance(revised_prompt, str) else ""
+                    ),
+                }
+            )
+
+        if llm_image_context:
+            return json.dumps(llm_image_context)
+
+    if tool_call_response:
+        return tool_call_response
+
+    return TOOL_CALL_RESPONSE_CROSS_MESSAGE
+
+
 def convert_chat_history(
     chat_history: list[ChatMessage],
     files: list[ChatLoadedFile],
@@ -502,13 +465,22 @@ def convert_chat_history(
     additional_context: str | None,
     token_counter: Callable[[str], int],
     tool_id_to_name_map: dict[int, str],
-) -> list[ChatMessageSimple]:
+) -> ChatHistoryResult:
     """Convert ChatMessage history to ChatMessageSimple format.
 
     For user messages: includes attached files (images attached to message, text files as separate messages)
-    For assistant messages: includes tool calls followed by the assistant response
+    For assistant messages with tool calls: creates ONE ASSISTANT message with tool_calls array,
+        followed by N TOOL_CALL_RESPONSE messages (OpenAI parallel tool calling format)
+    For assistant messages without tool calls: creates a simple ASSISTANT message
+
+    Every injected text-file message is tagged with ``file_id`` and its
+    metadata is collected in ``ChatHistoryResult.all_injected_file_metadata``.
+    After context-window truncation, callers compare surviving ``file_id`` tags
+    against this map to discover "forgotten" files and provide their metadata
+    to the FileReaderTool.
     """
     simple_messages: list[ChatMessageSimple] = []
+    all_injected_file_metadata: dict[str, FileToolMetadata] = {}
 
     # Create a mapping of file IDs to loaded files for quick lookup
     file_map = {str(f.file_id): f for f in files}
@@ -537,7 +509,9 @@ def convert_chat_history(
                             # Text files (DOC, PLAIN_TEXT, CSV) are added as separate messages
                             text_files.append(loaded_file)
 
-            # Add text files as separate messages before the user message
+            # Add text files as separate messages before the user message.
+            # Each message is tagged with ``file_id`` so that forgotten files
+            # can be detected after context-window truncation.
             for text_file in text_files:
                 file_text = text_file.content_text or ""
                 filename = text_file.filename
@@ -552,7 +526,13 @@ def convert_chat_history(
                         token_count=text_file.token_count,
                         message_type=MessageType.USER,
                         image_files=None,
+                        file_id=text_file.file_id,
                     )
+                )
+                all_injected_file_metadata[text_file.file_id] = FileToolMetadata(
+                    file_id=text_file.file_id,
+                    filename=filename or "unknown",
+                    approx_char_count=len(file_text),
                 )
 
             # Sum token counts from image files (excluding project image files)
@@ -589,8 +569,10 @@ def convert_chat_history(
             )
 
         elif chat_message.message_type == MessageType.ASSISTANT:
-            # Add tool calls if present
-            # Tool calls should be ordered by turn_number, then by tool_id within each turn
+            # Handle tool calls if present using OpenAI parallel tool calling format:
+            # 1. Group tool calls by turn_number
+            # 2. For each turn: ONE ASSISTANT message with tool_calls array
+            # 3. Followed by N TOOL_CALL_RESPONSE messages (one per tool call)
             if chat_message.tool_calls:
                 # Group tool calls by turn number
                 tool_calls_by_turn: dict[int, list] = {}
@@ -605,38 +587,62 @@ def convert_chat_history(
                     # Sort by tool_id within the turn for consistent ordering
                     turn_tool_calls.sort(key=lambda tc: tc.tool_id)
 
-                    # Add each tool call as a separate message with the tool arguments
+                    # Build ToolCallSimple list for this turn
+                    tool_calls_simple: list[ToolCallSimple] = []
                     for tool_call in turn_tool_calls:
-                        # Create a message containing the tool call information
                         tool_name = tool_id_to_name_map.get(
                             tool_call.tool_id, "unknown"
                         )
-                        tool_call_data = {
-                            "function_name": tool_name,
-                            "arguments": tool_call.tool_call_arguments,
-                        }
-                        tool_call_message = json.dumps(tool_call_data)
-                        simple_messages.append(
-                            ChatMessageSimple(
-                                message=tool_call_message,
+                        tool_calls_simple.append(
+                            ToolCallSimple(
+                                tool_call_id=tool_call.tool_call_id,
+                                tool_name=tool_name,
+                                tool_arguments=tool_call.tool_call_arguments or {},
                                 token_count=tool_call.tool_call_tokens,
-                                message_type=MessageType.TOOL_CALL,
-                                image_files=None,
-                                tool_call_id=tool_call.tool_call_id,
                             )
                         )
 
+                    # Create ONE ASSISTANT message with all tool calls for this turn
+                    total_tool_call_tokens = sum(
+                        tc.token_count for tc in tool_calls_simple
+                    )
+                    simple_messages.append(
+                        ChatMessageSimple(
+                            message="",  # No text content when making tool calls
+                            token_count=total_tool_call_tokens,
+                            message_type=MessageType.ASSISTANT,
+                            tool_calls=tool_calls_simple,
+                            image_files=None,
+                        )
+                    )
+
+                    # Add TOOL_CALL_RESPONSE messages for each tool call in this turn
+                    for tool_call in turn_tool_calls:
+                        tool_name = tool_id_to_name_map.get(
+                            tool_call.tool_id, "unknown"
+                        )
+                        tool_response_message = (
+                            _build_tool_call_response_history_message(
+                                tool_name=tool_name,
+                                generated_images=tool_call.generated_images,
+                                tool_call_response=tool_call.tool_call_response,
+                            )
+                        )
                         simple_messages.append(
                             ChatMessageSimple(
-                                message=TOOL_CALL_RESPONSE_CROSS_MESSAGE,
-                                token_count=20,  # Tiny overestimate
+                                message=tool_response_message,
+                                token_count=(
+                                    token_counter(tool_response_message)
+                                    if tool_name == IMAGE_GENERATION_TOOL_NAME
+                                    else 20
+                                ),
                                 message_type=MessageType.TOOL_CALL_RESPONSE,
-                                image_files=None,
                                 tool_call_id=tool_call.tool_call_id,
+                                image_files=None,
                             )
                         )
 
-            # Add the assistant message itself
+            # Add the assistant message itself (the final answer)
             simple_messages.append(
                 ChatMessageSimple(
                     message=chat_message.message,
@@ -650,32 +656,41 @@ def convert_chat_history(
                 f"Invalid message type when constructing simple history: {chat_message.message_type}"
             )
 
-    return simple_messages
+    return ChatHistoryResult(
+        simple_messages=simple_messages,
+        all_injected_file_metadata=all_injected_file_metadata,
+    )
 
 
 def get_custom_agent_prompt(persona: Persona, chat_session: ChatSession) -> str | None:
-    """Get the custom agent prompt from persona or project instructions.
+    """Get the custom agent prompt from persona or project instructions. If it's replacing the base system prompt,
+    it does not count as a custom agent prompt (logic exists later also to drop it in this case).
 
     Chat Sessions in Projects that are using a custom agent will retain the custom agent prompt.
-    Priority: persona.system_prompt > chat_session.project.instructions > None
+    Priority: persona.system_prompt (if not default Agent) > chat_session.project.instructions
+
+    # NOTE: Logic elsewhere allows saving empty strings for potentially other purposes but for constructing the prompts
+    # we never want to return an empty string for a prompt so it's translated into an explicit None.
 
     Args:
         persona: The Persona object
         chat_session: The ChatSession object
 
     Returns:
-        The custom agent prompt string, or None if neither persona nor project has one
+        The prompt to use for the custom Agent part of the prompt.
     """
-    # Not considered a custom agent if it's the default behavior persona
-    if persona.id == DEFAULT_PERSONA_ID:
-        return None
+    # If using a custom Agent, always respect its prompt, even if in a Project, and even if it's an empty custom prompt.
+    if persona.id != DEFAULT_PERSONA_ID:
+        # Logic exists later also to drop it in this case but this is strictly correct anyhow.
+        if persona.replace_base_system_prompt:
+            return None
+        return persona.system_prompt or None
 
-    if persona.system_prompt:
-        return persona.system_prompt
-    elif chat_session.project and chat_session.project.instructions:
+    # If in a project and using the default Agent, respect the project instructions.
+    if chat_session.project and chat_session.project.instructions:
         return chat_session.project.instructions
-    else:
-        return None
+
+    return None
 
 
 def is_last_assistant_message_clarification(chat_history: list[ChatMessage]) -> bool:
@@ -697,35 +712,60 @@ def is_last_assistant_message_clarification(chat_history: list[ChatMessage]) -> 
 
 
 def create_tool_call_failure_messages(
-    tool_call: ToolCallKickoff, token_counter: Callable[[str], int]
+    tool_calls: list[ToolCallKickoff], token_counter: Callable[[str], int]
 ) -> list[ChatMessageSimple]:
-    """Create ChatMessageSimple objects for a failed tool call.
+    """Create ChatMessageSimple objects for failed tool calls.
 
-    Creates two messages:
-    1. The tool call message itself
-    2. A failure response message indicating the tool call failed
+    Creates messages using OpenAI parallel tool calling format:
+    1. An ASSISTANT message with tool_calls field containing all failed tool calls
+    2. A TOOL_CALL_RESPONSE failure message for each tool call
 
     Args:
-        tool_call: The ToolCallKickoff object representing the failed tool call
+        tool_calls: List of ToolCallKickoff objects representing the failed tool calls
         token_counter: Function to count tokens in a message string
 
     Returns:
-        List containing two ChatMessageSimple objects: tool call message and failure response
+        List containing ChatMessageSimple objects: one assistant message with all tool calls
+        followed by a failure response for each tool call
     """
-    tool_call_msg = ChatMessageSimple(
-        message=tool_call.to_msg_str(),
-        token_count=token_counter(tool_call.to_msg_str()),
-        message_type=MessageType.TOOL_CALL,
-        tool_call_id=tool_call.tool_call_id,
+    if not tool_calls:
+        return []
+
+    # Create ToolCallSimple for each failed tool call
+    tool_calls_simple: list[ToolCallSimple] = []
+    for tool_call in tool_calls:
+        tool_call_token_count = token_counter(tool_call.to_msg_str())
+        tool_calls_simple.append(
+            ToolCallSimple(
+                tool_call_id=tool_call.tool_call_id,
+                tool_name=tool_call.tool_name,
+                tool_arguments=tool_call.tool_args,
+                token_count=tool_call_token_count,
+            )
+        )
+
+    total_token_count = sum(tc.token_count for tc in tool_calls_simple)
+
+    # Create ONE ASSISTANT message with all tool_calls (OpenAI format)
+    assistant_msg = ChatMessageSimple(
+        message="",  # No text content when making tool calls
+        token_count=total_token_count,
+        message_type=MessageType.ASSISTANT,
+        tool_calls=tool_calls_simple,
         image_files=None,
     )
 
-    failure_response_msg = ChatMessageSimple(
-        message=TOOL_CALL_FAILURE_PROMPT,
-        token_count=token_counter(TOOL_CALL_FAILURE_PROMPT),
-        message_type=MessageType.TOOL_CALL_RESPONSE,
-        tool_call_id=tool_call.tool_call_id,
-        image_files=None,
-    )
+    messages: list[ChatMessageSimple] = [assistant_msg]
 
-    return [tool_call_msg, failure_response_msg]
+    # Create a TOOL_CALL_RESPONSE failure message for each tool call
+    for tool_call in tool_calls:
+        failure_response_msg = ChatMessageSimple(
+            message=TOOL_CALL_FAILURE_PROMPT,
+            token_count=50,  # Tiny overestimate
+            message_type=MessageType.TOOL_CALL_RESPONSE,
+            tool_call_id=tool_call.tool_call_id,
+            image_files=None,
+        )
+        messages.append(failure_response_msg)
+
+    return messages

@@ -60,7 +60,8 @@ class ProcessingMode(str, PyEnum):
     """Determines how documents are processed after fetching."""
 
     REGULAR = "REGULAR"  # Full pipeline: chunk → embed → Vespa
-    FILE_SYSTEM = "FILE_SYSTEM"  # Write to file system only
+    FILE_SYSTEM = "FILE_SYSTEM"  # Write to file system only (JSON documents)
+    RAW_BINARY = "RAW_BINARY"  # Write raw binary to S3 (no text extraction)
 
 
 class SyncType(str, PyEnum):
@@ -197,6 +198,12 @@ class ThemePreference(str, PyEnum):
     SYSTEM = "system"
 
 
+class DefaultAppMode(str, PyEnum):
+    AUTO = "AUTO"
+    CHAT = "CHAT"
+    SEARCH = "SEARCH"
+
+
 class SwitchoverType(str, PyEnum):
     REINDEX = "reindex"
     ACTIVE_ONLY = "active_only"
@@ -225,17 +232,22 @@ class BuildSessionStatus(str, PyEnum):
     IDLE = "idle"
 
 
+class SharingScope(str, PyEnum):
+    PRIVATE = "private"
+    PUBLIC_ORG = "public_org"
+    PUBLIC_GLOBAL = "public_global"
+
+
 class SandboxStatus(str, PyEnum):
     PROVISIONING = "provisioning"
     RUNNING = "running"
-    IDLE = "idle"
     SLEEPING = "sleeping"  # Pod terminated, snapshots saved to S3
     TERMINATED = "terminated"
     FAILED = "failed"
 
     def is_active(self) -> bool:
-        """Check if sandbox is in an active state (running or idle)."""
-        return self in (SandboxStatus.RUNNING, SandboxStatus.IDLE)
+        """Check if sandbox is in an active state (running)."""
+        return self == SandboxStatus.RUNNING
 
     def is_terminal(self) -> bool:
         """Check if sandbox is in a terminal state."""
@@ -285,3 +297,9 @@ class HierarchyNodeType(str, PyEnum):
 
     # Slack
     CHANNEL = "channel"
+
+
+class LLMModelFlowType(str, PyEnum):
+    CHAT = "chat"
+    VISION = "vision"
+    CONTEXTUAL_RAG = "contextual_rag"

@@ -677,11 +677,28 @@ def connector_document_extraction(
                 logger.debug(f"Indexing batch of documents: {batch_description}")
                 memory_tracer.increment_and_maybe_trace()
 
-                # cc4a
                 if processing_mode == ProcessingMode.FILE_SYSTEM:
                     # File system only - write directly to persistent storage,
                     # skip chunking/embedding/Vespa but still track documents in DB
 
+                    # IMPORTANT: Write to S3 FIRST, before marking as indexed in DB.
+
+                    # Write documents to persistent file system
+                    # Use creator_id for user-segregated storage paths (sandbox isolation)
+                    creator_id = index_attempt.connector_credential_pair.creator_id
+                    if creator_id is None:
+                        raise ValueError(
+                            f"ConnectorCredentialPair {index_attempt.connector_credential_pair.id} "
+                            "must have a creator_id for persistent document storage"
+                        )
+                    user_id_str: str = str(creator_id)
+                    writer = get_persistent_document_writer(
+                        user_id=user_id_str,
+                        tenant_id=tenant_id,
+                    )
+                    written_paths = writer.write_documents(doc_batch_cleaned)
+
+                    # Only after successful S3 write, mark documents as indexed in DB
                     with get_session_with_current_tenant() as db_session:
                         # Create metadata for the batch
                         index_attempt_metadata = IndexAttemptMetadata(
@@ -710,21 +727,6 @@ def connector_document_extraction(
                             db_session=db_session,
                         )
                         db_session.commit()
-
-                    # Write documents to persistent file system
-                    # Use creator_id for user-segregated storage paths (sandbox isolation)
-                    creator_id = index_attempt.connector_credential_pair.creator_id
-                    if creator_id is None:
-                        raise ValueError(
-                            f"ConnectorCredentialPair {index_attempt.connector_credential_pair.id} "
-                            "must have a creator_id for persistent document storage"
-                        )
-                    user_id_str: str = str(creator_id)
-                    writer = get_persistent_document_writer(
-                        user_id=user_id_str,
-                        tenant_id=tenant_id,
-                    )
-                    written_paths = writer.write_documents(doc_batch_cleaned)
 
                     # Update coordination directly (no docprocessing task)
                     with get_session_with_current_tenant() as db_session:
@@ -814,17 +816,19 @@ def connector_document_extraction(
         if processing_mode == ProcessingMode.FILE_SYSTEM:
             creator_id = index_attempt.connector_credential_pair.creator_id
             if creator_id:
+                source_value = db_connector.source.value
                 app.send_task(
                     OnyxCeleryTask.SANDBOX_FILE_SYNC,
                     kwargs={
                         "user_id": str(creator_id),
                         "tenant_id": tenant_id,
+                        "source": source_value,
                     },
                     queue=OnyxCeleryQueues.SANDBOX,
                 )
                 logger.info(
                     f"Triggered sandbox file sync for user {creator_id} "
-                    f"after indexing complete"
+                    f"source={source_value} after indexing complete"
                 )
 
     except Exception as e:

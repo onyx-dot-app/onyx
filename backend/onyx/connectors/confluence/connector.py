@@ -891,8 +891,8 @@ class ConfluenceConnector(
 
     def _retrieve_all_slim_docs(
         self,
-        start: SecondsSinceUnixEpoch | None = None,
-        end: SecondsSinceUnixEpoch | None = None,
+        start: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        end: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
         callback: IndexingHeartbeatInterface | None = None,
         include_permissions: bool = True,
     ) -> GenerateSlimDocumentOutput:
@@ -904,6 +904,10 @@ class ConfluenceConnector(
             space_level_access_info = get_all_space_permissions(
                 self.confluence_client, self.is_cloud
             )
+
+        # Yield space hierarchy nodes first
+        for node in self._yield_space_hierarchy_nodes():
+            doc_metadata_list.append(node)
 
         def get_external_access(
             doc_id: str, restrictions: dict[str, Any], ancestors: list[dict[str, Any]]
@@ -919,6 +923,10 @@ class ConfluenceConnector(
             expand=restrictions_expand,
             limit=_SLIM_DOC_BATCH_SIZE,
         ):
+            # Yield ancestor hierarchy nodes for this page
+            for node in self._yield_ancestor_hierarchy_nodes(page):
+                doc_metadata_list.append(node)
+
             page_id = _get_page_id(page)
             page_restrictions = page.get("restrictions") or {}
             page_space_key = page.get("space", {}).get("key")
@@ -939,6 +947,7 @@ class ConfluenceConnector(
             )
 
             # Query attachments for each page
+            page_hierarchy_node_yielded = False
             attachment_query = self._construct_attachment_query(_get_page_id(page))
             for attachment in self.confluence_client.cql_paginate_all_expansions(
                 cql=attachment_query,
@@ -951,6 +960,14 @@ class ConfluenceConnector(
                     attachment,
                 ):
                     continue
+
+                # If this page has valid attachments and we haven't yielded it as a
+                # hierarchy node yet, do so now (attachments are children of the page)
+                if not page_hierarchy_node_yielded:
+                    page_node = self._maybe_yield_page_hierarchy_node(page)
+                    if page_node:
+                        doc_metadata_list.append(page_node)
+                    page_hierarchy_node_yielded = True
 
                 attachment_restrictions = attachment.get("restrictions", {})
                 if not attachment_restrictions:

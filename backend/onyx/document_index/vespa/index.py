@@ -39,7 +39,6 @@ from onyx.document_index.interfaces import (
 from onyx.document_index.interfaces import EnrichedDocumentIndexingInfo
 from onyx.document_index.interfaces import IndexBatchParams
 from onyx.document_index.interfaces import MinimalDocumentIndexingInfo
-from onyx.document_index.interfaces import UpdateRequest
 from onyx.document_index.interfaces import VespaChunkRequest
 from onyx.document_index.interfaces import VespaDocumentFields
 from onyx.document_index.interfaces import VespaDocumentUserFields
@@ -648,9 +647,6 @@ class VespaIndex(DocumentIndex):
             time.monotonic() - update_start,
         )
 
-    def update(self, update_requests: list[UpdateRequest], *, tenant_id: str) -> None:
-        raise NotImplementedError
-
     def update_single(
         self,
         doc_id: str,
@@ -665,9 +661,10 @@ class VespaIndex(DocumentIndex):
         Handle other exceptions if you wish to implement retry behavior
         """
         if fields is None and user_fields is None:
-            raise ValueError(
-                f"Bug: Tried to update document {doc_id} with no updated fields or user fields."
+            logger.warning(
+                f"Tried to update document {doc_id} with no updated fields or user fields."
             )
+            return
 
         tenant_state = TenantState(
             tenant_id=get_current_tenant_id(),
@@ -738,7 +735,7 @@ class VespaIndex(DocumentIndex):
         chunk_requests: list[VespaChunkRequest],
         filters: IndexFilters,
         batch_retrieval: bool = False,
-        get_large_chunks: bool = False,
+        get_large_chunks: bool = False,  # noqa: ARG002
     ) -> list[InferenceChunk]:
         tenant_state = TenantState(
             tenant_id=get_current_tenant_id(),
@@ -772,12 +769,11 @@ class VespaIndex(DocumentIndex):
         query_embedding: Embedding,
         final_keywords: list[str] | None,
         filters: IndexFilters,
-        hybrid_alpha: float,
-        time_decay_multiplier: float,
+        hybrid_alpha: float,  # noqa: ARG002
+        time_decay_multiplier: float,  # noqa: ARG002
         num_to_retrieve: int,
         ranking_profile_type: QueryExpansionType = QueryExpansionType.SEMANTIC,
-        offset: int = 0,
-        title_content_ratio: float | None = TITLE_CONTENT_RATIO,
+        title_content_ratio: float | None = TITLE_CONTENT_RATIO,  # noqa: ARG002
     ) -> list[InferenceChunk]:
         tenant_state = TenantState(
             tenant_id=get_current_tenant_id(),
@@ -808,15 +804,14 @@ class VespaIndex(DocumentIndex):
             query_type,
             filters,
             num_to_retrieve,
-            offset,
         )
 
     def admin_retrieval(
         self,
         query: str,
+        query_embedding: Embedding,  # noqa: ARG002
         filters: IndexFilters,
         num_to_retrieve: int = NUM_RETURNED_HITS,
-        offset: int = 0,
     ) -> list[InferenceChunk]:
         vespa_where_clauses = build_vespa_filters(filters, include_hidden=True)
         yql = (
@@ -833,7 +828,6 @@ class VespaIndex(DocumentIndex):
             "yql": yql,
             "query": query,
             "hits": num_to_retrieve,
-            "offset": 0,
             "ranking.profile": "admin_search",
             "timeout": VESPA_TIMEOUT,
         }

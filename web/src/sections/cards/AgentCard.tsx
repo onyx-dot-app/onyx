@@ -25,9 +25,10 @@ import {
 } from "@opal/icons";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import ShareAgentModal from "@/sections/modals/ShareAgentModal";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import AgentViewerModal from "@/sections/modals/AgentViewerModal";
+import { toast } from "@/hooks/useToast";
 import { LineItemLayout, CardItemLayout } from "@/layouts/general-layouts";
-import { Hoverable } from "@/refresh-components/Hoverable";
+import { Interactive } from "@opal/core";
 import { Card } from "@/refresh-components/cards";
 
 export interface AgentCardProps {
@@ -47,8 +48,8 @@ export default function AgentCard({ agent }: AgentCardProps) {
   const isOwnedByUser = checkUserOwnsAssistant(user, agent);
   const [hovered, setHovered] = React.useState(false);
   const shareAgentModal = useCreateModal();
+  const agentViewerModal = useCreateModal();
   const { agent: fullAgent, refresh: refreshAgent } = useAgent(agent.id);
-  const { popup, setPopup } = usePopup();
 
   // Start chat and auto-pin unpinned agents to the sidebar
   const handleStartChat = useCallback(() => {
@@ -70,23 +71,18 @@ export default function AgentCard({ agent }: AgentCardProps) {
       );
 
       if (error) {
-        setPopup({
-          type: "error",
-          message: `Failed to share agent: ${error}`,
-        });
+        toast.error(`Failed to share agent: ${error}`);
       } else {
         // Revalidate the agent data to reflect the changes
         refreshAgent();
         shareAgentModal.toggle(false);
       }
     },
-    [agent.id, isPaidEnterpriseFeaturesEnabled, refreshAgent, setPopup]
+    [agent.id, isPaidEnterpriseFeaturesEnabled, refreshAgent]
   );
 
   return (
     <>
-      {popup}
-
       <shareAgentModal.Provider>
         <ShareAgentModal
           agentId={agent.id}
@@ -97,13 +93,16 @@ export default function AgentCard({ agent }: AgentCardProps) {
         />
       </shareAgentModal.Provider>
 
-      <Hoverable
-        asChild
-        onClick={handleStartChat}
+      <agentViewerModal.Provider>
+        {fullAgent && <AgentViewerModal agent={fullAgent} />}
+      </agentViewerModal.Provider>
+
+      <Interactive.Base
+        onClick={() => agentViewerModal.toggle(true)}
         group="group/AgentCard"
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
-        nonInteractive
+        variant="none"
       >
         <Card padding={0} gap={0} height="full">
           <div className="flex self-stretch h-[6rem]">
@@ -193,7 +192,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
             </div>
           </div>
         </Card>
-      </Hoverable>
+      </Interactive.Base>
     </>
   );
 }

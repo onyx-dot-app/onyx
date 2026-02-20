@@ -1,4 +1,4 @@
-import React, { JSX, useState, useEffect, useRef } from "react";
+import React, { JSX, useState, useEffect, useRef, useMemo } from "react";
 import { SourceTag, SourceInfo } from "@/refresh-components/buttons/source-tag";
 import { cn } from "@/lib/utils";
 
@@ -16,6 +16,7 @@ export interface SearchChipListProps<T> {
   emptyState?: React.ReactNode;
   className?: string;
   showDetailsCard?: boolean;
+  isQuery?: boolean;
 }
 
 type DisplayEntry<T> =
@@ -32,56 +33,35 @@ export function SearchChipList<T>({
   emptyState,
   className = "",
   showDetailsCard,
+  isQuery,
 }: SearchChipListProps<T>): JSX.Element {
-  const [displayList, setDisplayList] = useState<DisplayEntry<T>[]>([]);
-  const [batchId, setBatchId] = useState(0);
+  const [visibleCount, setVisibleCount] = useState(initialCount);
   const animatedKeysRef = useRef<Set<string>>(new Set());
 
   const getEntryKey = (entry: DisplayEntry<T>): string => {
-    if (entry.type === "more") return `more-button-${entry.batchId}`;
+    if (entry.type === "more") return `more-button`;
     return String(getKey(entry.item, entry.index));
   };
 
-  useEffect(() => {
-    const initial: DisplayEntry<T>[] = items
-      .slice(0, initialCount)
+  const effectiveCount = Math.min(visibleCount, items.length);
+
+  const displayList: DisplayEntry<T>[] = useMemo(() => {
+    const chips: DisplayEntry<T>[] = items
+      .slice(0, effectiveCount)
       .map((item, i) => ({ type: "chip" as const, item, index: i }));
 
-    if (items.length > initialCount) {
-      initial.push({ type: "more", batchId: 0 });
+    if (effectiveCount < items.length) {
+      chips.push({ type: "more", batchId: 0 });
     }
+    return chips;
+  }, [items, effectiveCount]);
 
-    setDisplayList(initial);
-    setBatchId(0);
-  }, [items, initialCount]);
-
-  const chipCount = displayList.filter((e) => e.type === "chip").length;
+  const chipCount = effectiveCount;
   const remainingCount = items.length - chipCount;
   const remainingItems = items.slice(chipCount);
 
   const handleShowMore = () => {
-    const nextBatchId = batchId + 1;
-
-    setDisplayList((prev) => {
-      const withoutButton = prev.filter((e) => e.type !== "more");
-      const currentCount = withoutButton.length;
-      const newCount = Math.min(currentCount + expansionCount, items.length);
-      const newItems: DisplayEntry<T>[] = items
-        .slice(currentCount, newCount)
-        .map((item, i) => ({
-          type: "chip" as const,
-          item,
-          index: currentCount + i,
-        }));
-
-      const updated = [...withoutButton, ...newItems];
-      if (newCount < items.length) {
-        updated.push({ type: "more", batchId: nextBatchId });
-      }
-      return updated;
-    });
-
-    setBatchId(nextBatchId);
+    setVisibleCount((prev) => prev + expansionCount);
   };
 
   useEffect(() => {
@@ -123,6 +103,8 @@ export function SearchChipList<T>({
                 sources={[toSourceInfo(entry.item, entry.index)]}
                 onSourceClick={onClick ? () => onClick(entry.item) : undefined}
                 showDetailsCard={showDetailsCard}
+                isQuery={isQuery}
+                tooltipText={isQuery ? "View Full Search Term" : undefined}
               />
             ) : (
               <SourceTag
@@ -132,6 +114,8 @@ export function SearchChipList<T>({
                 )}
                 onSourceClick={() => handleShowMore()}
                 showDetailsCard={showDetailsCard}
+                isQuery={isQuery}
+                isMore={isQuery}
               />
             )}
           </div>

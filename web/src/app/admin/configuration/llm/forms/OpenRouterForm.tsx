@@ -105,8 +105,6 @@ export function OpenRouterForm({
       {({
         onClose,
         mutate,
-        popup,
-        setPopup,
         isTesting,
         setIsTesting,
         testError,
@@ -132,103 +130,99 @@ export function OpenRouterForm({
         });
 
         return (
-          <>
-            {popup}
-            <Formik
-              initialValues={initialValues}
-              validationSchema={validationSchema}
-              validateOnMount={true}
-              onSubmit={async (values, { setSubmitting }) => {
-                await submitLLMProvider({
-                  providerName: OPENROUTER_PROVIDER_NAME,
-                  values,
-                  initialValues,
-                  modelConfigurations:
-                    fetchedModels.length > 0
-                      ? fetchedModels
-                      : modelConfigurations,
-                  existingLlmProvider,
-                  shouldMarkAsDefault,
-                  setIsTesting,
-                  setTestError,
-                  setPopup,
-                  mutate,
-                  onClose,
-                  setSubmitting,
-                });
-              }}
-            >
-              {(formikProps) => {
-                const currentModels =
+          <Formik
+            initialValues={initialValues}
+            validationSchema={validationSchema}
+            validateOnMount={true}
+            onSubmit={async (values, { setSubmitting }) => {
+              await submitLLMProvider({
+                providerName: OPENROUTER_PROVIDER_NAME,
+                values,
+                initialValues,
+                modelConfigurations:
                   fetchedModels.length > 0
                     ? fetchedModels
-                    : existingLlmProvider?.model_configurations ||
-                      modelConfigurations;
+                    : modelConfigurations,
+                existingLlmProvider,
+                shouldMarkAsDefault,
+                setIsTesting,
+                setTestError,
+                mutate,
+                onClose,
+                setSubmitting,
+              });
+            }}
+          >
+            {(formikProps) => {
+              const currentModels =
+                fetchedModels.length > 0
+                  ? fetchedModels
+                  : existingLlmProvider?.model_configurations ||
+                    modelConfigurations;
 
-                const isFetchDisabled =
-                  !formikProps.values.api_base || !formikProps.values.api_key;
+              const isFetchDisabled =
+                !formikProps.values.api_base || !formikProps.values.api_key;
 
-                return (
-                  <Form className={LLM_FORM_CLASS_NAME}>
-                    <DisplayNameField disabled={!!existingLlmProvider} />
+              return (
+                <Form className={LLM_FORM_CLASS_NAME}>
+                  <DisplayNameField disabled={!!existingLlmProvider} />
 
-                    <PasswordInputTypeInField name="api_key" label="API Key" />
+                  <PasswordInputTypeInField name="api_key" label="API Key" />
 
-                    <TextFormField
-                      name="api_base"
-                      label="API Base URL"
-                      subtext="The base URL for OpenRouter API."
-                      placeholder={DEFAULT_API_BASE}
-                    />
+                  <TextFormField
+                    name="api_base"
+                    label="API Base URL"
+                    subtext="The base URL for OpenRouter API."
+                    placeholder={DEFAULT_API_BASE}
+                  />
 
-                    <FetchModelsButton
-                      onFetch={() =>
-                        fetchOpenRouterModels({
-                          apiBase: formikProps.values.api_base,
-                          apiKey: formikProps.values.api_key,
-                          providerName: existingLlmProvider?.name,
-                        })
-                      }
-                      isDisabled={isFetchDisabled}
-                      disabledHint={
-                        !formikProps.values.api_key
-                          ? "Enter your API key first."
-                          : !formikProps.values.api_base
-                            ? "Enter the API base URL."
-                            : undefined
-                      }
-                      onModelsFetched={setFetchedModels}
-                      autoFetchOnInitialLoad={!!existingLlmProvider}
-                    />
+                  <FetchModelsButton
+                    onFetch={() =>
+                      fetchOpenRouterModels({
+                        apiBase: formikProps.values.api_base,
+                        apiKey: formikProps.values.api_key,
+                        providerName: existingLlmProvider?.name,
+                      })
+                    }
+                    isDisabled={isFetchDisabled}
+                    disabledHint={
+                      !formikProps.values.api_key
+                        ? "Enter your API key first."
+                        : !formikProps.values.api_base
+                          ? "Enter the API base URL."
+                          : undefined
+                    }
+                    onModelsFetched={setFetchedModels}
+                    autoFetchOnInitialLoad={!!existingLlmProvider}
+                  />
 
-                    <Separator />
+                  <Separator />
 
-                    <DisplayModels
-                      modelConfigurations={currentModels}
-                      formikProps={formikProps}
-                      noModelConfigurationsMessage={
-                        "Fetch available models first, then you'll be able to select " +
-                        "the models you want to make available in Onyx."
-                      }
-                      recommendedDefaultModel={null}
-                      shouldShowAutoUpdateToggle={false}
-                    />
+                  <DisplayModels
+                    modelConfigurations={currentModels}
+                    formikProps={formikProps}
+                    noModelConfigurationsMessage={
+                      "Fetch available models first, then you'll be able to select " +
+                      "the models you want to make available in Onyx."
+                    }
+                    recommendedDefaultModel={null}
+                    shouldShowAutoUpdateToggle={false}
+                  />
 
-                    <AdvancedOptions formikProps={formikProps} />
+                  <AdvancedOptions formikProps={formikProps} />
 
-                    <FormActionButtons
-                      isTesting={isTesting}
-                      testError={testError}
-                      existingLlmProvider={existingLlmProvider}
-                      mutate={mutate}
-                      onClose={onClose}
-                      isFormValid={formikProps.isValid}
-                    />
-                  </Form>
-                );
-              }}
-            </Formik>
-          </>
+                  <FormActionButtons
+                    isTesting={isTesting}
+                    testError={testError}
+                    existingLlmProvider={existingLlmProvider}
+                    mutate={mutate}
+                    onClose={onClose}
+                    isFormValid={formikProps.isValid}
+                  />
+                </Form>
+              );
+            }}
+          </Formik>
         );
       }}
     </ProviderFormEntrypointWrapper>

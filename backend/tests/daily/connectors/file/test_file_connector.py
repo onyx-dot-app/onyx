@@ -35,7 +35,7 @@ def mock_filestore_record() -> MagicMock:
     "onyx.file_processing.extract_file_text.get_unstructured_api_key", return_value=None
 )
 def test_single_text_file_with_metadata(
-    mock_get_unstructured_api_key: MagicMock,
+    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
     mock_get_session: MagicMock,
     mock_db_session: MagicMock,
     mock_file_store: MagicMock,
@@ -80,8 +80,8 @@ def test_single_text_file_with_metadata(
     "onyx.file_processing.extract_file_text.get_unstructured_api_key", return_value=None
 )
 def test_two_text_files_with_zip_metadata(
-    mock_get_unstructured_api_key: MagicMock,
-    mock_db_session: MagicMock,
+    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
+    mock_db_session: MagicMock,  # noqa: ARG001
     mock_file_store: MagicMock,
 ) -> None:
     file1_content = io.BytesIO(b"File 1 content")

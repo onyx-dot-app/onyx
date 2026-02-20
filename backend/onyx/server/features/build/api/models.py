@@ -10,6 +10,7 @@ from onyx.configs.constants import MessageType
 from onyx.db.enums import ArtifactType
 from onyx.db.enums import BuildSessionStatus
 from onyx.db.enums import SandboxStatus
+from onyx.db.enums import SharingScope
 from onyx.server.features.build.sandbox.models import (
     FilesystemEntry as FileSystemEntry,
 )
@@ -107,6 +108,7 @@ class SessionResponse(BaseModel):
     nextjs_port: int | None
     sandbox: SandboxResponse | None
     artifacts: list[ArtifactResponse]
+    sharing_scope: SharingScope
 
     @classmethod
     def from_model(
@@ -129,6 +131,7 @@ class SessionResponse(BaseModel):
             nextjs_port=session.nextjs_port,
             sandbox=(SandboxResponse.from_model(sandbox) if sandbox else None),
             artifacts=[ArtifactResponse.from_model(a) for a in session.artifacts],
+            sharing_scope=session.sharing_scope,
         )
 
 
@@ -157,6 +160,19 @@ class SessionListResponse(BaseModel):
     """Response containing list of sessions."""
 
     sessions: list[SessionResponse]
+
+
+class SetSessionSharingRequest(BaseModel):
+    """Request to set the sharing scope of a session."""
+
+    sharing_scope: SharingScope
+
+
+class SetSessionSharingResponse(BaseModel):
+    """Response after setting session sharing scope."""
+
+    session_id: str
+    sharing_scope: SharingScope
 
 
 # ===== Message Models =====
@@ -243,6 +259,8 @@ class WebappInfo(BaseModel):
     has_webapp: bool  # Whether a webapp exists in outputs/web
     webapp_url: str | None  # URL to access the webapp (e.g., http://localhost:3015)
     status: str  # Sandbox status (running, terminated, etc.)
+    ready: bool  # Whether the NextJS dev server is actually responding
+    sharing_scope: SharingScope
 
 
 # ===== File Upload Models =====
@@ -263,6 +281,14 @@ class RateLimitResponse(BaseModel):
     messages_used: int
     limit: int
     reset_timestamp: str | None = None
+
+
+# ===== Pre-Provisioned Session Check Models =====
+class PreProvisionedCheckResponse(BaseModel):
+    """Response for checking if a pre-provisioned session is still valid (empty)."""
+
+    valid: bool  # True if session exists and has no messages
+    session_id: str | None = None  # Session ID if valid, None otherwise
 
 
 # ===== Build Connector Models =====
@@ -323,3 +349,11 @@ class GenerateSuggestionsResponse(BaseModel):
     """Response containing generated suggestions."""
 
     suggestions: list[SuggestionBubble]
+
+
+class PptxPreviewResponse(BaseModel):
+    """Response with PPTX slide preview metadata."""
+
+    slide_count: int
+    slide_paths: list[str]  # Relative paths to slide JPEGs within session workspace
+    cached: bool  # Whether result was served from cache

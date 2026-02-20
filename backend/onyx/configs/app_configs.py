@@ -50,6 +50,17 @@ GENERATIVE_MODEL_ACCESS_CHECK_FREQ = int(
 # Controls whether users can use User Knowledge (personal documents) in assistants
 DISABLE_USER_KNOWLEDGE = os.environ.get("DISABLE_USER_KNOWLEDGE", "").lower() == "true"
 
+# Disables vector DB (Vespa/OpenSearch) entirely. When True, connectors and RAG search
+# are disabled but core chat, tools, user file uploads, and Projects still work.
+DISABLE_VECTOR_DB = os.environ.get("DISABLE_VECTOR_DB", "").lower() == "true"
+
+# Maximum token count for a single uploaded file. Files exceeding this are rejected.
+# Defaults to 100k tokens (or 10M when vector DB is disabled).
+_DEFAULT_FILE_TOKEN_LIMIT = 10_000_000 if DISABLE_VECTOR_DB else 100_000
+FILE_TOKEN_COUNT_THRESHOLD = int(
+    os.environ.get("FILE_TOKEN_COUNT_THRESHOLD", str(_DEFAULT_FILE_TOKEN_LIMIT))
+)
+
 # If set to true, will show extra/uncommon connectors in the "Other" category
 SHOW_EXTRA_CONNECTORS = os.environ.get("SHOW_EXTRA_CONNECTORS", "").lower() == "true"
 
@@ -75,15 +86,19 @@ WEB_DOMAIN = os.environ.get("WEB_DOMAIN") or "http://localhost:3000"
 # Auth Configs
 #####
 # Upgrades users from disabled auth to basic auth and shows warning.
-_auth_type_str = (os.environ.get("AUTH_TYPE") or "").lower()
-if not _auth_type_str or _auth_type_str in ("disabled", "none"):
+_auth_type_str = (os.environ.get("AUTH_TYPE") or "basic").lower()
+if _auth_type_str == "disabled":
     logger.warning(
         "AUTH_TYPE='disabled' is no longer supported. "
         "Defaulting to 'basic'. Please update your configuration. "
         "Your existing data will be migrated automatically."
     )
     _auth_type_str = AuthType.BASIC.value
-AUTH_TYPE = AuthType(_auth_type_str)
+try:
+    AUTH_TYPE = AuthType(_auth_type_str)
+except ValueError:
+    logger.error(f"Invalid AUTH_TYPE: {_auth_type_str}. Defaulting to 'basic'.")
+    AUTH_TYPE = AuthType.BASIC
 
 PASSWORD_MIN_LENGTH = int(os.getenv("PASSWORD_MIN_LENGTH", 8))
 PASSWORD_MAX_LENGTH = int(os.getenv("PASSWORD_MAX_LENGTH", 64))
@@ -221,11 +236,44 @@ DOCUMENT_INDEX_NAME = "danswer_index"
 # OpenSearch Configs
 OPENSEARCH_HOST = os.environ.get("OPENSEARCH_HOST") or "localhost"
 OPENSEARCH_REST_API_PORT = int(os.environ.get("OPENSEARCH_REST_API_PORT") or 9200)
+# TODO(andrei): 60 seconds is too much, we're just setting a high default
+# timeout for now to examine why queries are slow.
+# NOTE: This timeout applies to all requests the client makes, including bulk
+# indexing.
+DEFAULT_OPENSEARCH_CLIENT_TIMEOUT_S = int(
+    os.environ.get("DEFAULT_OPENSEARCH_CLIENT_TIMEOUT_S") or 60
+)
+# TODO(andrei): 50 seconds is too much, we're just setting a high default
+# timeout for now to examine why queries are slow.
+# NOTE: To get useful partial results, this value should be less than the client
+# timeout above.
+DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S = int(
+    os.environ.get("DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S") or 50
+)
 OPENSEARCH_ADMIN_USERNAME = os.environ.get("OPENSEARCH_ADMIN_USERNAME", "admin")
 OPENSEARCH_ADMIN_PASSWORD = os.environ.get("OPENSEARCH_ADMIN_PASSWORD", "")
 USING_AWS_MANAGED_OPENSEARCH = (
     os.environ.get("USING_AWS_MANAGED_OPENSEARCH", "").lower() == "true"
 )
+# Profiling adds some overhead to OpenSearch operations. This overhead is
+# unknown right now. It is enabled by default so we can get useful logs for
+# investigating slow queries. We may never disable it if the overhead is
+# minimal.
+OPENSEARCH_PROFILING_DISABLED = (
+    os.environ.get("OPENSEARCH_PROFILING_DISABLED", "").lower() == "true"
+)
+
+# When enabled, OpenSearch returns detailed score breakdowns for each hit.
+# Useful for debugging and tuning search relevance. Has ~10-30% performance overhead according to documentation.
+# Seems for Hybrid Search in practice, the impact is actually more like 1000x slower.
+OPENSEARCH_EXPLAIN_ENABLED = (
+    os.environ.get("OPENSEARCH_EXPLAIN_ENABLED", "").lower() == "true"
+)
+
+# Analyzer used for full-text fields (title, content). Use OpenSearch built-in analyzer
+# names (e.g. "english", "standard", "german"). Affects stemming and tokenization;
+# existing indices need reindexing after a change.
+OPENSEARCH_TEXT_ANALYZER = os.environ.get("OPENSEARCH_TEXT_ANALYZER") or "english"
 
 # This is the "base" config for now, the idea is that at least for our dev
 # environments we always want to be dual indexing into both OpenSearch and Vespa
@@ -817,6 +865,7 @@ SCHEDULED_EVAL_PROJECT = os.environ.get("SCHEDULED_EVAL_PROJECT", "st-dev")
 # Langfuse API credentials - if provided, Langfuse tracing will be enabled
 LANGFUSE_SECRET_KEY = os.environ.get("LANGFUSE_SECRET_KEY") or ""
 LANGFUSE_PUBLIC_KEY = os.environ.get("LANGFUSE_PUBLIC_KEY") or ""
+LANGFUSE_HOST = os.environ.get("LANGFUSE_HOST") or ""  # For self-hosted Langfuse
 
 # Defined custom query/answer conditions to validate the query and the LLM answer.
 # Format: list of strings
@@ -895,6 +944,9 @@ MANAGED_VESPA = os.environ.get("MANAGED_VESPA", "").lower() == "true"
 
 ENABLE_EMAIL_INVITES = os.environ.get("ENABLE_EMAIL_INVITES", "").lower() == "true"
 
+# Limit on number of users a free trial tenant can invite (cloud only)
+NUM_FREE_TRIAL_USER_INVITES = int(os.environ.get("NUM_FREE_TRIAL_USER_INVITES", "10"))
+
 # Security and authentication
 DATA_PLANE_SECRET = os.environ.get(
     "DATA_PLANE_SECRET", ""
@@ -937,6 +989,7 @@ API_KEY_HASH_ROUNDS = (
 # MCP Server Configs
 #####
 MCP_SERVER_ENABLED = os.environ.get("MCP_SERVER_ENABLED", "").lower() == "true"
+MCP_SERVER_HOST = os.environ.get("MCP_SERVER_HOST", "0.0.0.0")
 MCP_SERVER_PORT = int(os.environ.get("MCP_SERVER_PORT") or 8090)
 
 # CORS origins for MCP clients (comma-separated)
@@ -1003,6 +1056,9 @@ DB_READONLY_PASSWORD: str = urllib.parse.quote_plus(
 )
 
 # File Store Configuration
+# Which backend to use for file storage: "s3" (S3/MinIO) or "postgres" (PostgreSQL Large Objects)
+FILE_STORE_BACKEND = os.environ.get("FILE_STORE_BACKEND", "s3")
+
 S3_FILE_STORE_BUCKET_NAME = (
     os.environ.get("S3_FILE_STORE_BUCKET_NAME") or "onyx-file-store-bucket"
 )

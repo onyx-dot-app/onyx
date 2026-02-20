@@ -22,6 +22,7 @@ from onyx.tools.interface import Tool
 from onyx.tools.models import LlmPythonExecutionResult
 from onyx.tools.models import PythonExecutionFile
 from onyx.tools.models import PythonToolOverrideKwargs
+from onyx.tools.models import ToolCallException
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
     CodeInterpreterClient,
@@ -138,6 +139,15 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
         Returns:
             ToolResponse with execution results
         """
+        if CODE_FIELD not in llm_kwargs:
+            raise ToolCallException(
+                message=f"Missing required '{CODE_FIELD}' parameter in python tool call",
+                llm_facing_message=(
+                    f"The python tool requires a '{CODE_FIELD}' parameter containing "
+                    f"the Python code to execute. Please provide like: "
+                    f'{{"code": "print(\'Hello, world!\')"}}'
+                ),
+            )
         code = cast(str, llm_kwargs[CODE_FIELD])
         chat_files = override_kwargs.chat_files if override_kwargs else []
 

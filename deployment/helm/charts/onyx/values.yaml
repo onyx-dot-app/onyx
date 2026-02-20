@@ -25,6 +25,15 @@ postgresql:
     superuserSecret:
       name: onyx-postgresql  # keep in sync with auth.postgresql
 
+# -- Master toggle for vector database support. When false:
+#   - Sets DISABLE_VECTOR_DB=true on all backend pods
+#   - Skips the indexing model server deployment (embeddings not needed)
+#   - Skips docprocessing and docfetching celery workers
+#   - You should also set vespa.enabled=false and opensearch.enabled=false
+#     to prevent those subcharts from deploying
+vectorDB:
+  enabled: true
+
 vespa:
   name: da-vespa-0
   service:
@@ -150,6 +159,15 @@ inferenceCapability:
     limits:
       cpu: 4000m
       memory: 10Gi
+  # Optional health probes
+  # Example:
+  # readinessProbe:
+  #   httpGet:
+  #     path: /health
+  #     port: model-server
+  startupProbe: {}
+  readinessProbe: {}
+  livenessProbe: {}
   podSecurityContext: {}
   securityContext:
     privileged: true
@@ -167,6 +185,7 @@ inferenceCapability:
   #     maxSurge: 0
   #     maxUnavailable: 1
 
+
 indexCapability:
   service:
     portName: modelserver
@@ -178,7 +197,7 @@ indexCapability:
   deploymentLabels:
     app: indexing-model-server
   podLabels:
-    app: indexing-model-server
+    scope: onyx-backend
   indexingOnly: "True"
   podAnnotations: {}
   containerPorts:
@@ -195,6 +214,15 @@ indexCapability:
     limits:
       cpu: 6000m
       memory: 6Gi
+  # Optional health probes
+  # Example:
+  # readinessProbe:
+  #   httpGet:
+  #     path: /health
+  #     port: model-server
+  startupProbe: {}
+  readinessProbe: {}
+  livenessProbe: {}
   podSecurityContext: {}
   securityContext:
     privileged: true
@@ -291,7 +319,7 @@ webserver:
     app: web-server
   podAnnotations: {}
   podLabels:
-    app: web-server
+    scope: onyx-frontend
   podSecurityContext:
     {}
     # fsGroup: 2000
@@ -321,6 +349,16 @@ webserver:
       cpu: 1000m
       memory: 1Gi
 
+  # Optional health probes
+  # Example:
+  # readinessProbe:
+  #   httpGet:
+  #     path: /api/health
+  #     port: http
+  startupProbe: {}
+  readinessProbe: {}
+  livenessProbe: {}
+
   autoscaling:
     enabled: false
     minReplicas: 1
@@ -330,7 +368,6 @@ webserver:
     # KEDA specific configurations (only used when autoscaling.engine is set to 'keda')
     pollingInterval: 30  # seconds
     cooldownPeriod: 300  # seconds
-    idleReplicaCount: 1  # minimum replicas when idle
     failureThreshold: 3  # number of failures before fallback
     fallbackReplicas: 1  # replicas to maintain on failure
     # Custom triggers for advanced KEDA configurations
@@ -370,7 +407,6 @@ api:
   podAnnotations: {}
   podLabels:
     scope: onyx-backend
-    app: api-server
 
   containerPorts:
     server: 8080
@@ -402,6 +438,16 @@ api:
       cpu: 1000m
       memory: 3Gi
 
+  # Optional health probes
+  # Example:
+  # readinessProbe:
+  #   httpGet:
+  #     path: /health
+  #     port: api-server-port
+  startupProbe: {}
+  readinessProbe: {}
+  livenessProbe: {}
+
   autoscaling:
     enabled: false
     minReplicas: 1
@@ -411,7 +457,6 @@ api:
     # KEDA specific configurations (only used when autoscaling.engine is set to 'keda')
     pollingInterval: 30  # seconds
     cooldownPeriod: 300  # seconds
-    idleReplicaCount: 1  # minimum replicas when idle
     failureThreshold: 3  # number of failures before fallback
     fallbackReplicas: 1  # replicas to maintain on failure
     # Custom triggers for advanced KEDA configurations
@@ -478,10 +523,10 @@ celery_shared:
 
 celery_beat:
   replicaCount: 1
+  logLevel: INFO
   podAnnotations: {}
   podLabels:
     scope: onyx-backend-celery
-    app: celery-beat
   deploymentLabels:
     app: celery-beat
   resources:
@@ -499,6 +544,7 @@ celery_beat:
 
 celery_worker_heavy:
   replicaCount: 1
+  logLevel: INFO
   autoscaling:
     enabled: false
     minReplicas: 1
@@ -508,7 +554,6 @@ celery_worker_heavy:
     # KEDA specific configurations (only used when autoscaling.engine is set to 'keda')
     pollingInterval: 30  # seconds
     cooldownPeriod: 300  # seconds
-    idleReplicaCount: 1  # minimum replicas when idle
     failureThreshold: 3  # number of failures before fallback
     fallbackReplicas: 1  # replicas to maintain on failure
     # Custom triggers for advanced KEDA configurations
@@ -516,7 +561,6 @@ celery_worker_heavy:
   podAnnotations: {}
   podLabels:
     scope: onyx-backend-celery
-    app: celery-worker-heavy
   deploymentLabels:
     app: celery-worker-heavy
   resources:
@@ -534,6 +578,7 @@ celery_worker_heavy:
 
 celery_worker_docprocessing:
   replicaCount: 1
+  logLevel: INFO
   autoscaling:
     enabled: false
     minReplicas: 1
@@ -543,7 +588,6 @@ celery_worker_docprocessing:
     # KEDA specific configurations (only used when autoscaling.engine is set to 'keda')
     pollingInterval: 30  # seconds
     cooldownPeriod: 300  # seconds
-    idleReplicaCount: 1  # minimum replicas when idle
     failureThreshold: 3  # number of failures before fallback
     fallbackReplicas: 1  # replicas to maintain on failure
     # Custom triggers for advanced KEDA configurations
@@ -551,7 +595,6 @@ celery_worker_docprocessing:
   podAnnotations: {}
   podLabels:
     scope: onyx-backend-celery
-    app: celery-worker-docprocessing
   deploymentLabels:
     app: celery-worker-docprocessing
   resources:
@@ -569,6 +612,7 @@ celery_worker_docprocessing:
 
 celery_worker_light:
   replicaCount: 1
+  logLevel: INFO
   autoscaling:
     enabled: false
     minReplicas: 1
@@ -578,7 +622,6 @@ celery_worker_light:
     # KEDA specific configurations (only used when autoscaling.engine is set to 'keda')
     pollingInterval: 30  # seconds
     cooldownPeriod: 300  # seconds
-    idleReplicaCount: 1  # minimum replicas when idle
     failureThreshold: 3  # number of failures before fallback
     fallbackReplicas: 1  # replicas to maintain on failure
     # Custom triggers for advanced KEDA configurations
@@ -586,7 +629,6 @@ celery_worker_light:
   podAnnotations: {}
   podLabels:
     scope: onyx-backend-celery
-    app: celery-worker-light
   deploymentLabels:
     app: celery-worker-light
   resources:
@@ -604,6 +646,7 @@ celery_worker_light:
 
 celery_worker_monitoring:
   replicaCount: 1
+  logLevel: INFO
   autoscaling:
     enabled: false
     minReplicas: 1
@@ -613,7 +656,6 @@ celery_worker_monitoring:
     # KEDA specific configurations (only used when autoscaling.engine is set to 'keda')
     pollingInterval: 30  # seconds
     cooldownPeriod: 300  # seconds
-    idleReplicaCount: 1  # minimum replicas when idle
     failureThreshold: 3  # number of failures before fallback
     fallbackReplicas: 1  # replicas to maintain on failure
     # Custom triggers for advanced KEDA configurations
@@ -621,7 +663,6 @@ celery_worker_monitoring:
   podAnnotations: {}
   podLabels:
     scope: onyx-backend-celery
-    app: celery-worker-monitoring
   deploymentLabels:
     app: celery-worker-monitoring
   resources:
@@ -639,6 +680,7 @@ celery_worker_monitoring:
 
 celery_worker_primary:
   replicaCount: 1
+  logLevel: INFO
   autoscaling:
     enabled: false
     minReplicas: 1
@@ -648,7 +690,6 @@ celery_worker_primary:
     # KEDA specific configurations (only used when autoscaling.engine is set to 'keda')
     pollingInterval: 30  # seconds
     cooldownPeriod: 300  # seconds
-    idleReplicaCount: 1  # minimum replicas when idle
     failureThreshold: 3  # number of failures before fallback
     fallbackReplicas: 1  # replicas to maintain on failure
     # Custom triggers for advanced KEDA configurations
@@ -656,7 +697,6 @@ celery_worker_primary:
   podAnnotations: {}
   podLabels:
     scope: onyx-backend-celery
-    app: celery-worker-primary
   deploymentLabels:
     app: celery-worker-primary
   resources:
@@ -674,6 +714,7 @@ celery_worker_primary:
 
 celery_worker_user_file_processing:
   replicaCount: 1
+  logLevel: INFO
   autoscaling:
     enabled: false
     minReplicas: 1
@@ -683,7 +724,6 @@ celery_worker_user_file_processing:
     # KEDA specific configurations
     pollingInterval: 30  # seconds
     cooldownPeriod: 300  # seconds
-    idleReplicaCount: 1  # minimum replicas when idle
     failureThreshold: 3  # number of failures before fallback
     fallbackReplicas: 1  # replicas to maintain on failure
     # Custom triggers for advanced KEDA configurations
@@ -691,7 +731,6 @@ celery_worker_user_file_processing:
   podAnnotations: {}
   podLabels:
     scope: onyx-backend-celery
-    app: celery-worker-user-file-processing
   deploymentLabels:
     app: celery-worker-user-file-processing
   resources:
@@ -725,7 +764,6 @@ discordbot:
   podAnnotations: {}
   podLabels:
     scope: onyx-backend
-    app: discord-bot
   deploymentLabels:
     app: discord-bot
   podSecurityContext:
@@ -754,7 +792,6 @@ slackbot:
   podAnnotations: {}
   podLabels:
     scope: onyx-backend
-    app: slack-bot
   deploymentLabels:
     app: slack-bot
   podSecurityContext:
@@ -786,7 +823,6 @@ mcpServer:
   podAnnotations: {}
   podLabels:
     scope: onyx-backend
-    app: mcp-server
   deploymentLabels:
     app: mcp-server
   containerPorts:
@@ -823,6 +859,7 @@ mcpServer:
 
 celery_worker_docfetching:
   replicaCount: 1
+  logLevel: INFO
   autoscaling:
     enabled: false
     minReplicas: 1
@@ -832,7 +869,6 @@ celery_worker_docfetching:
     # KEDA specific configurations (only used when autoscaling.engine is set to 'keda')
     pollingInterval: 30  # seconds
     cooldownPeriod: 300  # seconds
-    idleReplicaCount: 1  # minimum replicas when idle
     failureThreshold: 3  # number of failures before fallback
     fallbackReplicas: 1  # replicas to maintain on failure
     # Custom triggers for advanced KEDA configurations
@@ -840,7 +876,6 @@ celery_worker_docfetching:
   podAnnotations: {}
   podLabels:
     scope: onyx-backend-celery
-    app: celery-worker-docfetching
   deploymentLabels:
     app: celery-worker-docfetching
   resources:
@@ -1166,7 +1201,7 @@ configMap:
   S3_FILE_STORE_BUCKET_NAME: ""
   # Gen AI Settings
   GEN_AI_MAX_TOKENS: ""
-  QA_TIMEOUT: "60"
+  LLM_SOCKET_READ_TIMEOUT: "60"
   MAX_CHUNKS_FED_TO_CHAT: ""
   # Query Options
   DOC_TIME_DECAY: ""

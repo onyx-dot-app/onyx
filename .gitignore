@@ -6,6 +6,8 @@
 !/.vscode/tasks.template.jsonc
 .zed
 .cursor
+!/.cursor/mcp.json
+!/.cursor/skills/
 
 # macos
 .DS_store
@@ -39,10 +41,6 @@ settings.json
 *.sw?
 /backend/tests/regression/answer_quality/search_test_config.yaml
 *.egg-info
-
-# Claude
-AGENTS.md
-CLAUDE.md
 
 # Local .terraform directories
 **/.terraform/*

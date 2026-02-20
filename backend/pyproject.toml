@@ -17,9 +17,12 @@ disallow_untyped_defs = true
 warn_unused_ignores = true
 enable_error_code = ["possibly-undefined"]
 strict_equality = true
+# Patterns match paths whether mypy is run from backend/ (CI) or repo root (e.g. VS Code extension with target ./backend)
 exclude = [
-  "^generated/.*",
-  "^\\.venv/",
+  "(?:^|/)generated/",
+  "(?:^|/)\\.venv/",
+  "(?:^|/)onyx/server/features/build/sandbox/kubernetes/docker/skills/",
+  "(?:^|/)onyx/server/features/build/sandbox/kubernetes/docker/templates/",
 ]
 
 [[tool.mypy.overrides]]
@@ -39,15 +42,3 @@ ignore_errors = true
 module = "transformers.*"
 follow_imports = "skip"
 ignore_errors = true
-
-[tool.ruff]
-line-length = 130
-target-version = "py311"
-
-[tool.ruff.lint]
-ignore = []
-select = [
-  "E",
-  "F",
-  "W",
-]

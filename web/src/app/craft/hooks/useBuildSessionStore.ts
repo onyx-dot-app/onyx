@@ -1221,24 +1221,28 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
           !sessionData.session_loaded_in_sandbox);
 
       if (needsRestore) {
-        console.log(`Restoring session ${sessionId}...`);
-        // Update UI to show restoring state
+        // Show sandbox as "restoring" while we load messages + restore
         updateSessionData(sessionId, {
-          status: "creating", // Use "creating" to show loading indicator
+          status: "creating",
+          sandbox: sessionData.sandbox
+            ? { ...sessionData.sandbox, status: "restoring" }
+            : null,
         });
-
-        // Call restore endpoint (blocks until complete)
-        sessionData = await restoreSession(sessionId);
-        console.log(`Session ${sessionId} restored successfully`);
       }
 
-      // Now fetch messages and artifacts
-      const [messages, artifacts] = await Promise.all([
-        fetchMessages(sessionId),
-        fetchArtifacts(sessionId),
-      ]);
+      // Messages come from DB and don't need the sandbox running.
+      // Artifacts need sandbox filesystem, so skip during restore.
+      const messages = await fetchMessages(sessionId);
+      const artifacts = needsRestore ? [] : await fetchArtifacts(sessionId);
 
-      // Construct webapp URL if sandbox has a Next.js port and there's a webapp artifact
+      // Preserve optimistic messages if actively streaming (pre-provisioned flow).
+      const currentSession = get().sessions.get(sessionId);
+      const isStreaming =
+        (currentSession?.messages?.length ?? 0) > 0 &&
+        (currentSession?.status === "running" ||
+          currentSession?.status === "creating");
+
+      // Construct webapp URL
       let webappUrl: string | null = null;
       const hasWebapp = artifacts.some(
         (a) => a.type === "nextjs_app" || a.type === "web_app"
@@ -1247,42 +1251,62 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         webappUrl = `http://localhost:${sessionData.sandbox.nextjs_port}`;
       }
 
-      // Re-fetch existing session to check for optimistic messages
-      const currentSession = get().sessions.get(sessionId);
-      const hasOptimisticMessages = (currentSession?.messages.length ?? 0) > 0;
-      const isCurrentlyStreaming =
-        currentSession?.status === "running" ||
-        currentSession?.status === "creating";
-
-      // Consolidate messages into proper conversation turns
-      // Each assistant turn becomes a single message with streamItems in metadata
-      // If there are optimistic messages (active streaming), preserve current state
-      const messagesToUse = hasOptimisticMessages
+      const status = isStreaming
+        ? currentSession!.status
+        : needsRestore
+          ? "creating"
+          : sessionData.status === "active"
+            ? "active"
+            : "idle";
+      const resolvedMessages = isStreaming
         ? currentSession!.messages
         : consolidateMessagesIntoTurns(messages);
-      // Session-level streamItems are only for current streaming response
-      // When loading from history, they should be empty (each message has its own streamItems)
-      const streamItemsToUse = hasOptimisticMessages
-        ? currentSession!.streamItems
-        : [];
-      // Preserve streaming status if currently streaming, otherwise use backend status
-      const statusToUse = isCurrentlyStreaming
-        ? currentSession!.status
-        : sessionData.status === "active"
-          ? "completed"
-          : "idle";
+      const streamItems = isStreaming ? currentSession!.streamItems : [];
+      const sandbox =
+        needsRestore && sessionData.sandbox
+          ? { ...sessionData.sandbox, status: "restoring" as const }
+          : sessionData.sandbox;
 
       updateSessionData(sessionId, {
-        status: statusToUse,
-        // Preserve optimistic messages if they exist (e.g., from pre-provisioned flow)
-        messages: messagesToUse,
-        streamItems: streamItemsToUse,
+        status,
+        messages: resolvedMessages,
+        streamItems,
         artifacts,
         webappUrl,
-        sandbox: sessionData.sandbox,
+        sandbox,
         error: null,
         isLoaded: true,
       });
+
+      // Now restore the sandbox if needed (messages are already visible).
+      // The backend enforces a timeout and returns an error if restore
+      // takes too long, so no frontend timeout needed here.
+      if (needsRestore) {
+        try {
+          sessionData = await restoreSession(sessionId);
+
+          // Sandbox is now running - fetch artifacts
+          const restoredArtifacts = await fetchArtifacts(sessionId);
+
+          updateSessionData(sessionId, {
+            status: sessionData.status === "active" ? "active" : "idle",
+            artifacts: restoredArtifacts,
+            sandbox: sessionData.sandbox,
+            // Bump so OutputPanel's SWR refetches webapp-info (which
+            // derives the actual webappUrl from the backend).
+            webappNeedsRefresh:
+              (get().sessions.get(sessionId)?.webappNeedsRefresh || 0) + 1,
+          });
+        } catch (restoreErr) {
+          console.error("Sandbox restore failed:", restoreErr);
+          updateSessionData(sessionId, {
+            status: "idle",
+            sandbox: sessionData.sandbox
+              ? { ...sessionData.sandbox, status: "failed" }
+              : null,
+          });
+        }
+      }
     } catch (err) {
       console.error("Failed to load session:", err);
       updateSessionData(sessionId, {
@@ -1627,8 +1651,16 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
     if (session) {
       // Increment refresh counter to trigger files list refresh
       // Using a counter ensures each write/edit triggers a new refresh
+      // Also collapse the attachments directory to show fresh state
+      const collapsedExpandedPaths = session.filesTabState.expandedPaths.filter(
+        (path) => path !== "attachments" && !path.startsWith("attachments/")
+      );
       get().updateSessionData(sessionId, {
         filesNeedsRefresh: (session.filesNeedsRefresh || 0) + 1,
+        filesTabState: {
+          ...session.filesTabState,
+          expandedPaths: collapsedExpandedPaths,
+        },
       });
     }
   },

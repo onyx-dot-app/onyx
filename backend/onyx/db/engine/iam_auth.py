@@ -36,7 +36,9 @@ def configure_psycopg2_iam_auth(
     cparams["sslrootcert"] = SSL_CERT_FILE
 
 
-def provide_iam_token(dialect: Any, conn_rec: Any, cargs: Any, cparams: Any) -> None:
+def provide_iam_token(
+    dialect: Any, conn_rec: Any, cargs: Any, cparams: Any  # noqa: ARG001
+) -> None:
     if USE_IAM_AUTH:
         host = POSTGRES_HOST
         port = POSTGRES_PORT

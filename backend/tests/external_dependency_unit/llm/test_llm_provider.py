@@ -14,6 +14,7 @@ import pytest
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from onyx.db.enums import LLMModelFlowType
 from onyx.db.llm import fetch_existing_llm_provider
 from onyx.db.llm import remove_llm_provider
 from onyx.db.llm import update_default_provider
@@ -79,7 +80,7 @@ class TestLLMConfigurationEndpoint:
     def test_successful_llm_test_with_new_provider(
         self,
         db_session: Session,
-        provider_name: str,
+        provider_name: str,  # noqa: ARG002
     ) -> None:
         """
         Test that a successful LLM test returns normally (no exception).
@@ -130,7 +131,7 @@ class TestLLMConfigurationEndpoint:
     def test_failed_llm_test_raises_http_exception(
         self,
         db_session: Session,
-        provider_name: str,
+        provider_name: str,  # noqa: ARG002
     ) -> None:
         """
         Test that a failed LLM test raises an HTTPException with status 400.
@@ -140,7 +141,7 @@ class TestLLMConfigurationEndpoint:
         """
         error_message = "Invalid API key: Authentication failed"
 
-        def mock_test_llm_failure(llm: LLM) -> str | None:
+        def mock_test_llm_failure(llm: LLM) -> str | None:  # noqa: ARG001
             """Mock test_llm that always fails."""
             return error_message
 
@@ -551,7 +552,9 @@ class TestDefaultProviderEndpoint:
         from onyx.db.llm import fetch_existing_llm_providers
 
         try:
-            existing_providers = fetch_existing_llm_providers(db_session)
+            existing_providers = fetch_existing_llm_providers(
+                db_session, flow_type_filter=[LLMModelFlowType.CHAT]
+            )
             provider_names_to_restore: list[str] = []
 
             for provider in existing_providers:
@@ -581,7 +584,7 @@ class TestDefaultProviderEndpoint:
         provider_name = f"test-provider-{uuid4().hex[:8]}"
         error_message = "Connection to LLM provider failed"
 
-        def mock_test_llm_failure(llm: LLM) -> str | None:
+        def mock_test_llm_failure(llm: LLM) -> str | None:  # noqa: ARG001
             """Mock test_llm that always fails."""
             return error_message
 

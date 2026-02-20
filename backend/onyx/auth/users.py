@@ -38,6 +38,7 @@ from fastapi_users import schemas
 from fastapi_users import UUIDIDMixin
 from fastapi_users.authentication import AuthenticationBackend
 from fastapi_users.authentication import CookieTransport
+from fastapi_users.authentication import JWTStrategy
 from fastapi_users.authentication import RedisStrategy
 from fastapi_users.authentication import Strategy
 from fastapi_users.authentication.strategy.db import AccessTokenDatabase
@@ -59,6 +60,7 @@ from sqlalchemy import nulls_last
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
 from onyx.auth.api_key import get_hashed_api_key_from_request
 from onyx.auth.disposable_email_validator import is_disposable_email
@@ -109,6 +111,7 @@ from onyx.db.auth import get_user_db
 from onyx.db.auth import SQLAlchemyUserAdminDB
 from onyx.db.engine.async_sql_engine import get_async_session
 from onyx.db.engine.async_sql_engine import get_async_session_context_manager
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.models import AccessToken
 from onyx.db.models import OAuthAccount
@@ -118,6 +121,7 @@ from onyx.db.pat import fetch_user_for_pat
 from onyx.db.users import get_user_by_email
 from onyx.redis.redis_pool import get_async_redis_connection
 from onyx.redis.redis_pool import get_redis_client
+from onyx.server.settings.store import load_settings
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
@@ -133,6 +137,8 @@ from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+
+REGISTER_INVITE_ONLY_CODE = "REGISTER_INVITE_ONLY"
 
 
 def is_user_admin(user: User) -> bool:
@@ -205,22 +211,34 @@ def anonymous_user_enabled(*, tenant_id: str | None = None) -> bool:
     return int(value.decode("utf-8")) == 1
 
 
+def workspace_invite_only_enabled() -> bool:
+    settings = load_settings()
+    return settings.invite_only_enabled
+
+
 def verify_email_is_invited(email: str) -> None:
     if AUTH_TYPE in {AuthType.SAML, AuthType.OIDC}:
         # SSO providers manage membership; allow JIT provisioning regardless of invites
         return
 
-    whitelist = get_invited_users()
-    if not whitelist:
+    if not workspace_invite_only_enabled():
         return
 
+    whitelist = get_invited_users()
+
     if not email:
-        raise PermissionError("Email must be specified")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"reason": "Email must be specified"},
+        )
 
     try:
         email_info = validate_email(email, check_deliverability=False)
     except EmailUndeliverableError:
-        raise PermissionError("Email is not valid")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"reason": "Email is not valid"},
+        )
 
     for email_whitelist in whitelist:
         try:
@@ -237,7 +255,13 @@ def verify_email_is_invited(email: str) -> None:
         if email_info.normalized.lower() == email_info_whitelist.normalized.lower():
             return
 
-    raise PermissionError("User not on allowed user whitelist")
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail={
+            "code": REGISTER_INVITE_ONLY_CODE,
+            "reason": "This workspace is invite-only. Please ask your admin to invite you.",
+        },
+    )
 
 
 def verify_email_in_whitelist(email: str, tenant_id: str) -> None:
@@ -269,6 +293,22 @@ def verify_email_domain(email: str) -> None:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Email domain is not valid",
             )
+
+
+def enforce_seat_limit(db_session: Session, seats_needed: int = 1) -> None:
+    """Raise HTTPException(402) if adding users would exceed the seat limit.
+
+    No-op for multi-tenant or CE deployments.
+    """
+    if MULTI_TENANT:
+        return
+
+    result = fetch_ee_implementation_or_noop(
+        "onyx.db.license", "check_seat_availability", None
+    )(db_session, seats_needed=seats_needed)
+
+    if result is not None and not result.available:
+        raise HTTPException(status_code=402, detail=result.error_message)
 
 
 class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
@@ -399,6 +439,12 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         or user_create.email in get_default_admin_user_emails()
                     ):
                         user_create.role = UserRole.ADMIN
+
+                # Check seat availability for new users (single-tenant only)
+                with get_session_with_current_tenant() as sync_db:
+                    existing = get_user_by_email(user_create.email, sync_db)
+                    if existing is None:
+                        enforce_seat_limit(sync_db)
 
                 user_created = False
                 try:
@@ -609,6 +655,10 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         raise exceptions.UserNotExists()
 
                 except exceptions.UserNotExists:
+                    # Check seat availability before creating (single-tenant only)
+                    with get_session_with_current_tenant() as sync_db:
+                        enforce_seat_limit(sync_db)
+
                     password = self.password_helper.generate()
                     user_dict = {
                         "email": account_email,
@@ -780,7 +830,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         )
 
     async def on_after_forgot_password(
-        self, user: User, token: str, request: Optional[Request] = None
+        self, user: User, token: str, request: Optional[Request] = None  # noqa: ARG002
     ) -> None:
         if not EMAIL_CONFIGURED:
             logger.error(
@@ -799,7 +849,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         send_forgot_password_email(user.email, tenant_id=tenant_id, token=token)
 
     async def on_after_request_verify(
-        self, user: User, token: str, request: Optional[Request] = None
+        self, user: User, token: str, request: Optional[Request] = None  # noqa: ARG002
     ) -> None:
         verify_email_domain(user.email)
 
@@ -983,7 +1033,7 @@ class TenantAwareRedisStrategy(RedisStrategy[User, uuid.UUID]):
         except (exceptions.UserNotExists, exceptions.InvalidID, KeyError):
             return None
 
-    async def destroy_token(self, token: str, user: User) -> None:
+    async def destroy_token(self, token: str, user: User) -> None:  # noqa: ARG002
         """Properly delete the token from async redis."""
         redis = await get_async_redis_connection()
         await redis.delete(f"{self.key_prefix}{token}")
@@ -1046,6 +1096,61 @@ class RefreshableDatabaseStrategy(DatabaseStrategy[User, uuid.UUID, AccessToken]
         return token
 
 
+class SingleTenantJWTStrategy(JWTStrategy[User, uuid.UUID]):
+    """Stateless JWT strategy for single-tenant deployments.
+
+    Tokens are self-contained and verified via signature — no Redis or DB
+    lookup required per request. An ``iat`` claim is embedded so that
+    downstream code can determine when the token was created without
+    querying an external store.
+
+    Refresh is implemented by issuing a brand-new JWT (the old one remains
+    valid until its natural expiry).  ``destroy_token`` is a no-op because
+    JWTs cannot be server-side invalidated.
+    """
+
+    def __init__(
+        self,
+        secret: SecretType,
+        lifetime_seconds: int | None = SESSION_EXPIRE_TIME_SECONDS,
+        token_audience: list[str] | None = None,
+        algorithm: str = "HS256",
+        public_key: SecretType | None = None,
+    ):
+        super().__init__(
+            secret=secret,
+            lifetime_seconds=lifetime_seconds,
+            token_audience=token_audience or ["fastapi-users:auth"],
+            algorithm=algorithm,
+            public_key=public_key,
+        )
+
+    async def write_token(self, user: User) -> str:
+        data = {
+            "sub": str(user.id),
+            "aud": self.token_audience,
+            "iat": int(datetime.now(timezone.utc).timestamp()),
+        }
+        return generate_jwt(
+            data, self.encode_key, self.lifetime_seconds, algorithm=self.algorithm
+        )
+
+    async def destroy_token(self, token: str, user: User) -> None:  # noqa: ARG002
+        # JWTs are stateless — nothing to invalidate server-side.
+        # NOTE: a compromise that makes JWT auth stateful but revocable
+        # is to include a token_version claim in the JWT payload. The token_version
+        # is incremented whenever the user logs out (or gets login revoked). Whenever
+        # the JWT is used, it is only valid if the token_version claim is the same as the one
+        # in the db. If not, the JWT is invalid and the user needs to login again.
+        return
+
+    async def refresh_token(
+        self, token: Optional[str], user: User  # noqa: ARG002
+    ) -> str:
+        """Issue a fresh JWT with a new expiry."""
+        return await self.write_token(user)
+
+
 def get_redis_strategy() -> TenantAwareRedisStrategy:
     return TenantAwareRedisStrategy()
 
@@ -1058,6 +1163,22 @@ def get_database_strategy(
     )
 
 
+def get_jwt_strategy() -> SingleTenantJWTStrategy:
+    return SingleTenantJWTStrategy(
+        secret=USER_AUTH_SECRET,
+        lifetime_seconds=SESSION_EXPIRE_TIME_SECONDS,
+    )
+
+
+if AUTH_BACKEND == AuthBackend.JWT:
+    if MULTI_TENANT or AUTH_TYPE == AuthType.CLOUD:
+        raise ValueError(
+            "JWT auth backend is only supported for single-tenant, self-hosted deployments. "
+            "Use 'redis' or 'postgres' instead."
+        )
+    if not USER_AUTH_SECRET:
+        raise ValueError("USER_AUTH_SECRET is required for JWT auth backend.")
+
 if AUTH_BACKEND == AuthBackend.REDIS:
     auth_backend = AuthenticationBackend(
         name="redis", transport=cookie_transport, get_strategy=get_redis_strategy
@@ -1065,6 +1186,10 @@ if AUTH_BACKEND == AuthBackend.REDIS:
 elif AUTH_BACKEND == AuthBackend.POSTGRES:
     auth_backend = AuthenticationBackend(
         name="postgres", transport=cookie_transport, get_strategy=get_database_strategy
+    )
+elif AUTH_BACKEND == AuthBackend.JWT:
+    auth_backend = AuthenticationBackend(
+        name="jwt", transport=cookie_transport, get_strategy=get_jwt_strategy
     )
 else:
     raise ValueError(f"Invalid auth backend: {AUTH_BACKEND}")
@@ -1328,14 +1453,6 @@ async def optional_user(
     user: User | None = Depends(optional_fastapi_current_user),
 ) -> User | None:
 
-    tenant_id = get_current_tenant_id()
-    if (
-        user is not None
-        and user.is_anonymous
-        and anonymous_user_enabled(tenant_id=tenant_id)
-    ):
-        return get_anonymous_user()
-
     if user := await _check_for_saml_and_jwt(request, user, async_db_session):
         # If user is already set, _check_for_saml_and_jwt returns the same user object
         return user
@@ -1363,6 +1480,7 @@ def get_anonymous_user() -> User:
         is_superuser=False,
         role=UserRole.LIMITED,
         use_memories=False,
+        enable_memory_tool=False,
     )
     return user
 

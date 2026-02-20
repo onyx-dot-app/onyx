@@ -70,6 +70,8 @@ GENERATE_IMAGE_GUIDANCE = """
 
 ## generate_image
 NEVER use generate_image unless the user specifically requests an image.
+For edits/variations of a previously generated image, pass `reference_image_file_ids` with
+the `file_id` values returned by earlier `generate_image` tool results.
 """
 
 MEMORY_GUIDANCE = """

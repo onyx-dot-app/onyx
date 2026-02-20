@@ -67,6 +67,11 @@ interface PartialSourceMetadata {
   // federated connectors store the base source type if it's a source
   // that has both indexed connectors and federated connectors
   baseSourceType?: ValidSources;
+  // For connectors that are always available (don't need connection setup)
+  // e.g., User Library (CraftFile) where users just upload files
+  alwaysConnected?: boolean;
+  // Custom description to show instead of status (e.g., "Manage your uploaded files")
+  customDescription?: string;
 }
 
 type SourceMap = {
@@ -422,6 +427,16 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     category: SourceCategory.Other,
   },
 
+  // Craft-specific sources
+  craft_file: {
+    icon: SvgFileText,
+    displayName: "Your Files",
+    category: SourceCategory.Other,
+    isPopular: false, // Hidden from standard Add Connector page
+    alwaysConnected: true, // No setup required, just upload files
+    customDescription: "Manage your uploaded files",
+  },
+
   // Placeholder (non-null default)
   not_applicable: {
     icon: SvgGlobe,
@@ -447,12 +462,17 @@ function fillSourceMetadata(
 }
 
 export function getSourceMetadata(sourceType: ValidSources): SourceMetadata {
-  const response = fillSourceMetadata(
-    SOURCE_METADATA_MAP[sourceType],
-    sourceType
-  );
+  const partialMetadata = SOURCE_METADATA_MAP[sourceType];
 
-  return response;
+  // Fallback to not_applicable if sourceType not found in map
+  if (!partialMetadata) {
+    return fillSourceMetadata(
+      SOURCE_METADATA_MAP[ValidSources.NotApplicable],
+      ValidSources.NotApplicable
+    );
+  }
+
+  return fillSourceMetadata(partialMetadata, sourceType);
 }
 
 export function listSourceMetadata(): SourceMetadata[] {

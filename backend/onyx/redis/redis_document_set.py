@@ -52,7 +52,7 @@ class RedisDocumentSet(RedisObjectHelper):
 
     def generate_tasks(
         self,
-        max_tasks: int,
+        max_tasks: int,  # noqa: ARG002
         celery_app: Celery,
         db_session: Session,
         redis_client: Redis,

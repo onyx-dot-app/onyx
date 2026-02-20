@@ -41,8 +41,7 @@ jobs:
           version: v3.19.0
 
       - name: Set up chart-testing
-        # NOTE: This is Jamison's patch from https://github.com/helm/chart-testing-action/pull/194
-        uses: helm/chart-testing-action@8958a6ac472cbd8ee9a8fbb6f1acbc1b0e966e44 # zizmor: ignore[impostor-commit]
+        uses: helm/chart-testing-action@b5eebdd9998021f29756c53432f48dab66394810
         with:
           uv_version: "0.9.9"
 

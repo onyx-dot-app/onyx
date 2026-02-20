@@ -1,12 +1,19 @@
 """Celery tasks for sandbox operations (cleanup, file sync, etc.)."""
 
+from collections.abc import Iterator
+from contextlib import contextmanager
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 from celery import shared_task
 from celery import Task
 from redis.lock import Lock as RedisLock
 
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
+
 from onyx.background.celery.apps.app_base import task_logger
+from onyx.configs.constants import CELERY_SANDBOX_FILE_SYNC_LOCK_TIMEOUT
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -15,7 +22,11 @@ from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SANDBOX_IDLE_TIMEOUT_SECONDS
 from onyx.server.features.build.configs import SandboxBackend
+from onyx.server.features.build.configs import USER_LIBRARY_SOURCE_DIR
 from onyx.server.features.build.db.build_session import clear_nextjs_ports_for_user
+from onyx.server.features.build.db.build_session import (
+    mark_user_sessions_idle__no_commit,
+)
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.sandbox.base import get_sandbox_manager
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
@@ -36,7 +47,7 @@ TIMEOUT_SECONDS = 6000
     bind=True,
     ignore_result=True,
 )
-def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:
+def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa: ARG001
     """Put idle sandboxes to sleep after snapshotting all sessions.
 
     This task:
@@ -75,12 +86,11 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:
     try:
         # Import here to avoid circular imports
         from onyx.db.enums import SandboxStatus
-        from onyx.server.features.build.db.sandbox import create_snapshot
+        from onyx.server.features.build.db.sandbox import create_snapshot__no_commit
         from onyx.server.features.build.db.sandbox import get_idle_sandboxes
         from onyx.server.features.build.db.sandbox import (
             update_sandbox_status__no_commit,
         )
-        from onyx.server.features.build.sandbox import get_sandbox_manager
 
         sandbox_manager = get_sandbox_manager()
 
@@ -128,7 +138,7 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:
                             )
                             if snapshot_result:
                                 # Create DB record for the snapshot
-                                create_snapshot(
+                                create_snapshot__no_commit(
                                     db_session,
                                     session_id,
                                     snapshot_result.storage_path,
@@ -154,7 +164,15 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:
                         f"{sandbox.user_id}"
                     )
 
-                    # Mark sandbox as SLEEPING (not TERMINATED)
+                    # Mark all active sessions as IDLE
+                    idled = mark_user_sessions_idle__no_commit(
+                        db_session, sandbox.user_id
+                    )
+                    task_logger.debug(
+                        f"Marked {idled} sessions as IDLE for user "
+                        f"{sandbox.user_id}"
+                    )
+
                     update_sandbox_status__no_commit(
                         db_session, sandbox_id, SandboxStatus.SLEEPING
                     )
@@ -237,59 +255,145 @@ def _list_session_directories(
         return []
 
 
+@contextmanager
+def _acquire_sandbox_file_sync_lock(lock: RedisLock) -> Iterator[bool]:
+    """Acquire the sandbox file-sync lock with blocking timeout; release on exit."""
+    acquired = lock.acquire(
+        blocking_timeout=CELERY_SANDBOX_FILE_SYNC_LOCK_TIMEOUT,
+    )
+    try:
+        yield acquired
+    finally:
+        if lock.owned():
+            lock.release()
+
+
+def _get_disabled_user_library_paths(db_session: "Session", user_id: str) -> list[str]:
+    """Get list of disabled user library file paths for exclusion during sync.
+
+    Queries the document table for CRAFT_FILE documents with sync_disabled=True
+    and returns their relative paths within user_library/.
+
+    Args:
+        db_session: Database session
+        user_id: The user ID to filter documents
+
+    Returns:
+        List of relative file paths to exclude (e.g., ["/data/file.xlsx", "/old/report.pdf"])
+    """
+    from uuid import UUID
+
+    from onyx.configs.constants import DocumentSource
+    from onyx.db.document import get_documents_by_source
+
+    disabled_paths: list[str] = []
+
+    # Get CRAFT_FILE documents for this user (filtered at SQL level)
+    documents = get_documents_by_source(
+        db_session=db_session,
+        source=DocumentSource.CRAFT_FILE,
+        creator_id=UUID(user_id),
+    )
+
+    for doc in documents:
+        doc_metadata = doc.doc_metadata or {}
+        if not doc_metadata.get("sync_disabled"):
+            continue
+
+        # Extract file path from semantic_id
+        # semantic_id format: "user_library/path/to/file.xlsx"
+        # Include both files AND directories - the shell script in
+        # setup_session_workspace() handles directory exclusion by
+        # checking if paths are children of an excluded directory.
+        semantic_id = doc.semantic_id or ""
+        if semantic_id.startswith(USER_LIBRARY_SOURCE_DIR):
+            file_path = semantic_id[len(USER_LIBRARY_SOURCE_DIR) :]
+            if file_path:
+                disabled_paths.append(file_path)
+
+    return disabled_paths
+
+
 @shared_task(
     name=OnyxCeleryTask.SANDBOX_FILE_SYNC,
     soft_time_limit=TIMEOUT_SECONDS,
     bind=True,
     ignore_result=True,
 )
-def sync_sandbox_files(self: Task, *, user_id: str, tenant_id: str) -> bool:
+def sync_sandbox_files(
+    self: Task,  # noqa: ARG001
+    *,
+    user_id: str,
+    tenant_id: str,
+    source: str | None = None,
+) -> bool:
     """Sync files from S3 to a user's running sandbox.
 
     This task is triggered after documents are written to S3 during indexing.
-    It executes `aws s3 sync` in the file-sync sidecar container to download
+    It executes `s5cmd sync` in the file-sync sidecar container to download
     any new or changed files.
 
-    This is safe to call multiple times - aws s3 sync is idempotent.
+    Per-user locking ensures only one sync runs at a time for a given user.
+    If a sync is already in progress, this task will wait until it completes.
+
+    Note: File visibility in sessions is controlled via filtered symlinks in
+    setup_session_workspace(), not at the sync level. The sync mirrors S3
+    faithfully; disabled files are excluded only when creating new sessions.
 
     Args:
         user_id: The user ID whose sandbox should be synced
         tenant_id: The tenant ID for S3 path construction
+        source: Optional source type (e.g., "gmail", "google_drive", "user_library").
+                If None, syncs all sources.
 
     Returns:
         True if sync was successful, False if skipped or failed
     """
+    source_info = f" source={source}" if source else " (all sources)"
     task_logger.info(
         f"sync_sandbox_files starting for user {user_id} in tenant {tenant_id}"
+        f"{source_info}"
     )
 
-    with get_session_with_current_tenant() as db_session:
-        sandbox = get_sandbox_by_user_id(db_session, UUID(user_id))
+    lock_timeout = CELERY_SANDBOX_FILE_SYNC_LOCK_TIMEOUT
+    redis_client = get_redis_client(tenant_id=tenant_id)
+    lock = redis_client.lock(
+        f"{OnyxRedisLocks.SANDBOX_FILE_SYNC_LOCK_PREFIX}:{user_id}",
+        timeout=lock_timeout,
+    )
 
-        if sandbox is None:
-            task_logger.debug(f"No sandbox found for user {user_id}, skipping sync")
-            return False
-
-        if sandbox.status not in [SandboxStatus.RUNNING, SandboxStatus.IDLE]:
-            task_logger.debug(
-                f"Sandbox {sandbox.id} not running (status={sandbox.status}), "
-                f"skipping sync"
+    with _acquire_sandbox_file_sync_lock(lock) as acquired:
+        if not acquired:
+            task_logger.warning(
+                f"sync_sandbox_files - failed to acquire lock for user {user_id} "
+                f"after {lock_timeout}s, skipping"
             )
             return False
 
-        sandbox_manager = get_sandbox_manager()
-        result = sandbox_manager.sync_files(
-            sandbox_id=sandbox.id,
-            user_id=UUID(user_id),
-            tenant_id=tenant_id,
-        )
+        with get_session_with_current_tenant() as db_session:
+            sandbox = get_sandbox_by_user_id(db_session, UUID(user_id))
+            if sandbox is None:
+                task_logger.debug(f"No sandbox found for user {user_id}, skipping sync")
+                return False
+            if sandbox.status != SandboxStatus.RUNNING:
+                task_logger.debug(
+                    f"Sandbox {sandbox.id} not running (status={sandbox.status}), "
+                    f"skipping sync"
+                )
+                return False
 
-        if result:
-            task_logger.info(f"File sync completed for user {user_id}")
-        else:
-            task_logger.warning(f"File sync failed for user {user_id}")
-
-        return result
+            sandbox_manager = get_sandbox_manager()
+            result = sandbox_manager.sync_files(
+                sandbox_id=sandbox.id,
+                user_id=UUID(user_id),
+                tenant_id=tenant_id,
+                source=source,
+            )
+            if result:
+                task_logger.info(f"File sync completed for user {user_id}{source_info}")
+            else:
+                task_logger.warning(f"File sync failed for user {user_id}{source_info}")
+            return result
 
 
 # NOTE: in the future, may need to add this. For now, will do manual cleanup.

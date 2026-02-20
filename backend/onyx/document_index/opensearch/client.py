@@ -5,17 +5,24 @@ from typing import Generic
 from typing import TypeVar
 
 from opensearchpy import OpenSearch
-from opensearchpy.exceptions import TransportError
+from opensearchpy import TransportError
+from opensearchpy.helpers import bulk
 from pydantic import BaseModel
 
+from onyx.configs.app_configs import DEFAULT_OPENSEARCH_CLIENT_TIMEOUT_S
 from onyx.configs.app_configs import OPENSEARCH_ADMIN_PASSWORD
 from onyx.configs.app_configs import OPENSEARCH_ADMIN_USERNAME
 from onyx.configs.app_configs import OPENSEARCH_HOST
 from onyx.configs.app_configs import OPENSEARCH_REST_API_PORT
+from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.schema import DocumentChunk
 from onyx.document_index.opensearch.schema import get_opensearch_doc_chunk_id
 from onyx.document_index.opensearch.search import DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW
 from onyx.utils.logger import setup_logger
+from onyx.utils.timing import log_function_time
+
+
+CLIENT_THRESHOLD_TO_LOG_SLOW_SEARCH_MS = 2000
 
 
 logger = setup_logger(__name__)
@@ -47,6 +54,33 @@ class SearchHit(BaseModel, Generic[SchemaDocumentModel]):
     # Maps schema property name to a list of highlighted snippets with match
     # terms wrapped in tags (e.g. "something <hi>keyword</hi> other thing").
     match_highlights: dict[str, list[str]] = {}
+    # Score explanation from OpenSearch when "explain": true is set in the query.
+    # Contains detailed breakdown of how the score was calculated.
+    explanation: dict[str, Any] | None = None
+
+
+def get_new_body_without_vectors(body: dict[str, Any]) -> dict[str, Any]:
+    """Recursively replaces vectors in the body with their length.
+
+    TODO(andrei): Do better.
+
+    Args:
+        body: The body to replace the vectors.
+
+    Returns:
+        A copy of body with vectors replaced with their length.
+    """
+    new_body: dict[str, Any] = {}
+    for k, v in body.items():
+        if k == "vector":
+            new_body[k] = len(v)
+        elif isinstance(v, dict):
+            new_body[k] = get_new_body_without_vectors(v)
+        elif isinstance(v, list) and len(v) > 0 and isinstance(v[0], dict):
+            new_body[k] = [get_new_body_without_vectors(item) for item in v]
+        else:
+            new_body[k] = v
+    return new_body
 
 
 class OpenSearchClient:
@@ -71,16 +105,31 @@ class OpenSearchClient:
         use_ssl: bool = True,
         verify_certs: bool = False,
         ssl_show_warn: bool = False,
+        timeout: int = DEFAULT_OPENSEARCH_CLIENT_TIMEOUT_S,
     ):
         self._index_name = index_name
+        logger.debug(
+            f"Creating OpenSearch client for index {index_name} with host {host} and port {port} and timeout {timeout} seconds."
+        )
         self._client = OpenSearch(
             hosts=[{"host": host, "port": port}],
             http_auth=auth,
             use_ssl=use_ssl,
             verify_certs=verify_certs,
             ssl_show_warn=ssl_show_warn,
+            # NOTE: This timeout applies to all requests the client makes,
+            # including bulk indexing. When exceeded, the client will raise a
+            # ConnectionTimeout and return no useful results. The OpenSearch
+            # server will log that the client cancelled the request. To get
+            # partial results from OpenSearch, pass in a timeout parameter to
+            # your request body that is less than this value.
+            timeout=timeout,
+        )
+        logger.debug(
+            f"OpenSearch client created successfully for index {self._index_name}."
         )
 
+    @log_function_time(print_only=True, debug_only=True, include_args=True)
     def create_index(self, mappings: dict[str, Any], settings: dict[str, Any]) -> None:
         """Creates the index.
 
@@ -98,6 +147,7 @@ class OpenSearchClient:
             "mappings": mappings,
             "settings": settings,
         }
+        logger.debug(f"Creating index {self._index_name} with body {body}.")
         response = self._client.indices.create(index=self._index_name, body=body)
         if not response.get("acknowledged", False):
             raise RuntimeError(f"Failed to create index {self._index_name}.")
@@ -106,7 +156,9 @@ class OpenSearchClient:
             raise RuntimeError(
                 f"OpenSearch responded with index name {response_index} when creating index {self._index_name}."
             )
+        logger.debug(f"Index {self._index_name} created successfully.")
 
+    @log_function_time(print_only=True, debug_only=True)
     def delete_index(self) -> bool:
         """Deletes the index.
 
@@ -122,11 +174,13 @@ class OpenSearchClient:
             )
             return False
 
+        logger.debug(f"Deleting index {self._index_name}.")
         response = self._client.indices.delete(index=self._index_name)
         if not response.get("acknowledged", False):
             raise RuntimeError(f"Failed to delete index {self._index_name}.")
         return True
 
+    @log_function_time(print_only=True, debug_only=True)
     def index_exists(self) -> bool:
         """Checks if the index exists.
 
@@ -138,6 +192,7 @@ class OpenSearchClient:
         """
         return self._client.indices.exists(index=self._index_name)
 
+    @log_function_time(print_only=True, debug_only=True, include_args=True)
     def validate_index(self, expected_mappings: dict[str, Any]) -> bool:
         """Validates the index.
 
@@ -166,6 +221,9 @@ class OpenSearchClient:
                 f"Tried to validate index {self._index_name} but it does not exist."
             )
             return False
+        logger.debug(
+            f"Validating index {self._index_name} with expected mappings {expected_mappings}."
+        )
 
         get_result = self._client.indices.get(index=self._index_name)
         index_info: dict[str, Any] = get_result.get(self._index_name, {})
@@ -206,8 +264,10 @@ class OpenSearchClient:
                 )
                 return False
 
+        logger.debug(f"Index {self._index_name} validated successfully.")
         return True
 
+    @log_function_time(print_only=True, debug_only=True, include_args=True)
     def update_settings(self, settings: dict[str, Any]) -> None:
         """Updates the settings of the index.
 
@@ -224,8 +284,20 @@ class OpenSearchClient:
         # TODO(andrei): Implement this.
         raise NotImplementedError
 
+    @log_function_time(
+        print_only=True,
+        debug_only=True,
+        include_args_subset={
+            "document": str,
+            "tenant_state": str,
+            "update_if_exists": str,
+        },
+    )
     def index_document(
-        self, document: DocumentChunk, update_if_exists: bool = False
+        self,
+        document: DocumentChunk,
+        tenant_state: TenantState,
+        update_if_exists: bool = False,
     ) -> None:
         """Indexes a document.
 
@@ -233,6 +305,7 @@ class OpenSearchClient:
             document: The document to index. In Onyx this is a chunk of a
                 document, OpenSearch simply refers to this as a document as
                 well.
+            tenant_state: The tenant state of the caller.
             update_if_exists: Whether to update the document if it already
                 exists. If False, will raise an exception if the document
                 already exists. Defaults to False.
@@ -242,7 +315,12 @@ class OpenSearchClient:
                 the case where a document with the same ID already exists if
                 update_if_exists is False.
         """
+        logger.debug(
+            f"Trying to index document ID {document.document_id} for tenant {tenant_state.tenant_id}. "
+            f"update_if_exists={update_if_exists}."
+        )
         document_chunk_id: str = get_opensearch_doc_chunk_id(
+            tenant_state=tenant_state,
             document_id=document.document_id,
             chunk_index=document.chunk_index,
             max_chunk_size=document.max_chunk_size,
@@ -269,19 +347,91 @@ class OpenSearchClient:
         match result_string:
             # Sanity check.
             case "created":
-                return
+                pass
             case "updated":
                 if not update_if_exists:
                     raise RuntimeError(
                         f'The OpenSearch client returned result "updated" for indexing document chunk "{document_chunk_id}". '
                         "This indicates that a document chunk with that ID already exists, which is not expected."
                     )
-                return
             case _:
                 raise RuntimeError(
                     f'Unknown OpenSearch indexing result: "{result_string}".'
                 )
+        logger.debug(f"Successfully indexed {document_chunk_id}.")
 
+    @log_function_time(
+        print_only=True,
+        debug_only=True,
+        include_args_subset={
+            "documents": len,
+            "tenant_state": str,
+            "update_if_exists": str,
+        },
+    )
+    def bulk_index_documents(
+        self,
+        documents: list[DocumentChunk],
+        tenant_state: TenantState,
+        update_if_exists: bool = False,
+    ) -> None:
+        """Bulk indexes documents.
+
+        Raises if there are any errors during the bulk index. It should be
+        assumed that no documents in the batch were indexed successfully if
+        there is an error.
+
+        Retries on 429 too many requests.
+
+        Args:
+            documents: The documents to index. In Onyx this is a chunk of a
+                document, OpenSearch simply refers to this as a document as
+                well.
+            tenant_state: The tenant state of the caller.
+            update_if_exists: Whether to update the document if it already
+                exists. If False, will raise an exception if the document
+                already exists. Defaults to False.
+
+        Raises:
+            Exception: There was an error during the bulk index. This
+                includes the case where a document with the same ID already
+                exists if update_if_exists is False.
+        """
+        if not documents:
+            return
+        logger.debug(
+            f"Bulk indexing {len(documents)} documents for tenant {tenant_state.tenant_id}. update_if_exists={update_if_exists}."
+        )
+        data = []
+        for document in documents:
+            document_chunk_id: str = get_opensearch_doc_chunk_id(
+                tenant_state=tenant_state,
+                document_id=document.document_id,
+                chunk_index=document.chunk_index,
+                max_chunk_size=document.max_chunk_size,
+            )
+            body: dict[str, Any] = document.model_dump(exclude_none=True)
+            data_for_document: dict[str, Any] = {
+                "_index": self._index_name,
+                "_id": document_chunk_id,
+                "_op_type": "index" if update_if_exists else "create",
+                "_source": body,
+            }
+            data.append(data_for_document)
+        # max_retries is the number of times to retry a request if we get a 429.
+        success, errors = bulk(self._client, data, max_retries=3)
+        if errors:
+            raise RuntimeError(
+                f"Failed to bulk index documents for index {self._index_name}. Errors: {errors}"
+            )
+        if success != len(documents):
+            raise RuntimeError(
+                f"OpenSearch reported no errors during bulk index but the number of successful operations "
+                f"({success}) does not match the number of documents ({len(documents)})."
+            )
+        logger.debug(f"Successfully bulk indexed {len(documents)} documents.")
+
+    @log_function_time(print_only=True, debug_only=True, include_args=True)
     def delete_document(self, document_chunk_id: str) -> bool:
         """Deletes a document.
 
@@ -296,9 +446,15 @@ class OpenSearchClient:
             True if the document was deleted, False if it was not found.
         """
         try:
+            logger.debug(
+                f"Trying to delete document chunk {document_chunk_id} from index {self._index_name}."
+            )
             result = self._client.delete(index=self._index_name, id=document_chunk_id)
         except TransportError as e:
             if e.status_code == 404:
+                logger.debug(
+                    f"Document chunk {document_chunk_id} not found in index {self._index_name}."
+                )
                 return False
             else:
                 raise e
@@ -306,14 +462,21 @@ class OpenSearchClient:
         result_string: str = result.get("result", "")
         match result_string:
             case "deleted":
+                logger.debug(
+                    f"Successfully deleted document chunk {document_chunk_id} from index {self._index_name}."
+                )
                 return True
             case "not_found":
+                logger.debug(
+                    f"Document chunk {document_chunk_id} not found in index {self._index_name}."
+                )
                 return False
             case _:
                 raise RuntimeError(
                     f'Unknown OpenSearch deletion result: "{result_string}".'
                 )
 
+    @log_function_time(print_only=True, debug_only=True)
     def delete_by_query(self, query_body: dict[str, Any]) -> int:
         """Deletes documents by a query.
 
@@ -326,6 +489,9 @@ class OpenSearchClient:
         Returns:
             The number of documents deleted.
         """
+        logger.debug(
+            f"Trying to delete documents by query for index {self._index_name}."
+        )
         result = self._client.delete_by_query(index=self._index_name, body=query_body)
         if result.get("timed_out", False):
             raise RuntimeError(
@@ -344,12 +510,23 @@ class OpenSearchClient:
                 f"{num_deleted} documents were deleted out of {num_processed} documents that were processed."
             )
 
+        logger.debug(
+            f"Successfully deleted {num_deleted} documents by query for index {self._index_name}."
+        )
         return num_deleted
 
+    @log_function_time(
+        print_only=True,
+        debug_only=True,
+        include_args_subset={
+            "document_chunk_id": str,
+            "properties_to_update": lambda x: x.keys(),
+        },
+    )
     def update_document(
         self, document_chunk_id: str, properties_to_update: dict[str, Any]
     ) -> None:
-        """Updates a document's properties.
+        """Updates an OpenSearch document chunk's properties.
 
         Args:
             document_chunk_id: The OpenSearch ID of the document chunk to
@@ -360,6 +537,9 @@ class OpenSearchClient:
         Raises:
             Exception: There was an error updating the document.
         """
+        logger.debug(
+            f"Trying to update document chunk {document_chunk_id} for index {self._index_name}."
+        )
         update_body: dict[str, Any] = {"doc": properties_to_update}
         result = self._client.update(
             index=self._index_name,
@@ -378,6 +558,9 @@ class OpenSearchClient:
         match result_string:
             # Sanity check.
             case "updated":
+                logger.debug(
+                    f"Successfully updated document chunk {document_chunk_id} for index {self._index_name}."
+                )
                 return
             case "noop":
                 logger.warning(
@@ -390,10 +573,11 @@ class OpenSearchClient:
                     "This is unexpected."
                 )
 
+    @log_function_time(print_only=True, debug_only=True, include_args=True)
     def get_document(self, document_chunk_id: str) -> DocumentChunk:
-        """Gets a document.
+        """Gets an OpenSearch document chunk.
 
-        Will raise an exception if the document is not found.
+        Will raise an exception if the document chunk is not found.
 
         Args:
             document_chunk_id: The OpenSearch ID of the document chunk to get.
@@ -405,6 +589,9 @@ class OpenSearchClient:
         Returns:
             The document chunk.
         """
+        logger.debug(
+            f"Trying to get document chunk {document_chunk_id} from index {self._index_name}."
+        )
         result = self._client.get(index=self._index_name, id=document_chunk_id)
         found_result: bool = result.get("found", False)
         if not found_result:
@@ -418,8 +605,12 @@ class OpenSearchClient:
                 f'Document chunk with ID "{document_chunk_id}" has no data.'
             )
 
+        logger.debug(
+            f"Successfully got document chunk {document_chunk_id} from index {self._index_name}."
+        )
         return DocumentChunk.model_validate(document_chunk_source)
 
+    @log_function_time(print_only=True, debug_only=True, include_args=True)
     def create_search_pipeline(
         self,
         pipeline_id: str,
@@ -442,6 +633,7 @@ class OpenSearchClient:
         if not result.get("acknowledged", False):
             raise RuntimeError(f"Failed to create search pipeline {pipeline_id}.")
 
+    @log_function_time(print_only=True, debug_only=True, include_args=True)
     def delete_search_pipeline(self, pipeline_id: str) -> None:
         """Deletes a search pipeline.
 
@@ -455,6 +647,7 @@ class OpenSearchClient:
         if not result.get("acknowledged", False):
             raise RuntimeError(f"Failed to delete search pipeline {pipeline_id}.")
 
+    @log_function_time(print_only=True, debug_only=True)
     def search(
         self, body: dict[str, Any], search_pipeline_id: str | None
     ) -> list[SearchHit[DocumentChunk]]:
@@ -477,15 +670,35 @@ class OpenSearchClient:
         Returns:
             List of search hits that match the search request.
         """
+        logger.debug(
+            f"Trying to search index {self._index_name} with search pipeline {search_pipeline_id}."
+        )
         result: dict[str, Any]
+        params = {"phase_took": "true"}
         if search_pipeline_id:
             result = self._client.search(
-                index=self._index_name, search_pipeline=search_pipeline_id, body=body
+                index=self._index_name,
+                search_pipeline=search_pipeline_id,
+                body=body,
+                params=params,
             )
         else:
-            result = self._client.search(index=self._index_name, body=body)
+            result = self._client.search(
+                index=self._index_name, body=body, params=params
+            )
 
-        hits = self._get_hits_from_search_result(result)
+        hits, time_took, timed_out, phase_took, profile = (
+            self._get_hits_and_profile_from_search_result(result)
+        )
+        self._log_search_result_perf(
+            time_took=time_took,
+            timed_out=timed_out,
+            phase_took=phase_took,
+            profile=profile,
+            body=body,
+            search_pipeline_id=search_pipeline_id,
+            raise_on_timeout=True,
+        )
 
         search_hits: list[SearchHit[DocumentChunk]] = []
         for hit in hits:
@@ -496,14 +709,20 @@ class OpenSearchClient:
                 )
             document_chunk_score = hit.get("_score", None)
             match_highlights: dict[str, list[str]] = hit.get("highlight", {})
+            explanation: dict[str, Any] | None = hit.get("_explanation", None)
             search_hit = SearchHit[DocumentChunk](
                 document_chunk=DocumentChunk.model_validate(document_chunk_source),
                 score=document_chunk_score,
                 match_highlights=match_highlights,
+                explanation=explanation,
             )
             search_hits.append(search_hit)
+        logger.debug(
+            f"Successfully searched index {self._index_name} and got {len(search_hits)} hits."
+        )
         return search_hits
 
+    @log_function_time(print_only=True, debug_only=True)
     def search_for_document_ids(self, body: dict[str, Any]) -> list[str]:
         """Searches the index and returns only document chunk IDs.
 
@@ -528,15 +747,31 @@ class OpenSearchClient:
         Returns:
             List of document chunk IDs that match the search request.
         """
+        logger.debug(
+            f"Trying to search for document chunk IDs in index {self._index_name}."
+        )
         if "_source" not in body or body["_source"] is not False:
             logger.warning(
                 "The body of the search request for document chunk IDs is missing the key, value pair of "
                 '"_source": False. This query will therefore be inefficient.'
             )
 
-        result: dict[str, Any] = self._client.search(index=self._index_name, body=body)
+        params = {"phase_took": "true"}
+        result: dict[str, Any] = self._client.search(
+            index=self._index_name, body=body, params=params
+        )
 
-        hits = self._get_hits_from_search_result(result)
+        hits, time_took, timed_out, phase_took, profile = (
+            self._get_hits_and_profile_from_search_result(result)
+        )
+        self._log_search_result_perf(
+            time_took=time_took,
+            timed_out=timed_out,
+            phase_took=phase_took,
+            profile=profile,
+            body=body,
+            raise_on_timeout=True,
+        )
 
         # TODO(andrei): Implement scroll/point in time for results so that we
         # can return arbitrarily-many IDs.
@@ -555,8 +790,12 @@ class OpenSearchClient:
                     "Received a hit from OpenSearch but the _id field is missing."
                 )
             document_chunk_ids.append(document_chunk_id)
+        logger.debug(
+            f"Successfully searched for document chunk IDs in index {self._index_name} and got {len(document_chunk_ids)} hits."
+        )
         return document_chunk_ids
 
+    @log_function_time(print_only=True, debug_only=True)
     def refresh_index(self) -> None:
         """Refreshes the index to make recent changes searchable.
 
@@ -568,36 +807,28 @@ class OpenSearchClient:
         """
         self._client.indices.refresh(index=self._index_name)
 
-    def set_cluster_auto_create_index_setting(self, enabled: bool) -> bool:
-        """Sets the cluster auto create index setting.
-
-        By default, when you index a document to a non-existent index,
-        OpenSearch will automatically create the index. This behavior is
-        undesirable so this function exposes the ability to disable it.
-
-        See
-        https://docs.opensearch.org/latest/install-and-configure/configuring-opensearch/index/#updating-cluster-settings-using-the-api
+    @log_function_time(print_only=True, debug_only=True, include_args=True)
+    def put_cluster_settings(self, settings: dict[str, Any]) -> bool:
+        """Puts cluster settings.
 
         Args:
-            enabled: Whether to enable the auto create index setting.
+            settings: The settings to put.
+
+        Raises:
+            Exception: There was an error putting the cluster settings.
 
         Returns:
-            True if the setting was updated successfully, False otherwise. Does
-                not raise.
+            True if the settings were put successfully, False otherwise.
         """
-        try:
-            body = {"persistent": {"action.auto_create_index": enabled}}
-            response = self._client.cluster.put_settings(body=body)
-            if response.get("acknowledged", False):
-                logger.info(f"Successfully set action.auto_create_index to {enabled}.")
-                return True
-            else:
-                logger.error(f"Failed to update setting: {response}.")
-                return False
-        except Exception:
-            logger.exception("Error setting auto_create_index.")
+        response = self._client.cluster.put_settings(body=settings)
+        if response.get("acknowledged", False):
+            logger.info("Successfully put cluster settings.")
+            return True
+        else:
+            logger.error(f"Failed to put cluster settings: {response}.")
             return False
 
+    @log_function_time(print_only=True, debug_only=True)
     def ping(self) -> bool:
         """Pings the OpenSearch cluster.
 
@@ -606,6 +837,7 @@ class OpenSearchClient:
         """
         return self._client.ping()
 
+    @log_function_time(print_only=True, debug_only=True)
     def close(self) -> None:
         """Closes the client.
 
@@ -617,28 +849,78 @@ class OpenSearchClient:
         """
         self._client.close()
 
-    def _get_hits_from_search_result(self, result: dict[str, Any]) -> list[Any]:
-        """Extracts the hits from a search result.
+    def _get_hits_and_profile_from_search_result(
+        self, result: dict[str, Any]
+    ) -> tuple[list[Any], int | None, bool | None, dict[str, Any], dict[str, Any]]:
+        """Extracts the hits and profiling information from a search result.
 
         Args:
             result: The search result to extract the hits from.
 
         Raises:
             Exception: There was an error extracting the hits from the search
-                result. This includes the case where the search timed out.
+                result.
 
         Returns:
-            The hits from the search result.
+            A tuple containing the hits from the search result, the time taken
+                to execute the search in milliseconds, whether the search timed
+                out, the time taken to execute each phase of the search, and the
+                profile.
         """
-        if result.get("timed_out", False):
-            raise RuntimeError(f"Search timed out for index {self._index_name}.")
+        time_took: int | None = result.get("took")
+        timed_out: bool | None = result.get("timed_out")
+        phase_took: dict[str, Any] = result.get("phase_took", {})
+        profile: dict[str, Any] = result.get("profile", {})
+
         hits_first_layer: dict[str, Any] = result.get("hits", {})
         if not hits_first_layer:
             raise RuntimeError(
                 f"Hits field missing from response when trying to search index {self._index_name}."
             )
         hits_second_layer: list[Any] = hits_first_layer.get("hits", [])
-        return hits_second_layer
+
+        return hits_second_layer, time_took, timed_out, phase_took, profile
+
+    def _log_search_result_perf(
+        self,
+        time_took: int | None,
+        timed_out: bool | None,
+        phase_took: dict[str, Any],
+        profile: dict[str, Any],
+        body: dict[str, Any],
+        search_pipeline_id: str | None = None,
+        raise_on_timeout: bool = False,
+    ) -> None:
+        """Logs the performance of a search result.
+
+        Args:
+            time_took: The time taken to execute the search in milliseconds.
+            timed_out: Whether the search timed out.
+            phase_took: The time taken to execute each phase of the search.
+            profile: The profile for the search.
+            body: The body of the search request for logging.
+            search_pipeline_id: The ID of the search pipeline used for the
+                search, if any, for logging. Defaults to None.
+            raise_on_timeout: Whether to raise an exception if the search timed
+                out. Note that the result may still contain useful partial
+                results. Defaults to False.
+
+        Raises:
+            Exception: If raise_on_timeout is True and the search timed out.
+        """
+        if time_took and time_took > CLIENT_THRESHOLD_TO_LOG_SLOW_SEARCH_MS:
+            logger.warning(
+                f"OpenSearch client warning: Search for index {self._index_name} took {time_took} milliseconds.\n"
+                f"Body: {get_new_body_without_vectors(body)}\n"
+                f"Search pipeline ID: {search_pipeline_id}\n"
+                f"Phase took: {phase_took}\n"
+                f"Profile: {profile}\n"
+            )
+        if timed_out:
+            error_str = f"OpenSearch client error: Search timed out for index {self._index_name}."
+            logger.error(error_str)
+            if raise_on_timeout:
+                raise RuntimeError(error_str)
 
 
 def wait_for_opensearch_with_timeout(

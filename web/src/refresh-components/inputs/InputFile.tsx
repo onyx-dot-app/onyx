@@ -4,7 +4,7 @@ import React, { useRef, useState } from "react";
 import InputTypeIn, {
   InputTypeInProps,
 } from "@/refresh-components/inputs/InputTypeIn";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button } from "@opal/components";
 import { noProp } from "@/lib/utils";
 import { SvgPaperclip } from "@opal/icons";
 
@@ -127,12 +127,13 @@ export default function InputFile({
   }
 
   const rightSection = (
-    <IconButton
+    <Button
       icon={SvgPaperclip}
       disabled={isNonEditable}
       onClick={noProp(openFilePicker)}
       type="button"
-      internal
+      prominence="tertiary"
+      size="sm"
       aria-label="Attach file"
     />
   );

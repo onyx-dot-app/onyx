@@ -1,5 +1,5 @@
 import { type User } from "@/lib/types";
-import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import userMutationFetcher from "@/lib/admin/users/userMutationFetcher";
 import useSWRMutation from "swr/mutation";
 import Button from "@/refresh-components/buttons/Button";
@@ -9,13 +9,11 @@ import { useRouter } from "next/navigation";
 
 export const LeaveOrganizationButton = ({
   user,
-  setPopup,
   mutate,
   className,
   children,
 }: {
   user: User;
-  setPopup: (spec: PopupSpec) => void;
   mutate: () => void;
   className?: string;
   children?: React.ReactNode;
@@ -27,16 +25,9 @@ export const LeaveOrganizationButton = ({
     {
       onSuccess: () => {
         mutate();
-        setPopup({
-          message: "Successfully left the team!",
-          type: "success",
-        });
+        toast.success("Successfully left the team!");
       },
-      onError: (errorMsg) =>
-        setPopup({
-          message: `Unable to leave team - ${errorMsg}`,
-          type: "error",
-        }),
+      onError: (errorMsg) => toast.error(`Unable to leave team - ${errorMsg}`),
     }
   );
 

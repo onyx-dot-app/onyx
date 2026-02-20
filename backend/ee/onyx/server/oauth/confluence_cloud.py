@@ -260,7 +260,7 @@ def confluence_oauth_accessible_resources(
     credential_id: int,
     user: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
-    tenant_id: str | None = Depends(get_current_tenant_id),
+    tenant_id: str | None = Depends(get_current_tenant_id),  # noqa: ARG001
 ) -> JSONResponse:
     """Atlassian's API is weird and does not supply us with enough info to be in a
     usable state after authorizing.  All API's require a cloud id. We have to list
@@ -270,7 +270,11 @@ def confluence_oauth_accessible_resources(
     if not credential:
         raise HTTPException(400, f"Credential {credential_id} not found.")
 
-    credential_dict = credential.credential_json
+    credential_dict = (
+        credential.credential_json.get_value(apply_mask=False)
+        if credential.credential_json
+        else {}
+    )
     access_token = credential_dict["confluence_access_token"]
 
     try:
@@ -323,7 +327,7 @@ def confluence_oauth_finalize(
     cloud_url: str,
     user: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
-    tenant_id: str | None = Depends(get_current_tenant_id),
+    tenant_id: str | None = Depends(get_current_tenant_id),  # noqa: ARG001
 ) -> JSONResponse:
     """Saves the info for the selected cloud site to the credential.
     This is the final step in the confluence oauth flow where after the traditional
@@ -337,7 +341,12 @@ def confluence_oauth_finalize(
             detail=f"Confluence Cloud OAuth failed - credential {credential_id} not found.",
         )
 
-    new_credential_json: dict[str, Any] = dict(credential.credential_json)
+    existing_credential_json = (
+        credential.credential_json.get_value(apply_mask=False)
+        if credential.credential_json
+        else {}
+    )
+    new_credential_json: dict[str, Any] = dict(existing_credential_json)
     new_credential_json["cloud_id"] = cloud_id
     new_credential_json["cloud_name"] = cloud_name
     new_credential_json["wiki_base"] = cloud_url

@@ -1,10 +1,13 @@
 import {
-  Citation,
   QuestionCardProps,
   DocumentCardProps,
 } from "@/components/search/results/Citation";
-import { LoadedOnyxDocument, OnyxDocument } from "@/lib/search/interfaces";
-import React, { memo, JSX } from "react";
+import {
+  LoadedOnyxDocument,
+  MinimalOnyxDocument,
+  OnyxDocument,
+} from "@/lib/search/interfaces";
+import React, { memo, JSX, useMemo, useCallback } from "react";
 import { SourceIcon } from "@/components/SourceIcon";
 import { WebResultIcon } from "@/components/WebResultIcon";
 import { SubQuestionDetail, CitationMap } from "../interfaces";
@@ -12,7 +15,14 @@ import { ValidSources } from "@/lib/types";
 import { ProjectFile } from "../projects/projectsService";
 import { BlinkingDot } from "./BlinkingDot";
 import Text from "@/refresh-components/texts/Text";
-import { cn } from "@/lib/utils";
+import SourceTag from "@/refresh-components/buttons/source-tag/SourceTag";
+import {
+  documentToSourceInfo,
+  questionToSourceInfo,
+  getDisplayNameForSource,
+} from "@/refresh-components/buttons/source-tag/sourceTagUtils";
+import { openDocument } from "@/lib/search/utils";
+import { ensureHrefProtocol } from "@/lib/utils";
 
 export const MemoizedAnchor = memo(
   ({
@@ -30,7 +40,7 @@ export const MemoizedAnchor = memo(
     docs?: OnyxDocument[] | null;
     userFiles?: ProjectFile[] | null;
     citations?: CitationMap;
-    updatePresentingDocument: (doc: OnyxDocument) => void;
+    updatePresentingDocument: (doc: MinimalOnyxDocument) => void;
     href?: string;
     children: React.ReactNode;
   }): JSX.Element => {
@@ -124,51 +134,74 @@ export const MemoizedLink = memo(
     [key: string]: any;
   }) => {
     const value = rest.children;
-    const questionCardProps: QuestionCardProps | undefined =
-      question && openQuestion
-        ? {
-            question: question,
-            openQuestion: openQuestion,
-          }
-        : undefined;
 
-    const documentCardProps: DocumentCardProps | undefined =
-      document && updatePresentingDocument
-        ? {
-            url: document.link,
-            document: document as LoadedOnyxDocument,
-            updatePresentingDocument: updatePresentingDocument!,
-          }
-        : undefined;
+    // Convert document to SourceInfo for SourceTag
+    const documentSourceInfo = useMemo(() => {
+      if (!document) return null;
+      return documentToSourceInfo(document as OnyxDocument);
+    }, [document]);
+
+    // Convert question to SourceInfo for SourceTag
+    const questionSourceInfo = useMemo(() => {
+      if (!question) return null;
+      return questionToSourceInfo(question, question.level_question_num);
+    }, [question]);
+
+    // Handle click on SourceTag
+    const handleSourceClick = useCallback(() => {
+      if (document && updatePresentingDocument) {
+        openDocument(document as OnyxDocument, updatePresentingDocument);
+      } else if (question && openQuestion) {
+        openQuestion(question);
+      }
+    }, [document, updatePresentingDocument, question, openQuestion]);
 
     if (value?.toString().startsWith("*")) {
       return <BlinkingDot addMargin />;
     } else if (value?.toString().startsWith("[")) {
+      const sourceInfo = documentSourceInfo || questionSourceInfo;
+      if (!sourceInfo) {
+        return <>{rest.children}</>;
+      }
+
+      const displayName = document
+        ? getDisplayNameForSource(document as OnyxDocument)
+        : question?.question || "Question";
+
       return (
-        <>
-          {documentCardProps ? (
-            <Citation document_info={documentCardProps}>
-              {rest.children}
-            </Citation>
-          ) : (
-            <Citation question_info={questionCardProps}>
-              {rest.children}
-            </Citation>
-          )}
-        </>
+        <SourceTag
+          variant="inlineCitation"
+          displayName={displayName}
+          sources={[sourceInfo]}
+          onSourceClick={handleSourceClick}
+          showDetailsCard
+          className="mr-0.5"
+        />
       );
     }
 
-    let url = href || rest.children?.toString();
-    if (url && !url.includes("://")) {
-      // Only add https:// if the URL doesn't already have a protocol
-      const httpsUrl = `https://${url}`;
-      try {
-        new URL(httpsUrl);
-        url = httpsUrl;
-      } catch {
-        // If not a valid URL, don't modify original url
-      }
+    const url = ensureHrefProtocol(href);
+
+    // Check if the link is to a file on the backend
+    const isChatFile = url?.includes("/api/chat/file/");
+    if (isChatFile && updatePresentingDocument) {
+      const fileId = url!.split("/api/chat/file/")[1]?.split(/[?#]/)[0] || "";
+      const filename = value?.toString() || "download";
+      return (
+        <a
+          href="#"
+          onClick={(e) => {
+            e.preventDefault();
+            updatePresentingDocument({
+              document_id: fileId,
+              semantic_identifier: filename,
+            });
+          }}
+          className="cursor-pointer text-link hover:text-link-hover"
+        >
+          {rest.children}
+        </a>
+      );
     }
 
     return (

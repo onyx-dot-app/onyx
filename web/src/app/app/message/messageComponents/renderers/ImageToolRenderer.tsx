@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo } from "react";
-import { FiImage } from "react-icons/fi";
+import { SvgImage } from "@opal/icons";
 import {
   PacketType,
   ImageGenerationToolPacket,
@@ -69,124 +69,140 @@ export const ImageToolRenderer: MessageRenderer<
     // Full rendering with title header and content below
     // Loading state - when generating
     if (isGenerating) {
-      return children({
-        icon: FiImage,
-        status: "Generating images...",
-        supportsCompact: false,
-        content: (
-          <div className="flex flex-col">
-            <div>
-              <GeneratingImageDisplay isCompleted={false} />
+      return children([
+        {
+          icon: SvgImage,
+          status: "Generating images...",
+          supportsCollapsible: false,
+          content: (
+            <div className="flex flex-col">
+              <div>
+                <GeneratingImageDisplay isCompleted={false} />
+              </div>
             </div>
-          </div>
-        ),
-      });
+          ),
+        },
+      ]);
     }
 
     // Complete state - show images
     if (isComplete) {
-      return children({
-        icon: FiImage,
-        status: `Generated ${images.length} image${
-          images.length !== 1 ? "s" : ""
-        }`,
-        supportsCompact: false,
-        content: (
-          <div className="flex flex-col my-1">
-            {images.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {images.map((image, index: number) => (
-                  <div
-                    key={image.file_id || index}
-                    className="transition-all group"
-                  >
-                    {image.file_id && (
-                      <InMessageImage
-                        fileId={image.file_id}
-                        shape={image.shape}
-                      />
-                    )}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="py-4 text-center text-gray-500 dark:text-gray-400 ml-7">
-                <FiImage className="w-6 h-6 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">No images generated</p>
-              </div>
-            )}
-          </div>
-        ),
-      });
+      return children([
+        {
+          icon: SvgImage,
+          status: `Generated ${images.length} image${
+            images.length !== 1 ? "s" : ""
+          }`,
+          supportsCollapsible: false,
+          content: (
+            <div className="flex flex-col my-1">
+              {images.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {images.map((image, index: number) => (
+                    <div
+                      key={image.file_id || index}
+                      className="transition-all group"
+                    >
+                      {image.file_id && (
+                        <InMessageImage
+                          fileId={image.file_id}
+                          shape={image.shape}
+                        />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="py-4 text-center text-gray-500 dark:text-gray-400 ml-7">
+                  <SvgImage className="w-6 h-6 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">No images generated</p>
+                </div>
+              )}
+            </div>
+          ),
+        },
+      ]);
     }
 
     // Fallback (shouldn't happen in normal flow)
-    return children({
-      icon: FiImage,
-      status: status,
-      supportsCompact: false,
-      content: <div></div>,
-    });
+    return children([
+      {
+        icon: SvgImage,
+        status: status,
+        supportsCollapsible: false,
+        content: <div></div>,
+      },
+    ]);
   }
 
   // Highlight/Short rendering
   if (isGenerating) {
-    return children({
-      icon: FiImage,
-      status: "Generating image...",
-      supportsCompact: false,
-      content: (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <div className="flex gap-0.5">
-            <div className="w-1 h-1 bg-current rounded-full animate-pulse"></div>
-            <div
-              className="w-1 h-1 bg-current rounded-full animate-pulse"
-              style={{ animationDelay: "0.1s" }}
-            ></div>
-            <div
-              className="w-1 h-1 bg-current rounded-full animate-pulse"
-              style={{ animationDelay: "0.2s" }}
-            ></div>
+    return children([
+      {
+        icon: SvgImage,
+        status: "Generating image...",
+        supportsCollapsible: false,
+        content: (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <div className="flex gap-0.5">
+              <div className="w-1 h-1 bg-current rounded-full animate-pulse"></div>
+              <div
+                className="w-1 h-1 bg-current rounded-full animate-pulse"
+                style={{ animationDelay: "0.1s" }}
+              ></div>
+              <div
+                className="w-1 h-1 bg-current rounded-full animate-pulse"
+                style={{ animationDelay: "0.2s" }}
+              ></div>
+            </div>
+            <span>Generating image...</span>
           </div>
-          <span>Generating image...</span>
-        </div>
-      ),
-    });
+        ),
+      },
+    ]);
   }
 
   if (error) {
-    return children({
-      icon: FiImage,
-      status: "Image generation failed",
-      supportsCompact: false,
-      content: (
-        <div className="text-sm text-red-600 dark:text-red-400">
-          Image generation failed
-        </div>
-      ),
-    });
+    return children([
+      {
+        icon: SvgImage,
+        status: "Image generation failed",
+        supportsCollapsible: false,
+        content: (
+          <div className="text-sm text-red-600 dark:text-red-400">
+            Image generation failed
+          </div>
+        ),
+      },
+    ]);
   }
 
   if (isComplete && images.length > 0) {
-    return children({
-      icon: FiImage,
-      status: `Generated ${images.length} image${images.length > 1 ? "s" : ""}`,
-      supportsCompact: false,
-      content: (
-        <div className="text-sm text-muted-foreground">
-          Generated {images.length} image
-          {images.length > 1 ? "s" : ""}
-        </div>
-      ),
-    });
+    return children([
+      {
+        icon: SvgImage,
+        status: `Generated ${images.length} image${
+          images.length > 1 ? "s" : ""
+        }`,
+        supportsCollapsible: false,
+        content: (
+          <div className="text-sm text-muted-foreground">
+            Generated {images.length} image
+            {images.length > 1 ? "s" : ""}
+          </div>
+        ),
+      },
+    ]);
   }
 
-  return children({
-    icon: FiImage,
-    status: "Image generation",
-    supportsCompact: false,
-    content: (
-      <div className="text-sm text-muted-foreground">Image generation</div>
-    ),
-  });
+  return children([
+    {
+      icon: SvgImage,
+      status: "Image generation",
+      supportsCollapsible: false,
+      content: (
+        <div className="text-sm text-muted-foreground">Image generation</div>
+      ),
+    },
+  ]);
 };

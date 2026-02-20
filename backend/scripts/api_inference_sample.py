@@ -23,7 +23,7 @@ def create_new_chat_session(onyx_url: str, api_key: str | None) -> int:
 
 
 def process_question(onyx_url: str, question: str, api_key: str | None) -> None:
-    message_endpoint = onyx_url + "/api/chat/send-message"
+    message_endpoint = onyx_url + "/api/chat/send-chat-message"
 
     chat_session_id = create_new_chat_session(onyx_url, api_key)
 

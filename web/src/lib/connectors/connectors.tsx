@@ -992,6 +992,15 @@ export const connectorConfigs: Record<
 For example, specifying .*-support.* as a "channel" will cause the connector to include any channels with "-support" in the name.`,
         optional: true,
       },
+      {
+        type: "checkbox",
+        query: "Include bot messages?",
+        label: "Include Bot Messages",
+        name: "include_bot_messages",
+        description:
+          "If enabled, messages from bots and apps will be indexed. Useful for channels that are primarily bot-driven feeds (e.g. CRM updates, automated notes).",
+        optional: true,
+      },
     ],
   },
   slab: {
@@ -1556,19 +1565,48 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
     description: "Configure Airtable connector",
     values: [
       {
-        type: "text",
-        query: "Enter the base ID:",
-        label: "Base ID",
-        name: "base_id",
-        optional: false,
-        description: "The ID of the Airtable base to index.",
-      },
-      {
-        type: "text",
-        query: "Enter the table name or ID:",
-        label: "Table Name or Table ID",
-        name: "table_name_or_id",
-        optional: false,
+        type: "tab",
+        name: "airtable_scope",
+        label: "What should we index from Airtable?",
+        optional: true,
+        tabs: [
+          {
+            value: "everything",
+            label: "Everything",
+            fields: [
+              {
+                type: "string_tab",
+                label: "Everything",
+                name: "everything_description",
+                description:
+                  "This connector will automatically discover and index all bases and tables accessible by your API token.",
+              },
+            ],
+          },
+          {
+            value: "specific",
+            label: "Specific Table",
+            fields: [
+              {
+                type: "text",
+                query: "Paste the Airtable URL:",
+                label: "Airtable URL",
+                name: "airtable_url",
+                optional: false,
+                description:
+                  "Paste the URL from your browser when viewing the table, e.g. https://airtable.com/appXXX/tblYYY/viwZZZ",
+              },
+              {
+                type: "text",
+                label: "Share ID",
+                name: "share_id",
+                optional: true,
+                description:
+                  "Optional. If you want record links to use a shared view URL, put the share ID here e.g. shrkfjEzDmLaDtK83.",
+              },
+            ],
+          },
+        ],
       },
       {
         type: "checkbox",
@@ -1579,24 +1617,7 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
         optional: false,
       },
     ],
-    advanced_values: [
-      {
-        type: "text",
-        label: "View ID",
-        name: "view_id",
-        optional: true,
-        description:
-          "If you need to link to a specific View, put that ID here e.g. viwVUEJjWPd8XYjh8.",
-      },
-      {
-        type: "text",
-        label: "Share ID",
-        name: "share_id",
-        optional: true,
-        description:
-          "If you need to link to a specific Share, put that ID here e.g. shrkfjEzDmLaDtK83.",
-      },
-    ],
+    advanced_values: [],
     overrideDefaultFreq: 60 * 60 * 24,
   },
   highspot: {
@@ -1892,6 +1913,7 @@ export interface SlackConfig {
   workspace: string;
   channels?: string[];
   channel_regex_enabled?: boolean;
+  include_bot_messages?: boolean;
 }
 
 export interface SlabConfig {
@@ -1911,7 +1933,7 @@ export interface LoopioConfig {
 export interface FileConfig {
   file_locations: string[];
   file_names: string[];
-  zip_metadata: Record<string, any>;
+  zip_metadata_file_id: string | null;
 }
 
 export interface ZulipConfig {

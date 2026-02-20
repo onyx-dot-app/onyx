@@ -104,6 +104,33 @@ class TestMakeBillingRequest:
     @pytest.mark.asyncio
     @patch("ee.onyx.server.billing.service._get_headers")
     @patch("ee.onyx.server.billing.service._get_base_url")
+    async def test_follows_redirects(
+        self,
+        mock_base_url: MagicMock,
+        mock_headers: MagicMock,
+    ) -> None:
+        """AsyncClient must be created with follow_redirects=True.
+
+        The target server (cloud data plane for self-hosted, control
+        plane for cloud) may sit behind nginx that returns 308
+        (HTTP→HTTPS). httpx does not follow redirects by default,
+        so we must explicitly opt in.
+        """
+        from ee.onyx.server.billing.service import _make_billing_request
+
+        mock_base_url.return_value = "http://api.example.com"
+        mock_headers.return_value = {"Authorization": "Bearer token"}
+        mock_response = make_mock_response({"ok": True})
+        mock_client = make_mock_http_client("get", response=mock_response)
+
+        with patch("httpx.AsyncClient", mock_client):
+            await _make_billing_request(method="GET", path="/test")
+
+        mock_client.assert_called_once_with(timeout=30.0, follow_redirects=True)
+
+    @pytest.mark.asyncio
+    @patch("ee.onyx.server.billing.service._get_headers")
+    @patch("ee.onyx.server.billing.service._get_base_url")
     async def test_raises_on_connection_error(
         self,
         mock_base_url: MagicMock,

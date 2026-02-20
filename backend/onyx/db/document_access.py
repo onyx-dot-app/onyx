@@ -12,9 +12,11 @@ This is a standalone module to avoid circular imports between document.py and pe
 
 from sqlalchemy import and_
 from sqlalchemy import any_
+from sqlalchemy import cast
 from sqlalchemy import or_
 from sqlalchemy import Select
 from sqlalchemy import select
+from sqlalchemy import String
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
@@ -78,7 +80,7 @@ def apply_document_access_filter(
     if external_group_ids:
         access_filters.append(
             Document.external_user_group_ids.overlap(
-                postgresql.array(external_group_ids)
+                cast(postgresql.array(external_group_ids), postgresql.ARRAY(String))
             )
         )
 

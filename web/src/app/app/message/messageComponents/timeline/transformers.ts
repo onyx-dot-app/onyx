@@ -47,6 +47,37 @@ export function transformPacketGroups(
 
 /**
  * Group transformed steps by turn_index to detect parallel tools
+ *
+ * @example
+ * // Input: TransformedStep[]
+ * // ┌──────────────────────────────────────────┐
+ * // │ [0] key="0-0" turnIndex=0 tabIndex=0     │
+ * // │ [1] key="0-1" turnIndex=0 tabIndex=1     │
+ * // │ [2] key="1-0" turnIndex=1 tabIndex=0     │
+ * // └──────────────────────────────────────────┘
+ * //
+ * // Step 1: Build Map<turnIndex, TransformedStep[]>
+ * // ┌─────────────────────────────────────────────┐
+ * // │ turnMap = {                                 │
+ * // │   0 → [step(0-0), step(0-1)]               │
+ * // │   1 → [step(1-0)]                          │
+ * // │ }                                          │
+ * // └─────────────────────────────────────────────┘
+ * //
+ * // Step 2: Sort turn indices & steps by tabIndex
+ * //
+ * // Step 3: Build TurnGroup[] with isParallel flag
+ * // ┌─────────────────────────────────────────────┐
+ * // │ Output: TurnGroup[]                         │
+ * // ├─────────────────────────────────────────────┤
+ * // │ [0] turnIndex=0                             │
+ * // │     steps=[0-0, 0-1]                        │
+ * // │     isParallel=true  ← 2 steps = parallel   │
+ * // │                                             │
+ * // │ [1] turnIndex=1                             │
+ * // │     steps=[1-0]                             │
+ * // │     isParallel=false ← 1 step = sequential  │
+ * // └─────────────────────────────────────────────┘
  */
 export function groupStepsByTurn(steps: TransformedStep[]): TurnGroup[] {
   const turnMap = new Map<number, TransformedStep[]>();

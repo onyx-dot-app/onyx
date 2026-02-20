@@ -11,11 +11,16 @@ from pydantic import model_serializer
 from pydantic import model_validator
 from pydantic import SerializerFunctionWrapHandler
 
+from onyx.configs.app_configs import OPENSEARCH_TEXT_ANALYZER
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.constants import DEFAULT_MAX_CHUNK_SIZE
 from onyx.document_index.opensearch.constants import EF_CONSTRUCTION
 from onyx.document_index.opensearch.constants import EF_SEARCH
 from onyx.document_index.opensearch.constants import M
+from onyx.document_index.opensearch.string_filtering import (
+    filter_and_validate_document_id,
+)
+from onyx.utils.tenant import get_tenant_id_short_string
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -50,18 +55,36 @@ SECONDARY_OWNERS_FIELD_NAME = "secondary_owners"
 ANCESTOR_HIERARCHY_NODE_IDS_FIELD_NAME = "ancestor_hierarchy_node_ids"
 
 
+# Faiss was also tried but it didn't have any benefits
+# NMSLIB is deprecated, not recommended
+OPENSEARCH_KNN_ENGINE = "lucene"
+
+
 def get_opensearch_doc_chunk_id(
-    document_id: str, chunk_index: int, max_chunk_size: int = DEFAULT_MAX_CHUNK_SIZE
+    tenant_state: TenantState,
+    document_id: str,
+    chunk_index: int,
+    max_chunk_size: int = DEFAULT_MAX_CHUNK_SIZE,
 ) -> str:
     """
     Returns a unique identifier for the chunk.
 
-    TODO(andrei): Add source type to this.
-    TODO(andrei): Add tenant ID to this.
-    TODO(andrei): Sanitize document_id in the event it contains characters that
-    are not allowed in OpenSearch IDs.
+    This will be the string used to identify the chunk in OpenSearch. Any direct
+    chunk queries should use this function.
     """
-    return f"{document_id}__{max_chunk_size}__{chunk_index}"
+    sanitized_document_id = filter_and_validate_document_id(document_id)
+    opensearch_doc_chunk_id = (
+        f"{sanitized_document_id}__{max_chunk_size}__{chunk_index}"
+    )
+    if tenant_state.multitenant:
+        # Use tenant ID because in multitenant mode each tenant has its own
+        # Documents table, so there is a very small chance that doc IDs are not
+        # actually unique across all tenants.
+        short_tenant_id = get_tenant_id_short_string(tenant_state.tenant_id)
+        opensearch_doc_chunk_id = f"{short_tenant_id}__{opensearch_doc_chunk_id}"
+    # Do one more validation to ensure we haven't exceeded the max length.
+    opensearch_doc_chunk_id = filter_and_validate_document_id(opensearch_doc_chunk_id)
+    return opensearch_doc_chunk_id
 
 
 def set_or_convert_timezone_to_utc(value: datetime) -> datetime:
@@ -147,6 +170,13 @@ class DocumentChunk(BaseModel):
         )
     )
 
+    def __str__(self) -> str:
+        return (
+            f"DocumentChunk(document_id={self.document_id}, chunk_index={self.chunk_index}, "
+            f"content length={len(self.content)}, content vector length={len(self.content_vector)}, "
+            f"tenant_id={self.tenant_id.tenant_id})"
+        )
+
     @model_validator(mode="after")
     def check_title_and_title_vector_are_consistent(self) -> Self:
         # title and title_vector should both either be None or not.
@@ -180,7 +210,9 @@ class DocumentChunk(BaseModel):
 
     @field_serializer("last_updated", mode="wrap")
     def serialize_datetime_fields_to_epoch_seconds(
-        self, value: datetime | None, handler: SerializerFunctionWrapHandler
+        self,
+        value: datetime | None,
+        handler: SerializerFunctionWrapHandler,  # noqa: ARG002
     ) -> int | None:
         """
         Serializes datetime fields to seconds since the Unix epoch.
@@ -214,7 +246,7 @@ class DocumentChunk(BaseModel):
 
     @field_serializer("tenant_id", mode="wrap")
     def serialize_tenant_state(
-        self, value: TenantState, handler: SerializerFunctionWrapHandler
+        self, value: TenantState, handler: SerializerFunctionWrapHandler  # noqa: ARG002
     ) -> str | None:
         """
         Serializes tenant_state to the tenant str if multitenant, or None if
@@ -317,6 +349,9 @@ class DocumentSchema:
             "properties": {
                 TITLE_FIELD_NAME: {
                     "type": "text",
+                    # Language analyzer (e.g. english) stems at index and search time for variant matching.
+                    # Configure via OPENSEARCH_TEXT_ANALYZER. Existing indices need reindexing after a change.
+                    "analyzer": OPENSEARCH_TEXT_ANALYZER,
                     "fields": {
                         # Subfield accessed as title.keyword. Not indexed for
                         # values longer than 256 chars.
@@ -331,9 +366,7 @@ class DocumentSchema:
                 CONTENT_FIELD_NAME: {
                     "type": "text",
                     "store": True,
-                    # This makes highlighting text during queries more efficient
-                    # at the cost of disk space. See
-                    # https://docs.opensearch.org/latest/search-plugins/searching-data/highlight/#methods-of-obtaining-offsets
+                    "analyzer": OPENSEARCH_TEXT_ANALYZER,
                     "index_options": "offsets",
                 },
                 TITLE_VECTOR_FIELD_NAME: {
@@ -342,7 +375,7 @@ class DocumentSchema:
                     "method": {
                         "name": "hnsw",
                         "space_type": "cosinesimil",
-                        "engine": "lucene",
+                        "engine": OPENSEARCH_KNN_ENGINE,
                         "parameters": {"ef_construction": EF_CONSTRUCTION, "m": M},
                     },
                 },
@@ -354,7 +387,7 @@ class DocumentSchema:
                     "method": {
                         "name": "hnsw",
                         "space_type": "cosinesimil",
-                        "engine": "lucene",
+                        "engine": OPENSEARCH_KNN_ENGINE,
                         "parameters": {"ef_construction": EF_CONSTRUCTION, "m": M},
                     },
                 },

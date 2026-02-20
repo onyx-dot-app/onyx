@@ -121,10 +121,8 @@ def handle_regular_answer(
 
     if message_info.email:
         with get_session_with_current_tenant() as db_session:
-            user = (
-                get_user_by_email(message_info.email, db_session)
-                or get_anonymous_user()
-            )
+            found_user = get_user_by_email(message_info.email, db_session)
+            user = found_user if found_user else get_anonymous_user()
     else:
         user = get_anonymous_user()
 

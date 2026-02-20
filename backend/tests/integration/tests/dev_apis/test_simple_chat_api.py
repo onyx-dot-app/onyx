@@ -17,9 +17,9 @@ from tests.integration.conftest import DocumentBuilderType
     reason="/chat/send-message-simple-with-history tests are enterprise only",
 )
 def test_send_message_simple_with_history(
-    reset: None,
+    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
-    llm_provider: DATestLLMProvider,
+    llm_provider: DATestLLMProvider,  # noqa: ARG001
     document_builder: DocumentBuilderType,
 ) -> None:
     # create documents using the document builder
@@ -62,9 +62,9 @@ def test_send_message_simple_with_history(
     reason="/chat/send-message-simple-with-history tests are enterprise only",
 )
 def test_using_reference_docs_with_simple_with_history_api_flow(
-    reset: None,
+    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
-    llm_provider: DATestLLMProvider,
+    llm_provider: DATestLLMProvider,  # noqa: ARG001
     document_builder: DocumentBuilderType,
 ) -> None:
     # SEEDING DOCUMENTS
@@ -128,9 +128,9 @@ def test_using_reference_docs_with_simple_with_history_api_flow(
     reason="/chat/send-message-simple-with-history tests are enterprise only",
 )
 def test_send_message_simple_with_history_strict_json(
-    reset: None,
+    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
-    llm_provider: DATestLLMProvider,
+    llm_provider: DATestLLMProvider,  # noqa: ARG001
 ) -> None:
 
     response = requests.post(
@@ -213,9 +213,9 @@ def test_send_message_simple_with_history_strict_json(
     reason="/query/answer-with-citation tests are enterprise only",
 )
 def test_answer_with_citation_api(
-    reset: None,
+    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
-    llm_provider: DATestLLMProvider,
+    llm_provider: DATestLLMProvider,  # noqa: ARG001
     document_builder: DocumentBuilderType,
 ) -> None:
 

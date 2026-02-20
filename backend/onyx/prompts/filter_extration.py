@@ -1,8 +1,7 @@
 # The following prompts are used for extracting filters to apply along with the query in the
 # document index. For example, a filter for dates or a filter by source type such as GitHub
 # or Slack
-from onyx.prompts.constants import SOURCES_KEY
-
+SOURCES_KEY = "sources"
 
 # Smaller followup prompts in time_filter.py
 TIME_FILTER_PROMPT = """

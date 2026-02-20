@@ -1,7 +1,7 @@
 "use client";
 
 import { PageSelector } from "@/components/PageSelector";
-import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { EditIcon } from "@/components/icons/icons";
 import { SlackChannelConfig } from "@/lib/types";
 import {
@@ -19,7 +19,7 @@ import { deleteSlackChannelConfig, isPersonaASlackBotPersona } from "./lib";
 import { Card } from "@/components/ui/card";
 import Button from "@/refresh-components/buttons/Button";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button as OpalButton } from "@opal/components";
 import { SvgSettings, SvgTrash } from "@opal/icons";
 const numToDisplay = 50;
 
@@ -27,14 +27,12 @@ export interface SlackChannelConfigsTableProps {
   slackBotId: number;
   slackChannelConfigs: SlackChannelConfig[];
   refresh: () => void;
-  setPopup: (popupSpec: PopupSpec | null) => void;
 }
 
 export default function SlackChannelConfigsTable({
   slackBotId,
   slackChannelConfigs,
   refresh,
-  setPopup,
 }: SlackChannelConfigsTableProps) {
   const [page, setPage] = useState(1);
 
@@ -123,28 +121,27 @@ export default function SlackChannelConfigsTable({
                         </div>
                       </TableCell>
                       <TableCell onClick={(e) => e.stopPropagation()}>
-                        <IconButton
+                        <OpalButton
                           onClick={async (e) => {
                             e.stopPropagation();
                             const response = await deleteSlackChannelConfig(
                               slackChannelConfig.id
                             );
                             if (response.ok) {
-                              setPopup({
-                                message: `Slack bot config "${slackChannelConfig.id}" deleted`,
-                                type: "success",
-                              });
+                              toast.success(
+                                `Slack bot config "${slackChannelConfig.id}" deleted`
+                              );
                             } else {
                               const errorMsg = await response.text();
-                              setPopup({
-                                message: `Failed to delete Slack bot config - ${errorMsg}`,
-                                type: "error",
-                              });
+                              toast.error(
+                                `Failed to delete Slack bot config - ${errorMsg}`
+                              );
                             }
                             refresh();
                           }}
                           icon={SvgTrash}
-                          internal
+                          prominence="tertiary"
+                          size="sm"
                         />
                       </TableCell>
                     </TableRow>

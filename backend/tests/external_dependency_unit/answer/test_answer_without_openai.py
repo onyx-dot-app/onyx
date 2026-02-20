@@ -6,10 +6,10 @@ from uuid import uuid4
 from sqlalchemy.orm import Session
 
 from onyx.chat.models import AnswerStreamPart
-from onyx.chat.models import MessageResponseIDInfo
 from onyx.chat.models import StreamingError
-from onyx.chat.process_message import stream_chat_message_objects
+from onyx.chat.process_message import handle_stream_message_objects
 from onyx.db.chat import create_chat_session
+from onyx.db.enums import LLMModelFlowType
 from onyx.db.llm import fetch_existing_llm_providers
 from onyx.db.llm import remove_llm_provider
 from onyx.db.llm import update_default_provider
@@ -17,8 +17,8 @@ from onyx.db.llm import upsert_llm_provider
 from onyx.llm.constants import LlmProviderNames
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
-from onyx.server.query_and_chat.models import CreateChatMessageRequest
-from onyx.server.query_and_chat.models import RetrievalDetails
+from onyx.server.query_and_chat.models import MessageResponseIDInfo
+from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
 from onyx.server.query_and_chat.streaming_models import Packet
@@ -27,8 +27,8 @@ from tests.external_dependency_unit.conftest import create_test_user
 
 def test_answer_with_only_anthropic_provider(
     db_session: Session,
-    full_deployment_setup: None,
-    mock_external_deps: None,
+    full_deployment_setup: None,  # noqa: ARG001
+    mock_external_deps: None,  # noqa: ARG001
 ) -> None:
     """Ensure chat still streams answers when only an Anthropic provider is configured."""
 
@@ -36,7 +36,7 @@ def test_answer_with_only_anthropic_provider(
     assert anthropic_api_key, "ANTHROPIC_API_KEY environment variable must be set"
 
     # Drop any existing providers so that only Anthropic is available.
-    for provider in fetch_existing_llm_providers(db_session):
+    for provider in fetch_existing_llm_providers(db_session, [LLMModelFlowType.CHAT]):
         remove_llm_provider(db_session, provider.id)
 
     anthropic_model = "claude-haiku-4-5-20251001"
@@ -69,17 +69,13 @@ def test_answer_with_only_anthropic_provider(
             persona_id=0,
         )
 
-        chat_request = CreateChatMessageRequest(
-            chat_session_id=chat_session.id,
-            parent_message_id=None,
+        chat_request = SendMessageRequest(
             message="hello",
-            file_descriptors=[],
-            search_doc_ids=None,
-            retrieval_options=RetrievalDetails(),
+            chat_session_id=chat_session.id,
         )
 
         response_stream: list[AnswerStreamPart] = []
-        for packet in stream_chat_message_objects(
+        for packet in handle_stream_message_objects(
             new_msg_req=chat_request,
             user=test_user,
             db_session=db_session,

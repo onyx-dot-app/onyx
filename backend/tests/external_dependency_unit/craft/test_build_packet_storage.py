@@ -26,7 +26,7 @@ class TestBuildMessageStorage:
         self,
         db_session: Session,
         build_session: BuildSession,
-        tenant_context: None,
+        tenant_context: None,  # noqa: ARG002
     ) -> None:
         """Test creating a message with JSON metadata and turn_index."""
         user_message_metadata = {
@@ -54,7 +54,7 @@ class TestBuildMessageStorage:
         self,
         db_session: Session,
         build_session: BuildSession,
-        tenant_context: None,
+        tenant_context: None,  # noqa: ARG002
     ) -> None:
         """Test creating multiple messages with correct turn_index values."""
         # First user message (turn 0)
@@ -120,7 +120,7 @@ class TestBuildMessageStorage:
         self,
         db_session: Session,
         build_session: BuildSession,
-        tenant_context: None,
+        tenant_context: None,  # noqa: ARG002
     ) -> None:
         """Test storing only completed tool calls."""
         # Create a user message first
@@ -162,7 +162,7 @@ class TestBuildMessageStorage:
         self,
         db_session: Session,
         build_session: BuildSession,
-        tenant_context: None,
+        tenant_context: None,  # noqa: ARG002
     ) -> None:
         """Test upserting agent plan - only latest should be kept."""
         # Create a user message first
@@ -229,7 +229,7 @@ class TestBuildMessageStorage:
         self,
         db_session: Session,
         build_session: BuildSession,
-        tenant_context: None,
+        tenant_context: None,  # noqa: ARG002
     ) -> None:
         """Test upserting agent plan when we don't know the existing ID."""
         # Create a user message first
@@ -277,7 +277,7 @@ class TestBuildMessageStorage:
         self,
         db_session: Session,
         build_session: BuildSession,
-        tenant_context: None,
+        tenant_context: None,  # noqa: ARG002
     ) -> None:
         """Test that streaming flow creates correct number of DB messages.
 

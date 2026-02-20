@@ -18,11 +18,16 @@ export function isToolPacket(
     PacketType.PYTHON_TOOL_DELTA,
     PacketType.CUSTOM_TOOL_START,
     PacketType.CUSTOM_TOOL_DELTA,
+    PacketType.FILE_READER_START,
+    PacketType.FILE_READER_RESULT,
     PacketType.REASONING_START,
     PacketType.REASONING_DELTA,
     PacketType.FETCH_TOOL_START,
     PacketType.FETCH_TOOL_URLS,
     PacketType.FETCH_TOOL_DOCUMENTS,
+    PacketType.MEMORY_TOOL_START,
+    PacketType.MEMORY_TOOL_DELTA,
+    PacketType.MEMORY_TOOL_NO_ACCESS,
     PacketType.DEEP_RESEARCH_PLAN_START,
     PacketType.DEEP_RESEARCH_PLAN_DELTA,
     PacketType.RESEARCH_AGENT_START,
@@ -53,8 +58,7 @@ export function isActualToolCallPacket(packet: Packet): boolean {
 export function isDisplayPacket(packet: Packet) {
   return (
     packet.obj.type === PacketType.MESSAGE_START ||
-    packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_START ||
-    packet.obj.type === PacketType.PYTHON_TOOL_START
+    packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_START
   );
 }
 
@@ -74,8 +78,7 @@ export function isFinalAnswerComing(packets: Packet[]) {
   return packets.some(
     (packet) =>
       packet.obj.type === PacketType.MESSAGE_START ||
-      packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_START ||
-      packet.obj.type === PacketType.PYTHON_TOOL_START
+      packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_START
   );
 }
 
@@ -84,8 +87,7 @@ export function isFinalAnswerComplete(packets: Packet[]) {
   const messageStartPacket = packets.find(
     (packet) =>
       packet.obj.type === PacketType.MESSAGE_START ||
-      packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_START ||
-      packet.obj.type === PacketType.PYTHON_TOOL_START
+      packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_START
   );
 
   if (!messageStartPacket) {

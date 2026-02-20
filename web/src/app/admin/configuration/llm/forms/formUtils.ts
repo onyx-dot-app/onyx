@@ -4,7 +4,7 @@ import {
   WellKnownLLMProviderDescriptor,
 } from "../interfaces";
 import { LLM_PROVIDERS_ADMIN_URL } from "../constants";
-import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import * as Yup from "yup";
 import isEqual from "lodash/isEqual";
 
@@ -102,7 +102,6 @@ export interface SubmitLLMProviderParams<
   hideSuccess?: boolean;
   setIsTesting: (testing: boolean) => void;
   setTestError: (error: string) => void;
-  setPopup?: (popup: PopupSpec) => void;
   mutate: (key: string) => void;
   onClose: () => void;
   setSubmitting: (submitting: boolean) => void;
@@ -157,7 +156,6 @@ export const submitLLMProvider = async <T extends BaseLLMFormValues>({
   hideSuccess,
   setIsTesting,
   setTestError,
-  setPopup,
   mutate,
   onClose,
   setSubmitting,
@@ -198,8 +196,14 @@ export const submitLLMProvider = async <T extends BaseLLMFormValues>({
     initialValues.custom_config
   );
 
+  const normalizedApiBase =
+    typeof rest.api_base === "string" && rest.api_base.trim() === ""
+      ? undefined
+      : rest.api_base;
+
   const finalValues = {
     ...rest,
+    api_base: normalizedApiBase,
     default_model_name: finalDefaultModelName,
     api_key,
     api_key_changed: api_key !== (initialValues.api_key as string | undefined),
@@ -252,14 +256,7 @@ export const submitLLMProvider = async <T extends BaseLLMFormValues>({
     const fullErrorMsg = existingLlmProvider
       ? `Failed to update provider: ${errorMsg}`
       : `Failed to enable provider: ${errorMsg}`;
-    if (setPopup) {
-      setPopup({
-        type: "error",
-        message: fullErrorMsg,
-      });
-    } else {
-      alert(fullErrorMsg);
-    }
+    toast.error(fullErrorMsg);
     return;
   }
 
@@ -273,15 +270,7 @@ export const submitLLMProvider = async <T extends BaseLLMFormValues>({
     );
     if (!setDefaultResponse.ok) {
       const errorMsg = (await setDefaultResponse.json()).detail;
-      const fullErrorMsg = `Failed to set provider as default: ${errorMsg}`;
-      if (setPopup) {
-        setPopup({
-          type: "error",
-          message: fullErrorMsg,
-        });
-      } else {
-        alert(fullErrorMsg);
-      }
+      toast.error(`Failed to set provider as default: ${errorMsg}`);
       return;
     }
   }
@@ -289,16 +278,11 @@ export const submitLLMProvider = async <T extends BaseLLMFormValues>({
   mutate(LLM_PROVIDERS_ADMIN_URL);
   onClose();
 
-  const successMsg = existingLlmProvider
-    ? "Provider updated successfully!"
-    : "Provider enabled successfully!";
-  if (!hideSuccess && setPopup) {
-    setPopup({
-      type: "success",
-      message: successMsg,
-    });
-  } else if (!hideSuccess) {
-    alert(successMsg);
+  if (!hideSuccess) {
+    const successMsg = existingLlmProvider
+      ? "Provider updated successfully!"
+      : "Provider enabled successfully!";
+    toast.success(successMsg);
   }
 
   setSubmitting(false);

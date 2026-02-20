@@ -536,7 +536,9 @@ def connector_permission_sync_generator_task(
             )
             redis_connector.permissions.set_fence(new_payload)
 
-            callback = PermissionSyncCallback(redis_connector, lock, r)
+            callback = PermissionSyncCallback(
+                redis_connector, lock, r, timeout_seconds=JOB_TIMEOUT
+            )
 
             # pass in the capability to fetch all existing docs for the cc_pair
             # this is can be used to determine documents that are "missing" and thus
@@ -576,6 +578,13 @@ def connector_permission_sync_generator_task(
             tasks_generated = 0
             docs_with_errors = 0
             for doc_external_access in document_external_accesses:
+                if callback.should_stop():
+                    raise RuntimeError(
+                        f"Permission sync task timed out or stop signal detected: "
+                        f"cc_pair={cc_pair_id} "
+                        f"tasks_generated={tasks_generated}"
+                    )
+
                 result = redis_connector.permissions.update_db(
                     lock=lock,
                     new_permissions=[doc_external_access],
@@ -932,6 +941,7 @@ class PermissionSyncCallback(IndexingHeartbeatInterface):
         redis_connector: RedisConnector,
         redis_lock: RedisLock,
         redis_client: Redis,
+        timeout_seconds: int | None = None,
     ):
         super().__init__()
         self.redis_connector: RedisConnector = redis_connector
@@ -944,14 +954,29 @@ class PermissionSyncCallback(IndexingHeartbeatInterface):
         self.last_tag: str = "PermissionSyncCallback.__init__"
         self.last_lock_reacquire: datetime = datetime.now(timezone.utc)
         self.last_lock_monotonic = time.monotonic()
+        self.start_monotonic = time.monotonic()
+        self.timeout_seconds = timeout_seconds
 
     def should_stop(self) -> bool:
         if self.redis_connector.stop.fenced:
             return True
 
+        # Check if the task has exceeded its timeout
+        # NOTE: Celery's soft_time_limit does not work with thread pools,
+        # so we must enforce timeouts internally.
+        if self.timeout_seconds is not None:
+            elapsed = time.monotonic() - self.start_monotonic
+            if elapsed > self.timeout_seconds:
+                logger.warning(
+                    f"PermissionSyncCallback - task timeout exceeded: "
+                    f"elapsed={elapsed:.0f}s timeout={self.timeout_seconds}s "
+                    f"cc_pair={self.redis_connector.cc_pair_id}"
+                )
+                return True
+
         return False
 
-    def progress(self, tag: str, amount: int) -> None:
+    def progress(self, tag: str, amount: int) -> None:  # noqa: ARG002
         try:
             self.redis_connector.permissions.set_active()
 
@@ -982,7 +1007,7 @@ class PermissionSyncCallback(IndexingHeartbeatInterface):
 
 
 def monitor_ccpair_permissions_taskset(
-    tenant_id: str, key_bytes: bytes, r: Redis, db_session: Session
+    tenant_id: str, key_bytes: bytes, r: Redis, db_session: Session  # noqa: ARG001
 ) -> None:
     fence_key = key_bytes.decode("utf-8")
     cc_pair_id_str = RedisConnector.get_id_from_fence_key(fence_key)

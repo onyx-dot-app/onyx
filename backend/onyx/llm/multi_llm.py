@@ -1,12 +1,15 @@
+import os
+import threading
 from collections.abc import Iterator
+from contextlib import contextmanager
+from contextlib import nullcontext
 from typing import Any
 from typing import cast
 from typing import TYPE_CHECKING
 from typing import Union
 
 from onyx.configs.app_configs import MOCK_LLM_RESPONSE
-from onyx.configs.chat_configs import QA_TIMEOUT
-from onyx.configs.model_configs import DEFAULT_REASONING_EFFORT
+from onyx.configs.chat_configs import LLM_SOCKET_READ_TIMEOUT
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.configs.model_configs import LITELLM_EXTRA_BODY
 from onyx.llm.constants import LlmProviderNames
@@ -20,7 +23,9 @@ from onyx.llm.interfaces import ToolChoiceOptions
 from onyx.llm.model_response import ModelResponse
 from onyx.llm.model_response import ModelResponseStream
 from onyx.llm.model_response import Usage
+from onyx.llm.models import ANTHROPIC_REASONING_EFFORT_BUDGET
 from onyx.llm.models import OPENAI_REASONING_EFFORT
+from onyx.llm.request_context import get_llm_mock_response
 from onyx.llm.utils import build_litellm_passthrough_kwargs
 from onyx.llm.utils import is_true_openai_model
 from onyx.llm.utils import model_is_reasoning_model
@@ -43,19 +48,25 @@ from onyx.llm.well_known_providers.constants import (
     VERTEX_CREDENTIALS_FILE_KWARG_ENV_VAR_FORMAT,
 )
 from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
-from onyx.server.utils import mask_string
+from onyx.utils.encryption import mask_string
 from onyx.utils.logger import setup_logger
-from onyx.utils.special_types import JSON_ro
 
 logger = setup_logger()
 
+_env_lock = threading.Lock()
+
 if TYPE_CHECKING:
     from litellm import CustomStreamWrapper
+    from litellm import HTTPHandler
 
 
 _LLM_PROMPT_LONG_TERM_LOG_CATEGORY = "llm_prompt"
 LEGACY_MAX_TOKENS_KWARG = "max_tokens"
 STANDARD_MAX_TOKENS_KWARG = "max_completion_tokens"
+_VERTEX_ANTHROPIC_MODELS_REJECTING_OUTPUT_CONFIG = (
+    "claude-opus-4-5",
+    "claude-opus-4-6",
+)
 
 
 class LLMTimeoutError(Exception):
@@ -81,8 +92,12 @@ def _prompt_to_dicts(prompt: LanguageModelInput) -> list[dict[str, Any]]:
     return [prompt.model_dump(exclude_none=True)]
 
 
-def _prompt_as_json(prompt: LanguageModelInput) -> JSON_ro:
-    return cast(JSON_ro, _prompt_to_dicts(prompt))
+def _is_vertex_model_rejecting_output_config(model_name: str) -> bool:
+    normalized_model_name = model_name.lower()
+    return any(
+        blocked_model in normalized_model_name
+        for blocked_model in _VERTEX_ANTHROPIC_MODELS_REJECTING_OUTPUT_CONFIG
+    )
 
 
 class LitellmLLM(LLM):
@@ -106,12 +121,14 @@ class LitellmLLM(LLM):
         extra_body: dict | None = LITELLM_EXTRA_BODY,
         model_kwargs: dict[str, Any] | None = None,
     ):
+        # Timeout in seconds for each socket read operation (i.e., max time between
+        # receiving data chunks/tokens). This is NOT a total request timeout - a
+        # request can run indefinitely as long as data keeps arriving within this
+        # window. If the LLM pauses for longer than this timeout between chunks,
+        # a ReadTimeout is raised.
         self._timeout = timeout
         if timeout is None:
-            if model_is_reasoning_model(model_name, model_provider):
-                self._timeout = QA_TIMEOUT * 10  # Reasoning models are slow
-            else:
-                self._timeout = QA_TIMEOUT
+            self._timeout = LLM_SOCKET_READ_TIMEOUT
 
         self._temperature = GEN_AI_TEMPERATURE if temperature is None else temperature
 
@@ -235,12 +252,14 @@ class LitellmLLM(LLM):
         tool_choice: ToolChoiceOptions | None,
         stream: bool,
         parallel_tool_calls: bool,
-        reasoning_effort: ReasoningEffort | None = None,
+        reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
         user_identity: LLMUserIdentity | None = None,
+        client: "HTTPHandler | None" = None,
     ) -> Union["ModelResponse", "CustomStreamWrapper"]:
+        # Lazy loading to avoid memory bloat for non-inference flows
         from onyx.llm.litellm_singleton import litellm
         from litellm.exceptions import Timeout, RateLimitError
 
@@ -259,10 +278,11 @@ class LitellmLLM(LLM):
         is_ollama = self._model_provider == LlmProviderNames.OLLAMA_CHAT
         is_mistral = self._model_provider == LlmProviderNames.MISTRAL
         is_vertex_ai = self._model_provider == LlmProviderNames.VERTEX_AI
-        # Vertex Anthropic Opus 4.5 rejects output_config (LiteLLM maps reasoning_effort).
-        # Keep this guard until LiteLLM/Vertex accept the field for this model.
-        is_vertex_opus_4_5 = (
-            is_vertex_ai and "claude-opus-4-5" in self.config.model_name.lower()
+        # Some Vertex Anthropic models reject output_config.
+        # Keep this guard until LiteLLM/Vertex accept the field for these models.
+        is_vertex_model_rejecting_output_config = (
+            is_vertex_ai
+            and _is_vertex_model_rejecting_output_config(self.config.model_name)
         )
 
         #########################
@@ -294,15 +314,16 @@ class LitellmLLM(LLM):
         # Temperature
         temperature = 1 if is_reasoning else self._temperature
 
-        if stream and not is_vertex_opus_4_5:
+        if stream and not is_vertex_model_rejecting_output_config:
             optional_kwargs["stream_options"] = {"include_usage": True}
 
-        # Use configured default if not provided (if not set in env, low)
-        reasoning_effort = reasoning_effort or ReasoningEffort(DEFAULT_REASONING_EFFORT)
+        # Note, there is a reasoning_effort parameter in LiteLLM but it is completely jank and does not work for any
+        # of the major providers. Not setting it sets it to OFF.
         if (
             is_reasoning
+            # The default of this parameter not set is surprisingly not the equivalent of an Auto but is actually Off
             and reasoning_effort != ReasoningEffort.OFF
-            and not is_vertex_opus_4_5
+            and not is_vertex_model_rejecting_output_config
         ):
             if is_openai_model:
                 # OpenAI API does not accept reasoning params for GPT 5 chat models
@@ -313,10 +334,38 @@ class LitellmLLM(LLM):
                         "effort": OPENAI_REASONING_EFFORT[reasoning_effort],
                         "summary": "auto",
                     }
+
+            elif is_claude_model:
+                budget_tokens: int | None = ANTHROPIC_REASONING_EFFORT_BUDGET.get(
+                    reasoning_effort
+                )
+
+                if budget_tokens is not None:
+                    if max_tokens is not None:
+                        # Anthropic has a weird rule where max token has to be at least as much as budget tokens if set
+                        # and the minimum budget tokens is 1024
+                        # Will note that overwriting a developer set max tokens is not ideal but is the best we can do for now
+                        # It is better to allow the LLM to output more reasoning tokens even if it results in a fairly small tool
+                        # call as compared to reducing the budget for reasoning.
+                        max_tokens = max(budget_tokens + 1, max_tokens)
+                    optional_kwargs["thinking"] = {
+                        "type": "enabled",
+                        "budget_tokens": budget_tokens,
+                    }
+
+                # LiteLLM just does some mapping like this anyway but is incomplete for Anthropic
+                optional_kwargs.pop("reasoning_effort", None)
+
             else:
-                # Note that litellm auto maps reasoning_effort to thinking
-                # and budget_tokens for Anthropic Claude models
-                optional_kwargs["reasoning_effort"] = reasoning_effort
+                # Hope for the best from LiteLLM
+                if reasoning_effort in [
+                    ReasoningEffort.LOW,
+                    ReasoningEffort.MEDIUM,
+                    ReasoningEffort.HIGH,
+                ]:
+                    optional_kwargs["reasoning_effort"] = reasoning_effort.value
+                else:
+                    optional_kwargs["reasoning_effort"] = ReasoningEffort.MEDIUM.value
 
         if tools:
             # OpenAI will error if parallel_tool_calls is True and tools are not specified
@@ -347,22 +396,31 @@ class LitellmLLM(LLM):
             # does we allow it to clobber _api_key.
             if "api_key" not in passthrough_kwargs:
                 passthrough_kwargs["api_key"] = self._api_key or None
-            response = litellm.completion(
-                mock_response=MOCK_LLM_RESPONSE,
-                model=model,
-                base_url=self._api_base or None,
-                api_version=self._api_version or None,
-                custom_llm_provider=self._custom_llm_provider or None,
-                messages=_prompt_to_dicts(prompt),
-                tools=tools,
-                tool_choice=tool_choice,
-                stream=stream,
-                temperature=temperature,
-                timeout=timeout_override or self._timeout,
-                max_tokens=max_tokens,
-                **optional_kwargs,
-                **passthrough_kwargs,
+
+            # We only need to set environment variables if custom config is set
+            env_ctx = (
+                temporary_env_and_lock(self._custom_config)
+                if self._custom_config
+                else nullcontext()
             )
+            with env_ctx:
+                response = litellm.completion(
+                    mock_response=get_llm_mock_response() or MOCK_LLM_RESPONSE,
+                    model=model,
+                    base_url=self._api_base or None,
+                    api_version=self._api_version or None,
+                    custom_llm_provider=self._custom_llm_provider or None,
+                    messages=_prompt_to_dicts(prompt),
+                    tools=tools,
+                    tool_choice=tool_choice,
+                    stream=stream,
+                    temperature=temperature,
+                    timeout=timeout_override or self._timeout,
+                    max_tokens=max_tokens,
+                    client=client,
+                    **optional_kwargs,
+                    **passthrough_kwargs,
+                )
             return response
         except Exception as e:
             # for break pointing
@@ -396,36 +454,93 @@ class LitellmLLM(LLM):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
-        reasoning_effort: ReasoningEffort | None = None,
+        reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
     ) -> ModelResponse:
+        from litellm import HTTPHandler
         from litellm import ModelResponse as LiteLLMModelResponse
 
         from onyx.llm.model_response import from_litellm_model_response
 
-        response = cast(
-            LiteLLMModelResponse,
-            self._completion(
-                prompt=prompt,
-                tools=tools,
-                tool_choice=tool_choice,
-                stream=False,
-                structured_response_format=structured_response_format,
-                timeout_override=timeout_override,
-                max_tokens=max_tokens,
-                parallel_tool_calls=True,
-                reasoning_effort=reasoning_effort,
-                user_identity=user_identity,
-            ),
-        )
+        # HTTPHandler Threading & Connection Pool Notes:
+        # =============================================
+        # We create an isolated HTTPHandler ONLY for true OpenAI models (not OpenAI-compatible
+        # providers like glm-4.7, DeepSeek, etc.). This distinction is critical:
+        #
+        # 1. WHY ONLY TRUE OPENAI MODELS:
+        #    - True OpenAI models use litellm's "responses API" path which expects HTTPHandler
+        #    - OpenAI-compatible providers (model_provider="openai" with non-OpenAI models)
+        #      use the standard completion path which expects OpenAI SDK client objects
+        #    - Passing HTTPHandler to OpenAI-compatible providers causes:
+        #      AttributeError: 'HTTPHandler' object has no attribute 'api_key'
+        #      (because _get_openai_client() calls openai_client.api_key on line ~929)
+        #
+        # 2. WHY ISOLATED HTTPHandler FOR OPENAI:
+        #    - Prevents "Bad file descriptor" errors when multiple threads stream concurrently
+        #    - Shared connection pools can have stale connections or abandoned streams that
+        #      corrupt the pool state for other threads
+        #    - Each request gets its own fresh httpx.Client via HTTPHandler
+        #
+        # 3. WHY OTHER PROVIDERS DON'T NEED THIS:
+        #    - Other providers (Anthropic, Bedrock, etc.) use litellm.module_level_client
+        #      which handles concurrency appropriately
+        #    - httpx.Client itself IS thread-safe for concurrent requests
+        #    - The issue is specific to OpenAI's responses API path and connection reuse
+        #
+        # 4. PITFALL - is_true_openai_model() CHECK:
+        #    - Must use is_true_openai_model() NOT just check model_provider == "openai"
+        #    - Many OpenAI-compatible providers set model_provider="openai" but are NOT true
+        #      OpenAI models (glm-4.7, DeepSeek, local proxies, etc.)
+        #    - is_true_openai_model() checks both provider AND model name patterns
+        #
+        # This note may not be entirely accurate as there is a lot of complexity in the LiteLLM codebase around this
+        # and not every model path was traced thoroughly. It is also possible that in future versions of LiteLLM
+        # they will realize that their OpenAI handling is not threadsafe. Hope they will just fix it.
+        client = None
+        if is_true_openai_model(self.config.model_provider, self.config.model_name):
+            client = HTTPHandler(timeout=timeout_override or self._timeout)
 
-        model_response = from_litellm_model_response(response)
+        try:
+            # When custom_config is set, env vars are temporarily injected
+            # under a global lock. Using stream=True here means the lock is
+            # only held during connection setup (not the full inference).
+            # The chunks are then collected outside the lock and reassembled
+            # into a single ModelResponse via stream_chunk_builder.
+            from litellm import stream_chunk_builder
+            from litellm import CustomStreamWrapper as LiteLLMCustomStreamWrapper
 
-        # Track LLM cost for Onyx-managed API keys
-        if model_response.usage:
-            self._track_llm_cost(model_response.usage)
+            stream_response = cast(
+                LiteLLMCustomStreamWrapper,
+                self._completion(
+                    prompt=prompt,
+                    tools=tools,
+                    tool_choice=tool_choice,
+                    stream=True,
+                    structured_response_format=structured_response_format,
+                    timeout_override=timeout_override,
+                    max_tokens=max_tokens,
+                    parallel_tool_calls=True,
+                    reasoning_effort=reasoning_effort,
+                    user_identity=user_identity,
+                    client=client,
+                ),
+            )
+            chunks = list(stream_response)
+            response = cast(
+                LiteLLMModelResponse,
+                stream_chunk_builder(chunks),
+            )
 
-        return model_response
+            model_response = from_litellm_model_response(response)
+
+            # Track LLM cost for Onyx-managed API keys
+            if model_response.usage:
+                self._track_llm_cost(model_response.usage)
+
+            return model_response
+        finally:
+            if client is not None:
+                client.close()
 
     def stream(
         self,
@@ -435,33 +550,99 @@ class LitellmLLM(LLM):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
-        reasoning_effort: ReasoningEffort | None = None,
+        reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
     ) -> Iterator[ModelResponseStream]:
         from litellm import CustomStreamWrapper as LiteLLMCustomStreamWrapper
+        from litellm import HTTPHandler
+
         from onyx.llm.model_response import from_litellm_model_response_stream
 
-        response = cast(
-            LiteLLMCustomStreamWrapper,
-            self._completion(
-                prompt=prompt,
-                tools=tools,
-                tool_choice=tool_choice,
-                stream=True,
-                structured_response_format=structured_response_format,
-                timeout_override=timeout_override,
-                max_tokens=max_tokens,
-                parallel_tool_calls=True,
-                reasoning_effort=reasoning_effort,
-                user_identity=user_identity,
-            ),
-        )
+        # HTTPHandler Threading & Connection Pool Notes:
+        # =============================================
+        # See invoke() method for full explanation. Key points for streaming:
+        #
+        # 1. SAME RESTRICTIONS APPLY:
+        #    - HTTPHandler ONLY for true OpenAI models (use is_true_openai_model())
+        #    - OpenAI-compatible providers will fail with AttributeError on api_key
+        #
+        # 2. STREAMING-SPECIFIC CONCERNS:
+        #    - "Bad file descriptor" errors are MORE common during streaming because:
+        #      a) Streams hold connections open longer, increasing conflict window
+        #      b) Multiple concurrent streams (e.g., deep research) share the pool
+        #      c) Abandoned/interrupted streams can leave connections in bad state
+        #
+        # 3. ABANDONED STREAM PITFALL:
+        #    - If callers abandon this generator without fully consuming it (e.g.,
+        #      early return, exception, or break), the finally block won't execute
+        #      until the generator is garbage collected
+        #    - This is acceptable because:
+        #      a) CPython's refcounting typically finalizes generators promptly
+        #      b) Each HTTPHandler has its own isolated connection pool
+        #      c) httpx has built-in connection timeouts as a fallback
+        #    - If abandoned streams become problematic, consider using contextlib
+        #      or explicit stream.close() at call sites
+        #
+        # 4. WHY NOT USE SHARED HTTPHandler:
+        #    - litellm's InMemoryCache (used for client caching) is NOT thread-safe
+        #    - Shared pools can have connections corrupted by other threads
+        #    - Per-request HTTPHandler eliminates cross-thread interference
+        client = None
+        if is_true_openai_model(self.config.model_provider, self.config.model_name):
+            client = HTTPHandler(timeout=timeout_override or self._timeout)
 
-        for chunk in response:
-            model_response = from_litellm_model_response_stream(chunk)
+        try:
+            response = cast(
+                LiteLLMCustomStreamWrapper,
+                self._completion(
+                    prompt=prompt,
+                    tools=tools,
+                    tool_choice=tool_choice,
+                    stream=True,
+                    structured_response_format=structured_response_format,
+                    timeout_override=timeout_override,
+                    max_tokens=max_tokens,
+                    parallel_tool_calls=True,
+                    reasoning_effort=reasoning_effort,
+                    user_identity=user_identity,
+                    client=client,
+                ),
+            )
 
-            # Track LLM cost when usage info is available (typically in the last chunk)
-            if model_response.usage:
-                self._track_llm_cost(model_response.usage)
+            for chunk in response:
+                model_response = from_litellm_model_response_stream(chunk)
 
-            yield model_response
+                # Track LLM cost when usage info is available (typically in the last chunk)
+                if model_response.usage:
+                    self._track_llm_cost(model_response.usage)
+
+                yield model_response
+        finally:
+            if client is not None:
+                client.close()
+
+
+@contextmanager
+def temporary_env_and_lock(env_variables: dict[str, str]) -> Iterator[None]:
+    """
+    Temporarily sets the environment variables to the given values.
+    Code path is locked while the environment variables are set.
+    Then cleans up the environment and frees the lock.
+    """
+    with _env_lock:
+        logger.debug("Acquired lock in temporary_env_and_lock")
+        # Store original values (None if key didn't exist)
+        original_values: dict[str, str | None] = {
+            key: os.environ.get(key) for key in env_variables
+        }
+        try:
+            os.environ.update(env_variables)
+            yield
+        finally:
+            for key, original_value in original_values.items():
+                if original_value is None:
+                    os.environ.pop(key, None)  # Remove if it didn't exist before
+                else:
+                    os.environ[key] = original_value  # Restore original value
+
+    logger.debug("Released lock in temporary_env_and_lock")

@@ -85,7 +85,7 @@ def send_message(
     Enforces rate limiting before executing the agent (via dependency).
     Returns a Server-Sent Events (SSE) stream with the agent's response.
 
-    Follows the same pattern as /chat/send-message for consistency.
+    Follows the same pattern as /chat/send-chat-message for consistency.
     """
 
     def stream_generator() -> Generator[str, None, None]:

@@ -6,6 +6,7 @@ from celery.schedules import crontab
 
 from onyx.configs.app_configs import AUTO_LLM_CONFIG_URL
 from onyx.configs.app_configs import AUTO_LLM_UPDATE_INTERVAL_SECONDS
+from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.app_configs import ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
 from onyx.configs.app_configs import ENTERPRISE_EDITION_ENABLED
 from onyx.configs.app_configs import SCHEDULED_EVAL_DATASET_NAMES
@@ -215,26 +216,39 @@ if SCHEDULED_EVAL_DATASET_NAMES:
 if ENABLE_OPENSEARCH_INDEXING_FOR_ONYX:
     beat_task_templates.append(
         {
-            "name": "check-for-documents-for-opensearch-migration",
-            "task": OnyxCeleryTask.CHECK_FOR_DOCUMENTS_FOR_OPENSEARCH_MIGRATION_TASK,
+            "name": "migrate-chunks-from-vespa-to-opensearch",
+            "task": OnyxCeleryTask.MIGRATE_CHUNKS_FROM_VESPA_TO_OPENSEARCH_TASK,
+            # Try to enqueue an invocation of this task with this frequency.
             "schedule": timedelta(seconds=120),  # 2 minutes
             "options": {
                 "priority": OnyxCeleryPriority.LOW,
+                # If the task was not dequeued in this time, revoke it.
                 "expires": BEAT_EXPIRES_DEFAULT,
+                "queue": OnyxCeleryQueues.OPENSEARCH_MIGRATION,
             },
         }
     )
-    beat_task_templates.append(
-        {
-            "name": "migrate-documents-from-vespa-to-opensearch",
-            "task": OnyxCeleryTask.MIGRATE_DOCUMENT_FROM_VESPA_TO_OPENSEARCH_TASK,
-            "schedule": timedelta(seconds=120),  # 2 minutes
-            "options": {
-                "priority": OnyxCeleryPriority.LOW,
-                "expires": BEAT_EXPIRES_DEFAULT,
-            },
-        }
-    )
+
+
+# Beat task names that require a vector DB. Filtered out when DISABLE_VECTOR_DB.
+_VECTOR_DB_BEAT_TASK_NAMES: set[str] = {
+    "check-for-indexing",
+    "check-for-connector-deletion",
+    "check-for-vespa-sync",
+    "check-for-pruning",
+    "check-for-hierarchy-fetching",
+    "check-for-checkpoint-cleanup",
+    "check-for-index-attempt-cleanup",
+    "check-for-doc-permissions-sync",
+    "check-for-external-group-sync",
+    "check-for-documents-for-opensearch-migration",
+    "migrate-documents-from-vespa-to-opensearch",
+}
+
+if DISABLE_VECTOR_DB:
+    beat_task_templates = [
+        t for t in beat_task_templates if t["name"] not in _VECTOR_DB_BEAT_TASK_NAMES
+    ]
 
 
 def make_cloud_generator_task(task: dict[str, Any]) -> dict[str, Any]:

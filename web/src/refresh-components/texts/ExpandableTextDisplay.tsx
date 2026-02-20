@@ -1,13 +1,12 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect, useLayoutEffect } from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import Modal from "@/refresh-components/Modal";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import Text from "@/refresh-components/texts/Text";
-import FadingEdgeContainer from "@/refresh-components/FadingEdgeContainer";
 import { SvgDownload, SvgMaximize2, SvgX } from "@opal/icons";
+import { Button } from "@opal/components";
 import { cn } from "@/lib/utils";
 
 export interface ExpandableTextDisplayProps {
@@ -19,24 +18,51 @@ export interface ExpandableTextDisplayProps {
   displayContent?: string;
   /** Subtitle text (e.g., file size). If not provided, calculates from content */
   subtitle?: string;
-  /** Maximum lines to show in collapsed state (1-6). Values outside this range default to 5. */
-  maxLines?: 1 | 2 | 3 | 4 | 5 | 6;
+  /** Maximum lines to show in collapsed state (1-10). Values outside this range default to 8. */
+  maxLines?: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
   /** Additional className for the container */
   className?: string;
-  /** Optional custom renderer for content (e.g., markdown). Falls back to plain text. */
-  renderContent?: (content: string) => React.ReactNode;
+  /** Optional custom renderer for content (e.g., markdown). Falls back to plain text.
+   * @param content - The text content to render
+   * @param isExpanded - Whether the content is being rendered in expanded (modal) view
+   */
+  renderContent?: (content: string, isExpanded: boolean) => React.ReactNode;
+  /** When true, shows last N lines with top-truncation (ellipsis at top) instead of bottom-truncation */
+  isStreaming?: boolean;
 }
 
 /** Calculate content size in human-readable format */
 function getContentSize(text: string): string {
   const bytes = new Blob([text]).size;
-  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024) return `${bytes} Bytes`;
   return `${(bytes / 1024).toFixed(2)} KB`;
 }
 
 /** Count lines in text */
 function getLineCount(text: string): number {
   return text.split("\n").length;
+}
+
+/** Extract the last N lines from text for streaming display.
+ * When truncated, returns (maxLines - 1) lines to leave room for ellipsis.
+ */
+function getLastLines(
+  text: string,
+  maxLines: number
+): { lines: string; hasTruncation: boolean } {
+  const allLines = text.split("\n");
+  if (allLines.length <= maxLines) {
+    return { lines: text, hasTruncation: false };
+  }
+  // Reserve one line for ellipsis, show last (maxLines - 1) content lines
+  const linesToShow = maxLines - 1;
+  if (linesToShow <= 0) {
+    return { lines: "", hasTruncation: true };
+  }
+  return {
+    lines: allLines.slice(-linesToShow).join("\n"),
+    hasTruncation: true,
+  };
 }
 
 /** Download content as a .txt file */
@@ -55,63 +81,241 @@ function downloadAsTxt(content: string, filename: string) {
   }
 }
 
+/** Block-level HTML tags used by the snap algorithm to recurse into containers. */
+const CONTAINER_TAGS = new Set([
+  "UL",
+  "OL",
+  "LI",
+  "BLOCKQUOTE",
+  "DIV",
+  "DL",
+  "DD",
+  "TABLE",
+  "TBODY",
+  "THEAD",
+  "TR",
+  "TH",
+  "TD",
+  "SECTION",
+  "DETAILS",
+  "PRE",
+  "FIGURE",
+  "FIGCAPTION",
+  "ARTICLE",
+  "ASIDE",
+  "HEADER",
+  "FOOTER",
+  "MAIN",
+  "NAV",
+]);
+
 export default function ExpandableTextDisplay({
   title,
   content,
   displayContent,
   subtitle,
-  maxLines = 5,
+  maxLines = 8,
   className,
   renderContent,
+  isStreaming = false,
 }: ExpandableTextDisplayProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isTruncated, setIsTruncated] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const contentInnerRef = useRef<HTMLDivElement>(null);
 
   const lineCount = useMemo(() => getLineCount(content), [content]);
   const contentSize = useMemo(() => getContentSize(content), [content]);
   const displaySubtitle = subtitle ?? contentSize;
+
+  // Truncation detection (read-only, doesn't need to block paint)
+  useEffect(() => {
+    if (renderContent && scrollRef.current) {
+      setIsTruncated(
+        scrollRef.current.scrollHeight > scrollRef.current.clientHeight
+      );
+    } else if (isStreaming) {
+      const textToCheck = displayContent ?? content;
+      setIsTruncated(getLineCount(textToCheck) > maxLines);
+    } else if (scrollRef.current) {
+      setIsTruncated(
+        scrollRef.current.scrollHeight > scrollRef.current.clientHeight
+      );
+    }
+  }, [isStreaming, renderContent, content, displayContent, maxLines]);
+
+  // Shift content upward during streaming for renderContent mode,
+  // snapping to element boundaries so blocks are never partially clipped.
+  // Must block paint to avoid flicker.
+  useLayoutEffect(() => {
+    if (
+      !isStreaming ||
+      !renderContent ||
+      !scrollRef.current ||
+      !contentInnerRef.current
+    ) {
+      return;
+    }
+
+    const containerHeight = scrollRef.current.clientHeight;
+    const contentHeight = contentInnerRef.current.scrollHeight;
+    let overflow = Math.max(0, contentHeight - containerHeight);
+
+    if (overflow > 0) {
+      let blockParent: Element = contentInnerRef.current;
+      while (
+        blockParent.children.length === 1 &&
+        blockParent.children[0]!.children.length > 0
+      ) {
+        blockParent = blockParent.children[0]!;
+      }
+
+      contentInnerRef.current.style.transform = "translateY(0)";
+      const refTop = contentInnerRef.current.getBoundingClientRect().top;
+
+      let snapParent: Element = blockParent;
+      let snap = overflow;
+      while (true) {
+        let found = false;
+        for (let i = 0; i < snapParent.children.length; i++) {
+          const child = snapParent.children[i] as HTMLElement;
+          const rect = child.getBoundingClientRect();
+          const top = rect.top - refTop;
+          const bottom = top + rect.height;
+          if (top < snap && snap < bottom) {
+            if (
+              child.children.length > 0 &&
+              CONTAINER_TAGS.has(child.tagName)
+            ) {
+              snapParent = child;
+              found = true;
+              break;
+            }
+            snap = bottom;
+            found = true;
+            break;
+          }
+        }
+        if (!found) break;
+        if (snap !== overflow) break;
+      }
+      overflow = snap;
+    }
+
+    contentInnerRef.current.style.transform =
+      overflow > 0 ? `translateY(-${overflow}px)` : "translateY(0)";
+  }, [isStreaming, renderContent, content, displayContent, maxLines]);
 
   const handleDownload = () => {
     const sanitizedTitle = title.replace(/[^a-z0-9]/gi, "_").toLowerCase();
     downloadAsTxt(content, sanitizedTitle);
   };
 
-  const lineClampClassMap: Record<number, string> = {
-    1: "line-clamp-1",
-    2: "line-clamp-2",
-    3: "line-clamp-3",
-    4: "line-clamp-4",
-    5: "line-clamp-5",
-    6: "line-clamp-6",
+  // Map maxLines to Tailwind line-clamp classes (fallback to 8 for invalid runtime values)
+  const lineClampClass =
+    {
+      1: "line-clamp-1",
+      2: "line-clamp-2",
+      3: "line-clamp-3",
+      4: "line-clamp-4",
+      5: "line-clamp-5",
+      6: "line-clamp-6",
+      7: "line-clamp-7",
+      8: "line-clamp-8",
+      9: "line-clamp-9",
+      10: "line-clamp-10",
+    }[maxLines] ?? "line-clamp-8";
+
+  // Single container for renderContent mode (both streaming and static)
+  // Keeps scrollRef alive across the streaming → static transition
+  const renderContentWithRef = () => {
+    const textToDisplay = displayContent ?? content;
+
+    if (isStreaming) {
+      // During streaming: use max-height with overflow-hidden and CSS transform to shift
+      // content upward, showing the latest content from the bottom without scroll jitter.
+      // Line height is approximately 1.5rem (24px) for body text.
+      // We show a top ellipsis indicator when content is truncated.
+      return (
+        <div>
+          {isTruncated && (
+            <Text as="p" text03 mainUiMuted className="!my-0">
+              …
+            </Text>
+          )}
+          <div
+            ref={scrollRef}
+            className="overflow-hidden"
+            style={{ maxHeight: `calc(${maxLines} * 1.5rem)` }}
+          >
+            <div ref={contentInnerRef}>
+              {renderContent!(textToDisplay, false)}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Static mode: use CSS line-clamp for bottom truncation
+    return (
+      <div ref={scrollRef} className={cn("overflow-hidden", lineClampClass)}>
+        {renderContent!(textToDisplay, false)}
+      </div>
+    );
   };
-  const lineClampClass = lineClampClassMap[maxLines] ?? "line-clamp-5";
+
+  // Render plain text streaming (top-truncation with last N lines)
+  const renderPlainTextStreaming = () => {
+    const textToDisplay = displayContent ?? content;
+    const { lines, hasTruncation } = getLastLines(textToDisplay, maxLines);
+
+    return (
+      <div ref={scrollRef} className="overflow-hidden">
+        {hasTruncation && (
+          <Text as="span" mainUiMuted text03>
+            …{"\n"}
+          </Text>
+        )}
+        <Text as="p" mainUiMuted text03 className="whitespace-pre-wrap">
+          {lines}
+        </Text>
+      </div>
+    );
+  };
+
+  // Render plain text static (CSS line-clamp + scroll-based truncation detection)
+  const renderPlainTextStatic = () => (
+    <div ref={scrollRef} className={cn("overflow-hidden", lineClampClass)}>
+      <Text as="span" mainUiMuted text03 className="whitespace-pre-wrap">
+        {displayContent ?? content}
+      </Text>
+    </div>
+  );
 
   return (
     <>
       {/* Collapsed View */}
-      <div className={cn("w-full", className)}>
-        <div
-          className={cn(
-            lineClampClass,
-            !renderContent && "whitespace-pre-wrap"
-          )}
-        >
-          {renderContent ? (
-            renderContent(displayContent ?? content)
-          ) : (
-            <Text as="p" mainUiMuted text03>
-              {displayContent ?? content}
-            </Text>
-          )}
+      <div className={cn("w-full flex", className)}>
+        <div className="flex-1 min-w-0">
+          {renderContent
+            ? renderContentWithRef()
+            : isStreaming
+              ? renderPlainTextStreaming()
+              : renderPlainTextStatic()}
         </div>
 
-        {/* Expand button */}
-        <div className="flex justify-end mt-1">
-          <IconButton
-            internal
-            icon={SvgMaximize2}
-            tooltip="View Full Text"
-            onClick={() => setIsModalOpen(true)}
-          />
+        {/* Expand button - only show when content is truncated */}
+
+        <div className="flex justify-end self-end mt-1 w-8">
+          {isTruncated && (
+            <Button
+              prominence="tertiary"
+              size="sm"
+              icon={SvgMaximize2}
+              tooltip="View Full Text"
+              onClick={() => setIsModalOpen(true)}
+            />
+          )}
         </div>
       </div>
 
@@ -133,9 +337,10 @@ export default function ExpandableTextDisplay({
               </DialogPrimitive.Description>
             </div>
             <DialogPrimitive.Close asChild>
-              <IconButton
+              <Button
                 icon={SvgX}
-                internal
+                prominence="tertiary"
+                size="sm"
                 onClick={() => setIsModalOpen(false)}
               />
             </DialogPrimitive.Close>
@@ -144,7 +349,7 @@ export default function ExpandableTextDisplay({
           {/* Body */}
           <Modal.Body>
             {renderContent ? (
-              renderContent(content)
+              renderContent(content, true)
             ) : (
               <Text as="p" mainUiMuted text03 className="whitespace-pre-wrap">
                 {content}
@@ -161,12 +366,14 @@ export default function ExpandableTextDisplay({
             </div>
             <div className="flex items-center gap-1 bg-background-tint-00 p-1 rounded-12">
               <CopyIconButton
-                internal
+                prominence="tertiary"
+                size="sm"
                 getCopyText={() => content}
                 tooltip="Copy"
               />
-              <IconButton
-                internal
+              <Button
+                prominence="tertiary"
+                size="sm"
                 icon={SvgDownload}
                 tooltip="Download"
                 onClick={handleDownload}

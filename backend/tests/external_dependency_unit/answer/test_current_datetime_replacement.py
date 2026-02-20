@@ -4,21 +4,22 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 from onyx.chat.models import AnswerStreamPart
-from onyx.chat.models import MessageResponseIDInfo
 from onyx.chat.models import StreamingError
-from onyx.chat.process_message import stream_chat_message_objects
+from onyx.chat.process_message import handle_stream_message_objects
 from onyx.db.chat import create_chat_session
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
-from onyx.server.query_and_chat.models import CreateChatMessageRequest
-from onyx.server.query_and_chat.models import RetrievalDetails
+from onyx.server.query_and_chat.models import MessageResponseIDInfo
+from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from tests.external_dependency_unit.answer.conftest import ensure_default_llm_provider
 from tests.external_dependency_unit.conftest import create_test_user
 
 
 def test_stream_chat_current_date_response(
-    db_session: Session, full_deployment_setup: None, mock_external_deps: None
+    db_session: Session,
+    full_deployment_setup: None,  # noqa: ARG001
+    mock_external_deps: None,  # noqa: ARG001
 ) -> None:
     """Smoke test that asking for current date yields a streamed response.
 
@@ -40,18 +41,12 @@ def test_stream_chat_current_date_response(
         persona_id=default_persona.id,
     )
 
-    chat_request = CreateChatMessageRequest(
-        chat_session_id=chat_session.id,
-        parent_message_id=None,
+    chat_request = SendMessageRequest(
         message="Please respond only with the current date in the format 'Weekday Month DD, YYYY'.",
-        file_descriptors=[],
-        prompt_override=None,
-        search_doc_ids=None,
-        retrieval_options=RetrievalDetails(),
-        query_override=None,
+        chat_session_id=chat_session.id,
     )
 
-    gen = stream_chat_message_objects(
+    gen = handle_stream_message_objects(
         new_msg_req=chat_request,
         user=test_user,
         db_session=db_session,

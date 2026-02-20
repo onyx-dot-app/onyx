@@ -145,8 +145,6 @@ export function OllamaForm({
       {({
         onClose,
         mutate,
-        popup,
-        setPopup,
         isTesting,
         setIsTesting,
         testError,
@@ -175,62 +173,58 @@ export function OllamaForm({
         });
 
         return (
-          <>
-            {popup}
-            <Formik
-              initialValues={initialValues}
-              validationSchema={validationSchema}
-              validateOnMount={true}
-              onSubmit={async (values, { setSubmitting }) => {
-                // Filter out empty custom_config values
-                const filteredCustomConfig = Object.fromEntries(
-                  Object.entries(values.custom_config || {}).filter(
-                    ([, v]) => v !== ""
-                  )
-                );
+          <Formik
+            initialValues={initialValues}
+            validationSchema={validationSchema}
+            validateOnMount={true}
+            onSubmit={async (values, { setSubmitting }) => {
+              // Filter out empty custom_config values
+              const filteredCustomConfig = Object.fromEntries(
+                Object.entries(values.custom_config || {}).filter(
+                  ([, v]) => v !== ""
+                )
+              );
 
-                const submitValues = {
-                  ...values,
-                  custom_config:
-                    Object.keys(filteredCustomConfig).length > 0
-                      ? filteredCustomConfig
-                      : undefined,
-                };
+              const submitValues = {
+                ...values,
+                custom_config:
+                  Object.keys(filteredCustomConfig).length > 0
+                    ? filteredCustomConfig
+                    : undefined,
+              };
 
-                await submitLLMProvider({
-                  providerName: OLLAMA_PROVIDER_NAME,
-                  values: submitValues,
-                  initialValues,
-                  modelConfigurations:
-                    fetchedModels.length > 0
-                      ? fetchedModels
-                      : modelConfigurations,
-                  existingLlmProvider,
-                  shouldMarkAsDefault,
-                  setIsTesting,
-                  setTestError,
-                  setPopup,
-                  mutate,
-                  onClose,
-                  setSubmitting,
-                });
-              }}
-            >
-              {(formikProps) => (
-                <OllamaFormContent
-                  formikProps={formikProps}
-                  existingLlmProvider={existingLlmProvider}
-                  fetchedModels={fetchedModels}
-                  setFetchedModels={setFetchedModels}
-                  isTesting={isTesting}
-                  testError={testError}
-                  mutate={mutate}
-                  onClose={onClose}
-                  isFormValid={formikProps.isValid}
-                />
-              )}
-            </Formik>
-          </>
+              await submitLLMProvider({
+                providerName: OLLAMA_PROVIDER_NAME,
+                values: submitValues,
+                initialValues,
+                modelConfigurations:
+                  fetchedModels.length > 0
+                    ? fetchedModels
+                    : modelConfigurations,
+                existingLlmProvider,
+                shouldMarkAsDefault,
+                setIsTesting,
+                setTestError,
+                mutate,
+                onClose,
+                setSubmitting,
+              });
+            }}
+          >
+            {(formikProps) => (
+              <OllamaFormContent
+                formikProps={formikProps}
+                existingLlmProvider={existingLlmProvider}
+                fetchedModels={fetchedModels}
+                setFetchedModels={setFetchedModels}
+                isTesting={isTesting}
+                testError={testError}
+                mutate={mutate}
+                onClose={onClose}
+                isFormValid={formikProps.isValid}
+              />
+            )}
+          </Formik>
         );
       }}
     </ProviderFormEntrypointWrapper>

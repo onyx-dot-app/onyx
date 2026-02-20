@@ -6,10 +6,8 @@ import {
   updateLlmOverrideForChatSession,
 } from "@/app/app/services/lib";
 import { StreamStopInfo } from "@/lib/search/interfaces";
-
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Route } from "next";
-import { stopChatSession } from "@/app/app/chat_search/utils";
 import {
   getLastSuccessfulMessageId,
   getLatestMessageChain,
@@ -50,7 +48,7 @@ import {
   updateCurrentMessageFIFO,
 } from "@/app/app/services/currentMessageFIFO";
 import { buildFilters } from "@/lib/search/utils";
-import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import {
   ReadonlyURLSearchParams,
   usePathname,
@@ -107,9 +105,21 @@ interface UseChatControllerProps {
   existingChatSessionId: string | null;
   selectedDocuments: OnyxDocument[];
   searchParams: ReadonlyURLSearchParams;
-  setPopup: (popup: PopupSpec) => void;
   resetInputBar: () => void;
   setSelectedAssistantFromId: (assistantId: number | null) => void;
+}
+
+async function stopChatSession(chatSessionId: string): Promise<void> {
+  const response = await fetch(`/api/chat/stop-chat-session/${chatSessionId}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to stop chat session: ${response.statusText}`);
+  }
 }
 
 export default function useChatController({
@@ -119,7 +129,6 @@ export default function useChatController({
   liveAssistant,
   existingChatSessionId,
   selectedDocuments,
-  setPopup,
   resetInputBar,
   setSelectedAssistantFromId,
 }: UseChatControllerProps) {
@@ -172,6 +181,9 @@ export default function useChatController({
     (state) => state.setAbortController
   );
   const setIsReady = useChatSessionStore((state) => state.setIsReady);
+  const setStreamingStartTime = useChatSessionStore(
+    (state) => state.setStreamingStartTime
+  );
 
   // Use custom hooks for accessing store data
   const currentMessageTree = useCurrentMessageTree();
@@ -341,6 +353,7 @@ export default function useChatController({
 
     // Update chat state to input immediately for good UX
     // The stream will close naturally when the backend sends the STOP packet
+    setStreamingStartTime(currentSession, null);
     updateChatStateAction(currentSession, "input");
   }, [currentMessageHistory, currentMessageTree]);
 
@@ -437,15 +450,9 @@ export default function useChatController({
 
       if (currentChatState != "input") {
         if (currentChatState == "uploading") {
-          setPopup({
-            message: "Please wait for the content to upload",
-            type: "error",
-          });
+          toast.error("Please wait for the content to upload");
         } else {
-          setPopup({
-            message: "Please wait for the response to complete",
-            type: "error",
-          });
+          toast.error("Please wait for the response to complete");
         }
 
         return;
@@ -549,11 +556,9 @@ export default function useChatController({
         : null;
 
       if (!messageToResend && messageIdToResend !== undefined) {
-        setPopup({
-          message:
-            "Failed to re-send message - please refresh the page and try again.",
-          type: "error",
-        });
+        toast.error(
+          "Failed to re-send message - please refresh the page and try again."
+        );
         resetRegenerationState(frozenSessionId);
         updateChatStateAction(frozenSessionId, "input");
         return;
@@ -564,6 +569,14 @@ export default function useChatController({
       let currMessage = regenerationRequest
         ? messageToResend?.message || message
         : message;
+
+      // When editing a message that had files attached, preserve the original files.
+      // Skip for regeneration — the regeneration path reuses the existing user node
+      // (and its files), so merging here would send duplicates.
+      const effectiveFileDescriptors = [
+        ...projectFilesToFileDescriptors(currentMessageFiles),
+        ...(!regenerationRequest ? messageToResend?.files ?? [] : []),
+      ];
 
       updateChatStateAction(frozenSessionId, "loading");
 
@@ -603,7 +616,7 @@ export default function useChatController({
         const result = buildImmediateMessages(
           parentNodeIdForMessage,
           currMessage,
-          projectFilesToFileDescriptors(currentMessageFiles),
+          effectiveFileDescriptors,
           messageToResend
         );
         initialUserNode = result.initialUserNode;
@@ -640,7 +653,7 @@ export default function useChatController({
 
       let finalMessage: BackendMessage | null = null;
       let toolCall: ToolCallMetadata | null = null;
-      let files = projectFilesToFileDescriptors(currentMessageFiles);
+      let files = effectiveFileDescriptors;
       let packets: Packet[] = [];
       let packetsVersion = 0;
 
@@ -678,7 +691,7 @@ export default function useChatController({
         updateCurrentMessageFIFO(stack, {
           signal: controller.signal,
           message: currMessage,
-          fileDescriptors: projectFilesToFileDescriptors(currentMessageFiles),
+          fileDescriptors: effectiveFileDescriptors,
           parentMessageId: (() => {
             const parentId =
               regenerationRequest?.parentMessage.messageId ||
@@ -733,6 +746,14 @@ export default function useChatController({
             // We've processed initial packets and are starting to stream content.
             // Transition from 'loading' to 'streaming'.
             updateChatStateAction(frozenSessionId, "streaming");
+            // Only set start time once (guard prevents reset on each packet)
+            // Use getState() to avoid stale closure - sessions captured at render time becomes stale in async loop
+            if (
+              !useChatSessionStore.getState().sessions.get(frozenSessionId)
+                ?.streamingStartTime
+            ) {
+              setStreamingStartTime(frozenSessionId, Date.now());
+            }
 
             if ((packet as MessageResponseIDInfo).user_message_id) {
               newUserMessageId = (packet as MessageResponseIDInfo)
@@ -743,7 +764,7 @@ export default function useChatController({
                 posthog.capture("extension_chat_query", {
                   extension_context: extensionContext,
                   assistant_id: liveAssistant?.id,
-                  has_files: currentMessageFiles.length > 0,
+                  has_files: effectiveFileDescriptors.length > 0,
                   deep_research: deepResearch,
                 });
               }
@@ -858,8 +879,17 @@ export default function useChatController({
                   overridden_model: finalMessage?.overridden_model,
                   stopReason: stopReason,
                   packets: packets,
-                  packetsVersion: packetsVersion,
                   packetCount: packets.length,
+                  processingDurationSeconds:
+                    finalMessage?.processing_duration_seconds ??
+                    (() => {
+                      const startTime = useChatSessionStore
+                        .getState()
+                        .getStreamingStartTime(frozenSessionId);
+                      return startTime
+                        ? Math.floor((Date.now() - startTime) / 1000)
+                        : undefined;
+                    })(),
                 },
               ],
               // Pass the latest map state
@@ -877,12 +907,7 @@ export default function useChatController({
               nodeId: initialUserNode.nodeId,
               message: currMessage,
               type: "user",
-              files: currentMessageFiles.map((file) => ({
-                id: file.file_id,
-                type: file.chat_file_type,
-                name: file.name,
-                user_file_id: file.id,
-              })),
+              files: effectiveFileDescriptors,
               toolCall: null,
               parentNodeId: parentMessage?.nodeId || SYSTEM_NODE_ID,
               packets: [],
@@ -909,6 +934,7 @@ export default function useChatController({
       }
 
       resetRegenerationState(frozenSessionId);
+      setStreamingStartTime(frozenSessionId, null);
       updateChatStateAction(frozenSessionId, "input");
 
       // Name the chat now that we have the first AI response (navigation already happened before streaming)
@@ -930,7 +956,6 @@ export default function useChatController({
       existingChatSessionId,
       selectedDocuments,
       searchParams,
-      setPopup,
       resetInputBar,
       setSelectedAssistantFromId,
       updateSelectedNodeForDocDisplay,
@@ -964,18 +989,15 @@ export default function useChatController({
       );
 
       if (imageFiles.length > 0 && !llmAcceptsImages) {
-        setPopup({
-          type: "error",
-          message:
-            "The current model does not support image input. Please select a model with Vision support.",
-        });
+        toast.error(
+          "The current model does not support image input. Please select a model with Vision support."
+        );
         return;
       }
       updateChatStateAction(getCurrentSessionId(), "uploading");
       const uploadedMessageFiles = await beginUpload(
         Array.from(acceptedFiles),
-        null,
-        setPopup
+        null
       );
       setCurrentMessageFiles((prev) => [...prev, ...uploadedMessageFiles]);
       updateChatStateAction(getCurrentSessionId(), "input");
@@ -1038,10 +1060,7 @@ export default function useChatController({
         router.push(data.redirect_url);
       } catch (error) {
         console.error("Error seeding chat from Slack:", error);
-        setPopup({
-          message: "Failed to load chat from Slack",
-          type: "error",
-        });
+        toast.error("Failed to load chat from Slack");
       }
     };
 

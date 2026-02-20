@@ -43,7 +43,7 @@ _TENANT_PROVISIONING_TIME_LIMIT = 60 * 10  # 10 minutes
     trail=False,
     bind=True,
 )
-def check_available_tenants(self: Task) -> None:
+def check_available_tenants(self: Task) -> None:  # noqa: ARG001
     """
     Check if we have enough pre-provisioned tenants available.
     If not, trigger the pre-provisioning of new tenants.

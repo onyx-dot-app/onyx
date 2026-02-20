@@ -39,8 +39,8 @@ def _get_slim_doc_generator(
 
 def gmail_doc_sync(
     cc_pair: ConnectorCredentialPair,
-    fetch_all_existing_docs_fn: FetchAllDocumentsFunction,
-    fetch_all_existing_docs_ids_fn: FetchAllDocumentsIdsFunction,
+    fetch_all_existing_docs_fn: FetchAllDocumentsFunction,  # noqa: ARG001
+    fetch_all_existing_docs_ids_fn: FetchAllDocumentsIdsFunction,  # noqa: ARG001
     callback: IndexingHeartbeatInterface | None,
 ) -> Generator[ElementExternalAccess, None, None]:
     """
@@ -50,7 +50,12 @@ def gmail_doc_sync(
     already populated.
     """
     gmail_connector = GmailConnector(**cc_pair.connector.connector_specific_config)
-    gmail_connector.load_credentials(cc_pair.credential.credential_json)
+    credential_json = (
+        cc_pair.credential.credential_json.get_value(apply_mask=False)
+        if cc_pair.credential.credential_json
+        else {}
+    )
+    gmail_connector.load_credentials(credential_json)
 
     slim_doc_generator = _get_slim_doc_generator(
         cc_pair, gmail_connector, callback=callback

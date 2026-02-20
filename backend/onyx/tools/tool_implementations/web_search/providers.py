@@ -13,6 +13,9 @@ from onyx.tools.tool_implementations.open_url.onyx_web_crawler import (
     DEFAULT_MAX_PDF_SIZE_BYTES,
 )
 from onyx.tools.tool_implementations.open_url.onyx_web_crawler import OnyxWebCrawler
+from onyx.tools.tool_implementations.web_search.clients.brave_client import (
+    BraveClient,
+)
 from onyx.tools.tool_implementations.web_search.clients.exa_client import (
     ExaClient,
 )
@@ -35,16 +38,76 @@ from shared_configs.enums import WebSearchProviderType
 logger = setup_logger()
 
 
+def _parse_positive_int_config(
+    *,
+    raw_value: str | None,
+    default: int,
+    provider_name: str,
+    config_key: str,
+) -> int:
+    if not raw_value:
+        return default
+    try:
+        value = int(raw_value)
+    except ValueError as exc:
+        raise ValueError(
+            f"{provider_name} provider config '{config_key}' must be an integer."
+        ) from exc
+    if value <= 0:
+        raise ValueError(
+            f"{provider_name} provider config '{config_key}' must be greater than 0."
+        )
+    return value
+
+
+def provider_requires_api_key(provider_type: WebSearchProviderType) -> bool:
+    """Return True if the given provider type requires an API key.
+    This list is most likely just going to contain SEARXNG. The way it works is that it uses public search engines that do not
+    require an API key. You can also set it up in a way which requires a key but SearXNG itself does not require a key.
+    """
+    return provider_type != WebSearchProviderType.SEARXNG
+
+
 def build_search_provider_from_config(
     provider_type: WebSearchProviderType,
-    api_key: str,
+    api_key: str | None,
     config: dict[str, str] | None,  # TODO use a typed object
 ) -> WebSearchProvider:
     config = config or {}
     num_results = int(config.get("num_results") or DEFAULT_MAX_RESULTS)
 
+    # SearXNG does not require an API key
+    if provider_type == WebSearchProviderType.SEARXNG:
+        searxng_base_url = config.get("searxng_base_url")
+        if not searxng_base_url:
+            raise ValueError("Please provide a URL for your private SearXNG instance.")
+        return SearXNGClient(
+            searxng_base_url,
+            num_results=num_results,
+        )
+
+    # All other providers require an API key
+    if not api_key:
+        raise ValueError(f"API key is required for {provider_type.value} provider.")
+
     if provider_type == WebSearchProviderType.EXA:
         return ExaClient(api_key=api_key, num_results=num_results)
+    if provider_type == WebSearchProviderType.BRAVE:
+        return BraveClient(
+            api_key=api_key,
+            num_results=num_results,
+            timeout_seconds=_parse_positive_int_config(
+                raw_value=config.get("timeout_seconds"),
+                default=10,
+                provider_name="Brave",
+                config_key="timeout_seconds",
+            ),
+            country=config.get("country"),
+            search_lang=config.get("search_lang"),
+            ui_lang=config.get("ui_lang"),
+            safesearch=config.get("safesearch"),
+            freshness=config.get("freshness"),
+        )
     if provider_type == WebSearchProviderType.SERPER:
         return SerperClient(api_key=api_key, num_results=num_results)
     if provider_type == WebSearchProviderType.GOOGLE_PSE:
@@ -57,27 +120,24 @@ def build_search_provider_from_config(
             raise ValueError(
                 "Google PSE provider requires a search engine id (cx) in addition to the API key."
             )
-
         return GooglePSEClient(
             api_key=api_key,
             search_engine_id=search_engine_id,
             num_results=num_results,
             timeout_seconds=int(config.get("timeout_seconds") or 10),
         )
-    if provider_type == WebSearchProviderType.SEARXNG:
-        searxng_base_url = config.get("searxng_base_url")
-        if not searxng_base_url:
-            raise ValueError("Please provide a URL for your private SearXNG instance.")
-        return SearXNGClient(
-            searxng_base_url,
-            num_results=num_results,
-        )
+
+    raise ValueError(f"Unknown provider type: {provider_type.value}")
 
 
 def _build_search_provider(provider_model: InternetSearchProvider) -> WebSearchProvider:
     return build_search_provider_from_config(
         provider_type=WebSearchProviderType(provider_model.provider_type),
-        api_key=provider_model.api_key or "",
+        api_key=(
+            provider_model.api_key.get_value(apply_mask=False)
+            if provider_model.api_key
+            else None
+        ),
         config=provider_model.config or {},
     )
 
@@ -129,10 +189,12 @@ def get_default_content_provider() -> WebContentProvider:
         if provider_model:
             provider = build_content_provider_from_config(
                 provider_type=WebContentProviderType(provider_model.provider_type),
-                api_key=provider_model.api_key or "",
-                config=WebContentProviderConfig.model_validate(
-                    provider_model.config or {}
+                api_key=(
+                    provider_model.api_key.get_value(apply_mask=False)
+                    if provider_model.api_key
+                    else ""
                 ),
+                config=provider_model.config or WebContentProviderConfig(),
             )
             if provider:
                 return provider

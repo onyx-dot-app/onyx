@@ -1,12 +1,20 @@
 import { test, expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
-import { loginAs, loginWithCredentials } from "../utils/auth";
-import { OnyxApiClient } from "../utils/onyxApiClient";
-import { startMcpApiKeyServer, McpServerProcess } from "../utils/mcpServer";
+import { loginAs, apiLogin } from "@tests/e2e/utils/auth";
+import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
+import {
+  startMcpApiKeyServer,
+  McpServerProcess,
+} from "@tests/e2e/utils/mcpServer";
+import {
+  getPacketObjectsByType,
+  sendMessageAndCaptureStreamPackets,
+} from "@tests/e2e/utils/chatStream";
 
 const API_KEY = process.env.MCP_API_KEY || "test-api-key-12345";
 const DEFAULT_PORT = Number(process.env.MCP_API_KEY_TEST_PORT || "8005");
 const MCP_API_KEY_TEST_URL = process.env.MCP_API_KEY_TEST_URL;
+const MCP_ASSERTED_TOOL_NAME = "tool_0";
 
 async function scrollToBottom(page: Page): Promise<void> {
   try {
@@ -31,26 +39,49 @@ async function ensureOnboardingComplete(page: Page): Promise<void> {
     } catch {
       // ignore personalization failures
     }
-
-    const baseKey = "hasFinishedOnboarding";
-    localStorage.setItem(baseKey, "true");
-
-    try {
-      const meRes = await fetch("/api/me", { credentials: "include" });
-      if (meRes.ok) {
-        const me = await meRes.json();
-        const userId = me.id ?? me.user?.id ?? me.user_id;
-        if (userId) {
-          localStorage.setItem(`${baseKey}_${userId}`, "true");
-        }
-      }
-    } catch {
-      // ignore
-    }
   });
 
   await page.reload();
   await page.waitForLoadState("networkidle");
+}
+
+const getToolName = (packetObject: Record<string, unknown>): string | null => {
+  const value = packetObject.tool_name;
+  return typeof value === "string" ? value : null;
+};
+
+function getToolPacketCounts(
+  packets: Record<string, unknown>[],
+  toolName: string
+): { start: number; delta: number; debug: number } {
+  const start = getPacketObjectsByType(packets, "custom_tool_start").filter(
+    (packetObject) => getToolName(packetObject) === toolName
+  ).length;
+  const delta = getPacketObjectsByType(packets, "custom_tool_delta").filter(
+    (packetObject) => getToolName(packetObject) === toolName
+  ).length;
+  const debug = getPacketObjectsByType(packets, "tool_call_debug").filter(
+    (packetObject) => getToolName(packetObject) === toolName
+  ).length;
+
+  return { start, delta, debug };
+}
+
+async function fetchMcpToolIdByName(
+  page: Page,
+  serverId: number,
+  toolName: string
+): Promise<number> {
+  const response = await page.request.get(
+    `/api/admin/mcp/server/${serverId}/db-tools`
+  );
+  expect(response.ok()).toBeTruthy();
+  const data = (await response.json()) as {
+    tools?: Array<{ id: number; name: string }>;
+  };
+  const matchedTool = data.tools?.find((tool) => tool.name === toolName);
+  expect(matchedTool?.id).toBeTruthy();
+  return matchedTool!.id;
 }
 
 test.describe("Default Assistant MCP Integration", () => {
@@ -63,6 +94,7 @@ test.describe("Default Assistant MCP Integration", () => {
   let basicUserEmail: string;
   let basicUserPassword: string;
   let createdProviderId: number | null = null;
+  let assertedToolId: number | null = null;
 
   test.beforeAll(async ({ browser }) => {
     // Use dockerized server if URL is provided, otherwise start local server
@@ -90,15 +122,10 @@ test.describe("Default Assistant MCP Integration", () => {
       storageState: "admin_auth.json",
     });
     const adminPage = await adminContext.newPage();
-    const adminClient = new OnyxApiClient(adminPage);
+    const adminClient = new OnyxApiClient(adminPage.request);
 
-    const providers = await adminClient.listLlmProviders();
-    const hasPublicProvider = providers.some((provider) => provider.is_public);
-    if (!hasPublicProvider) {
-      createdProviderId = await adminClient.createPublicProvider(
-        `PW Public Provider ${Date.now()}`
-      );
-    }
+    // Ensure a public LLM provider exists
+    createdProviderId = await adminClient.ensurePublicProvider();
 
     // Clean up any existing servers with the same URL
     try {
@@ -125,9 +152,9 @@ test.describe("Default Assistant MCP Integration", () => {
       storageState: "admin_auth.json",
     });
     const adminPage = await adminContext.newPage();
-    const adminClient = new OnyxApiClient(adminPage);
+    const adminClient = new OnyxApiClient(adminPage.request);
 
-    if (createdProviderId) {
+    if (createdProviderId !== null) {
       await adminClient.deleteProvider(createdProviderId);
     }
 
@@ -245,6 +272,15 @@ test.describe("Default Assistant MCP Integration", () => {
     });
     console.log(`[test] Tools loaded successfully`);
 
+    assertedToolId = await fetchMcpToolIdByName(
+      page,
+      serverId,
+      MCP_ASSERTED_TOOL_NAME
+    );
+    console.log(
+      `[test] Resolved ${MCP_ASSERTED_TOOL_NAME} to tool ID ${assertedToolId}`
+    );
+
     // Disable multiple tools (tool_0, tool_1, tool_2, tool_3)
     const toolIds = ["tool_11", "tool_12", "tool_13", "tool_14"];
     let disabledToolsCount = 0;
@@ -265,10 +301,10 @@ test.describe("Default Assistant MCP Integration", () => {
       console.log(`[test] Found tool: ${toolId}`);
 
       // Disable if currently enabled (tools are enabled by default)
-      const state = await toolToggle.getAttribute("data-state");
-      if (state === "checked") {
+      const state = await toolToggle.getAttribute("aria-checked");
+      if (state === "true") {
         await toolToggle.click();
-        await expect(toolToggle).toHaveAttribute("data-state", "unchecked", {
+        await expect(toolToggle).toHaveAttribute("aria-checked", "false", {
           timeout: 5000,
         });
         disabledToolsCount++;
@@ -328,12 +364,15 @@ test.describe("Default Assistant MCP Integration", () => {
     }
 
     // Select the MCP server checkbox (to enable all tools)
-    const serverCheckbox = page.getByLabel(
-      "mcp-server-select-all-tools-checkbox"
-    );
+    const serverCheckbox = mcpServerSection.getByRole("checkbox", {
+      name: "mcp-server-select-all-tools-checkbox",
+    });
     await expect(serverCheckbox).toBeVisible({ timeout: 5000 });
     await serverCheckbox.scrollIntoViewIfNeeded();
-    await serverCheckbox.check();
+    if ((await serverCheckbox.getAttribute("aria-checked")) !== "true") {
+      await serverCheckbox.click();
+    }
+    await expect(serverCheckbox).toHaveAttribute("aria-checked", "true");
     console.log(`[test] Checked MCP server checkbox`);
 
     // Scroll to bottom to find Save button
@@ -361,7 +400,7 @@ test.describe("Default Assistant MCP Integration", () => {
     test.skip(!basicUserEmail, "Basic user must be created first");
 
     await page.context().clearCookies();
-    await loginWithCredentials(page, basicUserEmail, basicUserPassword);
+    await apiLogin(page, basicUserEmail, basicUserPassword);
     console.log(`[test] Logged in as basic user: ${basicUserEmail}`);
 
     // Navigate to chat (which uses default assistant for new users)
@@ -412,14 +451,14 @@ test.describe("Default Assistant MCP Integration", () => {
     console.log(`[test] Tool toggle is visible`);
 
     // Get initial state and toggle
-    const initialState = await toolToggle.getAttribute("data-state");
+    const initialState = await toolToggle.getAttribute("aria-checked");
     console.log(`[test] Initial toggle state: ${initialState}`);
     await toolToggle.click();
     await page.waitForTimeout(300);
 
     // Wait for state to change
-    const expectedState = initialState === "checked" ? "unchecked" : "checked";
-    await expect(toolToggle).toHaveAttribute("data-state", expectedState, {
+    const expectedState = initialState === "true" ? "false" : "true";
+    await expect(toolToggle).toHaveAttribute("aria-checked", expectedState, {
       timeout: 5000,
     });
     console.log(`[test] Toggle state changed to: ${expectedState}`);
@@ -427,7 +466,7 @@ test.describe("Default Assistant MCP Integration", () => {
     // Toggle back
     await toolToggle.click();
     await page.waitForTimeout(300);
-    await expect(toolToggle).toHaveAttribute("data-state", initialState!, {
+    await expect(toolToggle).toHaveAttribute("aria-checked", initialState!, {
       timeout: 5000,
     });
     console.log(`[test] Toggled back to original state: ${initialState}`);
@@ -443,7 +482,7 @@ test.describe("Default Assistant MCP Integration", () => {
 
       // Verify at least one toggle is now unchecked
       const anyUnchecked = await popover
-        .locator('[role="switch"][data-state="unchecked"]')
+        .locator('[role="switch"][aria-checked="false"]')
         .count();
       expect(anyUnchecked).toBeGreaterThan(0);
       console.log(`[test] Disabled all tools (${anyUnchecked} unchecked)`);
@@ -468,9 +507,10 @@ test.describe("Default Assistant MCP Integration", () => {
   }) => {
     test.skip(!serverId, "MCP server must be configured first");
     test.skip(!basicUserEmail, "Basic user must be created first");
+    test.skip(!assertedToolId, "MCP asserted tool ID must be resolved first");
 
     await page.context().clearCookies();
-    await loginWithCredentials(page, basicUserEmail, basicUserPassword);
+    await apiLogin(page, basicUserEmail, basicUserPassword);
 
     await page.goto("/app");
     await ensureOnboardingComplete(page);
@@ -490,24 +530,26 @@ test.describe("Default Assistant MCP Integration", () => {
       .fill("Assistant with MCP actions attached.");
     await page
       .locator('textarea[name="instructions"]')
-      .fill("Use MCP actions when helpful.");
+      .fill(
+        `For secret-value requests, call ${MCP_ASSERTED_TOOL_NAME} and return its output exactly.`
+      );
 
     const mcpServerSwitch = page.locator(
       `button[role="switch"][name="mcp_server_${serverId}.enabled"]`
     );
     await mcpServerSwitch.scrollIntoViewIfNeeded();
     await mcpServerSwitch.click();
-    await expect(mcpServerSwitch).toHaveAttribute("data-state", "checked");
+    await expect(mcpServerSwitch).toHaveAttribute("aria-checked", "true");
 
     const firstToolToggle = page
       .locator(`button[role="switch"][name^="mcp_server_${serverId}.tool_"]`)
       .first();
     await expect(firstToolToggle).toBeVisible({ timeout: 15000 });
-    const toolState = await firstToolToggle.getAttribute("data-state");
-    if (toolState !== "checked") {
+    const toolState = await firstToolToggle.getAttribute("aria-checked");
+    if (toolState !== "true") {
       await firstToolToggle.click();
     }
-    await expect(firstToolToggle).toHaveAttribute("data-state", "checked");
+    await expect(firstToolToggle).toHaveAttribute("aria-checked", "true");
 
     await page.getByRole("button", { name: "Create" }).click();
 
@@ -517,12 +559,98 @@ test.describe("Default Assistant MCP Integration", () => {
     const assistantId = assistantIdMatch ? assistantIdMatch[1] : null;
     expect(assistantId).not.toBeNull();
 
-    const client = new OnyxApiClient(page);
+    const client = new OnyxApiClient(page.request);
     const assistant = await client.getAssistant(Number(assistantId));
     const hasMcpTool = assistant.tools.some(
       (tool) => tool.mcp_server_id === serverId
     );
     expect(hasMcpTool).toBeTruthy();
+
+    const invocationPackets = await sendMessageAndCaptureStreamPackets(
+      page,
+      `Call ${MCP_ASSERTED_TOOL_NAME} with {"name":"pw-invoke-${Date.now()}"} and return only the tool output.`,
+      {
+        mockLlmResponse: JSON.stringify({
+          name: MCP_ASSERTED_TOOL_NAME,
+          arguments: { name: `pw-invoke-${Date.now()}` },
+        }),
+        payloadOverrides: {
+          forced_tool_id: assertedToolId,
+          forced_tool_ids: [assertedToolId],
+        },
+        waitForAiMessage: false,
+      }
+    );
+    const invocationCounts = getToolPacketCounts(
+      invocationPackets,
+      MCP_ASSERTED_TOOL_NAME
+    );
+    expect(invocationCounts.start).toBeGreaterThan(0);
+    expect(invocationCounts.delta).toBeGreaterThan(0);
+    expect(invocationCounts.debug).toBeGreaterThan(0);
+
+    const actionsButton = page.getByTestId("action-management-toggle");
+    await expect(actionsButton).toBeVisible({ timeout: 10000 });
+    await actionsButton.click();
+
+    const popover = page.locator('[data-testid="tool-options"]');
+    await expect(popover).toBeVisible({ timeout: 5000 });
+
+    const serverLineItem = popover
+      .locator(".group\\/LineItem")
+      .filter({ hasText: serverName })
+      .first();
+    await expect(serverLineItem).toBeVisible({ timeout: 10000 });
+    await serverLineItem.click();
+
+    const toolSearchInput = popover
+      .getByPlaceholder(/Search .* tools/i)
+      .first();
+    await expect(toolSearchInput).toBeVisible({ timeout: 10000 });
+    await toolSearchInput.fill(MCP_ASSERTED_TOOL_NAME);
+
+    const toolToggle = popover.getByLabel(`Toggle ${MCP_ASSERTED_TOOL_NAME}`);
+    await expect(toolToggle).toBeVisible({ timeout: 10000 });
+    const isToolToggleUnchecked = async () => {
+      const dataState = await toolToggle.getAttribute("data-state");
+      if (typeof dataState === "string") {
+        return dataState === "unchecked";
+      }
+      return (await toolToggle.getAttribute("aria-checked")) === "false";
+    };
+    if (!(await isToolToggleUnchecked())) {
+      await toolToggle.click();
+    }
+    await expect
+      .poll(isToolToggleUnchecked, {
+        timeout: 5000,
+      })
+      .toBe(true);
+
+    await page.keyboard.press("Escape").catch(() => {});
+
+    const disabledPackets = await sendMessageAndCaptureStreamPackets(
+      page,
+      `Call ${MCP_ASSERTED_TOOL_NAME} with {"name":"pw-disabled-${Date.now()}"} and return only the tool output.`,
+      {
+        mockLlmResponse: JSON.stringify({
+          name: MCP_ASSERTED_TOOL_NAME,
+          arguments: { name: `pw-disabled-${Date.now()}` },
+        }),
+        payloadOverrides: {
+          forced_tool_id: assertedToolId,
+          forced_tool_ids: [assertedToolId],
+        },
+        waitForAiMessage: false,
+      }
+    );
+    const disabledCounts = getToolPacketCounts(
+      disabledPackets,
+      MCP_ASSERTED_TOOL_NAME
+    );
+    expect(disabledCounts.start).toBe(0);
+    expect(disabledCounts.delta).toBe(0);
+    expect(disabledCounts.debug).toBe(0);
   });
 
   test("Admin can modify MCP tools in default assistant", async ({ page }) => {
@@ -665,7 +793,7 @@ test.describe("Default Assistant MCP Integration", () => {
     test.skip(!basicUserEmail, "Basic user must be created first");
 
     await page.context().clearCookies();
-    await loginWithCredentials(page, basicUserEmail, basicUserPassword);
+    await apiLogin(page, basicUserEmail, basicUserPassword);
     console.log(`[test] Logged in as basic user to verify tool visibility`);
 
     // Navigate to chat

@@ -43,9 +43,9 @@ def confluence_connector() -> ConfluenceConnector:
     return_value=None,
 )
 def test_confluence_connector_permissions(
-    mock_get_api_key: MagicMock,
+    mock_get_api_key: MagicMock,  # noqa: ARG001
     confluence_connector: ConfluenceConnector,
-    set_ee_on: None,
+    set_ee_on: None,  # noqa: ARG001
 ) -> None:
     # Get all doc IDs from the full connector
     all_full_doc_ids = set()
@@ -91,9 +91,9 @@ def test_confluence_connector_permissions(
     return_value=None,
 )
 def test_confluence_connector_restriction_handling(
-    mock_get_api_key: MagicMock,
+    mock_get_api_key: MagicMock,  # noqa: ARG001
     mock_db_provider_class: MagicMock,
-    set_ee_on: None,
+    set_ee_on: None,  # noqa: ARG001
 ) -> None:
     # Test space key
     test_space_key = "DailyPermS"
@@ -123,7 +123,7 @@ def test_confluence_connector_restriction_handling(
 
     # Call the confluence_doc_sync function directly with the mock cc_pair
     def mock_fetch_all_docs_fn(
-        sort_order: SortOrder | None = None,
+        sort_order: SortOrder | None = None,  # noqa: ARG001
     ) -> list[DocumentRow]:
         return []
 

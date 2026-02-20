@@ -19,6 +19,7 @@ from onyx.context.search.models import InferenceChunk
 from onyx.db.enums import EmbeddingPrecision
 from onyx.document_index.chunk_content_enrichment import cleanup_content_for_chunks
 from onyx.document_index.document_index_utils import get_document_chunk_ids
+from onyx.document_index.document_index_utils import get_uuid_from_chunk_info
 from onyx.document_index.interfaces import EnrichedDocumentIndexingInfo
 from onyx.document_index.interfaces import MinimalDocumentIndexingInfo
 from onyx.document_index.interfaces import VespaChunkRequest
@@ -29,6 +30,7 @@ from onyx.document_index.interfaces_new import IndexingMetadata
 from onyx.document_index.interfaces_new import MetadataUpdateRequest
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.vespa.chunk_retrieval import batch_search_api_retrieval
+from onyx.document_index.vespa.chunk_retrieval import get_all_chunks_paginated
 from onyx.document_index.vespa.chunk_retrieval import get_chunks_via_visit_api
 from onyx.document_index.vespa.chunk_retrieval import (
     parallel_visit_api_retrieval,
@@ -49,15 +51,19 @@ from onyx.document_index.vespa.shared_utils.vespa_request_builders import (
     build_vespa_filters,
 )
 from onyx.document_index.vespa_constants import BATCH_SIZE
+from onyx.document_index.vespa_constants import CHUNK_ID
 from onyx.document_index.vespa_constants import CONTENT_SUMMARY
+from onyx.document_index.vespa_constants import DOCUMENT_ID
 from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
 from onyx.document_index.vespa_constants import NUM_THREADS
+from onyx.document_index.vespa_constants import SEARCH_ENDPOINT
 from onyx.document_index.vespa_constants import VESPA_TIMEOUT
 from onyx.document_index.vespa_constants import YQL_BASE
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.tools.tool_implementations.search.constants import KEYWORD_QUERY_HYBRID_ALPHA
 from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import MULTI_TENANT
 from shared_configs.model_server_models import Embedding
 
 
@@ -546,7 +552,6 @@ class VespaDocumentIndex(DocumentIndex):
         query_type: QueryType,
         filters: IndexFilters,
         num_to_retrieve: int,
-        offset: int = 0,
     ) -> list[InferenceChunk]:
         vespa_where_clauses = build_vespa_filters(filters)
         # Needs to be at least as much as the rerank-count value set in the
@@ -592,7 +597,6 @@ class VespaDocumentIndex(DocumentIndex):
             "input.query(alpha)": hybrid_alpha,
             "input.query(title_content_ratio)": TITLE_CONTENT_RATIO,
             "hits": num_to_retrieve,
-            "offset": offset,
             "ranking.profile": ranking_profile,
             "timeout": VESPA_TIMEOUT,
         }
@@ -603,7 +607,7 @@ class VespaDocumentIndex(DocumentIndex):
         self,
         filters: IndexFilters,
         num_to_retrieve: int = 100,
-        dirty: bool | None = None,
+        dirty: bool | None = None,  # noqa: ARG002
     ) -> list[InferenceChunk]:
         vespa_where_clauses = build_vespa_filters(filters, remove_trailing_and=True)
 
@@ -624,13 +628,17 @@ class VespaDocumentIndex(DocumentIndex):
     def get_raw_document_chunks(self, document_id: str) -> list[dict[str, Any]]:
         """Gets all raw document chunks for a document as returned by Vespa.
 
+        Used in the Vespa migration task.
+
         Args:
             document_id: The ID of the document to get chunks for.
 
         Returns:
             List of raw document chunks.
         """
-        chunk_request = VespaChunkRequest(document_id=document_id)
+        # Vespa doc IDs are sanitized using replace_invalid_doc_id_characters.
+        sanitized_document_id = replace_invalid_doc_id_characters(document_id)
+        chunk_request = VespaChunkRequest(document_id=sanitized_document_id)
         raw_chunks = get_chunks_via_visit_api(
             chunk_request=chunk_request,
             index_name=self._index_name,
@@ -642,3 +650,85 @@ class VespaDocumentIndex(DocumentIndex):
         # chunk we're interested in is in the "fields" field.
         raw_document_chunks = [chunk["fields"] for chunk in raw_chunks]
         return raw_document_chunks
+
+    def get_all_raw_document_chunks_paginated(
+        self,
+        continuation_token_map: dict[int, str | None],
+        page_size: int,
+    ) -> tuple[list[dict[str, Any]], dict[int, str | None]]:
+        """Gets all the chunks in Vespa, paginated.
+
+        Used in the chunk-level Vespa-to-OpenSearch migration task.
+
+        Args:
+            continuation_token: Token returned by Vespa representing a page
+                offset. None to start from the beginning. Defaults to None.
+            page_size: Best-effort batch size for the visit.
+
+        Returns:
+            Tuple of (list of chunk dicts, next continuation token or None). The
+                continuation token is None when the visit is complete.
+        """
+        raw_chunks, next_continuation_token_map = get_all_chunks_paginated(
+            index_name=self._index_name,
+            tenant_state=TenantState(
+                tenant_id=self._tenant_id, multitenant=MULTI_TENANT
+            ),
+            continuation_token_map=continuation_token_map,
+            page_size=page_size,
+        )
+        return raw_chunks, next_continuation_token_map
+
+    def index_raw_chunks(self, chunks: list[dict[str, Any]]) -> None:
+        """Indexes raw document chunks into Vespa.
+
+        To only be used in tests. Not for production.
+        """
+        json_header = {
+            "Content-Type": "application/json",
+        }
+        with self._httpx_client_context as http_client:
+            for chunk in chunks:
+                chunk_id = str(
+                    get_uuid_from_chunk_info(
+                        document_id=chunk[DOCUMENT_ID],
+                        chunk_id=chunk[CHUNK_ID],
+                        tenant_id=self._tenant_id,
+                    )
+                )
+                vespa_url = f"{DOCUMENT_ID_ENDPOINT.format(index_name=self._index_name)}/{chunk_id}"
+                response = http_client.post(
+                    vespa_url,
+                    headers=json_header,
+                    json={"fields": chunk},
+                )
+                response.raise_for_status()
+
+    def get_chunk_count(self) -> int:
+        """Returns the exact number of document chunks in Vespa for this tenant.
+
+        Uses the Vespa Search API with `limit 0` and `ranking.profile=unranked`
+        to get an exact count without fetching any document data.
+
+        Includes large chunks. There is no way to filter these out using the
+        Search API.
+        """
+        where_clause = (
+            f'tenant_id contains "{self._tenant_id}"' if self._multitenant else "true"
+        )
+        yql = (
+            f"select documentid from {self._index_name} "
+            f"where {where_clause} "
+            f"limit 0"
+        )
+        params: dict[str, str | int] = {
+            "yql": yql,
+            "ranking.profile": "unranked",
+            "timeout": VESPA_TIMEOUT,
+        }
+
+        with get_vespa_http_client() as http_client:
+            response = http_client.post(SEARCH_ENDPOINT, json=params)
+            response.raise_for_status()
+            response_data = response.json()
+        return response_data["root"]["fields"]["totalCount"]

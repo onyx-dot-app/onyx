@@ -154,10 +154,31 @@ def _get_hierarchy_fields_for_file_type(field_type: DriveFileFieldType) -> str:
         return HIERARCHY_FIELDS
 
 
+def get_shared_drive_name(
+    service: Resource,
+    drive_id: str,
+) -> str | None:
+    """Fetch the actual name of a shared drive via the drives().get() API.
+
+    The files().get() API returns 'Drive' as the name for shared drive root
+    folders. Only drives().get() returns the real user-assigned name.
+    """
+    try:
+        drive = service.drives().get(driveId=drive_id, fields="name").execute()
+        return drive.get("name")
+    except HttpError as e:
+        if e.resp.status in (403, 404):
+            logger.debug(f"Cannot access drive {drive_id}: {e}")
+        else:
+            raise
+    return None
+
+
 def get_external_access_for_folder(
     folder: GoogleDriveFileType,
     google_domain: str,
     drive_service: GoogleDriveService,
+    add_prefix: bool = False,
 ) -> ExternalAccess:
     """
     Extract ExternalAccess from a folder's permissions.
@@ -172,13 +193,16 @@ def get_external_access_for_folder(
         folder: The folder metadata from Google Drive API (must include permissionIds field)
         google_domain: The company's Google Workspace domain (e.g., "company.com")
         drive_service: Google Drive service for fetching permission details
+        add_prefix: When True, prefix group IDs with source type (for indexing path).
+                   When False (default), leave unprefixed (for permission sync path
+                   where upsert_document_external_perms handles prefixing).
 
     Returns:
         ExternalAccess with extracted permission info
     """
     # Try to get the EE implementation
     get_folder_access_fn = cast(
-        Callable[[GoogleDriveFileType, str, GoogleDriveService], ExternalAccess],
+        Callable[[GoogleDriveFileType, str, GoogleDriveService, bool], ExternalAccess],
         fetch_versioned_implementation_with_fallback(
             "onyx.external_permissions.google_drive.doc_sync",
             "get_external_access_for_folder",
@@ -186,7 +210,7 @@ def get_external_access_for_folder(
         ),
     )
 
-    return get_folder_access_fn(folder, google_domain, drive_service)
+    return get_folder_access_fn(folder, google_domain, drive_service, add_prefix)
 
 
 def _get_fields_for_file_type(field_type: DriveFileFieldType) -> str:

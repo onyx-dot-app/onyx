@@ -4,7 +4,7 @@ from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.test_models import DATestUser
 
 
-def test_unified_assistant(reset: None, admin_user: DATestUser) -> None:
+def test_unified_assistant(reset: None, admin_user: DATestUser) -> None:  # noqa: ARG001
     """Combined test verifying unified assistant existence, tools, and starter messages."""
     # Fetch all personas
     personas = PersonaManager.get_all(admin_user)

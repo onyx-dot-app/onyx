@@ -1,0 +1,74 @@
+# =============================================================================
+# ONYX NO-VECTOR-DB OVERLAY
+# =============================================================================
+# Overlay to run Onyx without a vector database (Vespa), model servers, or
+# code interpreter. In this mode, connectors and RAG search are disabled, but
+# the core chat experience (LLM conversations, tools, user file uploads,
+# Projects, Agent knowledge) still works.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.no-vectordb.yml up -d
+#
+# With dev ports:
+#   docker compose -f docker-compose.yml -f docker-compose.no-vectordb.yml \
+#                  -f docker-compose.dev.yml up -d --wait
+#
+# This overlay:
+#   - Moves Vespa (index), both model servers, and code-interpreter to profiles
+#     so they do not start by default
+#   - Makes the depends_on references to those services optional
+#   - Sets DISABLE_VECTOR_DB=true on backend services
+#
+# To selectively bring services back:
+#   --profile vectordb          Vespa + indexing model server
+#   --profile inference         Inference model server
+#   --profile code-interpreter  Code interpreter
+# =============================================================================
+
+name: onyx
+
+services:
+  api_server:
+    depends_on:
+      index:
+        condition: service_started
+        required: false
+      inference_model_server:
+        condition: service_started
+        required: false
+      minio:
+        condition: service_started
+        required: false
+    environment:
+      - DISABLE_VECTOR_DB=true
+      - FILE_STORE_BACKEND=postgres
+
+  background:
+    depends_on:
+      index:
+        condition: service_started
+        required: false
+      indexing_model_server:
+        condition: service_started
+        required: false
+      inference_model_server:
+        condition: service_started
+        required: false
+    environment:
+      - DISABLE_VECTOR_DB=true
+      - FILE_STORE_BACKEND=postgres
+
+  # Move Vespa and indexing model server to a profile so they do not start.
+  index:
+    profiles: ["vectordb"]
+
+  indexing_model_server:
+    profiles: ["vectordb"]
+
+  # Inference model server is only needed for local embeddings, not for LLM chat.
+  inference_model_server:
+    profiles: ["inference"]
+
+  # Code interpreter is not needed in minimal mode.
+  code-interpreter:
+    profiles: ["code-interpreter"]

@@ -1,5 +1,5 @@
 import { type User } from "@/lib/types";
-import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import Button from "@/refresh-components/buttons/Button";
 import useSWRMutation from "swr/mutation";
 import userMutationFetcher from "@/lib/admin/users/userMutationFetcher";
@@ -7,14 +7,12 @@ import { SvgXCircle } from "@opal/icons";
 const DeactivateUserButton = ({
   user,
   deactivate,
-  setPopup,
   mutate,
   className,
   children,
 }: {
   user: User;
   deactivate: boolean;
-  setPopup: (spec: PopupSpec) => void;
   mutate: () => void;
   className?: string;
   children?: string;
@@ -27,13 +25,9 @@ const DeactivateUserButton = ({
     {
       onSuccess: () => {
         mutate();
-        setPopup({
-          message: `User ${deactivate ? "deactivated" : "activated"}!`,
-          type: "success",
-        });
+        toast.success(`User ${deactivate ? "deactivated" : "activated"}!`);
       },
-      onError: (errorMsg) =>
-        setPopup({ message: errorMsg.message, type: "error" }),
+      onError: (errorMsg) => toast.error(errorMsg.message),
     }
   );
   return (

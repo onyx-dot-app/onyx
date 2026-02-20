@@ -14,6 +14,7 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import { cn, isImageFile } from "@/lib/utils";
+import { Disabled } from "@/refresh-components/Disabled";
 import {
   useUploadFilesContext,
   BuildFile,
@@ -23,9 +24,11 @@ import { useDemoDataEnabled } from "@/app/craft/hooks/useBuildSessionStore";
 import { CRAFT_CONFIGURE_PATH } from "@/app/craft/v1/constants";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SelectButton from "@/refresh-components/buttons/SelectButton";
+import { Button } from "@opal/components";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import {
   SvgArrowUp,
+  SvgClock,
   SvgFileText,
   SvgImage,
   SvgLoader,
@@ -52,14 +55,12 @@ export interface InputBarProps {
   isRunning: boolean;
   disabled?: boolean;
   placeholder?: string;
-  /** Session ID for immediate file uploads. If provided, files upload immediately when attached. */
-  sessionId?: string;
-  /** Pre-provisioned session ID for file uploads before a session is active. */
-  preProvisionedSessionId?: string | null;
   /** When true, shows spinner on send button with "Initializing sandbox..." tooltip */
   sandboxInitializing?: boolean;
   /** When true, removes bottom rounding to allow seamless connection with components below */
   noBottomRounding?: boolean;
+  /** Whether this is the welcome page (no existing session in URL). Used for Demo Data pill. */
+  isWelcomePage?: boolean;
 }
 
 /**
@@ -74,6 +75,7 @@ function BuildFileCard({
 }) {
   const isImage = isImageFile(file.name);
   const isUploading = file.status === UploadFileStatus.UPLOADING;
+  const isPending = file.status === UploadFileStatus.PENDING;
   const isFailed = file.status === UploadFileStatus.FAILED;
 
   const cardContent = (
@@ -87,6 +89,8 @@ function BuildFileCard({
     >
       {isUploading ? (
         <SvgLoader className="h-4 w-4 animate-spin text-text-03" />
+      ) : isPending ? (
+        <SvgClock className="h-4 w-4 text-text-03" />
       ) : isFailed ? (
         <SvgAlertCircle className="h-4 w-4 text-status-error-02" />
       ) : isImage ? (
@@ -111,7 +115,7 @@ function BuildFileCard({
     </div>
   );
 
-  // Wrap in tooltip if there's an error
+  // Wrap in tooltip for error or pending status
   if (isFailed && file.error) {
     return (
       <SimpleTooltip tooltip={file.error} side="top">
@@ -120,9 +124,30 @@ function BuildFileCard({
     );
   }
 
+  if (isPending) {
+    return (
+      <SimpleTooltip tooltip="Waiting for session to be ready..." side="top">
+        {cardContent}
+      </SimpleTooltip>
+    );
+  }
+
   return cardContent;
 }
 
+/**
+ * InputBar - Text input with file attachment support
+ *
+ * File upload state is managed by UploadFilesContext. This component just:
+ * - Triggers file selection/paste
+ * - Displays attached files
+ * - Handles message submission
+ *
+ * The context handles:
+ * - Session binding (which session to upload to)
+ * - Auto-upload when session becomes available
+ * - Fetching existing attachments on session change
+ */
 const InputBar = memo(
   forwardRef<InputBarHandle, InputBarProps>(
     (
@@ -131,10 +156,9 @@ const InputBar = memo(
         isRunning,
         disabled = false,
         placeholder = "Describe your task...",
-        sessionId,
-        preProvisionedSessionId,
         sandboxInitializing = false,
         noBottomRounding = false,
+        isWelcomePage = false,
       },
       ref
     ) => {
@@ -142,9 +166,6 @@ const InputBar = memo(
       const demoDataEnabled = useDemoDataEnabled();
       const [message, setMessage] = useState("");
 
-      // Use active session ID, falling back to pre-provisioned session ID
-      const effectiveSessionId =
-        sessionId ?? preProvisionedSessionId ?? undefined;
       const textAreaRef = useRef<HTMLTextAreaElement>(null);
       const containerRef = useRef<HTMLDivElement>(null);
       const fileInputRef = useRef<HTMLInputElement>(null);
@@ -200,11 +221,11 @@ const InputBar = memo(
         async (e: ChangeEvent<HTMLInputElement>) => {
           const files = e.target.files;
           if (!files || files.length === 0) return;
-          // Pass effectiveSessionId so files upload immediately if session exists
-          uploadFiles(Array.from(files), effectiveSessionId);
+          // Context handles session binding internally
+          uploadFiles(Array.from(files));
           e.target.value = "";
         },
-        [uploadFiles, effectiveSessionId]
+        [uploadFiles]
       );
 
       const handlePaste = useCallback(
@@ -221,12 +242,12 @@ const InputBar = memo(
             }
             if (pastedFiles.length > 0) {
               event.preventDefault();
-              // Pass effectiveSessionId so files upload immediately if session exists
-              uploadFiles(pastedFiles, effectiveSessionId);
+              // Context handles session binding internally
+              uploadFiles(pastedFiles);
             }
           }
         },
-        [uploadFiles, effectiveSessionId]
+        [uploadFiles]
       );
 
       const handleInputChange = useCallback(
@@ -237,17 +258,21 @@ const InputBar = memo(
       );
 
       const handleSubmit = useCallback(() => {
-        if (
-          !message.trim() ||
-          disabled ||
-          isRunning ||
-          hasUploadingFiles ||
-          sandboxInitializing
-        )
+        if (disabled || isRunning || hasUploadingFiles || sandboxInitializing)
           return;
-        onSubmit(message.trim(), currentMessageFiles, demoDataEnabled);
-        setMessage("");
-        clearFiles();
+
+        const hasMessage = message.trim().length > 0;
+        const hasFiles = currentMessageFiles.length > 0;
+
+        if (hasMessage) {
+          onSubmit(message.trim(), currentMessageFiles, demoDataEnabled);
+          setMessage("");
+          clearFiles({ suppressRefetch: true });
+        } else if (hasFiles) {
+          // User hit Enter with only files attached: remove files from input bar
+          // (File stays in session; no way to delete from session for now)
+          clearFiles({ suppressRefetch: true });
+        }
       }, [
         message,
         disabled,
@@ -282,118 +307,120 @@ const InputBar = memo(
         !sandboxInitializing;
 
       return (
-        <div
-          ref={containerRef}
-          className={cn(
-            "w-full flex flex-col shadow-01 bg-background-neutral-00",
-            noBottomRounding ? "rounded-t-16 rounded-b-none" : "rounded-16",
-            disabled && "opacity-50 cursor-not-allowed pointer-events-none"
-          )}
-          aria-disabled={disabled}
-        >
-          {/* Hidden file input */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            className="hidden"
-            multiple
-            onChange={handleFileSelect}
-            accept="*/*"
-          />
-
-          {/* Attached Files */}
-          {currentMessageFiles.length > 0 && (
-            <div className="p-2 rounded-t-16 flex flex-wrap gap-1">
-              {currentMessageFiles.map((file) => (
-                <BuildFileCard
-                  key={file.id}
-                  file={file}
-                  onRemove={(id) => removeFile(id, effectiveSessionId)}
-                />
-              ))}
-            </div>
-          )}
-
-          {/* Input area */}
-          <textarea
-            onPaste={handlePaste}
-            onChange={handleInputChange}
-            onKeyDown={handleKeyDown}
-            ref={textAreaRef}
+        <Disabled disabled={disabled}>
+          <div
+            ref={containerRef}
             className={cn(
-              "w-full",
-              "h-[44px]",
-              "outline-none",
-              "bg-transparent",
-              "resize-none",
-              "placeholder:text-text-03",
-              "whitespace-pre-wrap",
-              "break-word",
-              "overscroll-contain",
-              "overflow-y-auto",
-              "px-3",
-              "pb-2",
-              "pt-3"
+              "w-full flex flex-col shadow-01 bg-background-neutral-00",
+              noBottomRounding ? "rounded-t-16 rounded-b-none" : "rounded-16"
             )}
-            autoFocus
-            style={{ scrollbarWidth: "thin" }}
-            role="textarea"
-            aria-multiline
-            placeholder={placeholder}
-            value={message}
-            disabled={disabled}
-          />
+          >
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              multiple
+              onChange={handleFileSelect}
+              accept="*/*"
+            />
 
-          {/* Bottom controls */}
-          <div className="flex justify-between items-center w-full p-1 min-h-[40px]">
-            {/* Bottom left controls */}
-            <div className="flex flex-row items-center gap-1">
-              {/* (+) button for file upload */}
-              <IconButton
-                icon={SvgPaperclip}
-                tooltip="Attach Files"
-                tertiary
-                disabled={disabled}
-                onClick={() => fileInputRef.current?.click()}
-              />
-              {/* Demo Data indicator pill - only show on welcome page (no session) when demo data is enabled */}
-              {demoDataEnabled && !sessionId && (
-                <SimpleTooltip
-                  tooltip="Switch to your data in the Configure panel!"
-                  side="top"
-                >
-                  <span>
-                    <SelectButton
-                      leftIcon={SvgOrganization}
-                      engaged={demoDataEnabled}
-                      action
-                      folded
-                      disabled={disabled}
-                      onClick={() => router.push(CRAFT_CONFIGURE_PATH)}
-                      className="bg-action-link-01"
-                    >
-                      Demo Data Active
-                    </SelectButton>
-                  </span>
-                </SimpleTooltip>
+            {/* Attached Files */}
+            {currentMessageFiles.length > 0 && (
+              <div className="p-2 rounded-t-16 flex flex-wrap gap-1">
+                {currentMessageFiles.map((file) => (
+                  <BuildFileCard
+                    key={file.id}
+                    file={file}
+                    onRemove={removeFile}
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* Input area */}
+            <textarea
+              onPaste={handlePaste}
+              onChange={handleInputChange}
+              onKeyDown={handleKeyDown}
+              ref={textAreaRef}
+              className={cn(
+                "w-full",
+                "h-[44px]",
+                "outline-none",
+                "bg-transparent",
+                "resize-none",
+                "placeholder:text-text-03",
+                "whitespace-pre-wrap",
+                "break-word",
+                "overscroll-contain",
+                "overflow-y-auto",
+                "px-3",
+                "pb-2",
+                "pt-3"
               )}
-            </div>
+              autoFocus
+              style={{ scrollbarWidth: "thin" }}
+              role="textarea"
+              aria-multiline
+              placeholder={placeholder}
+              value={message}
+              disabled={disabled}
+            />
 
-            {/* Bottom right controls */}
-            <div className="flex flex-row items-center gap-1">
-              {/* Submit button */}
-              <IconButton
-                icon={sandboxInitializing ? SvgLoader : SvgArrowUp}
-                onClick={handleSubmit}
-                disabled={!canSubmit}
-                tooltip={
-                  sandboxInitializing ? "Initializing sandbox..." : "Send"
-                }
-                iconClassName={sandboxInitializing ? "animate-spin" : undefined}
-              />
+            {/* Bottom controls */}
+            <div className="flex justify-between items-center w-full p-1 min-h-[40px]">
+              {/* Bottom left controls */}
+              <div className="flex flex-row items-center gap-1">
+                {/* (+) button for file upload */}
+                <Button
+                  icon={SvgPaperclip}
+                  tooltip="Attach Files"
+                  prominence="tertiary"
+                  disabled={disabled}
+                  onClick={() => fileInputRef.current?.click()}
+                />
+                {/* Demo Data indicator pill - only show on welcome page (no session) when demo data is enabled */}
+                {demoDataEnabled && isWelcomePage && (
+                  <SimpleTooltip
+                    tooltip="Switch to your data in the Configure panel!"
+                    side="top"
+                  >
+                    <span>
+                      <SelectButton
+                        leftIcon={SvgOrganization}
+                        engaged={demoDataEnabled}
+                        action
+                        folded
+                        disabled={disabled}
+                        onClick={() => router.push(CRAFT_CONFIGURE_PATH)}
+                        className="bg-action-link-01"
+                      >
+                        Demo Data Active
+                      </SelectButton>
+                    </span>
+                  </SimpleTooltip>
+                )}
+              </div>
+
+              {/* Bottom right controls */}
+              <div className="flex flex-row items-center gap-1">
+                {/* Submit button */}
+                <IconButton
+                  icon={sandboxInitializing ? SvgLoader : SvgArrowUp}
+                  onClick={handleSubmit}
+                  disabled={!canSubmit}
+                  tooltip={
+                    sandboxInitializing ? "Initializing sandbox..." : "Send"
+                  }
+                  iconClassName={
+                    sandboxInitializing ? "animate-spin" : undefined
+                  }
+                />
+              </div>
             </div>
           </div>
-        </div>
+        </Disabled>
       );
     }
   )

@@ -48,10 +48,10 @@ class OnyxRedisSlackRetryHandler(RetryHandler):
     def _can_retry(
         self,
         *,
-        state: RetryState,
-        request: HttpRequest,
+        state: RetryState,  # noqa: ARG002
+        request: HttpRequest,  # noqa: ARG002
         response: Optional[HttpResponse] = None,
-        error: Optional[Exception] = None,
+        error: Optional[Exception] = None,  # noqa: ARG002
     ) -> bool:
         return response is not None and response.status_code == 429
 
@@ -59,7 +59,7 @@ class OnyxRedisSlackRetryHandler(RetryHandler):
         self,
         *,
         state: RetryState,
-        request: HttpRequest,
+        request: HttpRequest,  # noqa: ARG002
         response: Optional[HttpResponse] = None,
         error: Optional[Exception] = None,
     ) -> None:

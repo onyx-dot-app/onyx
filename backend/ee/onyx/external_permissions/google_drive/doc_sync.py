@@ -13,6 +13,7 @@ from onyx.access.models import DocExternalAccess
 from onyx.access.models import ElementExternalAccess
 from onyx.access.models import ExternalAccess
 from onyx.access.models import NodeExternalAccess
+from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.google_drive.models import GoogleDriveFileType
@@ -67,11 +68,17 @@ def get_external_access_for_raw_gdrive_file(
     company_domain: str,
     retriever_drive_service: GoogleDriveService | None,
     admin_drive_service: GoogleDriveService,
+    add_prefix: bool = False,
 ) -> ExternalAccess:
     """
     Get the external access for a raw Google Drive file.
 
     Assumes the file we retrieved has EITHER `permissions` or `permission_ids`
+
+    add_prefix: When this method is called during the initial indexing via the connector,
+                set add_prefix to True so group IDs are prefixed with the source type.
+                When invoked from doc_sync (permission sync), use the default (False)
+                since upsert_document_external_perms handles prefixing.
     """
     doc_id = file.get("id")
     if not doc_id:
@@ -164,6 +171,13 @@ def get_external_access_for_raw_gdrive_file(
         | ({drive_id} if drive_id is not None else set())
     )
 
+    # Prefix group IDs with source type if requested (for indexing path)
+    if add_prefix:
+        group_ids = {
+            build_ext_group_name_for_onyx(group_id, DocumentSource.GOOGLE_DRIVE)
+            for group_id in group_ids
+        }
+
     return ExternalAccess(
         external_user_emails=user_emails,
         external_user_group_ids=group_ids,
@@ -175,6 +189,7 @@ def get_external_access_for_folder(
     folder: GoogleDriveFileType,
     google_domain: str,
     drive_service: GoogleDriveService,
+    add_prefix: bool = False,
 ) -> ExternalAccess:
     """
     Extract ExternalAccess from a folder's permissions.
@@ -186,6 +201,8 @@ def get_external_access_for_folder(
         folder: The folder metadata from Google Drive API (must include permissionIds field)
         google_domain: The company's Google Workspace domain (e.g., "company.com")
         drive_service: Google Drive service for fetching permission details
+        add_prefix: When True, prefix group IDs with source type (for indexing path).
+                   When False (default), leave unprefixed (for permission sync path).
 
     Returns:
         ExternalAccess with extracted permission info
@@ -248,17 +265,25 @@ def get_external_access_for_folder(
             # If allowFileDiscovery is False, it's "link only" access
             is_public = permission.allow_file_discovery is not False
 
+    # Prefix group IDs with source type if requested (for indexing path)
+    group_ids: set[str] = group_emails
+    if add_prefix:
+        group_ids = {
+            build_ext_group_name_for_onyx(group_id, DocumentSource.GOOGLE_DRIVE)
+            for group_id in group_emails
+        }
+
     return ExternalAccess(
         external_user_emails=user_emails,
-        external_user_group_ids=group_emails,
+        external_user_group_ids=group_ids,
         is_public=is_public,
     )
 
 
 def gdrive_doc_sync(
     cc_pair: ConnectorCredentialPair,
-    fetch_all_existing_docs_fn: FetchAllDocumentsFunction,
-    fetch_all_existing_docs_ids_fn: FetchAllDocumentsIdsFunction,
+    fetch_all_existing_docs_fn: FetchAllDocumentsFunction,  # noqa: ARG001
+    fetch_all_existing_docs_ids_fn: FetchAllDocumentsIdsFunction,  # noqa: ARG001
     callback: IndexingHeartbeatInterface | None,
 ) -> Generator[ElementExternalAccess, None, None]:
     """
@@ -270,7 +295,12 @@ def gdrive_doc_sync(
     google_drive_connector = GoogleDriveConnector(
         **cc_pair.connector.connector_specific_config
     )
-    google_drive_connector.load_credentials(cc_pair.credential.credential_json)
+    credential_json = (
+        cc_pair.credential.credential_json.get_value(apply_mask=False)
+        if cc_pair.credential.credential_json
+        else {}
+    )
+    google_drive_connector.load_credentials(credential_json)
 
     slim_doc_generator = _get_slim_doc_generator(cc_pair, google_drive_connector)
 

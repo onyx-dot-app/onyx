@@ -160,13 +160,13 @@ class TestDocprocessingPriorityInDocumentExtraction:
     @patch("onyx.background.indexing.run_docfetching.cache_hierarchy_nodes_batch")
     def test_docprocessing_priority_based_on_last_successful_index_time(
         self,
-        mock_cache_hierarchy_nodes_batch: MagicMock,
+        mock_cache_hierarchy_nodes_batch: MagicMock,  # noqa: ARG002
         mock_get_node_id_from_raw_id: MagicMock,
         mock_get_source_node_id_from_cache: MagicMock,
         mock_ensure_source_node_exists: MagicMock,
         mock_get_redis_client: MagicMock,
         mock_get_latest_valid_checkpoint: MagicMock,
-        mock_save_checkpoint: MagicMock,
+        mock_save_checkpoint: MagicMock,  # noqa: ARG002
         mock_get_last_successful_attempt_poll_range_end: MagicMock,
         mock_get_recent_completed_attempts: MagicMock,
         mock_get_connector_runner: MagicMock,

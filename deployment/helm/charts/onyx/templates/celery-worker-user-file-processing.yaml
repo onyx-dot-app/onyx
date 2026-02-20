@@ -65,7 +65,7 @@ spec:
               "-A",
               "onyx.background.celery.versioned_apps.user_file_processing",
               "worker",
-              "--loglevel=INFO",
+              {{ printf "--loglevel=%s" .Values.celery_worker_user_file_processing.logLevel | quote }},
               "--hostname=user-file-processing@%n",
               "-Q",
               "user_file_processing,user_file_project_sync,user_file_delete",
@@ -108,4 +108,3 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
 {{- end }}
-

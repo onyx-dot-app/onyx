@@ -65,10 +65,10 @@ spec:
               "-A",
               "onyx.background.celery.versioned_apps.light",
               "worker",
-              "--loglevel=INFO",
+              {{ printf "--loglevel=%s" .Values.celery_worker_light.logLevel | quote }},
               "--hostname=light@%n",
               "-Q",
-              "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,checkpoint_cleanup,index_attempt_cleanup",
+              "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,checkpoint_cleanup,index_attempt_cleanup,opensearch_migration",
             ]
           resources:
             {{- toYaml .Values.celery_worker_light.resources | nindent 12 }}

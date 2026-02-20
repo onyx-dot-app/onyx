@@ -28,9 +28,9 @@ import Button from "@/refresh-components/buttons/Button";
 import Switch from "@/refresh-components/inputs/Switch";
 import { useUser } from "@/providers/UserProvider";
 import { useTheme } from "next-themes";
-import { ThemePreference } from "@/lib/types";
+import { MemoryItem, ThemePreference } from "@/lib/types";
 import useUserPersonalization from "@/hooks/useUserPersonalization";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import LLMPopover from "@/refresh-components/popovers/LLMPopover";
 import { deleteAllChatSessions } from "@/app/app/services/lib";
 import { useAuthType, useLlmManager } from "@/lib/hooks";
@@ -39,7 +39,7 @@ import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useFilter from "@/hooks/useFilter";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button as OpalButton } from "@opal/components";
 import useFederatedOAuthStatus from "@/hooks/useFederatedOAuthStatus";
 import useCCPairs from "@/hooks/useCCPairs";
 import { ValidSources } from "@/lib/types";
@@ -47,10 +47,12 @@ import Separator from "@/refresh-components/Separator";
 import Text from "@/refresh-components/texts/Text";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import Code from "@/refresh-components/Code";
+import CharacterCount from "@/refresh-components/CharacterCount";
 import { InputPrompt } from "@/app/app/interfaces";
 import usePromptShortcuts from "@/hooks/usePromptShortcuts";
 import ColorSwatch from "@/refresh-components/ColorSwatch";
 import EmptyMessage from "@/refresh-components/EmptyMessage";
+import Memories from "@/sections/settings/Memories";
 import { FederatedConnectorOAuthStatus } from "@/components/chat/FederatedOAuthModal";
 import {
   CHAT_BACKGROUND_OPTIONS,
@@ -58,7 +60,8 @@ import {
 } from "@/lib/constants/chatBackgrounds";
 import { SvgCheck } from "@opal/icons";
 import { cn } from "@/lib/utils";
-import { Hoverable, HoverableContainer } from "@/refresh-components/Hoverable";
+import { Interactive } from "@opal/core";
+import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 
 interface PAT {
   id: number;
@@ -182,7 +185,6 @@ function GeneralSettings() {
     updateUserChatBackground,
   } = useUser();
   const { theme, setTheme, systemTheme } = useTheme();
-  const { popup, setPopup } = usePopup();
   const { refreshChatSessions } = useChatSessions();
   const router = useRouter();
   const pathname = usePathname();
@@ -194,16 +196,8 @@ function GeneralSettings() {
     updatePersonalizationField,
     handleSavePersonalization,
   } = useUserPersonalization(user, updateUserPersonalization, {
-    onSuccess: () =>
-      setPopup({
-        message: "Personalization updated successfully",
-        type: "success",
-      }),
-    onError: () =>
-      setPopup({
-        message: "Failed to update personalization",
-        type: "error",
-      }),
+    onSuccess: () => toast.success("Personalization updated successfully"),
+    onError: () => toast.error("Failed to update personalization"),
   });
 
   // Track initial values to detect changes
@@ -221,29 +215,21 @@ function GeneralSettings() {
     try {
       const response = await deleteAllChatSessions();
       if (response.ok) {
-        setPopup({
-          message: "All your chat sessions have been deleted.",
-          type: "success",
-        });
+        toast.success("All your chat sessions have been deleted.");
         await refreshChatSessions();
         setShowDeleteConfirmation(false);
       } else {
         throw new Error("Failed to delete all chat sessions");
       }
     } catch (error) {
-      setPopup({
-        message: "Failed to delete all chat sessions",
-        type: "error",
-      });
+      toast.error("Failed to delete all chat sessions");
     } finally {
       setIsDeleting(false);
     }
-  }, [pathname, router, setPopup, refreshChatSessions]);
+  }, [pathname, router, refreshChatSessions]);
 
   return (
     <>
-      {popup}
-
       {showDeleteConfirmation && (
         <ConfirmationModalLayout
           icon={SvgTrash}
@@ -384,7 +370,7 @@ function GeneralSettings() {
                   const currentBackgroundId =
                     user?.preferences?.chat_background ?? "none";
                   const isSelected = currentBackgroundId === bg.id;
-                  const isNone = bg.url === CHAT_BACKGROUND_NONE;
+                  const isNone = bg.src === CHAT_BACKGROUND_NONE;
 
                   return (
                     <button
@@ -463,7 +449,6 @@ interface LocalShortcut extends InputPrompt {
 }
 
 function PromptShortcuts() {
-  const { popup, setPopup } = usePopup();
   const { promptShortcuts, isLoading, error, refresh } = usePromptShortcuts();
   const [shortcuts, setShortcuts] = useState<LocalShortcut[]>([]);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
@@ -499,8 +484,8 @@ function PromptShortcuts() {
   // Show error popup if fetch fails
   useEffect(() => {
     if (!error) return;
-    setPopup({ message: "Failed to load shortcuts", type: "error" });
-  }, [error, setPopup]);
+    toast.error("Failed to load shortcuts");
+  }, [error]);
 
   // Auto-add empty row when user starts typing in the last row
   useEffect(() => {
@@ -585,25 +570,22 @@ function PromptShortcuts() {
         if (response.ok) {
           setShortcuts((prev) => prev.filter((_, i) => i !== index));
           await refresh();
-          setPopup({ message: "Shortcut deleted", type: "success" });
+          toast.success("Shortcut deleted");
         } else {
           throw new Error("Failed to delete shortcut");
         }
       } catch (error) {
-        setPopup({ message: "Failed to delete shortcut", type: "error" });
+        toast.error("Failed to delete shortcut");
       }
     },
-    [shortcuts, setPopup, refresh]
+    [shortcuts, refresh]
   );
 
   const handleSaveShortcut = useCallback(
     async (index: number) => {
       const shortcut = shortcuts[index];
       if (!shortcut || !shortcut.prompt.trim() || !shortcut.content.trim()) {
-        setPopup({
-          message: "Both shortcut and expansion are required",
-          type: "error",
-        });
+        toast.error("Both shortcut and expansion are required");
         return;
       }
 
@@ -623,7 +605,7 @@ function PromptShortcuts() {
 
           if (response.ok) {
             await refresh();
-            setPopup({ message: "Shortcut created", type: "success" });
+            toast.success("Shortcut created");
           } else {
             throw new Error("Failed to create shortcut");
           }
@@ -642,19 +624,16 @@ function PromptShortcuts() {
 
           if (response.ok) {
             await refresh();
-            setPopup({ message: "Shortcut updated", type: "success" });
+            toast.success("Shortcut updated");
           } else {
             throw new Error("Failed to update shortcut");
           }
         }
       } catch (error) {
-        setPopup({
-          message: "Failed to save shortcut",
-          type: "error",
-        });
+        toast.error("Failed to save shortcut");
       }
     },
-    [shortcuts, setPopup, refresh]
+    [shortcuts, refresh]
   );
 
   const handleBlurShortcut = useCallback(
@@ -677,8 +656,6 @@ function PromptShortcuts() {
 
   return (
     <>
-      {popup}
-
       {shortcuts.length > 0 && (
         <Section gap={0.75}>
           {shortcuts.map((shortcut, index) => {
@@ -718,10 +695,10 @@ function PromptShortcuts() {
                   }
                 />
                 <Section>
-                  <IconButton
+                  <OpalButton
                     icon={SvgMinusCircle}
                     onClick={() => void handleRemoveShortcut(index)}
-                    tertiary
+                    prominence="tertiary"
                     disabled={(shortcut.isNew && isEmpty) || shortcut.is_public}
                     aria-label="Remove shortcut"
                     tooltip={
@@ -761,179 +738,6 @@ function PromptShortcuts() {
   );
 }
 
-interface Memory {
-  id: number;
-  content: string;
-}
-
-interface LocalMemory extends Memory {
-  isNew: boolean;
-}
-
-interface MemoriesProps {
-  memories: string[];
-  onSaveMemories: (memories: string[]) => Promise<boolean>;
-}
-
-function Memories({ memories, onSaveMemories }: MemoriesProps) {
-  const { popup, setPopup } = usePopup();
-  const [localMemories, setLocalMemories] = useState<LocalMemory[]>([]);
-  const [isInitialLoad, setIsInitialLoad] = useState(true);
-  const initialMemoriesRef = useRef<string[]>([]);
-
-  // Initialize local memories from props
-  useEffect(() => {
-    // Convert string[] to LocalMemory[] with isNew: false for existing items
-    const existingMemories: LocalMemory[] = memories.map((content, index) => ({
-      id: index + 1,
-      content,
-      isNew: false,
-    }));
-
-    // Always ensure there's at least one empty row
-    setLocalMemories([
-      ...existingMemories,
-      { id: Date.now(), content: "", isNew: true },
-    ]);
-    initialMemoriesRef.current = memories;
-    setIsInitialLoad(false);
-  }, [memories]);
-
-  // Auto-add empty row when user starts typing in the last row
-  useEffect(() => {
-    if (isInitialLoad) return;
-
-    // Only manage new/unsaved rows (isNew: true)
-    const newMemories = localMemories.filter((m) => m.isNew);
-    const emptyNewRows = newMemories.filter((m) => !m.content.trim());
-    const emptyNewRowsCount = emptyNewRows.length;
-
-    // If we have no empty new rows, add one
-    if (emptyNewRowsCount === 0) {
-      setLocalMemories((prev) => [
-        ...prev,
-        { id: Date.now(), content: "", isNew: true },
-      ]);
-    }
-    // If we have more than one empty new row, keep only one
-    else if (emptyNewRowsCount > 1) {
-      setLocalMemories((prev) => {
-        const existingMemories = prev.filter((m) => !m.isNew);
-        const filledNewMemories = prev.filter(
-          (m) => m.isNew && m.content.trim()
-        );
-        return [
-          ...existingMemories,
-          ...filledNewMemories,
-          { id: Date.now(), content: "", isNew: true },
-        ];
-      });
-    }
-  }, [localMemories, isInitialLoad]);
-
-  const handleUpdateMemory = useCallback((index: number, value: string) => {
-    setLocalMemories((prev) =>
-      prev.map((memory, i) =>
-        i === index ? { ...memory, content: value } : memory
-      )
-    );
-  }, []);
-
-  const handleRemoveMemory = useCallback(
-    async (index: number) => {
-      const memory = localMemories[index];
-      if (!memory) return;
-
-      // If it's a new memory (isNew: true), just remove from state
-      if (memory.isNew) {
-        setLocalMemories((prev) => prev.filter((_, i) => i !== index));
-        return;
-      }
-
-      // For existing memories, remove and save
-      const newMemories = localMemories
-        .filter((_, i) => i !== index)
-        .filter((m) => !m.isNew || m.content.trim())
-        .map((m) => m.content);
-
-      const success = await onSaveMemories(newMemories);
-      if (success) {
-        setPopup({ message: "Memory deleted", type: "success" });
-      } else {
-        setPopup({ message: "Failed to delete memory", type: "error" });
-      }
-    },
-    [localMemories, onSaveMemories, setPopup]
-  );
-
-  const handleBlurMemory = useCallback(
-    async (index: number) => {
-      const memory = localMemories[index];
-      if (!memory || !memory.content.trim()) return;
-
-      // Build the new memories array from current state
-      const newMemories = localMemories
-        .filter((m) => m.content.trim())
-        .map((m) => m.content);
-
-      // Check if anything actually changed
-      const memoriesChanged =
-        JSON.stringify(newMemories) !==
-        JSON.stringify(initialMemoriesRef.current);
-
-      if (!memoriesChanged) return;
-
-      const success = await onSaveMemories(newMemories);
-      if (success) {
-        initialMemoriesRef.current = newMemories;
-        setPopup({ message: "Memory saved", type: "success" });
-      } else {
-        setPopup({ message: "Failed to save memory", type: "error" });
-      }
-    },
-    [localMemories, onSaveMemories, setPopup]
-  );
-
-  return (
-    <>
-      {popup}
-
-      {localMemories.length > 0 && (
-        <Section gap={0.5}>
-          {localMemories.map((memory, index) => {
-            const isEmpty = !memory.content.trim();
-            const isExisting = !memory.isNew;
-
-            return (
-              <Section
-                key={memory.id}
-                flexDirection="row"
-                alignItems="start"
-                gap={0.5}
-              >
-                <InputTextArea
-                  placeholder="Type or paste in a personal note or memory"
-                  value={memory.content}
-                  onChange={(e) => handleUpdateMemory(index, e.target.value)}
-                  onBlur={() => void handleBlurMemory(index)}
-                  rows={2}
-                />
-                <IconButton
-                  icon={SvgMinusCircle}
-                  onClick={() => void handleRemoveMemory(index)}
-                  tertiary
-                  disabled={isEmpty && !isExisting}
-                  aria-label="Remove memory"
-                />
-              </Section>
-            );
-          })}
-        </Section>
-      )}
-    </>
-  );
-}
-
 function ChatPreferencesSettings() {
   const {
     user,
@@ -941,19 +745,29 @@ function ChatPreferencesSettings() {
     updateUserAutoScroll,
     updateUserShortcuts,
     updateUserDefaultModel,
+    updateUserDefaultAppMode,
   } = useUser();
+  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
   const llmManager = useLlmManager();
 
   const {
     personalizationValues,
     toggleUseMemories,
+    toggleEnableMemoryTool,
+    updateUserPreferences,
     handleSavePersonalization,
-  } = useUserPersonalization(user, updateUserPersonalization, {});
+  } = useUserPersonalization(user, updateUserPersonalization, {
+    onSuccess: () => toast.success("Preferences saved"),
+    onError: () => toast.error("Failed to save preferences"),
+  });
 
   // Wrapper to save memories and return success/failure
   const handleSaveMemories = useCallback(
-    async (newMemories: string[]): Promise<boolean> => {
-      const result = await handleSavePersonalization({ memories: newMemories });
+    async (newMemories: MemoryItem[]): Promise<boolean> => {
+      const result = await handleSavePersonalization(
+        { memories: newMemories },
+        true
+      );
       return !!result;
     },
     [handleSavePersonalization]
@@ -987,6 +801,87 @@ function ChatPreferencesSettings() {
               }}
             />
           </InputLayouts.Horizontal>
+
+          {isPaidEnterpriseFeaturesEnabled && (
+            <InputLayouts.Horizontal
+              title="Default App Mode"
+              description="Choose whether new sessions start in Search or Chat mode."
+              center
+            >
+              <InputSelect
+                value={user?.preferences.default_app_mode ?? "CHAT"}
+                onValueChange={(value) => {
+                  void updateUserDefaultAppMode(value as "CHAT" | "SEARCH");
+                }}
+              >
+                <InputSelect.Trigger />
+                <InputSelect.Content>
+                  <InputSelect.Item value="CHAT">Chat</InputSelect.Item>
+                  <InputSelect.Item value="SEARCH">Search</InputSelect.Item>
+                </InputSelect.Content>
+              </InputSelect>
+            </InputLayouts.Horizontal>
+          )}
+        </Card>
+      </Section>
+
+      <Section gap={0.75}>
+        <InputLayouts.Vertical
+          title="Personal Preferences"
+          description="Provide your custom preferences in natural language."
+        >
+          <InputTextArea
+            placeholder="Describe how you want the system to behave and the tone it should use."
+            value={personalizationValues.user_preferences}
+            onChange={(e) => updateUserPreferences(e.target.value)}
+            onBlur={() => void handleSavePersonalization()}
+            rows={4}
+            maxRows={10}
+            autoResize
+            maxLength={500}
+          />
+          <CharacterCount
+            value={personalizationValues.user_preferences || ""}
+            limit={500}
+          />
+        </InputLayouts.Vertical>
+        <InputLayouts.Title title="Memory" />
+        <Card>
+          <InputLayouts.Horizontal
+            title="Reference Stored Memories"
+            description="Let Onyx reference stored memories in chats."
+          >
+            <Switch
+              checked={personalizationValues.use_memories}
+              onCheckedChange={(checked) => {
+                toggleUseMemories(checked);
+                void handleSavePersonalization({ use_memories: checked });
+              }}
+            />
+          </InputLayouts.Horizontal>
+          <InputLayouts.Horizontal
+            title="Update Memories"
+            description="Let Onyx generate and update stored memories."
+          >
+            <Switch
+              checked={personalizationValues.enable_memory_tool}
+              onCheckedChange={(checked) => {
+                toggleEnableMemoryTool(checked);
+                void handleSavePersonalization({
+                  enable_memory_tool: checked,
+                });
+              }}
+            />
+          </InputLayouts.Horizontal>
+
+          {(personalizationValues.use_memories ||
+            personalizationValues.enable_memory_tool ||
+            personalizationValues.memories.length > 0) && (
+            <Memories
+              memories={personalizationValues.memories}
+              onSaveMemories={handleSaveMemories}
+            />
+          )}
         </Card>
       </Section>
 
@@ -1008,38 +903,12 @@ function ChatPreferencesSettings() {
           {user?.preferences?.shortcut_enabled && <PromptShortcuts />}
         </Card>
       </Section>
-
-      <Section gap={0.75}>
-        <InputLayouts.Title title="Personalization" />
-        <Card>
-          <InputLayouts.Horizontal
-            title="Reference Stored Memories"
-            description="Let Onyx reference stored memories in chats."
-          >
-            <Switch
-              checked={personalizationValues.use_memories}
-              onCheckedChange={(checked) => {
-                toggleUseMemories(checked);
-                void handleSavePersonalization({ use_memories: checked });
-              }}
-            />
-          </InputLayouts.Horizontal>
-
-          {personalizationValues.use_memories && (
-            <Memories
-              memories={personalizationValues.memories}
-              onSaveMemories={handleSaveMemories}
-            />
-          )}
-        </Card>
-      </Section>
     </Section>
   );
 }
 
 function AccountsAccessSettings() {
   const { user, authTypeMetadata } = useUser();
-  const { popup, setPopup } = usePopup();
   const authType = useAuthType();
   const [showPasswordModal, setShowPasswordModal] = useState(false);
 
@@ -1094,13 +963,13 @@ function AccountsAccessSettings() {
   // Show error popup if SWR fetch fails
   useEffect(() => {
     if (error) {
-      setPopup({ message: "Failed to load tokens", type: "error" });
+      toast.error("Failed to load tokens");
     }
-  }, [error, setPopup]);
+  }, [error]);
 
   const createPAT = useCallback(async () => {
     if (!newTokenName.trim()) {
-      setPopup({ message: "Token name is required", type: "error" });
+      toast.error("Token name is required");
       return;
     }
 
@@ -1124,22 +993,19 @@ function AccountsAccessSettings() {
           token: data.token,
           name: newTokenName,
         });
-        setPopup({ message: "Token created successfully", type: "success" });
+        toast.success("Token created successfully");
         // Revalidate the token list
         await mutate();
       } else {
         const errorData = await response.json();
-        setPopup({
-          message: errorData.detail || "Failed to create token",
-          type: "error",
-        });
+        toast.error(errorData.detail || "Failed to create token");
       }
     } catch (error) {
-      setPopup({ message: "Network error creating token", type: "error" });
+      toast.error("Network error creating token");
     } finally {
       setIsCreating(false);
     }
-  }, [newTokenName, expirationDays, mutate, setPopup]);
+  }, [newTokenName, expirationDays, mutate]);
 
   const deletePAT = useCallback(
     async (patId: number) => {
@@ -1154,16 +1020,16 @@ function AccountsAccessSettings() {
             setNewlyCreatedToken(null);
           }
           await mutate();
-          setPopup({ message: "Token deleted successfully", type: "success" });
+          toast.success("Token deleted successfully");
           setTokenToDelete(null);
         } else {
-          setPopup({ message: "Failed to delete token", type: "error" });
+          toast.error("Failed to delete token");
         }
       } catch (error) {
-        setPopup({ message: "Network error deleting token", type: "error" });
+        toast.error("Network error deleting token");
       }
     },
-    [newlyCreatedToken, mutate, setPopup]
+    [newlyCreatedToken, mutate]
   );
 
   const handleChangePassword = useCallback(
@@ -1185,32 +1051,21 @@ function AccountsAccessSettings() {
         });
 
         if (response.ok) {
-          setPopup({
-            type: "success",
-            message: "Password updated successfully",
-          });
+          toast.success("Password updated successfully");
           setShowPasswordModal(false);
         } else {
           const errorData = await response.json();
-          setPopup({
-            message: errorData.detail || "Failed to change password",
-            type: "error",
-          });
+          toast.error(errorData.detail || "Failed to change password");
         }
       } catch (error) {
-        setPopup({
-          message: "An error occurred while changing the password",
-          type: "error",
-        });
+        toast.error("An error occurred while changing the password");
       }
     },
-    [setPopup]
+    []
   );
 
   return (
     <>
-      {popup}
-
       {showCreateModal && (
         <PATModal
           isCreating={isCreating}
@@ -1446,29 +1301,29 @@ function AccountsAccessSettings() {
                     } ago - ${expiryText}`;
 
                     return (
-                      <Hoverable
+                      <Interactive.Container
                         key={pat.id}
-                        asChild
-                        nonInteractive
-                        variant="secondary"
+                        heightVariant="fit"
+                        widthVariant="full"
                       >
-                        <HoverableContainer noPadding heightVariant="full">
+                        <div className="w-full bg-background-tint-01">
                           <AttachmentItemLayout
                             icon={SvgKey}
                             title={pat.name}
                             description={pat.token_display}
                             middleText={middleText}
                             rightChildren={
-                              <IconButton
+                              <OpalButton
                                 icon={SvgTrash}
                                 onClick={() => setTokenToDelete(pat)}
-                                internal
+                                prominence="tertiary"
+                                size="sm"
                                 aria-label={`Delete token ${pat.name}`}
                               />
                             }
                           />
-                        </HoverableContainer>
-                      </Hoverable>
+                        </div>
+                      </Interactive.Container>
                     );
                   })}
                 </Section>
@@ -1509,7 +1364,6 @@ function FederatedConnectorCard({
   connector,
   onDisconnectSuccess,
 }: FederatedConnectorCardProps) {
-  const { popup, setPopup } = usePopup();
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   const [showDisconnectConfirmation, setShowDisconnectConfirmation] =
     useState(false);
@@ -1524,29 +1378,21 @@ function FederatedConnectorCard({
       );
 
       if (response.ok) {
-        setPopup({
-          message: "Disconnected successfully",
-          type: "success",
-        });
+        toast.success("Disconnected successfully");
         setShowDisconnectConfirmation(false);
         onDisconnectSuccess();
       } else {
         throw new Error("Failed to disconnect");
       }
     } catch (error) {
-      setPopup({
-        message: "Failed to disconnect",
-        type: "error",
-      });
+      toast.error("Failed to disconnect");
     } finally {
       setIsDisconnecting(false);
     }
-  }, [connector.federated_connector_id, onDisconnectSuccess, setPopup]);
+  }, [connector.federated_connector_id, onDisconnectSuccess]);
 
   return (
     <>
-      {popup}
-
       {showDisconnectConfirmation && (
         <ConfirmationModalLayout
           icon={SvgUnplug}
@@ -1585,9 +1431,10 @@ function FederatedConnectorCard({
           }
           rightChildren={
             connector.has_oauth_token ? (
-              <IconButton
+              <OpalButton
                 icon={SvgUnplug}
-                internal
+                prominence="tertiary"
+                size="sm"
                 onClick={() => setShowDisconnectConfirmation(true)}
                 disabled={isDisconnecting}
               />

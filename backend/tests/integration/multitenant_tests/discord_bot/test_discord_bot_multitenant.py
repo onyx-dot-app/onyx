@@ -95,7 +95,7 @@ class TestGuildDataIsolation:
     """Tests for guild data isolation between tenants via API."""
 
     def test_tenant_cannot_see_other_tenant_guilds(
-        self, reset_multitenant: None
+        self, reset_multitenant: None  # noqa: ARG002
     ) -> None:
         """Guilds created in tenant 1 are not visible from tenant 2.
 
@@ -158,7 +158,9 @@ class TestGuildDataIsolation:
                 headers=admin_user1.headers,
             )
 
-    def test_guild_list_returns_only_own_tenant(self, reset_multitenant: None) -> None:
+    def test_guild_list_returns_only_own_tenant(
+        self, reset_multitenant: None  # noqa: ARG002
+    ) -> None:
         """List guilds returns exactly the guilds for that tenant.
 
         Creates 1 guild in each tenant, registers them with different data,
@@ -338,7 +340,7 @@ class TestGuildAccessIsolation:
     """Tests for guild access isolation between tenants."""
 
     def test_tenant_cannot_access_other_tenant_guild(
-        self, reset_multitenant: None
+        self, reset_multitenant: None  # noqa: ARG002
     ) -> None:
         """Tenant 2 cannot access or modify tenant 1's guild by ID.
 

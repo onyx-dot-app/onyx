@@ -14,9 +14,12 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.db.llm import fetch_default_provider
+from onyx.db.enums import LLMModelFlowType
+from onyx.db.llm import fetch_default_llm_model
 from onyx.db.llm import fetch_existing_llm_provider
+from onyx.db.llm import fetch_existing_llm_providers
 from onyx.db.llm import remove_llm_provider
+from onyx.db.llm import sync_auto_mode_models
 from onyx.db.llm import update_default_provider
 from onyx.db.models import UserRole
 from onyx.llm.constants import LlmProviderNames
@@ -169,16 +172,16 @@ class TestAutoModeSyncFeature:
             update_default_provider(provider.id, db_session)
 
             # Step 5: Fetch the default provider and verify
-            default_provider = fetch_default_provider(db_session)
-            assert default_provider is not None, "Default provider should exist"
+            default_model = fetch_default_llm_model(db_session)
+            assert default_model is not None, "Default provider should exist"
             assert (
-                default_provider.name == provider_name
+                default_model.llm_provider.name == provider_name
             ), "Default provider should be our test provider"
             assert (
-                default_provider.default_model_name == expected_default_model
+                default_model.name == expected_default_model
             ), f"Default provider's default model should be '{expected_default_model}'"
             assert (
-                default_provider.is_auto_mode is True
+                default_model.llm_provider.is_auto_mode is True
             ), "Default provider should be in auto mode"
 
         finally:
@@ -570,11 +573,11 @@ class TestAutoModeSyncFeature:
 
             # Step 3: Verify provider 1 is still the default
             db_session.expire_all()
-            default_provider = fetch_default_provider(db_session)
-            assert default_provider is not None
-            assert default_provider.name == provider_1_name
-            assert default_provider.default_model_name == provider_1_default_model
-            assert default_provider.is_auto_mode is True
+            default_model = fetch_default_llm_model(db_session)
+            assert default_model is not None
+            assert default_model.llm_provider.name == provider_1_name
+            assert default_model.name == provider_1_default_model
+            assert default_model.llm_provider.is_auto_mode is True
 
             # Step 4: Change the default to provider 2
             provider_2 = fetch_existing_llm_provider(
@@ -585,11 +588,11 @@ class TestAutoModeSyncFeature:
 
             # Step 5: Verify provider 2 is now the default
             db_session.expire_all()
-            default_provider = fetch_default_provider(db_session)
-            assert default_provider is not None
-            assert default_provider.name == provider_2_name
-            assert default_provider.default_model_name == provider_2_default_model
-            assert default_provider.is_auto_mode is True
+            default_model = fetch_default_llm_model(db_session)
+            assert default_model is not None
+            assert default_model.llm_provider.name == provider_2_name
+            assert default_model.name == provider_2_default_model
+            assert default_model.llm_provider.is_auto_mode is True
 
             # Step 6: Run test_default_provider and verify it uses provider 2's model
             with patch(
@@ -606,3 +609,95 @@ class TestAutoModeSyncFeature:
             db_session.rollback()
             _cleanup_provider(db_session, provider_1_name)
             _cleanup_provider(db_session, provider_2_name)
+
+
+class TestAutoModeMissingFlows:
+    """Regression test: sync_auto_mode_models must create LLMModelFlow rows
+    for every ModelConfiguration it inserts, otherwise the provider vanishes
+    from listing queries that join through LLMModelFlow."""
+
+    def test_sync_auto_mode_creates_flow_rows(
+        self,
+        db_session: Session,
+        provider_name: str,
+    ) -> None:
+        """
+        Steps:
+        1. Create a provider with no model configs (empty shell).
+        2. Call sync_auto_mode_models to add models from a mock config.
+        3. Assert every new ModelConfiguration has at least one LLMModelFlow.
+        4. Assert fetch_existing_llm_providers (which joins through
+           LLMModelFlow) returns the provider.
+        """
+        mock_recommendations = _create_mock_llm_recommendations(
+            provider=LlmProviderNames.OPENAI,
+            default_model_name="gpt-4o",
+            additional_models=["gpt-4o-mini"],
+        )
+
+        try:
+            # Step 1: Create provider with no model configs
+            put_llm_provider(
+                llm_provider_upsert_request=LLMProviderUpsertRequest(
+                    name=provider_name,
+                    provider=LlmProviderNames.OPENAI,
+                    api_key="sk-test-key-00000000000000000000000000000000000",
+                    api_key_changed=True,
+                    is_auto_mode=True,
+                    default_model_name="gpt-4o",
+                    model_configurations=[],
+                ),
+                is_creation=True,
+                _=_create_mock_admin(),
+                db_session=db_session,
+            )
+
+            # Step 2: Run sync_auto_mode_models (simulating the periodic sync)
+            db_session.expire_all()
+            provider = fetch_existing_llm_provider(
+                name=provider_name, db_session=db_session
+            )
+            assert provider is not None
+
+            sync_auto_mode_models(
+                db_session=db_session,
+                provider=provider,
+                llm_recommendations=mock_recommendations,
+            )
+
+            # Step 3: Every ModelConfiguration must have at least one LLMModelFlow
+            db_session.expire_all()
+            provider = fetch_existing_llm_provider(
+                name=provider_name, db_session=db_session
+            )
+            assert provider is not None
+
+            synced_model_names = {mc.name for mc in provider.model_configurations}
+            assert "gpt-4o" in synced_model_names
+            assert "gpt-4o-mini" in synced_model_names
+
+            for mc in provider.model_configurations:
+                assert len(mc.llm_model_flows) > 0, (
+                    f"ModelConfiguration '{mc.name}' (id={mc.id}) has no "
+                    f"LLMModelFlow rows — it will be invisible to listing queries"
+                )
+
+                flow_types = {f.llm_model_flow_type for f in mc.llm_model_flows}
+                assert (
+                    LLMModelFlowType.CHAT in flow_types
+                ), f"ModelConfiguration '{mc.name}' is missing a CHAT flow"
+
+            # Step 4: The provider must appear in fetch_existing_llm_providers
+            listed_providers = fetch_existing_llm_providers(
+                db_session=db_session,
+                flow_type_filter=[LLMModelFlowType.CHAT],
+            )
+            listed_provider_names = {p.name for p in listed_providers}
+            assert provider_name in listed_provider_names, (
+                f"Provider '{provider_name}' not returned by "
+                f"fetch_existing_llm_providers — models are missing flow rows"
+            )
+
+        finally:
+            db_session.rollback()
+            _cleanup_provider(db_session, provider_name)

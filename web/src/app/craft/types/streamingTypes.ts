@@ -1,4 +1,10 @@
 // =============================================================================
+// Sharing Types
+// =============================================================================
+
+export type SharingScope = "private" | "public_org" | "public_global";
+
+// =============================================================================
 // Session Error Constants
 // =============================================================================
 
@@ -118,7 +124,7 @@ export type SessionStatus =
   | "idle"
   | "creating"
   | "running"
-  | "completed"
+  | "active"
   | "failed";
 
 export interface Session {
@@ -148,7 +154,8 @@ export interface ApiSandboxResponse {
     | "idle"
     | "sleeping"
     | "terminated"
-    | "failed";
+    | "failed"
+    | "restoring"; // Frontend-only: set during snapshot restore
   container_id: string | null;
   created_at: string;
   last_heartbeat: string | null;
@@ -164,6 +171,7 @@ export interface ApiSessionResponse {
   last_activity_at: string;
   sandbox: ApiSandboxResponse | null;
   artifacts: ApiArtifactResponse[];
+  sharing_scope: SharingScope;
 }
 
 export interface ApiDetailedSessionResponse extends ApiSessionResponse {
@@ -194,6 +202,8 @@ export interface ApiWebappInfoResponse {
   has_webapp: boolean;
   webapp_url: string | null;
   status: string;
+  ready: boolean;
+  sharing_scope: SharingScope;
 }
 
 export interface FileSystemEntry {

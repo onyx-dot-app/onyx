@@ -8,8 +8,8 @@ import {
   FetchToolDocuments,
   TopLevelBranching,
   Stop,
-  SearchToolStart,
-  CustomToolStart,
+  ImageGenerationToolDelta,
+  MessageStart,
 } from "@/app/app/services/streamingModels";
 import { CitationMap } from "@/app/app/interfaces";
 import { OnyxDocument } from "@/lib/search/interfaces";
@@ -29,7 +29,7 @@ export { parseToolKey };
 
 export interface ProcessorState {
   nodeId: number;
-  lastProcessedIndex: number;
+  nextPacketIndex: number;
 
   // Citations
   citations: StreamingCitation[];
@@ -49,18 +49,21 @@ export interface ProcessorState {
   toolGroupKeys: Set<string>;
   displayGroupKeys: Set<string>;
 
-  // Unique tool names tracking (populated during packet processing)
-  uniqueToolNames: Set<string>;
+  // Image generation status
+  isGeneratingImage: boolean;
+  generatedImageCount: number;
 
   // Streaming status
   finalAnswerComing: boolean;
   stopPacketSeen: boolean;
   stopReason: StopReason | undefined;
 
+  // Tool processing duration from backend (captured when MESSAGE_START arrives)
+  toolProcessingDuration: number | undefined;
+
   // Result arrays (built at end of processPackets)
   toolGroups: GroupedPacket[];
   potentialDisplayGroups: GroupedPacket[];
-  uniqueToolNamesArray: string[];
 }
 
 export interface GroupedPacket {
@@ -76,7 +79,7 @@ export interface GroupedPacket {
 export function createInitialState(nodeId: number): ProcessorState {
   return {
     nodeId,
-    lastProcessedIndex: 0,
+    nextPacketIndex: 0,
     citations: [],
     seenCitationDocIds: new Set(),
     citationMap: {},
@@ -87,13 +90,14 @@ export function createInitialState(nodeId: number): ProcessorState {
     expectedBranches: new Map(),
     toolGroupKeys: new Set(),
     displayGroupKeys: new Set(),
-    uniqueToolNames: new Set(),
+    isGeneratingImage: false,
+    generatedImageCount: 0,
     finalAnswerComing: false,
     stopPacketSeen: false,
     stopReason: undefined,
+    toolProcessingDuration: undefined,
     toolGroups: [],
     potentialDisplayGroups: [],
-    uniqueToolNamesArray: [],
   };
 }
 
@@ -135,7 +139,10 @@ const CONTENT_PACKET_TYPES_SET = new Set<PacketType>([
   PacketType.IMAGE_GENERATION_TOOL_START,
   PacketType.PYTHON_TOOL_START,
   PacketType.CUSTOM_TOOL_START,
+  PacketType.FILE_READER_START,
   PacketType.FETCH_TOOL_START,
+  PacketType.MEMORY_TOOL_START,
+  PacketType.MEMORY_TOOL_NO_ACCESS,
   PacketType.REASONING_START,
   PacketType.DEEP_RESEARCH_PLAN_START,
   PacketType.RESEARCH_AGENT_START,
@@ -148,37 +155,6 @@ function hasContentPackets(packets: Packet[]): boolean {
 }
 
 /**
- * Extract tool name from a packet for unique tool tracking.
- * Returns null for non-tool packets.
- */
-function getToolNameFromPacket(packet: Packet): string | null {
-  switch (packet.obj.type) {
-    case PacketType.SEARCH_TOOL_START: {
-      const searchPacket = packet.obj as SearchToolStart;
-      return searchPacket.is_internet_search ? "Web Search" : "Internal Search";
-    }
-    case PacketType.PYTHON_TOOL_START:
-      return "Code Interpreter";
-    case PacketType.FETCH_TOOL_START:
-      return "Open URLs";
-    case PacketType.CUSTOM_TOOL_START: {
-      const customPacket = packet.obj as CustomToolStart;
-      return customPacket.tool_name || "Custom Tool";
-    }
-    case PacketType.IMAGE_GENERATION_TOOL_START:
-      return "Generate Image";
-    case PacketType.DEEP_RESEARCH_PLAN_START:
-      return "Generate plan";
-    case PacketType.RESEARCH_AGENT_START:
-      return "Research agent";
-    case PacketType.REASONING_START:
-      return "Thinking";
-    default:
-      return null;
-  }
-}
-
-/**
  * Packet types that indicate final answer content is coming
  */
 const FINAL_ANSWER_PACKET_TYPES_SET = new Set<PacketType>([
@@ -186,8 +162,6 @@ const FINAL_ANSWER_PACKET_TYPES_SET = new Set<PacketType>([
   PacketType.MESSAGE_DELTA,
   PacketType.IMAGE_GENERATION_TOOL_START,
   PacketType.IMAGE_GENERATION_TOOL_DELTA,
-  PacketType.PYTHON_TOOL_START,
-  PacketType.PYTHON_TOOL_DELTA,
 ]);
 
 // ============================================================================
@@ -271,6 +245,14 @@ function handleStreamingStatusPacket(
   // Check if final answer is coming
   if (FINAL_ANSWER_PACKET_TYPES_SET.has(packet.obj.type as PacketType)) {
     state.finalAnswerComing = true;
+  }
+
+  // Capture pre-answer processing time from MESSAGE_START packet
+  if (packet.obj.type === PacketType.MESSAGE_START) {
+    const messageStart = packet.obj as MessageStart;
+    if (messageStart.pre_answer_processing_seconds !== undefined) {
+      state.toolProcessingDuration = messageStart.pre_answer_processing_seconds;
+    }
   }
 }
 
@@ -363,15 +345,21 @@ function processPacket(state: ProcessorState, packet: Packet): void {
   if (isFirstPacket) {
     if (isToolPacket(packet, false)) {
       state.toolGroupKeys.add(groupKey);
-      // Track unique tool name
-      const toolName = getToolNameFromPacket(packet);
-      if (toolName) {
-        state.uniqueToolNames.add(toolName);
-      }
     }
     if (isDisplayPacket(packet)) {
       state.displayGroupKeys.add(groupKey);
     }
+
+    // Track image generation for header display
+    if (packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_START) {
+      state.isGeneratingImage = true;
+    }
+  }
+
+  // Count generated images from DELTA packets
+  if (packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_DELTA) {
+    const delta = packet.obj as ImageGenerationToolDelta;
+    state.generatedImageCount += delta.images?.length ?? 0;
   }
 
   // Handle specific packet types
@@ -387,27 +375,33 @@ export function processPackets(
   rawPackets: Packet[]
 ): ProcessorState {
   // Handle reset (packets array shrunk - upstream replaced with shorter list)
-  if (state.lastProcessedIndex > rawPackets.length) {
+  if (state.nextPacketIndex > rawPackets.length) {
     state = createInitialState(state.nodeId);
   }
 
+  // Track if we processed any new packets
+  const prevProcessedIndex = state.nextPacketIndex;
+
   // Process only new packets
-  for (let i = state.lastProcessedIndex; i < rawPackets.length; i++) {
+  for (let i = state.nextPacketIndex; i < rawPackets.length; i++) {
     const packet = rawPackets[i];
     if (packet) {
       processPacket(state, packet);
     }
   }
 
-  state.lastProcessedIndex = rawPackets.length;
+  state.nextPacketIndex = rawPackets.length;
 
-  // Build result arrays after processing
-  state.toolGroups = buildGroupsFromKeys(state, state.toolGroupKeys);
-  state.potentialDisplayGroups = buildGroupsFromKeys(
-    state,
-    state.displayGroupKeys
-  );
-  state.uniqueToolNamesArray = Array.from(state.uniqueToolNames);
+  // Only rebuild result arrays if we processed new packets
+  // This prevents creating new references when nothing changed
+  if (prevProcessedIndex !== rawPackets.length) {
+    // Build result arrays after processing new packets
+    state.toolGroups = buildGroupsFromKeys(state, state.toolGroupKeys);
+    state.potentialDisplayGroups = buildGroupsFromKeys(
+      state,
+      state.displayGroupKeys
+    );
+  }
 
   return state;
 }
@@ -415,6 +409,43 @@ export function processPackets(
 /**
  * Build GroupedPacket array from a set of group keys.
  * Filters to only include groups with meaningful content and sorts by turn/tab index.
+ *
+ * @example
+ * // Input: state.groupedPacketsMap + keys Set
+ * // ┌─────────────────────────────────────────────────────┐
+ * // │ groupedPacketsMap = {                               │
+ * // │   "0-0" → [packet1, packet2]                       │
+ * // │   "0-1" → [packet3]                                │
+ * // │   "1-0" → [packet4, packet5]                       │
+ * // │   "2-0" → [empty_packet]  ← no content packets     │
+ * // │ }                                                  │
+ * // │ keys = Set{"0-0", "0-1", "1-0", "2-0"}             │
+ * // └─────────────────────────────────────────────────────┘
+ * //
+ * // Step 1: Map keys → GroupedPacket (parse key, lookup packets)
+ * // ┌─────────────────────────────────────────────────────┐
+ * // │ "0-0" → { turn_index:0, tab_index:0, packets:[...] }│
+ * // │ "0-1" → { turn_index:0, tab_index:1, packets:[...] }│
+ * // │ "1-0" → { turn_index:1, tab_index:0, packets:[...] }│
+ * // │ "2-0" → { turn_index:2, tab_index:0, packets:[...] }│
+ * // └─────────────────────────────────────────────────────┘
+ * //
+ * // Step 2: Filter (hasContentPackets check)
+ * // ┌─────────────────────────────────────────────────────┐
+ * // │ ✓ "0-0" has MESSAGE_START        → keep            │
+ * // │ ✓ "0-1" has SEARCH_TOOL_START    → keep            │
+ * // │ ✓ "1-0" has PYTHON_TOOL_START    → keep            │
+ * // │ ✗ "2-0" no content packets       → filtered out    │
+ * // └─────────────────────────────────────────────────────┘
+ * //
+ * // Step 3: Sort by turn_index, then tab_index
+ * // ┌─────────────────────────────────────────────────────┐
+ * // │ Output: GroupedPacket[]                             │
+ * // ├─────────────────────────────────────────────────────┤
+ * // │ [0] turn_index=0, tab_index=0, packets=[...]       │
+ * // │ [1] turn_index=0, tab_index=1, packets=[...]       │
+ * // │ [2] turn_index=1, tab_index=0, packets=[...]       │
+ * // └─────────────────────────────────────────────────────┘
  */
 function buildGroupsFromKeys(
   state: ProcessorState,

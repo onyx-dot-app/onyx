@@ -34,8 +34,6 @@ export function AnthropicForm({
       {({
         onClose,
         mutate,
-        popup,
-        setPopup,
         isTesting,
         setIsTesting,
         testError,
@@ -52,7 +50,7 @@ export function AnthropicForm({
             modelConfigurations
           ),
           api_key: existingLlmProvider?.api_key ?? "",
-          api_base: existingLlmProvider?.api_base ?? "",
+          api_base: existingLlmProvider?.api_base ?? undefined,
           default_model_name:
             existingLlmProvider?.default_model_name ??
             wellKnownLLMProvider?.recommended_default_model?.name ??
@@ -66,60 +64,56 @@ export function AnthropicForm({
         });
 
         return (
-          <>
-            {popup}
-            <Formik
-              initialValues={initialValues}
-              validationSchema={validationSchema}
-              validateOnMount={true}
-              onSubmit={async (values, { setSubmitting }) => {
-                await submitLLMProvider({
-                  providerName: ANTHROPIC_PROVIDER_NAME,
-                  values,
-                  initialValues,
-                  modelConfigurations,
-                  existingLlmProvider,
-                  shouldMarkAsDefault,
-                  setIsTesting,
-                  setTestError,
-                  setPopup,
-                  mutate,
-                  onClose,
-                  setSubmitting,
-                });
-              }}
-            >
-              {(formikProps) => {
-                return (
-                  <Form className={LLM_FORM_CLASS_NAME}>
-                    <DisplayNameField disabled={!!existingLlmProvider} />
+          <Formik
+            initialValues={initialValues}
+            validationSchema={validationSchema}
+            validateOnMount={true}
+            onSubmit={async (values, { setSubmitting }) => {
+              await submitLLMProvider({
+                providerName: ANTHROPIC_PROVIDER_NAME,
+                values,
+                initialValues,
+                modelConfigurations,
+                existingLlmProvider,
+                shouldMarkAsDefault,
+                setIsTesting,
+                setTestError,
+                mutate,
+                onClose,
+                setSubmitting,
+              });
+            }}
+          >
+            {(formikProps) => {
+              return (
+                <Form className={LLM_FORM_CLASS_NAME}>
+                  <DisplayNameField disabled={!!existingLlmProvider} />
 
-                    <PasswordInputTypeInField name="api_key" label="API Key" />
+                  <PasswordInputTypeInField name="api_key" label="API Key" />
 
-                    <DisplayModels
-                      modelConfigurations={modelConfigurations}
-                      formikProps={formikProps}
-                      recommendedDefaultModel={
-                        wellKnownLLMProvider?.recommended_default_model ?? null
-                      }
-                      shouldShowAutoUpdateToggle={true}
-                    />
+                  <DisplayModels
+                    modelConfigurations={modelConfigurations}
+                    formikProps={formikProps}
+                    recommendedDefaultModel={
+                      wellKnownLLMProvider?.recommended_default_model ?? null
+                    }
+                    shouldShowAutoUpdateToggle={true}
+                  />
 
-                    <AdvancedOptions formikProps={formikProps} />
+                  <AdvancedOptions formikProps={formikProps} />
 
-                    <FormActionButtons
-                      isTesting={isTesting}
-                      testError={testError}
-                      existingLlmProvider={existingLlmProvider}
-                      mutate={mutate}
-                      onClose={onClose}
-                      isFormValid={formikProps.isValid}
-                    />
-                  </Form>
-                );
-              }}
-            </Formik>
-          </>
+                  <FormActionButtons
+                    isTesting={isTesting}
+                    testError={testError}
+                    existingLlmProvider={existingLlmProvider}
+                    mutate={mutate}
+                    onClose={onClose}
+                    isFormValid={formikProps.isValid}
+                  />
+                </Form>
+              );
+            }}
+          </Formik>
         );
       }}
     </ProviderFormEntrypointWrapper>

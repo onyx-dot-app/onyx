@@ -4,23 +4,21 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from typing import Any
 
-from pydantic import BaseModel
 from sqlalchemy import Engine
 from sqlalchemy import event
 from sqlalchemy.orm import Session
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.orm.session import SessionTransaction
 
-from onyx.chat.models import MessageResponseIDInfo
-from onyx.chat.models import StreamingError
-from onyx.chat.process_message import AnswerStream
+from onyx.chat.chat_state import ChatStateContainer
+from onyx.chat.models import ChatFullResponse
+from onyx.chat.process_message import gather_stream_full
 from onyx.chat.process_message import handle_stream_message_objects
-from onyx.chat.process_message import remove_answer_citations
-from onyx.chat.process_message import stream_chat_message_objects
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.db.chat import create_chat_session
 from onyx.db.engine.sql_engine import get_sqlalchemy_engine
 from onyx.db.users import get_user_by_email
+from onyx.evals.models import ChatFullEvalResult
 from onyx.evals.models import EvalationAck
 from onyx.evals.models import EvalConfigurationOptions
 from onyx.evals.models import EvalMessage
@@ -33,18 +31,7 @@ from onyx.evals.provider import get_provider
 from onyx.llm.override_models import LLMOverride
 from onyx.server.query_and_chat.models import AUTO_PLACE_AFTER_LATEST_MESSAGE
 from onyx.server.query_and_chat.models import ChatSessionCreationRequest
-from onyx.server.query_and_chat.models import CreateChatMessageRequest
-from onyx.server.query_and_chat.models import RetrievalDetails
 from onyx.server.query_and_chat.models import SendMessageRequest
-from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
-from onyx.server.query_and_chat.streaming_models import AgentResponseStart
-from onyx.server.query_and_chat.streaming_models import CitationInfo
-from onyx.server.query_and_chat.streaming_models import CustomToolStart
-from onyx.server.query_and_chat.streaming_models import ImageGenerationToolStart
-from onyx.server.query_and_chat.streaming_models import OpenUrlStart
-from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.server.query_and_chat.streaming_models import PythonToolStart
-from onyx.server.query_and_chat.streaming_models import SearchToolStart
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -87,193 +74,29 @@ def isolated_ephemeral_session_factory(
         conn.close()
 
 
-class GatherStreamResult(BaseModel):
-    """Result of gathering a stream with tool call information."""
-
-    answer: str
-    answer_citationless: str
-    tools_called: list[str]
-    tool_call_details: list[dict[str, Any]]
-    message_id: int
-    error_msg: str | None = None
-    citations: list[CitationInfo] = []
-    timings: EvalTimings | None = None
-
-
-def gather_stream_with_tools(packets: AnswerStream) -> GatherStreamResult:
-    """
-    Gather streaming packets and extract both answer content and tool call information.
-
-    Returns a GatherStreamResult containing the answer and all tools that were called.
-    """
-    stream_start_time = time.time()
-
-    answer: str | None = None
-    citations: list[CitationInfo] = []
-    error_msg: str | None = None
-    message_id: int | None = None
-    tools_called: list[str] = []
-    tool_call_details: list[dict[str, Any]] = []
-
-    # Timing tracking
-    first_token_time: float | None = None
-    tool_start_times: dict[str, float] = {}  # tool_name -> start time
-    tool_execution_ms: dict[str, float] = {}  # tool_name -> duration in ms
-    current_tool: str | None = None
-
-    def _finalize_tool_timing(tool_name: str) -> None:
-        """Record the duration for a tool that just finished."""
-        if tool_name in tool_start_times:
-            duration_ms = (time.time() - tool_start_times[tool_name]) * 1000
-            tool_execution_ms[tool_name] = duration_ms
-
-    for packet in packets:
-        if isinstance(packet, Packet):
-            obj = packet.obj
-
-            # Handle answer content
-            if isinstance(obj, AgentResponseStart):
-                # When answer starts, finalize any in-progress tool
-                if current_tool:
-                    _finalize_tool_timing(current_tool)
-                    current_tool = None
-            elif isinstance(obj, AgentResponseDelta):
-                if answer is None:
-                    answer = ""
-                    first_token_time = time.time()
-                if obj.content:
-                    answer += obj.content
-            elif isinstance(obj, CitationInfo):
-                citations.append(obj)
-
-            # Track tool calls with timing
-            elif isinstance(obj, SearchToolStart):
-                # Finalize any previous tool
-                if current_tool:
-                    _finalize_tool_timing(current_tool)
-
-                tool_name = "WebSearchTool" if obj.is_internet_search else "SearchTool"
-                current_tool = tool_name
-                tool_start_times[tool_name] = time.time()
-                tools_called.append(tool_name)
-                tool_call_details.append(
-                    {
-                        "tool_name": tool_name,
-                        "tool_type": "search",
-                        "is_internet_search": obj.is_internet_search,
-                    }
-                )
-            elif isinstance(obj, ImageGenerationToolStart):
-                if current_tool:
-                    _finalize_tool_timing(current_tool)
-
-                tool_name = "ImageGenerationTool"
-                current_tool = tool_name
-                tool_start_times[tool_name] = time.time()
-                tools_called.append(tool_name)
-                tool_call_details.append(
-                    {
-                        "tool_name": tool_name,
-                        "tool_type": "image_generation",
-                    }
-                )
-            elif isinstance(obj, PythonToolStart):
-                if current_tool:
-                    _finalize_tool_timing(current_tool)
-
-                tool_name = "PythonTool"
-                current_tool = tool_name
-                tool_start_times[tool_name] = time.time()
-                tools_called.append(tool_name)
-                tool_call_details.append(
-                    {
-                        "tool_name": tool_name,
-                        "tool_type": "python",
-                        "code": obj.code,
-                    }
-                )
-            elif isinstance(obj, OpenUrlStart):
-                if current_tool:
-                    _finalize_tool_timing(current_tool)
-
-                tool_name = "OpenURLTool"
-                current_tool = tool_name
-                tool_start_times[tool_name] = time.time()
-                tools_called.append(tool_name)
-                tool_call_details.append(
-                    {
-                        "tool_name": tool_name,
-                        "tool_type": "open_url",
-                    }
-                )
-            elif isinstance(obj, CustomToolStart):
-                if current_tool:
-                    _finalize_tool_timing(current_tool)
-
-                tool_name = obj.tool_name
-                current_tool = tool_name
-                tool_start_times[tool_name] = time.time()
-                tools_called.append(tool_name)
-                tool_call_details.append(
-                    {
-                        "tool_name": tool_name,
-                        "tool_type": "custom",
-                    }
-                )
-
-        elif isinstance(packet, StreamingError):
-            logger.warning(f"Streaming error during eval: {packet.error}")
-            error_msg = packet.error
-        elif isinstance(packet, MessageResponseIDInfo):
-            message_id = packet.reserved_assistant_message_id
-
-    # Finalize any remaining tool timing
-    if current_tool:
-        _finalize_tool_timing(current_tool)
-
+def _chat_full_response_to_eval_result(
+    full: ChatFullResponse,
+    stream_start_time: float,
+) -> ChatFullEvalResult:
+    """Map ChatFullResponse from gather_stream_full to eval result components."""
+    tools_called = [tc.tool_name for tc in full.tool_calls]
+    tool_call_details: list[dict[str, Any]] = [
+        {"tool_name": tc.tool_name, "tool_arguments": tc.tool_arguments}
+        for tc in full.tool_calls
+    ]
     stream_end_time = time.time()
-
-    if message_id is None:
-        # If we got a streaming error, include it in the exception
-        if error_msg:
-            raise ValueError(f"Message ID is required. Stream error: {error_msg}")
-        raise ValueError(
-            f"Message ID is required. No MessageResponseIDInfo received. "
-            f"Tools called: {tools_called}"
-        )
-
-    # Allow empty answers for tool-only turns (e.g., in multi-turn evals)
-    # Some turns may only execute tools without generating a text response
-    if answer is None:
-        logger.warning(
-            "No answer content generated. Tools called: %s. "
-            "This may be expected for tool-only turns.",
-            tools_called,
-        )
-        answer = ""
-
-    # Calculate timings
     total_ms = (stream_end_time - stream_start_time) * 1000
-    first_token_ms = (
-        (first_token_time - stream_start_time) * 1000 if first_token_time else None
-    )
-    stream_processing_ms = (stream_end_time - stream_start_time) * 1000
-
     timings = EvalTimings(
         total_ms=total_ms,
-        llm_first_token_ms=first_token_ms,
-        tool_execution_ms=tool_execution_ms,
-        stream_processing_ms=stream_processing_ms,
+        llm_first_token_ms=None,
+        tool_execution_ms={},
+        stream_processing_ms=total_ms,
     )
-
-    return GatherStreamResult(
-        answer=answer,
-        answer_citationless=remove_answer_citations(answer),
+    return ChatFullEvalResult(
+        answer=full.answer,
         tools_called=tools_called,
         tool_call_details=tool_call_details,
-        message_id=message_id,
-        error_msg=error_msg,
-        citations=citations,
+        citations=full.citation_info,
         timings=timings,
     )
 
@@ -413,14 +236,17 @@ def _get_answer_with_tools(
                 ),
             )
 
+            stream_start_time = time.time()
+            state_container = ChatStateContainer()
             packets = handle_stream_message_objects(
                 new_msg_req=request,
                 user=user,
                 db_session=db_session,
+                external_state_container=state_container,
             )
+            full = gather_stream_full(packets, state_container)
 
-            # Gather stream with tool call tracking
-            result = gather_stream_with_tools(packets)
+            result = _chat_full_response_to_eval_result(full, stream_start_time)
 
             # Evaluate tool assertions
             assertion_passed, assertion_details = evaluate_tool_assertions(
@@ -551,30 +377,30 @@ def _get_multi_turn_answer_with_tools(
                         ),
                     )
 
-                # Create request for this turn
+                # Create request for this turn using SendMessageRequest (same API as handle_stream_message_objects)
                 # Use AUTO_PLACE_AFTER_LATEST_MESSAGE to chain messages
-                request = CreateChatMessageRequest(
+                forced_tool_id = forced_tool_ids[0] if forced_tool_ids else None
+                request = SendMessageRequest(
                     chat_session_id=chat_session_id,
                     parent_message_id=AUTO_PLACE_AFTER_LATEST_MESSAGE,
                     message=msg.message,
-                    file_descriptors=[],
-                    search_doc_ids=None,
-                    retrieval_options=RetrievalDetails(),
                     llm_override=llm_override,
-                    persona_override_config=full_configuration.persona_override_config,
-                    skip_gen_ai_answer_generation=False,
                     allowed_tool_ids=full_configuration.allowed_tool_ids,
-                    forced_tool_ids=forced_tool_ids or None,
+                    forced_tool_id=forced_tool_id,
                 )
 
-                # Stream and gather results for this turn
-                packets = stream_chat_message_objects(
+                # Stream and gather results for this turn via handle_stream_message_objects + gather_stream_full
+                stream_start_time = time.time()
+                state_container = ChatStateContainer()
+                packets = handle_stream_message_objects(
                     new_msg_req=request,
                     user=user,
                     db_session=db_session,
+                    external_state_container=state_container,
                 )
+                full = gather_stream_full(packets, state_container)
 
-                result = gather_stream_with_tools(packets)
+                result = _chat_full_response_to_eval_result(full, stream_start_time)
 
                 # Evaluate tool assertions for this turn
                 assertion_passed, assertion_details = evaluate_tool_assertions(

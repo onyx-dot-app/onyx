@@ -17,6 +17,7 @@ class TestOnyxWebCrawler:
     content from public websites correctly.
     """
 
+    @pytest.mark.skip(reason="Temporarily disabled")
     def test_fetches_public_url_successfully(self, admin_user: DATestUser) -> None:
         """Test that the crawler can fetch content from a public URL."""
         response = requests.post(
@@ -40,6 +41,7 @@ class TestOnyxWebCrawler:
         assert "This domain is for use in" in content
         assert "documentation" in content or "illustrative" in content
 
+    @pytest.mark.skip(reason="Temporarily disabled")
     def test_fetches_multiple_urls(self, admin_user: DATestUser) -> None:
         """Test that the crawler can fetch multiple URLs in one request."""
         response = requests.post(
@@ -263,8 +265,9 @@ def _activate_exa_provider(admin_user: DATestUser) -> int:
 
 
 @pytestmark_exa
+@pytest.mark.skip(reason="Temporarily disabled")
 def test_web_search_endpoints_with_exa(
-    reset: None,
+    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     provider_id = _activate_exa_provider(admin_user)

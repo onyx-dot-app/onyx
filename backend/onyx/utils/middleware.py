@@ -1,6 +1,7 @@
 import base64
 import hashlib
 import logging
+import re
 import uuid
 from collections.abc import Awaitable
 from collections.abc import Callable
@@ -10,12 +11,16 @@ from datetime import timezone
 from fastapi import FastAPI
 from fastapi import Request
 from fastapi import Response
+from fastapi.routing import APIRoute
 
+from shared_configs.contextvars import CURRENT_ENDPOINT_CONTEXTVAR
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from shared_configs.contextvars import ONYX_REQUEST_ID_CONTEXTVAR
 
 
-def add_onyx_tenant_id_middleware(app: FastAPI, logger: logging.LoggerAdapter) -> None:
+def add_onyx_tenant_id_middleware(
+    app: FastAPI, logger: logging.LoggerAdapter  # noqa: ARG001
+) -> None:
     @app.middleware("http")
     async def set_tenant_id(
         request: Request, call_next: Callable[[Request], Awaitable[Response]]
@@ -29,7 +34,7 @@ def add_onyx_tenant_id_middleware(app: FastAPI, logger: logging.LoggerAdapter) -
 
 
 def add_onyx_request_id_middleware(
-    app: FastAPI, prefix: str, logger: logging.LoggerAdapter
+    app: FastAPI, prefix: str, logger: logging.LoggerAdapter  # noqa: ARG001
 ) -> None:
     @app.middleware("http")
     async def set_request_id(
@@ -74,3 +79,50 @@ def _make_onyx_request_id(prefix: str, hash_input: str) -> str:
     hash_str = base64.urlsafe_b64encode(hash_bytes).decode("utf-8").rstrip("=")
     onyx_request_id = f"{prefix}:{hash_str}"
     return onyx_request_id
+
+
+def _build_route_map(app: FastAPI) -> list[tuple[re.Pattern[str], str]]:
+    """Build a list of (compiled regex, route template) from the app's routes.
+
+    Used by endpoint context middleware to resolve request paths to route
+    templates, avoiding high-cardinality raw paths in metrics labels.
+    """
+    route_map: list[tuple[re.Pattern[str], str]] = []
+    for route in app.routes:
+        if isinstance(route, APIRoute):
+            route_map.append((route.path_regex, route.path))
+    return route_map
+
+
+def _match_route(route_map: list[tuple[re.Pattern[str], str]], path: str) -> str | None:
+    """Match a request path against the route map and return the template."""
+    for pattern, template in route_map:
+        if pattern.match(path):
+            return template
+    return None
+
+
+def add_endpoint_context_middleware(app: FastAPI) -> None:
+    """Set CURRENT_ENDPOINT_CONTEXTVAR so Prometheus pool metrics can
+    attribute DB connections to the endpoint that checked them out.
+
+    Used by ``onyx_db_connections_held_by_endpoint`` and
+    ``onyx_db_connection_hold_seconds`` in the pool event listeners.
+
+    Resolves request paths to route templates (e.g. /api/chat/{chat_id}
+    instead of /api/chat/abc-123) to keep metric label cardinality low.
+
+    Must be registered AFTER all routes are added to the app.
+    """
+    route_map = _build_route_map(app)
+
+    @app.middleware("http")
+    async def set_endpoint_context(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        handler = _match_route(route_map, request.url.path)
+        token = CURRENT_ENDPOINT_CONTEXTVAR.set(handler or "unmatched")
+        try:
+            return await call_next(request)
+        finally:
+            CURRENT_ENDPOINT_CONTEXTVAR.reset(token)

@@ -1,12 +1,9 @@
 from collections.abc import Generator
 
-from office365.sharepoint.client_context import ClientContext  # type: ignore[import-untyped]
-
 from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.sharepoint.permission_utils import (
     get_sharepoint_external_groups,
 )
-from onyx.connectors.sharepoint.connector import acquire_token_for_rest
 from onyx.connectors.sharepoint.connector import SharepointConnector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.utils.logger import setup_logger
@@ -15,7 +12,7 @@ logger = setup_logger()
 
 
 def sharepoint_group_sync(
-    tenant_id: str,
+    tenant_id: str,  # noqa: ARG001
     cc_pair: ConnectorCredentialPair,
 ) -> Generator[ExternalUserGroup, None, None]:
     """Sync SharePoint groups and their members"""
@@ -25,7 +22,12 @@ def sharepoint_group_sync(
 
     # Create SharePoint connector instance and load credentials
     connector = SharepointConnector(**connector_config)
-    connector.load_credentials(cc_pair.credential.credential_json)
+    credential_json = (
+        cc_pair.credential.credential_json.get_value(apply_mask=False)
+        if cc_pair.credential.credential_json
+        else {}
+    )
+    connector.load_credentials(credential_json)
 
     if not connector.msal_app:
         raise RuntimeError("MSAL app not initialized in connector")
@@ -41,16 +43,11 @@ def sharepoint_group_sync(
 
     logger.info(f"Processing {len(site_descriptors)} sites for group sync")
 
-    msal_app = connector.msal_app
-    sp_tenant_domain = connector.sp_tenant_domain
     # Process each site
     for site_descriptor in site_descriptors:
         logger.debug(f"Processing site: {site_descriptor.url}")
 
-        # Create client context for the site using connector's MSAL app
-        ctx = ClientContext(site_descriptor.url).with_access_token(
-            lambda: acquire_token_for_rest(msal_app, sp_tenant_domain)
-        )
+        ctx = connector._create_rest_client_context(site_descriptor.url)
 
         # Get external groups for this site
         external_groups = get_sharepoint_external_groups(ctx, connector.graph_client)

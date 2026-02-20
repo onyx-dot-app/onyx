@@ -1,7 +1,7 @@
 "use client";
 
 import { Label, SubLabel } from "@/components/Field";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import Title from "@/components/ui/title";
 import Button from "@/refresh-components/buttons/Button";
 import { Settings } from "./interfaces";
@@ -10,12 +10,13 @@ import React, { useContext, useState, useEffect } from "react";
 import { SettingsContext } from "@/providers/SettingsProvider";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import Modal from "@/refresh-components/Modal";
-import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
+import { AuthType, NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { AnonymousUserPath } from "./AnonymousUserPath";
 import LLMSelector from "@/components/llm/LLMSelector";
 import { useVisionProviders } from "./hooks/useVisionProviders";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import { SvgAlertTriangle } from "@opal/icons";
+import { useUser } from "@/providers/UserProvider";
 
 export function Checkbox({
   label,
@@ -81,21 +82,20 @@ function IntegerInput({
 
 export function SettingsForm() {
   const router = useRouter();
+  const { authTypeMetadata } = useUser();
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [chatRetention, setChatRetention] = useState("");
   const [companyName, setCompanyName] = useState("");
   const [companyDescription, setCompanyDescription] = useState("");
-  const { popup, setPopup } = usePopup();
   const isEnterpriseEnabled = usePaidEnterpriseFeaturesEnabled();
 
-  // Pass setPopup to the hook
   const {
     visionProviders,
     visionLLM,
     setVisionLLM,
     updateDefaultVisionProvider,
-  } = useVisionProviders(setPopup);
+  } = useVisionProviders();
 
   const combinedSettings = useContext(SettingsContext);
 
@@ -116,6 +116,10 @@ export function SettingsForm() {
   if (!settings) {
     return null;
   }
+
+  const showInviteOnlyModeToggle =
+    authTypeMetadata.authType === AuthType.BASIC ||
+    authTypeMetadata.authType === AuthType.GOOGLE_OAUTH;
 
   async function updateSettingField(
     updateRequests: { fieldName: keyof Settings; newValue: any }[]
@@ -147,18 +151,12 @@ export function SettingsForm() {
       }
 
       router.refresh();
-      setPopup({
-        message: "Settings updated successfully!",
-        type: "success",
-      });
+      toast.success("Settings updated successfully!");
     } catch (error) {
       // Revert the optimistic update
       setSettings(settings);
       console.error("Error updating settings:", error);
-      setPopup({
-        message: `Failed to update settings`,
-        type: "error",
-      });
+      toast.error("Failed to update settings");
     }
   }
 
@@ -221,7 +219,6 @@ export function SettingsForm() {
 
   return (
     <>
-      {popup}
       <Title className="mb-4">Workspace Settings</Title>
       <label className="flex flex-col text-sm mb-4">
         <Label>Company Name</Label>
@@ -281,10 +278,20 @@ export function SettingsForm() {
           handleToggleSettingsField("anonymous_user_enabled", e.target.checked)
         }
       />
+      {showInviteOnlyModeToggle && (
+        <Checkbox
+          label="Whitelist / Invite-only"
+          sublabel="If set, only users on the invite list can join this workspace. If unset, users from your normal sign-up domain flow can still join even if invites exist."
+          checked={settings.invite_only_enabled}
+          onChange={(e) =>
+            handleToggleSettingsField("invite_only_enabled", e.target.checked)
+          }
+        />
+      )}
 
       <Checkbox
         label="Deep Research"
-        sublabel="Deep Research is in Alpha. Not recommended to be turned on. Use at your own risk."
+        sublabel="Enables a button to run deep research - a more complex and time intensive flow. Note: this costs >10x more in tokens to normal questions."
         checked={settings.deep_research_enabled ?? true}
         onChange={(e) =>
           handleToggleSettingsField("deep_research_enabled", e.target.checked)
@@ -304,7 +311,7 @@ export function SettingsForm() {
       />
 
       {NEXT_PUBLIC_CLOUD_ENABLED && settings.anonymous_user_enabled && (
-        <AnonymousUserPath setPopup={setPopup} />
+        <AnonymousUserPath />
       )}
       {showConfirmModal && (
         <Modal open onOpenChange={() => setShowConfirmModal(false)}>
