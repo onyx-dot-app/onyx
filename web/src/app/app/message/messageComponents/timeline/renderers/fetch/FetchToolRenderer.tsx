@@ -3,7 +3,7 @@ import {
   MessageRenderer,
   RenderType,
 } from "@/app/app/message/messageComponents/interfaces";
-import { BlinkingDot } from "@/app/app/message/BlinkingDot";
+import { BlinkingBar } from "@/app/app/message/BlinkingBar";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import { ValidSources } from "@/lib/types";
 import { SearchChipList, SourceInfo } from "../search/SearchChipList";
@@ -97,7 +97,7 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
                 onClick={(doc: OnyxDocument) => {
                   if (doc.link) window.open(doc.link, "_blank");
                 }}
-                emptyState={!stopPacketSeen ? <BlinkingDot /> : undefined}
+                emptyState={!stopPacketSeen ? <BlinkingBar /> : undefined}
               />
             ) : displayUrls ? (
               <SearchChipList
@@ -107,10 +107,10 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
                 getKey={(url: string) => url}
                 toSourceInfo={urlToSourceInfo}
                 onClick={(url: string) => window.open(url, "_blank")}
-                emptyState={!stopPacketSeen ? <BlinkingDot /> : undefined}
+                emptyState={!stopPacketSeen ? <BlinkingBar /> : undefined}
               />
             ) : (
-              !stopPacketSeen && <BlinkingDot />
+              !stopPacketSeen && <BlinkingBar />
             )}
           </div>
         ),
@@ -136,7 +136,7 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
               onClick={(doc: OnyxDocument) => {
                 if (doc.link) window.open(doc.link, "_blank");
               }}
-              emptyState={!stopPacketSeen ? <BlinkingDot /> : undefined}
+              emptyState={!stopPacketSeen ? <BlinkingBar /> : undefined}
             />
           ) : displayUrls ? (
             <SearchChipList
@@ -146,11 +146,11 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
               getKey={(url: string) => url}
               toSourceInfo={urlToSourceInfo}
               onClick={(url: string) => window.open(url, "_blank")}
-              emptyState={!stopPacketSeen ? <BlinkingDot /> : undefined}
+              emptyState={!stopPacketSeen ? <BlinkingBar /> : undefined}
             />
           ) : (
             <div className="flex flex-wrap gap-x-2 gap-y-2 ml-1">
-              {!stopPacketSeen && <BlinkingDot />}
+              {!stopPacketSeen && <BlinkingBar />}
             </div>
           )}
         </div>
