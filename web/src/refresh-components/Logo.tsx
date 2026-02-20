@@ -58,11 +58,11 @@ export default function Logo({ folded, size, className }: LogoProps) {
     includeName: boolean;
   }) => {
     return (
-      <div className="flex min-w-0 gap-2">
+      <div className="flex min-w-0 pt-1.5 gap-2">
         {opts.includeLogo && logo}
         {!folded && (
           /* H3 text is 4px larger (28px) than the Logo icon (24px), so negative margin hack. */
-          <div className="flex flex-1 flex-col items-centermin-w-0 -mt-0.5">
+          <div className="flex flex-1 flex-col -mt-0.5">
             {opts.includeName && (
               <Truncated headingH3>{applicationName}</Truncated>
             )}
