@@ -1301,7 +1301,11 @@ function AccountsAccessSettings() {
                     } ago - ${expiryText}`;
 
                     return (
-                      <Interactive.Container key={pat.id} heightVariant="fit">
+                      <Interactive.Container
+                        key={pat.id}
+                        heightVariant="fit"
+                        widthVariant="full"
+                      >
                         <div className="w-full bg-background-tint-01">
                           <AttachmentItemLayout
                             icon={SvgKey}

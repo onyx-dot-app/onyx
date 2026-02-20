@@ -64,6 +64,18 @@ const interactiveContainerSizeVariants = {
 } as const;
 
 /**
+ * Width presets for `Interactive.Container`.
+ *
+ * - `"auto"` — Shrink-wraps to content width (default)
+ * - `"full"` — Stretches to fill the parent's width (`w-full`)
+ */
+type InteractiveContainerWidthVariant = "auto" | "full";
+const interactiveContainerWidthVariants = {
+  auto: "w-auto",
+  full: "w-full",
+} as const;
+
+/**
  * Border-radius presets for `Interactive.Container`.
  *
  * - `"default"` — Default radius of 0.75rem (12px), matching card rounding
@@ -353,6 +365,16 @@ interface InteractiveContainerProps
    * @default "lg"
    */
   heightVariant?: InteractiveContainerHeightVariant;
+
+  /**
+   * Width preset controlling the container's horizontal size.
+   *
+   * - `"auto"` — Shrink-wraps to content width
+   * - `"full"` — Stretches to fill the parent's width (`w-full`)
+   *
+   * @default "auto"
+   */
+  widthVariant?: InteractiveContainerWidthVariant;
 }
 
 /**
@@ -391,6 +413,7 @@ function InteractiveContainer({
   border,
   roundingVariant = "default",
   heightVariant = "lg",
+  widthVariant = "auto",
   ...props
 }: InteractiveContainerProps) {
   // Radix Slot injects className, style, href, target, rel, and other
@@ -420,6 +443,7 @@ function InteractiveContainer({
       height,
       minWidth,
       padding,
+      interactiveContainerWidthVariants[widthVariant],
       slotClassName
     ),
     "data-border": border ? ("true" as const) : undefined,
@@ -497,5 +521,6 @@ export {
   type InteractiveBaseSelectVariantProps,
   type InteractiveContainerProps,
   type InteractiveContainerHeightVariant,
+  type InteractiveContainerWidthVariant,
   type InteractiveContainerRoundingVariant,
 };
