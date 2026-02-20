@@ -43,6 +43,7 @@ import { Button as OpalButton } from "@opal/components";
 import useFederatedOAuthStatus from "@/hooks/useFederatedOAuthStatus";
 import useCCPairs from "@/hooks/useCCPairs";
 import { ValidSources } from "@/lib/types";
+import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
 import Separator from "@/refresh-components/Separator";
 import Text from "@/refresh-components/texts/Text";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
@@ -1334,10 +1335,10 @@ function AccountsAccessSettings() {
 
 interface IndexedConnectorCardProps {
   source: ValidSources;
-  count: number;
+  isActive: boolean;
 }
 
-function IndexedConnectorCard({ source, count }: IndexedConnectorCardProps) {
+function IndexedConnectorCard({ source, isActive }: IndexedConnectorCardProps) {
   const sourceMetadata = getSourceMetadata(source);
 
   return (
@@ -1345,7 +1346,7 @@ function IndexedConnectorCard({ source, count }: IndexedConnectorCardProps) {
       <LineItemLayout
         icon={sourceMetadata.icon}
         title={sourceMetadata.displayName}
-        description={count > 1 ? `${count} connectors active` : "Connected"}
+        description={isActive ? "Connected" : "Paused"}
       />
     </Card>
   );
@@ -1459,19 +1460,23 @@ function ConnectorsSettings() {
   } = useFederatedOAuthStatus();
   const { ccPairs } = useCCPairs();
 
+  const ACTIVE_STATUSES: ConnectorCredentialPairStatus[] = [
+    ConnectorCredentialPairStatus.ACTIVE,
+    ConnectorCredentialPairStatus.SCHEDULED,
+    ConnectorCredentialPairStatus.INITIAL_INDEXING,
+  ];
+
   // Group indexed connectors by source
   const groupedConnectors = ccPairs.reduce(
     (acc, ccPair) => {
       if (!acc[ccPair.source]) {
         acc[ccPair.source] = {
           source: ccPair.source,
-          count: 0,
-          hasSuccessfulRun: false,
+          hasActiveConnector: false,
         };
       }
-      acc[ccPair.source]!.count++;
-      if (ccPair.has_successful_run) {
-        acc[ccPair.source]!.hasSuccessfulRun = true;
+      if (ACTIVE_STATUSES.includes(ccPair.status)) {
+        acc[ccPair.source]!.hasActiveConnector = true;
       }
       return acc;
     },
@@ -1479,8 +1484,7 @@ function ConnectorsSettings() {
       string,
       {
         source: ValidSources;
-        count: number;
-        hasSuccessfulRun: boolean;
+        hasActiveConnector: boolean;
       }
     >
   );
@@ -1499,7 +1503,7 @@ function ConnectorsSettings() {
               <IndexedConnectorCard
                 key={connector.source}
                 source={connector.source}
-                count={connector.count}
+                isActive={connector.hasActiveConnector}
               />
             ))}
 
