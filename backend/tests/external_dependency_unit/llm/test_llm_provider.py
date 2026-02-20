@@ -553,7 +553,7 @@ class TestDefaultProviderEndpoint:
 
         try:
             existing_providers = fetch_existing_llm_providers(
-                db_session, flow_types=[LLMModelFlowType.CHAT]
+                db_session, flow_type_filter=[LLMModelFlowType.CHAT]
             )
             provider_names_to_restore: list[str] = []
 

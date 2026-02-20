@@ -1,7 +1,7 @@
 import { test, expect, Page } from "@playwright/test";
-import { loginAs } from "../utils/auth";
-import { createAssistant } from "../utils/assistantUtils";
-import { OnyxApiClient } from "../utils/onyxApiClient";
+import { loginAs } from "@tests/e2e/utils/auth";
+import { createAssistant } from "@tests/e2e/utils/assistantUtils";
+import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 
 const DISABLE_DEFAULT_ASSISTANT_LABEL =
   'label:has-text("Disable Default Assistant") input[type="checkbox"]';

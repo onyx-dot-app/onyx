@@ -131,18 +131,24 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
             <LeftIcon className={cn("w-[1rem] h-[1rem]", iconClass)} />
           </div>
         )}
-        <div className={cn("leading-none", sizeClasses.content[iconPlacement])}>
-          {typeof children === "string" ? (
-            <Text
-              {...textSizeProps}
-              className={cn("whitespace-nowrap", textClass)}
-            >
-              {children}
-            </Text>
-          ) : (
-            children
-          )}
-        </div>
+        {/* Buttons may conditionally pass text as children (e.g. responsive
+            breakpoints), so skip content padding when children is empty. */}
+        {children !== "" && (
+          <div
+            className={cn("leading-none", sizeClasses.content[iconPlacement])}
+          >
+            {typeof children === "string" ? (
+              <Text
+                {...textSizeProps}
+                className={cn("whitespace-nowrap", textClass)}
+              >
+                {children}
+              </Text>
+            ) : (
+              children
+            )}
+          </div>
+        )}
         {RightIcon && (
           <div className="w-[1rem] h-[1rem]">
             <RightIcon className={cn("w-[1rem] h-[1rem]", iconClass)} />

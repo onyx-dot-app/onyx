@@ -98,7 +98,6 @@ function KnowledgeSidebar({
         <>
           <LineItem
             icon={SvgFolder}
-            description="(deprecated)"
             onClick={onNavigateToDocumentSets}
             selected={activeView === "document-sets"}
             emphasized={
@@ -672,7 +671,6 @@ const KnowledgeAddView = memo(function KnowledgeAddView({
         {vectorDbEnabled && (
           <LineItem
             icon={SvgFolder}
-            description="(deprecated)"
             onClick={onNavigateToDocumentSets}
             emphasized={selectedDocumentSetIds.length > 0}
             aria-label="knowledge-add-document-sets"

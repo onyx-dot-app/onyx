@@ -30,6 +30,8 @@ from onyx.server.features.build.api.models import SessionListResponse
 from onyx.server.features.build.api.models import SessionNameGenerateResponse
 from onyx.server.features.build.api.models import SessionResponse
 from onyx.server.features.build.api.models import SessionUpdateRequest
+from onyx.server.features.build.api.models import SetSessionSharingRequest
+from onyx.server.features.build.api.models import SetSessionSharingResponse
 from onyx.server.features.build.api.models import SuggestionBubble
 from onyx.server.features.build.api.models import SuggestionTheme
 from onyx.server.features.build.api.models import UploadResponse
@@ -38,6 +40,7 @@ from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.build.db.build_session import allocate_nextjs_port
 from onyx.server.features.build.db.build_session import get_build_session
+from onyx.server.features.build.db.build_session import set_build_session_sharing_scope
 from onyx.server.features.build.db.sandbox import get_latest_snapshot_for_session
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
@@ -292,6 +295,25 @@ def update_session_name(
     # Get the user's sandbox to include in response
     sandbox = get_sandbox_by_user_id(db_session, user.id)
     return SessionResponse.from_model(session, sandbox)
+
+
+@router.patch("/{session_id}/public")
+def set_session_public(
+    session_id: UUID,
+    request: SetSessionSharingRequest,
+    user: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> SetSessionSharingResponse:
+    """Set the sharing scope of a build session's webapp."""
+    updated = set_build_session_sharing_scope(
+        session_id, user.id, request.sharing_scope, db_session
+    )
+    if not updated:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return SetSessionSharingResponse(
+        session_id=str(session_id),
+        sharing_scope=updated.sharing_scope,
+    )
 
 
 @router.delete("/{session_id}", response_model=None)

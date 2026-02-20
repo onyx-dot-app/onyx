@@ -1,16 +1,12 @@
 import { expect, Page, test } from "@playwright/test";
-import { loginAs, loginAsRandomUser } from "../utils/auth";
+import { loginAs, loginAsWorkerUser } from "@tests/e2e/utils/auth";
 import {
+  selectModelFromInputPopover,
   sendMessage,
   startNewChat,
   verifyCurrentModel,
-} from "../utils/chatActions";
-import { OnyxApiClient } from "../utils/onyxApiClient";
-
-const PROVIDER_API_KEY =
-  process.env.E2E_LLM_PROVIDER_API_KEY ||
-  process.env.OPENAI_API_KEY ||
-  "e2e-placeholder-api-key-not-used";
+} from "@tests/e2e/utils/chatActions";
+import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 
 type SendChatMessagePayload = {
   llm_override?: {
@@ -30,6 +26,18 @@ async function openChat(page: Page): Promise<void> {
   await page.waitForSelector("#onyx-chat-input-textarea", { timeout: 15000 });
 }
 
+async function loginWithCleanCookies(
+  page: Page,
+  user: "admin" | number
+): Promise<void> {
+  await page.context().clearCookies();
+  if (typeof user === "number") {
+    await loginAsWorkerUser(page, user);
+  } else {
+    await loginAs(page, user);
+  }
+}
+
 async function createLlmProvider(
   page: Page,
   params: {
@@ -46,7 +54,7 @@ async function createLlmProvider(
       data: {
         name: params.name,
         provider: params.provider,
-        api_key: PROVIDER_API_KEY,
+        api_key: "e2e-placeholder-api-key-not-used",
         default_model_name: params.defaultModelName,
         is_public: params.isPublic,
         groups: params.groupIds ?? [],
@@ -64,81 +72,6 @@ async function createLlmProvider(
   expect(response.ok()).toBeTruthy();
   const data = (await response.json()) as { id: number };
   return data.id;
-}
-
-async function selectModelFromInputPopover(
-  page: Page,
-  preferredModels: string[]
-): Promise<string> {
-  const currentModelText =
-    (
-      await page.getByTestId("AppInputBar/llm-popover-trigger").textContent()
-    )?.trim() ?? "";
-
-  await page.getByTestId("AppInputBar/llm-popover-trigger").click();
-  await page.waitForSelector('[role="dialog"]', {
-    state: "visible",
-    timeout: 10000,
-  });
-
-  const dialog = page.locator('[role="dialog"]');
-  const searchInput = dialog.getByPlaceholder("Search models...");
-
-  for (const modelName of preferredModels) {
-    await searchInput.fill(modelName);
-    const modelOptions = dialog.locator("button[data-selected]");
-    const nonSelectedOptions = dialog.locator('button[data-selected="false"]');
-
-    if ((await modelOptions.count()) > 0) {
-      const candidate =
-        (await nonSelectedOptions.count()) > 0
-          ? nonSelectedOptions.first()
-          : modelOptions.first();
-
-      await candidate.click();
-      await page.waitForSelector('[role="dialog"]', { state: "hidden" });
-      const selectedText =
-        (
-          await page
-            .getByTestId("AppInputBar/llm-popover-trigger")
-            .textContent()
-        )?.trim() ?? "";
-      if (!selectedText) {
-        throw new Error(
-          "Failed to read selected model text from input trigger"
-        );
-      }
-      return selectedText;
-    }
-  }
-
-  const nonSelectedOptions = dialog.locator('button[data-selected="false"]');
-  if ((await nonSelectedOptions.count()) > 0) {
-    const fallback = nonSelectedOptions.first();
-    await expect(fallback).toBeVisible();
-    await fallback.click();
-    await page.waitForSelector('[role="dialog"]', { state: "hidden" });
-
-    const selectedText =
-      (
-        await page.getByTestId("AppInputBar/llm-popover-trigger").textContent()
-      )?.trim() ?? "";
-    if (!selectedText) {
-      throw new Error("Failed to read selected model text from input trigger");
-    }
-    return selectedText;
-  }
-
-  await page.keyboard.press("Escape").catch(() => {});
-  await page
-    .waitForSelector('[role="dialog"]', { state: "hidden", timeout: 5000 })
-    .catch(() => {});
-
-  if (currentModelText) {
-    return currentModelText;
-  }
-
-  throw new Error("Unable to select a model from input popover");
 }
 
 async function sendMessageAndCapturePayload(
@@ -228,14 +161,14 @@ test.describe("LLM Runtime Selection", () => {
   let providersToCleanup: number[] = [];
   let groupsToCleanup: number[] = [];
 
-  test.beforeEach(async () => {
+  test.beforeEach(async ({ page }, testInfo) => {
     providersToCleanup = [];
     groupsToCleanup = [];
+    await loginWithCleanCookies(page, testInfo.workerIndex);
   });
 
   test.afterEach(async ({ page }) => {
-    await page.context().clearCookies();
-    await loginAs(page, "admin");
+    await loginWithCleanCookies(page, "admin");
 
     const client = new OnyxApiClient(page.request);
     const providerIds = Array.from(new Set(providersToCleanup));
@@ -262,9 +195,8 @@ test.describe("LLM Runtime Selection", () => {
 
   test("model selection persists across refresh and subsequent messages in the same chat", async ({
     page,
-  }) => {
-    await page.context().clearCookies();
-    await loginAs(page, "admin");
+  }, testInfo) => {
+    await loginWithCleanCookies(page, "admin");
 
     const persistenceProviderName = uniqueName("PW Runtime Persist Provider");
     const persistenceModelName = `persist-runtime-model-${Date.now()}`;
@@ -279,6 +211,7 @@ test.describe("LLM Runtime Selection", () => {
       persistenceProviderName,
     ]);
 
+    await loginWithCleanCookies(page, testInfo.workerIndex);
     await openChat(page);
 
     let turn = 0;
@@ -326,8 +259,6 @@ test.describe("LLM Runtime Selection", () => {
   test("regenerate with alternate model preserves version history semantics", async ({
     page,
   }) => {
-    await page.context().clearCookies();
-    await loginAs(page, "admin");
     await openChat(page);
 
     let turn = 0;
@@ -425,9 +356,8 @@ test.describe("LLM Runtime Selection", () => {
 
   test("same model name across providers resolves to provider-specific runtime payloads", async ({
     page,
-  }) => {
-    await page.context().clearCookies();
-    await loginAs(page, "admin");
+  }, testInfo) => {
+    await loginWithCleanCookies(page, "admin");
 
     const sharedModelName = `shared-runtime-model-${Date.now()}`;
     const openAiProviderName = uniqueName("PW Runtime OpenAI");
@@ -452,6 +382,8 @@ test.describe("LLM Runtime Selection", () => {
       openAiProviderName,
       anthropicProviderName,
     ]);
+
+    await loginWithCleanCookies(page, testInfo.workerIndex);
 
     const capturedPayloads: SendChatMessagePayload[] = [];
     let turn = 0;
@@ -541,9 +473,8 @@ test.describe("LLM Runtime Selection", () => {
 
   test("restricted provider model is unavailable to unauthorized runtime user selection", async ({
     page,
-  }) => {
-    await page.context().clearCookies();
-    await loginAs(page, "admin");
+  }, testInfo) => {
+    await loginWithCleanCookies(page, "admin");
 
     const client = new OnyxApiClient(page.request);
     const restrictedGroupName = uniqueName("PW Runtime Restricted Group");
@@ -575,8 +506,7 @@ test.describe("LLM Runtime Selection", () => {
     });
     providersToCleanup.push(restrictedProviderId);
 
-    await page.context().clearCookies();
-    await loginAsRandomUser(page);
+    await loginWithCleanCookies(page, testInfo.workerIndex);
     await openChat(page);
 
     await page.getByTestId("AppInputBar/llm-popover-trigger").click();

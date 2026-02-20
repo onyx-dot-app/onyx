@@ -6,6 +6,7 @@ WARNING: As with all external dependency tests, do not run them against a
 database with data you care about. Your data will be destroyed.
 """
 
+import json
 from collections.abc import Generator
 from copy import deepcopy
 from datetime import datetime
@@ -16,6 +17,9 @@ from unittest.mock import patch
 import pytest
 from sqlalchemy.orm import Session
 
+from onyx.background.celery.tasks.opensearch_migration.tasks import (
+    is_continuation_token_done_for_all_slices,
+)
 from onyx.background.celery.tasks.opensearch_migration.tasks import (
     migrate_chunks_from_vespa_to_opensearch_task,
 )
@@ -451,8 +455,12 @@ class TestMigrateChunksFromVespaToOpenSearchTask:
         assert tenant_record is not None
         assert tenant_record.total_chunks_migrated == len(all_chunks)
         # Visit is complete so continuation token should be None.
-        assert tenant_record.vespa_visit_continuation_token is None
+        assert tenant_record.vespa_visit_continuation_token is not None
+        assert is_continuation_token_done_for_all_slices(
+            json.loads(tenant_record.vespa_visit_continuation_token)
+        )
         assert tenant_record.migration_completed_at is not None
+        assert tenant_record.approx_chunk_count_in_vespa == len(all_chunks)
 
         # Verify chunks were indexed in OpenSearch.
         for document in test_documents:
@@ -529,7 +537,12 @@ class TestMigrateChunksFromVespaToOpenSearchTask:
         partial_chunks_migrated = tenant_record.total_chunks_migrated
         assert partial_chunks_migrated > 0
         assert tenant_record.vespa_visit_continuation_token is not None
+        # Slices are not necessarily evenly distributed across all document
+        # chunks so we can't test that every token is non-None, but certainly at
+        # least one must be.
+        assert any(json.loads(tenant_record.vespa_visit_continuation_token).values())
         assert tenant_record.migration_completed_at is None
+        assert tenant_record.approx_chunk_count_in_vespa is not None
 
         # Under test.
         # Run the remainder of the migration.
@@ -548,8 +561,12 @@ class TestMigrateChunksFromVespaToOpenSearchTask:
         assert tenant_record.total_chunks_migrated > partial_chunks_migrated
         assert tenant_record.total_chunks_migrated == len(all_chunks)
         # Visit is complete so continuation token should be None.
-        assert tenant_record.vespa_visit_continuation_token is None
+        assert tenant_record.vespa_visit_continuation_token is not None
+        assert is_continuation_token_done_for_all_slices(
+            json.loads(tenant_record.vespa_visit_continuation_token)
+        )
         assert tenant_record.migration_completed_at is not None
+        assert tenant_record.approx_chunk_count_in_vespa == len(all_chunks)
 
         # Verify chunks were indexed in OpenSearch.
         for document in test_documents:
@@ -587,9 +604,14 @@ class TestMigrateChunksFromVespaToOpenSearchTask:
         tenant_record = db_session.query(OpenSearchTenantMigrationRecord).first()
         assert tenant_record is not None
         assert tenant_record.total_chunks_migrated == 0
-        assert tenant_record.vespa_visit_continuation_token is None
-        # We do not mark the migration as completed for empty Vespa.
-        assert tenant_record.migration_completed_at is None
+        # Visit is complete so continuation token should be marked as done for all slices.
+        assert tenant_record.vespa_visit_continuation_token is not None
+        assert is_continuation_token_done_for_all_slices(
+            json.loads(tenant_record.vespa_visit_continuation_token)
+        )
+        # Mark migration as completed even for empty Vespa.
+        assert tenant_record.migration_completed_at is not None
+        assert tenant_record.approx_chunk_count_in_vespa == 0
 
     def test_chunk_migration_updates_existing_chunks(
         self,
@@ -665,8 +687,12 @@ class TestMigrateChunksFromVespaToOpenSearchTask:
         assert tenant_record is not None
         assert tenant_record.total_chunks_migrated == len(all_chunks)
         # Visit is complete so continuation token should be None.
-        assert tenant_record.vespa_visit_continuation_token is None
+        assert tenant_record.vespa_visit_continuation_token is not None
+        assert is_continuation_token_done_for_all_slices(
+            json.loads(tenant_record.vespa_visit_continuation_token)
+        )
         assert tenant_record.migration_completed_at is not None
+        assert tenant_record.approx_chunk_count_in_vespa == len(all_chunks)
 
         # Verify chunks were indexed in OpenSearch.
         for document in test_documents:
@@ -730,8 +756,12 @@ class TestMigrateChunksFromVespaToOpenSearchTask:
         assert tenant_record is not None
         assert tenant_record.total_chunks_migrated == len(all_chunks)
         # Visit is complete so continuation token should be None.
-        assert tenant_record.vespa_visit_continuation_token is None
+        assert tenant_record.vespa_visit_continuation_token is not None
+        assert is_continuation_token_done_for_all_slices(
+            json.loads(tenant_record.vespa_visit_continuation_token)
+        )
         assert tenant_record.migration_completed_at is not None
+        assert tenant_record.approx_chunk_count_in_vespa == len(all_chunks)
 
         # Verify chunks were indexed in OpenSearch.
         for document in test_documents:
@@ -761,8 +791,12 @@ class TestMigrateChunksFromVespaToOpenSearchTask:
         assert tenant_record is not None
         assert tenant_record.total_chunks_migrated == len(all_chunks)
         # Visit is complete so continuation token should be None.
-        assert tenant_record.vespa_visit_continuation_token is None
+        assert tenant_record.vespa_visit_continuation_token is not None
+        assert is_continuation_token_done_for_all_slices(
+            json.loads(tenant_record.vespa_visit_continuation_token)
+        )
         assert tenant_record.migration_completed_at is not None
+        assert tenant_record.approx_chunk_count_in_vespa == len(all_chunks)
 
         # Verify chunks were indexed in OpenSearch.
         for document in test_documents:
@@ -789,6 +823,37 @@ class TestMigrateChunksFromVespaToOpenSearchTask:
 
         # Postcondition.
         assert result is None
+
+    def test_vespa_get_chunk_count(
+        self,
+        vespa_document_index: VespaDocumentIndex,
+        test_embedding_dimension: int,
+    ) -> None:
+        """
+        Tests that the VespaDocumentIndex.get_chunk_count() method returns the
+        correct number of chunks.
+        """
+        # Precondition.
+        # Index chunks into Vespa.
+        all_chunks = [
+            _create_raw_document_chunk(
+                document_id="test_doc_1",
+                chunk_index=i,
+                content=f"Test content {i} for test_doc_1",
+                embedding=_generate_test_vector(test_embedding_dimension),
+                now=datetime.now(),
+                title=f"Test title {i}",
+                title_embedding=_generate_test_vector(test_embedding_dimension),
+            )
+            for i in range(500)
+        ]
+        vespa_document_index.index_raw_chunks(all_chunks)
+
+        # Under test.
+        chunk_count = vespa_document_index.get_chunk_count()
+
+        # Postcondition.
+        assert chunk_count == len(all_chunks)
 
 
 class TestSanitizedDocIdResolution:

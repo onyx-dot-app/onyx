@@ -12,6 +12,7 @@ from shared_configs.enums import WebSearchProviderType
 def test_provider_requires_api_key() -> None:
     """Test that provider_requires_api_key correctly identifies which providers need API keys."""
     assert provider_requires_api_key(WebSearchProviderType.EXA) is True
+    assert provider_requires_api_key(WebSearchProviderType.BRAVE) is True
     assert provider_requires_api_key(WebSearchProviderType.SERPER) is True
     assert provider_requires_api_key(WebSearchProviderType.GOOGLE_PSE) is True
     assert provider_requires_api_key(WebSearchProviderType.SEARXNG) is False
@@ -42,6 +43,16 @@ def test_build_exa_provider_requires_api_key() -> None:
     with pytest.raises(ValueError, match="API key is required"):
         build_search_provider_from_config(
             provider_type=WebSearchProviderType.EXA,
+            api_key=None,
+            config={},
+        )
+
+
+def test_build_brave_provider_requires_api_key() -> None:
+    """Test that Brave provider requires an API key."""
+    with pytest.raises(ValueError, match="API key is required"):
+        build_search_provider_from_config(
+            provider_type=WebSearchProviderType.BRAVE,
             api_key=None,
             config={},
         )

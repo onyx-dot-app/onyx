@@ -13,6 +13,9 @@ from onyx.tools.tool_implementations.open_url.onyx_web_crawler import (
     DEFAULT_MAX_PDF_SIZE_BYTES,
 )
 from onyx.tools.tool_implementations.open_url.onyx_web_crawler import OnyxWebCrawler
+from onyx.tools.tool_implementations.web_search.clients.brave_client import (
+    BraveClient,
+)
 from onyx.tools.tool_implementations.web_search.clients.exa_client import (
     ExaClient,
 )
@@ -67,6 +70,12 @@ def build_search_provider_from_config(
 
     if provider_type == WebSearchProviderType.EXA:
         return ExaClient(api_key=api_key, num_results=num_results)
+    if provider_type == WebSearchProviderType.BRAVE:
+        return BraveClient(
+            api_key=api_key,
+            num_results=num_results,
+            timeout_seconds=int(config.get("timeout_seconds") or 10),
+        )
     if provider_type == WebSearchProviderType.SERPER:
         return SerperClient(api_key=api_key, num_results=num_results)
     if provider_type == WebSearchProviderType.GOOGLE_PSE:

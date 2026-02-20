@@ -263,9 +263,15 @@ def refresh_license_cache(
 
     try:
         payload = verify_license_signature(license_record.license_data)
+        # Derive source from payload: manual licenses lack stripe_customer_id
+        source: LicenseSource = (
+            LicenseSource.AUTO_FETCH
+            if payload.stripe_customer_id
+            else LicenseSource.MANUAL_UPLOAD
+        )
         return update_license_cache(
             payload,
-            source=LicenseSource.AUTO_FETCH,
+            source=source,
             tenant_id=tenant_id,
         )
     except ValueError as e:

@@ -77,6 +77,7 @@ from onyx.db.enums import (
     ThemePreference,
     DefaultAppMode,
     SwitchoverType,
+    SharingScope,
 )
 from onyx.configs.constants import NotificationType
 from onyx.configs.constants import SearchFeedbackType
@@ -1040,7 +1041,9 @@ class OpenSearchTenantMigrationRecord(Base):
         nullable=False,
     )
     # Opaque continuation token from Vespa's Visit API.
-    # NULL means "not started" or "visit completed".
+    # NULL means "not started".
+    # Otherwise contains a serialized mapping between slice ID and continuation
+    # token for that slice.
     vespa_visit_continuation_token: Mapped[str | None] = mapped_column(
         Text, nullable=True
     )
@@ -1063,6 +1066,9 @@ class OpenSearchTenantMigrationRecord(Base):
     )
     enable_opensearch_retrieval: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
+    )
+    approx_chunk_count_in_vespa: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
     )
 
 
@@ -4711,6 +4717,12 @@ class BuildSession(Base):
     nextjs_port: Mapped[int | None] = mapped_column(Integer, nullable=True)
     demo_data_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("true")
+    )
+    sharing_scope: Mapped[SharingScope] = mapped_column(
+        String,
+        nullable=False,
+        default=SharingScope.PRIVATE,
+        server_default="private",
     )
 
     # Relationships

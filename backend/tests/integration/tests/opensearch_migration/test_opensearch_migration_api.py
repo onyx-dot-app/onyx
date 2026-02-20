@@ -21,6 +21,7 @@ def test_migration_status_returns_defaults_when_no_record(
     assert data["total_chunks_migrated"] == 0
     assert data["created_at"] is None
     assert data["migration_completed_at"] is None
+    assert data["approx_chunk_count_in_vespa"] is None
 
 
 def test_retrieval_status_returns_false_when_no_record(
@@ -110,6 +111,7 @@ def test_migration_status_after_record_created(
     assert data["total_chunks_migrated"] == 0
     assert data["created_at"] is not None
     assert data["migration_completed_at"] is None
+    assert data["approx_chunk_count_in_vespa"] is None
 
 
 def test_endpoints_require_admin(

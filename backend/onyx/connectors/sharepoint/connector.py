@@ -7,6 +7,7 @@ import re
 import time
 from collections import deque
 from collections.abc import Generator
+from collections.abc import Iterable
 from datetime import datetime
 from datetime import timezone
 from enum import Enum
@@ -27,6 +28,7 @@ from office365.onedrive.sites.site import Site  # type: ignore[import-untyped]
 from office365.onedrive.sites.sites_with_root import SitesWithRoot  # type: ignore[import-untyped]
 from office365.runtime.auth.token_response import TokenResponse  # type: ignore[import-untyped]
 from office365.runtime.client_request import ClientRequestException  # type: ignore
+from office365.runtime.paths.resource_path import ResourcePath  # type: ignore[import-untyped]
 from office365.runtime.queries.client_query import ClientQuery  # type: ignore[import-untyped]
 from office365.sharepoint.client_context import ClientContext  # type: ignore[import-untyped]
 from pydantic import BaseModel
@@ -79,7 +81,68 @@ SHARED_DOCUMENTS_MAP_REVERSE = {v: k for k, v in SHARED_DOCUMENTS_MAP.items()}
 
 ASPX_EXTENSION = ".aspx"
 
-# The office365 library's ClientContext caches the access token from
+GRAPH_API_BASE = "https://graph.microsoft.com/v1.0"
+GRAPH_API_MAX_RETRIES = 5
+GRAPH_API_RETRYABLE_STATUSES = frozenset({429, 500, 502, 503, 504})
+
+
+class DriveItemData(BaseModel):
+    """Lightweight representation of a Graph API drive item, parsed from JSON.
+
+    Replaces the SDK DriveItem for fetching/listing so that we can paginate
+    lazily through the Graph API without materialising every item in memory.
+    """
+
+    id: str
+    name: str
+    web_url: str
+    size: int | None = None
+    mime_type: str | None = None
+    download_url: str | None = None
+    last_modified_datetime: datetime | None = None
+    last_modified_by_display_name: str | None = None
+    last_modified_by_email: str | None = None
+    parent_reference_path: str | None = None
+    drive_id: str | None = None
+
+    @classmethod
+    def from_graph_json(cls, item: dict[str, Any]) -> "DriveItemData":
+        last_mod_raw = item.get("lastModifiedDateTime")
+        last_mod: datetime | None = None
+        if isinstance(last_mod_raw, str):
+            last_mod = datetime.fromisoformat(last_mod_raw.replace("Z", "+00:00"))
+
+        last_modified_by = item.get("lastModifiedBy", {}).get("user", {})
+        parent_ref = item.get("parentReference", {})
+
+        return cls(
+            id=item["id"],
+            name=item.get("name", ""),
+            web_url=item.get("webUrl", ""),
+            size=item.get("size"),
+            mime_type=item.get("file", {}).get("mimeType"),
+            download_url=item.get("@microsoft.graph.downloadUrl"),
+            last_modified_datetime=last_mod,
+            last_modified_by_display_name=last_modified_by.get("displayName"),
+            last_modified_by_email=(
+                last_modified_by.get("email")
+                or last_modified_by.get("userPrincipalName")
+            ),
+            parent_reference_path=parent_ref.get("path"),
+            drive_id=parent_ref.get("driveId"),
+        )
+
+    def to_sdk_driveitem(self, graph_client: GraphClient) -> DriveItem:
+        """Construct a lazy SDK DriveItem for permission lookups."""
+        if not self.drive_id:
+            raise ValueError("drive_id is required to construct SDK DriveItem")
+        path = ResourcePath(
+            self.id,
+            ResourcePath("items", ResourcePath(self.drive_id, ResourcePath("drives"))),
+        )
+        return DriveItem(graph_client, path)
+
+
 # The office365 library's ClientContext caches the access token from its
 # first request and never re-invokes the token callback.  Microsoft access
 # tokens live ~60-75 minutes, so we recreate the cached ClientContext every
@@ -209,25 +272,37 @@ def acquire_token_for_rest(
     return TokenResponse.from_json(token)
 
 
-def _get_download_url(driveitem: DriveItem) -> str | None:
-    """Best-effort retrieval of the Microsoft Graph download URL from a DriveItem."""
-    try:
-        additional_data = getattr(driveitem, "additional_data", None)
-        if isinstance(additional_data, dict):
-            url = additional_data.get("@microsoft.graph.downloadUrl")
-            if isinstance(url, str) and url:
-                return url
-    except Exception:
-        pass
+def _create_document_failure(
+    driveitem: DriveItemData,
+    error_message: str,
+    exception: Exception | None = None,
+) -> ConnectorFailure:
+    """Helper method to create a ConnectorFailure for document processing errors."""
+    return ConnectorFailure(
+        failed_document=DocumentFailure(
+            document_id=driveitem.id or "unknown",
+            document_link=driveitem.web_url,
+        ),
+        failure_message=f"SharePoint document '{driveitem.name or 'unknown'}': {error_message}",
+        exception=exception,
+    )
 
-    try:
-        driveitem_json = driveitem.to_json()
-        url = driveitem_json.get("@microsoft.graph.downloadUrl")
-        if isinstance(url, str) and url:
-            return url
-    except Exception:
-        pass
-    return None
+
+def _create_entity_failure(
+    entity_id: str,
+    error_message: str,
+    time_range: tuple[datetime, datetime] | None = None,
+    exception: Exception | None = None,
+) -> ConnectorFailure:
+    """Helper method to create a ConnectorFailure for entity-level errors."""
+    return ConnectorFailure(
+        failed_entity=EntityFailure(
+            entity_id=entity_id,
+            missed_time_range=time_range,
+        ),
+        failure_message=f"SharePoint entity '{entity_id}': {error_message}",
+        exception=exception,
+    )
 
 
 def _probe_remote_size(url: str, timeout: int) -> int | None:
@@ -302,35 +377,41 @@ def _download_with_cap(url: str, timeout: int, cap: int) -> bytes:
         return buf.getvalue()
 
 
-def _download_via_sdk_with_cap(
-    driveitem: DriveItem, bytes_allowed: int, chunk_size: int = 64 * 1024
+def _download_via_graph_api(
+    access_token: str,
+    drive_id: str,
+    item_id: str,
+    bytes_allowed: int,
 ) -> bytes:
-    """Use the Office365 SDK streaming download with a hard byte cap.
+    """Download a drive item via the Graph API /content endpoint with a byte cap.
 
-    Raises SizeCapExceeded("during_sdk_download") if the cap would be exceeded.
+    Raises SizeCapExceeded if the cap is exceeded.
     """
-    buf = io.BytesIO()
-
-    def on_chunk(bytes_read: int) -> None:
-        # bytes_read is total bytes seen so far per SDK contract
-        if bytes_read > bytes_allowed:
-            raise SizeCapExceeded("during_sdk_download")
-
-    # modifies the driveitem to change its download behavior
-    driveitem.download_session(buf, chunk_downloaded=on_chunk, chunk_size=chunk_size)
-    # Execute the configured request with retries using existing helper
-    sleep_and_retry(driveitem.context, "download_session")
-    return buf.getvalue()
+    url = f"{GRAPH_API_BASE}/drives/{drive_id}/items/{item_id}/content"
+    headers = {"Authorization": f"Bearer {access_token}"}
+    with requests.get(
+        url, headers=headers, stream=True, timeout=REQUEST_TIMEOUT_SECONDS
+    ) as resp:
+        resp.raise_for_status()
+        buf = io.BytesIO()
+        for chunk in resp.iter_content(64 * 1024):
+            if not chunk:
+                continue
+            buf.write(chunk)
+            if buf.tell() > bytes_allowed:
+                raise SizeCapExceeded("during_graph_api_download")
+        return buf.getvalue()
 
 
 def _convert_driveitem_to_document_with_permissions(
-    driveitem: DriveItem,
+    driveitem: DriveItemData,
     drive_name: str,
     ctx: ClientContext | None,
     graph_client: GraphClient,
     include_permissions: bool = False,
     parent_hierarchy_raw_node_id: str | None = None,
-) -> Document | None:
+    access_token: str | None = None,
+) -> Document | ConnectorFailure | None:
 
     if not driveitem.name or not driveitem.id:
         raise ValueError("DriveItem name/id is required")
@@ -338,29 +419,16 @@ def _convert_driveitem_to_document_with_permissions(
     if include_permissions and ctx is None:
         raise ValueError("ClientContext is required for permissions")
 
-    # Determine size before downloading, when possible
-    file_size: int | None = None
-    try:
-        item_json = driveitem.to_json()
-        mime_type = item_json.get("file", {}).get("mimeType")
-        if not mime_type or mime_type in OnyxMimeTypes.EXCLUDED_IMAGE_TYPES:
-            # NOTE: this function should be refactored to look like Drive doc_conversion.py pattern
-            # for now, this skip must happen before we download the file
-            # Similar to Google Drive, we'll just semi-silently skip excluded image types
-            logger.debug(
-                f"Skipping malformed or excluded mime type {mime_type} for {driveitem.name}"
-            )
-            return None
-
-        size_value = item_json.get("size")
-        if size_value is not None:
-            file_size = int(size_value)
-    except Exception as e:
+    mime_type = driveitem.mime_type
+    if not mime_type or mime_type in OnyxMimeTypes.EXCLUDED_IMAGE_TYPES:
         logger.debug(
-            f"Could not access file size for '{driveitem.name}' from item JSON: {e}"
+            f"Skipping malformed or excluded mime type {mime_type} for {driveitem.name}"
         )
+        return None
 
-    download_url = _get_download_url(driveitem)
+    file_size = driveitem.size
+    download_url = driveitem.download_url
+
     if file_size is None and download_url:
         file_size = _probe_remote_size(download_url, REQUEST_TIMEOUT_SECONDS)
 
@@ -374,8 +442,6 @@ def _convert_driveitem_to_document_with_permissions(
     content_bytes: bytes | None = None
     if download_url:
         try:
-            # Use this to test the sdk size cap
-            # raise requests.RequestException("test")
             content_bytes = _download_with_cap(
                 download_url,
                 REQUEST_TIMEOUT_SECONDS,
@@ -387,20 +453,30 @@ def _convert_driveitem_to_document_with_permissions(
         except requests.RequestException as e:
             status = e.response.status_code if e.response is not None else -1
             logger.warning(
-                f"Failed to download via downloadUrl for '{driveitem.name}' (status={status}); falling back to SDK."
+                f"Failed to download via downloadUrl for '{driveitem.name}' (status={status}); falling back to Graph API."
             )
 
-    # Fallback to SDK content if needed
-    if content_bytes is None:
+    # Fallback: download via Graph API /content endpoint
+    if content_bytes is None and access_token and driveitem.drive_id:
         try:
-            content_bytes = _download_via_sdk_with_cap(
-                driveitem, SHAREPOINT_CONNECTOR_SIZE_THRESHOLD
+            content_bytes = _download_via_graph_api(
+                access_token,
+                driveitem.drive_id,
+                driveitem.id,
+                SHAREPOINT_CONNECTOR_SIZE_THRESHOLD,
             )
         except SizeCapExceeded:
             logger.warning(
-                f"Skipping '{driveitem.name}' exceeded size cap during SDK streaming."
+                f"Skipping '{driveitem.name}' exceeded size cap during Graph API download."
             )
             return None
+        except Exception as e:
+            logger.warning(
+                f"Failed to download via Graph API for '{driveitem.name}': {e}"
+            )
+            return _create_document_failure(
+                driveitem, f"Failed to download via graph api: {e}", e
+            )
 
     sections: list[TextSection | ImageSection] = []
     file_ext = get_file_ext(driveitem.name)
@@ -410,7 +486,6 @@ def _convert_driveitem_to_document_with_permissions(
             f"Zero-length content for '{driveitem.name}'. Skipping text/image extraction."
         )
     elif file_ext in OnyxFileExtensions.IMAGE_EXTENSIONS:
-        # NOTE: this if should probably check mime_type instead
         image_section, _ = store_image_and_create_section(
             image_data=content_bytes,
             file_id=driveitem.id,
@@ -420,10 +495,10 @@ def _convert_driveitem_to_document_with_permissions(
         image_section.link = driveitem.web_url
         sections.append(image_section)
     else:
-        # Note: we don't process Onyx metadata for connectors like Drive & Sharepoint, but could
+
         def _store_embedded_image(img_data: bytes, img_name: str) -> None:
             try:
-                mime_type = get_image_type_from_bytes(img_data)
+                img_mime = get_image_type_from_bytes(img_data)
             except ValueError:
                 logger.debug(
                     "Skipping embedded image with unknown format for %s",
@@ -431,12 +506,10 @@ def _convert_driveitem_to_document_with_permissions(
                 )
                 return
 
-            # The only mime type that would be returned by get_image_type_from_bytes that is in
-            # EXCLUDED_IMAGE_TYPES is image/gif.
-            if mime_type in OnyxMimeTypes.EXCLUDED_IMAGE_TYPES:
+            if img_mime in OnyxMimeTypes.EXCLUDED_IMAGE_TYPES:
                 logger.debug(
                     "Skipping embedded image of excluded type %s for %s",
-                    mime_type,
+                    img_mime,
                     driveitem.name,
                 )
                 return
@@ -459,14 +532,14 @@ def _convert_driveitem_to_document_with_permissions(
             sections.append(
                 TextSection(link=driveitem.web_url, text=extraction_result.text_content)
             )
-        # Any embedded images were stored via the callback; the returned list may be empty.
 
     if include_permissions and ctx is not None:
         logger.info(f"Getting external access for {driveitem.name}")
+        sdk_item = driveitem.to_sdk_driveitem(graph_client)
         external_access = get_sharepoint_external_access(
             ctx=ctx,
             graph_client=graph_client,
-            drive_item=driveitem,
+            drive_item=sdk_item,
             drive_name=drive_name,
             add_prefix=True,
         )
@@ -486,9 +559,8 @@ def _convert_driveitem_to_document_with_permissions(
         ),
         primary_owners=[
             BasicExpertInfo(
-                display_name=driveitem.last_modified_by.user.displayName,
-                email=getattr(driveitem.last_modified_by.user, "email", "")
-                or getattr(driveitem.last_modified_by.user, "userPrincipalName", ""),
+                display_name=driveitem.last_modified_by_display_name or "",
+                email=driveitem.last_modified_by_email or "",
             )
         ],
         metadata={"drive": drive_name},
@@ -658,7 +730,7 @@ def _convert_sitepage_to_document(
 
 
 def _convert_driveitem_to_slim_document(
-    driveitem: DriveItem,
+    driveitem: DriveItemData,
     drive_name: str,
     ctx: ClientContext,
     graph_client: GraphClient,
@@ -666,10 +738,11 @@ def _convert_driveitem_to_slim_document(
     if driveitem.id is None:
         raise ValueError("DriveItem ID is required")
 
+    sdk_item = driveitem.to_sdk_driveitem(graph_client)
     external_access = get_sharepoint_external_access(
         ctx=ctx,
         graph_client=graph_client,
-        drive_item=driveitem,
+        drive_item=sdk_item,
         drive_name=drive_name,
     )
 
@@ -861,103 +934,60 @@ class SharepointConnector(
             )
         return site_data_list
 
-    def _get_drive_items_for_drive_name(
+    def _resolve_drive(
         self,
         site_descriptor: SiteDescriptor,
         drive_name: str,
+    ) -> tuple[str, str | None] | None:
+        """Find the drive ID and web_url for a given drive name on a site.
+
+        Returns (drive_id, drive_web_url) or None if the drive was not found.
+        Raises on auth/permission errors so callers can propagate them.
+        """
+        site = self.graph_client.sites.get_by_url(site_descriptor.url)
+        drives = site.drives.get().execute_query()
+        logger.info(f"Found drives: {[d.name for d in drives]}")
+
+        matched = [
+            d
+            for d in drives
+            if (d.name and d.name.lower() == drive_name.lower())
+            or (
+                d.name in SHARED_DOCUMENTS_MAP
+                and SHARED_DOCUMENTS_MAP[d.name] == drive_name
+            )
+        ]
+        if not matched:
+            logger.warning(f"Drive '{drive_name}' not found")
+            return None
+
+        drive = matched[0]
+        drive_web_url: str | None = drive.web_url
+        logger.info(f"Found drive: {drive.name} (web_url: {drive_web_url})")
+        return cast(str, drive.id), drive_web_url
+
+    def _get_drive_items_for_drive_id(
+        self,
+        site_descriptor: SiteDescriptor,
+        drive_id: str,
         start: datetime | None = None,
         end: datetime | None = None,
-    ) -> tuple[list[DriveItem], str | None]:
-        """Fetch drive items for a given drive name.
+    ) -> Generator[DriveItemData, None, None]:
+        """Yield drive items lazily for a given drive name.
 
         Returns:
-            A tuple of (list of DriveItem, drive_web_url).
-            drive_web_url is the actual web_url from the Drive API for use as hierarchy node ID.
+            A generator of DriveItemData.
+            The generator paginates through the Graph API so items are never
+            all held in memory at once.
         """
         try:
-            site = self.graph_client.sites.get_by_url(site_descriptor.url)
-            drives = site.drives.get().execute_query()
-            logger.info(f"Found drives: {[drive.name for drive in drives]}")
 
-            drives = [
-                drive
-                for drive in drives
-                if (drive.name and drive.name.lower() == drive_name.lower())
-                or (
-                    drive.name in SHARED_DOCUMENTS_MAP
-                    and SHARED_DOCUMENTS_MAP[drive.name] == drive_name
-                )
-            ]
-            drive = drives[0] if len(drives) > 0 else None
-            if drive is None:
-                logger.warning(f"Drive '{drive_name}' not found")
-                return [], None
-
-            drive_web_url: str | None = drive.web_url
-            logger.info(f"Found drive: {drive.name} (web_url: {drive_web_url})")
-            try:
-                root_folder = drive.root
-                if site_descriptor.folder_path:
-                    for folder_part in site_descriptor.folder_path.split("/"):
-                        root_folder = root_folder.get_by_path(folder_part)
-
-                logger.info(f"Found root folder: {root_folder.name}")
-
-                # TODO: consider ways to avoid materializing the entire list of files in memory
-                query = root_folder.get_files(
-                    recursive=True,
-                    page_size=1000,
-                )
-                driveitems = query.execute_query()
-                logger.info(f"Found {len(driveitems)} items in drive '{drive_name}'")
-
-                # Filter items based on folder path if specified
-                if site_descriptor.folder_path:
-                    # Filter items to ensure they're in the specified folder or its subfolders
-                    # The path will be in format: /drives/{drive_id}/root:/folder/path
-                    driveitems = [
-                        item
-                        for item in driveitems
-                        if item.parent_reference.path
-                        and "root:/" in item.parent_reference.path
-                        and (
-                            item.parent_reference.path.split("root:/")[1]
-                            == site_descriptor.folder_path
-                            or item.parent_reference.path.split("root:/")[1].startswith(
-                                site_descriptor.folder_path + "/"
-                            )
-                        )
-                    ]
-                    if len(driveitems) == 0:
-                        all_paths = [item.parent_reference.path for item in driveitems]
-                        logger.warning(
-                            f"Nothing found for folder '{site_descriptor.folder_path}' "
-                            f"in; any of valid paths: {all_paths}"
-                        )
-                    logger.info(
-                        f"Found {len(driveitems)} items in drive '{drive_name}' for the folder '{site_descriptor.folder_path}'"
-                    )
-
-                # Filter items based on time window if specified
-                if start is not None and end is not None:
-                    driveitems = [
-                        item
-                        for item in driveitems
-                        if item.last_modified_datetime
-                        and start
-                        <= item.last_modified_datetime.replace(tzinfo=timezone.utc)
-                        <= end
-                    ]
-                    logger.info(
-                        f"Found {len(driveitems)} items within time window in drive '{drive.name}'"
-                    )
-
-                return list(driveitems), drive_web_url
-
-            except Exception as e:
-                # Some drives might not be accessible
-                logger.warning(f"Failed to process drive: {str(e)}")
-                return [], None
+            yield from self._iter_drive_items_paged(
+                drive_id=drive_id,
+                folder_path=site_descriptor.folder_path,
+                start=start,
+                end=end,
+            )
 
         except Exception as e:
             err_str = str(e)
@@ -968,32 +998,24 @@ class SharepointConnector(
             ):
                 raise e
 
-            # Sites include things that do not contain drives so this fails
-            # but this is fine, as there are no actual documents in those
             logger.warning(f"Failed to process site: {site_descriptor.url} - {err_str}")
-            return [], None
 
     def _fetch_driveitems(
         self,
         site_descriptor: SiteDescriptor,
         start: datetime | None = None,
         end: datetime | None = None,
-    ) -> list[tuple[DriveItem, str, str | None]]:
-        """Fetch all drive items for a site.
+    ) -> Generator[tuple[DriveItemData, str, str | None], None, None]:
+        """Yield drive items lazily for all drives in a site.
 
-        Returns:
-            A list of tuples (DriveItem, drive_name, drive_web_url).
-            drive_web_url is the actual web_url from the Drive API for use as hierarchy node ID.
+        Yields (DriveItemData, drive_name, drive_web_url) tuples one item at
+        a time, paginating through the Graph API internally.
         """
-        final_driveitems: list[tuple[DriveItem, str, str | None]] = []
         try:
             site = self.graph_client.sites.get_by_url(site_descriptor.url)
-
-            # Get all drives in the site
             drives = site.drives.get().execute_query()
-            logger.debug(f"Found drives: {[drive.name for drive in drives]}")
+            logger.debug(f"Found drives: {[d.name for d in drives]}")
 
-            # Filter drives based on the requested drive name
             if site_descriptor.drive_name:
                 drives = [
                     drive
@@ -1004,87 +1026,29 @@ class SharepointConnector(
                         and SHARED_DOCUMENTS_MAP[drive.name]
                         == site_descriptor.drive_name
                     )
-                ]  # NOTE: right now we only support english, german and spanish drive names
-                # add to SHARED_DOCUMENTS_MAP if you want to support more languages
+                ]
                 if not drives:
                     logger.warning(f"Drive '{site_descriptor.drive_name}' not found")
-                    return []
+                    return
 
-            # Process each matching drive
             for drive in drives:
                 try:
-                    root_folder = drive.root
-                    if site_descriptor.folder_path:
-                        # If a specific folder is requested, navigate to it
-                        for folder_part in site_descriptor.folder_path.split("/"):
-                            root_folder = root_folder.get_by_path(folder_part)
-
-                    # Get all items recursively
-                    # TODO: consider ways to avoid materializing the entire list of files in memory
-                    query = root_folder.get_files(
-                        recursive=True,
-                        page_size=1000,
-                    )
-                    driveitems = query.execute_query()
-                    logger.debug(
-                        f"Found {len(driveitems)} items in drive '{drive.name}'"
-                    )
-
-                    # Use "Shared Documents" as the library name for the default "Documents" drive
-                    # NOTE: right now we only support english, german and spanish drive names
-                    # add to SHARED_DOCUMENTS_MAP if you want to support more languages
                     drive_name = (
                         SHARED_DOCUMENTS_MAP[drive.name]
                         if drive.name in SHARED_DOCUMENTS_MAP
                         else cast(str, drive.name)
                     )
-
-                    # Filter items based on folder path if specified
-                    if site_descriptor.folder_path:
-                        # Filter items to ensure they're in the specified folder or its subfolders
-                        # The path will be in format: /drives/{drive_id}/root:/folder/path
-                        driveitems = [
-                            item
-                            for item in driveitems
-                            if item.parent_reference.path
-                            and "root:/" in item.parent_reference.path
-                            and (
-                                item.parent_reference.path.split("root:/")[1]
-                                == site_descriptor.folder_path
-                                or item.parent_reference.path.split("root:/")[
-                                    1
-                                ].startswith(site_descriptor.folder_path + "/")
-                            )
-                        ]
-                        if len(driveitems) == 0:
-                            all_paths = [
-                                item.parent_reference.path for item in driveitems
-                            ]
-                            logger.warning(
-                                f"Nothing found for folder '{site_descriptor.folder_path}' "
-                                f"in; any of valid paths: {all_paths}"
-                            )
-
-                    # Filter items based on time window if specified
-                    if start is not None and end is not None:
-                        driveitems = [
-                            item
-                            for item in driveitems
-                            if item.last_modified_datetime
-                            and start
-                            <= item.last_modified_datetime.replace(tzinfo=timezone.utc)
-                            <= end
-                        ]
-                        logger.debug(
-                            f"Found {len(driveitems)} items within time window in drive '{drive.name}'"
-                        )
-
                     drive_web_url: str | None = drive.web_url
-                    for item in driveitems:
-                        final_driveitems.append((item, drive_name or "", drive_web_url))
+
+                    for item in self._iter_drive_items_paged(
+                        drive_id=cast(str, drive.id),
+                        folder_path=site_descriptor.folder_path,
+                        start=start,
+                        end=end,
+                    ):
+                        yield item, drive_name or "", drive_web_url
 
                 except Exception as e:
-                    # Some drives might not be accessible
                     logger.warning(f"Failed to process drive '{drive.name}': {str(e)}")
 
         except Exception as e:
@@ -1096,11 +1060,7 @@ class SharepointConnector(
             ):
                 raise e
 
-            # Sites include things that do not contain drives so this fails
-            # but this is fine, as there are no actual documents in those
             logger.warning(f"Failed to process site: {err_str}")
-
-        return final_driveitems
 
     def _handle_paginated_sites(
         self, sites: SitesWithRoot
@@ -1218,6 +1178,118 @@ class SharepointConnector(
         )
         return token
 
+    def _get_graph_access_token(self) -> str:
+        token_data = self._acquire_token()
+        access_token = token_data.get("access_token")
+        if not access_token:
+            raise RuntimeError("Failed to acquire Graph API access token")
+        return access_token
+
+    def _graph_api_get_json(
+        self,
+        url: str,
+        params: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        """Make an authenticated GET request to the Graph API with retry."""
+        access_token = self._get_graph_access_token()
+        headers = {"Authorization": f"Bearer {access_token}"}
+
+        for attempt in range(GRAPH_API_MAX_RETRIES + 1):
+            try:
+                response = requests.get(
+                    url,
+                    headers=headers,
+                    params=params,
+                    timeout=REQUEST_TIMEOUT_SECONDS,
+                )
+                if response.status_code in GRAPH_API_RETRYABLE_STATUSES:
+                    if attempt < GRAPH_API_MAX_RETRIES:
+                        retry_after = int(
+                            response.headers.get("Retry-After", str(2**attempt))
+                        )
+                        wait = min(retry_after, 60)
+                        logger.warning(
+                            f"Graph API {response.status_code} on attempt {attempt + 1}, "
+                            f"retrying in {wait}s: {url}"
+                        )
+                        time.sleep(wait)
+                        # Re-acquire token in case it expired during a long traversal
+                        access_token = self._get_graph_access_token()
+                        headers = {"Authorization": f"Bearer {access_token}"}
+                        continue
+                response.raise_for_status()
+                return response.json()
+            except (requests.ConnectionError, requests.Timeout):
+                if attempt < GRAPH_API_MAX_RETRIES:
+                    wait = min(2**attempt, 60)
+                    logger.warning(
+                        f"Graph API connection error on attempt {attempt + 1}, "
+                        f"retrying in {wait}s: {url}"
+                    )
+                    time.sleep(wait)
+                    continue
+                raise
+
+        raise RuntimeError(
+            f"Graph API request failed after {GRAPH_API_MAX_RETRIES + 1} attempts: {url}"
+        )
+
+    def _iter_drive_items_paged(
+        self,
+        drive_id: str,
+        folder_path: str | None = None,
+        start: datetime | None = None,
+        end: datetime | None = None,
+        page_size: int = 200,
+    ) -> Generator[DriveItemData, None, None]:
+        """Yield DriveItemData for every file in a drive via the Graph API.
+
+        Performs BFS folder traversal manually, fetching one page of children
+        at a time so that memory usage stays bounded regardless of drive size.
+        """
+        base = f"{GRAPH_API_BASE}/drives/{drive_id}"
+        if folder_path:
+            start_url = f"{base}/root:/{folder_path}:/children"
+        else:
+            start_url = f"{base}/root/children"
+
+        folder_queue: deque[str] = deque([start_url])
+
+        while folder_queue:
+            page_url: str | None = folder_queue.popleft()
+            params: dict[str, str] | None = {"$top": str(page_size)}
+
+            while page_url:
+                data = self._graph_api_get_json(page_url, params)
+                params = None  # nextLink already embeds query params
+
+                for item in data.get("value", []):
+                    if "folder" in item:
+                        child_url = f"{base}/items/{item['id']}/children"
+                        folder_queue.append(child_url)
+                        continue
+
+                    # Skip non-file items (e.g. OneNote notebooks without a "file" facet)
+                    # but still yield them — the downstream conversion handles filtering
+                    # by extension / mime type.
+
+                    # NOTE: We are now including items without a lastModifiedDateTime,
+                    # and respecting when only one of start or end is set.
+                    if start is not None or end is not None:
+                        raw_ts = item.get("lastModifiedDateTime")
+                        if raw_ts:
+                            mod_dt = datetime.fromisoformat(
+                                raw_ts.replace("Z", "+00:00")
+                            )
+                            if start is not None and mod_dt < start:
+                                continue
+                            if end is not None and mod_dt > end:
+                                continue
+
+                    yield DriveItemData.from_graph_json(item)
+
+                page_url = data.get("@odata.nextLink")
+
     def _fetch_slim_documents_from_sharepoint(self) -> GenerateSlimDocumentOutput:
         site_descriptors = self.site_descriptors or self.fetch_sites()
 
@@ -1236,9 +1308,9 @@ class SharepointConnector(
 
             # Process site documents if flag is True
             if self.include_site_documents:
-                driveitems = self._fetch_driveitems(site_descriptor=site_descriptor)
-                for driveitem, drive_name, drive_web_url in driveitems:
-                    # Yield drive hierarchy node using helper
+                for driveitem, drive_name, drive_web_url in self._fetch_driveitems(
+                    site_descriptor=site_descriptor
+                ):
                     if drive_web_url:
                         doc_batch.extend(
                             self._yield_drive_hierarchy_node(
@@ -1246,11 +1318,8 @@ class SharepointConnector(
                             )
                         )
 
-                    # Extract folder path and yield folder hierarchy nodes using helper
                     folder_path = self._extract_folder_path_from_parent_reference(
-                        driveitem.parent_reference.path
-                        if driveitem.parent_reference
-                        else None
+                        driveitem.parent_reference_path
                     )
                     if folder_path and drive_web_url:
                         doc_batch.extend(
@@ -1372,39 +1441,6 @@ class SharepointConnector(
             # remove the .onmicrosoft.com part
             self.sp_tenant_domain = sp_tenant_domain.split(".")[0]
         return None
-
-    def _create_document_failure(
-        self,
-        driveitem: DriveItem,
-        error_message: str,
-        exception: Exception | None = None,
-    ) -> ConnectorFailure:
-        """Helper method to create a ConnectorFailure for document processing errors."""
-        return ConnectorFailure(
-            failed_document=DocumentFailure(
-                document_id=driveitem.id or "unknown",
-                document_link=driveitem.web_url,
-            ),
-            failure_message=f"SharePoint document '{driveitem.name or 'unknown'}': {error_message}",
-            exception=exception,
-        )
-
-    def _create_entity_failure(
-        self,
-        entity_id: str,
-        error_message: str,
-        time_range: tuple[datetime, datetime] | None = None,
-        exception: Exception | None = None,
-    ) -> ConnectorFailure:
-        """Helper method to create a ConnectorFailure for entity-level errors."""
-        return ConnectorFailure(
-            failed_entity=EntityFailure(
-                entity_id=entity_id,
-                missed_time_range=time_range,
-            ),
-            failure_message=f"SharePoint entity '{entity_id}': {error_message}",
-            exception=exception,
-        )
 
     def _get_drive_names_for_site(self, site_url: str) -> list[str]:
         """Return all library/drive names for a given SharePoint site."""
@@ -1563,7 +1599,7 @@ class SharepointConnector(
         site_url: str,
         drive_web_url: str,
         drive_name: str,
-        driveitem: DriveItem,
+        driveitem: DriveItemData,
     ) -> str:
         """Determine the parent hierarchy node URL for a document.
 
@@ -1572,7 +1608,7 @@ class SharepointConnector(
             - Drive URL if document is at drive root
         """
         folder_path = self._extract_folder_path_from_parent_reference(
-            driveitem.parent_reference.path if driveitem.parent_reference else None
+            driveitem.parent_reference_path
         )
 
         if folder_path:
@@ -1671,7 +1707,7 @@ class SharepointConnector(
                 # Yield a ConnectorFailure for site-level access failures
                 start_dt = datetime.fromtimestamp(start, tz=timezone.utc)
                 end_dt = datetime.fromtimestamp(end, tz=timezone.utc)
-                yield self._create_entity_failure(
+                yield _create_entity_failure(
                     checkpoint.current_site_descriptor.url,
                     f"Failed to access site: {str(e)}",
                     (start_dt, end_dt),
@@ -1714,42 +1750,34 @@ class SharepointConnector(
             )
             logger.debug(f"Time range: {start_dt} to {end_dt}")
 
-            # At this point current_drive_name should be set from popleft()
             current_drive_name = checkpoint.current_drive_name
             if current_drive_name is None:
                 logger.warning("Current drive name is None, skipping")
                 return checkpoint
 
+            driveitems: Iterable[DriveItemData] = iter(())
+            drive_web_url: str | None = None
             try:
                 logger.info(
                     f"Fetching drive items for drive name: {current_drive_name}"
                 )
-                driveitems, drive_web_url = self._get_drive_items_for_drive_name(
-                    site_descriptor, current_drive_name, start_dt, end_dt
-                )
-                # Store drive_web_url in checkpoint for hierarchy tracking
-                checkpoint.current_drive_web_url = drive_web_url
-
-                if not driveitems:
-                    logger.warning(
-                        f"No drive items found in drive '{current_drive_name}' for site: {site_descriptor.url}"
+                result = self._resolve_drive(site_descriptor, current_drive_name)
+                if result is not None:
+                    drive_id, drive_web_url = result
+                    driveitems = self._get_drive_items_for_drive_id(
+                        site_descriptor, drive_id, start_dt, end_dt
                     )
-                else:
-                    logger.info(
-                        f"Found {len(driveitems)} items to process in drive '{current_drive_name}'"
-                    )
+                    checkpoint.current_drive_web_url = drive_web_url
             except Exception as e:
                 logger.error(
                     f"Failed to retrieve items from drive '{current_drive_name}' in site: {site_descriptor.url}: {e}"
                 )
-                # Yield a ConnectorFailure for drive-level access failures
-                yield self._create_entity_failure(
+                yield _create_entity_failure(
                     f"{site_descriptor.url}|{current_drive_name}",
                     f"Failed to access drive '{current_drive_name}' in site '{site_descriptor.url}': {str(e)}",
                     (start_dt, end_dt),
                     e,
                 )
-                # Clear current drive and continue to next
                 checkpoint.current_drive_name = None
                 checkpoint.current_drive_web_url = None
                 return checkpoint
@@ -1759,7 +1787,6 @@ class SharepointConnector(
                 current_drive_name, current_drive_name
             )
 
-            # Yield drive hierarchy node if we have a valid drive_web_url
             if drive_web_url:
                 yield from self._yield_drive_hierarchy_node(
                     site_descriptor.url,
@@ -1768,7 +1795,9 @@ class SharepointConnector(
                     checkpoint,
                 )
 
+            item_count = 0
             for driveitem in driveitems:
+                item_count += 1
                 driveitem_extension = get_file_ext(driveitem.name)
                 if driveitem_extension not in OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS:
                     logger.warning(
@@ -1776,17 +1805,13 @@ class SharepointConnector(
                     )
                     continue
 
-                # Only yield empty documents if they are PDFs or images
                 should_yield_if_empty = (
                     driveitem_extension in OnyxFileExtensions.IMAGE_EXTENSIONS
                     or driveitem_extension == ".pdf"
                 )
 
-                # Extract folder path and yield folder hierarchy nodes
                 folder_path = self._extract_folder_path_from_parent_reference(
-                    driveitem.parent_reference.path
-                    if driveitem.parent_reference
-                    else None
+                    driveitem.parent_reference_path
                 )
                 if folder_path and drive_web_url:
                     yield from self._yield_folder_hierarchy_nodes(
@@ -1797,7 +1822,6 @@ class SharepointConnector(
                         checkpoint,
                     )
 
-                # Determine parent hierarchy URL for this document
                 parent_hierarchy_url: str | None = None
                 if drive_web_url:
                     parent_hierarchy_url = self._get_parent_hierarchy_url(
@@ -1812,37 +1836,42 @@ class SharepointConnector(
                     if include_permissions:
                         ctx = self._create_rest_client_context(site_descriptor.url)
 
-                    doc = _convert_driveitem_to_document_with_permissions(
+                    # Re-acquire token in case it expired during a long traversal
+                    # MSAL has a cache that returns the same token while still valid.
+                    access_token = self._get_graph_access_token()
+                    doc_or_failure = _convert_driveitem_to_document_with_permissions(
                         driveitem,
                         current_drive_name,
                         ctx,
                         self.graph_client,
                         include_permissions=include_permissions,
                         parent_hierarchy_raw_node_id=parent_hierarchy_url,
+                        access_token=access_token,
                     )
 
-                    if doc:
-                        if doc.sections:
-                            yield doc
+                    if isinstance(doc_or_failure, Document):
+                        if doc_or_failure.sections:
+                            yield doc_or_failure
                         elif should_yield_if_empty:
-                            doc.sections = [
+                            doc_or_failure.sections = [
                                 TextSection(link=driveitem.web_url, text="")
                             ]
-                            yield doc
+                            yield doc_or_failure
                         else:
                             logger.warning(
                                 f"Skipping {driveitem.web_url} as it is empty and not a PDF or image"
                             )
+                    elif isinstance(doc_or_failure, ConnectorFailure):
+                        yield doc_or_failure
                 except Exception as e:
                     logger.warning(
                         f"Failed to process driveitem {driveitem.web_url}: {e}"
                     )
-                    # Yield a ConnectorFailure for individual document processing failures
-                    yield self._create_document_failure(
+                    yield _create_document_failure(
                         driveitem, f"Failed to process: {str(e)}", e
                     )
 
-            # Clear current drive after processing
+            logger.info(f"Processed {item_count} items in drive '{current_drive_name}'")
             checkpoint.current_drive_name = None
             checkpoint.current_drive_web_url = None
 
@@ -2009,8 +2038,8 @@ if __name__ == "__main__":
         ):
             if doc_batch:
                 print(f"Retrieved batch of {len(doc_batch)} documents")
-                for doc in doc_batch:
-                    print(f"Document: {doc.semantic_identifier}")
+                for test_doc in doc_batch:
+                    print(f"Document: {test_doc.semantic_identifier}")
             if failure:
                 print(f"Failure: {failure.failure_message}")
             if next_checkpoint:
