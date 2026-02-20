@@ -33,6 +33,7 @@ function LogoSection({ folded, onFoldClick }: LogoSectionProps) {
   return (
     <div
       className={cn(
+        /* px-2.5 => 2 for the standard sidebar padding + 0.5 for internal padding specific to this component. */
         "flex px-2.5 py-2 min-h-[3.25rem]",
         folded ? "justify-center" : "justify-between",
         applicationName ? "min-h-[3.75rem]" : "min-h-[3.25rem]"
