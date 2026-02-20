@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
@@ -15,11 +16,12 @@ import (
 
 // CherryPickOptions holds options for the cherry-pick command
 type CherryPickOptions struct {
-	Releases []string
-	DryRun   bool
-	Yes      bool
-	NoVerify bool
-	Continue bool
+	Releases      []string
+	LatestRelease bool
+	DryRun        bool
+	Yes           bool
+	NoVerify      bool
+	Continue      bool
 }
 
 // NewCherryPickCommand creates a new cherry-pick command
@@ -73,6 +75,7 @@ Example usage:
 
 	cmd.Flags().BoolVar(&opts.Continue, "continue", false, "Resume a cherry-pick after manual conflict resolution")
 	cmd.Flags().StringSliceVar(&opts.Releases, "release", []string{}, "Release version(s) to cherry-pick to (e.g., 1.0, v1.1). 'v' prefix is optional. Can be specified multiple times.")
+	cmd.Flags().BoolVar(&opts.LatestRelease, "latest-release", false, "Cherry-pick to the latest release branch (e.g., release/v2.12)")
 	cmd.Flags().BoolVar(&opts.DryRun, "dry-run", false, "Perform all local operations but skip pushing to remote and creating PRs")
 	cmd.Flags().BoolVar(&opts.Yes, "yes", false, "Skip confirmation prompts and automatically proceed")
 	cmd.Flags().BoolVar(&opts.NoVerify, "no-verify", false, "Skip pre-commit and commit-msg hooks for cherry-pick and push")
@@ -135,7 +138,20 @@ func runCherryPick(cmd *cobra.Command, args []string, opts *CherryPickOptions) {
 
 	// Determine which releases to target
 	var releases []string
-	if len(opts.Releases) > 0 {
+	if opts.LatestRelease && len(opts.Releases) > 0 {
+		git.RestoreStash(stashResult)
+		log.Fatal("Cannot use --latest-release together with --release.")
+	}
+
+	if opts.LatestRelease {
+		version, err := findLatestReleaseVersion()
+		if err != nil {
+			git.RestoreStash(stashResult)
+			log.Fatalf("Failed to find latest release branch: %v", err)
+		}
+		log.Infof("Using latest release version: %s", version)
+		releases = []string{version}
+	} else if len(opts.Releases) > 0 {
 		// Normalize versions to ensure they have 'v' prefix
 		for _, rel := range opts.Releases {
 			releases = append(releases, normalizeVersion(rel))
@@ -453,6 +469,67 @@ func findNearestStableTag(commitSHA string) (string, error) {
 	}
 
 	return matches[1], nil
+}
+
+func findLatestReleaseVersion() (string, error) {
+	cmd := exec.Command("git", "ls-remote", "--heads", "origin", "release/v*")
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to list remote release branches: %w", err)
+	}
+
+	version, parseErr := parseLatestReleaseVersion(string(output))
+	if parseErr != nil {
+		return "", parseErr
+	}
+
+	return version, nil
+}
+
+func parseLatestReleaseVersion(lsRemoteOutput string) (string, error) {
+	re := regexp.MustCompile(`refs/heads/release/(v\d+\.\d+)$`)
+	var latest string
+	var latestMajor int
+	var latestMinor int
+	found := false
+
+	for _, line := range strings.Split(lsRemoteOutput, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		matches := re.FindStringSubmatch(line)
+		if len(matches) < 2 {
+			continue
+		}
+
+		version := matches[1]
+		majorMinor := strings.TrimPrefix(version, "v")
+		parts := strings.Split(majorMinor, ".")
+		if len(parts) != 2 {
+			continue
+		}
+
+		major, majorErr := strconv.Atoi(parts[0])
+		minor, minorErr := strconv.Atoi(parts[1])
+		if majorErr != nil || minorErr != nil {
+			continue
+		}
+
+		if !found || major > latestMajor || (major == latestMajor && minor > latestMinor) {
+			latest = version
+			latestMajor = major
+			latestMinor = minor
+			found = true
+		}
+	}
+
+	if !found {
+		return "", fmt.Errorf("no release branches matching release/v<major>.<minor> found on origin")
+	}
+
+	return latest, nil
 }
 
 // createCherryPickPR creates a pull request for cherry-picks using the GitHub CLI

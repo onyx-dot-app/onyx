@@ -1,0 +1,83 @@
+name: Post-Merge Beta Cherry-Pick
+concurrency:
+  group: Post-Merge-Beta-Cherry-Pick-${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+on:
+  pull_request_target:
+    types: [closed]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  cherry-pick-to-latest-release:
+    if: ${{ github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check PR body for beta cherry-pick checkbox
+        id: gate
+        env:
+          PR_BODY: ${{ github.event.pull_request.body || '' }}
+        run: |
+          if echo "$PR_BODY" | grep -qiE "\\[x\\][[:space:]]*\\[Required\\][[:space:]]*I have considered whether this PR needs to be cherry[- ]picked to the latest beta branch"; then
+            echo "should_cherrypick=true" >> "$GITHUB_OUTPUT"
+            echo "Cherry-pick checkbox checked."
+            exit 0
+          fi
+
+          echo "should_cherrypick=false" >> "$GITHUB_OUTPUT"
+          echo "Cherry-pick checkbox not checked. Skipping."
+
+      - name: Checkout repository
+        if: steps.gate.outputs.should_cherrypick == 'true'
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+          ref: main
+
+      - name: Setup Go
+        if: steps.gate.outputs.should_cherrypick == 'true'
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: tools/ods/go.mod
+
+      - name: Configure git identity
+        if: steps.gate.outputs.should_cherrypick == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Determine commits to cherry-pick
+        if: steps.gate.outputs.should_cherrypick == 'true'
+        id: commits
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          commit_shas="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/commits" --paginate --jq '.[] | select((.parents | length) == 1) | .sha' | tr '\n' ' ' | sed -E 's/[[:space:]]+$//')"
+
+          if [ -z "$commit_shas" ]; then
+            merge_commit_sha="${{ github.event.pull_request.merge_commit_sha }}"
+            if [ -z "$merge_commit_sha" ]; then
+              echo "::error::Unable to determine commits to cherry-pick for PR #${PR_NUMBER}."
+              exit 1
+            fi
+            commit_shas="$merge_commit_sha"
+          fi
+
+          echo "commit_shas=$commit_shas" >> "$GITHUB_OUTPUT"
+          echo "Commits selected for cherry-pick: $commit_shas"
+
+      - name: Create cherry-pick PR to latest release
+        if: steps.gate.outputs.should_cherrypick == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+          COMMIT_SHAS: ${{ steps.commits.outputs.commit_shas }}
+        run: |
+          read -r -a commits <<< "$COMMIT_SHAS"
+          go run ./tools/ods cherry-pick "${commits[@]}" --latest-release --yes --no-verify
