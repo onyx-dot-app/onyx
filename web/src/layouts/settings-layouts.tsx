@@ -220,7 +220,7 @@ function SettingsHeader({
       className={cn(
         "w-full bg-background-tint-01",
         isSticky && "sticky top-0 z-settings-header",
-        backButton ? "md:pt-4" : "md:pt-10"
+        backButton && "md:pt-4"
       )}
     >
       {backButton && (
