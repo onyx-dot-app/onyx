@@ -1299,7 +1299,9 @@ def test_code_interpreter_replay_packets_include_code_and_output(
         f"Expected 1 PythonToolStart packet, got {len(start_packets)}. "
         f"Packet types: {[type(p.obj).__name__ for p in packets]}"
     )
-    assert start_packets[0].obj.code == code
+    start_obj = start_packets[0].obj
+    assert isinstance(start_obj, PythonToolStart)
+    assert start_obj.code == code
 
     # Extract PythonToolDelta packets – these must contain stdout/stderr
     delta_packets = [p for p in packets if isinstance(p.obj, PythonToolDelta)]
@@ -1308,4 +1310,6 @@ def test_code_interpreter_replay_packets_include_code_and_output(
         f"Packet types: {[type(p.obj).__name__ for p in packets]}"
     )
     # The mock CI server returns "mock output\n" as stdout
-    assert "mock output" in delta_packets[0].obj.stdout
+    delta_obj = delta_packets[0].obj
+    assert isinstance(delta_obj, PythonToolDelta)
+    assert "mock output" in delta_obj.stdout
