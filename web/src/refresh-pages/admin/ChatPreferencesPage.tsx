@@ -403,25 +403,25 @@ function ChatPreferencesForm() {
             <Card>
               <SimpleTooltip
                 tooltip={
-                  uniqueSources.length !== 0
+                  uniqueSources.length === 0
                     ? "Set up connectors to use Search Mode"
                     : undefined
                 }
                 side="top"
               >
-                <Disabled disabled={uniqueSources.length !== 0} allowClick>
+                <Disabled disabled={uniqueSources.length === 0} allowClick>
                   <div className="w-full">
                     <InputLayouts.Horizontal
                       title="Search Mode"
                       description="UI mode for quick document search across your organization."
-                      disabled={uniqueSources.length !== 0}
+                      disabled={uniqueSources.length === 0}
                     >
                       <SwitchField
                         name="search_ui_enabled"
                         onCheckedChange={(checked) => {
                           void saveSettings({ search_ui_enabled: checked });
                         }}
-                        disabled={uniqueSources.length !== 0}
+                        disabled={uniqueSources.length === 0}
                       />
                     </InputLayouts.Horizontal>
                   </div>
