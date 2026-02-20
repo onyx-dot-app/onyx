@@ -335,50 +335,6 @@ function ChatPreferencesForm() {
         />
 
         <SettingsLayouts.Body>
-          {/* Features */}
-          <Section gap={0.75}>
-            <InputLayouts.Title title="Features" />
-            <Card>
-              <InputLayouts.Horizontal
-                title="Search Mode"
-                description="UI mode for quick document search across your organization."
-              >
-                <SwitchField
-                  name="search_ui_enabled"
-                  onCheckedChange={(checked) => {
-                    void saveSettings({ search_ui_enabled: checked });
-                  }}
-                />
-              </InputLayouts.Horizontal>
-
-              <InputLayouts.Horizontal
-                title="Deep Research"
-                description="Agentic research system that works across the web and connected sources. Uses significantly more tokens per query."
-              >
-                <SwitchField
-                  name="deep_research_enabled"
-                  onCheckedChange={(checked) => {
-                    void saveSettings({ deep_research_enabled: checked });
-                  }}
-                />
-              </InputLayouts.Horizontal>
-
-              <InputLayouts.Horizontal
-                title="Chat Auto-Scroll"
-                description="Automatically scroll to new content as chat generates response. Users can override this in their personal settings."
-              >
-                <SwitchField
-                  name="auto_scroll"
-                  onCheckedChange={(checked) => {
-                    void saveSettings({ auto_scroll: checked });
-                  }}
-                />
-              </InputLayouts.Horizontal>
-            </Card>
-          </Section>
-
-          <Separator noPadding />
-
           {/* Team Context */}
           <Section gap={1}>
             <InputLayouts.Vertical
@@ -444,6 +400,50 @@ function ChatPreferencesForm() {
               Modify Prompt
             </Button>
           </InputLayouts.Horizontal>
+
+          <Separator noPadding />
+
+          {/* Features */}
+          <Section gap={0.75}>
+            <InputLayouts.Title title="Features" />
+            <Card>
+              <InputLayouts.Horizontal
+                title="Search Mode"
+                description="UI mode for quick document search across your organization."
+              >
+                <SwitchField
+                  name="search_ui_enabled"
+                  onCheckedChange={(checked) => {
+                    void saveSettings({ search_ui_enabled: checked });
+                  }}
+                />
+              </InputLayouts.Horizontal>
+
+              <InputLayouts.Horizontal
+                title="Deep Research"
+                description="Agentic research system that works across the web and connected sources. Uses significantly more tokens per query."
+              >
+                <SwitchField
+                  name="deep_research_enabled"
+                  onCheckedChange={(checked) => {
+                    void saveSettings({ deep_research_enabled: checked });
+                  }}
+                />
+              </InputLayouts.Horizontal>
+
+              <InputLayouts.Horizontal
+                title="Chat Auto-Scroll"
+                description="Automatically scroll to new content as chat generates response. Users can override this in their personal settings."
+              >
+                <SwitchField
+                  name="auto_scroll"
+                  onCheckedChange={(checked) => {
+                    void saveSettings({ auto_scroll: checked });
+                  }}
+                />
+              </InputLayouts.Horizontal>
+            </Card>
+          </Section>
 
           <Separator noPadding />
 
