@@ -13,6 +13,7 @@ from datetime import timezone
 from enum import Enum
 from typing import Any
 from typing import cast
+from urllib.parse import quote
 from urllib.parse import unquote
 from urllib.parse import urlsplit
 
@@ -70,6 +71,7 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 SLIM_BATCH_SIZE = 1000
+_EPOCH = datetime.fromtimestamp(0, tz=timezone.utc)
 
 
 SHARED_DOCUMENTS_MAP = {
@@ -975,19 +977,30 @@ class SharepointConnector(
     ) -> Generator[DriveItemData, None, None]:
         """Yield drive items lazily for a given drive name.
 
+        Uses the delta API for whole-drive enumeration (flat, incremental via
+        timestamp token) and falls back to BFS /children traversal when a
+        folder_path is configured, since delta cannot scope to a subtree
+        efficiently.
+
         Returns:
             A generator of DriveItemData.
             The generator paginates through the Graph API so items are never
             all held in memory at once.
         """
         try:
-
-            yield from self._iter_drive_items_paged(
-                drive_id=drive_id,
-                folder_path=site_descriptor.folder_path,
-                start=start,
-                end=end,
-            )
+            if site_descriptor.folder_path:
+                yield from self._iter_drive_items_paged(
+                    drive_id=drive_id,
+                    folder_path=site_descriptor.folder_path,
+                    start=start,
+                    end=end,
+                )
+            else:
+                yield from self._iter_drive_items_delta(
+                    drive_id=drive_id,
+                    start=start,
+                    end=end,
+                )
 
         except Exception as e:
             err_str = str(e)
@@ -1040,12 +1053,21 @@ class SharepointConnector(
                     )
                     drive_web_url: str | None = drive.web_url
 
-                    for item in self._iter_drive_items_paged(
-                        drive_id=cast(str, drive.id),
-                        folder_path=site_descriptor.folder_path,
-                        start=start,
-                        end=end,
-                    ):
+                    if site_descriptor.folder_path:
+                        item_iter = self._iter_drive_items_paged(
+                            drive_id=cast(str, drive.id),
+                            folder_path=site_descriptor.folder_path,
+                            start=start,
+                            end=end,
+                        )
+                    else:
+                        item_iter = self._iter_drive_items_delta(
+                            drive_id=cast(str, drive.id),
+                            start=start,
+                            end=end,
+                        )
+
+                    for item in item_iter:
                         yield item, drive_name or "", drive_web_url
 
                 except Exception as e:
@@ -1289,6 +1311,100 @@ class SharepointConnector(
                     yield DriveItemData.from_graph_json(item)
 
                 page_url = data.get("@odata.nextLink")
+
+    def _iter_drive_items_delta(
+        self,
+        drive_id: str,
+        start: datetime | None = None,
+        end: datetime | None = None,
+        page_size: int = 200,
+    ) -> Generator[DriveItemData, None, None]:
+        """Yield DriveItemData for every file in a drive via the Graph delta API.
+
+        Uses the flat delta endpoint instead of recursive folder traversal.
+        On subsequent runs (start > epoch), passes the start timestamp as a
+        delta token so that only changed items are returned.
+
+        Falls back to full enumeration if the API returns 410 Gone (expired token).
+        """
+        use_timestamp_token = start is not None and start > _EPOCH
+
+        initial_url = f"{GRAPH_API_BASE}/drives/{drive_id}/root/delta"
+        if use_timestamp_token:
+            assert start is not None  # mypy
+            token = quote(start.isoformat(timespec="seconds"))
+            initial_url += f"?token={token}"
+
+        yield from self._iter_delta_pages(
+            initial_url=initial_url,
+            drive_id=drive_id,
+            start=start,
+            end=end,
+            page_size=page_size,
+            allow_full_resync=use_timestamp_token,
+        )
+
+    def _iter_delta_pages(
+        self,
+        initial_url: str,
+        drive_id: str,
+        start: datetime | None,
+        end: datetime | None,
+        page_size: int,
+        allow_full_resync: bool,
+    ) -> Generator[DriveItemData, None, None]:
+        """Paginate through delta API responses, yielding file DriveItemData.
+
+        If the API responds with 410 Gone and allow_full_resync is True,
+        restarts with a full delta enumeration.
+        """
+        page_url: str | None = initial_url
+        params: dict[str, str] | None = {"$top": str(page_size)}
+
+        while page_url:
+            try:
+                data = self._graph_api_get_json(page_url, params)
+            except requests.HTTPError as e:
+                # 410 means the delta token expired, so we need to fall back to full enumeration
+                if e.response is not None and e.response.status_code == 410:
+                    if not allow_full_resync:
+                        raise
+                    logger.warning(
+                        "Delta token expired (410 Gone) for drive '%s'. "
+                        "Falling back to full delta enumeration.",
+                        drive_id,
+                    )
+                    yield from self._iter_delta_pages(
+                        initial_url=f"{GRAPH_API_BASE}/drives/{drive_id}/root/delta",
+                        drive_id=drive_id,
+                        start=start,
+                        end=end,
+                        page_size=page_size,
+                        allow_full_resync=False,
+                    )
+                    return
+                raise
+
+            params = None  # nextLink/deltaLink already embed query params
+
+            for item in data.get("value", []):
+                if "folder" in item or "deleted" in item:
+                    continue
+
+                if start is not None or end is not None:
+                    raw_ts = item.get("lastModifiedDateTime")
+                    if raw_ts:
+                        mod_dt = datetime.fromisoformat(raw_ts.replace("Z", "+00:00"))
+                        if start is not None and mod_dt < start:
+                            continue
+                        if end is not None and mod_dt > end:
+                            continue
+
+                yield DriveItemData.from_graph_json(item)
+
+            page_url = data.get("@odata.nextLink")
+            if not page_url:
+                break
 
     def _fetch_slim_documents_from_sharepoint(self) -> GenerateSlimDocumentOutput:
         site_descriptors = self.site_descriptors or self.fetch_sites()
