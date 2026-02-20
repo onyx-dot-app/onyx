@@ -38,7 +38,6 @@ import {
   WEB_SEARCH_TOOL_ID,
   PYTHON_TOOL_ID,
   OPEN_URL_TOOL_ID,
-  FILE_READER_TOOL_ID,
 } from "@/app/app/components/tools/constants";
 import { Button } from "@opal/components";
 import Modal from "@/refresh-components/Modal";
@@ -199,9 +198,6 @@ function ChatPreferencesForm() {
   );
   const codeInterpreterTool = availableTools.find(
     (t) => t.in_code_tool_id === PYTHON_TOOL_ID
-  );
-  const fileReaderTool = availableTools.find(
-    (t) => t.in_code_tool_id === FILE_READER_TOOL_ID
   );
 
   // Connectors
@@ -607,27 +603,6 @@ function ChatPreferencesForm() {
                               void toggleTool(codeInterpreterTool.id, checked)
                             }
                             disabled={!codeInterpreterTool}
-                          />
-                        </InputLayouts.Horizontal>
-                      </Card>
-
-                      <Card variant={fileReaderTool ? undefined : "disabled"}>
-                        <InputLayouts.Horizontal
-                          title="File Reader"
-                          description="Read sections of uploaded files. Required for files that exceed the context window."
-                          disabled={!fileReaderTool}
-                        >
-                          <Switch
-                            checked={
-                              fileReaderTool
-                                ? isToolEnabled(fileReaderTool.id)
-                                : false
-                            }
-                            onCheckedChange={(checked) =>
-                              fileReaderTool &&
-                              void toggleTool(fileReaderTool.id, checked)
-                            }
-                            disabled={!fileReaderTool}
                           />
                         </InputLayouts.Horizontal>
                       </Card>
