@@ -78,10 +78,7 @@ services:
       - VESPA_HOST=${VESPA_HOST:-index}
       - OPENSEARCH_HOST=${OPENSEARCH_HOST:-opensearch}
       - OPENSEARCH_ADMIN_PASSWORD=${OPENSEARCH_ADMIN_PASSWORD:-StrongPassword123!}
-      # TODO: Although the .env should be the source of truth for this, we don't
-      # require it for this service, so just to be sure set the default to true
-      # when cutting the tag for v3.
-      - ENABLE_OPENSEARCH_INDEXING_FOR_ONYX=${OPENSEARCH_FOR_ONYX_ENABLED:-false}
+      - ENABLE_OPENSEARCH_INDEXING_FOR_ONYX=${OPENSEARCH_FOR_ONYX_ENABLED:-true}
       - REDIS_HOST=${REDIS_HOST:-cache}
       - MODEL_SERVER_HOST=${MODEL_SERVER_HOST:-inference_model_server}
       - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-http://minio:9000}
@@ -155,10 +152,7 @@ services:
       - VESPA_HOST=${VESPA_HOST:-index}
       - OPENSEARCH_HOST=${OPENSEARCH_HOST:-opensearch}
       - OPENSEARCH_ADMIN_PASSWORD=${OPENSEARCH_ADMIN_PASSWORD:-StrongPassword123!}
-      # TODO: Although the .env should be the source of truth for this, we don't
-      # require it for this service, so just to be sure set the default to true
-      # when cutting the tag for v3.
-      - ENABLE_OPENSEARCH_INDEXING_FOR_ONYX=${OPENSEARCH_FOR_ONYX_ENABLED:-false}
+      - ENABLE_OPENSEARCH_INDEXING_FOR_ONYX=${OPENSEARCH_FOR_ONYX_ENABLED:-true}
       - REDIS_HOST=${REDIS_HOST:-cache}
       - MODEL_SERVER_HOST=${MODEL_SERVER_HOST:-inference_model_server}
       - INDEXING_MODEL_SERVER_HOST=${INDEXING_MODEL_SERVER_HOST:-indexing_model_server}
