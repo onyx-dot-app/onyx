@@ -403,7 +403,7 @@ def test_iter_drive_items_delta_uses_timestamp_token(
     assert len(items) == 1
     assert items[0].id == "file-1"
     assert len(captured_urls) == 1
-    assert "token=2025-06-01T00%3A00%3A00Z" in captured_urls[0]
+    assert "token=2025-06-01T00%3A00%3A00%2B00%3A00" in captured_urls[0]
 
 
 def test_iter_drive_items_delta_full_crawl_when_no_start(

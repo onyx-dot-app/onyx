@@ -71,7 +71,7 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 SLIM_BATCH_SIZE = 1000
-_EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
+_EPOCH = datetime.fromtimestamp(0, tz=timezone.utc)
 
 
 SHARED_DOCUMENTS_MAP = {
@@ -1332,7 +1332,7 @@ class SharepointConnector(
         initial_url = f"{GRAPH_API_BASE}/drives/{drive_id}/root/delta"
         if use_timestamp_token:
             assert start is not None  # mypy
-            token = quote(start.strftime("%Y-%m-%dT%H:%M:%SZ"))
+            token = quote(start.isoformat(timespec="seconds"))
             initial_url += f"?token={token}"
 
         yield from self._iter_delta_pages(
@@ -1401,8 +1401,8 @@ class SharepointConnector(
 
                 yield DriveItemData.from_graph_json(item)
 
-            page_url = data.get("@odata.nextLink") or data.get("@odata.deltaLink")
-            if "@odata.deltaLink" in data and "@odata.nextLink" not in data:
+            page_url = data.get("@odata.nextLink")
+            if not page_url:
                 break
 
     def _fetch_slim_documents_from_sharepoint(self) -> GenerateSlimDocumentOutput:
