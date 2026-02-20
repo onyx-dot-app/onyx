@@ -1,4 +1,4 @@
-import { useReducer, useCallback, useState, useEffect, useRef } from "react";
+import { useReducer, useCallback, useEffect, useRef } from "react";
 import { onboardingReducer, initialState } from "./reducer";
 import {
   OnboardingActions,
@@ -12,7 +12,7 @@ import { updateUserPersonalization } from "@/lib/userSettings";
 import { useUser } from "@/providers/UserProvider";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
-import { useLLMProviderOptions } from "@/lib/hooks/useLLMProviderOptions";
+import { useProviderStatus } from "@/components/chat/ProviderContext";
 
 export function useOnboardingState(liveAssistant?: MinimalPersonaSnapshot): {
   state: OnboardingState;
@@ -22,21 +22,23 @@ export function useOnboardingState(liveAssistant?: MinimalPersonaSnapshot): {
 } {
   const [state, dispatch] = useReducer(onboardingReducer, initialState);
   const { user, refreshUser } = useUser();
-  // Use the SWR hook for LLM providers - no persona ID for the general providers list
+
+  // Get provider data from ProviderContext instead of duplicating the call
   const {
     llmProviders,
-    isLoading: isLoadingProviders,
-    refetch: refreshLlmProviders,
-  } = useLLMProviders();
+    isLoadingProviders,
+    hasProviders: hasLlmProviders,
+    providerOptions,
+    refreshProviderInfo,
+  } = useProviderStatus();
+
+  // Only fetch persona-specific providers (different endpoint)
   const { refetch: refreshPersonaProviders } = useLLMProviders(
     liveAssistant?.id
   );
-  const hasLlmProviders = (llmProviders?.length ?? 0) > 0;
-  const userName = user?.personalization?.name;
 
-  // Use SWR hook instead of raw fetch for provider options
-  const { llmProviderOptions } = useLLMProviderOptions();
-  const llmDescriptors = llmProviderOptions ?? [];
+  const userName = user?.personalization?.name;
+  const llmDescriptors = providerOptions;
 
   const nameUpdateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
@@ -118,13 +120,13 @@ export function useOnboardingState(liveAssistant?: MinimalPersonaSnapshot): {
     }
 
     if (state.currentStep === OnboardingStep.LlmSetup) {
-      refreshLlmProviders();
+      refreshProviderInfo();
       if (liveAssistant) {
         refreshPersonaProviders();
       }
     }
     dispatch({ type: OnboardingActionType.NEXT_STEP });
-  }, [state, refreshLlmProviders, llmProviders, refreshPersonaProviders]);
+  }, [state, refreshProviderInfo, llmProviders, refreshPersonaProviders]);
 
   const prevStep = useCallback(() => {
     dispatch({ type: OnboardingActionType.PREV_STEP });

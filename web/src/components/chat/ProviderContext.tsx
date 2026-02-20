@@ -1,5 +1,8 @@
 "use client";
-import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
+import {
+  WellKnownLLMProviderDescriptor,
+  LLMProviderDescriptor,
+} from "@/app/admin/configuration/llm/interfaces";
 import React, {
   createContext,
   useContext,
@@ -15,6 +18,10 @@ interface ProviderContextType {
   shouldShowConfigurationNeeded: boolean;
   providerOptions: WellKnownLLMProviderDescriptor[];
   refreshProviderInfo: () => Promise<void>;
+  // Expose configured provider instances for components that need it (e.g., onboarding)
+  llmProviders: LLMProviderDescriptor[] | undefined;
+  isLoadingProviders: boolean;
+  hasProviders: boolean;
 }
 
 const ProviderContext = createContext<ProviderContextType | undefined>(
@@ -43,7 +50,11 @@ export function ProviderContextProvider({
   const { user } = useUser();
 
   // Use SWR hooks instead of raw fetch
-  const { llmProviders, refetch: refetchProviders } = useLLMProviders();
+  const {
+    llmProviders,
+    isLoading: isLoadingProviders,
+    refetch: refetchProviders,
+  } = useLLMProviders();
   const { llmProviderOptions: providerOptions, refetch: refetchOptions } =
     useLLMProviderOptions();
 
@@ -71,8 +82,8 @@ export function ProviderContextProvider({
     }
   }, [user]);
 
-  const validProviderExists =
-    (llmProviders?.length ?? 0) > 0 && defaultCheckSuccessful;
+  const hasProviders = (llmProviders?.length ?? 0) > 0;
+  const validProviderExists = hasProviders && defaultCheckSuccessful;
 
   const shouldShowConfigurationNeeded =
     !validProviderExists && (providerOptions?.length ?? 0) > 0;
@@ -87,6 +98,9 @@ export function ProviderContextProvider({
         shouldShowConfigurationNeeded,
         providerOptions: providerOptions ?? [],
         refreshProviderInfo,
+        llmProviders,
+        isLoadingProviders,
+        hasProviders,
       }}
     >
       {children}
