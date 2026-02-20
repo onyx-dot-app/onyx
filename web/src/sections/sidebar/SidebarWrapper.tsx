@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@opal/components";
 import Logo from "@/refresh-components/Logo";
 import { SvgSidebar } from "@opal/icons";
+import { useSettingsContext } from "@/providers/SettingsProvider";
 
 interface LogoSectionProps {
   folded?: boolean;
@@ -10,6 +11,9 @@ interface LogoSectionProps {
 }
 
 function LogoSection({ folded, onFoldClick }: LogoSectionProps) {
+  const settings = useSettingsContext();
+  const applicationName = settings.enterpriseSettings?.application_name;
+
   const logo = useCallback(
     (className?: string) => <Logo folded={folded} className={className} />,
     [folded]
@@ -29,22 +33,26 @@ function LogoSection({ folded, onFoldClick }: LogoSectionProps) {
   return (
     <div
       className={cn(
-        "flex p-2 min-h-[3.25rem] gap-1",
-        folded ? "justify-center" : "justify-between"
+        /* px-2 is the standard sidebar padding; pl-3.5 adds 1.5 to match Icon padding */
+        "flex p-2 pl-3.5 min-h-[3.25rem]",
+        folded ? "justify-center" : "justify-between",
+        applicationName ? "min-h-[3.75rem]" : "min-h-[3.25rem]"
       )}
     >
       {folded === undefined ? (
         logo()
       ) : folded ? (
         <>
-          <div className="group-hover/SidebarWrapper:hidden p-1 ">{logo()}</div>
+          <div className="group-hover/SidebarWrapper:hidden pt-1.5">
+            {logo()}
+          </div>
           <div className="w-full justify-center hidden group-hover/SidebarWrapper:flex">
             {closeButton(false)}
           </div>
         </>
       ) : (
         <>
-          {<div className="p-1.5 pb-0">{logo()}</div>}
+          {applicationName ? logo() : <div className="pt-1.5">{logo()}</div>}
           {closeButton(true)}
         </>
       )}
