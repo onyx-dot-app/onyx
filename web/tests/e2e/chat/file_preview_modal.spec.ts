@@ -173,18 +173,27 @@ test.describe("File preview modal from chat file links", () => {
     await expect(fileLink).toBeVisible({ timeout: 5000 });
     await fileLink.click();
 
-    // Verify the modal opens
+    // Verify the CodeViewModal opens
     const modal = page.getByRole("dialog");
     await expect(modal).toBeVisible({ timeout: 5000 });
 
-    // Verify the file name is shown
+    // Verify the file name is shown in the header
     await expect(modal.getByText("app.py")).toBeVisible();
+
+    // Verify the header description shows language and line info
+    await expect(modal.getByText(/python/i)).toBeVisible();
+    await expect(modal.getByText("2 lines", { exact: true })).toBeVisible();
 
     // Verify the code content is rendered
     await expect(modal.getByText("Hello, world!")).toBeVisible();
 
-    // Verify the download button exists
-    await expect(modal.getByText("Download File")).toBeVisible();
+    // Verify the download icon button exists (tooltip-only, no visible text)
+    const downloadButton = modal.locator("button").last();
+    await expect(downloadButton).toBeVisible();
+
+    // Hover to verify the download tooltip appears
+    await downloadButton.hover();
+    await expect(page.getByText("Download")).toBeVisible({ timeout: 3000 });
   });
 
   test("download button triggers file download", async ({ page }) => {
