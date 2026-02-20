@@ -422,7 +422,8 @@ services:
       # Xms is the starting size, Xmx is the maximum size. These should be the
       # same.
       - "OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g"
-    # DEV: To expose ports to the host machine, uncomment the ports below.
+    # DEV: To expose ports to the host machine, uncomment the ports below or
+    # include docker-compose.dev.yml in your docker compose command.
     # ports:
     #   - "9200:9200"
     volumes:
