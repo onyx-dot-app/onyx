@@ -12,11 +12,18 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_user
+from onyx.background.celery.tasks.user_file_processing.tasks import (
+    enqueue_user_file_project_sync_task,
+)
+from onyx.background.celery.tasks.user_file_processing.tasks import (
+    get_user_file_project_sync_queue_depth,
+)
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import PUBLIC_API_TAGS
+from onyx.configs.constants import USER_FILE_PROJECT_SYNC_MAX_QUEUE_DEPTH
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import UserFileStatus
 from onyx.db.models import ChatSession
@@ -27,6 +34,7 @@ from onyx.db.models import UserProject
 from onyx.db.persona import get_personas_by_ids
 from onyx.db.projects import get_project_token_count
 from onyx.db.projects import upload_files_to_user_files_with_indexing
+from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.projects.models import CategorizedFilesSnapshot
 from onyx.server.features.projects.models import ChatSessionRequest
 from onyx.server.features.projects.models import TokenCountResponse
@@ -45,6 +53,33 @@ class UserFileDeleteResult(BaseModel):
     has_associations: bool
     project_names: list[str] = []
     assistant_names: list[str] = []
+
+
+def _trigger_user_file_project_sync(user_file_id: UUID, tenant_id: str) -> None:
+    queue_depth = get_user_file_project_sync_queue_depth(client_app)
+    if queue_depth > USER_FILE_PROJECT_SYNC_MAX_QUEUE_DEPTH:
+        logger.warning(
+            f"Skipping immediate project sync for user_file_id={user_file_id} due to "
+            f"queue depth {queue_depth}>{USER_FILE_PROJECT_SYNC_MAX_QUEUE_DEPTH}. "
+            "It will be picked up by beat later."
+        )
+        return
+
+    redis_client = get_redis_client(tenant_id=tenant_id)
+    enqueued = enqueue_user_file_project_sync_task(
+        celery_app=client_app,
+        redis_client=redis_client,
+        user_file_id=user_file_id,
+        tenant_id=tenant_id,
+        priority=OnyxCeleryPriority.HIGHEST,
+    )
+    if not enqueued:
+        logger.info(
+            f"Skipped duplicate project sync enqueue for user_file_id={user_file_id}"
+        )
+        return
+
+    logger.info(f"Triggered project sync for user_file_id={user_file_id}")
 
 
 @router.get("", tags=PUBLIC_API_TAGS)
@@ -189,15 +224,7 @@ def unlink_user_file_from_project(
         db_session.commit()
 
     tenant_id = get_current_tenant_id()
-    task = client_app.send_task(
-        OnyxCeleryTask.PROCESS_SINGLE_USER_FILE_PROJECT_SYNC,
-        kwargs={"user_file_id": user_file.id, "tenant_id": tenant_id},
-        queue=OnyxCeleryQueues.USER_FILE_PROJECT_SYNC,
-        priority=OnyxCeleryPriority.HIGHEST,
-    )
-    logger.info(
-        f"Triggered project sync for user_file_id={user_file.id} with task_id={task.id}"
-    )
+    _trigger_user_file_project_sync(user_file.id, tenant_id)
 
     return Response(status_code=204)
 
@@ -241,15 +268,7 @@ def link_user_file_to_project(
         db_session.commit()
 
     tenant_id = get_current_tenant_id()
-    task = client_app.send_task(
-        OnyxCeleryTask.PROCESS_SINGLE_USER_FILE_PROJECT_SYNC,
-        kwargs={"user_file_id": user_file.id, "tenant_id": tenant_id},
-        queue=OnyxCeleryQueues.USER_FILE_PROJECT_SYNC,
-        priority=OnyxCeleryPriority.HIGHEST,
-    )
-    logger.info(
-        f"Triggered project sync for user_file_id={user_file.id} with task_id={task.id}"
-    )
+    _trigger_user_file_project_sync(user_file.id, tenant_id)
 
     return UserFileSnapshot.from_model(user_file)
 
