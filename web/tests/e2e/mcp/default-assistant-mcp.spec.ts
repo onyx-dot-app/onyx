@@ -364,11 +364,11 @@ test.describe("Default Assistant MCP Integration", () => {
     const serverState = await serverSwitch.getAttribute("aria-checked");
     if (serverState !== "true") {
       await serverSwitch.click();
+      // Auto-save triggers immediately
+      await expect(page.getByText("Tools updated")).toBeVisible({
+        timeout: 10000,
+      });
     }
-    // Auto-save triggers immediately
-    await expect(page.getByText("Tools updated")).toBeVisible({
-      timeout: 10000,
-    });
     console.log(`[test] MCP tools successfully added to default assistant`);
   });
 

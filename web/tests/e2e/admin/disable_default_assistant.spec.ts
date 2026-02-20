@@ -9,13 +9,26 @@ const SETTING_SAVE_RETRY_DELAY_MS = 750;
 /**
  * Expand the "Advanced Options" collapsible section on the Chat Preferences page.
  * The section is closed by default (`defaultOpen={false}`).
+ * Only expands if not already open (checks for the switch element visibility).
  */
 async function expandAdvancedOptions(page: Page): Promise<void> {
+  // Wait for the page title to be visible, signalling the form has loaded
+  await expect(page.locator('[aria-label="admin-page-title"]')).toBeVisible({
+    timeout: 10000,
+  });
+
+  // Check if the switch is already visible (section already expanded)
+  const switchEl = page.locator("#disable_default_assistant");
+  const alreadyVisible = await switchEl.isVisible().catch(() => false);
+  if (alreadyVisible) return;
+
   const header = page.getByText("Advanced Options", { exact: true });
+  await expect(header).toBeVisible({ timeout: 10000 });
   await header.scrollIntoViewIfNeeded();
   await header.click();
-  // Wait for the collapsible content to expand
-  await page.waitForTimeout(300);
+
+  // Wait for the collapsible content to expand and switch to appear
+  await expect(switchEl).toBeVisible({ timeout: 5000 });
 }
 
 /**
@@ -33,7 +46,7 @@ async function setDisableDefaultAssistantSetting(
 
   for (let attempt = 0; attempt < MAX_SETTING_SAVE_ATTEMPTS; attempt += 1) {
     await page.goto("/admin/configuration/chat-preferences");
-    await page.waitForURL("**/admin/configuration/chat-preferences**");
+    await page.waitForLoadState("networkidle");
 
     // Expand "Advanced Options" collapsible (closed by default)
     await expandAdvancedOptions(page);
@@ -60,7 +73,7 @@ async function setDisableDefaultAssistantSetting(
 
     // Verify persistence after reload
     await page.reload();
-    await page.waitForURL("**/admin/configuration/chat-preferences**");
+    await page.waitForLoadState("networkidle");
 
     // Re-expand Advanced Options (closed by default after reload)
     await expandAdvancedOptions(page);
@@ -173,14 +186,14 @@ test.describe("Disable Default Assistant Setting @exclusive", () => {
 
     // Navigate to chat preferences configuration page
     await page.goto("/admin/configuration/chat-preferences");
-    await page.waitForURL("**/admin/configuration/chat-preferences**");
+    await page.waitForLoadState("networkidle");
 
     // The new page wraps Connectors + Actions & Tools in <Disabled disabled={values.disable_default_assistant}>
     // When disabled, the section should have reduced opacity / disabled styling
     // The "Modify Prompt" button should still be accessible (it's outside the Disabled wrapper)
     await expect(
       page.getByRole("button", { name: "Modify Prompt" })
-    ).toBeVisible();
+    ).toBeVisible({ timeout: 10000 });
 
     // The "Actions & Tools" section text should still be present but visually disabled
     await expect(page.getByText("Actions & Tools")).toBeVisible();
@@ -194,10 +207,12 @@ test.describe("Disable Default Assistant Setting @exclusive", () => {
 
     // Navigate to chat preferences configuration page
     await page.goto("/admin/configuration/chat-preferences");
-    await page.waitForURL("**/admin/configuration/chat-preferences**");
+    await page.waitForLoadState("networkidle");
 
     // Verify configuration UI is shown (Actions & Tools section should be visible and enabled)
-    await expect(page.getByText("Actions & Tools")).toBeVisible();
+    await expect(page.getByText("Actions & Tools")).toBeVisible({
+      timeout: 10000,
+    });
 
     // Verify the page title
     await expect(page.locator('[aria-label="admin-page-title"]')).toHaveText(

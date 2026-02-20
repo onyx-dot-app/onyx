@@ -159,16 +159,19 @@ test.describe("Chat Preferences Admin Page", () => {
       `[toggle] Internal Search initial aria-checked=${initialState}`
     );
 
-    // Toggle it — auto-saves immediately
-    await searchSwitch.click();
-
-    // Wait for PATCH to complete
-    const patchResp = await page.waitForResponse(
+    // Set up response listener before the click to avoid race conditions
+    const patchRespPromise = page.waitForResponse(
       (r) =>
         r.url().includes("/api/admin/default-assistant") &&
         r.request().method() === "PATCH",
       { timeout: 8000 }
     );
+
+    // Toggle it — auto-saves immediately
+    await searchSwitch.click();
+
+    // Wait for PATCH to complete
+    const patchResp = await patchRespPromise;
     console.log(
       `[toggle] Internal Search PATCH status=${patchResp.status()} body=${(
         await patchResp.text()
@@ -208,16 +211,19 @@ test.describe("Chat Preferences Admin Page", () => {
     const initialState = await webSearchSwitch.getAttribute("aria-checked");
     console.log(`[toggle] Web Search initial aria-checked=${initialState}`);
 
-    // Toggle it
-    await webSearchSwitch.click();
-
-    // Wait for PATCH to complete
-    const patchResp = await page.waitForResponse(
+    // Set up response listener before the click to avoid race conditions
+    const patchRespPromise = page.waitForResponse(
       (r) =>
         r.url().includes("/api/admin/default-assistant") &&
         r.request().method() === "PATCH",
       { timeout: 8000 }
     );
+
+    // Toggle it
+    await webSearchSwitch.click();
+
+    // Wait for PATCH to complete
+    const patchResp = await patchRespPromise;
     console.log(
       `[toggle] Web Search PATCH status=${patchResp.status()} body=${(
         await patchResp.text()
@@ -258,16 +264,19 @@ test.describe("Chat Preferences Admin Page", () => {
       `[toggle] Image Generation initial aria-checked=${initialState}`
     );
 
-    // Toggle it
-    await imageGenSwitch.click();
-
-    // Wait for PATCH to complete
-    const patchResp = await page.waitForResponse(
+    // Set up response listener before the click to avoid race conditions
+    const patchRespPromise = page.waitForResponse(
       (r) =>
         r.url().includes("/api/admin/default-assistant") &&
         r.request().method() === "PATCH",
       { timeout: 8000 }
     );
+
+    // Toggle it
+    await imageGenSwitch.click();
+
+    // Wait for PATCH to complete
+    const patchResp = await patchRespPromise;
     console.log(
       `[toggle] Image Generation PATCH status=${patchResp.status()} body=${(
         await patchResp.text()
@@ -314,16 +323,19 @@ test.describe("Chat Preferences Admin Page", () => {
     const textarea = modal.getByPlaceholder("Enter your system prompt...");
     await textarea.fill(testPrompt);
 
-    // Click Save in the modal footer
-    await modal.getByRole("button", { name: "Save" }).click();
-
-    // Wait for PATCH to complete
-    const patchResp = await page.waitForResponse(
+    // Set up response listener before the click to avoid race conditions
+    const patchRespPromise = page.waitForResponse(
       (r) =>
         r.url().includes("/api/admin/default-assistant") &&
         r.request().method() === "PATCH",
       { timeout: 8000 }
     );
+
+    // Click Save in the modal footer
+    await modal.getByRole("button", { name: "Save" }).click();
+
+    // Wait for PATCH to complete
+    const patchResp = await patchRespPromise;
     console.log(
       `[prompt] Save PATCH status=${patchResp.status()} body=${(
         await patchResp.text()
@@ -381,14 +393,18 @@ test.describe("Chat Preferences Admin Page", () => {
     // Clear the textarea
     await textarea.fill("");
 
+    // Set up response listener before the click to avoid race conditions
+    const patchRespPromise = page.waitForResponse(
+      (r) =>
+        r.url().includes("/api/admin/default-assistant") &&
+        r.request().method() === "PATCH",
+      { timeout: 8000 }
+    );
+
     // Save
     await modal.getByRole("button", { name: "Save" }).click();
 
-    const patchResp = await page.waitForResponse(
-      (r) =>
-        r.url().includes("/api/admin/default-assistant") &&
-        r.request().method() === "PATCH"
-    );
+    const patchResp = await patchRespPromise;
     console.log(
       `[prompt-empty] Save empty PATCH status=${patchResp.status()} body=${(
         await patchResp.text()
@@ -443,13 +459,17 @@ test.describe("Chat Preferences Admin Page", () => {
 
     await textarea.fill(longPrompt);
 
-    // Save
-    await modal.getByRole("button", { name: "Save" }).click();
-    const patchResp = await page.waitForResponse(
+    // Set up response listener before the click to avoid race conditions
+    const patchRespPromise = page.waitForResponse(
       (r) =>
         r.url().includes("/api/admin/default-assistant") &&
-        r.request().method() === "PATCH"
+        r.request().method() === "PATCH",
+      { timeout: 8000 }
     );
+
+    // Save
+    await modal.getByRole("button", { name: "Save" }).click();
+    const patchResp = await patchRespPromise;
     console.log(
       `[prompt-long] Save PATCH status=${patchResp.status()} body=${(
         await patchResp.text()
