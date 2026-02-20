@@ -36,7 +36,6 @@
 import BackButton from "@/refresh-components/buttons/BackButton";
 import { cn } from "@/lib/utils";
 import Separator from "@/refresh-components/Separator";
-import Spacer from "@/refresh-components/Spacer";
 import Text from "@/refresh-components/texts/Text";
 import { WithoutStyles } from "@/types";
 import { IconProps } from "@opal/types";
