@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import Modal from "@/refresh-components/Modal";
 import Text from "@/refresh-components/texts/Text";
@@ -56,8 +56,8 @@ export default function CodeViewModal({
     } · ${fileSize}`;
   }, [fileContent, language, lineCount, fileSize]);
 
-  const fetchFile = useCallback(
-    async (signal?: AbortSignal) => {
+  useEffect(() => {
+    (async () => {
       setIsLoading(true);
       setLoadError(null);
       setFileContent("");
@@ -66,8 +66,7 @@ export default function CodeViewModal({
         presentingDocument.document_id;
 
       try {
-        const response = await fetchChatFile(fileIdLocal, signal);
-
+        const response = await fetchChatFile(fileIdLocal);
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
         setFileUrl((prev) => {
@@ -76,34 +75,15 @@ export default function CodeViewModal({
           }
           return url;
         });
-
-        const originalFileName =
-          presentingDocument.semantic_identifier || "document";
-        setFileName(originalFileName);
-
-        const text = await blob.text();
-        setFileContent(text);
-      } catch (error) {
-        if (signal?.aborted) {
-          return;
-        }
+        setFileName(presentingDocument.semantic_identifier || "document");
+        setFileContent(await blob.text());
+      } catch {
         setLoadError("Failed to load document.");
       } finally {
-        if (!signal?.aborted) {
-          setIsLoading(false);
-        }
+        setIsLoading(false);
       }
-    },
-    [presentingDocument]
-  );
-
-  useEffect(() => {
-    const controller = new AbortController();
-    fetchFile(controller.signal);
-    return () => {
-      controller.abort();
-    };
-  }, [fetchFile]);
+    })();
+  }, [presentingDocument]);
 
   useEffect(() => {
     return () => {

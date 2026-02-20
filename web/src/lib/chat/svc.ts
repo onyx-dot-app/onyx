@@ -6,15 +6,11 @@ const CHAT_FILE_PREFIX = "/api/chat/file";
  * The caller is responsible for consuming the body (e.g. `.blob()`,
  * `.text()`) since different consumers need different formats.
  */
-export async function fetchChatFile(
-  fileId: string,
-  signal?: AbortSignal
-): Promise<Response> {
+export async function fetchChatFile(fileId: string): Promise<Response> {
   const response = await fetch(
     `${CHAT_FILE_PREFIX}/${encodeURIComponent(fileId)}`,
     {
       method: "GET",
-      signal,
       cache: "force-cache",
     }
   );
