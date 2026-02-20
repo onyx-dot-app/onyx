@@ -21,6 +21,7 @@ from onyx.llm.constants import PROVIDER_DISPLAY_NAMES
 DYNAMIC_LLM_PROVIDERS = frozenset(
     {
         LlmProviderNames.OPENROUTER,
+        LlmProviderNames.LLMAPI,
         LlmProviderNames.BEDROCK,
         LlmProviderNames.OLLAMA_CHAT,
     }
@@ -320,7 +321,7 @@ def extract_vendor_from_model_name(model_name: str, provider: str) -> str | None
         - Ollama: "llama3:70b" → "Meta"
         - Ollama: "qwen2.5:7b" → "Alibaba"
     """
-    if provider == LlmProviderNames.OPENROUTER:
+    if provider in (LlmProviderNames.OPENROUTER, LlmProviderNames.LLMAPI):
         # Format: "vendor/model-name" e.g., "anthropic/claude-3-5-sonnet"
         if "/" in model_name:
             vendor_key = model_name.split("/")[0].lower()

@@ -5,6 +5,7 @@ import { OllamaForm } from "./OllamaForm";
 import { AzureForm } from "./AzureForm";
 import { VertexAIForm } from "./VertexAIForm";
 import { OpenRouterForm } from "./OpenRouterForm";
+import { LLMAPIForm } from "./LLMAPIForm";
 import { CustomForm } from "./CustomForm";
 import { BedrockForm } from "./BedrockForm";
 
@@ -38,6 +39,8 @@ export const getFormForExistingProvider = (provider: LLMProviderView) => {
       return <BedrockForm existingLlmProvider={provider} />;
     case LLMProviderName.OPENROUTER:
       return <OpenRouterForm existingLlmProvider={provider} />;
+    case LLMProviderName.LLMAPI:
+      return <LLMAPIForm existingLlmProvider={provider} />;
     default:
       return <CustomForm existingLlmProvider={provider} />;
   }

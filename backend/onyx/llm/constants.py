@@ -20,6 +20,7 @@ class LlmProviderNames(str, Enum):
     BEDROCK_CONVERSE = "bedrock_converse"
     VERTEX_AI = "vertex_ai"
     OPENROUTER = "openrouter"
+    LLMAPI = "llmapi"
     AZURE = "azure"
     OLLAMA_CHAT = "ollama_chat"
     MISTRAL = "mistral"
@@ -39,6 +40,7 @@ WELL_KNOWN_PROVIDER_NAMES = [
     LlmProviderNames.VERTEX_AI,
     LlmProviderNames.BEDROCK,
     LlmProviderNames.OPENROUTER,
+    LlmProviderNames.LLMAPI,
     LlmProviderNames.AZURE,
     LlmProviderNames.OLLAMA_CHAT,
 ]
@@ -53,6 +55,7 @@ PROVIDER_DISPLAY_NAMES: dict[str, str] = {
     LlmProviderNames.BEDROCK_CONVERSE: "Bedrock",
     LlmProviderNames.VERTEX_AI: "Vertex AI",
     LlmProviderNames.OPENROUTER: "OpenRouter",
+    LlmProviderNames.LLMAPI: "LLM API",
     LlmProviderNames.AZURE: "Azure",
     "ollama": "Ollama",
     LlmProviderNames.OLLAMA_CHAT: "Ollama",
@@ -102,6 +105,7 @@ AGGREGATOR_PROVIDERS: set[str] = {
     LlmProviderNames.BEDROCK,
     LlmProviderNames.BEDROCK_CONVERSE,
     LlmProviderNames.OPENROUTER,
+    LlmProviderNames.LLMAPI,
     LlmProviderNames.OLLAMA_CHAT,
     LlmProviderNames.VERTEX_AI,
     LlmProviderNames.AZURE,
