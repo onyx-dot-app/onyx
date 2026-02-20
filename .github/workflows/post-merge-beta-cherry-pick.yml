@@ -4,7 +4,7 @@ concurrency:
   cancel-in-progress: true
 
 on:
-  pull_request_target:
+  pull_request:
     types: [closed]
 
 permissions:
@@ -22,7 +22,7 @@ jobs:
         env:
           PR_BODY: ${{ github.event.pull_request.body || '' }}
         run: |
-          if echo "$PR_BODY" | grep -qiE "\\[x\\][[:space:]]*\\[Required\\][[:space:]]*I have considered whether this PR needs to be cherry[- ]picked to the latest beta branch"; then
+          if echo "$PR_BODY" | grep -qiE "\\[x\\][[:space:]]*(\\[[^]]+\\][[:space:]]*)?I have considered whether this PR needs to be cherry[- ]picked to the latest beta branch"; then
             echo "should_cherrypick=true" >> "$GITHUB_OUTPUT"
             echo "Cherry-pick checkbox checked."
             exit 0
@@ -57,16 +57,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          MERGE_COMMIT_SHA: ${{ github.event.pull_request.merge_commit_sha || '' }}
         run: |
           commit_shas="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/commits" --paginate --jq '.[] | select((.parents | length) == 1) | .sha' | tr '\n' ' ' | sed -E 's/[[:space:]]+$//')"
 
           if [ -z "$commit_shas" ]; then
-            merge_commit_sha="${{ github.event.pull_request.merge_commit_sha }}"
-            if [ -z "$merge_commit_sha" ]; then
+            if [ -z "$MERGE_COMMIT_SHA" ]; then
               echo "::error::Unable to determine commits to cherry-pick for PR #${PR_NUMBER}."
               exit 1
             fi
-            commit_shas="$merge_commit_sha"
+            commit_shas="$MERGE_COMMIT_SHA"
           fi
 
           echo "commit_shas=$commit_shas" >> "$GITHUB_OUTPUT"
