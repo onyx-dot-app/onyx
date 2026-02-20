@@ -1969,12 +1969,6 @@ export interface DrupalWikiConfig {
   include_attachments?: boolean;
 }
 
-export interface TeamsConfig {
-  teams?: string[];
-  authority_host?: string;
-  graph_api_host?: string;
-}
-
 export interface ProductboardConfig {}
 
 export interface SlackConfig {
