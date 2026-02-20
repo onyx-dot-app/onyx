@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@opal/components";
 import Logo from "@/refresh-components/Logo";
 import { SvgSidebar } from "@opal/icons";
+import { useSettingsContext } from "@/providers/SettingsProvider";
 
 interface LogoSectionProps {
   folded?: boolean;
@@ -10,6 +11,9 @@ interface LogoSectionProps {
 }
 
 function LogoSection({ folded, onFoldClick }: LogoSectionProps) {
+  const settings = useSettingsContext();
+  const applicationName = settings.enterpriseSettings?.application_name;
+
   const logo = useCallback(
     (className?: string) => <Logo folded={folded} className={className} />,
     [folded]
@@ -29,28 +33,26 @@ function LogoSection({ folded, onFoldClick }: LogoSectionProps) {
   return (
     <div
       className={cn(
-        // # Note
-        //
-        // The `px-3.5` was chosen carefully to make the logo sit in the center of the folded + unfolded sidebar view.
-        // If you want to modify it, you'll also have to modify the size of the sidebar (located at the bottom of this file, annotated with `@HERE`).
-        //
-        // - @raunakab
-        "flex flex-row items-center py-1 gap-1 h-[3.5rem] px-3.5",
-        folded ? "justify-start" : "justify-between"
+        /* px-2.5 => 2 for the standard sidebar padding + 0.5 for internal padding specific to this component. */
+        "flex px-2.5 py-2 min-h-[3.25rem]",
+        folded ? "justify-center" : "justify-between",
+        applicationName ? "min-h-[3.75rem]" : "min-h-[3.25rem]"
       )}
     >
       {folded === undefined ? (
-        logo()
+        <div className="p-1">{logo()}</div>
       ) : folded ? (
         <>
-          <div className="group-hover/SidebarWrapper:hidden">{logo()}</div>
+          <div className="group-hover/SidebarWrapper:hidden pt-1.5">
+            {logo()}
+          </div>
           <div className="w-full justify-center hidden group-hover/SidebarWrapper:flex">
             {closeButton(false)}
           </div>
         </>
       ) : (
         <>
-          {logo()}
+          <div className="p-1"> {logo()}</div>
           {closeButton(true)}
         </>
       )}
@@ -76,10 +78,6 @@ export default function SidebarWrapper({
       <div
         className={cn(
           "h-screen flex flex-col bg-background-tint-02 py-2 gap-4 group/SidebarWrapper transition-width duration-200 ease-in-out",
-
-          // @HERE (size of sidebar)
-          //
-          // - @raunakab
           folded ? "w-[3.25rem]" : "w-[15rem]"
         )}
       >
