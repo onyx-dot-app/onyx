@@ -17,8 +17,5 @@ dependencies:
 - name: minio
   repository: https://charts.min.io/
   version: 5.4.0
-- name: code-interpreter
-  repository: https://onyx-dot-app.github.io/code-interpreter/
-  version: 0.2.0
-digest: sha256:65e3aad0189907ff35e1532374ca0b4a5c32c7356c8af55f646a6e3c59e574cd
-generated: "2026-01-21T11:06:55.190114-08:00"
+digest: sha256:e3e3df4464d00165d63e5aa150b768c0957e5eab2b310414ce5d7381d00dbd2e
+generated: "2026-02-19T20:17:06.462195-08:00"
