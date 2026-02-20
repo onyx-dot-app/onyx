@@ -344,6 +344,7 @@ jobs:
           docker compose -f docker-compose.yml -f docker-compose.dev.yml up \
             relational_db \
             index \
+            opensearch \
             cache \
             minio \
             api_server \
@@ -498,7 +499,8 @@ jobs:
           RUN_ID: ${{ github.run_id }}
         run: |
           cat <<EOF > deployment/docker_compose/.env
-          COMPOSE_PROFILES=s3-filestore
+          COMPOSE_PROFILES=s3-filestore,opensearch-enabled
+          OPENSEARCH_FOR_ONYX_ENABLED=true
           ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
           LICENSE_ENFORCEMENT_ENABLED=false
           AUTH_TYPE=basic
