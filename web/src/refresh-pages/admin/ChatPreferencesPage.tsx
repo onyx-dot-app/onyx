@@ -680,7 +680,7 @@ function ChatPreferencesForm() {
           <Separator noPadding />
 
           {/* Advanced Options */}
-          <SimpleCollapsible>
+          <SimpleCollapsible defaultOpen={false}>
             <SimpleCollapsible.Header title="Advanced Options" />
             <SimpleCollapsible.Content>
               <Section gap={1}>
