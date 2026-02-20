@@ -18,17 +18,17 @@ export interface AppModeProviderProps {
  * - **chat**: Forces chat mode - conversation with follow-up questions
  *
  * The initial mode is read from the user's persisted `default_app_mode` preference.
- * When `search_ui_enabled` is false (admin setting), the mode is locked to "chat".
+ * When search mode is unavailable (admin setting or no connectors), the mode is locked to "chat".
  */
 export function AppModeProvider({ children }: AppModeProviderProps) {
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
   const { user } = useUser();
   const settings = useSettingsContext();
-  const searchUiEnabled = settings.settings.search_ui_enabled !== false;
+  const { isSearchModeAvailable } = settings;
 
   const persistedMode = user?.preferences?.default_app_mode;
   const initialMode: AppMode =
-    isPaidEnterpriseFeaturesEnabled && searchUiEnabled && persistedMode
+    isPaidEnterpriseFeaturesEnabled && isSearchModeAvailable && persistedMode
       ? (persistedMode.toLowerCase() as AppMode)
       : "chat";
 
@@ -36,10 +36,10 @@ export function AppModeProvider({ children }: AppModeProviderProps) {
 
   const setAppMode = useCallback(
     (mode: AppMode) => {
-      if (!isPaidEnterpriseFeaturesEnabled || !searchUiEnabled) return;
+      if (!isPaidEnterpriseFeaturesEnabled || !isSearchModeAvailable) return;
       setAppModeState(mode);
     },
-    [isPaidEnterpriseFeaturesEnabled, searchUiEnabled]
+    [isPaidEnterpriseFeaturesEnabled, isSearchModeAvailable]
   );
 
   return (

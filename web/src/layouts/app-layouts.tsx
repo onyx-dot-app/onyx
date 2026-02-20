@@ -314,7 +314,7 @@ function Header() {
             />
           )}
           {isPaidEnterpriseFeaturesEnabled &&
-            settings.settings.search_ui_enabled !== false &&
+            settings.isSearchModeAvailable &&
             appFocus.isNewSession() &&
             !classification && (
               <Popover open={modePopoverOpen} onOpenChange={setModePopoverOpen}>

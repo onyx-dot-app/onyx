@@ -29,7 +29,7 @@ export function QueryControllerProvider({
   const appFocus = useAppFocus();
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
   const settings = useSettingsContext();
-  const searchUiEnabled = settings.settings.search_ui_enabled !== false;
+  const { isSearchModeAvailable: searchUiEnabled } = settings;
 
   // Query state
   const [query, setQuery] = useState<string | null>(null);

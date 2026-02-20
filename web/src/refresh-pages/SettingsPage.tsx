@@ -751,7 +751,7 @@ function ChatPreferencesSettings() {
   } = useUser();
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
   const settings = useSettingsContext();
-  const searchUiEnabled = settings.settings.search_ui_enabled !== false;
+  const { isSearchModeAvailable: searchUiEnabled } = settings;
   const llmManager = useLlmManager();
 
   const {
