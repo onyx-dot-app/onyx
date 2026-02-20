@@ -37,7 +37,7 @@ router = APIRouter(prefix="/search")
 
 # Temporary hardcode for latency testing of search-flow classification.
 CLASSIFICATION_LLM_PROVIDER_NAME = "OpenAI"
-CLASSIFICATION_LLM_MODEL_NAME = "gpt-5-nano"
+CLASSIFICATION_LLM_MODEL_NAME = "gpt-5.2"
 
 
 @router.post("/search-flow-classification")
