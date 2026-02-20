@@ -44,6 +44,7 @@ class BraveClient(WebSearchProvider):
             "Accept": "application/json",
             "X-Subscription-Token": api_key,
         }
+        logger.debug(f"Count of results passed to BraveClient: {num_results}")
         self._num_results = max(1, min(num_results, BRAVE_MAX_RESULTS_PER_REQUEST))
         self._timeout_seconds = timeout_seconds
         self._country = _normalize_country(country)
