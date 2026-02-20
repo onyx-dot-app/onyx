@@ -200,12 +200,14 @@ export const MemoizedLink = memo(
       const filename = value?.toString() || "download";
       return (
         <a
-          onClick={() =>
+          href="#"
+          onClick={(e) => {
+            e.preventDefault();
             updatePresentingDocument({
               document_id: fileId,
               semantic_identifier: filename,
-            })
-          }
+            });
+          }}
           className="cursor-pointer text-link hover:text-link-hover"
         >
           {rest.children}
