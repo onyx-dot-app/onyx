@@ -13,6 +13,7 @@ import { getCodeLanguage } from "@/lib/languages";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import { CodeBlock } from "@/app/app/message/CodeBlock";
 import { extractCodeText } from "@/app/app/message/codeUtils";
+import { fetchChatFile } from "@/lib/chat/svc";
 
 export interface CodeViewProps {
   presentingDocument: MinimalOnyxDocument;
@@ -65,19 +66,7 @@ export default function CodeViewModal({
         presentingDocument.document_id;
 
       try {
-        const response = await fetch(
-          `/api/chat/file/${encodeURIComponent(fileIdLocal)}`,
-          {
-            method: "GET",
-            signal,
-            cache: "force-cache",
-          }
-        );
-
-        if (!response.ok) {
-          setLoadError("Failed to load document.");
-          return;
-        }
+        const response = await fetchChatFile(fileIdLocal, signal);
 
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
@@ -123,15 +112,6 @@ export default function CodeViewModal({
       }
     };
   }, [fileUrl]);
-
-  const handleDownload = () => {
-    const link = document.createElement("a");
-    link.href = fileUrl;
-    link.download = fileName || presentingDocument.document_id;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
 
   return (
     <Modal
@@ -208,13 +188,17 @@ export default function CodeViewModal({
                 tooltip="Copy code"
                 size="sm"
               />
-              <Button
-                icon={SvgDownload}
-                onClick={handleDownload}
-                tooltip="Download"
-                size="sm"
-                prominence="tertiary"
-              />
+              <a
+                href={fileUrl}
+                download={fileName || presentingDocument.document_id}
+              >
+                <Button
+                  icon={SvgDownload}
+                  tooltip="Download"
+                  size="sm"
+                  prominence="tertiary"
+                />
+              </a>
             </Section>
           </Section>
         </Modal.Footer>
