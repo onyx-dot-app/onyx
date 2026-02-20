@@ -176,6 +176,25 @@ class CertificateData(BaseModel):
     thumbprint: str
 
 
+def _site_page_in_time_window(
+    page: dict[str, Any],
+    start: datetime | None,
+    end: datetime | None,
+) -> bool:
+    """Return True if the page's lastModifiedDateTime falls within [start, end]."""
+    if start is None and end is None:
+        return True
+    raw = page.get("lastModifiedDateTime")
+    if not raw:
+        return True
+    if not isinstance(raw, str):
+        raise ValueError(f"lastModifiedDateTime is not a string: {raw}")
+    last_modified = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    return (start is None or last_modified >= start) and (
+        end is None or last_modified <= end
+    )
+
+
 def sleep_and_retry(
     query_obj: ClientQuery, method_name: str, max_retries: int = 3
 ) -> Any:
@@ -1117,76 +1136,36 @@ class SharepointConnector(
         site_descriptor: SiteDescriptor,
         start: datetime | None = None,
         end: datetime | None = None,
-    ) -> list[dict[str, Any]]:
-        """Fetch SharePoint site pages (.aspx files) using the SharePoint Pages API."""
+    ) -> Generator[dict[str, Any], None, None]:
+        """Yield SharePoint site pages (.aspx files) one at a time.
 
-        # Get the site to extract the site ID
+        Pages are fetched via the Graph Pages API and yielded lazily as each
+        API page arrives, so memory stays bounded regardless of total page count.
+        Time-window filtering is applied per-item before yielding.
+        """
         site = self.graph_client.sites.get_by_url(site_descriptor.url)
-        site.execute_query()  # Execute the query to actually fetch the data
+        site.execute_query()
         site_id = site.id
 
-        # Get the token acquisition function from the GraphClient
-        token_data = self._acquire_token()
-        access_token = token_data.get("access_token")
-        if not access_token:
-            raise RuntimeError("Failed to acquire access token")
-
-        # Construct the SharePoint Pages API endpoint
-        # Using API directly, since the Graph Client doesn't support the Pages API
-        pages_endpoint = f"https://graph.microsoft.com/v1.0/sites/{site_id}/pages/microsoft.graph.sitePage"
-
-        headers = {
-            "Authorization": f"Bearer {access_token}",
-            "Content-Type": "application/json",
-        }
-
-        # Add expand parameter to get canvas layout content
-        params = {"$expand": "canvasLayout"}
-
-        response = requests.get(
-            pages_endpoint,
-            headers=headers,
-            params=params,
-            timeout=REQUEST_TIMEOUT_SECONDS,
+        page_url: str | None = (
+            f"{GRAPH_API_BASE}/sites/{site_id}/pages/microsoft.graph.sitePage"
         )
-        response.raise_for_status()
-        pages_data = response.json()
-        all_pages = pages_data.get("value", [])
+        params: dict[str, str] | None = {"$expand": "canvasLayout"}
+        total_yielded = 0
 
-        # Handle pagination if there are more pages
-        # TODO: This accumulates all pages in memory and can be heavy on large tenants.
-        #       We should process each page incrementally to avoid unbounded growth.
-        while "@odata.nextLink" in pages_data:
-            next_url = pages_data["@odata.nextLink"]
-            response = requests.get(
-                next_url, headers=headers, timeout=REQUEST_TIMEOUT_SECONDS
-            )
-            response.raise_for_status()
-            pages_data = response.json()
-            all_pages.extend(pages_data.get("value", []))
+        while page_url:
+            data = self._graph_api_get_json(page_url, params)
+            params = None  # nextLink already embeds query params
 
-        logger.debug(f"Found {len(all_pages)} site pages in {site_descriptor.url}")
+            for page in data.get("value", []):
+                if not _site_page_in_time_window(page, start, end):
+                    continue
+                total_yielded += 1
+                yield page
 
-        # Filter pages based on time window if specified
-        if start is not None or end is not None:
-            filtered_pages: list[dict[str, Any]] = []
-            for page in all_pages:
-                page_modified = page.get("lastModifiedDateTime")
-                if page_modified:
-                    if isinstance(page_modified, str):
-                        page_modified = datetime.fromisoformat(
-                            page_modified.replace("Z", "+00:00")
-                        )
+            page_url = data.get("@odata.nextLink")
 
-                    if start is not None and page_modified < start:
-                        continue
-                    if end is not None and page_modified > end:
-                        continue
-
-                filtered_pages.append(page)
-            all_pages = filtered_pages
-
-        return all_pages
+        logger.debug(f"Yielded {total_yielded} site pages for {site_descriptor.url}")
 
     def _acquire_token(self) -> dict[str, Any]:
         """
