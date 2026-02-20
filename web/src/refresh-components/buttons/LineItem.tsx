@@ -2,6 +2,7 @@ import React from "react";
 import { cn } from "@/lib/utils";
 import type { IconProps } from "@opal/types";
 import Truncated from "@/refresh-components/texts/Truncated";
+import Text from "@/refresh-components/texts/Text";
 import Link from "next/link";
 import type { Route } from "next";
 import { Section } from "@/layouts/general-layouts";
@@ -219,16 +220,16 @@ export default function LineItem({
               )}
             </Section>
             {description && (
-              <Truncated secondaryBody text03 className="text-left w-full">
+              <Text as="p" secondaryBody text03 className="text-left w-full">
                 {description}
-              </Truncated>
+              </Text>
             )}
           </>
         ) : description ? (
           <Section flexDirection="row" gap={0.5}>
-            <Truncated secondaryBody text03 className="text-left w-full">
+            <Text as="p" secondaryBody text03 className="text-left w-full">
               {description}
-            </Truncated>
+            </Text>
             {rightChildren && (
               <Section alignItems="end" width="fit">
                 {rightChildren}
