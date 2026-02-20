@@ -282,6 +282,9 @@ OPENSEARCH_TEXT_ANALYZER = os.environ.get("OPENSEARCH_TEXT_ANALYZER") or "englis
 ENABLE_OPENSEARCH_INDEXING_FOR_ONYX = (
     os.environ.get("ENABLE_OPENSEARCH_INDEXING_FOR_ONYX", "").lower() == "true"
 )
+# NOTE: This effectively does nothing anymore, admins can now toggle whether
+# retrieval is through OpenSearch. This value is only used as a final fallback
+# in case that doesn't work for whatever reason.
 # Given that the "base" config above is true, this enables whether we want to
 # retrieve from OpenSearch or Vespa. We want to be able to quickly toggle this
 # in the event we see issues with OpenSearch retrieval in our dev environments.

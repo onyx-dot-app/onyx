@@ -1,3 +1,9 @@
+# NOTE: Preserved for continued compatibility with Clear and Restart OpenSearch
+# Container and other dev flows. Use
+# deployment/docker_compose/docker-compose.yml instead, which contains the
+# configuration for OpenSearch that is distributed to users. This file will be
+# removed at some point in the future.
+
 services:
   opensearch:
     image: opensearchproject/opensearch:3.4.0
