@@ -33,7 +33,7 @@ function LogoSection({ folded, onFoldClick }: LogoSectionProps) {
   return (
     <div
       className={cn(
-        /* px-2 is the standard sidebar padding; pl-3.5 adds 1.5 to match Icon padding */
+        /* px-2 is the standard sidebar padding; pl-3.5 adds 1.5 to match Icon padding. */
         "flex p-2 pl-3.5 min-h-[3.25rem]",
         folded ? "justify-center" : "justify-between",
         applicationName ? "min-h-[3.75rem]" : "min-h-[3.25rem]"
@@ -43,7 +43,12 @@ function LogoSection({ folded, onFoldClick }: LogoSectionProps) {
         logo()
       ) : folded ? (
         <>
-          <div className="group-hover/SidebarWrapper:hidden pt-1.5">
+          <div
+            className={cn(
+              "group-hover/SidebarWrapper:hidden",
+              folded && !applicationName && "pt-1.5"
+            )}
+          >
             {logo()}
           </div>
           <div className="w-full justify-center hidden group-hover/SidebarWrapper:flex">
