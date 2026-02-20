@@ -210,22 +210,15 @@ export default function ActionsPopover({
       sourceSet.add(normalized);
     });
 
+    // No specific sources selected means everything is searchable
+    if (sourceSet.size === 0) return null;
+
     return sourceSet;
   }, [
     isDefaultAgent,
     selectedAssistant.document_sets,
     selectedAssistant.knowledge_sources,
   ]);
-
-  // Check if non-default agent has no knowledge sources (Internal Search should be disabled)
-  // Knowledge sources include document sets and hierarchy nodes (folders, spaces, channels)
-  // Check if non-default agent has no knowledge sources (Internal Search should be disabled)
-  // Knowledge sources include document sets, hierarchy nodes, and attached documents
-  const hasNoKnowledgeSources =
-    !isDefaultAgent &&
-    selectedAssistant.document_sets.length === 0 &&
-    (selectedAssistant.hierarchy_node_count ?? 0) === 0 &&
-    (selectedAssistant.attached_document_count ?? 0) === 0;
 
   // Store MCP server auth/loading state (tools are part of selectedAssistant.tools)
   const [mcpServerData, setMcpServerData] = useState<{
@@ -905,7 +898,6 @@ export default function ActionsPopover({
                   setSecondaryView({ type: "sources" })
                 }
                 hasNoConnectors={hasNoConnectors}
-                hasNoKnowledgeSources={hasNoKnowledgeSources}
                 toolAuthStatus={getToolAuthStatus(tool)}
                 onOAuthAuthenticate={() => authenticateTool(tool)}
                 onClose={() => setOpen(false)}
