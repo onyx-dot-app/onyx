@@ -22,6 +22,7 @@ from ee.onyx.external_permissions.sharepoint.permission_utils import GroupsResul
 
 
 MODULE = "ee.onyx.external_permissions.sharepoint.permission_utils"
+GRAPH_API_BASE = "https://graph.microsoft.com/v1.0"
 
 
 # ---------------------------------------------------------------------------
@@ -125,7 +126,11 @@ def test_enumerate_ad_groups_yields_groups(mock_get: MagicMock) -> None:
     }
     mock_get.side_effect = _mock_graph_get_for_enumeration(groups, members)
 
-    results = list(_enumerate_ad_groups_paginated(_fake_token, already_resolved=set()))
+    results = list(
+        _enumerate_ad_groups_paginated(
+            _fake_token, already_resolved=set(), graph_api_base=GRAPH_API_BASE
+        )
+    )
 
     assert len(results) == 2
     eng = next(r for r in results if r.id == "Engineering_g1")
@@ -140,7 +145,11 @@ def test_enumerate_ad_groups_skips_already_resolved(mock_get: MagicMock) -> None
     mock_get.side_effect = _mock_graph_get_for_enumeration(groups, {})
 
     results = list(
-        _enumerate_ad_groups_paginated(_fake_token, already_resolved={"Engineering_g1"})
+        _enumerate_ad_groups_paginated(
+            _fake_token,
+            already_resolved={"Engineering_g1"},
+            graph_api_base=GRAPH_API_BASE,
+        )
     )
     assert results == []
 
@@ -152,7 +161,11 @@ def test_enumerate_ad_groups_circuit_breaker(mock_get: MagicMock) -> None:
     groups = [{"id": f"g{i}", "displayName": f"Group{i}"} for i in range(over_limit)]
     mock_get.side_effect = _mock_graph_get_for_enumeration(groups, {})
 
-    results = list(_enumerate_ad_groups_paginated(_fake_token, already_resolved=set()))
+    results = list(
+        _enumerate_ad_groups_paginated(
+            _fake_token, already_resolved=set(), graph_api_base=GRAPH_API_BASE
+        )
+    )
     assert len(results) <= AD_GROUP_ENUMERATION_THRESHOLD
 
 
@@ -189,6 +202,7 @@ def test_default_skips_ad_enumeration(
     results = get_sharepoint_external_groups(
         client_context=MagicMock(),
         graph_client=MagicMock(),
+        graph_api_base=GRAPH_API_BASE,
     )
 
     assert len(results) == 1
@@ -219,6 +233,7 @@ def test_enumerate_all_includes_ad_groups(
         graph_client=MagicMock(),
         get_access_token=_fake_token,
         enumerate_all_ad_groups=True,
+        graph_api_base=GRAPH_API_BASE,
     )
 
     assert len(results) == 2
@@ -246,6 +261,7 @@ def test_enumerate_all_without_token_skips(
         graph_client=MagicMock(),
         get_access_token=None,
         enumerate_all_ad_groups=True,
+        graph_api_base=GRAPH_API_BASE,
     )
 
     assert results == []
