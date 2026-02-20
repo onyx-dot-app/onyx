@@ -4,6 +4,7 @@ import {
   Interactive,
   type InteractiveBaseProps,
   type InteractiveContainerHeightVariant,
+  type InteractiveContainerWidthVariant,
 } from "@opal/core";
 import type { TooltipSide } from "@opal/components";
 import type { IconFunctionComponent } from "@opal/types";
@@ -83,6 +84,9 @@ type ButtonProps = InteractiveBaseProps &
     /** Tooltip text shown on hover. */
     tooltip?: string;
 
+    /** Width preset. `"auto"` shrink-wraps, `"full"` stretches to parent width. */
+    width?: InteractiveContainerWidthVariant;
+
     /** Which side the tooltip appears on. */
     tooltipSide?: TooltipSide;
   };
@@ -98,6 +102,7 @@ function Button({
   size = "lg",
   foldable,
   type = "button",
+  width,
   tooltip,
   tooltipSide = "top",
   ...interactiveBaseProps
@@ -121,6 +126,7 @@ function Button({
         type={type}
         border={interactiveBaseProps.prominence === "secondary"}
         heightVariant={size}
+        widthVariant={width}
         roundingVariant={
           isLarge ? "default" : size === "2xs" ? "mini" : "compact"
         }
