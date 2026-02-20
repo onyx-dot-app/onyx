@@ -18,11 +18,16 @@ Also verifies that process_single_user_file clears the guard key the moment
 it is picked up by a worker.
 
 Uses real Redis (DB 0 via get_redis_client) and real PostgreSQL for UserFile
-rows.  The Celery app is provided as a MagicMock so no real broker is needed.
+rows.  The Celery app is provided as a MagicMock injected via a PropertyMock
+on the task class so no real broker is needed.
 """
 
+from collections.abc import Generator
+from contextlib import contextmanager
+from typing import Any
 from unittest.mock import MagicMock
 from unittest.mock import patch
+from unittest.mock import PropertyMock
 from uuid import uuid4
 
 from sqlalchemy.orm import Session
@@ -74,13 +79,21 @@ def _create_processing_user_file(db_session: Session, user_id: object) -> UserFi
     return uf
 
 
-def _mock_self() -> MagicMock:
-    """Return a MagicMock that acts as the bound Celery Task instance.
+@contextmanager
+def _patch_task_app(task: Any, mock_app: MagicMock) -> Generator[None, None, None]:
+    """Patch the ``app`` property on *task*'s class so that ``self.app``
+    inside the task function returns *mock_app*.
 
-    celery_get_queue_length is patched in each test, so the broker connection
-    only needs to return *something* without raising.
+    With ``bind=True``, ``task.run`` is a bound method whose ``__self__`` is
+    the actual task instance.  We patch ``app`` on that instance's class
+    (a unique Celery-generated Task subclass) so the mock is scoped to this
+    task only.
     """
-    return MagicMock()
+    task_instance = task.run.__self__
+    with patch.object(
+        type(task_instance), "app", new_callable=PropertyMock, return_value=mock_app
+    ):
+        yield
 
 
 # ---------------------------------------------------------------------------
@@ -100,14 +113,17 @@ class TestQueueDepthBackpressure:
         user = create_test_user(db_session, "bp_user")
         _create_processing_user_file(db_session, user.id)
 
-        mock_task = _mock_self()
+        mock_app = MagicMock()
 
-        with patch(
-            _PATCH_QUEUE_LEN, return_value=USER_FILE_PROCESSING_MAX_QUEUE_DEPTH + 1
+        with (
+            _patch_task_app(check_user_file_processing, mock_app),
+            patch(
+                _PATCH_QUEUE_LEN, return_value=USER_FILE_PROCESSING_MAX_QUEUE_DEPTH + 1
+            ),
         ):
-            check_user_file_processing.run(mock_task, tenant_id=TEST_TENANT_ID)  # type: ignore[misc]
+            check_user_file_processing.run(tenant_id=TEST_TENANT_ID)
 
-        mock_task.app.send_task.assert_not_called()
+        mock_app.send_task.assert_not_called()
 
 
 class TestPerFileGuardKey:
@@ -126,14 +142,17 @@ class TestPerFileGuardKey:
         guard_key = _user_file_queued_key(uf.id)
         redis_client.setex(guard_key, CELERY_USER_FILE_PROCESSING_TASK_EXPIRES, 1)
 
-        mock_task = _mock_self()
+        mock_app = MagicMock()
 
         try:
-            with patch(_PATCH_QUEUE_LEN, return_value=0):
-                check_user_file_processing.run(mock_task, tenant_id=TEST_TENANT_ID)  # type: ignore[misc]
+            with (
+                _patch_task_app(check_user_file_processing, mock_app),
+                patch(_PATCH_QUEUE_LEN, return_value=0),
+            ):
+                check_user_file_processing.run(tenant_id=TEST_TENANT_ID)
 
             # send_task must not have been called with this specific file's ID
-            for call in mock_task.app.send_task.call_args_list:
+            for call in mock_app.send_task.call_args_list:
                 kwargs = call.kwargs.get("kwargs", {})
                 assert kwargs.get("user_file_id") != str(
                     uf.id
@@ -154,11 +173,14 @@ class TestPerFileGuardKey:
         guard_key = _user_file_queued_key(uf.id)
         redis_client.delete(guard_key)  # clean slate
 
-        mock_task = _mock_self()
+        mock_app = MagicMock()
 
         try:
-            with patch(_PATCH_QUEUE_LEN, return_value=0):
-                check_user_file_processing.run(mock_task, tenant_id=TEST_TENANT_ID)  # type: ignore[misc]
+            with (
+                _patch_task_app(check_user_file_processing, mock_app),
+                patch(_PATCH_QUEUE_LEN, return_value=0),
+            ):
+                check_user_file_processing.run(tenant_id=TEST_TENANT_ID)
 
             assert redis_client.exists(
                 guard_key
@@ -188,19 +210,22 @@ class TestTaskExpiry:
         guard_key = _user_file_queued_key(uf.id)
         redis_client.delete(guard_key)
 
-        mock_task = _mock_self()
+        mock_app = MagicMock()
 
         try:
-            with patch(_PATCH_QUEUE_LEN, return_value=0):
-                check_user_file_processing.run(mock_task, tenant_id=TEST_TENANT_ID)  # type: ignore[misc]
+            with (
+                _patch_task_app(check_user_file_processing, mock_app),
+                patch(_PATCH_QUEUE_LEN, return_value=0),
+            ):
+                check_user_file_processing.run(tenant_id=TEST_TENANT_ID)
 
             # At least one task should have been submitted (for our file)
             assert (
-                mock_task.app.send_task.call_count >= 1
+                mock_app.send_task.call_count >= 1
             ), "Expected at least one task to be submitted"
 
             # Every submitted task must carry expires
-            for call in mock_task.app.send_task.call_args_list:
+            for call in mock_app.send_task.call_args_list:
                 assert call.args[0] == OnyxCeleryTask.PROCESS_SINGLE_USER_FILE
                 assert call.kwargs.get("queue") == OnyxCeleryQueues.USER_FILE_PROCESSING
                 assert (
@@ -243,8 +268,7 @@ class TestWorkerClearsGuardKey:
         assert acquired, "Should be able to acquire the processing lock for this test"
 
         try:
-            process_single_user_file.run(  # type: ignore[misc]
-                _mock_self(),
+            process_single_user_file.run(
                 user_file_id=user_file_id,
                 tenant_id=TEST_TENANT_ID,
             )
