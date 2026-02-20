@@ -127,25 +127,19 @@ export const MessageTextRenderer: MessageRenderer<
     {
       icon: null,
       status: null,
-      content: (
-        <>
-          {"Hello world"}
+      content:
+        content.length > 0 || packets.length > 0 ? (
+          <>
+            {renderedContent}
+            {wasUserCancelled && (
+              <Text as="p" secondaryBody text04>
+                User has stopped generation
+              </Text>
+            )}
+          </>
+        ) : (
           <BlinkingBar addMargin />
-        </>
-      ),
-      // content:
-      //   content.length > 0 || packets.length > 0 ? (
-      //     <>
-      //       {renderedContent}
-      //       {wasUserCancelled && (
-      //         <Text as="p" secondaryBody text04>
-      //           User has stopped generation
-      //         </Text>
-      //       )}
-      //     </>
-      //   ) : (
-      //     <BlinkingBar addMargin />
-      //   ),
+        ),
     },
   ]);
 };
