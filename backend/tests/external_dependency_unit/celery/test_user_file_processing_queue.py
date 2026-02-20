@@ -105,7 +105,7 @@ class TestQueueDepthBackpressure:
         with patch(
             _PATCH_QUEUE_LEN, return_value=USER_FILE_PROCESSING_MAX_QUEUE_DEPTH + 1
         ):
-            check_user_file_processing(mock_task, tenant_id=TEST_TENANT_ID)  # type: ignore[misc]
+            check_user_file_processing.run(mock_task, tenant_id=TEST_TENANT_ID)  # type: ignore[misc]
 
         mock_task.app.send_task.assert_not_called()
 
@@ -130,7 +130,7 @@ class TestPerFileGuardKey:
 
         try:
             with patch(_PATCH_QUEUE_LEN, return_value=0):
-                check_user_file_processing(mock_task, tenant_id=TEST_TENANT_ID)  # type: ignore[misc]
+                check_user_file_processing.run(mock_task, tenant_id=TEST_TENANT_ID)  # type: ignore[misc]
 
             # send_task must not have been called with this specific file's ID
             for call in mock_task.app.send_task.call_args_list:
@@ -158,7 +158,7 @@ class TestPerFileGuardKey:
 
         try:
             with patch(_PATCH_QUEUE_LEN, return_value=0):
-                check_user_file_processing(mock_task, tenant_id=TEST_TENANT_ID)  # type: ignore[misc]
+                check_user_file_processing.run(mock_task, tenant_id=TEST_TENANT_ID)  # type: ignore[misc]
 
             assert redis_client.exists(
                 guard_key
@@ -192,7 +192,7 @@ class TestTaskExpiry:
 
         try:
             with patch(_PATCH_QUEUE_LEN, return_value=0):
-                check_user_file_processing(mock_task, tenant_id=TEST_TENANT_ID)  # type: ignore[misc]
+                check_user_file_processing.run(mock_task, tenant_id=TEST_TENANT_ID)  # type: ignore[misc]
 
             # At least one task should have been submitted (for our file)
             assert (
@@ -243,7 +243,7 @@ class TestWorkerClearsGuardKey:
         assert acquired, "Should be able to acquire the processing lock for this test"
 
         try:
-            process_single_user_file(  # type: ignore[misc]
+            process_single_user_file.run(  # type: ignore[misc]
                 _mock_self(),
                 user_file_id=user_file_id,
                 tenant_id=TEST_TENANT_ID,
