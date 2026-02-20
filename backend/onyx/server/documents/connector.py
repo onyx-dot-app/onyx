@@ -103,6 +103,7 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import IndexingMode
+from onyx.db.enums import ProcessingMode
 from onyx.db.federated import fetch_all_federated_connectors_parallel
 from onyx.db.index_attempt import get_index_attempts_for_cc_pair
 from onyx.db.index_attempt import get_latest_index_attempts_by_status
@@ -1924,6 +1925,8 @@ def get_basic_connector_indexing_status(
         get_editable=False,
         user=user,
     )
+
+    # NOTE: This endpoint excludes Craft connectors
     return [
         BasicCCPairInfo(
             has_successful_run=cc_pair.last_successful_index_time is not None,
@@ -1931,6 +1934,7 @@ def get_basic_connector_indexing_status(
         )
         for cc_pair in cc_pairs
         if cc_pair.connector.source != DocumentSource.INGESTION_API
+        and cc_pair.processing_mode == ProcessingMode.REGULAR
     ]
 
 
