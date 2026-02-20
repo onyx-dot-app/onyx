@@ -70,7 +70,7 @@ def _graph_api_get(
                 continue
             resp.raise_for_status()
             return resp.json()
-        except (_requests.ConnectionError, _requests.Timeout):
+        except (_requests.ConnectionError, _requests.Timeout, _requests.HTTPError):
             if attempt < GRAPH_API_MAX_RETRIES:
                 wait = min(2**attempt, 60)
                 logger.warning(
