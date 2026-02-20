@@ -1314,7 +1314,6 @@ class SharepointConnector(
             token = quote(start.isoformat(timespec="seconds"))
             initial_url += f"?token={token}"
 
-
         yield from self._iter_delta_pages(
             initial_url=initial_url,
             drive_id=drive_id,
