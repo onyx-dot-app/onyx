@@ -49,30 +49,18 @@ type InteractiveBaseVariantProps =
  * - `"fit"` — Shrink-wraps to content height (`h-fit`), for variable-height layouts
  */
 type InteractiveContainerHeightVariant =
-  keyof typeof interactiveContainerHeightVariants;
-const interactiveContainerHeightVariants = {
-  lg: "h-[2.25rem]",
-  md: "h-[1.75rem]",
-  sm: "h-[1.5rem]",
-  xs: "h-[1.25rem]",
-  "2xs": "h-[1rem]",
-  fit: "h-fit",
-} as const;
-const interactiveContainerMinWidthVariants = {
-  lg: "min-w-[2.25rem]",
-  md: "min-w-[1.75rem]",
-  sm: "min-w-[1.5rem]",
-  xs: "min-w-[1.25rem]",
-  "2xs": "min-w-[1rem]",
-  fit: "",
-} as const;
-const interactiveContainerPaddingVariants = {
-  lg: "p-2",
-  md: "p-1",
-  sm: "p-1",
-  xs: "p-0.5",
-  "2xs": "p-0.5",
-  fit: "p-0",
+  keyof typeof interactiveContainerSizeVariants;
+const interactiveContainerSizeVariants = {
+  lg: { height: "h-[2.25rem]", minWidth: "min-w-[2.25rem]", padding: "p-2" },
+  md: { height: "h-[1.75rem]", minWidth: "min-w-[1.75rem]", padding: "p-1" },
+  sm: { height: "h-[1.5rem]", minWidth: "min-w-[1.5rem]", padding: "p-1" },
+  xs: {
+    height: "h-[1.25rem]",
+    minWidth: "min-w-[1.25rem]",
+    padding: "p-0.5",
+  },
+  "2xs": { height: "h-[1rem]", minWidth: "min-w-[1rem]", padding: "p-0.5" },
+  fit: { height: "h-fit", minWidth: "", padding: "p-0" },
 } as const;
 
 /**
@@ -422,14 +410,16 @@ function InteractiveContainer({
     target?: string;
     rel?: string;
   };
+  const { height, minWidth, padding } =
+    interactiveContainerSizeVariants[heightVariant];
   const sharedProps = {
     ...rest,
     className: cn(
       "interactive-container",
       interactiveContainerRoundingVariants[roundingVariant],
-      interactiveContainerHeightVariants[heightVariant],
-      interactiveContainerMinWidthVariants[heightVariant],
-      interactiveContainerPaddingVariants[heightVariant],
+      height,
+      minWidth,
+      padding,
       slotClassName
     ),
     "data-border": border ? ("true" as const) : undefined,
