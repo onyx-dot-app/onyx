@@ -401,18 +401,32 @@ function ChatPreferencesForm() {
           <Section gap={0.75}>
             <InputLayouts.Title title="Features" />
             <Card>
-              <InputLayouts.Horizontal
-                title="Search Mode"
-                description="UI mode for quick document search across your organization."
+              <SimpleTooltip
+                tooltip={
+                  uniqueSources.length !== 0
+                    ? "Set up connectors to use Search Mode"
+                    : undefined
+                }
+                side="top"
               >
-                <SwitchField
-                  name="search_ui_enabled"
-                  onCheckedChange={(checked) => {
-                    void saveSettings({ search_ui_enabled: checked });
-                  }}
-                />
-              </InputLayouts.Horizontal>
-
+                <Disabled disabled={uniqueSources.length !== 0} allowClick>
+                  <div className="w-full">
+                    <InputLayouts.Horizontal
+                      title="Search Mode"
+                      description="UI mode for quick document search across your organization."
+                      disabled={uniqueSources.length !== 0}
+                    >
+                      <SwitchField
+                        name="search_ui_enabled"
+                        onCheckedChange={(checked) => {
+                          void saveSettings({ search_ui_enabled: checked });
+                        }}
+                        disabled={uniqueSources.length !== 0}
+                      />
+                    </InputLayouts.Horizontal>
+                  </div>
+                </Disabled>
+              </SimpleTooltip>
               <InputLayouts.Horizontal
                 title="Deep Research"
                 description="Agentic research system that works across the web and connected sources. Uses significantly more tokens per query."
@@ -424,7 +438,6 @@ function ChatPreferencesForm() {
                   }}
                 />
               </InputLayouts.Horizontal>
-
               <InputLayouts.Horizontal
                 title="Chat Auto-Scroll"
                 description="Automatically scroll to new content as chat generates response. Users can override this in their personal settings."
