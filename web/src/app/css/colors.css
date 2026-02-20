@@ -136,25 +136,64 @@
   --purple-05: #f1ebfa;
   --purple-01: #f9f7fd;
 
-  /* Neon Scale */
+  /* Neon Scale
+     Base vars (--neon-X) are the /40 level.
+     Alpha variants use -aXX suffix (e.g. -a60 = 40 at 60% opacity).
+     Numeric suffixes are Figma scale levels (e.g. -50 = Neon/X/50). */
+  --neon-yellow-90: #5a581d;
+  --neon-yellow-80: #979430;
+  --neon-yellow-50: #ece600;
   --neon-yellow: #fef800;
-  --neon-yellow-60: #fef80099;
-  --neon-yellow-30: #fef8004d;
+  --neon-yellow-a60: #fef80099;
+  --neon-yellow-a30: #fef8004d;
+  --neon-yellow-20: #fcfa8f;
+  --neon-yellow-05: #f9faeb;
+
+  --neon-amber-90: #625025;
+  --neon-amber-80: #a68018;
+  --neon-amber-60: #d9a500;
+  --neon-amber-50: #ecb400;
   --neon-amber: #ffc733;
-  --neon-amber-60: #ffc73399;
-  --neon-amber-30: #ffc7334d;
+  --neon-amber-a60: #ffc73399;
+  --neon-amber-a30: #ffc7334d;
+  --neon-amber-20: #ffd985;
+  --neon-amber-05: #fef8ea;
+
+  --neon-sky-90: #204f67;
+  --neon-sky-80: #3989b3;
+  --neon-sky-50: #1ebcff;
   --neon-sky: #4dc3ff;
-  --neon-sky-60: #4dc3ff99;
-  --neon-sky-30: #4dc3ff4d;
+  --neon-sky-a60: #4dc3ff99;
+  --neon-sky-a30: #4dc3ff4d;
+  --neon-sky-20: #93d8ff;
+  --neon-sky-05: #f2faff;
+
+  --neon-cyan-90: #1a5e5d;
+  --neon-cyan-80: #009a99;
+  --neon-cyan-50: #00ebea;
   --neon-cyan: #00f9f9;
-  --neon-cyan-60: #00f9f999;
-  --neon-cyan-30: #00f9f94d;
+  --neon-cyan-a60: #00f9f999;
+  --neon-cyan-a30: #00f9f94d;
+  --neon-cyan-20: #62fefd;
+  --neon-cyan-05: #eafdfc;
+
+  --neon-lime-90: #3f5b39;
+  --neon-lime-80: #639e56;
+  --neon-lime-60: #53cd32;
   --neon-lime: #6dff46;
-  --neon-lime-60: #6dff4699;
-  --neon-lime-30: #6dff464d;
+  --neon-lime-a60: #6dff4699;
+  --neon-lime-a30: #6dff464d;
+  --neon-lime-20: #a8ff94;
+  --neon-lime-05: #f2fcf0;
+
+  --neon-magenta-90: #654666;
+  --neon-magenta-80: #ab6bac;
+  --neon-magenta-50: #f198f2;
   --neon-magenta: #fea1ff;
-  --neon-magenta-60: #fea1ff99;
-  --neon-magenta-30: #fea1ff4d;
+  --neon-magenta-a60: #fea1ff99;
+  --neon-magenta-a30: #fea1ff4d;
+  --neon-magenta-20: #fec4fe;
+  --neon-magenta-05: #fff5ff;
 
   /* Stone Scale */
   --stone-98: #0b0b0f;
@@ -254,8 +293,8 @@
   --background-neutral-02: var(--grey-06);
   --background-neutral-03: var(--grey-10);
   --background-neutral-04: var(--grey-20);
-  --background-neutral-inverted-04: var(--grey-75);
-  --background-neutral-inverted-03: var(--grey-80);
+  --background-neutral-inverted-04: var(--grey-60);
+  --background-neutral-inverted-03: var(--grey-75);
   --background-neutral-inverted-02: var(--grey-85);
   --background-neutral-inverted-01: var(--grey-90);
   --background-neutral-inverted-00: var(--grey-100);
@@ -269,7 +308,7 @@
   --background-tint-02: var(--tint-05);
   --background-tint-03: var(--tint-10);
   --background-tint-04: var(--tint-20);
-  --background-tint-inverted-04: var(--tint-80);
+  --background-tint-inverted-04: var(--tint-60);
   --background-tint-inverted-03: var(--tint-85);
   --background-tint-inverted-02: var(--tint-90);
   --background-tint-inverted-01: var(--tint-95);
@@ -296,7 +335,7 @@
 
   /* Theme / Gradient */
   --theme-gradient-05: var(--tint-50);
-  --theme-gradient-00: var(--grey-00);
+  --theme-gradient-00: var(--grey-100);
 
   /* Theme / Red */
   --theme-red-05: var(--red-50);
@@ -311,15 +350,15 @@
   --theme-orange-01: var(--orange-05);
 
   /* Theme / Amber */
-  --theme-amber-05: var(--neon-amber);
+  --theme-amber-05: var(--neon-amber-50);
   --theme-amber-04: var(--neon-amber);
-  --theme-amber-02: var(--neon-amber-30);
-  --theme-amber-01: var(--neon-amber-30);
+  --theme-amber-02: var(--neon-amber-20);
+  --theme-amber-01: var(--neon-amber-05);
 
   /* Theme / Yellow */
-  --theme-yellow-05: var(--neon-yellow);
-  --theme-yellow-02: var(--neon-yellow-30);
-  --theme-yellow-01: var(--neon-yellow-30);
+  --theme-yellow-05: var(--neon-yellow-50);
+  --theme-yellow-02: var(--neon-yellow-20);
+  --theme-yellow-01: var(--neon-yellow-05);
 
   /* Theme / Green */
   --theme-green-05: var(--green-60);
@@ -328,18 +367,18 @@
 
   /* Theme / Lime */
   --theme-lime-05: var(--neon-lime-60);
-  --theme-lime-02: var(--neon-lime-30);
-  --theme-lime-01: var(--neon-lime-30);
+  --theme-lime-02: var(--neon-lime-20);
+  --theme-lime-01: var(--neon-lime-05);
 
   /* Theme / Cyan */
-  --theme-cyan-05: var(--neon-cyan);
-  --theme-cyan-02: var(--neon-cyan-30);
-  --theme-cyan-01: var(--neon-cyan-30);
+  --theme-cyan-05: var(--neon-cyan-50);
+  --theme-cyan-02: var(--neon-cyan-20);
+  --theme-cyan-01: var(--neon-cyan-05);
 
   /* Theme / Sky */
-  --theme-sky-05: var(--neon-sky);
-  --theme-sky-02: var(--neon-sky-30);
-  --theme-sky-01: var(--neon-sky-30);
+  --theme-sky-05: var(--neon-sky-50);
+  --theme-sky-02: var(--neon-sky-20);
+  --theme-sky-01: var(--neon-sky-05);
 
   /* Theme / Blue */
   --theme-blue-05: var(--blue-50);
@@ -352,9 +391,9 @@
   --theme-purple-01: var(--purple-05);
 
   /* Theme / Magenta */
-  --theme-magenta-05: var(--neon-magenta);
-  --theme-magenta-02: var(--neon-magenta-30);
-  --theme-magenta-01: var(--neon-magenta-30);
+  --theme-magenta-05: var(--neon-magenta-50);
+  --theme-magenta-02: var(--neon-magenta-20);
+  --theme-magenta-01: var(--neon-magenta-05);
 
   /* Status */
   --status-success-05: var(--green-50);
@@ -408,10 +447,10 @@
   --code-definition: var(--orange-55);
 
   /* Highlight */
-  --highlight-match: var(--neon-yellow-30);
-  --highlight-selection: var(--neon-sky-30);
-  --highlight-active: var(--neon-amber-60);
-  --highlight-accent: var(--neon-magenta-60);
+  --highlight-match: var(--neon-yellow-a30);
+  --highlight-selection: var(--neon-sky-a30);
+  --highlight-active: var(--neon-amber-a60);
+  --highlight-accent: var(--neon-magenta-a60);
 
   /* Shadow */
   --shadow-01: var(--alpha-grey-100-05);
@@ -419,7 +458,7 @@
   --shadow-03: var(--alpha-grey-100-20);
 
   /* Mask */
-  --mask-01: var(--alpha-grey-100-10);
+  --mask-01: var(--alpha-grey-00-10);
   --mask-02: var(--alpha-grey-100-20);
   --mask-03: var(--alpha-grey-100-40);
 
@@ -514,13 +553,13 @@
   /* Theme / Amber */
   --theme-amber-05: var(--neon-amber);
   --theme-amber-04: var(--neon-amber-60);
-  --theme-amber-02: var(--neon-amber-60);
-  --theme-amber-01: var(--neon-amber-60);
+  --theme-amber-02: var(--neon-amber-80);
+  --theme-amber-01: var(--neon-amber-90);
 
   /* Theme / Yellow */
   --theme-yellow-05: var(--neon-yellow);
-  --theme-yellow-02: var(--neon-yellow-60);
-  --theme-yellow-01: var(--neon-yellow-60);
+  --theme-yellow-02: var(--neon-yellow-80);
+  --theme-yellow-01: var(--neon-yellow-90);
 
   /* Theme / Green */
   --theme-green-05: var(--green-50);
@@ -529,18 +568,18 @@
 
   /* Theme / Lime */
   --theme-lime-05: var(--neon-lime);
-  --theme-lime-02: var(--neon-lime-60);
-  --theme-lime-01: var(--neon-lime-60);
+  --theme-lime-02: var(--neon-lime-80);
+  --theme-lime-01: var(--neon-lime-90);
 
   /* Theme / Cyan */
   --theme-cyan-05: var(--neon-cyan);
-  --theme-cyan-02: var(--neon-cyan-60);
-  --theme-cyan-01: var(--neon-cyan-60);
+  --theme-cyan-02: var(--neon-cyan-80);
+  --theme-cyan-01: var(--neon-cyan-90);
 
   /* Theme / Sky */
   --theme-sky-05: var(--neon-sky);
-  --theme-sky-02: var(--neon-sky-60);
-  --theme-sky-01: var(--neon-sky-60);
+  --theme-sky-02: var(--neon-sky-80);
+  --theme-sky-01: var(--neon-sky-90);
 
   /* Theme / Blue */
   --theme-blue-05: var(--blue-45);
@@ -554,8 +593,8 @@
 
   /* Theme / Magenta */
   --theme-magenta-05: var(--neon-magenta);
-  --theme-magenta-02: var(--neon-magenta-60);
-  --theme-magenta-01: var(--neon-magenta-60);
+  --theme-magenta-02: var(--neon-magenta-80);
+  --theme-magenta-01: var(--neon-magenta-90);
 
   /* Status */
   --status-success-05: var(--green-50);
@@ -609,10 +648,10 @@
   --code-definition: var(--orange-50);
 
   /* Highlight */
-  --highlight-match: var(--neon-yellow-30);
-  --highlight-selection: var(--neon-sky-30);
-  --highlight-active: var(--neon-amber-60);
-  --highlight-accent: var(--neon-magenta-60);
+  --highlight-match: var(--neon-yellow-a30);
+  --highlight-selection: var(--neon-sky-a30);
+  --highlight-active: var(--neon-amber-a60);
+  --highlight-accent: var(--neon-magenta-a60);
 
   /* Shadow */
   --shadow-01: var(--alpha-grey-00-05);
@@ -620,7 +659,7 @@
   --shadow-03: var(--alpha-grey-00-20);
 
   /* Mask */
-  --mask-01: var(--alpha-grey-100-10);
+  --mask-01: var(--alpha-grey-00-10);
   --mask-02: var(--alpha-grey-100-20);
   --mask-03: var(--alpha-grey-100-40);
 
