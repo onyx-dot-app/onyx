@@ -474,6 +474,23 @@ class SandboxManager(ABC):
         """
         ...
 
+    def ensure_nextjs_running(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        nextjs_port: int,
+    ) -> None:
+        """Ensure the Next.js server is running for a session.
+
+        Default is a no-op — only meaningful for local backends that manage
+        process lifecycles directly (e.g., LocalSandboxManager).
+
+        Args:
+            sandbox_id: The sandbox ID
+            session_id: The session ID
+            nextjs_port: The port the Next.js server should be listening on
+        """
+
 
 # Singleton instance cache for the factory
 _sandbox_manager_instance: SandboxManager | None = None

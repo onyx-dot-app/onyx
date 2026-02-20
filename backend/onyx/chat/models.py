@@ -185,3 +185,6 @@ class LlmStepResult(BaseModel):
     reasoning: str | None
     answer: str | None
     tool_calls: list[ToolCallKickoff] | None
+    # Raw LLM text before any display-oriented filtering/sanitization.
+    # Used for fallback tool-call extraction when providers emit calls as text.
+    raw_answer: str | None = None

@@ -58,6 +58,7 @@ export async function fetchSettingsSS(): Promise<CombinedSettings | null> {
           notifications: [],
           needs_reindexing: false,
           anonymous_user_enabled: false,
+          invite_only_enabled: false,
           deep_research_enabled: true,
           temperature_override_enabled: true,
           query_history_type: QueryHistoryType.NORMAL,

@@ -63,6 +63,10 @@ if TYPE_CHECKING:
 _LLM_PROMPT_LONG_TERM_LOG_CATEGORY = "llm_prompt"
 LEGACY_MAX_TOKENS_KWARG = "max_tokens"
 STANDARD_MAX_TOKENS_KWARG = "max_completion_tokens"
+_VERTEX_ANTHROPIC_MODELS_REJECTING_OUTPUT_CONFIG = (
+    "claude-opus-4-5",
+    "claude-opus-4-6",
+)
 
 
 class LLMTimeoutError(Exception):
@@ -86,6 +90,14 @@ def _prompt_to_dicts(prompt: LanguageModelInput) -> list[dict[str, Any]]:
     if isinstance(prompt, list):
         return [msg.model_dump(exclude_none=True) for msg in prompt]
     return [prompt.model_dump(exclude_none=True)]
+
+
+def _is_vertex_model_rejecting_output_config(model_name: str) -> bool:
+    normalized_model_name = model_name.lower()
+    return any(
+        blocked_model in normalized_model_name
+        for blocked_model in _VERTEX_ANTHROPIC_MODELS_REJECTING_OUTPUT_CONFIG
+    )
 
 
 class LitellmLLM(LLM):
@@ -266,10 +278,11 @@ class LitellmLLM(LLM):
         is_ollama = self._model_provider == LlmProviderNames.OLLAMA_CHAT
         is_mistral = self._model_provider == LlmProviderNames.MISTRAL
         is_vertex_ai = self._model_provider == LlmProviderNames.VERTEX_AI
-        # Vertex Anthropic Opus 4.5 rejects output_config.
-        # Keep this guard until LiteLLM/Vertex accept the field for this model.
-        is_vertex_opus_4_5 = (
-            is_vertex_ai and "claude-opus-4-5" in self.config.model_name.lower()
+        # Some Vertex Anthropic models reject output_config.
+        # Keep this guard until LiteLLM/Vertex accept the field for these models.
+        is_vertex_model_rejecting_output_config = (
+            is_vertex_ai
+            and _is_vertex_model_rejecting_output_config(self.config.model_name)
         )
 
         #########################
@@ -301,7 +314,7 @@ class LitellmLLM(LLM):
         # Temperature
         temperature = 1 if is_reasoning else self._temperature
 
-        if stream and not is_vertex_opus_4_5:
+        if stream and not is_vertex_model_rejecting_output_config:
             optional_kwargs["stream_options"] = {"include_usage": True}
 
         # Note, there is a reasoning_effort parameter in LiteLLM but it is completely jank and does not work for any
@@ -310,7 +323,7 @@ class LitellmLLM(LLM):
             is_reasoning
             # The default of this parameter not set is surprisingly not the equivalent of an Auto but is actually Off
             and reasoning_effort != ReasoningEffort.OFF
-            and not is_vertex_opus_4_5
+            and not is_vertex_model_rejecting_output_config
         ):
             if is_openai_model:
                 # OpenAI API does not accept reasoning params for GPT 5 chat models

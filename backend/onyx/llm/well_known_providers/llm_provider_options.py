@@ -215,6 +215,23 @@ def model_configurations_for_provider(
 ) -> list[ModelConfigurationView]:
     recommended_visible_models = llm_recommendations.get_visible_models(provider_name)
     recommended_visible_models_names = [m.name for m in recommended_visible_models]
+
+    # Preserve provider-defined ordering while de-duplicating.
+    model_names: list[str] = []
+    seen_model_names: set[str] = set()
+    for model_name in (
+        fetch_models_for_provider(provider_name) + recommended_visible_models_names
+    ):
+        if model_name in seen_model_names:
+            continue
+        seen_model_names.add(model_name)
+        model_names.append(model_name)
+
+    # Vertex model list can be large and mixed-vendor; alphabetical ordering
+    # makes model discovery easier in admin selection UIs.
+    if provider_name == VERTEXAI_PROVIDER_NAME:
+        model_names = sorted(model_names, key=str.lower)
+
     return [
         ModelConfigurationView(
             name=model_name,
@@ -222,8 +239,7 @@ def model_configurations_for_provider(
             max_input_tokens=get_max_input_tokens(model_name, provider_name),
             supports_image_input=model_supports_image_input(model_name, provider_name),
         )
-        for model_name in set(fetch_models_for_provider(provider_name))
-        | set(recommended_visible_models_names)
+        for model_name in model_names
     ]
 
 

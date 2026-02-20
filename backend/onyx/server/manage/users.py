@@ -608,7 +608,8 @@ def list_all_users_basic_info(
     return [
         MinimalUserSnapshot(id=user.id, email=user.email)
         for user in users
-        if include_api_keys or not is_api_key_email_address(user.email)
+        if user.role != UserRole.SLACK_USER
+        and (include_api_keys or not is_api_key_email_address(user.email))
     ]
 
 

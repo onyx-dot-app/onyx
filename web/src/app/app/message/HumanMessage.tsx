@@ -192,10 +192,10 @@ const HumanMessage = React.memo(function HumanMessage({
           />
         ) : typeof content === "string" ? (
           <>
-            <div className="md:max-w-[25rem] flex basis-[100%] md:basis-auto justify-end md:order-1">
+            <div className="md:max-w-[37.5rem] flex basis-[100%] md:basis-auto justify-end md:order-1">
               <div
                 className={
-                  "max-w-[25rem] whitespace-break-spaces rounded-t-16 rounded-bl-16 bg-background-tint-02 py-2 px-3"
+                  "max-w-[30rem] md:max-w-[37.5rem] whitespace-break-spaces rounded-t-16 rounded-bl-16 bg-background-tint-02 py-2 px-3"
                 }
                 onCopy={(e) => {
                   const selection = window.getSelection();
@@ -214,7 +214,7 @@ const HumanMessage = React.memo(function HumanMessage({
                 </Text>
               </div>
             </div>
-            {onEdit && !isEditing && (!files || files.length === 0) && (
+            {onEdit && !isEditing && (
               <div className="flex flex-row p-1 opacity-0 group-hover:opacity-100 transition-opacity">
                 <CopyIconButton
                   getCopyText={() => content}
@@ -236,7 +236,7 @@ const HumanMessage = React.memo(function HumanMessage({
             <div
               className={cn(
                 "my-auto",
-                onEdit && !isEditing && (!files || files.length === 0)
+                onEdit && !isEditing
                   ? "opacity-0 group-hover:opacity-100 transition-opacity"
                   : "invisible"
               )}

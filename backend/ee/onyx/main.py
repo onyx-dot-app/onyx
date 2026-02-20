@@ -31,6 +31,7 @@ from ee.onyx.server.query_and_chat.query_backend import (
 from ee.onyx.server.query_and_chat.search_backend import router as search_router
 from ee.onyx.server.query_history.api import router as query_history_router
 from ee.onyx.server.reporting.usage_export_api import router as usage_export_router
+from ee.onyx.server.scim.api import scim_router
 from ee.onyx.server.seeding import seed_db
 from ee.onyx.server.tenants.api import router as tenants_router
 from ee.onyx.server.token_rate_limits.api import (
@@ -161,6 +162,11 @@ def get_application() -> FastAPI:
     if MULTI_TENANT:
         # Tenant management
         include_router_with_global_prefix_prepended(application, tenants_router)
+
+    # SCIM 2.0 — protocol endpoints (unauthenticated by Onyx session auth;
+    # they use their own SCIM bearer token auth).
+    # Not behind APP_API_PREFIX because IdPs expect /scim/v2/... directly.
+    application.include_router(scim_router)
 
     # Ensure all routes have auth enabled or are explicitly marked as public
     check_ee_router_auth(application)

@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="refresh" content="15" />
+    <title>Craft — Starting up</title>
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+          monospace;
+        background: linear-gradient(to bottom right, #030712, #111827, #030712);
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 1.5rem;
+        padding: 2rem;
+      }
+
+      .terminal {
+        width: 100%;
+        max-width: 580px;
+        border: 2px solid #374151;
+        border-radius: 2px;
+      }
+
+      .titlebar {
+        background: #1f2937;
+        padding: 0.5rem 0.75rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        border-bottom: 1px solid #374151;
+      }
+
+      .btn {
+        width: 12px;
+        height: 12px;
+        border-radius: 2px;
+        flex-shrink: 0;
+      }
+      .btn-red {
+        background: #ef4444;
+      }
+      .btn-yellow {
+        background: #eab308;
+      }
+      .btn-green {
+        background: #22c55e;
+      }
+
+      .title-label {
+        flex: 1;
+        text-align: center;
+        font-size: 0.75rem;
+        color: #6b7280;
+        margin-right: 36px;
+      }
+
+      .body {
+        background: #111827;
+        padding: 1.5rem;
+        min-height: 200px;
+        font-size: 0.875rem;
+        color: #d1d5db;
+        display: flex;
+        align-items: flex-start;
+        gap: 0.375rem;
+      }
+
+      .prompt {
+        color: #10b981;
+        user-select: none;
+      }
+
+      .tagline {
+        font-size: 0.8125rem;
+        color: #4b5563;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="terminal">
+      <div class="titlebar">
+        <div class="btn btn-red"></div>
+        <div class="btn btn-yellow"></div>
+        <div class="btn btn-green"></div>
+        <span class="title-label">crafting_table</span>
+      </div>
+      <div class="body">
+        <span class="prompt">/&gt;</span>
+        <span>Sandbox is asleep...</span>
+      </div>
+    </div>
+    <p class="tagline">
+      Ask the owner to open their Craft session to wake it up.
+    </p>
+  </body>
+</html>

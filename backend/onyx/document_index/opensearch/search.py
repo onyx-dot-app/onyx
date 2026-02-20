@@ -6,13 +6,16 @@ from typing import Any
 from uuid import UUID
 
 from onyx.configs.app_configs import DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S
+from onyx.configs.app_configs import OPENSEARCH_EXPLAIN_ENABLED
 from onyx.configs.app_configs import OPENSEARCH_PROFILING_DISABLED
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import INDEX_SEPARATOR
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import Tag
 from onyx.document_index.interfaces_new import TenantState
-from onyx.document_index.opensearch.constants import DEFAULT_K_NUM_CANDIDATES
+from onyx.document_index.opensearch.constants import (
+    DEFAULT_NUM_HYBRID_SEARCH_CANDIDATES,
+)
 from onyx.document_index.opensearch.constants import HYBRID_SEARCH_NORMALIZATION_WEIGHTS
 from onyx.document_index.opensearch.schema import ACCESS_CONTROL_LIST_FIELD_NAME
 from onyx.document_index.opensearch.schema import ANCESTOR_HIERARCHY_NODE_IDS_FIELD_NAME
@@ -240,6 +243,9 @@ class DocumentQuery:
         Returns:
             A dictionary representing the final hybrid search query.
         """
+        # WARNING: Profiling does not work with hybrid search; do not add it at
+        # this level. See https://github.com/opensearch-project/neural-search/issues/1255
+
         if num_hits > DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW:
             raise ValueError(
                 f"Bug: num_hits ({num_hits}) is greater than the current maximum allowed "
@@ -247,7 +253,7 @@ class DocumentQuery:
             )
 
         hybrid_search_subqueries = DocumentQuery._get_hybrid_search_subqueries(
-            query_text, query_vector, num_candidates=DEFAULT_K_NUM_CANDIDATES
+            query_text, query_vector
         )
         hybrid_search_filters = DocumentQuery._get_search_filters(
             tenant_state=tenant_state,
@@ -275,16 +281,20 @@ class DocumentQuery:
         hybrid_search_query: dict[str, Any] = {
             "hybrid": {
                 "queries": hybrid_search_subqueries,
-                # Applied to all the sub-queries. Source:
+                # Max results per subquery per shard before aggregation. Ensures keyword and vector
+                # subqueries contribute equally to the candidate pool for hybrid fusion.
+                # Sources:
+                # https://docs.opensearch.org/latest/vector-search/ai-search/hybrid-search/pagination/
+                # https://opensearch.org/blog/navigating-pagination-in-hybrid-queries-with-the-pagination_depth-parameter/
+                "pagination_depth": DEFAULT_NUM_HYBRID_SEARCH_CANDIDATES,
+                # Applied to all the sub-queries independently (this avoids having subqueries having a lot of results thrown out).
+                # Sources:
                 # https://docs.opensearch.org/latest/query-dsl/compound/hybrid/
+                # https://opensearch.org/blog/introducing-common-filter-support-for-hybrid-search-queries
                 # Does AND for each filter in the list.
                 "filter": {"bool": {"filter": hybrid_search_filters}},
             }
         }
-
-        # NOTE: By default, hybrid search retrieves "size"-many results from
-        # each OpenSearch shard before aggregation. Source:
-        # https://docs.opensearch.org/latest/vector-search/ai-search/hybrid-search/pagination/
 
         final_hybrid_search_body: dict[str, Any] = {
             "query": hybrid_search_query,
@@ -292,8 +302,10 @@ class DocumentQuery:
             "highlight": match_highlights_configuration,
             "timeout": f"{DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S}s",
         }
-        # WARNING: Profiling does not work with hybrid search; do not add it at
-        # this level. See https://github.com/opensearch-project/neural-search/issues/1255
+
+        # Explain is for scoring breakdowns.
+        if OPENSEARCH_EXPLAIN_ENABLED:
+            final_hybrid_search_body["explain"] = True
 
         return final_hybrid_search_body
 
@@ -355,7 +367,12 @@ class DocumentQuery:
 
     @staticmethod
     def _get_hybrid_search_subqueries(
-        query_text: str, query_vector: list[float], num_candidates: int
+        query_text: str,
+        query_vector: list[float],
+        # The default number of neighbors to consider for knn vector similarity search.
+        # This is higher than the number of results because the scoring is hybrid.
+        # for a detailed breakdown, see where the default value is set.
+        vector_candidates: int = DEFAULT_NUM_HYBRID_SEARCH_CANDIDATES,
     ) -> list[dict[str, Any]]:
         """Returns subqueries for hybrid search.
 
@@ -367,9 +384,8 @@ class DocumentQuery:
 
         Matches:
           - Title vector
-          - Title keyword
           - Content vector
-          - Content keyword + phrase
+          - Keyword (title + content, match and phrase)
 
         Normalization is not performed here.
         The weights of each of these subqueries should be configured in a search
@@ -390,9 +406,9 @@ class DocumentQuery:
         NOTE: Options considered and rejected:
         - minimum_should_match: Since it's hybrid search and users often provide semantic queries, there is often a lot of terms,
           and very low number of meaningful keywords (and a low ratio of keywords).
-        - fuzziness AUTO: typo tolerance (0/1/2 edit distance by term length). This is reasonable but in reality seeing the
-          user usage patterns, this is not very common and people tend to not be confused when a miss happens for this reason.
-          In testing datasets, this makes recall slightly worse.
+        - fuzziness AUTO: typo tolerance (0/1/2 edit distance by term length). It's mostly for typos as the analyzer ("english by
+          default") already does some stemming and tokenization. In testing datasets, this makes recall slightly worse. It also is
+          less performant so not really any reason to do it.
 
         Args:
             query_text: The text of the query to search for.
@@ -401,64 +417,56 @@ class DocumentQuery:
                 similarity search.
         """
         # Build sub-queries for hybrid search. Order must match normalization
-        # pipeline weights: title vector, title keyword, content vector,
-        # content keyword.
+        # pipeline weights: title vector, content vector, keyword (title + content).
         hybrid_search_queries: list[dict[str, Any]] = [
             # 1. Title vector search
             {
                 "knn": {
                     TITLE_VECTOR_FIELD_NAME: {
                         "vector": query_vector,
-                        "k": num_candidates,
+                        "k": vector_candidates,
                     }
                 }
             },
-            # 2. Title keyword + phrase search.
-            {
-                "bool": {
-                    "should": [
-                        {
-                            "match": {
-                                TITLE_FIELD_NAME: {
-                                    "query": query_text,
-                                    # operator "or" = match doc if any query term matches (default, explicit for clarity).
-                                    "operator": "or",
-                                }
-                            }
-                        },
-                        {
-                            "match_phrase": {
-                                TITLE_FIELD_NAME: {
-                                    "query": query_text,
-                                    # Slop = 1 allows one extra word or transposition in phrase match.
-                                    "slop": 1,
-                                    # Boost phrase over bag-of-words; exact phrase is a stronger signal.
-                                    "boost": 1.5,
-                                }
-                            }
-                        },
-                    ]
-                }
-            },
-            # 3. Content vector search
+            # 2. Content vector search
             {
                 "knn": {
                     CONTENT_VECTOR_FIELD_NAME: {
                         "vector": query_vector,
-                        "k": num_candidates,
+                        "k": vector_candidates,
                     }
                 }
             },
-            # 4. Content keyword + phrase search.
+            # 3. Keyword (title + content) match and phrase search.
             {
                 "bool": {
                     "should": [
                         {
                             "match": {
+                                TITLE_FIELD_NAME: {
+                                    "query": query_text,
+                                    "operator": "or",
+                                    # The title fields are strongly discounted as they are included in the content.
+                                    # It just acts as a minor boost
+                                    "boost": 0.1,
+                                }
+                            }
+                        },
+                        {
+                            "match_phrase": {
+                                TITLE_FIELD_NAME: {
+                                    "query": query_text,
+                                    "slop": 1,
+                                    "boost": 0.2,
+                                }
+                            }
+                        },
+                        {
+                            "match": {
                                 CONTENT_FIELD_NAME: {
                                     "query": query_text,
-                                    # operator "or" = match doc if any query term matches (default, explicit for clarity).
                                     "operator": "or",
+                                    "boost": 1.0,
                                 }
                             }
                         },
@@ -466,9 +474,7 @@ class DocumentQuery:
                             "match_phrase": {
                                 CONTENT_FIELD_NAME: {
                                     "query": query_text,
-                                    # Slop = 1 allows one extra word or transposition in phrase match.
                                     "slop": 1,
-                                    # Boost phrase over bag-of-words; exact phrase is a stronger signal.
                                     "boost": 1.5,
                                 }
                             }

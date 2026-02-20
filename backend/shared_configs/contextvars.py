@@ -26,6 +26,12 @@ INDEX_ATTEMPT_INFO_CONTEXTVAR: contextvars.ContextVar[tuple[int, int] | None] = 
     contextvars.ContextVar("index_attempt_info", default=None)
 )
 
+# Set by endpoint context middleware — used for per-endpoint DB pool attribution
+CURRENT_ENDPOINT_CONTEXTVAR: contextvars.ContextVar[str | None] = (
+    contextvars.ContextVar("current_endpoint", default=None)
+)
+
+
 """Utils related to contextvars"""
 
 

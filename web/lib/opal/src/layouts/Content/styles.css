@@ -1,0 +1,266 @@
+/* ---------------------------------------------------------------------------
+   Content — HeadingLayout
+
+   Two icon placement modes (driven by variant):
+     left  (variant="section") : flex-row  — icon beside content
+     top   (variant="heading") : flex-col  — icon above content
+
+   Sizing (icon size, gap, padding, font, line-height) is driven by the
+   sizePreset prop via inline styles + Tailwind classes in the component.
+   --------------------------------------------------------------------------- */
+
+/* ---------------------------------------------------------------------------
+   Layout — icon placement
+   --------------------------------------------------------------------------- */
+
+.opal-content-heading {
+  @apply flex items-start;
+}
+
+.opal-content-heading[data-icon-placement="left"] {
+  @apply flex-row;
+}
+
+.opal-content-heading[data-icon-placement="top"] {
+  @apply flex-col;
+}
+
+/* ---------------------------------------------------------------------------
+   Icon
+   --------------------------------------------------------------------------- */
+
+.opal-content-heading-icon-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.opal-content-heading-icon {
+  color: var(--text-04);
+}
+
+/* ---------------------------------------------------------------------------
+   Body column
+   --------------------------------------------------------------------------- */
+
+.opal-content-heading-body {
+  @apply flex flex-1 flex-col items-start;
+  min-width: 0.0625rem;
+}
+
+/* ---------------------------------------------------------------------------
+   Title row — title (or input) + edit button
+   --------------------------------------------------------------------------- */
+
+.opal-content-heading-title-row {
+  @apply flex items-center w-full;
+  gap: 0.25rem;
+}
+
+.opal-content-heading-title {
+  @apply text-left overflow-hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  padding: 0 0.125rem;
+  min-width: 0.0625rem;
+}
+
+.opal-content-heading-input-sizer {
+  display: inline-grid;
+  align-items: stretch;
+}
+
+.opal-content-heading-input-sizer > * {
+  grid-area: 1 / 1;
+  padding: 0 0.125rem;
+  min-width: 0.0625rem;
+}
+
+.opal-content-heading-input-mirror {
+  visibility: hidden;
+  white-space: pre;
+}
+
+.opal-content-heading-input {
+  @apply bg-transparent outline-none border-none;
+}
+
+/* ---------------------------------------------------------------------------
+   Edit button — visible only on hover of the outer container
+   --------------------------------------------------------------------------- */
+
+.opal-content-heading-edit-button {
+  @apply opacity-0 transition-opacity shrink-0;
+}
+
+.opal-content-heading:hover .opal-content-heading-edit-button {
+  @apply opacity-100;
+}
+
+/* ---------------------------------------------------------------------------
+   Description
+   --------------------------------------------------------------------------- */
+
+.opal-content-heading-description {
+  @apply text-left w-full;
+  padding: 0 0.125rem;
+}
+
+/* ===========================================================================
+   Content — LabelLayout
+
+   Always inline (flex-row). Icon color varies per sizePreset and is applied
+   via Tailwind class from the component.
+   =========================================================================== */
+
+/* ---------------------------------------------------------------------------
+   Layout
+   --------------------------------------------------------------------------- */
+
+.opal-content-label {
+  @apply flex flex-row items-start;
+}
+
+/* ---------------------------------------------------------------------------
+   Icon
+   --------------------------------------------------------------------------- */
+
+.opal-content-label-icon-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ---------------------------------------------------------------------------
+   Body column
+   --------------------------------------------------------------------------- */
+
+.opal-content-label-body {
+  @apply flex flex-1 flex-col items-start;
+  min-width: 0.0625rem;
+}
+
+/* ---------------------------------------------------------------------------
+   Title row — title (or input) + edit button
+   --------------------------------------------------------------------------- */
+
+.opal-content-label-title-row {
+  @apply flex items-center w-full;
+  gap: 0.25rem;
+}
+
+.opal-content-label-title {
+  @apply text-left overflow-hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  padding: 0 0.125rem;
+  min-width: 0.0625rem;
+}
+
+.opal-content-label-input-sizer {
+  display: inline-grid;
+  align-items: stretch;
+}
+
+.opal-content-label-input-sizer > * {
+  grid-area: 1 / 1;
+  padding: 0 0.125rem;
+  min-width: 0.0625rem;
+}
+
+.opal-content-label-input-mirror {
+  visibility: hidden;
+  white-space: pre;
+}
+
+.opal-content-label-input {
+  @apply bg-transparent outline-none border-none;
+}
+
+/* ---------------------------------------------------------------------------
+   Aux icon
+   --------------------------------------------------------------------------- */
+
+.opal-content-label-aux-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ---------------------------------------------------------------------------
+   Edit button — visible only on hover of the outer container
+   --------------------------------------------------------------------------- */
+
+.opal-content-label-edit-button {
+  @apply opacity-0 transition-opacity shrink-0;
+}
+
+.opal-content-label:hover .opal-content-label-edit-button {
+  @apply opacity-100;
+}
+
+/* ---------------------------------------------------------------------------
+   Description
+   --------------------------------------------------------------------------- */
+
+.opal-content-label-description {
+  @apply text-left w-full;
+  padding: 0 0.125rem;
+}
+
+/* ===========================================================================
+   Content — BodyLayout
+
+   Three orientation modes (driven by orientation prop):
+     inline  : flex-row         — icon left, title right
+     vertical: flex-col         — icon top, title below
+     reverse : flex-row-reverse — title left, icon right
+
+   Icon color is always text-03. Title color varies by prominence
+   (text-04 default, text-03 muted) and is applied via Tailwind class.
+   =========================================================================== */
+
+/* ---------------------------------------------------------------------------
+   Layout — orientation
+   --------------------------------------------------------------------------- */
+
+.opal-content-body {
+  @apply flex items-start;
+}
+
+.opal-content-body[data-orientation="inline"] {
+  @apply flex-row;
+}
+
+.opal-content-body[data-orientation="vertical"] {
+  @apply flex-col;
+}
+
+.opal-content-body[data-orientation="reverse"] {
+  @apply flex-row-reverse;
+}
+
+/* ---------------------------------------------------------------------------
+   Icon
+   --------------------------------------------------------------------------- */
+
+.opal-content-body-icon-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ---------------------------------------------------------------------------
+   Title
+   --------------------------------------------------------------------------- */
+
+.opal-content-body-title {
+  @apply text-left overflow-hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  padding: 0 0.125rem;
+  min-width: 0.0625rem;
+}

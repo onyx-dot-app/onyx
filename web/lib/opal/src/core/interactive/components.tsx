@@ -45,30 +45,34 @@ type InteractiveBaseVariantProps =
  * - `"md"` — 1.75rem (28px), standard compact size
  * - `"sm"` — 1.5rem (24px), for denser UIs
  * - `"xs"` — 1.25rem (20px), for inline elements
+ * - `"2xs"` — 1rem (16px), for micro elements
  * - `"fit"` — Shrink-wraps to content height (`h-fit`), for variable-height layouts
  */
 type InteractiveContainerHeightVariant =
-  keyof typeof interactiveContainerHeightVariants;
-const interactiveContainerHeightVariants = {
-  lg: "h-[2.25rem]",
-  md: "h-[1.75rem]",
-  sm: "h-[1.5rem]",
-  xs: "h-[1.25rem]",
-  fit: "h-fit",
+  keyof typeof interactiveContainerSizeVariants;
+const interactiveContainerSizeVariants = {
+  lg: { height: "h-[2.25rem]", minWidth: "min-w-[2.25rem]", padding: "p-2" },
+  md: { height: "h-[1.75rem]", minWidth: "min-w-[1.75rem]", padding: "p-1" },
+  sm: { height: "h-[1.5rem]", minWidth: "min-w-[1.5rem]", padding: "p-1" },
+  xs: {
+    height: "h-[1.25rem]",
+    minWidth: "min-w-[1.25rem]",
+    padding: "p-0.5",
+  },
+  "2xs": { height: "h-[1rem]", minWidth: "min-w-[1rem]", padding: "p-0.5" },
+  fit: { height: "h-fit", minWidth: "", padding: "p-0" },
 } as const;
-const interactiveContainerMinWidthVariants = {
-  lg: "min-w-[2.25rem]",
-  md: "min-w-[1.75rem]",
-  sm: "min-w-[1.5rem]",
-  xs: "min-w-[1.25rem]",
-  fit: "",
-} as const;
-const interactiveContainerPaddingVariants = {
-  lg: "p-2",
-  md: "p-1",
-  sm: "p-1",
-  xs: "p-0.5",
-  fit: "",
+
+/**
+ * Width presets for `Interactive.Container`.
+ *
+ * - `"auto"` — Shrink-wraps to content width (default)
+ * - `"full"` — Stretches to fill the parent's width (`w-full`)
+ */
+type InteractiveContainerWidthVariant = "auto" | "full";
+const interactiveContainerWidthVariants = {
+  auto: "w-auto",
+  full: "w-full",
 } as const;
 
 /**
@@ -82,6 +86,7 @@ type InteractiveContainerRoundingVariant =
 const interactiveContainerRoundingVariants = {
   default: "rounded-12",
   compact: "rounded-08",
+  mini: "rounded-04",
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -354,11 +359,22 @@ interface InteractiveContainerProps
    * - `"md"` — 1.75rem (28px), standard compact size
    * - `"sm"` — 1.5rem (24px), for denser UIs
    * - `"xs"` — 1.25rem (20px), for inline elements
+   * - `"2xs"` — 1rem (16px), for micro elements
    * - `"fit"` — Shrink-wraps to content height (`h-fit`)
    *
    * @default "lg"
    */
   heightVariant?: InteractiveContainerHeightVariant;
+
+  /**
+   * Width preset controlling the container's horizontal size.
+   *
+   * - `"auto"` — Shrink-wraps to content width
+   * - `"full"` — Stretches to fill the parent's width (`w-full`)
+   *
+   * @default "auto"
+   */
+  widthVariant?: InteractiveContainerWidthVariant;
 }
 
 /**
@@ -377,7 +393,7 @@ interface InteractiveContainerProps
  * // Standard card-like container
  * <Interactive.Base>
  *   <Interactive.Container border>
- *     <LineItemLayout icon={SvgIcon} title="Option" />
+ *     <Content icon={SvgIcon} title="Option" />
  *   </Interactive.Container>
  * </Interactive.Base>
  *
@@ -397,6 +413,7 @@ function InteractiveContainer({
   border,
   roundingVariant = "default",
   heightVariant = "lg",
+  widthVariant = "auto",
   ...props
 }: InteractiveContainerProps) {
   // Radix Slot injects className, style, href, target, rel, and other
@@ -416,14 +433,17 @@ function InteractiveContainer({
     target?: string;
     rel?: string;
   };
+  const { height, minWidth, padding } =
+    interactiveContainerSizeVariants[heightVariant];
   const sharedProps = {
     ...rest,
     className: cn(
       "interactive-container",
       interactiveContainerRoundingVariants[roundingVariant],
-      interactiveContainerHeightVariants[heightVariant],
-      interactiveContainerMinWidthVariants[heightVariant],
-      interactiveContainerPaddingVariants[heightVariant],
+      height,
+      minWidth,
+      padding,
+      interactiveContainerWidthVariants[widthVariant],
       slotClassName
     ),
     "data-border": border ? ("true" as const) : undefined,
@@ -501,5 +521,6 @@ export {
   type InteractiveBaseSelectVariantProps,
   type InteractiveContainerProps,
   type InteractiveContainerHeightVariant,
+  type InteractiveContainerWidthVariant,
   type InteractiveContainerRoundingVariant,
 };

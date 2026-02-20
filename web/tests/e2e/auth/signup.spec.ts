@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { expectScreenshot } from "../utils/visualRegression";
+import { expectScreenshot } from "@tests/e2e/utils/visualRegression";
 
 // These tests exercise the signup (user registration) flow.
 // They clear cookies to start unauthenticated, then drive the signup form.

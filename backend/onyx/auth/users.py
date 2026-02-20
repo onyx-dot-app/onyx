@@ -121,6 +121,7 @@ from onyx.db.pat import fetch_user_for_pat
 from onyx.db.users import get_user_by_email
 from onyx.redis.redis_pool import get_async_redis_connection
 from onyx.redis.redis_pool import get_redis_client
+from onyx.server.settings.store import load_settings
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
@@ -136,6 +137,8 @@ from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+
+REGISTER_INVITE_ONLY_CODE = "REGISTER_INVITE_ONLY"
 
 
 def is_user_admin(user: User) -> bool:
@@ -208,22 +211,34 @@ def anonymous_user_enabled(*, tenant_id: str | None = None) -> bool:
     return int(value.decode("utf-8")) == 1
 
 
+def workspace_invite_only_enabled() -> bool:
+    settings = load_settings()
+    return settings.invite_only_enabled
+
+
 def verify_email_is_invited(email: str) -> None:
     if AUTH_TYPE in {AuthType.SAML, AuthType.OIDC}:
         # SSO providers manage membership; allow JIT provisioning regardless of invites
         return
 
-    whitelist = get_invited_users()
-    if not whitelist:
+    if not workspace_invite_only_enabled():
         return
 
+    whitelist = get_invited_users()
+
     if not email:
-        raise PermissionError("Email must be specified")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"reason": "Email must be specified"},
+        )
 
     try:
         email_info = validate_email(email, check_deliverability=False)
     except EmailUndeliverableError:
-        raise PermissionError("Email is not valid")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"reason": "Email is not valid"},
+        )
 
     for email_whitelist in whitelist:
         try:
@@ -240,7 +255,13 @@ def verify_email_is_invited(email: str) -> None:
         if email_info.normalized.lower() == email_info_whitelist.normalized.lower():
             return
 
-    raise PermissionError("User not on allowed user whitelist")
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail={
+            "code": REGISTER_INVITE_ONLY_CODE,
+            "reason": "This workspace is invite-only. Please ask your admin to invite you.",
+        },
+    )
 
 
 def verify_email_in_whitelist(email: str, tenant_id: str) -> None:
