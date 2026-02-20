@@ -137,7 +137,7 @@ The deployment mode affects:
 - Put tasks under `background/celery/tasks/` or `ee/background/celery/tasks`
 - Never enqueue a task without an expiration. Always supply `expires=` when
   sending tasks, either from the beat schedule or directly from another task. It
-  should never be acceptible to submit code which enqueues tasks without an
+  should never be acceptable to submit code which enqueues tasks without an
   expiration, as doing so can lead to unbounded task queue growth.
 
 **Defining APIs**:
