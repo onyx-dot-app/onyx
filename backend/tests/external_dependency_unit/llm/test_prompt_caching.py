@@ -282,12 +282,11 @@ def test_anthropic_prompt_caching_reduces_costs(
     Anthropic requires explicit cache_control parameters.
     """
     # Create Anthropic LLM
-    # NOTE: prompt caching support is model-specific; `claude-3-haiku-20240307` is known
-    # to return cache_creation/cache_read usage metrics, while some newer aliases may not.
+    # NOTE: prompt caching support is model-specific.
     llm = LitellmLLM(
         api_key=os.environ["ANTHROPIC_API_KEY"],
         model_provider="anthropic",
-        model_name="claude-3-haiku-20240307",
+        model_name="claude-haiku-4-5-20251001",
         max_input_tokens=200000,
     )
 
