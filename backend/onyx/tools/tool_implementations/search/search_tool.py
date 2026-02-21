@@ -319,6 +319,9 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 
             try:
                 slack_bots = fetch_slack_bots(db_session)
+                if not slack_bots:
+                    return None, None, {}
+
                 tenant_slack_bot = next(
                     (bot for bot in slack_bots if bot.enabled and bot.user_token),
                     None,
@@ -349,6 +352,9 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 federated_oauth_tokens = list_federated_connector_oauth_tokens(
                     db_session, self.user.id
                 )
+                if not federated_oauth_tokens:
+                    return access_token, bot_token, entities
+
                 slack_oauth_token = next(
                     (
                         token
@@ -554,6 +560,11 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             # SearchSettings → materialise EmbeddingModel while session is
             # open (forces lazy-load of cloud_provider properties)
             search_settings = get_current_search_settings(db_session)
+            if not search_settings:
+                raise RuntimeError(
+                    "No search settings configured — cannot run internal search"
+                )
+
             embedding_model = EmbeddingModel.from_db_model(
                 search_settings=search_settings,
                 server_host=MODEL_SERVER_HOST,
@@ -577,18 +588,29 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             user_file_ids = (
                 [uf.id for uf in self.persona.user_files] if self.persona else None
             )
-            federated_retrieval_infos = get_federated_retrieval_functions(
-                db_session=db_session,
-                user_id=self.user.id if self.user else None,
-                source_types=prefetch_source_types,
-                document_set_names=persona_document_sets,
-                user_file_ids=user_file_ids,
+            federated_retrieval_infos = (
+                get_federated_retrieval_functions(
+                    db_session=db_session,
+                    user_id=self.user.id if self.user else None,
+                    source_types=prefetch_source_types,
+                    document_set_names=persona_document_sets,
+                    user_file_ids=user_file_ids,
+                )
+                or []
             )
 
-            # Slack tokens and entity config
-            slack_access_token, slack_bot_token, slack_entities = (
-                self._prefetch_slack_data(db_session)
-            )
+            # Slack tokens and entity config — only prefetch when Slack
+            # search is enabled or we're in a Slack bot context.
+            if self.enable_slack_search or self.slack_context:
+                slack_access_token, slack_bot_token, slack_entities = (
+                    self._prefetch_slack_data(db_session)
+                )
+            else:
+                slack_access_token, slack_bot_token, slack_entities = (
+                    None,
+                    None,
+                    {},
+                )
         # Session is closed here — all parallel work uses plain Python objects only
 
         if QUERIES_FIELD not in llm_kwargs:
@@ -769,6 +791,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 
         # Run all searches in parallel (Vespa queries + Slack)
         all_search_results = run_functions_tuples_in_parallel(search_functions)
+        if not all_search_results:
+            all_search_results = []
 
         # Merge results using weighted Reciprocal Rank Fusion
         # This intelligently combines rankings from different queries
@@ -781,6 +805,17 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # We can disregard all of the chunks that exceed the num_hits parameter since it's not valid to have
         # documents/contents from things that aren't returned to the user on the frontend
         top_sections = merge_individual_chunks(top_chunks)[: override_kwargs.num_hits]
+
+        if not top_sections:
+            logger.info("Search tool - no results found, returning empty response")
+            return ToolResponse(
+                rich_response=SearchDocsResponse(
+                    search_docs=[],
+                    citation_mapping={},
+                    displayed_docs=None,
+                ),
+                llm_facing_response="",
+            )
 
         # Convert InferenceSections to SearchDocs for emission
         search_docs = convert_inference_sections_to_search_docs(
