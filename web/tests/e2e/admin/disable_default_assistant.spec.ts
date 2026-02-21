@@ -188,12 +188,20 @@ test.describe("Disable Default Assistant Setting @exclusive", () => {
     await page.goto("/admin/configuration/chat-preferences");
     await page.waitForLoadState("networkidle");
 
+    // Wait for the page to fully render (page title signals form is loaded)
+    await expect(page.locator('[aria-label="admin-page-title"]')).toHaveText(
+      "Chat Preferences",
+      { timeout: 10000 }
+    );
+
     // The new page wraps Connectors + Actions & Tools in <Disabled disabled={values.disable_default_assistant}>
     // When disabled, the section should have reduced opacity / disabled styling
     // The "Modify Prompt" button should still be accessible (it's outside the Disabled wrapper)
-    await expect(
-      page.getByRole("button", { name: "Modify Prompt" })
-    ).toBeVisible({ timeout: 10000 });
+    // Use text locator (Opal Button wraps text in Interactive.Base > Slot which may
+    // not expose role="button" to Playwright's getByRole)
+    await expect(page.getByText("Modify Prompt")).toBeVisible({
+      timeout: 5000,
+    });
 
     // The "Actions & Tools" section text should still be present but visually disabled
     await expect(page.getByText("Actions & Tools")).toBeVisible();

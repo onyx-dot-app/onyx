@@ -735,7 +735,7 @@ test.describe("Default Assistant MCP Integration", () => {
     await page.waitForURL("**/admin/configuration/chat-preferences**");
 
     // Click "Modify Prompt" to open the system prompt modal
-    const modifyButton = page.getByRole("button", { name: "Modify Prompt" });
+    const modifyButton = page.getByText("Modify Prompt");
     await expect(modifyButton).toBeVisible({ timeout: 5000 });
     await modifyButton.click();
 
@@ -764,9 +764,7 @@ test.describe("Default Assistant MCP Integration", () => {
     await page.waitForURL("**/admin/configuration/chat-preferences**");
 
     // Reopen modal and check persisted value
-    const modifyButtonAfter = page.getByRole("button", {
-      name: "Modify Prompt",
-    });
+    const modifyButtonAfter = page.getByText("Modify Prompt");
     await expect(modifyButtonAfter).toBeVisible({ timeout: 5000 });
     await modifyButtonAfter.click();
 

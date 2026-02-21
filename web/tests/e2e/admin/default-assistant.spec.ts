@@ -310,7 +310,7 @@ test.describe("Chat Preferences Admin Page", () => {
 
   test("should edit and save system prompt", async ({ page }) => {
     // Click "Modify Prompt" to open the system prompt modal
-    await page.getByRole("button", { name: "Modify Prompt" }).click();
+    await page.getByText("Modify Prompt").click();
 
     // Wait for modal to appear
     const modal = page.getByRole("dialog");
@@ -355,7 +355,7 @@ test.describe("Chat Preferences Admin Page", () => {
     await page.waitForLoadState("networkidle");
 
     // Reopen modal and verify
-    await page.getByRole("button", { name: "Modify Prompt" }).click();
+    await page.getByText("Modify Prompt").click();
     const modalAfter = page.getByRole("dialog");
     await expect(modalAfter).toBeVisible({ timeout: 5000 });
     await expect(
@@ -368,7 +368,7 @@ test.describe("Chat Preferences Admin Page", () => {
 
   test("should allow empty system prompt", async ({ page }) => {
     // Open system prompt modal
-    await page.getByRole("button", { name: "Modify Prompt" }).click();
+    await page.getByText("Modify Prompt").click();
     const modal = page.getByRole("dialog");
     await expect(modal).toBeVisible({ timeout: 5000 });
 
@@ -386,7 +386,7 @@ test.describe("Chat Preferences Admin Page", () => {
       });
       await page.waitForTimeout(500);
       // Reopen modal
-      await page.getByRole("button", { name: "Modify Prompt" }).click();
+      await page.getByText("Modify Prompt").click();
       await expect(modal).toBeVisible({ timeout: 5000 });
     }
 
@@ -420,7 +420,7 @@ test.describe("Chat Preferences Admin Page", () => {
     await page.waitForLoadState("networkidle");
 
     // Reopen modal and check
-    await page.getByRole("button", { name: "Modify Prompt" }).click();
+    await page.getByText("Modify Prompt").click();
     const modalAfter = page.getByRole("dialog");
     await expect(modalAfter).toBeVisible({ timeout: 5000 });
 
@@ -445,7 +445,7 @@ test.describe("Chat Preferences Admin Page", () => {
 
   test("should handle very long system prompt gracefully", async ({ page }) => {
     // Open system prompt modal
-    await page.getByRole("button", { name: "Modify Prompt" }).click();
+    await page.getByText("Modify Prompt").click();
     const modal = page.getByRole("dialog");
     await expect(modal).toBeVisible({ timeout: 5000 });
 
@@ -484,7 +484,7 @@ test.describe("Chat Preferences Admin Page", () => {
     await page.reload();
     await page.waitForLoadState("networkidle");
 
-    await page.getByRole("button", { name: "Modify Prompt" }).click();
+    await page.getByText("Modify Prompt").click();
     const modalAfter = page.getByRole("dialog");
     await expect(modalAfter).toBeVisible({ timeout: 5000 });
     await expect(
