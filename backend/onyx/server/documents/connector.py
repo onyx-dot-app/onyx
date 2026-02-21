@@ -1073,15 +1073,27 @@ def get_connector_indexing_status(
     parallel_functions: list[tuple[CallableProtocol, tuple[Any, ...]]] = [
         # Get editable connector/credential pairs
         (
-            get_connector_credential_pairs_for_user_parallel,
-            (user, True, None, True, True, False, True, request.source),
+            lambda: get_connector_credential_pairs_for_user_parallel(
+                user, True, None, True, True, False, True, request.source
+            ),
+            (),
         ),
         # Get federated connectors
         (fetch_all_federated_connectors_parallel, ()),
         # Get most recent index attempts
-        (get_latest_index_attempts_parallel, (request.secondary_index, True, False)),
+        (
+            lambda: get_latest_index_attempts_parallel(
+                request.secondary_index, True, False
+            ),
+            (),
+        ),
         # Get most recent finished index attempts
-        (get_latest_index_attempts_parallel, (request.secondary_index, True, True)),
+        (
+            lambda: get_latest_index_attempts_parallel(
+                request.secondary_index, True, True
+            ),
+            (),
+        ),
     ]
 
     if user and user.role == UserRole.ADMIN:
@@ -1098,8 +1110,10 @@ def get_connector_indexing_status(
         parallel_functions.append(
             # Get non-editable connector/credential pairs
             (
-                get_connector_credential_pairs_for_user_parallel,
-                (user, False, None, True, True, False, True, request.source),
+                lambda: get_connector_credential_pairs_for_user_parallel(
+                    user, False, None, True, True, False, True, request.source
+                ),
+                (),
             ),
         )
 
