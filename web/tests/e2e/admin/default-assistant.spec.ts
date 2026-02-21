@@ -20,6 +20,24 @@ function getToolSwitch(page: Page, toolName: string): Locator {
     .first();
 }
 
+/**
+ * Click a tool switch and wait for the PATCH response to complete.
+ * Uses waitForResponse set up *before* the click to avoid race conditions.
+ */
+async function clickToolSwitchAndWaitForSave(
+  page: Page,
+  switchLocator: Locator
+): Promise<void> {
+  const patchPromise = page.waitForResponse(
+    (r) =>
+      r.url().includes("/api/admin/default-assistant") &&
+      r.request().method() === "PATCH",
+    { timeout: 8000 }
+  );
+  await switchLocator.click();
+  await patchPromise;
+}
+
 test.describe("Chat Preferences Admin Page", () => {
   let testCcPairId: number | null = null;
   let webSearchProviderId: number | null = null;
@@ -196,10 +214,7 @@ test.describe("Chat Preferences Admin Page", () => {
     expect(initialState).not.toBe(newState);
 
     // Toggle back to original state
-    await searchSwitch.click();
-    await expect(page.getByText("Tools updated").first()).toBeVisible({
-      timeout: 5000,
-    });
+    await clickToolSwitchAndWaitForSave(page, searchSwitch);
   });
 
   test("should toggle Web Search tool on and off", async ({ page }) => {
@@ -247,10 +262,7 @@ test.describe("Chat Preferences Admin Page", () => {
     expect(initialState).not.toBe(newState);
 
     // Toggle back to original state
-    await webSearchSwitch.click();
-    await expect(page.getByText("Tools updated").first()).toBeVisible({
-      timeout: 5000,
-    });
+    await clickToolSwitchAndWaitForSave(page, webSearchSwitch);
   });
 
   test("should toggle Image Generation tool on and off", async ({ page }) => {
@@ -302,10 +314,7 @@ test.describe("Chat Preferences Admin Page", () => {
     expect(initialState).not.toBe(newState);
 
     // Toggle back to original state
-    await imageGenSwitch.click();
-    await expect(page.getByText("Tools updated").first()).toBeVisible({
-      timeout: 5000,
-    });
+    await clickToolSwitchAndWaitForSave(page, imageGenSwitch);
   });
 
   test("should edit and save system prompt", async ({ page }) => {
@@ -586,12 +595,7 @@ test.describe("Chat Preferences Admin Page", () => {
       const toolSwitch = getToolSwitch(page, toolName);
       const currentState = await toolSwitch.getAttribute("aria-checked");
       if (currentState === "true") {
-        await toolSwitch.click();
-        // Wait for auto-save to complete
-        await expect(page.getByText("Tools updated").first()).toBeVisible({
-          timeout: 5000,
-        });
-        await page.waitForTimeout(500);
+        await clickToolSwitchAndWaitForSave(page, toolSwitch);
         const newState = await toolSwitch.getAttribute("aria-checked");
         console.log(`[toggle-all] Clicked ${toolName}, new state=${newState}`);
       }
@@ -617,11 +621,7 @@ test.describe("Chat Preferences Admin Page", () => {
       const toolSwitch = getToolSwitch(page, toolName);
       const currentState = await toolSwitch.getAttribute("aria-checked");
       if (currentState === "false") {
-        await toolSwitch.click();
-        await expect(page.getByText("Tools updated").first()).toBeVisible({
-          timeout: 5000,
-        });
-        await page.waitForTimeout(500);
+        await clickToolSwitchAndWaitForSave(page, toolSwitch);
         const newState = await toolSwitch.getAttribute("aria-checked");
         console.log(`[toggle-all] Clicked ${toolName}, new state=${newState}`);
       }
@@ -715,11 +715,7 @@ test.describe("Chat Preferences Admin Page", () => {
       const originalState = toolStates[toolName];
 
       if (currentState !== originalState) {
-        await toolSwitch.click();
-        await expect(page.getByText("Tools updated").first()).toBeVisible({
-          timeout: 5000,
-        });
-        await page.waitForTimeout(300);
+        await clickToolSwitchAndWaitForSave(page, toolSwitch);
         needsSave = true;
       }
     }
