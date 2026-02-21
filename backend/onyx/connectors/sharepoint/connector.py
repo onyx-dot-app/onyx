@@ -1962,7 +1962,7 @@ class SharepointConnector(
                 result = self._resolve_drive(site_descriptor, current_drive_name)
                 if result is None:
                     logger.warning(f"Drive '{current_drive_name}' not found, skipping")
-                    checkpoint.current_drive_name = None
+                    self._clear_drive_checkpoint_state(checkpoint)
                     return checkpoint
 
                 drive_id, drive_web_url = result
@@ -1980,7 +1980,7 @@ class SharepointConnector(
                     (start_dt, end_dt),
                     e,
                 )
-                checkpoint.current_drive_name = None
+                self._clear_drive_checkpoint_state(checkpoint)
                 return checkpoint
 
             display_drive_name = SHARED_DOCUMENTS_MAP.get(
