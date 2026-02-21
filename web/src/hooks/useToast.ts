@@ -1,3 +1,5 @@
+"use client";
+
 import { useEffect, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";

@@ -1,17 +1,24 @@
+"use client";
+
 import React, { useState } from "react";
-import Modal from "@/refresh-components/Modal";
-import Button from "@/refresh-components/buttons/Button";
+import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
+import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { Badge } from "@/components/ui/badge";
 import { AccessType } from "@/lib/types";
-import { EditIcon, NewChatIcon, SwapIcon } from "@/components/icons/icons";
 import {
   ConfluenceCredentialJson,
   Credential,
 } from "@/lib/connectors/credentials";
 import { Connector } from "@/lib/connectors/connectors";
-import { SvgAlertTriangle, SvgTrash } from "@opal/icons";
-import { Button as OpalButton } from "@opal/components";
+import {
+  SvgAlertTriangle,
+  SvgBubbleText,
+  SvgCheck,
+  SvgEdit,
+  SvgTrash,
+} from "@opal/icons";
+
 interface CredentialSelectionTableProps {
   credentials: Credential<any>[];
   editableCredentials: Credential<any>[];
@@ -115,21 +122,21 @@ function CredentialSelectionTable({
                     {new Date(credential.time_updated).toLocaleString()}
                   </td>
                   <td className="p-2 flex gap-x-2 content-center mt-auto">
-                    <OpalButton
+                    <Button
                       onClick={async () => {
                         onDeleteCredential(credential);
                       }}
                       disabled={selected || !editable}
                       icon={SvgTrash}
+                      prominence="tertiary"
                     />
                     {onEditCredential && (
-                      <button
+                      <Button
                         disabled={!editable}
                         onClick={() => onEditCredential(credential)}
-                        className="cursor-pointer my-auto"
-                      >
-                        <EditIcon />
-                      </button>
+                        icon={SvgEdit}
+                        prominence="tertiary"
+                      />
                     )}
                   </td>
                 </tr>
@@ -203,31 +210,32 @@ export default function ModifyCredential({
               </Text>
             </Modal.Body>
             <Modal.Footer>
-              <Button
-                onClick={async () => {
-                  onDeleteCredential(confirmDeletionCredential);
-                  setConfirmDeletionCredential(null);
-                }}
-              >
-                Confirm
-              </Button>
-              <Button
-                secondary
-                onClick={() => setConfirmDeletionCredential(null)}
-              >
-                Cancel
-              </Button>
+              <BasicModalFooter
+                cancel={
+                  <Button
+                    prominence="secondary"
+                    onClick={() => setConfirmDeletionCredential(null)}
+                  >
+                    Cancel
+                  </Button>
+                }
+                submit={
+                  <Button
+                    onClick={async () => {
+                      onDeleteCredential(confirmDeletionCredential);
+                      setConfirmDeletionCredential(null);
+                    }}
+                  >
+                    Confirm
+                  </Button>
+                }
+              />
             </Modal.Footer>
           </Modal.Content>
         </Modal>
       )}
 
-      <div className="mb-0">
-        <Text as="p" className="mb-4">
-          Select a credential as needed! Ensure that you have selected a
-          credential with the proper permissions for this connector!
-        </Text>
-
+      <Modal.Body>
         <CredentialSelectionTable
           onDeleteCredential={async (credential: Credential<any | null>) => {
             setConfirmDeletionCredential(credential);
@@ -251,52 +259,48 @@ export default function ModifyCredential({
             }
           }}
         />
+      </Modal.Body>
 
-        {!showIfEmpty && (
-          <div className="flex mt-8 justify-between">
-            {onCreateNew ? (
+      {!showIfEmpty && (
+        <Modal.Footer>
+          <BasicModalFooter
+            cancel={
+              onCreateNew ? (
+                <Button
+                  onClick={onCreateNew}
+                  icon={SvgBubbleText}
+                  prominence="secondary"
+                >
+                  Create
+                </Button>
+              ) : undefined
+            }
+            submit={
               <Button
+                disabled={selectedCredential == null}
                 onClick={() => {
-                  onCreateNew();
-                }}
-                className="bg-background-500 disabled:border-transparent
-              transition-colors duration-150 ease-in disabled:bg-background-300
-              disabled:hover:bg-background-300 hover:bg-background-600 cursor-pointer"
-              >
-                <div className="flex gap-x-2 items-center w-full border-none">
-                  <NewChatIcon className="text-white" />
-                  <p>Create</p>
-                </div>
-              </Button>
-            ) : (
-              <div />
-            )}
-
-            <Button
-              disabled={selectedCredential == null}
-              onClick={() => {
-                if (onSwap && attachedConnector) {
-                  onSwap(selectedCredential!, attachedConnector.id, accessType);
-                  if (close) {
-                    close();
+                  if (onSwap && attachedConnector) {
+                    onSwap(
+                      selectedCredential!,
+                      attachedConnector.id,
+                      accessType
+                    );
+                    if (close) {
+                      close();
+                    }
                   }
-                }
-                if (onSwitch) {
-                  onSwitch(selectedCredential!);
-                }
-              }}
-              className="bg-indigo-500 disabled:border-transparent
-              transition-colors duration-150 ease-in disabled:bg-indigo-300
-              disabled:hover:bg-indigo-300 hover:bg-indigo-600 cursor-pointer"
-            >
-              <div className="flex gap-x-2 items-center w-full border-none">
-                <SwapIcon className="text-white" />
-                <p>Select</p>
-              </div>
-            </Button>
-          </div>
-        )}
-      </div>
+                  if (onSwitch) {
+                    onSwitch(selectedCredential!);
+                  }
+                }}
+                icon={SvgCheck}
+              >
+                Select
+              </Button>
+            }
+          />
+        </Modal.Footer>
+      )}
     </>
   );
 }

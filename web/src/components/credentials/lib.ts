@@ -107,6 +107,24 @@ export function createEditingValidationSchema(json_values: dictionaryType) {
   return Yup.object().shape(schemaFields);
 }
 
+/**
+ * Returns true when the credential template marks a field as optional.
+ *
+ * A field is optional when:
+ *  - it is a boolean toggle (`typeof def === "boolean"`)
+ *  - its template default is `null` (nullable / not-required)
+ *
+ * In the editing flow every field is optional, so callers can pass
+ * `allOptional = true` to short-circuit.
+ */
+export function isOptionalCredentialField(
+  def: unknown,
+  allOptional = false
+): boolean {
+  if (allOptional) return true;
+  return def === null || typeof def === "boolean";
+}
+
 export function createInitialValues(credential: Credential<any>): formType {
   const initialValues: formType = {
     name: credential.name || "",
