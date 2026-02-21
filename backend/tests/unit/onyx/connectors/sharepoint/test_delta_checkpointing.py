@@ -111,7 +111,7 @@ def _build_ready_checkpoint(
 def _setup_connector(monkeypatch: pytest.MonkeyPatch) -> SharepointConnector:
     """Create a connector with common methods mocked."""
     connector = SharepointConnector()
-    connector._graph_client = object()  # type: ignore[assignment]
+    connector._graph_client = object()
     connector.include_site_pages = False
 
     def fake_resolve_drive(
