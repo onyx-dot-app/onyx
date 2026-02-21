@@ -590,7 +590,7 @@ types-requests==2.32.0.20250328
     # via
     #   cohere
     #   onyx
-types-retry==0.9.9.3
+types-retry==0.9.9.20250322
     # via onyx
 types-setuptools==68.0.0.3
     # via onyx
