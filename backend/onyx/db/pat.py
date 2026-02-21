@@ -8,6 +8,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
 from onyx.auth.pat import build_displayable_pat
@@ -46,6 +47,7 @@ async def fetch_user_for_pat(
             (PersonalAccessToken.expires_at.is_(None))
             | (PersonalAccessToken.expires_at > now)
         )
+        .options(selectinload(User.memories))
     )
     if not user:
         return None
