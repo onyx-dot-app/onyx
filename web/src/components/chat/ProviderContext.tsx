@@ -13,6 +13,7 @@ import React, {
 import { useUser } from "@/providers/UserProvider";
 import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
 import { useLLMProviderOptions } from "@/lib/hooks/useLLMProviderOptions";
+import { testDefaultProvider as testDefaultProviderSvc } from "@/lib/llm/svc";
 
 interface ProviderContextType {
   shouldShowConfigurationNeeded: boolean;
@@ -68,17 +69,10 @@ export function ProviderContextProvider({
       (!user || user.role === "admin");
 
     if (shouldCheck) {
-      try {
-        const response = await fetch("/api/admin/llm/test/default", {
-          method: "POST",
-        });
-        const success = response?.ok || false;
-        setDefaultCheckSuccessful(success);
-        if (success) {
-          setDefaultLLMProviderTestComplete();
-        }
-      } catch {
-        setDefaultCheckSuccessful(false);
+      const success = await testDefaultProviderSvc();
+      setDefaultCheckSuccessful(success);
+      if (success) {
+        setDefaultLLMProviderTestComplete();
       }
     }
   }, [user]);
