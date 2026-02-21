@@ -192,14 +192,15 @@ def test_load_from_checkpoint_maps_drive_name(monkeypatch: pytest.MonkeyPatch) -
             "https://example.sharepoint.com/sites/sample/Documents",
         )
 
-    def fake_get_drive_items(
+    def fake_fetch_one_delta_page(
         self: SharepointConnector,  # noqa: ARG001
-        site_descriptor: SiteDescriptor,  # noqa: ARG001
+        page_url: str,  # noqa: ARG001
         drive_id: str,  # noqa: ARG001
-        start: datetime | None,  # noqa: ARG001
-        end: datetime | None,  # noqa: ARG001
-    ) -> Generator[DriveItemData, None, None]:
-        yield sample_item
+        start: datetime | None = None,  # noqa: ARG001
+        end: datetime | None = None,  # noqa: ARG001
+        page_size: int = 200,  # noqa: ARG001
+    ) -> tuple[list[DriveItemData], str | None]:
+        return [sample_item], None
 
     def fake_convert(
         driveitem: DriveItemData,  # noqa: ARG001
@@ -230,8 +231,8 @@ def test_load_from_checkpoint_maps_drive_name(monkeypatch: pytest.MonkeyPatch) -
     )
     monkeypatch.setattr(
         SharepointConnector,
-        "_get_drive_items_for_drive_id",
-        fake_get_drive_items,
+        "_fetch_one_delta_page",
+        fake_fetch_one_delta_page,
     )
     monkeypatch.setattr(
         "onyx.connectors.sharepoint.connector._convert_driveitem_to_document_with_permissions",
