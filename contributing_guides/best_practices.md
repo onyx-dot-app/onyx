@@ -161,4 +161,5 @@ Add clear comments:
 ## Misc
 
 - Any TODOs you add in the code must be accompanied by either the name/username
-  of the owner of that TODO, or an issue number referencing that piece of work.
+  of the owner of that TODO, or an issue number for an issue referencing that
+  piece of work.
