@@ -1421,11 +1421,10 @@ class SharepointConnector(
         URL so that the returned string is fully self-contained and can be
         stored in a checkpoint without needing a separate params dict.
         """
-        EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
         base_url = f"{self.graph_api_base}/drives/{drive_id}/root/delta"
         params = [f"$top={page_size}"]
-        if start is not None and start > EPOCH:
-            token = quote(start.strftime("%Y-%m-%dT%H:%M:%SZ"))
+        if start is not None and start > _EPOCH:
+            token = quote(start.isoformat(timespec="seconds"))
             params.append(f"token={token}")
         return f"{base_url}?{'&'.join(params)}"
 
