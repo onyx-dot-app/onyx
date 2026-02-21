@@ -25,6 +25,7 @@ import {
   SvgFold,
   SvgExternalLink,
 } from "@opal/icons";
+import { Content } from "@opal/layouts";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import useCCPairs from "@/hooks/useCCPairs";
 import { getSourceMetadata } from "@/lib/sources";
@@ -471,19 +472,18 @@ function ChatPreferencesForm() {
                       <EmptyMessage title="No connectors set up" />
                     ) : (
                       <>
-                        {uniqueSources.map((source) => {
+                        {uniqueSources.slice(0, 3).map((source) => {
                           const meta = getSourceMetadata(source);
                           return (
                             <Card
                               key={source}
                               padding={0.75}
-                              className="!w-[10rem]"
+                              className="w-[10rem]"
                             >
-                              <LineItemLayout
+                              <Content
                                 icon={meta.icon}
                                 title={meta.displayName}
-                                variant="secondary"
-                                center
+                                sizePreset="main-ui"
                               />
                             </Card>
                           );
