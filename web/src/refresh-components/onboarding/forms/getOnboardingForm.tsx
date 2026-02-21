@@ -7,6 +7,7 @@ import { OnboardingActions, OnboardingState } from "../types";
 import { OpenAIOnboardingForm } from "./OpenAIOnboardingForm";
 import { AnthropicOnboardingForm } from "./AnthropicOnboardingForm";
 import { OllamaOnboardingForm } from "./OllamaOnboardingForm";
+import { LMStudioOnboardingForm } from "./LMStudioOnboardingForm";
 import { AzureOnboardingForm } from "./AzureOnboardingForm";
 import { BedrockOnboardingForm } from "./BedrockOnboardingForm";
 import { VertexAIOnboardingForm } from "./VertexAIOnboardingForm";
@@ -36,6 +37,10 @@ const PROVIDER_DISPLAY_INFO: Record<
   [LLMProviderName.OPENROUTER]: {
     title: "OpenRouter",
     displayName: "OpenRouter",
+  },
+  [LLMProviderName.LM_STUDIO]: {
+    title: "LM Studio",
+    displayName: "LM Studio",
   },
 };
 
@@ -107,6 +112,17 @@ export function getOnboardingForm({
     case LLMProviderName.OLLAMA_CHAT:
       return (
         <OllamaOnboardingForm
+          llmDescriptor={llmDescriptor}
+          onboardingState={onboardingState}
+          onboardingActions={onboardingActions}
+          open={open}
+          onOpenChange={onOpenChange}
+        />
+      );
+
+    case LLMProviderName.LM_STUDIO:
+      return (
+        <LMStudioOnboardingForm
           llmDescriptor={llmDescriptor}
           onboardingState={onboardingState}
           onboardingActions={onboardingActions}
