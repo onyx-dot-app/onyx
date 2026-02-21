@@ -1671,7 +1671,10 @@ def get_oauth_router(
         if redirect_url is not None:
             authorize_redirect_url = redirect_url
         else:
-            authorize_redirect_url = str(request.url_for(callback_route_name))
+            # Use WEB_DOMAIN instead of request.url_for() to prevent host
+            # header poisoning — request.url_for() trusts the Host header.
+            callback_path = request.app.url_path_for(callback_route_name)
+            authorize_redirect_url = f"{WEB_DOMAIN}{callback_path}"
 
         next_url = request.query_params.get("next", "/")
 
