@@ -759,15 +759,10 @@ test.describe("Default Assistant MCP Integration", () => {
     // Modal should close
     await expect(modal).not.toBeVisible();
 
-    // Reload and verify — wait for config data to load before opening modal
-    const configLoadPromise = page.waitForResponse(
-      (r) =>
-        r.url().includes("/api/admin/default-assistant/configuration") &&
-        r.request().method() === "GET",
-      { timeout: 10000 }
-    );
+    // Reload and verify — wait for all data to load before opening modal
+    // (the modal reads system_prompt from SWR state at click time, so data must be ready)
     await page.reload();
-    await configLoadPromise;
+    await page.waitForLoadState("networkidle");
     await page.waitForURL("**/admin/configuration/chat-preferences**");
 
     // Reopen modal and check persisted value

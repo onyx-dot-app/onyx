@@ -201,24 +201,18 @@ test.describe("Chat Preferences Admin Page", () => {
       timeout: 5000,
     });
 
-    // Refresh page to verify persistence — wait for config data to load
-    const configLoadPromise = page.waitForResponse(
-      (r) =>
-        r.url().includes("/api/admin/default-assistant/configuration") &&
-        r.request().method() === "GET",
-      { timeout: 10000 }
-    );
+    // Refresh page to verify persistence
     await page.reload();
-    await configLoadPromise;
     await page.waitForSelector("text=Internal Search", { timeout: 10000 });
 
-    const newState = await searchSwitch.getAttribute("aria-checked");
+    // Wait for SWR data to load and React to re-render with the persisted state
+    const expectedState = initialState === "true" ? "false" : "true";
+    await expect(searchSwitch).toHaveAttribute("aria-checked", expectedState, {
+      timeout: 10000,
+    });
     console.log(
-      `[toggle] Internal Search after reload aria-checked=${newState}`
+      `[toggle] Internal Search after reload aria-checked=${expectedState}`
     );
-
-    // State should have changed
-    expect(initialState).not.toBe(newState);
 
     // Toggle back to original state
     await clickToolSwitchAndWaitForSave(page, searchSwitch);
@@ -257,23 +251,20 @@ test.describe("Chat Preferences Admin Page", () => {
       timeout: 5000,
     });
 
-    // Refresh page to verify persistence — wait for config data to load
-    const configLoadPromise = page.waitForResponse(
-      (r) =>
-        r.url().includes("/api/admin/default-assistant/configuration") &&
-        r.request().method() === "GET",
-      { timeout: 10000 }
-    );
+    // Refresh page to verify persistence
     await page.reload();
-    await configLoadPromise;
     await page.waitForSelector("text=Web Search", { timeout: 10000 });
 
-    // Check that state persisted
-    const newState = await webSearchSwitch.getAttribute("aria-checked");
-    console.log(`[toggle] Web Search after reload aria-checked=${newState}`);
-
-    // State should have changed
-    expect(initialState).not.toBe(newState);
+    // Wait for SWR data to load and React to re-render with the persisted state
+    const expectedState = initialState === "true" ? "false" : "true";
+    await expect(webSearchSwitch).toHaveAttribute(
+      "aria-checked",
+      expectedState,
+      { timeout: 10000 }
+    );
+    console.log(
+      `[toggle] Web Search after reload aria-checked=${expectedState}`
+    );
 
     // Toggle back to original state
     await clickToolSwitchAndWaitForSave(page, webSearchSwitch);
@@ -314,25 +305,20 @@ test.describe("Chat Preferences Admin Page", () => {
       timeout: 5000,
     });
 
-    // Refresh page to verify persistence — wait for config data to load
-    const configLoadPromise = page.waitForResponse(
-      (r) =>
-        r.url().includes("/api/admin/default-assistant/configuration") &&
-        r.request().method() === "GET",
-      { timeout: 10000 }
-    );
+    // Refresh page to verify persistence
     await page.reload();
-    await configLoadPromise;
     await page.waitForSelector("text=Image Generation", { timeout: 10000 });
 
-    // Check that state persisted
-    const newState = await imageGenSwitch.getAttribute("aria-checked");
-    console.log(
-      `[toggle] Image Generation after reload aria-checked=${newState}`
+    // Wait for SWR data to load and React to re-render with the persisted state
+    const expectedState = initialState === "true" ? "false" : "true";
+    await expect(imageGenSwitch).toHaveAttribute(
+      "aria-checked",
+      expectedState,
+      { timeout: 10000 }
     );
-
-    // State should have changed
-    expect(initialState).not.toBe(newState);
+    console.log(
+      `[toggle] Image Generation after reload aria-checked=${expectedState}`
+    );
 
     // Toggle back to original state
     await clickToolSwitchAndWaitForSave(page, imageGenSwitch);
