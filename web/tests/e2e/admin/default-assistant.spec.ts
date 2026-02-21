@@ -201,8 +201,15 @@ test.describe("Chat Preferences Admin Page", () => {
       timeout: 5000,
     });
 
-    // Refresh page to verify persistence
+    // Refresh page to verify persistence — wait for config data to load
+    const configLoadPromise = page.waitForResponse(
+      (r) =>
+        r.url().includes("/api/admin/default-assistant/configuration") &&
+        r.request().method() === "GET",
+      { timeout: 10000 }
+    );
     await page.reload();
+    await configLoadPromise;
     await page.waitForSelector("text=Internal Search", { timeout: 10000 });
 
     const newState = await searchSwitch.getAttribute("aria-checked");
@@ -250,8 +257,15 @@ test.describe("Chat Preferences Admin Page", () => {
       timeout: 5000,
     });
 
-    // Refresh page to verify persistence
+    // Refresh page to verify persistence — wait for config data to load
+    const configLoadPromise = page.waitForResponse(
+      (r) =>
+        r.url().includes("/api/admin/default-assistant/configuration") &&
+        r.request().method() === "GET",
+      { timeout: 10000 }
+    );
     await page.reload();
+    await configLoadPromise;
     await page.waitForSelector("text=Web Search", { timeout: 10000 });
 
     // Check that state persisted
@@ -300,8 +314,15 @@ test.describe("Chat Preferences Admin Page", () => {
       timeout: 5000,
     });
 
-    // Refresh page to verify persistence
+    // Refresh page to verify persistence — wait for config data to load
+    const configLoadPromise = page.waitForResponse(
+      (r) =>
+        r.url().includes("/api/admin/default-assistant/configuration") &&
+        r.request().method() === "GET",
+      { timeout: 10000 }
+    );
     await page.reload();
+    await configLoadPromise;
     await page.waitForSelector("text=Image Generation", { timeout: 10000 });
 
     // Check that state persisted
