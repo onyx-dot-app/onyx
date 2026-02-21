@@ -1267,7 +1267,8 @@ class SharepointConnector(
         """
         base = f"{self.graph_api_base}/drives/{drive_id}"
         if folder_path:
-            start_url = f"{base}/root:/{folder_path}:/children"
+            encoded_path = quote(folder_path, safe="/")
+            start_url = f"{base}/root:/{encoded_path}:/children"
         else:
             start_url = f"{base}/root/children"
 
