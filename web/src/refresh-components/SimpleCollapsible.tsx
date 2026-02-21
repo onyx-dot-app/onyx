@@ -199,11 +199,11 @@ const Header = React.forwardRef<HTMLDivElement, SimpleCollapsibleHeaderProps>(
           {...props}
         >
           <div ref={boundingRef} className="flex flex-col w-full">
-            <Text as="p" mainContentEmphasis>
+            <Text mainContentEmphasis text04>
               {title}
             </Text>
             {description && (
-              <Text as="p" secondaryBody text03>
+              <Text secondaryBody text03>
                 {description}
               </Text>
             )}

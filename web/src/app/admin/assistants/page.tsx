@@ -112,18 +112,6 @@ function MainContent({
             <CreateButton href="/app/agents/create?admin=true">
               Create Your First Assistant
             </CreateButton>
-            <div className="mt-6 pt-6 border-t border-border">
-              <Text className="text-subtle text-sm">
-                OR go{" "}
-                <a
-                  href="/admin/configuration/default-assistant"
-                  className="text-link underline"
-                >
-                  here
-                </a>{" "}
-                to adjust the Default Assistant
-              </Text>
-            </div>
           </div>
         )}
       </div>

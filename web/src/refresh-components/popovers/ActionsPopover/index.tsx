@@ -411,6 +411,9 @@ export default function ActionsPopover({
     // Filter out tools that are not chat-selectable (visibility set by backend)
     if (!tool.chat_selectable) return false;
 
+    // Always hide File Reader from the actions popover
+    if (tool.in_code_tool_id === FILE_READER_TOOL_ID) return false;
+
     // Special handling for Project Search
     // Ensure Project Search is hidden if no files exist
     if (tool.in_code_tool_id === SEARCH_TOOL_ID && !!currentProjectId) {
@@ -433,14 +436,6 @@ export default function ActionsPopover({
       hasNoConnectors &&
       !isAdmin &&
       !isCurator
-    ) {
-      return false;
-    }
-
-    // Hide File Reader entirely when it's not available (i.e. DISABLE_VECTOR_DB is off)
-    if (
-      tool.in_code_tool_id === FILE_READER_TOOL_ID &&
-      !availableToolIdSet.has(tool.id)
     ) {
       return false;
     }

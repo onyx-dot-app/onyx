@@ -319,19 +319,19 @@ test.describe("Default Assistant MCP Integration", () => {
     );
   });
 
-  test("Admin adds MCP tools to default assistant via default assistant page", async ({
+  test("Admin adds MCP tools to default assistant via chat preferences page", async ({
     page,
   }) => {
     test.skip(!serverId, "MCP server must be created first");
 
     await page.context().clearCookies();
     await loginAs(page, "admin");
-    console.log(`[test] Logged in as admin for default assistant config`);
+    console.log(`[test] Logged in as admin for chat preferences config`);
 
-    // Navigate to default assistant page
-    await page.goto("/admin/configuration/default-assistant");
-    await page.waitForURL("**/admin/configuration/default-assistant**");
-    console.log(`[test] Navigated to default assistant page`);
+    // Navigate to chat preferences page
+    await page.goto("/admin/configuration/chat-preferences");
+    await page.waitForURL("**/admin/configuration/chat-preferences**");
+    console.log(`[test] Navigated to chat preferences page`);
 
     // Wait for page to load
     await expect(page.locator('[aria-label="admin-page-title"]')).toBeVisible({
@@ -339,57 +339,36 @@ test.describe("Default Assistant MCP Integration", () => {
     });
     console.log(`[test] Page loaded`);
 
-    // Scroll to actions section
-    await page.evaluate(() => {
-      window.scrollTo(0, document.body.scrollHeight);
-    });
-    await page.waitForTimeout(300);
-
-    // Find the MCP server section
-    const mcpServerSection = page.getByTestId(`mcp-server-section-${serverId}`);
-    await expect(mcpServerSection).toBeVisible({ timeout: 10000 });
-    console.log(`[test] MCP server section found for server ID ${serverId}`);
-
-    // Scroll section into view
-    await mcpServerSection.scrollIntoViewIfNeeded();
-
-    // Expand the MCP server if collapsed
-    const toggleButton = page.getByTestId(`mcp-server-toggle-${serverId}`);
-    const isExpanded = await toggleButton.getAttribute("aria-expanded");
-    console.log(`[test] MCP server section expanded: ${isExpanded}`);
-    if (isExpanded === "false") {
-      await toggleButton.click();
-      await page.waitForTimeout(300);
-      console.log(`[test] Expanded MCP server section`);
-    }
-
-    // Select the MCP server checkbox (to enable all tools)
-    const serverCheckbox = mcpServerSection.getByRole("checkbox", {
-      name: "mcp-server-select-all-tools-checkbox",
-    });
-    await expect(serverCheckbox).toBeVisible({ timeout: 5000 });
-    await serverCheckbox.scrollIntoViewIfNeeded();
-    if ((await serverCheckbox.getAttribute("aria-checked")) !== "true") {
-      await serverCheckbox.click();
-    }
-    await expect(serverCheckbox).toHaveAttribute("aria-checked", "true");
-    console.log(`[test] Checked MCP server checkbox`);
-
-    // Scroll to bottom to find Save button
+    // Scroll to the Actions & Tools section (open by default)
     await scrollToBottom(page);
 
-    // Save the form
-    const saveButton = page.getByRole("button", { name: "Save Changes" });
-    await expect(saveButton).toBeVisible({ timeout: 5000 });
-    await saveButton.scrollIntoViewIfNeeded();
-    await saveButton.click();
-    console.log(`[test] Clicked Save Changes`);
+    // Find the MCP server card by name text
+    // The server name appears inside a label within the ActionsLayouts.Header
+    const serverLabel = page
+      .locator("label")
+      .filter({ has: page.getByText(serverName, { exact: true }) });
+    await expect(serverLabel.first()).toBeVisible({ timeout: 10000 });
+    console.log(`[test] MCP server card found for server: ${serverName}`);
 
-    // Wait for success message
-    await expect(page.getByText(/successfully/i)).toBeVisible({
-      timeout: 10000,
-    });
+    // Scroll server card into view
+    await serverLabel.first().scrollIntoViewIfNeeded();
 
+    // The server-level Switch in the header toggles ALL tools
+    const serverSwitch = serverLabel
+      .first()
+      .locator('button[role="switch"]')
+      .first();
+    await expect(serverSwitch).toBeVisible({ timeout: 5000 });
+
+    // Enable all tools by toggling the server switch ON
+    const serverState = await serverSwitch.getAttribute("aria-checked");
+    if (serverState !== "true") {
+      await serverSwitch.click();
+      // Auto-save triggers immediately
+      await expect(page.getByText("Tools updated").first()).toBeVisible({
+        timeout: 10000,
+      });
+    }
     console.log(`[test] MCP tools successfully added to default assistant`);
   });
 
@@ -660,130 +639,147 @@ test.describe("Default Assistant MCP Integration", () => {
     await loginAs(page, "admin");
     console.log(`[test] Testing tool modification`);
 
-    // Navigate to default assistant page
-    await page.goto("/admin/configuration/default-assistant");
-    await page.waitForURL("**/admin/configuration/default-assistant**");
+    // Navigate to chat preferences page
+    await page.goto("/admin/configuration/chat-preferences");
+    await page.waitForURL("**/admin/configuration/chat-preferences**");
 
-    // Scroll to actions section
+    // Scroll to Actions & Tools section
     await scrollToBottom(page);
 
-    // Find the MCP server section
-    const mcpServerSection = page.getByTestId(`mcp-server-section-${serverId}`);
-    await expect(mcpServerSection).toBeVisible({ timeout: 10000 });
-    await mcpServerSection.scrollIntoViewIfNeeded();
+    // Find the MCP server card by name
+    const serverLabel = page
+      .locator("label")
+      .filter({ has: page.getByText(serverName, { exact: true }) });
+    await expect(serverLabel.first()).toBeVisible({ timeout: 10000 });
+    await serverLabel.first().scrollIntoViewIfNeeded();
 
-    // Expand if needed
-    const toggleButton = page.getByTestId(`mcp-server-toggle-${serverId}`);
-    const isExpanded = await toggleButton.getAttribute("aria-expanded");
-    if (isExpanded === "false") {
-      await toggleButton.click();
+    // Click "Expand" to reveal individual tools
+    const expandButton = page.getByRole("button", { name: "Expand" }).first();
+    const isExpandVisible = await expandButton.isVisible().catch(() => false);
+    if (isExpandVisible) {
+      await expandButton.click();
       await page.waitForTimeout(300);
-      console.log(`[test] Expanded MCP server section`);
+      console.log(`[test] Expanded MCP server card`);
     }
 
-    // Find a specific tool checkbox
-    const firstToolCheckbox = mcpServerSection.getByLabel(
-      `mcp-server-tool-checkbox-tool_0`
-    );
+    // Find a specific tool by name inside the expanded card content
+    // Individual tools are rendered as ActionsLayouts.Tool with their own Card > Label
+    const toolLabel = page
+      .locator("label")
+      .filter({ has: page.getByText("tool_0", { exact: true }) });
+    const firstToolSwitch = toolLabel
+      .first()
+      .locator('button[role="switch"]')
+      .first();
 
-    await expect(firstToolCheckbox).toBeVisible({ timeout: 5000 });
-    await firstToolCheckbox.scrollIntoViewIfNeeded();
+    await expect(firstToolSwitch).toBeVisible({ timeout: 5000 });
+    await firstToolSwitch.scrollIntoViewIfNeeded();
 
     // Get initial state and toggle
-    const initialChecked = await firstToolCheckbox.getAttribute("aria-checked");
+    const initialChecked = await firstToolSwitch.getAttribute("aria-checked");
     console.log(`[test] Initial tool state: ${initialChecked}`);
-    await firstToolCheckbox.click();
-    await page.waitForTimeout(300);
+    await firstToolSwitch.click();
 
-    // Scroll to Save button
-    await scrollToBottom(page);
-
-    // Save changes
-    const saveButton = page.getByRole("button", { name: "Save Changes" });
-    await expect(saveButton).toBeVisible({ timeout: 5000 });
-    await saveButton.scrollIntoViewIfNeeded();
-    await saveButton.click();
-    console.log(`[test] Clicked Save Changes`);
-
-    // Wait for success
-    await expect(page.getByText(/successfully/i)).toBeVisible({
+    // Wait for auto-save toast
+    await expect(page.getByText("Tools updated").first()).toBeVisible({
       timeout: 10000,
     });
     console.log(`[test] Save successful`);
 
     // Reload and verify persistence
     await page.reload();
-    await page.waitForURL("**/admin/configuration/default-assistant**");
+    await page.waitForURL("**/admin/configuration/chat-preferences**");
     await scrollToBottom(page);
 
-    // Re-find the section
-    const mcpServerSectionAfter = page.getByTestId(
-      `mcp-server-section-${serverId}`
-    );
-    await expect(mcpServerSectionAfter).toBeVisible({ timeout: 10000 });
-    await mcpServerSectionAfter.scrollIntoViewIfNeeded();
+    // Re-find the server card
+    const serverLabelAfter = page
+      .locator("label")
+      .filter({ has: page.getByText(serverName, { exact: true }) });
+    await expect(serverLabelAfter.first()).toBeVisible({ timeout: 10000 });
+    await serverLabelAfter.first().scrollIntoViewIfNeeded();
 
-    // Re-expand the section
-    const toggleButtonAfter = page.getByTestId(`mcp-server-toggle-${serverId}`);
-    const isExpandedAfter =
-      await toggleButtonAfter.getAttribute("aria-expanded");
-    if (isExpandedAfter === "false") {
-      await toggleButtonAfter.click();
+    // Re-expand the card
+    const expandButtonAfter = page
+      .getByRole("button", { name: "Expand" })
+      .first();
+    const isExpandVisibleAfter = await expandButtonAfter
+      .isVisible()
+      .catch(() => false);
+    if (isExpandVisibleAfter) {
+      await expandButtonAfter.click();
       await page.waitForTimeout(300);
     }
 
     // Verify the tool state persisted
-    const firstToolCheckboxAfter = mcpServerSectionAfter.getByLabel(
-      `mcp-server-tool-checkbox-tool_0`
-    );
-    await expect(firstToolCheckboxAfter).toBeVisible({ timeout: 5000 });
+    const toolLabelAfter = page
+      .locator("label")
+      .filter({ has: page.getByText("tool_0", { exact: true }) });
+    const firstToolSwitchAfter = toolLabelAfter
+      .first()
+      .locator('button[role="switch"]')
+      .first();
+    await expect(firstToolSwitchAfter).toBeVisible({ timeout: 5000 });
     const finalChecked =
-      await firstToolCheckboxAfter.getAttribute("aria-checked");
+      await firstToolSwitchAfter.getAttribute("aria-checked");
     console.log(`[test] Final tool state: ${finalChecked}`);
     expect(finalChecked).not.toEqual(initialChecked);
   });
 
-  test("Instructions persist when saving default assistant", async ({
+  test("Instructions persist when saving via chat preferences", async ({
     page,
   }) => {
     await page.context().clearCookies();
     await loginAs(page, "admin");
 
-    await page.goto("/admin/configuration/default-assistant");
-    await page.waitForURL("**/admin/configuration/default-assistant**");
+    await page.goto("/admin/configuration/chat-preferences");
+    await page.waitForURL("**/admin/configuration/chat-preferences**");
 
-    // Find the instructions textarea
-    const instructionsTextarea = page.locator("textarea").first();
-    await expect(instructionsTextarea).toBeVisible({ timeout: 5000 });
-    await instructionsTextarea.scrollIntoViewIfNeeded();
+    // Click "Modify Prompt" to open the system prompt modal
+    const modifyButton = page.getByText("Modify Prompt");
+    await expect(modifyButton).toBeVisible({ timeout: 5000 });
+    await modifyButton.click();
 
+    const modal = page.getByRole("dialog");
+    await expect(modal).toBeVisible({ timeout: 5000 });
+
+    // Fill instructions in the modal textarea
     const testInstructions = `Test instructions for MCP - ${Date.now()}`;
-    await instructionsTextarea.fill(testInstructions);
+    const textarea = modal.getByPlaceholder("Enter your system prompt...");
+    await textarea.fill(testInstructions);
     console.log(`[test] Filled instructions`);
 
-    // Scroll to Save button
-    await scrollToBottom(page);
+    // Click Save in the modal footer
+    await modal.getByRole("button", { name: "Save" }).click();
 
-    // Save changes
-    const saveButton = page.getByRole("button", { name: "Save Changes" });
-    await expect(saveButton).toBeVisible({ timeout: 5000 });
-    await saveButton.scrollIntoViewIfNeeded();
-    await saveButton.click();
-
-    await expect(page.getByText(/successfully/i)).toBeVisible({
+    await expect(page.getByText("System prompt updated")).toBeVisible({
       timeout: 10000,
     });
     console.log(`[test] Instructions saved successfully`);
 
-    // Reload and verify
-    await page.reload();
-    await page.waitForURL("**/admin/configuration/default-assistant**");
+    // Modal should close
+    await expect(modal).not.toBeVisible();
 
-    const instructionsTextareaAfter = page.locator("textarea").first();
-    await expect(instructionsTextareaAfter).toBeVisible({ timeout: 5000 });
-    await expect(instructionsTextareaAfter).toHaveValue(testInstructions);
+    // Reload and verify — wait for all data to load before opening modal
+    // (the modal reads system_prompt from SWR state at click time, so data must be ready)
+    await page.reload();
+    await page.waitForLoadState("networkidle");
+    await page.waitForURL("**/admin/configuration/chat-preferences**");
+
+    // Reopen modal and check persisted value
+    const modifyButtonAfter = page.getByText("Modify Prompt");
+    await expect(modifyButtonAfter).toBeVisible({ timeout: 5000 });
+    await modifyButtonAfter.click();
+
+    const modalAfter = page.getByRole("dialog");
+    await expect(modalAfter).toBeVisible({ timeout: 5000 });
+    await expect(
+      modalAfter.getByPlaceholder("Enter your system prompt...")
+    ).toHaveValue(testInstructions);
 
     console.log(`[test] Instructions persisted correctly`);
+
+    // Close modal
+    await modalAfter.getByRole("button", { name: "Cancel" }).click();
   });
 
   test("MCP tools appear in basic user's chat actions after being added to default assistant", async ({

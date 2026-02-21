@@ -3,11 +3,41 @@ import { loginAs } from "@tests/e2e/utils/auth";
 import { createAssistant } from "@tests/e2e/utils/assistantUtils";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 
-const DISABLE_DEFAULT_ASSISTANT_LABEL =
-  'label:has-text("Disable Default Assistant") input[type="checkbox"]';
 const MAX_SETTING_SAVE_ATTEMPTS = 5;
 const SETTING_SAVE_RETRY_DELAY_MS = 750;
 
+/**
+ * Expand the "Advanced Options" collapsible section on the Chat Preferences page.
+ * The section is closed by default (`defaultOpen={false}`).
+ * Only expands if not already open (checks for the switch element visibility).
+ */
+async function expandAdvancedOptions(page: Page): Promise<void> {
+  // Wait for the page title to be visible, signalling the form has loaded
+  await expect(page.locator('[aria-label="admin-page-title"]')).toBeVisible({
+    timeout: 10000,
+  });
+
+  // Check if the switch is already visible (section already expanded)
+  const switchEl = page.locator("#disable_default_assistant");
+  const alreadyVisible = await switchEl.isVisible().catch(() => false);
+  if (alreadyVisible) return;
+
+  const header = page.getByText("Advanced Options", { exact: true });
+  await expect(header).toBeVisible({ timeout: 10000 });
+  await header.scrollIntoViewIfNeeded();
+  await header.click();
+
+  // Wait for the collapsible content to expand and switch to appear
+  await expect(switchEl).toBeVisible({ timeout: 5000 });
+}
+
+/**
+ * Toggle the "Always Start with an Agent" setting (formerly "Disable Default Assistant")
+ * on the Chat Preferences page. Uses auto-save via the SwitchField.
+ *
+ * The switch is a SwitchField with name="disable_default_assistant" which renders
+ * `<button role="switch" id="disable_default_assistant" aria-checked="...">`.
+ */
 async function setDisableDefaultAssistantSetting(
   page: Page,
   isDisabled: boolean
@@ -15,29 +45,41 @@ async function setDisableDefaultAssistantSetting(
   let lastCheckedState = false;
 
   for (let attempt = 0; attempt < MAX_SETTING_SAVE_ATTEMPTS; attempt += 1) {
-    await page.goto("/admin/settings");
-    await page.waitForURL("/admin/settings");
+    await page.goto("/admin/configuration/chat-preferences");
+    await page.waitForLoadState("networkidle");
 
-    const disableDefaultAssistantCheckbox = page.locator(
-      DISABLE_DEFAULT_ASSISTANT_LABEL
-    );
-    lastCheckedState = await disableDefaultAssistantCheckbox.isChecked();
+    // Expand "Advanced Options" collapsible (closed by default)
+    await expandAdvancedOptions(page);
+
+    const switchEl = page.locator("#disable_default_assistant");
+    await expect(switchEl).toBeVisible({ timeout: 5000 });
+
+    const currentState = await switchEl.getAttribute("aria-checked");
+    lastCheckedState = currentState === "true";
 
     if (lastCheckedState === isDisabled) {
       return;
     }
 
-    await disableDefaultAssistantCheckbox.click();
-    if (isDisabled) {
-      await expect(disableDefaultAssistantCheckbox).toBeChecked();
-    } else {
-      await expect(disableDefaultAssistantCheckbox).not.toBeChecked();
-    }
+    // Toggle the switch
+    await switchEl.click();
+
+    // Wait for auto-save toast
+    await expect(page.getByText("Settings updated")).toBeVisible({
+      timeout: 5000,
+    });
 
     await page.waitForTimeout(SETTING_SAVE_RETRY_DELAY_MS);
+
+    // Verify persistence after reload
     await page.reload();
-    await page.waitForURL("/admin/settings");
-    lastCheckedState = await disableDefaultAssistantCheckbox.isChecked();
+    await page.waitForLoadState("networkidle");
+
+    // Re-expand Advanced Options (closed by default after reload)
+    await expandAdvancedOptions(page);
+
+    const newState = await switchEl.getAttribute("aria-checked");
+    lastCheckedState = newState === "true";
 
     if (lastCheckedState === isDisabled) {
       return;
@@ -45,7 +87,7 @@ async function setDisableDefaultAssistantSetting(
   }
 
   throw new Error(
-    `Failed to persist Disable Default Assistant setting after ${MAX_SETTING_SAVE_ATTEMPTS} attempts (expected ${isDisabled}, last=${lastCheckedState}).`
+    `Failed to persist Always Start with an Agent setting after ${MAX_SETTING_SAVE_ATTEMPTS} attempts (expected ${isDisabled}, last=${lastCheckedState}).`
   );
 }
 
@@ -66,15 +108,14 @@ test.describe("Disable Default Assistant Setting @exclusive", () => {
       createdAssistantId = null;
     }
 
-    // Ensure default assistant is enabled (checkbox unchecked) after each test
+    // Ensure default assistant is enabled (switch unchecked) after each test
     // to avoid interfering with other tests
     await setDisableDefaultAssistantSetting(page, false);
   });
 
-  test("admin can enable and disable the setting in workspace settings", async ({
+  test("admin can enable and disable the setting in chat preferences", async ({
     page,
   }) => {
-    // Navigate to settings page
     await setDisableDefaultAssistantSetting(page, true);
     await setDisableDefaultAssistantSetting(page, false);
     await setDisableDefaultAssistantSetting(page, true);
@@ -137,33 +178,54 @@ test.describe("Disable Default Assistant Setting @exclusive", () => {
     }
   });
 
-  test("default assistant config panel shows message when setting is enabled", async ({
+  test("chat preferences shows disabled state when setting is enabled", async ({
     page,
   }) => {
     // First enable the setting
     await setDisableDefaultAssistantSetting(page, true);
 
-    // Navigate to default assistant configuration page
-    await page.goto("/admin/configuration/default-assistant");
-    await page.waitForURL("/admin/configuration/default-assistant");
+    // Navigate to chat preferences configuration page
+    await page.goto("/admin/configuration/chat-preferences");
+    await page.waitForLoadState("networkidle");
 
-    // Verify informative message is shown
-    await expect(
-      page.getByText(
-        "The default assistant is currently disabled in your workspace settings."
-      )
-    ).toBeVisible();
+    // Wait for the page to fully render (page title signals form is loaded)
+    await expect(page.locator('[aria-label="admin-page-title"]')).toHaveText(
+      "Chat Preferences",
+      { timeout: 10000 }
+    );
 
-    // Verify link to Settings is present
-    const settingsLinks = page.locator('a[href="/admin/settings"]');
-    await expect(settingsLinks).toHaveCount(2);
-    await expect(settingsLinks.first()).toBeVisible();
-    await expect(settingsLinks.nth(1)).toBeVisible();
+    // The new page wraps Connectors + Actions & Tools in <Disabled disabled={values.disable_default_assistant}>
+    // When disabled, the section should have reduced opacity / disabled styling
+    // The "Modify Prompt" button should still be accessible (it's outside the Disabled wrapper)
+    // Use text locator (Opal Button wraps text in Interactive.Base > Slot which may
+    // not expose role="button" to Playwright's getByRole)
+    await expect(page.getByText("Modify Prompt")).toBeVisible({
+      timeout: 5000,
+    });
 
-    // Verify actual configuration UI is hidden (Instructions textarea should not be visible)
-    await expect(
-      page.locator('textarea[placeholder*="professional email"]')
-    ).not.toBeVisible();
+    // The "Actions & Tools" section text should still be present but visually disabled
+    await expect(page.getByText("Actions & Tools")).toBeVisible();
+  });
+
+  test("chat preferences shows full configuration UI when setting is disabled", async ({
+    page,
+  }) => {
+    // Ensure setting is disabled
+    await setDisableDefaultAssistantSetting(page, false);
+
+    // Navigate to chat preferences configuration page
+    await page.goto("/admin/configuration/chat-preferences");
+    await page.waitForLoadState("networkidle");
+
+    // Verify configuration UI is shown (Actions & Tools section should be visible and enabled)
+    await expect(page.getByText("Actions & Tools")).toBeVisible({
+      timeout: 10000,
+    });
+
+    // Verify the page title
+    await expect(page.locator('[aria-label="admin-page-title"]')).toHaveText(
+      "Chat Preferences"
+    );
   });
 
   test("default assistant is available again when setting is disabled", async ({
@@ -178,8 +240,6 @@ test.describe("Disable Default Assistant Setting @exclusive", () => {
     // The default assistant (ID 0) should be available
     // We can verify this by checking that the app loads successfully
     // and doesn't force navigation to a specific assistant
-    const currentUrl = page.url();
-    // URL might not have assistantId, or it might be 0, or might redirect to default behavior
     expect(page.url()).toContain("/app");
 
     // Verify the new session button navigates to /app without assistantId
@@ -191,35 +251,5 @@ test.describe("Disable Default Assistant Setting @exclusive", () => {
     // Should navigate to /app without assistantId parameter
     const newUrl = page.url();
     expect(newUrl).toContain("/app");
-  });
-
-  test("default assistant config panel shows configuration UI when setting is disabled", async ({
-    page,
-  }) => {
-    // Navigate to settings and ensure setting is disabled
-    await page.goto("/admin/settings");
-    await page.waitForURL("/admin/settings");
-
-    const disableDefaultAssistantCheckbox = page.locator(
-      'label:has-text("Disable Default Assistant") input[type="checkbox"]'
-    );
-    const isEnabled = await disableDefaultAssistantCheckbox.isChecked();
-    if (isEnabled) {
-      await disableDefaultAssistantCheckbox.click();
-    }
-
-    // Navigate to default assistant configuration page
-    await page.goto("/admin/configuration/default-assistant");
-    await page.waitForURL("/admin/configuration/default-assistant");
-
-    // Verify configuration UI is shown (Instructions section should be visible)
-    await expect(page.getByText("Instructions", { exact: true })).toBeVisible();
-
-    // Verify informative message is NOT shown
-    await expect(
-      page.getByText(
-        "The default assistant is currently disabled in your workspace settings."
-      )
-    ).not.toBeVisible();
   });
 });
