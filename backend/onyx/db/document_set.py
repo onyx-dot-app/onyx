@@ -554,10 +554,19 @@ def fetch_all_document_sets_for_user(
     stmt = (
         select(DocumentSetDBModel)
         .distinct()
-        .options(selectinload(DocumentSetDBModel.federated_connectors))
+        .options(
+            selectinload(DocumentSetDBModel.connector_credential_pairs).selectinload(
+                ConnectorCredentialPair.connector
+            ),
+            selectinload(DocumentSetDBModel.users),
+            selectinload(DocumentSetDBModel.groups),
+            selectinload(DocumentSetDBModel.federated_connectors).selectinload(
+                FederatedConnector__DocumentSet.federated_connector
+            ),
+        )
     )
     stmt = _add_user_filters(stmt, user, get_editable=get_editable)
-    return db_session.scalars(stmt).all()
+    return db_session.scalars(stmt).unique().all()
 
 
 def fetch_documents_for_document_set_paginated(

@@ -988,6 +988,7 @@ def get_connector_status(
         user=user,
         eager_load_connector=True,
         eager_load_credential=True,
+        eager_load_user=True,
         get_editable=False,
     )
 
@@ -1001,11 +1002,23 @@ def get_connector_status(
             relationship.user_group_id
         )
 
+    # Pre-compute credential_ids per connector to avoid N+1 lazy loads
+    connector_to_credential_ids: dict[int, list[int]] = {}
+    for cc_pair in cc_pairs:
+        connector_to_credential_ids.setdefault(cc_pair.connector_id, []).append(
+            cc_pair.credential_id
+        )
+
     return [
         ConnectorStatus(
             cc_pair_id=cc_pair.id,
             name=cc_pair.name,
-            connector=ConnectorSnapshot.from_connector_db_model(cc_pair.connector),
+            connector=ConnectorSnapshot.from_connector_db_model(
+                cc_pair.connector,
+                credential_ids=connector_to_credential_ids.get(
+                    cc_pair.connector_id, []
+                ),
+            ),
             credential=CredentialSnapshot.from_credential_db_model(cc_pair.credential),
             access_type=cc_pair.access_type,
             groups=group_cc_pair_relationships_dict.get(cc_pair.id, []),
@@ -1060,15 +1073,27 @@ def get_connector_indexing_status(
     parallel_functions: list[tuple[CallableProtocol, tuple[Any, ...]]] = [
         # Get editable connector/credential pairs
         (
-            get_connector_credential_pairs_for_user_parallel,
-            (user, True, None, True, True, True, True, request.source),
+            lambda: get_connector_credential_pairs_for_user_parallel(
+                user, True, None, True, True, False, True, request.source
+            ),
+            (),
         ),
         # Get federated connectors
         (fetch_all_federated_connectors_parallel, ()),
         # Get most recent index attempts
-        (get_latest_index_attempts_parallel, (request.secondary_index, True, False)),
+        (
+            lambda: get_latest_index_attempts_parallel(
+                request.secondary_index, True, False
+            ),
+            (),
+        ),
         # Get most recent finished index attempts
-        (get_latest_index_attempts_parallel, (request.secondary_index, True, True)),
+        (
+            lambda: get_latest_index_attempts_parallel(
+                request.secondary_index, True, True
+            ),
+            (),
+        ),
     ]
 
     if user and user.role == UserRole.ADMIN:
@@ -1085,8 +1110,10 @@ def get_connector_indexing_status(
         parallel_functions.append(
             # Get non-editable connector/credential pairs
             (
-                get_connector_credential_pairs_for_user_parallel,
-                (user, False, None, True, True, True, True, request.source),
+                lambda: get_connector_credential_pairs_for_user_parallel(
+                    user, False, None, True, True, False, True, request.source
+                ),
+                (),
             ),
         )
 

@@ -287,7 +287,7 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
 
     # relationships
     credentials: Mapped[list["Credential"]] = relationship(
-        "Credential", back_populates="user", lazy="joined"
+        "Credential", back_populates="user"
     )
     chat_sessions: Mapped[list["ChatSession"]] = relationship(
         "ChatSession", back_populates="user"
@@ -321,7 +321,6 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         "Memory",
         back_populates="user",
         cascade="all, delete-orphan",
-        lazy="selectin",
         order_by="desc(Memory.id)",
     )
     oauth_user_tokens: Mapped[list["OAuthUserToken"]] = relationship(

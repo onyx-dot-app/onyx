@@ -53,7 +53,8 @@ class UserGroup(BaseModel):
                     id=cc_pair_relationship.cc_pair.id,
                     name=cc_pair_relationship.cc_pair.name,
                     connector=ConnectorSnapshot.from_connector_db_model(
-                        cc_pair_relationship.cc_pair.connector
+                        cc_pair_relationship.cc_pair.connector,
+                        credential_ids=[cc_pair_relationship.cc_pair.credential_id],
                     ),
                     credential=CredentialSnapshot.from_credential_db_model(
                         cc_pair_relationship.cc_pair.credential
