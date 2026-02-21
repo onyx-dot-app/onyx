@@ -487,65 +487,52 @@ function PromptShortcuts() {
     toast.error("Failed to load shortcuts");
   }, [error]);
 
-  // Auto-add empty row when user starts typing in the last row
-  useEffect(() => {
-    // Skip during initial load - the fetch useEffect handles the initial empty row
-    if (isInitialLoad) return;
-
-    // Only manage new/unsaved rows (isNew: true) - never touch existing shortcuts
-    const newShortcuts = shortcuts.filter((s) => s.isNew);
-    const emptyNewRows = newShortcuts.filter(
-      (s) => !s.prompt.trim() && !s.content.trim()
-    );
-    const emptyNewRowsCount = emptyNewRows.length;
-
-    // If we have no empty new rows, add one
-    if (emptyNewRowsCount === 0) {
-      setShortcuts((prev) => [
-        ...prev,
-        {
-          id: Date.now(),
-          prompt: "",
-          content: "",
-          active: true,
-          is_public: false,
-          isNew: true,
-        },
-      ]);
-    }
-    // If we have more than one empty new row, keep only one
-    else if (emptyNewRowsCount > 1) {
-      setShortcuts((prev) => {
-        // Keep all existing shortcuts regardless of their state
-        // Keep all new shortcuts that have at least one field filled
-        // Add one empty new shortcut
-        const existingShortcuts = prev.filter((s) => !s.isNew);
-        const filledNewShortcuts = prev.filter(
-          (s) => s.isNew && (s.prompt.trim() || s.content.trim())
-        );
-        return [
-          ...existingShortcuts,
-          ...filledNewShortcuts,
-          {
-            id: Date.now(),
-            prompt: "",
-            content: "",
-            active: true,
-            is_public: false,
-            isNew: true,
-          },
-        ];
-      });
-    }
-  }, [shortcuts, isInitialLoad]);
-
   const handleUpdateShortcut = useCallback(
     (index: number, field: "prompt" | "content", value: string) => {
-      setShortcuts((prev) =>
-        prev.map((shortcut, i) =>
+      setShortcuts((prev) => {
+        const next = prev.map((shortcut, i) =>
           i === index ? { ...shortcut, [field]: value } : shortcut
-        )
-      );
+        );
+
+        const isEmptyNew = (s: LocalShortcut) =>
+          s.isNew && !s.prompt.trim() && !s.content.trim();
+
+        const emptyCount = next.filter(isEmptyNew).length;
+
+        if (emptyCount === 0) {
+          return [
+            ...next,
+            {
+              id: Date.now(),
+              prompt: "",
+              content: "",
+              active: true,
+              is_public: false,
+              isNew: true,
+            },
+          ];
+        }
+
+        if (emptyCount > 1) {
+          const userRow = next[index];
+          const userRowEmpty = userRow !== undefined && isEmptyNew(userRow);
+          let keepIndex = -1;
+          if (userRowEmpty) {
+            keepIndex = index;
+          } else {
+            for (let i = next.length - 1; i >= 0; i--) {
+              const row = next[i];
+              if (row !== undefined && isEmptyNew(row)) {
+                keepIndex = i;
+                break;
+              }
+            }
+          }
+          return next.filter((s, i) => !isEmptyNew(s) || i === keepIndex);
+        }
+
+        return next;
+      });
     },
     []
   );
