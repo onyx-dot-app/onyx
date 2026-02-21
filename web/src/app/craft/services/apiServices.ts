@@ -358,6 +358,30 @@ export async function sendMessageStream(
   return res;
 }
 
+/**
+ * Cancel the current message/prompt operation for a session.
+ * Sends a session/cancel notification to the ACP agent to stop
+ * the currently running operation.
+ *
+ * This follows the ACP (Agent Client Protocol) specification for cancellation.
+ *
+ * @returns true if cancel was sent, false if no active operation
+ */
+export async function cancelMessage(sessionId: string): Promise<boolean> {
+  const res = await fetch(`${API_BASE}/sessions/${sessionId}/cancel-message`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+
+  if (!res.ok) {
+    console.error(`Failed to cancel message: ${res.status}`);
+    return false;
+  }
+
+  const data = await res.json();
+  return data.cancelled ?? false;
+}
+
 // =============================================================================
 // Artifacts API
 // =============================================================================
