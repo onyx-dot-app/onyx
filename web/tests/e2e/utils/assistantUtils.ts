@@ -99,7 +99,7 @@ export async function ensureImageGenerationEnabled(page: Page): Promise<void> {
     await imageGenSwitch.click();
 
     // Wait for the auto-save toast to confirm success
-    await expect(page.getByText("Tools updated")).toBeVisible({
+    await expect(page.getByText("Tools updated").first()).toBeVisible({
       timeout: 5000,
     });
 

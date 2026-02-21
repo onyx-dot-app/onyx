@@ -179,7 +179,7 @@ test.describe("Chat Preferences Admin Page", () => {
     );
 
     // Wait for success toast
-    await expect(page.getByText("Tools updated")).toBeVisible({
+    await expect(page.getByText("Tools updated").first()).toBeVisible({
       timeout: 5000,
     });
 
@@ -197,7 +197,7 @@ test.describe("Chat Preferences Admin Page", () => {
 
     // Toggle back to original state
     await searchSwitch.click();
-    await expect(page.getByText("Tools updated")).toBeVisible({
+    await expect(page.getByText("Tools updated").first()).toBeVisible({
       timeout: 5000,
     });
   });
@@ -231,7 +231,7 @@ test.describe("Chat Preferences Admin Page", () => {
     );
 
     // Wait for success toast
-    await expect(page.getByText("Tools updated")).toBeVisible({
+    await expect(page.getByText("Tools updated").first()).toBeVisible({
       timeout: 5000,
     });
 
@@ -248,7 +248,7 @@ test.describe("Chat Preferences Admin Page", () => {
 
     // Toggle back to original state
     await webSearchSwitch.click();
-    await expect(page.getByText("Tools updated")).toBeVisible({
+    await expect(page.getByText("Tools updated").first()).toBeVisible({
       timeout: 5000,
     });
   });
@@ -284,7 +284,7 @@ test.describe("Chat Preferences Admin Page", () => {
     );
 
     // Wait for success toast
-    await expect(page.getByText("Tools updated")).toBeVisible({
+    await expect(page.getByText("Tools updated").first()).toBeVisible({
       timeout: 5000,
     });
 
@@ -303,7 +303,7 @@ test.describe("Chat Preferences Admin Page", () => {
 
     // Toggle back to original state
     await imageGenSwitch.click();
-    await expect(page.getByText("Tools updated")).toBeVisible({
+    await expect(page.getByText("Tools updated").first()).toBeVisible({
       timeout: 5000,
     });
   });
@@ -588,7 +588,7 @@ test.describe("Chat Preferences Admin Page", () => {
       if (currentState === "true") {
         await toolSwitch.click();
         // Wait for auto-save to complete
-        await expect(page.getByText("Tools updated")).toBeVisible({
+        await expect(page.getByText("Tools updated").first()).toBeVisible({
           timeout: 5000,
         });
         await page.waitForTimeout(500);
@@ -618,7 +618,7 @@ test.describe("Chat Preferences Admin Page", () => {
       const currentState = await toolSwitch.getAttribute("aria-checked");
       if (currentState === "false") {
         await toolSwitch.click();
-        await expect(page.getByText("Tools updated")).toBeVisible({
+        await expect(page.getByText("Tools updated").first()).toBeVisible({
           timeout: 5000,
         });
         await page.waitForTimeout(500);
@@ -716,7 +716,7 @@ test.describe("Chat Preferences Admin Page", () => {
 
       if (currentState !== originalState) {
         await toolSwitch.click();
-        await expect(page.getByText("Tools updated")).toBeVisible({
+        await expect(page.getByText("Tools updated").first()).toBeVisible({
           timeout: 5000,
         });
         await page.waitForTimeout(300);

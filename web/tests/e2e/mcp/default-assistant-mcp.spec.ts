@@ -365,7 +365,7 @@ test.describe("Default Assistant MCP Integration", () => {
     if (serverState !== "true") {
       await serverSwitch.click();
       // Auto-save triggers immediately
-      await expect(page.getByText("Tools updated")).toBeVisible({
+      await expect(page.getByText("Tools updated").first()).toBeVisible({
         timeout: 10000,
       });
     }
@@ -681,7 +681,7 @@ test.describe("Default Assistant MCP Integration", () => {
     await firstToolSwitch.click();
 
     // Wait for auto-save toast
-    await expect(page.getByText("Tools updated")).toBeVisible({
+    await expect(page.getByText("Tools updated").first()).toBeVisible({
       timeout: 10000,
     });
     console.log(`[test] Save successful`);
