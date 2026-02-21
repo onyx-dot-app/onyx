@@ -69,7 +69,7 @@ def _make_document(item: DriveItemData) -> Document:
 
 
 def _consume_generator(
-    gen: Generator,
+    gen: Generator[Any, None, SharepointConnectorCheckpoint],
 ) -> tuple[list[Any], SharepointConnectorCheckpoint]:
     """Exhaust a _load_from_checkpoint generator.
 
@@ -111,7 +111,7 @@ def _build_ready_checkpoint(
 def _setup_connector(monkeypatch: pytest.MonkeyPatch) -> SharepointConnector:
     """Create a connector with common methods mocked."""
     connector = SharepointConnector()
-    connector._graph_client = object()  # type: ignore
+    connector._graph_client = object()  # type: ignore[assignment]
     connector.include_site_pages = False
 
     def fake_resolve_drive(
