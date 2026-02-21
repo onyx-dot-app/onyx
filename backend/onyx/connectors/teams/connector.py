@@ -50,12 +50,15 @@ class TeamsCheckpoint(ConnectorCheckpoint):
     todo_team_ids: list[str] | None = None
 
 
+DEFAULT_AUTHORITY_HOST = "https://login.microsoftonline.com"
+DEFAULT_GRAPH_API_HOST = "https://graph.microsoft.com"
+
+
 class TeamsConnector(
     CheckpointedConnectorWithPermSync[TeamsCheckpoint],
     SlimConnectorWithPermSync,
 ):
     MAX_WORKERS = 10
-    AUTHORITY_URL_PREFIX = "https://login.microsoftonline.com/"
 
     def __init__(
         self,
@@ -63,11 +66,15 @@ class TeamsConnector(
         # are not necessarily guaranteed to be unique
         teams: list[str] = [],
         max_workers: int = MAX_WORKERS,
+        authority_host: str = DEFAULT_AUTHORITY_HOST,
+        graph_api_host: str = DEFAULT_GRAPH_API_HOST,
     ) -> None:
         self.graph_client: GraphClient | None = None
         self.msal_app: msal.ConfidentialClientApplication | None = None
         self.max_workers = max_workers
         self.requested_team_list: list[str] = teams
+        self.authority_host = authority_host.rstrip("/")
+        self.graph_api_host = graph_api_host.rstrip("/")
 
     # impls for BaseConnector
 
@@ -76,7 +83,7 @@ class TeamsConnector(
         teams_client_secret = credentials["teams_client_secret"]
         teams_directory_id = credentials["teams_directory_id"]
 
-        authority_url = f"{TeamsConnector.AUTHORITY_URL_PREFIX}{teams_directory_id}"
+        authority_url = f"{self.authority_host}/{teams_directory_id}"
         self.msal_app = msal.ConfidentialClientApplication(
             authority=authority_url,
             client_id=teams_client_id,
@@ -91,7 +98,7 @@ class TeamsConnector(
                 raise RuntimeError("MSAL app is not initialized")
 
             token = self.msal_app.acquire_token_for_client(
-                scopes=["https://graph.microsoft.com/.default"]
+                scopes=[f"{self.graph_api_host}/.default"]
             )
 
             if not isinstance(token, dict):

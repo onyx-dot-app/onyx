@@ -206,6 +206,7 @@ def test_load_from_checkpoint_maps_drive_name(monkeypatch: pytest.MonkeyPatch) -
         drive_name: str,
         ctx: Any,  # noqa: ARG001
         graph_client: Any,  # noqa: ARG001
+        graph_api_base: str,  # noqa: ARG001
         include_permissions: bool,  # noqa: ARG001
         parent_hierarchy_raw_node_id: str | None = None,  # noqa: ARG001
         access_token: str | None = None,  # noqa: ARG001
