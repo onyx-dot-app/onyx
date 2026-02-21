@@ -759,8 +759,15 @@ test.describe("Default Assistant MCP Integration", () => {
     // Modal should close
     await expect(modal).not.toBeVisible();
 
-    // Reload and verify
+    // Reload and verify — wait for config data to load before opening modal
+    const configLoadPromise = page.waitForResponse(
+      (r) =>
+        r.url().includes("/api/admin/default-assistant/configuration") &&
+        r.request().method() === "GET",
+      { timeout: 10000 }
+    );
     await page.reload();
+    await configLoadPromise;
     await page.waitForURL("**/admin/configuration/chat-preferences**");
 
     // Reopen modal and check persisted value
