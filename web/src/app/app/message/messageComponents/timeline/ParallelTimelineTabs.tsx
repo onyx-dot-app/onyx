@@ -51,8 +51,6 @@ export function ParallelTimelineTabs({
   const handleToggle = useCallback(() => setIsExpanded((prev) => !prev), []);
   const handleHeaderEnter = useCallback(() => setIsHover(true), []);
   const handleHeaderLeave = useCallback(() => setIsHover(false), []);
-  const noopComplete = useCallback(() => {}, []);
-
   const topSpacerVariant = isFirstTurnGroup ? "first" : "none";
   const shouldShowResults = !(!isExpanded && stopPacketSeen);
 
@@ -165,7 +163,6 @@ export function ParallelTimelineTabs({
             key={`${activeTab}-${isExpanded}`}
             packets={activeStep.packets}
             chatState={chatState}
-            onComplete={noopComplete}
             animate={!stopPacketSeen}
             stopPacketSeen={stopPacketSeen}
             stopReason={stopReason}
