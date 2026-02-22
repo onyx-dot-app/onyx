@@ -9,6 +9,9 @@ from ee.onyx.server.scim.models import ScimUserResource
 from ee.onyx.server.scim.patch import apply_group_patch
 from ee.onyx.server.scim.patch import apply_user_patch
 from ee.onyx.server.scim.patch import ScimPatchError
+from ee.onyx.server.scim.providers.okta import OktaProvider
+
+_OKTA_IGNORED = OktaProvider().ignored_patch_paths
 
 
 def _make_user(**kwargs: object) -> ScimUserResource:
@@ -118,6 +121,86 @@ class TestApplyUserPatch:
         user = _make_user()
         with pytest.raises(ScimPatchError, match="Unsupported operation"):
             apply_user_patch([_remove_op("active")], user)
+
+    def test_replace_without_path_ignores_id(self) -> None:
+        """Okta sends 'id' alongside actual changes — it should be silently ignored."""
+        user = _make_user()
+        result = apply_user_patch(
+            [_replace_op(None, {"active": False, "id": "some-uuid"})],
+            user,
+            ignored_paths=_OKTA_IGNORED,
+        )
+        assert result.active is False
+
+    def test_replace_without_path_ignores_schemas(self) -> None:
+        """The 'schemas' key in a value dict should be silently ignored."""
+        user = _make_user()
+        result = apply_user_patch(
+            [
+                _replace_op(
+                    None,
+                    {
+                        "active": False,
+                        "schemas": "urn:ietf:params:scim:schemas:core:2.0:User",
+                    },
+                )
+            ],
+            user,
+            ignored_paths=_OKTA_IGNORED,
+        )
+        assert result.active is False
+
+    def test_okta_deactivation_payload(self) -> None:
+        """Exact Okta deactivation payload: path-less replace with id + active."""
+        user = _make_user()
+        result = apply_user_patch(
+            [
+                _replace_op(
+                    None,
+                    {"id": "abc-123", "active": False},
+                )
+            ],
+            user,
+            ignored_paths=_OKTA_IGNORED,
+        )
+        assert result.active is False
+        assert result.userName == "test@example.com"
+
+    def test_replace_displayname(self) -> None:
+        user = _make_user()
+        result = apply_user_patch(
+            [_replace_op("displayName", "New Display Name")], user
+        )
+        assert result.displayName == "New Display Name"
+        assert result.name is not None
+        assert result.name.formatted == "New Display Name"
+
+    def test_replace_without_path_complex_value_dict(self) -> None:
+        """Okta sends id/schemas/meta alongside actual changes — complex types
+        (lists, nested dicts) must not cause Pydantic validation errors."""
+        user = _make_user()
+        result = apply_user_patch(
+            [
+                _replace_op(
+                    None,
+                    {
+                        "active": False,
+                        "id": "some-uuid",
+                        "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
+                        "meta": {"resourceType": "User", "created": "2025-01-01"},
+                    },
+                )
+            ],
+            user,
+            ignored_paths=_OKTA_IGNORED,
+        )
+        assert result.active is False
+        assert result.userName == "test@example.com"
+
+    def test_add_operation_works_like_replace(self) -> None:
+        user = _make_user()
+        result = apply_user_patch([_add_op("externalId", "ext-456")], user)
+        assert result.externalId == "ext-456"
 
 
 class TestApplyGroupPatch:
@@ -256,3 +339,47 @@ class TestApplyGroupPatch:
         group = _make_group()
         apply_group_patch([_replace_op("displayName", "Changed")], group)
         assert group.displayName == "Engineering"
+
+    def test_replace_without_path_ignores_id(self) -> None:
+        """Group replace with 'id' in value dict should be silently ignored."""
+        group = _make_group()
+        result, _, _ = apply_group_patch(
+            [_replace_op(None, {"displayName": "Updated", "id": "some-id"})],
+            group,
+            ignored_paths=_OKTA_IGNORED,
+        )
+        assert result.displayName == "Updated"
+
+    def test_replace_without_path_ignores_schemas(self) -> None:
+        group = _make_group()
+        result, _, _ = apply_group_patch(
+            [
+                _replace_op(
+                    None, {"displayName": "Updated", "schemas": "urn:scim:schema"}
+                )
+            ],
+            group,
+            ignored_paths=_OKTA_IGNORED,
+        )
+        assert result.displayName == "Updated"
+
+    def test_replace_without_path_complex_value_dict(self) -> None:
+        """Group PATCH with complex types in value dict (lists, nested dicts)
+        must not cause Pydantic validation errors."""
+        group = _make_group()
+        result, _, _ = apply_group_patch(
+            [
+                _replace_op(
+                    None,
+                    {
+                        "displayName": "Updated",
+                        "id": "123",
+                        "schemas": ["urn:ietf:params:scim:schemas:core:2.0:Group"],
+                        "meta": {"resourceType": "Group"},
+                    },
+                )
+            ],
+            group,
+            ignored_paths=_OKTA_IGNORED,
+        )
+        assert result.displayName == "Updated"

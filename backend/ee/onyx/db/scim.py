@@ -127,9 +127,14 @@ class ScimDAL(DAL):
         self,
         external_id: str,
         user_id: UUID,
+        scim_username: str | None = None,
     ) -> ScimUserMapping:
         """Create a mapping between a SCIM externalId and an Onyx user."""
-        mapping = ScimUserMapping(external_id=external_id, user_id=user_id)
+        mapping = ScimUserMapping(
+            external_id=external_id,
+            user_id=user_id,
+            scim_username=scim_username,
+        )
         self._session.add(mapping)
         self._session.flush()
         return mapping
@@ -248,11 +253,11 @@ class ScimDAL(DAL):
         scim_filter: ScimFilter | None,
         start_index: int = 1,
         count: int = 100,
-    ) -> tuple[list[tuple[User, str | None]], int]:
+    ) -> tuple[list[tuple[User, ScimUserMapping | None]], int]:
         """Query users with optional SCIM filter and pagination.
 
         Returns:
-            A tuple of (list of (user, external_id) pairs, total_count).
+            A tuple of (list of (user, mapping) pairs, total_count).
 
         Raises:
             ValueError: If the filter uses an unsupported attribute.
@@ -292,33 +297,104 @@ class ScimDAL(DAL):
         users = list(
             self._session.scalars(
                 query.order_by(User.id).offset(offset).limit(count)  # type: ignore[arg-type]
-            ).all()
+            )
+            .unique()
+            .all()
         )
 
-        # Batch-fetch external IDs to avoid N+1 queries
-        ext_id_map = self._get_user_external_ids([u.id for u in users])
-        return [(u, ext_id_map.get(u.id)) for u in users], total
+        # Batch-fetch SCIM mappings to avoid N+1 queries
+        mapping_map = self._get_user_mappings_batch([u.id for u in users])
+        return [(u, mapping_map.get(u.id)) for u in users], total
 
-    def sync_user_external_id(self, user_id: UUID, new_external_id: str | None) -> None:
+    def sync_user_external_id(
+        self,
+        user_id: UUID,
+        new_external_id: str | None,
+        scim_username: str | None = None,
+    ) -> None:
         """Create, update, or delete the external ID mapping for a user."""
         mapping = self.get_user_mapping_by_user_id(user_id)
         if new_external_id:
             if mapping:
                 if mapping.external_id != new_external_id:
                     mapping.external_id = new_external_id
+                if scim_username is not None:
+                    mapping.scim_username = scim_username
             else:
-                self.create_user_mapping(external_id=new_external_id, user_id=user_id)
+                self.create_user_mapping(
+                    external_id=new_external_id,
+                    user_id=user_id,
+                    scim_username=scim_username,
+                )
         elif mapping:
             self.delete_user_mapping(mapping.id)
 
-    def _get_user_external_ids(self, user_ids: list[UUID]) -> dict[UUID, str]:
-        """Batch-fetch external IDs for a list of user IDs."""
+    def _get_user_mappings_batch(
+        self, user_ids: list[UUID]
+    ) -> dict[UUID, ScimUserMapping]:
+        """Batch-fetch SCIM user mappings keyed by user ID."""
         if not user_ids:
             return {}
         mappings = self._session.scalars(
             select(ScimUserMapping).where(ScimUserMapping.user_id.in_(user_ids))
         ).all()
-        return {m.user_id: m.external_id for m in mappings}
+        return {m.user_id: m for m in mappings}
+
+    def get_user_groups(self, user_id: UUID) -> list[tuple[int, str]]:
+        """Get groups a user belongs to as ``(group_id, group_name)`` pairs.
+
+        Excludes groups marked for deletion.
+        """
+        rels = self._session.scalars(
+            select(User__UserGroup).where(User__UserGroup.user_id == user_id)
+        ).all()
+
+        group_ids = [r.user_group_id for r in rels]
+        if not group_ids:
+            return []
+
+        groups = self._session.scalars(
+            select(UserGroup).where(
+                UserGroup.id.in_(group_ids),
+                UserGroup.is_up_for_deletion.is_(False),
+            )
+        ).all()
+        return [(g.id, g.name) for g in groups]
+
+    def get_users_groups_batch(
+        self, user_ids: list[UUID]
+    ) -> dict[UUID, list[tuple[int, str]]]:
+        """Batch-fetch group memberships for multiple users.
+
+        Returns a mapping of ``user_id → [(group_id, group_name), ...]``.
+        Avoids N+1 queries when building user list responses.
+        """
+        if not user_ids:
+            return {}
+
+        rels = self._session.scalars(
+            select(User__UserGroup).where(User__UserGroup.user_id.in_(user_ids))
+        ).all()
+
+        group_ids = list({r.user_group_id for r in rels})
+        if not group_ids:
+            return {}
+
+        groups = self._session.scalars(
+            select(UserGroup).where(
+                UserGroup.id.in_(group_ids),
+                UserGroup.is_up_for_deletion.is_(False),
+            )
+        ).all()
+        groups_by_id = {g.id: g.name for g in groups}
+
+        result: dict[UUID, list[tuple[int, str]]] = {}
+        for r in rels:
+            if r.user_id and r.user_group_id in groups_by_id:
+                result.setdefault(r.user_id, []).append(
+                    (r.user_group_id, groups_by_id[r.user_group_id])
+                )
+        return result
 
     # ------------------------------------------------------------------
     # Group mapping operations
@@ -483,9 +559,13 @@ class ScimDAL(DAL):
         if not user_ids:
             return []
 
-        users = self._session.scalars(
-            select(User).where(User.id.in_(user_ids))  # type: ignore[attr-defined]
-        ).all()
+        users = (
+            self._session.scalars(
+                select(User).where(User.id.in_(user_ids))  # type: ignore[attr-defined]
+            )
+            .unique()
+            .all()
+        )
         users_by_id = {u.id: u for u in users}
 
         return [
@@ -504,9 +584,13 @@ class ScimDAL(DAL):
         """
         if not uuids:
             return []
-        existing_users = self._session.scalars(
-            select(User).where(User.id.in_(uuids))  # type: ignore[attr-defined]
-        ).all()
+        existing_users = (
+            self._session.scalars(
+                select(User).where(User.id.in_(uuids))  # type: ignore[attr-defined]
+            )
+            .unique()
+            .all()
+        )
         existing_ids = {u.id for u in existing_users}
         return [uid for uid in uuids if uid not in existing_ids]
 

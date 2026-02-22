@@ -9,6 +9,7 @@ Admin API schemas are internal to Onyx and used for SCIM token management.
 
 from datetime import datetime
 from enum import Enum
+from typing import Any
 
 from pydantic import BaseModel
 from pydantic import ConfigDict
@@ -63,6 +64,13 @@ class ScimMeta(BaseModel):
     location: str | None = None
 
 
+class ScimUserGroupRef(BaseModel):
+    """Group reference within a User resource (RFC 7643 §4.1.2, read-only)."""
+
+    value: str
+    display: str | None = None
+
+
 class ScimUserResource(BaseModel):
     """SCIM User resource representation (RFC 7643 §4.1).
 
@@ -76,8 +84,10 @@ class ScimUserResource(BaseModel):
     externalId: str | None = None  # IdP's identifier for this user
     userName: str  # Typically the user's email address
     name: ScimName | None = None
+    displayName: str | None = None
     emails: list[ScimEmail] = Field(default_factory=list)
     active: bool = True
+    groups: list[ScimUserGroupRef] = Field(default_factory=list)
     meta: ScimMeta | None = None
 
 
@@ -126,7 +136,7 @@ class ScimPatchOperation(BaseModel):
 
     op: ScimPatchOperationType
     path: str | None = None
-    value: str | list[dict[str, str]] | dict[str, str | bool] | bool | None = None
+    value: Any = None
 
 
 class ScimPatchRequest(BaseModel):
