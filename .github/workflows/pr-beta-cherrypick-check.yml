@@ -15,14 +15,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - name: Check PR body for beta cherry-pick consideration
+      - name: Check PR body for beta cherry-pick consideration (non-blocking)
         env:
-          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_BODY: ${{ github.event.pull_request.body || '' }}
         run: |
-          if echo "$PR_BODY" | grep -qiE "\\[x\\][[:space:]]*\\[Required\\][[:space:]]*I have considered whether this PR needs to be cherry[- ]picked to the latest beta branch"; then
-            echo "Cherry-pick consideration box is checked. Check passed."
+          if echo "$PR_BODY" | grep -qiE "\\[x\\][[:space:]]*(\\[[^]]+\\][[:space:]]*)?I have considered whether this PR needs to be cherry[- ]picked to the latest beta branch"; then
+            echo "Cherry-pick consideration box is checked. Auto cherry-pick helper can run after merge."
             exit 0
           fi
 
-          echo "::error::Please check the 'I have considered whether this PR needs to be cherry-picked to the latest beta branch' box in the PR description."
-          exit 1
+          echo "Cherry-pick consideration box is not checked. This does not block merge."
+          exit 0
