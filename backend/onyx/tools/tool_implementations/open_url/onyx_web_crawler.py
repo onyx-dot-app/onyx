@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from concurrent.futures import ThreadPoolExecutor
 
 from onyx.file_processing.html_utils import ParsedHTML
 from onyx.file_processing.html_utils import web_html_cleanup
@@ -21,10 +22,22 @@ from onyx.utils.web_content import title_from_url
 
 logger = setup_logger()
 
-DEFAULT_TIMEOUT_SECONDS = 15
+DEFAULT_READ_TIMEOUT_SECONDS = 15
+DEFAULT_CONNECT_TIMEOUT_SECONDS = 5
 DEFAULT_USER_AGENT = "OnyxWebCrawler/1.0 (+https://www.onyx.app)"
 DEFAULT_MAX_PDF_SIZE_BYTES = 50 * 1024 * 1024  # 50 MB
 DEFAULT_MAX_HTML_SIZE_BYTES = 20 * 1024 * 1024  # 20 MB
+DEFAULT_MAX_WORKERS = 5
+
+
+def _failed_result(url: str) -> WebContent:
+    return WebContent(
+        title="",
+        link=url,
+        full_content="",
+        published_date=None,
+        scrape_successful=False,
+    )
 
 
 class OnyxWebCrawler(WebContentProvider):
@@ -37,12 +50,14 @@ class OnyxWebCrawler(WebContentProvider):
     def __init__(
         self,
         *,
-        timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
+        timeout_seconds: int = DEFAULT_READ_TIMEOUT_SECONDS,
+        connect_timeout_seconds: int = DEFAULT_CONNECT_TIMEOUT_SECONDS,
         user_agent: str = DEFAULT_USER_AGENT,
         max_pdf_size_bytes: int | None = None,
         max_html_size_bytes: int | None = None,
     ) -> None:
-        self._timeout_seconds = timeout_seconds
+        self._read_timeout_seconds = timeout_seconds
+        self._connect_timeout_seconds = connect_timeout_seconds
         self._max_pdf_size_bytes = max_pdf_size_bytes
         self._max_html_size_bytes = max_html_size_bytes
         self._headers = {
@@ -51,75 +66,68 @@ class OnyxWebCrawler(WebContentProvider):
         }
 
     def contents(self, urls: Sequence[str]) -> list[WebContent]:
-        results: list[WebContent] = []
-        for url in urls:
-            results.append(self._fetch_url(url))
-        return results
+        if not urls:
+            return []
+
+        max_workers = min(DEFAULT_MAX_WORKERS, len(urls))
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            return list(executor.map(self._fetch_url_safe, urls))
+
+    def _fetch_url_safe(self, url: str) -> WebContent:
+        """Wrapper that catches all exceptions so one bad URL doesn't kill the batch."""
+        try:
+            return self._fetch_url(url)
+        except Exception as exc:
+            logger.warning(
+                "Onyx crawler unexpected error for %s (%s)",
+                url,
+                exc.__class__.__name__,
+            )
+            return _failed_result(url)
 
     def _fetch_url(self, url: str) -> WebContent:
         try:
-            # Use SSRF-safe request to prevent DNS rebinding attacks
             response = ssrf_safe_get(
-                url, headers=self._headers, timeout=self._timeout_seconds
+                url,
+                headers=self._headers,
+                timeout=(self._connect_timeout_seconds, self._read_timeout_seconds),
             )
         except SSRFException as exc:
             logger.error(
-                "SSRF protection blocked request to %s: %s",
+                "SSRF protection blocked request to %s (%s)",
                 url,
-                str(exc),
+                exc.__class__.__name__,
             )
-            return WebContent(
-                title="",
-                link=url,
-                full_content="",
-                published_date=None,
-                scrape_successful=False,
-            )
-        except Exception as exc:  # pragma: no cover - network failures vary
+            return _failed_result(url)
+        except Exception as exc:
             logger.warning(
                 "Onyx crawler failed to fetch %s (%s)",
                 url,
                 exc.__class__.__name__,
             )
-            return WebContent(
-                title="",
-                link=url,
-                full_content="",
-                published_date=None,
-                scrape_successful=False,
-            )
+            return _failed_result(url)
 
         if response.status_code >= 400:
             logger.warning("Onyx crawler received %s for %s", response.status_code, url)
-            return WebContent(
-                title="",
-                link=url,
-                full_content="",
-                published_date=None,
-                scrape_successful=False,
-            )
+            return _failed_result(url)
 
         content_type = response.headers.get("Content-Type", "")
-        content_sniff = response.content[:1024] if response.content else None
+        content = response.content
+
+        content_sniff = content[:1024] if content else None
         if is_pdf_resource(url, content_type, content_sniff):
             if (
                 self._max_pdf_size_bytes is not None
-                and len(response.content) > self._max_pdf_size_bytes
+                and len(content) > self._max_pdf_size_bytes
             ):
                 logger.warning(
                     "PDF content too large (%d bytes) for %s, max is %d",
-                    len(response.content),
+                    len(content),
                     url,
                     self._max_pdf_size_bytes,
                 )
-                return WebContent(
-                    title="",
-                    link=url,
-                    full_content="",
-                    published_date=None,
-                    scrape_successful=False,
-                )
-            text_content, metadata = extract_pdf_text(response.content)
+                return _failed_result(url)
+            text_content, metadata = extract_pdf_text(content)
             title = title_from_pdf_metadata(metadata) or title_from_url(url)
             return WebContent(
                 title=title,
@@ -131,25 +139,19 @@ class OnyxWebCrawler(WebContentProvider):
 
         if (
             self._max_html_size_bytes is not None
-            and len(response.content) > self._max_html_size_bytes
+            and len(content) > self._max_html_size_bytes
         ):
             logger.warning(
                 "HTML content too large (%d bytes) for %s, max is %d",
-                len(response.content),
+                len(content),
                 url,
                 self._max_html_size_bytes,
             )
-            return WebContent(
-                title="",
-                link=url,
-                full_content="",
-                published_date=None,
-                scrape_successful=False,
-            )
+            return _failed_result(url)
 
         try:
             decoded_html = decode_html_bytes(
-                response.content,
+                content,
                 content_type=content_type,
                 fallback_encoding=response.apparent_encoding or response.encoding,
             )
