@@ -205,6 +205,16 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
                         stdout_parts.append(event.data)
                     else:
                         stderr_parts.append(event.data)
+                    # Emit incremental delta to frontend
+                    self.emitter.emit(
+                        Packet(
+                            placement=placement,
+                            obj=PythonToolDelta(
+                                stdout=event.data if event.stream == "stdout" else "",
+                                stderr=event.data if event.stream == "stderr" else "",
+                            ),
+                        )
+                    )
                 elif isinstance(event, StreamResultEvent):
                     result_event = event
                 elif isinstance(event, StreamErrorEvent):
@@ -288,17 +298,14 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
                         f"Failed to delete Code Interpreter staged file {file_mapping['file_id']}: {e}"
                     )
 
-            # Emit delta with stdout/stderr and generated files
-            self.emitter.emit(
-                Packet(
-                    placement=placement,
-                    obj=PythonToolDelta(
-                        stdout=truncated_stdout,
-                        stderr=truncated_stderr,
-                        file_ids=generated_file_ids,
-                    ),
+            # Emit file_ids once files are processed
+            if generated_file_ids:
+                self.emitter.emit(
+                    Packet(
+                        placement=placement,
+                        obj=PythonToolDelta(file_ids=generated_file_ids),
+                    )
                 )
-            )
 
             # Build result
             result = LlmPythonExecutionResult(

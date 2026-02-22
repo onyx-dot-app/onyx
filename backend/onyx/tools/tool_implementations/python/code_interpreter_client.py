@@ -126,7 +126,7 @@ class CodeInterpreterClient:
         execution if the streaming endpoint is not available (older
         code-interpreter versions).
         """
-        url = f"{self.base_url}/v1/execute/streaming"
+        url = f"{self.base_url}/v1/execute/stream"
         payload = self._build_payload(code, stdin, timeout_ms, files)
 
         response = self.session.post(
@@ -163,6 +163,8 @@ class CodeInterpreterClient:
         for line in response.iter_lines(decode_unicode=True):
             if line is None:
                 continue
+
+            logger.critical(line)
 
             if line == "":
                 # Blank line marks end of an SSE event
