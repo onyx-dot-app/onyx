@@ -4,6 +4,7 @@ export enum LLMProviderName {
   OLLAMA_CHAT = "ollama_chat",
   AZURE = "azure",
   OPENROUTER = "openrouter",
+  LLMAPI = "llmapi",
   VERTEX_AI = "vertex_ai",
   BEDROCK = "bedrock",
   CUSTOM = "custom",
@@ -127,6 +128,19 @@ export interface OpenRouterFetchParams {
   provider_name?: string;
 }
 
+export interface LLMAPIModelResponse {
+  name: string;
+  display_name: string;
+  max_input_tokens: number | null;
+  supports_image_input: boolean;
+}
+
+export interface LLMAPIFetchParams {
+  api_base?: string;
+  api_key?: string;
+  provider_name?: string;
+}
+
 export interface VertexAIFetchParams {
   model_configurations?: ModelConfiguration[];
 }
@@ -135,4 +149,5 @@ export type FetchModelsParams =
   | BedrockFetchParams
   | OllamaFetchParams
   | OpenRouterFetchParams
+  | LLMAPIFetchParams
   | VertexAIFetchParams;

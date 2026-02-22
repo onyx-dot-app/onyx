@@ -38,6 +38,9 @@ OLLAMA_API_KEY_CONFIG_KEY = "OLLAMA_API_KEY"
 # OpenRouter
 OPENROUTER_PROVIDER_NAME = "openrouter"
 
+# LLM API
+LLMAPI_PROVIDER_NAME = "llmapi"
+
 ANTHROPIC_PROVIDER_NAME = "anthropic"
 
 # Curated list of Anthropic models to show by default in the UI

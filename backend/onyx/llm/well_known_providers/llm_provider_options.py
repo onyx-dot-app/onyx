@@ -17,6 +17,7 @@ from onyx.llm.well_known_providers.constants import AZURE_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import BEDROCK_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import OLLAMA_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import OPENAI_PROVIDER_NAME
+from onyx.llm.well_known_providers.constants import LLMAPI_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import OPENROUTER_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import VERTEXAI_PROVIDER_NAME
 from onyx.llm.well_known_providers.models import WellKnownLLMProviderDescriptor
@@ -45,6 +46,7 @@ def _get_provider_to_models_map() -> dict[str, list[str]]:
         VERTEXAI_PROVIDER_NAME: get_vertexai_model_names(),
         OLLAMA_PROVIDER_NAME: [],  # Dynamic - fetched from Ollama API
         OPENROUTER_PROVIDER_NAME: [],  # Dynamic - fetched from OpenRouter API
+        LLMAPI_PROVIDER_NAME: [],  # Dynamic - fetched from LLM API
     }
 
 
@@ -328,6 +330,7 @@ def get_provider_display_name(provider_name: str) -> str:
         BEDROCK_PROVIDER_NAME: "Amazon Bedrock",
         VERTEXAI_PROVIDER_NAME: "Google Vertex AI",
         OPENROUTER_PROVIDER_NAME: "OpenRouter",
+        LLMAPI_PROVIDER_NAME: "LLM API",
     }
 
     if provider_name in _ONYX_PROVIDER_DISPLAY_NAMES:

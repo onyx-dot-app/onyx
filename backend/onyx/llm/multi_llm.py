@@ -292,11 +292,16 @@ class LitellmLLM(LLM):
         optional_kwargs: dict[str, Any] = {}
 
         # Model name
-        model_provider = (
-            f"{self.config.model_provider}/responses"
-            if is_openai_model  # Uses litellm's completions -> responses bridge
-            else self.config.model_provider
-        )
+        # LLMAPI is an OpenAI-compatible aggregator; route through LiteLLM's
+        # openai handler with a custom base_url.
+        is_llmapi = self._model_provider == LlmProviderNames.LLMAPI
+        if is_llmapi:
+            effective_provider = "openai"
+        elif is_openai_model:
+            effective_provider = f"{self.config.model_provider}/responses"
+        else:
+            effective_provider = self.config.model_provider
+        model_provider = effective_provider
         model = (
             f"{model_provider}/{self.config.deployment_name or self.config.model_name}"
         )

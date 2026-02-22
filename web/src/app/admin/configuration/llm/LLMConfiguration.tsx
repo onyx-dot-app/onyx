@@ -15,6 +15,7 @@ import { AzureForm } from "./forms/AzureForm";
 import { BedrockForm } from "./forms/BedrockForm";
 import { VertexAIForm } from "./forms/VertexAIForm";
 import { OpenRouterForm } from "./forms/OpenRouterForm";
+import { LLMAPIForm } from "./forms/LLMAPIForm";
 import { getFormForExistingProvider } from "./forms/getForm";
 import { CustomForm } from "./forms/CustomForm";
 
@@ -76,6 +77,7 @@ export function LLMConfiguration() {
         <BedrockForm shouldMarkAsDefault={isFirstProvider} />
         <VertexAIForm shouldMarkAsDefault={isFirstProvider} />
         <OpenRouterForm shouldMarkAsDefault={isFirstProvider} />
+        <LLMAPIForm shouldMarkAsDefault={isFirstProvider} />
 
         <CustomForm shouldMarkAsDefault={isFirstProvider} />
       </div>

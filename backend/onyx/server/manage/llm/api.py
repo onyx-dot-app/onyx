@@ -60,6 +60,9 @@ from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from onyx.server.manage.llm.models import OllamaFinalModelResponse
 from onyx.server.manage.llm.models import OllamaModelDetails
 from onyx.server.manage.llm.models import OllamaModelsRequest
+from onyx.server.manage.llm.models import LLMAPIFinalModelResponse
+from onyx.server.manage.llm.models import LLMAPIModelDetails
+from onyx.server.manage.llm.models import LLMAPIModelsRequest
 from onyx.server.manage.llm.models import OpenRouterFinalModelResponse
 from onyx.server.manage.llm.models import OpenRouterModelDetails
 from onyx.server.manage.llm.models import OpenRouterModelsRequest
@@ -1021,6 +1024,104 @@ def get_ollama_available_models(
                 )
         except ValueError as e:
             logger.warning(f"Failed to sync Ollama models to DB: {e}")
+
+    return sorted_results
+
+
+def _get_llmapi_models_response(api_base: str, api_key: str) -> dict:
+    """Perform GET to LLM API /models and return parsed JSON."""
+    cleaned_api_base = api_base.strip().rstrip("/")
+    url = f"{cleaned_api_base}/models"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+    }
+    try:
+        response = httpx.get(url, headers=headers, timeout=10.0)
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to fetch LLM API models: {e}",
+        )
+
+
+@admin_router.post("/llmapi/available-models")
+def get_llmapi_available_models(
+    request: LLMAPIModelsRequest,
+    _: User = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
+) -> list[LLMAPIFinalModelResponse]:
+    """Fetch available models from LLM API `/v1/models` endpoint.
+
+    Parses the OpenAI-compatible model list format.
+    """
+
+    response_json = _get_llmapi_models_response(
+        api_base=request.api_base, api_key=request.api_key
+    )
+
+    data = response_json.get("data", [])
+    if not isinstance(data, list) or len(data) == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="No models found from your LLM API endpoint",
+        )
+
+    results: list[LLMAPIFinalModelResponse] = []
+    for item in data:
+        try:
+            model_details = LLMAPIModelDetails.model_validate(item)
+
+            # Strip vendor prefix for display name
+            display_name = strip_openrouter_vendor_prefix(
+                model_details.display_name, model_details.id
+            )
+
+            results.append(
+                LLMAPIFinalModelResponse(
+                    name=model_details.id,
+                    display_name=display_name,
+                    max_input_tokens=None,
+                    supports_image_input=False,
+                )
+            )
+        except Exception as e:
+            logger.warning(
+                "Failed to parse LLM API model entry",
+                extra={"error": str(e), "item": str(item)[:1000]},
+            )
+
+    if not results:
+        raise HTTPException(
+            status_code=400, detail="No compatible models found from LLM API"
+        )
+
+    sorted_results = sorted(results, key=lambda m: m.name.lower())
+
+    # Sync new models to DB if provider_name is specified
+    if request.provider_name:
+        try:
+            models_to_sync = [
+                {
+                    "name": r.name,
+                    "display_name": r.display_name,
+                    "max_input_tokens": r.max_input_tokens,
+                    "supports_image_input": r.supports_image_input,
+                }
+                for r in sorted_results
+            ]
+            new_count = sync_model_configurations(
+                db_session=db_session,
+                provider_name=request.provider_name,
+                models=models_to_sync,
+            )
+            if new_count > 0:
+                logger.info(
+                    f"Added {new_count} new LLM API models to provider '{request.provider_name}'"
+                )
+        except ValueError as e:
+            logger.warning(f"Failed to sync LLM API models to DB: {e}")
 
     return sorted_results
 
