@@ -72,33 +72,41 @@ export async function pinAssistantByName(
 /**
  * Ensures the Image Generation tool is enabled in the default assistant configuration.
  * If it's not enabled, it will toggle it on.
+ *
+ * Navigates to the Chat Preferences page and toggles the Image Generation switch
+ * inside the "Actions & Tools" collapsible section (open by default).
  */
 export async function ensureImageGenerationEnabled(page: Page): Promise<void> {
-  // Navigate to the default assistant configuration page
-  await page.goto("/admin/configuration/default-assistant");
-
-  // Wait for the page to load
+  // Navigate to the chat preferences page
+  await page.goto("/admin/configuration/chat-preferences");
   await page.waitForLoadState("networkidle");
 
-  // Find the Image Generation tool checkbox
-  // The tool display name is "Image Generation" based on the description in the code
-  // Note: The UI changed from switches to checkboxes
-  const checkboxElement = page.getByLabel("image-generation-checkbox").first();
+  // The "Actions & Tools" collapsible is open by default.
+  // Find the Image Generation tool switch via its label container.
+  const imageGenSwitch = page
+    .locator("label")
+    .filter({ has: page.getByText("Image Generation", { exact: true }) })
+    .locator('button[role="switch"]')
+    .first();
+
+  await expect(imageGenSwitch).toBeVisible({ timeout: 10000 });
 
   // Check if it's already enabled
-  const isEnabled = Boolean(await checkboxElement.getAttribute("aria-checked"));
+  const currentState = await imageGenSwitch.getAttribute("aria-checked");
 
-  if (!isEnabled) {
-    // If not enabled, click to enable it
-    await checkboxElement.click();
+  if (currentState !== "true") {
+    // Toggle it on — auto-saves immediately via PATCH /api/admin/default-assistant
+    await imageGenSwitch.click();
 
-    // Wait for the toggle to complete
-    await page.waitForTimeout(1000);
+    // Wait for the auto-save toast to confirm success
+    await expect(page.getByText("Tools updated").first()).toBeVisible({
+      timeout: 5000,
+    });
 
     // Verify it's now enabled
-    const newState = Boolean(
-      await checkboxElement.getAttribute("aria-checked")
-    );
-    if (!newState) throw new Error("Failed to enable Image Generation tool");
+    const newState = await imageGenSwitch.getAttribute("aria-checked");
+    if (newState !== "true") {
+      throw new Error("Failed to enable Image Generation tool");
+    }
   }
 }

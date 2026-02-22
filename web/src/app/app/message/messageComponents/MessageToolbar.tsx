@@ -75,6 +75,7 @@ const SourcesTagWrapper = React.memo(function SourcesTagWrapper({
 
   return (
     <SourceTag
+      variant="button"
       displayName="Sources"
       sources={sources}
       onSourceClick={handleSourceClick}

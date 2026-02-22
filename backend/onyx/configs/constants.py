@@ -157,6 +157,17 @@ CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT = 300  # 5 min
 
 CELERY_USER_FILE_PROCESSING_LOCK_TIMEOUT = 30 * 60  # 30 minutes (in seconds)
 
+# How long a queued user-file task is valid before workers discard it.
+# Should be longer than the beat interval (20 s) but short enough to prevent
+# indefinite queue growth.  Workers drop tasks older than this without touching
+# the DB, so a shorter value = faster drain of stale duplicates.
+CELERY_USER_FILE_PROCESSING_TASK_EXPIRES = 60  # 1 minute (in seconds)
+
+# Maximum number of tasks allowed in the user-file-processing queue before the
+# beat generator stops adding more.  Prevents unbounded queue growth when workers
+# fall behind.
+USER_FILE_PROCESSING_MAX_QUEUE_DEPTH = 500
+
 CELERY_USER_FILE_PROJECT_SYNC_LOCK_TIMEOUT = 5 * 60  # 5 minutes (in seconds)
 
 CELERY_SANDBOX_FILE_SYNC_LOCK_TIMEOUT = 5 * 60  # 5 minutes (in seconds)
@@ -443,6 +454,9 @@ class OnyxRedisLocks:
     # User file processing
     USER_FILE_PROCESSING_BEAT_LOCK = "da_lock:check_user_file_processing_beat"
     USER_FILE_PROCESSING_LOCK_PREFIX = "da_lock:user_file_processing"
+    # Short-lived key set when a task is enqueued; cleared when the worker picks it up.
+    # Prevents the beat from re-enqueuing the same file while a task is already queued.
+    USER_FILE_QUEUED_PREFIX = "da_lock:user_file_queued"
     USER_FILE_PROJECT_SYNC_BEAT_LOCK = "da_lock:check_user_file_project_sync_beat"
     USER_FILE_PROJECT_SYNC_LOCK_PREFIX = "da_lock:user_file_project_sync"
     USER_FILE_DELETE_BEAT_LOCK = "da_lock:check_user_file_delete_beat"

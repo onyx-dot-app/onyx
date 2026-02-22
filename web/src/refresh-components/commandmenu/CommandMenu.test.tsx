@@ -367,8 +367,8 @@ describe("CommandMenu", () => {
       );
       expect(itemContainer).toBeInTheDocument();
 
-      // The LineItem component has a button inside that handles mouse events
-      const button = itemContainer!.querySelector("button");
+      // The LineItem component has a button inside that handles click events
+      const button = itemContainer!.querySelector('[role="button"]');
       expect(button).toBeInTheDocument();
       fireEvent.mouseEnter(button!);
 
@@ -391,7 +391,7 @@ describe("CommandMenu", () => {
       expect(itemContainer).toBeInTheDocument();
 
       // The LineItem component has a button inside that handles click events
-      const button = itemContainer!.querySelector("button");
+      const button = itemContainer!.querySelector('[role="button"]');
       expect(button).toBeInTheDocument();
       await user.click(button!);
 

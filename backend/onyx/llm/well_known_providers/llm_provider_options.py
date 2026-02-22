@@ -1,5 +1,7 @@
 import json
 import pathlib
+import threading
+import time
 
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.constants import PROVIDER_DISPLAY_NAMES
@@ -23,6 +25,11 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+_RECOMMENDATIONS_CACHE_TTL_SECONDS = 300
+_recommendations_cache_lock = threading.Lock()
+_cached_recommendations: LLMRecommendations | None = None
+_cached_recommendations_time: float = 0.0
+
 
 def _get_provider_to_models_map() -> dict[str, list[str]]:
     """Lazy-load provider model mappings to avoid importing litellm at module level.
@@ -41,19 +48,40 @@ def _get_provider_to_models_map() -> dict[str, list[str]]:
     }
 
 
-def get_recommendations() -> LLMRecommendations:
-    """Get the recommendations from the GitHub config."""
-    recommendations_from_github = fetch_llm_recommendations_from_github()
-    if recommendations_from_github:
-        return recommendations_from_github
-
-    # Fall back to json bundled with code
+def _load_bundled_recommendations() -> LLMRecommendations:
     json_path = pathlib.Path(__file__).parent / "recommended-models.json"
     with open(json_path, "r") as f:
         json_config = json.load(f)
+    return LLMRecommendations.model_validate(json_config)
 
-    recommendations_from_json = LLMRecommendations.model_validate(json_config)
-    return recommendations_from_json
+
+def get_recommendations() -> LLMRecommendations:
+    """Get the recommendations, with an in-memory cache to avoid
+    hitting GitHub on every API request."""
+    global _cached_recommendations, _cached_recommendations_time
+
+    now = time.monotonic()
+    if (
+        _cached_recommendations is not None
+        and (now - _cached_recommendations_time) < _RECOMMENDATIONS_CACHE_TTL_SECONDS
+    ):
+        return _cached_recommendations
+
+    with _recommendations_cache_lock:
+        # Double-check after acquiring lock
+        if (
+            _cached_recommendations is not None
+            and (time.monotonic() - _cached_recommendations_time)
+            < _RECOMMENDATIONS_CACHE_TTL_SECONDS
+        ):
+            return _cached_recommendations
+
+        recommendations_from_github = fetch_llm_recommendations_from_github()
+        result = recommendations_from_github or _load_bundled_recommendations()
+
+        _cached_recommendations = result
+        _cached_recommendations_time = time.monotonic()
+        return result
 
 
 def is_obsolete_model(model_name: str, provider: str) -> bool:
@@ -215,6 +243,23 @@ def model_configurations_for_provider(
 ) -> list[ModelConfigurationView]:
     recommended_visible_models = llm_recommendations.get_visible_models(provider_name)
     recommended_visible_models_names = [m.name for m in recommended_visible_models]
+
+    # Preserve provider-defined ordering while de-duplicating.
+    model_names: list[str] = []
+    seen_model_names: set[str] = set()
+    for model_name in (
+        fetch_models_for_provider(provider_name) + recommended_visible_models_names
+    ):
+        if model_name in seen_model_names:
+            continue
+        seen_model_names.add(model_name)
+        model_names.append(model_name)
+
+    # Vertex model list can be large and mixed-vendor; alphabetical ordering
+    # makes model discovery easier in admin selection UIs.
+    if provider_name == VERTEXAI_PROVIDER_NAME:
+        model_names = sorted(model_names, key=str.lower)
+
     return [
         ModelConfigurationView(
             name=model_name,
@@ -222,8 +267,7 @@ def model_configurations_for_provider(
             max_input_tokens=get_max_input_tokens(model_name, provider_name),
             supports_image_input=model_supports_image_input(model_name, provider_name),
         )
-        for model_name in set(fetch_models_for_provider(provider_name))
-        | set(recommended_visible_models_names)
+        for model_name in model_names
     ]
 
 

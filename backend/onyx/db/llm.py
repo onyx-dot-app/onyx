@@ -430,7 +430,7 @@ def fetch_existing_models(
 
 def fetch_existing_llm_providers(
     db_session: Session,
-    flow_types: list[LLMModelFlowType],
+    flow_type_filter: list[LLMModelFlowType],
     only_public: bool = False,
     exclude_image_generation_providers: bool = True,
 ) -> list[LLMProviderModel]:
@@ -438,30 +438,27 @@ def fetch_existing_llm_providers(
 
     Args:
         db_session: Database session
-        flow_types: List of flow types to filter by
+        flow_type_filter: List of flow types to filter by, empty list for no filter
         only_public: If True, only return public providers
         exclude_image_generation_providers: If True, exclude providers that are
             used for image generation configs
     """
-    providers_with_flows = (
-        select(ModelConfiguration.llm_provider_id)
-        .join(LLMModelFlow)
-        .where(LLMModelFlow.llm_model_flow_type.in_(flow_types))
-        .distinct()
-    )
+    stmt = select(LLMProviderModel)
+
+    if flow_type_filter:
+        providers_with_flows = (
+            select(ModelConfiguration.llm_provider_id)
+            .join(LLMModelFlow)
+            .where(LLMModelFlow.llm_model_flow_type.in_(flow_type_filter))
+            .distinct()
+        )
+        stmt = stmt.where(LLMProviderModel.id.in_(providers_with_flows))
 
     if exclude_image_generation_providers:
-        stmt = select(LLMProviderModel).where(
-            LLMProviderModel.id.in_(providers_with_flows)
-        )
-    else:
         image_gen_provider_ids = select(ModelConfiguration.llm_provider_id).join(
             ImageGenerationConfig
         )
-        stmt = select(LLMProviderModel).where(
-            LLMProviderModel.id.in_(providers_with_flows)
-            | LLMProviderModel.id.in_(image_gen_provider_ids)
-        )
+        stmt = stmt.where(~LLMProviderModel.id.in_(image_gen_provider_ids))
 
     stmt = stmt.options(
         selectinload(LLMProviderModel.model_configurations),

@@ -62,6 +62,8 @@ import { SvgCheck } from "@opal/icons";
 import { cn } from "@/lib/utils";
 import { Interactive } from "@opal/core";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { useSettingsContext } from "@/providers/SettingsProvider";
+import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 
 interface PAT {
   id: number;
@@ -487,65 +489,52 @@ function PromptShortcuts() {
     toast.error("Failed to load shortcuts");
   }, [error]);
 
-  // Auto-add empty row when user starts typing in the last row
-  useEffect(() => {
-    // Skip during initial load - the fetch useEffect handles the initial empty row
-    if (isInitialLoad) return;
-
-    // Only manage new/unsaved rows (isNew: true) - never touch existing shortcuts
-    const newShortcuts = shortcuts.filter((s) => s.isNew);
-    const emptyNewRows = newShortcuts.filter(
-      (s) => !s.prompt.trim() && !s.content.trim()
-    );
-    const emptyNewRowsCount = emptyNewRows.length;
-
-    // If we have no empty new rows, add one
-    if (emptyNewRowsCount === 0) {
-      setShortcuts((prev) => [
-        ...prev,
-        {
-          id: Date.now(),
-          prompt: "",
-          content: "",
-          active: true,
-          is_public: false,
-          isNew: true,
-        },
-      ]);
-    }
-    // If we have more than one empty new row, keep only one
-    else if (emptyNewRowsCount > 1) {
-      setShortcuts((prev) => {
-        // Keep all existing shortcuts regardless of their state
-        // Keep all new shortcuts that have at least one field filled
-        // Add one empty new shortcut
-        const existingShortcuts = prev.filter((s) => !s.isNew);
-        const filledNewShortcuts = prev.filter(
-          (s) => s.isNew && (s.prompt.trim() || s.content.trim())
-        );
-        return [
-          ...existingShortcuts,
-          ...filledNewShortcuts,
-          {
-            id: Date.now(),
-            prompt: "",
-            content: "",
-            active: true,
-            is_public: false,
-            isNew: true,
-          },
-        ];
-      });
-    }
-  }, [shortcuts, isInitialLoad]);
-
   const handleUpdateShortcut = useCallback(
     (index: number, field: "prompt" | "content", value: string) => {
-      setShortcuts((prev) =>
-        prev.map((shortcut, i) =>
+      setShortcuts((prev) => {
+        const next = prev.map((shortcut, i) =>
           i === index ? { ...shortcut, [field]: value } : shortcut
-        )
-      );
+        );
+
+        const isEmptyNew = (s: LocalShortcut) =>
+          s.isNew && !s.prompt.trim() && !s.content.trim();
+
+        const emptyCount = next.filter(isEmptyNew).length;
+
+        if (emptyCount === 0) {
+          return [
+            ...next,
+            {
+              id: Date.now(),
+              prompt: "",
+              content: "",
+              active: true,
+              is_public: false,
+              isNew: true,
+            },
+          ];
+        }
+
+        if (emptyCount > 1) {
+          const userRow = next[index];
+          const userRowEmpty = userRow !== undefined && isEmptyNew(userRow);
+          let keepIndex = -1;
+          if (userRowEmpty) {
+            keepIndex = index;
+          } else {
+            for (let i = next.length - 1; i >= 0; i--) {
+              const row = next[i];
+              if (row !== undefined && isEmptyNew(row)) {
+                keepIndex = i;
+                break;
+              }
+            }
+          }
+          return next.filter((s, i) => !isEmptyNew(s) || i === keepIndex);
+        }
+
+        return next;
+      });
     },
     []
   );
@@ -748,6 +737,8 @@ function ChatPreferencesSettings() {
     updateUserDefaultAppMode,
   } = useUser();
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
+  const settings = useSettingsContext();
+  const { isSearchModeAvailable: searchUiEnabled } = settings;
   const llmManager = useLlmManager();
 
   const {
@@ -803,24 +794,35 @@ function ChatPreferencesSettings() {
           </InputLayouts.Horizontal>
 
           {isPaidEnterpriseFeaturesEnabled && (
-            <InputLayouts.Horizontal
-              title="Default App Mode"
-              description="Choose whether new sessions start in Search or Chat mode."
-              center
+            <SimpleTooltip
+              tooltip={
+                searchUiEnabled
+                  ? undefined
+                  : "Search UI is disabled and can only be enabled by an admin."
+              }
+              side="top"
             >
-              <InputSelect
-                value={user?.preferences.default_app_mode ?? "CHAT"}
-                onValueChange={(value) => {
-                  void updateUserDefaultAppMode(value as "CHAT" | "SEARCH");
-                }}
+              <InputLayouts.Horizontal
+                title="Default App Mode"
+                description="Choose whether new sessions start in Search or Chat mode."
+                center
+                disabled={!searchUiEnabled}
               >
-                <InputSelect.Trigger />
-                <InputSelect.Content>
-                  <InputSelect.Item value="CHAT">Chat</InputSelect.Item>
-                  <InputSelect.Item value="SEARCH">Search</InputSelect.Item>
-                </InputSelect.Content>
-              </InputSelect>
-            </InputLayouts.Horizontal>
+                <InputSelect
+                  value={user?.preferences.default_app_mode ?? "CHAT"}
+                  onValueChange={(value) => {
+                    void updateUserDefaultAppMode(value as "CHAT" | "SEARCH");
+                  }}
+                  disabled={!searchUiEnabled}
+                >
+                  <InputSelect.Trigger />
+                  <InputSelect.Content>
+                    <InputSelect.Item value="CHAT">Chat</InputSelect.Item>
+                    <InputSelect.Item value="SEARCH">Search</InputSelect.Item>
+                  </InputSelect.Content>
+                </InputSelect>
+              </InputLayouts.Horizontal>
+            </SimpleTooltip>
           )}
         </Card>
       </Section>
@@ -1301,7 +1303,11 @@ function AccountsAccessSettings() {
                     } ago - ${expiryText}`;
 
                     return (
-                      <Interactive.Container key={pat.id} heightVariant="fit">
+                      <Interactive.Container
+                        key={pat.id}
+                        heightVariant="fit"
+                        widthVariant="full"
+                      >
                         <div className="w-full bg-background-tint-01">
                           <AttachmentItemLayout
                             icon={SvgKey}

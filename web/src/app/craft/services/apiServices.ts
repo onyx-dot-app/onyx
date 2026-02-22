@@ -11,6 +11,7 @@ import {
   StreamPacket,
   UsageLimits,
   DirectoryListing,
+  SharingScope,
 } from "@/app/craft/types/streamingTypes";
 
 // =============================================================================
@@ -196,6 +197,23 @@ export async function updateSessionName(
   if (!res.ok) {
     throw new Error(`Failed to update session name: ${res.status}`);
   }
+}
+
+export async function setSessionSharing(
+  sessionId: string,
+  sharingScope: SharingScope
+): Promise<{ session_id: string; sharing_scope: SharingScope }> {
+  const res = await fetch(`${API_BASE}/sessions/${sessionId}/public`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sharing_scope: sharingScope }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Failed to update session sharing: ${res.status}`);
+  }
+
+  return res.json();
 }
 
 export async function deleteSession(sessionId: string): Promise<void> {

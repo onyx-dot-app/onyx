@@ -217,8 +217,8 @@ class TestAutoModeSyncFeature:
                     ),
                     additional_visible_models=[
                         SimpleKnownModel(
-                            name="claude-3-5-haiku-latest",
-                            display_name="Claude 3.5 Haiku",
+                            name="claude-haiku-4-5",
+                            display_name="Claude Haiku 4.5",
                         )
                     ],
                 ),
@@ -260,7 +260,7 @@ class TestAutoModeSyncFeature:
 
             # Anthropic models should NOT be present
             assert "claude-3-5-sonnet-latest" not in model_names
-            assert "claude-3-5-haiku-latest" not in model_names
+            assert "claude-haiku-4-5" not in model_names
 
         finally:
             db_session.rollback()
@@ -485,7 +485,7 @@ class TestAutoModeSyncFeature:
 
         # Provider 2 (Anthropic) config
         provider_2_default_model = "claude-3-5-sonnet-latest"
-        provider_2_additional_models = ["claude-3-5-haiku-latest"]
+        provider_2_additional_models = ["claude-haiku-4-5"]
 
         # Create mock recommendations with both providers
         mock_recommendations = LLMRecommendations(
@@ -690,7 +690,7 @@ class TestAutoModeMissingFlows:
             # Step 4: The provider must appear in fetch_existing_llm_providers
             listed_providers = fetch_existing_llm_providers(
                 db_session=db_session,
-                flow_types=[LLMModelFlowType.CHAT],
+                flow_type_filter=[LLMModelFlowType.CHAT],
             )
             listed_provider_names = {p.name for p in listed_providers}
             assert provider_name in listed_provider_names, (

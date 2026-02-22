@@ -5,7 +5,7 @@ import {
   MessageRenderer,
   RenderType,
 } from "@/app/app/message/messageComponents/interfaces";
-import { BlinkingDot } from "@/app/app/message/BlinkingDot";
+import { BlinkingBar } from "@/app/app/message/BlinkingBar";
 import { ValidSources } from "@/lib/types";
 import { SearchChipList, SourceInfo } from "./SearchChipList";
 import {
@@ -80,7 +80,7 @@ export const WebSearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
               expansionCount={QUERIES_PER_EXPANSION}
               getKey={(_, index) => index}
               toSourceInfo={queryToSourceInfo}
-              emptyState={!stopPacketSeen ? <BlinkingDot /> : undefined}
+              emptyState={!stopPacketSeen ? <BlinkingBar /> : undefined}
               showDetailsCard={false}
               isQuery={true}
             />
@@ -105,7 +105,7 @@ export const WebSearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
             expansionCount={QUERIES_PER_EXPANSION}
             getKey={(_, index) => index}
             toSourceInfo={queryToSourceInfo}
-            emptyState={!stopPacketSeen ? <BlinkingDot /> : undefined}
+            emptyState={!stopPacketSeen ? <BlinkingBar /> : undefined}
             showDetailsCard={false}
             isQuery={true}
           />
@@ -126,7 +126,7 @@ export const WebSearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
           expansionCount={QUERIES_PER_EXPANSION}
           getKey={(_, index) => index}
           toSourceInfo={queryToSourceInfo}
-          emptyState={!stopPacketSeen ? <BlinkingDot /> : undefined}
+          emptyState={!stopPacketSeen ? <BlinkingBar /> : undefined}
           showDetailsCard={false}
           isQuery={true}
         />

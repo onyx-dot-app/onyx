@@ -388,9 +388,16 @@ ModalContent.displayName = DialogPrimitive.Content.displayName;
  * (icon, title, description, close button) are now controlled via this single
  * component using props, so no additional subcomponents are required.
  *
+ * When `icon` is omitted the header renders a minimal variant: just the
+ * title + description with the close button inline to the right of the title.
+ * This is JUST to be used for preview windows
+ *
  * @example
  * ```tsx
  * <Modal.Header icon={SvgWarning} title="Confirm Action" description="Are you sure?" />
+ *
+ * // Minimal variant (no icon)
+ * <Modal.Header title="Confirm Action" description="Are you sure?" />
  *
  * // With custom content
  * // Children render below the provided title/description stack.
@@ -400,7 +407,7 @@ ModalContent.displayName = DialogPrimitive.Content.displayName;
  * ```
  */
 interface ModalHeaderProps extends WithoutStyles<SectionProps> {
-  icon: React.FunctionComponent<IconProps>;
+  icon?: React.FunctionComponent<IconProps>;
   title: string;
   description?: string;
   onClose?: () => void;
@@ -415,52 +422,68 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
       setHasDescription(!!description);
     }, [description, setHasDescription]);
 
+    const closeButton = onClose && (
+      <div
+        tabIndex={-1}
+        ref={closeButtonRef as React.RefObject<HTMLDivElement>}
+      >
+        <DialogPrimitive.Close asChild>
+          <Button
+            icon={SvgX}
+            prominence="tertiary"
+            size="sm"
+            onClick={onClose}
+          />
+        </DialogPrimitive.Close>
+      </div>
+    );
+
     return (
       <Section ref={ref} padding={1} alignItems="start" height="fit" {...props}>
         <Section gap={0.5}>
+          {Icon && (
+            <Section
+              gap={0}
+              padding={0}
+              flexDirection="row"
+              justifyContent="between"
+            >
+              {/*
+                The `h-[1.5rem]` and `w-[1.5rem]` were added as backups here.
+                However, prop-resolution technically resolves to choosing classNames over size props, so technically the `size={24}` is the backup.
+                We specify both to be safe.
+
+                # Note
+                1.5rem === 24px
+              */}
+              <Icon
+                className="stroke-text-04 h-[1.5rem] w-[1.5rem]"
+                size={24}
+              />
+              {closeButton}
+            </Section>
+          )}
+
           <Section
+            alignItems="start"
             gap={0}
             padding={0}
             flexDirection="row"
             justifyContent="between"
           >
-            {/*
-              The `h-[1.5rem]` and `w-[1.5rem]` were added as backups here.
-              However, prop-resolution technically resolves to choosing classNames over size props, so technically the `size={24}` is the backup.
-              We specify both to be safe.
-
-              # Note
-              1.5rem === 24px
-            */}
-            <Icon className="stroke-text-04 h-[1.5rem] w-[1.5rem]" size={24} />
-            {onClose && (
-              <div
-                tabIndex={-1}
-                ref={closeButtonRef as React.RefObject<HTMLDivElement>}
-              >
-                <DialogPrimitive.Close asChild>
-                  <Button
-                    icon={SvgX}
-                    prominence="tertiary"
-                    size="sm"
-                    onClick={onClose}
-                  />
-                </DialogPrimitive.Close>
-              </div>
-            )}
-          </Section>
-
-          <Section alignItems="start" gap={0}>
-            <DialogPrimitive.Title asChild>
-              <Text headingH3>{title}</Text>
-            </DialogPrimitive.Title>
-            {description && (
-              <DialogPrimitive.Description asChild>
-                <Text secondaryBody text03>
-                  {description}
-                </Text>
-              </DialogPrimitive.Description>
-            )}
+            <Section alignItems="start" padding={0} gap={0}>
+              <DialogPrimitive.Title asChild>
+                <Text headingH3>{title}</Text>
+              </DialogPrimitive.Title>
+              {description && (
+                <DialogPrimitive.Description asChild>
+                  <Text secondaryBody text03>
+                    {description}
+                  </Text>
+                </DialogPrimitive.Description>
+              )}
+            </Section>
+            {!Icon && closeButton}
           </Section>
         </Section>
         {children}

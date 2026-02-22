@@ -13,9 +13,9 @@ from tests.integration.common_utils.test_models import DATestUser
 class APIKeyManager:
     @staticmethod
     def create(
+        user_performing_action: DATestUser,
         name: str | None = None,
         api_key_role: UserRole = UserRole.ADMIN,
-        user_performing_action: DATestUser | None = None,
     ) -> DATestAPIKey:
         name = f"{name}-api-key" if name else f"test-api-key-{uuid4()}"
         api_key_request = APIKeyArgs(
@@ -25,11 +25,7 @@ class APIKeyManager:
         api_key_response = requests.post(
             f"{API_SERVER_URL}/admin/api-key",
             json=api_key_request.model_dump(),
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         api_key_response.raise_for_status()
         api_key = api_key_response.json()
@@ -48,29 +44,21 @@ class APIKeyManager:
     @staticmethod
     def delete(
         api_key: DATestAPIKey,
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> None:
         api_key_response = requests.delete(
             f"{API_SERVER_URL}/admin/api-key/{api_key.api_key_id}",
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         api_key_response.raise_for_status()
 
     @staticmethod
     def get_all(
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> list[DATestAPIKey]:
         api_key_response = requests.get(
             f"{API_SERVER_URL}/admin/api-key",
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         api_key_response.raise_for_status()
         return [DATestAPIKey(**api_key) for api_key in api_key_response.json()]
@@ -78,8 +66,8 @@ class APIKeyManager:
     @staticmethod
     def verify(
         api_key: DATestAPIKey,
+        user_performing_action: DATestUser,
         verify_deleted: bool = False,
-        user_performing_action: DATestUser | None = None,
     ) -> None:
         retrieved_keys = APIKeyManager.get_all(
             user_performing_action=user_performing_action

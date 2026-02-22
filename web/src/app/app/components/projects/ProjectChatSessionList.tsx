@@ -38,7 +38,7 @@ export default function ProjectChatSessionList() {
   if (!currentProjectId) return null;
 
   return (
-    <div className="flex flex-col gap-2 px-2 w-full max-w-[800px] mx-auto mt-4">
+    <div className="flex flex-col gap-2 px-2 w-full mx-auto mt-4">
       <div className="flex items-center pl-2">
         <Text as="p" text02 secondaryBody>
           Recent Chats
@@ -56,7 +56,7 @@ export default function ProjectChatSessionList() {
           No chats yet.
         </Text>
       ) : (
-        <div className="flex flex-col gap-2 max-h-[46vh] overflow-y-auto overscroll-y-none">
+        <div className="flex flex-col gap-2">
           {projectChats.map((chat) => (
             <Link
               key={chat.id}

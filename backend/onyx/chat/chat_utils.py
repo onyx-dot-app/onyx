@@ -1,3 +1,4 @@
+import json
 import re
 from collections.abc import Callable
 from typing import cast
@@ -45,6 +46,7 @@ from onyx.utils.timing import log_function_time
 
 
 logger = setup_logger()
+IMAGE_GENERATION_TOOL_NAME = "generate_image"
 
 
 def create_chat_session_from_request(
@@ -422,6 +424,40 @@ def convert_chat_history_basic(
     return list(reversed(trimmed_reversed))
 
 
+def _build_tool_call_response_history_message(
+    tool_name: str,
+    generated_images: list[dict] | None,
+    tool_call_response: str | None,
+) -> str:
+    if tool_name != IMAGE_GENERATION_TOOL_NAME:
+        return TOOL_CALL_RESPONSE_CROSS_MESSAGE
+
+    if generated_images:
+        llm_image_context: list[dict[str, str]] = []
+        for image in generated_images:
+            file_id = image.get("file_id")
+            revised_prompt = image.get("revised_prompt")
+            if not isinstance(file_id, str):
+                continue
+
+            llm_image_context.append(
+                {
+                    "file_id": file_id,
+                    "revised_prompt": (
+                        revised_prompt if isinstance(revised_prompt, str) else ""
+                    ),
+                }
+            )
+
+        if llm_image_context:
+            return json.dumps(llm_image_context)
+
+    if tool_call_response:
+        return tool_call_response
+
+    return TOOL_CALL_RESPONSE_CROSS_MESSAGE
+
+
 def convert_chat_history(
     chat_history: list[ChatMessage],
     files: list[ChatLoadedFile],
@@ -582,10 +618,24 @@ def convert_chat_history(
 
                     # Add TOOL_CALL_RESPONSE messages for each tool call in this turn
                     for tool_call in turn_tool_calls:
+                        tool_name = tool_id_to_name_map.get(
+                            tool_call.tool_id, "unknown"
+                        )
+                        tool_response_message = (
+                            _build_tool_call_response_history_message(
+                                tool_name=tool_name,
+                                generated_images=tool_call.generated_images,
+                                tool_call_response=tool_call.tool_call_response,
+                            )
+                        )
                         simple_messages.append(
                             ChatMessageSimple(
-                                message=TOOL_CALL_RESPONSE_CROSS_MESSAGE,
-                                token_count=20,  # Tiny overestimate
+                                message=tool_response_message,
+                                token_count=(
+                                    token_counter(tool_response_message)
+                                    if tool_name == IMAGE_GENERATION_TOOL_NAME
+                                    else 20
+                                ),
                                 message_type=MessageType.TOOL_CALL_RESPONSE,
                                 tool_call_id=tool_call.tool_call_id,
                                 image_files=None,

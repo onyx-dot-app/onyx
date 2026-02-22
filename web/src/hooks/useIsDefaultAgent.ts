@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
-import { CombinedSettings } from "@/app/admin/settings/interfaces";
+import { CombinedSettings } from "@/interfaces/settings";
 import { ChatSession } from "@/app/app/interfaces";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { DEFAULT_ASSISTANT_ID } from "@/lib/constants";

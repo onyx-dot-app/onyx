@@ -1,6 +1,10 @@
 import { ReactNode, JSX } from "react";
 import { CompactDocumentCard, CompactQuestionCard } from "../DocumentDisplay";
-import { LoadedOnyxDocument, OnyxDocument } from "@/lib/search/interfaces";
+import {
+  LoadedOnyxDocument,
+  MinimalOnyxDocument,
+  OnyxDocument,
+} from "@/lib/search/interfaces";
 import {
   Tooltip,
   TooltipContent,
@@ -17,7 +21,7 @@ const MAX_CITATION_TEXT_LENGTH = 40;
 
 export interface DocumentCardProps {
   document: LoadedOnyxDocument;
-  updatePresentingDocument: (document: OnyxDocument) => void;
+  updatePresentingDocument: (document: MinimalOnyxDocument) => void;
   url?: string;
 }
 export interface QuestionCardProps {

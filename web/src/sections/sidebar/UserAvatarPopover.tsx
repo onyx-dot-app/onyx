@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { ANONYMOUS_USER_NAME, LOGOUT_DISABLED } from "@/lib/constants";
-import { Notification } from "@/app/admin/settings/interfaces";
+import { Notification } from "@/interfaces/settings";
 import useSWR, { preload } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { checkUserIsNoAuthUser, logout } from "@/lib/user";
