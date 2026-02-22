@@ -856,6 +856,11 @@ def handle_stream_message_objects(
                 reserved_tokens=reserved_token_count,
             )
 
+        # Release any read transaction before entering the long-running LLM stream.
+        # Without this, the request-scoped session can keep a connection checked out
+        # for the full stream duration.
+        db_session.commit()
+
         # The stream generator can resume on a different worker thread after early yields.
         # Set this right before launching the LLM loop so run_in_background copies the right context.
         if new_msg_req.mock_llm_response is not None:
