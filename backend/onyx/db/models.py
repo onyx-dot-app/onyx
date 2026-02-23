@@ -4978,3 +4978,13 @@ class ScimGroupMapping(Base):
     user_group: Mapped[UserGroup] = relationship(
         "UserGroup", foreign_keys=[user_group_id]
     )
+
+
+class CodeInterpreterServer(Base):
+    """An mapping to the code interpreter server details"""
+
+    __tablename__ = "code_interpreter_server"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    url: Mapped[str] = mapped_column(String, nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
