@@ -207,6 +207,8 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     if (!isSidePanel) return;
 
     function handleExtensionMessage(event: MessageEvent) {
+      // Only trust messages from the parent window (the Chrome extension panel)
+      if (event.source !== window.parent) return;
       if (event.data?.type === CHROME_MESSAGE.TAB_URL_UPDATED) {
         setCurrentTabUrl(event.data.url as string);
       }
@@ -360,7 +362,10 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     setCurrentTabUrl(null);
     resetInputBar();
     // Notify the service worker so it stops sending tab URL updates
-    window.parent.postMessage({ type: CHROME_MESSAGE.TAB_READING_DISABLED }, "*");
+    window.parent.postMessage(
+      { type: CHROME_MESSAGE.TAB_READING_DISABLED },
+      "*"
+    );
   }, [setCurrentSession, resetInputBar]);
 
   const handleToggleTabReading = useCallback(() => {
@@ -423,7 +428,10 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
         {({ getRootProps }) => (
           <div
             {...getRootProps()}
-            className="h-full w-full flex flex-col items-center outline-none"
+            className={cn(
+              "flex-1 min-h-0 w-full flex flex-col items-center outline-none",
+              isSidePanel && "px-3"
+            )}
           >
             {/* Chat area with messages */}
             {hasMessages && resolvedAssistant && (
@@ -435,6 +443,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                   anchorSelector={anchorSelector}
                   autoScroll={autoScrollEnabled}
                   isStreaming={isStreaming}
+                  hideScrollbar={isSidePanel}
                 >
                   <ChatUI
                     liveAssistant={resolvedAssistant}
@@ -463,7 +472,11 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
             {/* AppInputBar container - in normal flex flow like AppPage */}
             <div
               ref={inputRef}
-              className="w-full max-w-[var(--app-page-main-content-width)] flex flex-col px-4"
+              className={cn(
+                "w-full flex flex-col",
+                !isSidePanel &&
+                  "max-w-[var(--app-page-main-content-width)] px-4"
+              )}
             >
               <AppInputBar
                 ref={chatInputBarRef}
@@ -492,7 +505,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                   onToggleTabReading: handleToggleTabReading,
                 })}
               />
-              <Spacer rem={0.5} />
+              <Spacer rem={isSidePanel ? 1 : 0.5} />
             </div>
 
             {/* Search results - shown when query is classified as search */}
