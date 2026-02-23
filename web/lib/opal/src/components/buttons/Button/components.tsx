@@ -3,9 +3,9 @@ import "@opal/components/tooltip.css";
 import {
   Interactive,
   type InteractiveBaseProps,
-  type InteractiveContainerHeightVariant,
   type InteractiveContainerWidthVariant,
 } from "@opal/core";
+import type { SizeVariant } from "@opal/shared";
 import type { TooltipSide } from "@opal/components";
 import type { IconFunctionComponent } from "@opal/types";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
@@ -22,7 +22,7 @@ const iconVariants = {
 
 function iconWrapper(
   Icon: IconFunctionComponent | undefined,
-  size: InteractiveContainerHeightVariant,
+  size: SizeVariant,
   includeSpacer: boolean
 ) {
   const { padding: p, size: s } = iconVariants[size];
@@ -75,8 +75,11 @@ type ButtonContentProps =
 
 type ButtonProps = InteractiveBaseProps &
   ButtonContentProps & {
-    /** Size preset — controls gap, text size, and Container height/rounding. */
-    size?: InteractiveContainerHeightVariant;
+    /**
+     * Size preset — controls gap, text size, and Container height/rounding.
+     * Uses the shared `SizeVariant` scale from `@opal/shared`.
+     */
+    size?: SizeVariant;
 
     /** HTML button type. When provided, Container renders a `<button>` element. */
     type?: "submit" | "button" | "reset";
