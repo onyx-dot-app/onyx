@@ -65,8 +65,10 @@ class OAuthTokenManager:
             data={
                 "grant_type": "refresh_token",
                 "refresh_token": token_data["refresh_token"],
-                "client_id": self.oauth_config.client_id,
-                "client_secret": self.oauth_config.client_secret,
+                "client_id": self.oauth_config.client_id.get_value(apply_mask=False),
+                "client_secret": self.oauth_config.client_secret.get_value(
+                    apply_mask=False
+                ),
             },
             headers={"Accept": "application/json"},
         )
@@ -120,8 +122,10 @@ class OAuthTokenManager:
             data={
                 "grant_type": "authorization_code",
                 "code": code,
-                "client_id": self.oauth_config.client_id,
-                "client_secret": self.oauth_config.client_secret,
+                "client_id": self.oauth_config.client_id.get_value(apply_mask=False),
+                "client_secret": self.oauth_config.client_secret.get_value(
+                    apply_mask=False
+                ),
                 "redirect_uri": redirect_uri,
             },
             headers={"Accept": "application/json"},
@@ -142,7 +146,7 @@ class OAuthTokenManager:
     ) -> str:
         """Build OAuth authorization URL"""
         params: dict[str, Any] = {
-            "client_id": oauth_config.client_id,
+            "client_id": oauth_config.client_id.get_value(apply_mask=False),
             "redirect_uri": redirect_uri,
             "response_type": "code",
             "state": state,
