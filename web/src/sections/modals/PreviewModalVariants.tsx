@@ -210,7 +210,6 @@ const imageVariant: PreviewVariant = {
 
   renderFooterRight: (ctx) => (
     <Section flexDirection="row" width="fit">
-      <CopyButton getText={() => ctx.fileContent} />
       <DownloadButton fileUrl={ctx.fileUrl} fileName={ctx.fileName} />
     </Section>
   ),
