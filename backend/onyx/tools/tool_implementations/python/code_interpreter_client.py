@@ -81,6 +81,7 @@ class CodeInterpreterClient:
         self.base_url = base_url.rstrip("/")
         self.session = requests.Session()
 
+
     def _build_payload(
         self,
         code: str,
@@ -97,6 +98,14 @@ class CodeInterpreterClient:
         if files:
             payload["files"] = files
         return payload
+
+    def health(self) -> bool:
+        """Check if the Code Interpreter service is healthy"""
+        try:
+            response = self.session.get(f"{self.base_url}/health", timeout=5)
+            return response.ok
+        except Exception:
+            return False
 
     def execute(
         self,
