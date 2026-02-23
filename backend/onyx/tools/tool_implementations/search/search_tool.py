@@ -247,6 +247,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         user_selected_filters: BaseFilters | None,
         # If the chat is part of a project
         project_id: int | None,
+        # If set, search scopes to files attached to this persona
+        persona_id: int | None = None,
         bypass_acl: bool = False,
         # Slack context for federated Slack search (tokens fetched internally)
         slack_context: SlackContext | None = None,
@@ -261,6 +263,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         self.document_index = document_index
         self.user_selected_filters = user_selected_filters
         self.project_id = project_id
+        self.persona_id = persona_id
         self.bypass_acl = bypass_acl
         self.slack_context = slack_context
         self.enable_slack_search = enable_slack_search
@@ -456,6 +459,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 limit=num_hits,
             ),
             project_id=self.project_id,
+            persona_id=self.persona_id,
             document_index=self.document_index,
             user=self.user,
             persona=self.persona,

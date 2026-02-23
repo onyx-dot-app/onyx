@@ -28,6 +28,7 @@ from onyx.document_index.opensearch.schema import HIDDEN_FIELD_NAME
 from onyx.document_index.opensearch.schema import LAST_UPDATED_FIELD_NAME
 from onyx.document_index.opensearch.schema import MAX_CHUNK_SIZE_FIELD_NAME
 from onyx.document_index.opensearch.schema import METADATA_LIST_FIELD_NAME
+from onyx.document_index.opensearch.schema import PERSONAS_FIELD_NAME
 from onyx.document_index.opensearch.schema import PUBLIC_FIELD_NAME
 from onyx.document_index.opensearch.schema import set_or_convert_timezone_to_utc
 from onyx.document_index.opensearch.schema import SOURCE_TYPE_FIELD_NAME
@@ -144,6 +145,7 @@ class DocumentQuery:
             document_sets=index_filters.document_set or [],
             user_file_ids=index_filters.user_file_ids or [],
             project_id=index_filters.project_id,
+            persona_id=index_filters.persona_id,
             time_cutoff=index_filters.time_cutoff,
             min_chunk_index=min_chunk_index,
             max_chunk_index=max_chunk_index,
@@ -202,6 +204,7 @@ class DocumentQuery:
             document_sets=[],
             user_file_ids=[],
             project_id=None,
+            persona_id=None,
             time_cutoff=None,
             min_chunk_index=None,
             max_chunk_index=None,
@@ -267,6 +270,7 @@ class DocumentQuery:
             document_sets=index_filters.document_set or [],
             user_file_ids=index_filters.user_file_ids or [],
             project_id=index_filters.project_id,
+            persona_id=index_filters.persona_id,
             time_cutoff=index_filters.time_cutoff,
             min_chunk_index=None,
             max_chunk_index=None,
@@ -334,6 +338,7 @@ class DocumentQuery:
             document_sets=index_filters.document_set or [],
             user_file_ids=index_filters.user_file_ids or [],
             project_id=index_filters.project_id,
+            persona_id=index_filters.persona_id,
             time_cutoff=index_filters.time_cutoff,
             min_chunk_index=None,
             max_chunk_index=None,
@@ -496,6 +501,7 @@ class DocumentQuery:
         document_sets: list[str],
         user_file_ids: list[UUID],
         project_id: int | None,
+        persona_id: int | None,
         time_cutoff: datetime | None,
         min_chunk_index: int | None,
         max_chunk_index: int | None,
@@ -530,6 +536,8 @@ class DocumentQuery:
                 retrieved.
             project_id: If not None, only documents with this project ID in user
                 projects will be retrieved.
+            persona_id: If not None, only documents whose personas array
+                contains this persona ID will be retrieved.
             time_cutoff: Time cutoff for the documents to retrieve. If not None,
                 Documents which were last updated before this date will not be
                 returned. For documents which do not have a value for their last
@@ -626,6 +634,9 @@ class DocumentQuery:
                 {"term": {USER_PROJECTS_FIELD_NAME: {"value": project_id}}}
             )
             return user_project_filter
+
+        def _get_persona_filter(persona_id: int) -> dict[str, Any]:
+            return {"term": {PERSONAS_FIELD_NAME: {"value": persona_id}}}
 
         def _get_time_cutoff_filter(time_cutoff: datetime) -> dict[str, Any]:
             # Convert to UTC if not already so the cutoff is comparable to the
@@ -779,6 +790,9 @@ class DocumentQuery:
             # documents where the project ID provided here is present in the
             # document's user projects list.
             filter_clauses.append(_get_user_project_filter(project_id))
+
+        if persona_id is not None:
+            filter_clauses.append(_get_persona_filter(persona_id))
 
         if time_cutoff is not None:
             # If a time cutoff is provided, the caller will only retrieve
