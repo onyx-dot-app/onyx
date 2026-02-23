@@ -21,6 +21,7 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
+from alembic.run_multitenant_migrations import get_schemas_needing_migration
 from onyx.db.engine.sql_engine import SqlEngine
 
 # Resolve the backend/ directory once so every helper can use it as cwd.
@@ -262,3 +263,89 @@ def test_failed_migration(
     ]
     for line in batch_start_lines:
         assert tenant_schema_at_head not in line
+
+
+# ---------------------------------------------------------------------------
+# Fixtures for direct unit tests of get_schemas_needing_migration
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def tenant_schema_stale_rev(engine: Engine) -> Generator[str, None, None]:
+    """A tenant schema whose alembic_version is set to a non-head revision.
+
+    Uses a clearly fake revision string so it is never accidentally equal to
+    head, but unlike tenant_schema_bad_rev this fixture is for testing
+    get_schemas_needing_migration directly (not alembic's migration path).
+    """
+    schema = f"tenant_test_{uuid.uuid4().hex[:12]}"
+    with engine.connect() as conn:
+        conn.execute(text(f'CREATE SCHEMA "{schema}"'))
+        conn.execute(
+            text(
+                f'CREATE TABLE "{schema}".alembic_version '
+                f"(version_num VARCHAR(32) NOT NULL)"
+            )
+        )
+        conn.execute(
+            text(
+                f'INSERT INTO "{schema}".alembic_version (version_num) '
+                f"VALUES ('stalerev000000000000')"
+            )
+        )
+        conn.commit()
+
+    yield schema
+
+    with engine.connect() as conn:
+        conn.execute(text(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE'))
+        conn.commit()
+
+
+# ---------------------------------------------------------------------------
+# Direct unit tests for get_schemas_needing_migration
+# ---------------------------------------------------------------------------
+
+
+def test_get_schemas_needing_migration_unit(
+    current_head_rev: str,
+    tenant_schema_at_head: str,
+    tenant_schema_empty: str,
+    tenant_schema_stale_rev: str,
+) -> None:
+    """get_schemas_needing_migration correctly classifies all three cases:
+    - schema at head      → excluded
+    - schema with no alembic_version table → included (needs migration)
+    - schema with stale revision           → included (needs migration)
+    """
+    all_schemas = [tenant_schema_at_head, tenant_schema_empty, tenant_schema_stale_rev]
+    result = get_schemas_needing_migration(all_schemas, current_head_rev)
+
+    assert tenant_schema_at_head not in result
+    assert tenant_schema_empty in result
+    assert tenant_schema_stale_rev in result
+
+
+def test_get_schemas_needing_migration_idempotent(
+    current_head_rev: str,
+    tenant_schema_at_head: str,
+    tenant_schema_empty: str,
+) -> None:
+    """Calling the function twice in a row must not fail.
+
+    The first call cleans up _alembic_version_snapshot at the end; the second
+    call should succeed even if a previous run left the temp table behind
+    (covered by DROP TABLE IF EXISTS at the start of the function).
+    """
+    schemas = [tenant_schema_at_head, tenant_schema_empty]
+
+    first = get_schemas_needing_migration(schemas, current_head_rev)
+    second = get_schemas_needing_migration(schemas, current_head_rev)
+
+    assert first == second
+
+
+def test_get_schemas_needing_migration_empty_input(current_head_rev: str) -> None:
+    """An empty tenant list must return immediately without hitting the DB."""
+    result = get_schemas_needing_migration([], current_head_rev)
+    assert result == []
