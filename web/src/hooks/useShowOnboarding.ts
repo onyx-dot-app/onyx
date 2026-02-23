@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { useOnboardingState } from "@/refresh-components/onboarding/useOnboardingState";
+
+const ONBOARDING_COMPLETED_KEY = "onyx:onboardingCompleted";
 interface UseShowOnboardingParams {
   liveAssistant: MinimalPersonaSnapshot | undefined;
   isLoadingProviders: boolean;
@@ -21,6 +23,10 @@ export function useShowOnboarding({
   userId,
 }: UseShowOnboardingParams) {
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardingDismissed, setOnboardingDismissed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem(ONBOARDING_COMPLETED_KEY) === "true";
+  });
 
   // Initialize onboarding state
   const {
@@ -38,6 +44,11 @@ export function useShowOnboarding({
   // Show onboarding only if no LLM providers are configured.
   // Skip entirely if user has existing chat sessions.
   useEffect(() => {
+    // If onboarding was previously dismissed, never show it again
+    if (onboardingDismissed) {
+      return;
+    }
+
     // Wait for data to load
     if (isLoadingProviders || isLoadingChatSessions || userId === undefined) {
       return;
@@ -46,7 +57,7 @@ export function useShowOnboarding({
     // Only check once per user — but allow self-correction from true→false
     // when provider data arrives (e.g. after a transient fetch error).
     if (hasCheckedOnboardingForUserId.current === userId) {
-      if (showOnboarding && hasAnyProvider) {
+      if (showOnboarding && hasAnyProvider && onboardingState.stepIndex === 0) {
         setShowOnboarding(false);
       }
       return;
@@ -68,18 +79,22 @@ export function useShowOnboarding({
     chatSessionsCount,
     userId,
     showOnboarding,
+    onboardingDismissed,
+    onboardingState.stepIndex,
   ]);
 
-  const hideOnboarding = () => {
+  const dismissOnboarding = useCallback(() => {
     setShowOnboarding(false);
-  };
+    setOnboardingDismissed(true);
+    localStorage.setItem(ONBOARDING_COMPLETED_KEY, "true");
+  }, []);
 
-  const finishOnboarding = () => {
-    setShowOnboarding(false);
-  };
+  const hideOnboarding = dismissOnboarding;
+  const finishOnboarding = dismissOnboarding;
 
   return {
     showOnboarding,
+    onboardingDismissed,
     onboardingState,
     onboardingActions,
     llmDescriptors,

@@ -17,11 +17,13 @@ const mockActions = {
   reset: jest.fn(),
 };
 
+let mockStepIndex = 0;
+
 jest.mock("@/refresh-components/onboarding/useOnboardingState", () => ({
   useOnboardingState: () => ({
     state: {
       currentStep: OnboardingStep.Welcome,
-      stepIndex: 0,
+      stepIndex: mockStepIndex,
       totalSteps: 3,
       data: {},
       isButtonActive: true,
@@ -60,6 +62,8 @@ function renderUseShowOnboarding(
 describe("useShowOnboarding", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    localStorage.clear();
+    mockStepIndex = 0;
   });
 
   it("returns showOnboarding=false while providers are loading", () => {
@@ -129,6 +133,31 @@ describe("useShowOnboarding", () => {
     expect(result.current.showOnboarding).toBe(false);
   });
 
+  it("does not self-correct when user has advanced past Welcome step", () => {
+    const { result, rerender } = renderUseShowOnboarding({
+      hasAnyProvider: false,
+      chatSessionsCount: 0,
+      userId: "user-1",
+    });
+    expect(result.current.showOnboarding).toBe(true);
+
+    // Simulate user advancing past Welcome (e.g. they configured an LLM provider)
+    mockStepIndex = 1;
+
+    // Re-render with same userId but provider data now available
+    rerender({
+      liveAssistant: undefined,
+      isLoadingProviders: false,
+      hasAnyProvider: true,
+      isLoadingChatSessions: false,
+      chatSessionsCount: 0,
+      userId: "user-1",
+    });
+
+    // Should stay true — user is actively using onboarding
+    expect(result.current.showOnboarding).toBe(true);
+  });
+
   it("re-evaluates when userId changes", () => {
     const { result, rerender } = renderUseShowOnboarding({
       hasAnyProvider: false,
@@ -185,5 +214,55 @@ describe("useShowOnboarding", () => {
     );
     expect(result.current.onboardingActions).toBeDefined();
     expect(result.current.llmDescriptors).toEqual([]);
+  });
+
+  describe("localStorage persistence", () => {
+    it("finishOnboarding sets localStorage flag and onboardingDismissed", () => {
+      const { result } = renderUseShowOnboarding({
+        hasAnyProvider: false,
+        chatSessionsCount: 0,
+      });
+      expect(result.current.showOnboarding).toBe(true);
+      expect(result.current.onboardingDismissed).toBe(false);
+
+      act(() => {
+        result.current.finishOnboarding();
+      });
+
+      expect(result.current.showOnboarding).toBe(false);
+      expect(result.current.onboardingDismissed).toBe(true);
+      expect(localStorage.getItem("onyx:onboardingCompleted")).toBe("true");
+    });
+
+    it("hideOnboarding sets localStorage flag and onboardingDismissed", () => {
+      const { result } = renderUseShowOnboarding({
+        hasAnyProvider: false,
+        chatSessionsCount: 0,
+      });
+
+      act(() => {
+        result.current.hideOnboarding();
+      });
+
+      expect(result.current.onboardingDismissed).toBe(true);
+      expect(localStorage.getItem("onyx:onboardingCompleted")).toBe("true");
+    });
+
+    it("showOnboarding stays false when localStorage flag is set", () => {
+      localStorage.setItem("onyx:onboardingCompleted", "true");
+
+      const { result } = renderUseShowOnboarding({
+        hasAnyProvider: false,
+        chatSessionsCount: 0,
+      });
+
+      expect(result.current.showOnboarding).toBe(false);
+      expect(result.current.onboardingDismissed).toBe(true);
+    });
+
+    it("onboardingDismissed is false when localStorage flag is not set", () => {
+      const { result } = renderUseShowOnboarding();
+      expect(result.current.onboardingDismissed).toBe(false);
+    });
   });
 });
