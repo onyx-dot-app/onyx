@@ -2,10 +2,10 @@
 
 import Image from "next/image";
 import { useMemo, useState, useReducer } from "react";
-import { AdminPageTitle } from "@/components/admin/Title";
 import { InfoIcon } from "@/components/icons/icons";
 import Text from "@/refresh-components/texts/Text";
-import Separator from "@/refresh-components/Separator";
+import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { Content } from "@opal/layouts";
 import useSWR from "swr";
 import { errorHandlingFetcher, FetchError } from "@/lib/fetcher";
 import { ThreeDotsLoader } from "@/components/Loading";
@@ -22,7 +22,6 @@ import {
   SvgOnyxLogo,
   SvgX,
 } from "@opal/icons";
-
 import { WebProviderSetupModal } from "@/app/admin/configuration/web-search/WebProviderSetupModal";
 import {
   SEARCH_PROVIDERS_URL,
@@ -402,36 +401,40 @@ export default function Page() {
         : undefined);
 
     return (
-      <>
-        <AdminPageTitle
-          title="Web Search"
+      <SettingsLayouts.Root>
+        <SettingsLayouts.Header
           icon={SvgGlobe}
-          includeDivider={false}
+          title="Web Search"
+          description="Search settings for external search across the internet."
+          separator
         />
-        <Callout type="danger" title="Failed to load web search settings">
-          {message}
-          {detail && (
-            <Text as="p" className="mt-2 text-text-03" mainContentBody text03>
-              {detail}
-            </Text>
-          )}
-        </Callout>
-      </>
+        <SettingsLayouts.Body>
+          <Callout type="danger" title="Failed to load web search settings">
+            {message}
+            {detail && (
+              <Text as="p" className="mt-2 text-text-03" mainContentBody text03>
+                {detail}
+              </Text>
+            )}
+          </Callout>
+        </SettingsLayouts.Body>
+      </SettingsLayouts.Root>
     );
   }
 
   if (isLoading) {
     return (
-      <>
-        <AdminPageTitle
-          title="Web Search"
+      <SettingsLayouts.Root>
+        <SettingsLayouts.Header
           icon={SvgGlobe}
-          includeDivider={false}
+          title="Web Search"
+          description="Search settings for external search across the internet."
+          separator
         />
-        <div className="mt-8">
+        <SettingsLayouts.Body>
           <ThreeDotsLoader />
-        </div>
-      </>
+        </SettingsLayouts.Body>
+      </SettingsLayouts.Root>
     );
   }
 
@@ -827,32 +830,22 @@ export default function Page() {
 
   return (
     <>
-      <>
-        <AdminPageTitle icon={SvgGlobe} title="Web Search" />
-        <div className="pt-4 pb-4">
-          <Text as="p" className="text-text-dark">
-            Search settings for external search across the internet.
-          </Text>
-        </div>
+      <SettingsLayouts.Root>
+        <SettingsLayouts.Header
+          icon={SvgGlobe}
+          title="Web Search"
+          description="Search settings for external search across the internet."
+          separator
+        />
 
-        <Separator />
-
-        <div className="flex w-full flex-col gap-8 pb-6">
-          <div className="flex w-full max-w-[960px] flex-col gap-3">
-            <div className="flex flex-col gap-0.5">
-              <Text as="p" mainContentEmphasis text05>
-                Search Engine
-              </Text>
-              <Text
-                as="p"
-                className="flex items-start gap-[2px] self-stretch text-text-03"
-                secondaryBody
-                text03
-              >
-                External search engine API used for web search result URLs,
-                snippets, and metadata.
-              </Text>
-            </div>
+        <SettingsLayouts.Body>
+          <div className="flex w-full flex-col gap-3">
+            <Content
+              title="Search Engine"
+              description="External search engine API used for web search result URLs, snippets, and metadata."
+              sizePreset="main-content"
+              variant="section"
+            />
 
             {activationError && (
               <Callout type="danger" title="Unable to update default provider">
@@ -974,14 +967,12 @@ export default function Page() {
                           size: 16,
                           isHighlighted,
                         })}
-                        <div className="flex flex-col gap-0.5">
-                          <Text as="p" mainUiAction text05>
-                            {label}
-                          </Text>
-                          <Text as="p" secondaryBody text03>
-                            {subtitle}
-                          </Text>
-                        </div>
+                        <Content
+                          title={label}
+                          description={subtitle}
+                          sizePreset="main-ui"
+                          variant="section"
+                        />
                       </div>
                       <div className="flex items-center justify-end gap-2">
                         {isConfigured && (
@@ -1045,20 +1036,13 @@ export default function Page() {
             </div>
           </div>
 
-          <div className="flex w-full max-w-[960px] flex-col gap-3">
-            <div className="flex flex-col gap-0.5">
-              <Text as="p" mainContentEmphasis text05>
-                Web Crawler
-              </Text>
-              <Text
-                as="p"
-                className="flex items-start gap-[2px] self-stretch text-text-03"
-                secondaryBody
-                text03
-              >
-                Used to read the full contents of search result pages.
-              </Text>
-            </div>
+          <div className="flex w-full flex-col gap-3">
+            <Content
+              title="Web Crawler"
+              description="Used to read the full contents of search result pages."
+              sizePreset="main-content"
+              variant="section"
+            />
 
             {contentActivationError && (
               <Callout type="danger" title="Unable to update crawler">
@@ -1173,14 +1157,12 @@ export default function Page() {
                         size: 16,
                         isHighlighted: isCurrentCrawler,
                       })}
-                      <div className="flex flex-col gap-0.5">
-                        <Text as="p" mainUiAction text05>
-                          {label}
-                        </Text>
-                        <Text as="p" secondaryBody text03>
-                          {subtitle}
-                        </Text>
-                      </div>
+                      <Content
+                        title={label}
+                        description={subtitle}
+                        sizePreset="main-ui"
+                        variant="section"
+                      />
                     </div>
                     <div className="flex items-center justify-end gap-2">
                       {provider.provider_type !== "onyx_web_crawler" &&
@@ -1244,8 +1226,8 @@ export default function Page() {
               })}
             </div>
           </div>
-        </div>
-      </>
+        </SettingsLayouts.Body>
+      </SettingsLayouts.Root>
 
       <WebProviderSetupModal
         isOpen={selectedProviderType !== null}
