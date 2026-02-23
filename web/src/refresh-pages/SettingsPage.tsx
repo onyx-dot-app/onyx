@@ -65,6 +65,8 @@ import { Interactive } from "@opal/core";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import { useCloudSubscription } from "@/hooks/useCloudSubscription";
+import Link from "next/link";
 
 interface PAT {
   id: number;
@@ -937,6 +939,9 @@ function AccountsAccessSettings() {
     useState<CreatedTokenState | null>(null);
   const [tokenToDelete, setTokenToDelete] = useState<PAT | null>(null);
 
+  // const canCreateTokens = useCloudSubscription();
+  const canCreateTokens = false;
+
   const showPasswordSection = Boolean(user?.password_configured);
   const showTokensSection = authType !== null;
 
@@ -1254,7 +1259,9 @@ function AccountsAccessSettings() {
                       <Text as="span" text03 secondaryBody>
                         {isLoading
                           ? "Loading tokens..."
-                          : "No access tokens created."}
+                          : canCreateTokens
+                            ? "No access tokens created."
+                            : "Access tokens require an active paid subscription."}
                       </Text>
                     </Section>
                   ) : (
@@ -1266,15 +1273,21 @@ function AccountsAccessSettings() {
                       variant="internal"
                     />
                   )}
-                  <CreateButton
-                    onClick={() => setShowCreateModal(true)}
-                    secondary={false}
-                    internal
-                    transient={showCreateModal}
-                    rightIcon
-                  >
-                    New Access Token
-                  </CreateButton>
+                  {canCreateTokens ? (
+                    <CreateButton
+                      onClick={() => setShowCreateModal(true)}
+                      secondary={false}
+                      internal
+                      transient={showCreateModal}
+                      rightIcon
+                    >
+                      New Access Token
+                    </CreateButton>
+                  ) : (
+                    <Link href="/admin/billing">
+                      <Button secondary>Upgrade Plan</Button>
+                    </Link>
+                  )}
                 </Section>
 
                 {/* Token List */}
