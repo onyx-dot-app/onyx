@@ -16,9 +16,11 @@ const PROVIDER_ICONS: Record<string, IconFunctionComponent> = {
   vertex_ai: SvgCloud,
   bedrock: SvgAws,
   azure: SvgCloud,
-
+  // litellm: TODO (@raunakab),
   ollama_chat: SvgOllama,
   openrouter: SvgOpenrouter,
+
+  // fallback
   custom: SvgServer,
 };
 
@@ -32,6 +34,7 @@ const PROVIDER_PRODUCT_NAMES: Record<string, string> = {
   ollama_chat: "Ollama",
   openrouter: "OpenRouter",
 
+  // fallback
   custom: "Custom Models",
 };
 
@@ -45,14 +48,15 @@ const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
   ollama_chat: "Ollama",
   openrouter: "OpenRouter",
 
+  // fallback
   custom: "Other providers or self-hosted",
 };
 
-export function getProviderTitle(providerName: string): string {
+export function getProviderProductName(providerName: string): string {
   return PROVIDER_PRODUCT_NAMES[providerName] ?? providerName;
 }
 
-export function getProviderDescription(providerName: string): string {
+export function getProviderDisplayName(providerName: string): string {
   return PROVIDER_DISPLAY_NAMES[providerName] ?? providerName;
 }
 
