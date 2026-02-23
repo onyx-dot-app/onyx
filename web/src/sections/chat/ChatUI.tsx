@@ -115,7 +115,7 @@ const ChatUI = React.memo(
 
     return (
       <>
-        <div className="flex flex-col w-full max-w-[var(--app-page-main-content-width)] h-full pt-4 pb-8 gap-12">
+        <div className="flex flex-col w-full max-w-[var(--app-page-main-content-width)] h-full pt-4 pb-8 pr-1 gap-12">
           {messages.map((message, i) => {
             const messageReactComponentKey = `message-${message.nodeId}`;
             const parentMessage = message.parentNodeId
