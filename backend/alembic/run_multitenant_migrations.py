@@ -106,7 +106,7 @@ def get_head_revision() -> str | None:
 
 
 def get_schemas_needing_migration(
-    tenant_schemas: List[str], head_rev: str
+    tenant_schemas: List[str], head_rev: str, batch_size: int = 50
 ) -> List[str]:
     """Return only schemas whose current alembic version is not at head."""
     if not tenant_schemas:
@@ -137,16 +137,18 @@ def get_schemas_needing_migration(
             if not is_valid_schema_name(schema):
                 raise ValueError(f"Invalid schema name: {schema}")
 
-        # Single query to get every schema's current revision at once.
-        # Use integer tags instead of interpolating schema names into
-        # string literals to avoid quoting issues.
+        # Query alembic versions in batches to avoid a single massive
+        # UNION ALL that can stall on I/O with thousands of tenants.
         schema_list = list(schemas_with_table)
-        union_parts = [
-            f'SELECT {i} AS idx, version_num FROM "{schema}".alembic_version'
-            for i, schema in enumerate(schema_list)
-        ]
-        rows = conn.execute(text(" UNION ALL ".join(union_parts)))
-        version_by_schema = {schema_list[row[0]]: row[1] for row in rows}
+        version_by_schema: dict[str, str] = {}
+        for batch_start in range(0, len(schema_list), batch_size):
+            batch = schema_list[batch_start : batch_start + batch_size]
+            union_parts = [
+                f'SELECT {i} AS idx, version_num FROM "{schema}".alembic_version'
+                for i, schema in enumerate(batch)
+            ]
+            rows = conn.execute(text(" UNION ALL ".join(union_parts)))
+            version_by_schema.update({batch[row[0]]: row[1] for row in rows})
 
         needs_migration.extend(
             s for s in schemas_with_table if version_by_schema.get(s) != head_rev
@@ -315,7 +317,9 @@ def main() -> int:
             )
             return 1
 
-        schemas_to_migrate = get_schemas_needing_migration(tenant_schemas, head_rev)
+        schemas_to_migrate = get_schemas_needing_migration(
+            tenant_schemas, head_rev, batch_size=args.batch_size
+        )
 
     if not schemas_to_migrate:
         print(
