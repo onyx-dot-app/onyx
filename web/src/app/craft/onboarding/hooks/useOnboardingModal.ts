@@ -75,7 +75,7 @@ export function useOnboardingModal(): OnboardingModalController {
     level: existingPersona?.level,
   };
 
-  // Check if user has completed initial onboarding (persona cookie only, not name)
+  // Check if user has completed initial onboarding (only role required, not name)
   const hasUserInfo = useMemo(() => {
     return !!getBuildUserPersona()?.workArea;
   }, [user]);
@@ -93,7 +93,7 @@ export function useOnboardingModal(): OnboardingModalController {
   );
 
   // Auto-open initial onboarding modal on first load
-  // Shows if: user info (persona) missing OR (admin AND no providers configured)
+  // Shows if: user info (role) missing OR (admin AND no providers configured)
   useEffect(() => {
     if (hasInitialized || isLoadingLlm || !user) return;
 
