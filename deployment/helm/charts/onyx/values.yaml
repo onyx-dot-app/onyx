@@ -955,9 +955,9 @@ minio:
   tolerations: []
   affinity: {}
 
-# Code Interpreter - Python code execution service (beta feature)
+# Code Interpreter - Python code execution service
 codeInterpreter:
-  enabled: false  # Disabled by default (beta feature)
+  enabled: true
 
   replicaCount: 1
 
