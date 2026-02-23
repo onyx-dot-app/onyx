@@ -19,10 +19,6 @@ import { getCodeLanguage } from "@/lib/languages";
 import { CodeBlock } from "@/app/app/message/CodeBlock";
 import { extractCodeText } from "@/app/app/message/codeUtils";
 
-// ---------------------------------------------------------------------------
-// PreviewContext — shared data bag passed into every variant
-// ---------------------------------------------------------------------------
-
 export interface PreviewContext {
   fileContent: string;
   fileUrl: string;
@@ -34,10 +30,6 @@ export interface PreviewContext {
   onZoomIn: () => void;
   onZoomOut: () => void;
 }
-
-// ---------------------------------------------------------------------------
-// PreviewVariant — self-contained definition for a file-type view
-// ---------------------------------------------------------------------------
 
 export interface PreviewVariant {
   /** Return true if this variant should handle the given file. */
@@ -58,17 +50,11 @@ export interface PreviewVariant {
   renderFooterRight: (ctx: PreviewContext) => React.ReactNode;
 }
 
-// ---------------------------------------------------------------------------
-// Shared footer building blocks
-// ---------------------------------------------------------------------------
-
-function DownloadButton({
-  fileUrl,
-  fileName,
-}: {
+interface DownloadButtonProps {
   fileUrl: string;
   fileName: string;
-}) {
+}
+function DownloadButton({ fileUrl, fileName }: DownloadButtonProps) {
   return (
     <a href={fileUrl} download={fileName}>
       <Button
@@ -81,7 +67,10 @@ function DownloadButton({
   );
 }
 
-function CopyButton({ getText }: { getText: () => string }) {
+interface CopyButtonProps {
+  getText: () => string;
+}
+function CopyButton({ getText }: CopyButtonProps) {
   return (
     <CopyIconButton getCopyText={getText} tooltip="Copy content" size="sm" />
   );
@@ -120,10 +109,6 @@ function ZoomControls({
     </div>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Variants
-// ---------------------------------------------------------------------------
 
 const MARKDOWN_MIMES = [
   "text/markdown",
@@ -230,7 +215,7 @@ const pdfVariant: PreviewVariant = {
     />
   ),
 
-  renderFooterLeft: (ctx) => null,
+  renderFooterLeft: () => null,
   renderFooterRight: (ctx) => (
     <Section flexDirection="row" width="fit">
       <DownloadButton fileUrl={ctx.fileUrl} fileName={ctx.fileName} />
@@ -383,10 +368,6 @@ const unsupportedVariant: PreviewVariant = {
     <DownloadButton fileUrl={ctx.fileUrl} fileName={ctx.fileName} />
   ),
 };
-
-// ---------------------------------------------------------------------------
-// Variant registry — first match wins
-// ---------------------------------------------------------------------------
 
 const PREVIEW_VARIANTS: PreviewVariant[] = [
   codeVariant,

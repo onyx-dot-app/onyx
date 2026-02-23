@@ -14,10 +14,6 @@ import {
   resolveVariant,
 } from "@/sections/modals/PreviewModalVariants";
 
-// ---------------------------------------------------------------------------
-// MIME resolution helper
-// ---------------------------------------------------------------------------
-
 function resolveMimeType(mimeType: string, fileName: string): string {
   if (mimeType !== "application/octet-stream") return mimeType;
   const lower = fileName.toLowerCase();
@@ -27,10 +23,6 @@ function resolveMimeType(mimeType: string, fileName: string): string {
   if (lower.endsWith(".csv")) return "text/csv";
   return mimeType;
 }
-
-// ---------------------------------------------------------------------------
-// PreviewModal
-// ---------------------------------------------------------------------------
 
 interface PreviewModalProps {
   presentingDocument: MinimalOnyxDocument;
@@ -49,14 +41,10 @@ export default function PreviewModal({
   const [mimeType, setMimeType] = useState("application/octet-stream");
   const [zoom, setZoom] = useState(100);
 
-  // Resolve variant ----------------------------------------------------------
-
   const variant = useMemo(
     () => resolveVariant(presentingDocument.semantic_identifier, mimeType),
     [presentingDocument.semantic_identifier, mimeType]
   );
-
-  // Derived values -----------------------------------------------------------
 
   const language = useMemo(
     () =>
@@ -79,8 +67,6 @@ export default function PreviewModal({
     const mb = kb / 1024;
     return `${mb.toFixed(2)} MB`;
   }, [fileContent]);
-
-  // File fetching ------------------------------------------------------------
 
   const fetchFile = useCallback(async () => {
     setIsLoading(true);
@@ -133,8 +119,6 @@ export default function PreviewModal({
     };
   }, [fileUrl]);
 
-  // Actions ------------------------------------------------------------------
-
   const handleZoomIn = useCallback(
     () => setZoom((prev) => Math.min(prev + 25, 200)),
     []
@@ -143,8 +127,6 @@ export default function PreviewModal({
     () => setZoom((prev) => Math.max(prev - 25, 25)),
     []
   );
-
-  // Build context ------------------------------------------------------------
 
   const ctx: PreviewContext = useMemo(
     () => ({
@@ -170,8 +152,6 @@ export default function PreviewModal({
       handleZoomOut,
     ]
   );
-
-  // Render -------------------------------------------------------------------
 
   return (
     <Modal
