@@ -33,7 +33,6 @@ export interface PreviewContext {
   zoom: number;
   onZoomIn: () => void;
   onZoomOut: () => void;
-  onDownload: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -63,15 +62,22 @@ export interface PreviewVariant {
 // Shared footer building blocks
 // ---------------------------------------------------------------------------
 
-function DownloadButton({ onDownload }: { onDownload: () => void }) {
+function DownloadButton({
+  fileUrl,
+  fileName,
+}: {
+  fileUrl: string;
+  fileName: string;
+}) {
   return (
-    <Button
-      prominence="tertiary"
-      size="sm"
-      icon={SvgDownload}
-      onClick={onDownload}
-      tooltip="Download"
-    />
+    <a href={fileUrl} download={fileName}>
+      <Button
+        prominence="tertiary"
+        size="sm"
+        icon={SvgDownload}
+        tooltip="Download"
+      />
+    </a>
   );
 }
 
@@ -142,7 +148,7 @@ const codeVariant: PreviewVariant = {
 
   renderContent: (ctx) => (
     <MinimalMarkdown
-      content={`\`\`\`${ctx.language}${ctx.fileContent}\n\n\`\`\``}
+      content={`\`\`\`${ctx.language}\n${ctx.fileContent}\n\n\`\`\``}
       className="w-full break-words h-full"
       components={{
         code: ({ node, children }: any) => {
@@ -166,7 +172,7 @@ const codeVariant: PreviewVariant = {
   renderFooterRight: (ctx) => (
     <Section flexDirection="row" width="fit">
       <CopyButton getText={() => ctx.fileContent} />
-      <DownloadButton onDownload={ctx.onDownload} />
+      <DownloadButton fileUrl={ctx.fileUrl} fileName={ctx.fileName} />
     </Section>
   ),
 };
@@ -205,7 +211,7 @@ const imageVariant: PreviewVariant = {
   renderFooterRight: (ctx) => (
     <Section flexDirection="row" width="fit">
       <CopyButton getText={() => ctx.fileContent} />
-      <DownloadButton onDownload={ctx.onDownload} />
+      <DownloadButton fileUrl={ctx.fileUrl} fileName={ctx.fileName} />
     </Section>
   ),
 };
@@ -235,7 +241,7 @@ const pdfVariant: PreviewVariant = {
   renderFooterRight: (ctx) => (
     <Section flexDirection="row" width="fit">
       <CopyButton getText={() => ctx.fileContent} />
-      <DownloadButton onDownload={ctx.onDownload} />
+      <DownloadButton fileUrl={ctx.fileUrl} fileName={ctx.fileName} />
     </Section>
   ),
 };
@@ -321,7 +327,7 @@ const csvVariant: PreviewVariant = {
   renderFooterRight: (ctx) => (
     <Section flexDirection="row" width="fit">
       <CopyButton getText={() => ctx.fileContent} />
-      <DownloadButton onDownload={ctx.onDownload} />
+      <DownloadButton fileUrl={ctx.fileUrl} fileName={ctx.fileName} />
     </Section>
   ),
 };
@@ -357,7 +363,7 @@ const markdownVariant: PreviewVariant = {
   renderFooterRight: (ctx) => (
     <Section flexDirection="row" width="fit">
       <CopyButton getText={() => ctx.fileContent} />
-      <DownloadButton onDownload={ctx.onDownload} />
+      <DownloadButton fileUrl={ctx.fileUrl} fileName={ctx.fileName} />
     </Section>
   ),
 };
@@ -374,12 +380,16 @@ const unsupportedVariant: PreviewVariant = {
       <Text as="p" text03 mainUiBody>
         This file format is not supported for preview.
       </Text>
-      <Button onClick={ctx.onDownload}>Download File</Button>
+      <a href={ctx.fileUrl} download={ctx.fileName}>
+        <Button>Download File</Button>
+      </a>
     </div>
   ),
 
   renderFooterLeft: () => null,
-  renderFooterRight: (ctx) => <DownloadButton onDownload={ctx.onDownload} />,
+  renderFooterRight: (ctx) => (
+    <DownloadButton fileUrl={ctx.fileUrl} fileName={ctx.fileName} />
+  ),
 };
 
 // ---------------------------------------------------------------------------

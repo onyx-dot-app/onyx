@@ -135,15 +135,6 @@ export default function PreviewModal({
 
   // Actions ------------------------------------------------------------------
 
-  const handleDownload = useCallback(() => {
-    const link = document.createElement("a");
-    link.href = fileUrl;
-    link.download = fileName || presentingDocument.document_id;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  }, [fileUrl, fileName, presentingDocument.document_id]);
-
   const handleZoomIn = useCallback(
     () => setZoom((prev) => Math.min(prev + 25, 200)),
     []
@@ -166,7 +157,6 @@ export default function PreviewModal({
       zoom,
       onZoomIn: handleZoomIn,
       onZoomOut: handleZoomOut,
-      onDownload: handleDownload,
     }),
     [
       fileContent,
@@ -178,7 +168,6 @@ export default function PreviewModal({
       zoom,
       handleZoomIn,
       handleZoomOut,
-      handleDownload,
     ]
   );
 
