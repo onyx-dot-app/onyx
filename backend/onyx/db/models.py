@@ -4986,5 +4986,4 @@ class CodeInterpreterServer(Base):
     __tablename__ = "code_interpreter_server"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    url: Mapped[str] = mapped_column(String, nullable=False)
     server_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

@@ -21,7 +21,6 @@ def upgrade() -> None:
     op.create_table(
         "code_interpreter_server",
         sa.Column("id", sa.Integer, primary_key=True),
-        sa.Column("url", sa.String, nullable=False),
         sa.Column(
             "server_enabled", sa.Boolean, nullable=False, server_default=sa.true()
         ),
