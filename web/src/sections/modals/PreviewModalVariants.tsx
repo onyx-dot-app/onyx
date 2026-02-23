@@ -13,6 +13,7 @@ import Text from "@/refresh-components/texts/Text";
 import { SvgDownload, SvgZoomIn, SvgZoomOut } from "@opal/icons";
 import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
+import TextSeparator from "@/refresh-components/TextSeparator";
 import { cn } from "@/lib/utils";
 import { Section } from "@/layouts/general-layouts";
 import { getCodeLanguage } from "@/lib/languages";
@@ -271,15 +272,10 @@ const csvVariant: PreviewVariant = {
       <Section justifyContent="start" alignItems="start" padding={1}>
         <Table>
           <TableHeader className="sticky top-0 z-sticky">
-            <TableRow className="bg-background-tint-02">
+            <TableRow noHover>
               {headers.map((h: string, i: number) => (
                 <TableHead key={i}>
-                  <Text
-                    as="p"
-                    className="line-clamp-2 font-medium"
-                    text03
-                    mainUiBody
-                  >
+                  <Text as="p" className="line-clamp-2" text04 secondaryAction>
                     {h}
                   </Text>
                 </TableHead>
@@ -288,22 +284,33 @@ const csvVariant: PreviewVariant = {
           </TableHeader>
           <TableBody>
             {rows.map((row: string[], rIdx: number) => (
-              <TableRow key={rIdx}>
+              <TableRow key={rIdx} noHover>
                 {headers.map((_: string, cIdx: number) => (
                   <TableCell
                     key={cIdx}
                     className={cn(
-                      cIdx === 0 && "sticky left-0 bg-background-tint-01",
-                      "py-0 px-4 whitespace-normal break-words"
+                      cIdx === 0 && "sticky left-0",
+                      "py-3 px-4 whitespace-normal break-words"
                     )}
                   >
-                    {row?.[cIdx] ?? ""}
+                    <Text
+                      as="p"
+                      {...(cIdx === 0
+                        ? { text04: true, secondaryAction: true }
+                        : { text03: true, secondaryBody: true })}
+                    >
+                      {row?.[cIdx] ?? ""}
+                    </Text>
                   </TableCell>
                 ))}
               </TableRow>
             ))}
           </TableBody>
         </Table>
+        <TextSeparator
+          count={rows.length}
+          text={rows.length === 1 ? "row" : "rows"}
+        />
       </Section>
     );
   },
