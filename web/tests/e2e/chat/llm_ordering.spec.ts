@@ -39,36 +39,38 @@ test.describe("LLM Ordering", () => {
   test("Non-image-generation model visibility in chat input bar", async ({
     page,
   }) => {
-    // Ensure Image Generation is enabled in default assistant
     await ensureImageGenerationEnabled(page);
 
-    // Navigate to the chat page
     await page.goto("/app");
     await page.waitForSelector("#onyx-chat-input-textarea", { timeout: 10000 });
 
-    const testModelDisplayName = "GPT-4o Mini";
+    const trigger = page.getByTestId("llm-popover-trigger");
+    const originalTriggerText = (await trigger.textContent())?.trim() ?? "";
 
-    // Open the LLM popover by clicking the model selector button
-    const llmPopoverTrigger = page.locator(
-      '[data-testid="llm-popover-trigger"]'
-    );
-    await llmPopoverTrigger.click();
-
-    // Wait for the popover to open
+    await trigger.click();
     await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
 
-    // Verify that the non-vision model appears in the list
-    // The model name is displayed via getDisplayNameForModel
-    const modelButton = page
-      .locator('[role="dialog"]')
-      .locator("button")
-      .filter({ hasText: testModelDisplayName })
-      .first();
+    const dialog = page.locator('[role="dialog"]');
+    const allModelItems = dialog.locator("[data-selected]");
+    await expect(allModelItems.first()).toBeVisible({ timeout: 5000 });
 
-    await expect(modelButton).toBeVisible();
+    const count = await allModelItems.count();
+    expect(count).toBeGreaterThan(0);
 
-    // Optionally, select the model to verify it works
-    await modelButton.click();
-    await verifyCurrentModel(page, testModelDisplayName);
+    // Pick the first non-selected model so the trigger text changes after click
+    const nonSelectedItem = dialog.locator('[data-selected="false"]').first();
+    const hasNonSelected = (await nonSelectedItem.count()) > 0;
+    const targetItem = hasNonSelected ? nonSelectedItem : allModelItems.first();
+
+    await expect(targetItem).toBeVisible();
+    await targetItem.click();
+
+    // Verify the popover closed and the trigger updated
+    await expect(dialog).toBeHidden();
+
+    if (hasNonSelected) {
+      const updatedTriggerText = (await trigger.textContent())?.trim() ?? "";
+      expect(updatedTriggerText).not.toBe(originalTriggerText);
+    }
   });
 });

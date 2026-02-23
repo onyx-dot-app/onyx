@@ -10,8 +10,8 @@ from fastapi.testclient import TestClient
 from prometheus_client import CollectorRegistry
 from prometheus_client import Gauge
 
-from onyx.server.prometheus_instrumentation import _slow_request_callback
-from onyx.server.prometheus_instrumentation import setup_prometheus_metrics
+from onyx.server.metrics.prometheus_setup import setup_prometheus_metrics
+from onyx.server.metrics.slow_requests import slow_request_callback
 
 
 def _make_info(
@@ -30,14 +30,14 @@ def _make_info(
 
 
 def test_slow_request_callback_increments_above_threshold() -> None:
-    with patch("onyx.server.prometheus_instrumentation._slow_requests") as mock_counter:
+    with patch("onyx.server.metrics.slow_requests._slow_requests") as mock_counter:
         mock_labels = MagicMock()
         mock_counter.labels.return_value = mock_labels
 
         info = _make_info(
             duration=2.0, method="POST", handler="/api/chat", status="200"
         )
-        _slow_request_callback(info)
+        slow_request_callback(info)
 
         mock_counter.labels.assert_called_once_with(
             method="POST", handler="/api/chat", status="200"
@@ -46,28 +46,26 @@ def test_slow_request_callback_increments_above_threshold() -> None:
 
 
 def test_slow_request_callback_skips_below_threshold() -> None:
-    with patch("onyx.server.prometheus_instrumentation._slow_requests") as mock_counter:
+    with patch("onyx.server.metrics.slow_requests._slow_requests") as mock_counter:
         info = _make_info(duration=0.5)
-        _slow_request_callback(info)
+        slow_request_callback(info)
 
         mock_counter.labels.assert_not_called()
 
 
 def test_slow_request_callback_skips_at_exact_threshold() -> None:
     with (
-        patch(
-            "onyx.server.prometheus_instrumentation.SLOW_REQUEST_THRESHOLD_SECONDS", 1.0
-        ),
-        patch("onyx.server.prometheus_instrumentation._slow_requests") as mock_counter,
+        patch("onyx.server.metrics.slow_requests.SLOW_REQUEST_THRESHOLD_SECONDS", 1.0),
+        patch("onyx.server.metrics.slow_requests._slow_requests") as mock_counter,
     ):
         info = _make_info(duration=1.0)
-        _slow_request_callback(info)
+        slow_request_callback(info)
 
         mock_counter.labels.assert_not_called()
 
 
 def test_setup_attaches_instrumentator_to_app() -> None:
-    with patch("onyx.server.prometheus_instrumentation.Instrumentator") as mock_cls:
+    with patch("onyx.server.metrics.prometheus_setup.Instrumentator") as mock_cls:
         mock_instance = MagicMock()
         mock_instance.instrument.return_value = mock_instance
         mock_cls.return_value = mock_instance
@@ -84,7 +82,21 @@ def test_setup_attaches_instrumentator_to_app() -> None:
             excluded_handlers=["/health", "/metrics", "/openapi.json"],
         )
         mock_instance.add.assert_called_once()
-        mock_instance.instrument.assert_called_once_with(app)
+        mock_instance.instrument.assert_called_once_with(
+            app,
+            latency_lowr_buckets=(
+                0.01,
+                0.025,
+                0.05,
+                0.1,
+                0.25,
+                0.5,
+                1.0,
+                2.5,
+                5.0,
+                10.0,
+            ),
+        )
         mock_instance.expose.assert_called_once_with(app)
 
 

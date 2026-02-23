@@ -68,24 +68,32 @@ export interface DisabledProps {
  * - Sets aria-disabled attribute for accessibility
  * - Uses Radix Slot to avoid extra DOM nodes
  * - When disabled is false/undefined, renders child unchanged
+ * - Forwards refs so it can be used as a tooltip trigger
  */
-export function Disabled({
-  disabled,
-  allowClick = false,
-  children,
-}: DisabledProps) {
-  // When not disabled, render child unchanged
+const Disabled = React.forwardRef<
+  HTMLElement,
+  DisabledProps & React.HTMLAttributes<HTMLElement>
+>(function Disabled({ disabled, allowClick = false, children, ...rest }, ref) {
+  // When not disabled, render child unchanged (still forward ref + props
+  // so parent Slots like TooltipTrigger asChild work correctly)
   if (!disabled) {
-    return children;
+    return (
+      <Slot ref={ref} {...rest}>
+        {children}
+      </Slot>
+    );
   }
 
   const styles = allowClick ? DISABLED_ALLOW_CLICK_STYLES : DISABLED_STYLES;
 
   return (
     <Slot
+      ref={ref}
+      {...rest}
       className={cn(
         // Get existing className from child if present
         (children.props as { className?: string }).className,
+        rest.className,
         styles
       )}
       aria-disabled="true"
@@ -93,6 +101,7 @@ export function Disabled({
       {children}
     </Slot>
   );
-}
+});
 
+export { Disabled };
 export default Disabled;

@@ -13,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.apps.app_base import task_logger
+from onyx.background.celery.celery_redis import celery_get_queue_length
 from onyx.background.celery.celery_utils import httpx_init_vespa_pool
 from onyx.background.celery.tasks.shared.RetryDocumentIndex import RetryDocumentIndex
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
@@ -21,12 +22,14 @@ from onyx.configs.app_configs import VESPA_CLOUD_CERT_PATH
 from onyx.configs.app_configs import VESPA_CLOUD_KEY_PATH
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import CELERY_USER_FILE_PROCESSING_LOCK_TIMEOUT
+from onyx.configs.constants import CELERY_USER_FILE_PROCESSING_TASK_EXPIRES
 from onyx.configs.constants import CELERY_USER_FILE_PROJECT_SYNC_LOCK_TIMEOUT
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisLocks
+from onyx.configs.constants import USER_FILE_PROCESSING_MAX_QUEUE_DEPTH
 from onyx.connectors.file.connector import LocalFileConnector
 from onyx.connectors.models import Document
 from onyx.connectors.models import HierarchyNode
@@ -55,6 +58,17 @@ def _as_uuid(value: str | UUID) -> UUID:
 
 def _user_file_lock_key(user_file_id: str | UUID) -> str:
     return f"{OnyxRedisLocks.USER_FILE_PROCESSING_LOCK_PREFIX}:{user_file_id}"
+
+
+def _user_file_queued_key(user_file_id: str | UUID) -> str:
+    """Key that exists while a process_single_user_file task is sitting in the queue.
+
+    The beat generator sets this with a TTL equal to CELERY_USER_FILE_PROCESSING_TASK_EXPIRES
+    before enqueuing and the worker deletes it as its first action.  This prevents
+    the beat from adding duplicate tasks for files that already have a live task
+    in flight.
+    """
+    return f"{OnyxRedisLocks.USER_FILE_QUEUED_PREFIX}:{user_file_id}"
 
 
 def _user_file_project_sync_lock_key(user_file_id: str | UUID) -> str:
@@ -120,7 +134,24 @@ def _get_document_chunk_count(
 def check_user_file_processing(self: Task, *, tenant_id: str) -> None:
     """Scan for user files with PROCESSING status and enqueue per-file tasks.
 
-    Uses direct Redis locks to avoid overlapping runs.
+    Three mechanisms prevent queue runaway:
+
+    1. **Queue depth backpressure** – if the broker queue already has more than
+       USER_FILE_PROCESSING_MAX_QUEUE_DEPTH items we skip this beat cycle
+       entirely.  Workers are clearly behind; adding more tasks would only make
+       the backlog worse.
+
+    2. **Per-file queued guard** – before enqueuing a task we set a short-lived
+       Redis key (TTL = CELERY_USER_FILE_PROCESSING_TASK_EXPIRES).  If that key
+       already exists the file already has a live task in the queue, so we skip
+       it.  The worker deletes the key the moment it picks up the task so the
+       next beat cycle can re-enqueue if the file is still PROCESSING.
+
+    3. **Task expiry** – every enqueued task carries an `expires` value equal to
+       CELERY_USER_FILE_PROCESSING_TASK_EXPIRES.  If a task is still sitting in
+       the queue after that deadline, Celery discards it without touching the DB.
+       This is a belt-and-suspenders defence: even if the guard key is lost (e.g.
+       Redis restart), stale tasks evict themselves rather than piling up forever.
     """
     task_logger.info("check_user_file_processing - Starting")
 
@@ -135,7 +166,21 @@ def check_user_file_processing(self: Task, *, tenant_id: str) -> None:
         return None
 
     enqueued = 0
+    skipped_guard = 0
     try:
+        # --- Protection 1: queue depth backpressure ---
+        r_celery = self.app.broker_connection().channel().client  # type: ignore
+        queue_len = celery_get_queue_length(
+            OnyxCeleryQueues.USER_FILE_PROCESSING, r_celery
+        )
+        if queue_len > USER_FILE_PROCESSING_MAX_QUEUE_DEPTH:
+            task_logger.warning(
+                f"check_user_file_processing - Queue depth {queue_len} exceeds "
+                f"{USER_FILE_PROCESSING_MAX_QUEUE_DEPTH}, skipping enqueue for "
+                f"tenant={tenant_id}"
+            )
+            return None
+
         with get_session_with_current_tenant() as db_session:
             user_file_ids = (
                 db_session.execute(
@@ -148,12 +193,35 @@ def check_user_file_processing(self: Task, *, tenant_id: str) -> None:
             )
 
             for user_file_id in user_file_ids:
-                self.app.send_task(
-                    OnyxCeleryTask.PROCESS_SINGLE_USER_FILE,
-                    kwargs={"user_file_id": str(user_file_id), "tenant_id": tenant_id},
-                    queue=OnyxCeleryQueues.USER_FILE_PROCESSING,
-                    priority=OnyxCeleryPriority.HIGH,
+                # --- Protection 2: per-file queued guard ---
+                queued_key = _user_file_queued_key(user_file_id)
+                guard_set = redis_client.set(
+                    queued_key,
+                    1,
+                    ex=CELERY_USER_FILE_PROCESSING_TASK_EXPIRES,
+                    nx=True,
                 )
+                if not guard_set:
+                    skipped_guard += 1
+                    continue
+
+                # --- Protection 3: task expiry ---
+                # If task submission fails, clear the guard immediately so the
+                # next beat cycle can retry enqueuing this file.
+                try:
+                    self.app.send_task(
+                        OnyxCeleryTask.PROCESS_SINGLE_USER_FILE,
+                        kwargs={
+                            "user_file_id": str(user_file_id),
+                            "tenant_id": tenant_id,
+                        },
+                        queue=OnyxCeleryQueues.USER_FILE_PROCESSING,
+                        priority=OnyxCeleryPriority.HIGH,
+                        expires=CELERY_USER_FILE_PROCESSING_TASK_EXPIRES,
+                    )
+                except Exception:
+                    redis_client.delete(queued_key)
+                    raise
                 enqueued += 1
 
     finally:
@@ -161,7 +229,8 @@ def check_user_file_processing(self: Task, *, tenant_id: str) -> None:
             lock.release()
 
     task_logger.info(
-        f"check_user_file_processing - Enqueued {enqueued} tasks for tenant={tenant_id}"
+        f"check_user_file_processing - Enqueued {enqueued} skipped_guard={skipped_guard} "
+        f"tasks for tenant={tenant_id}"
     )
     return None
 
@@ -304,6 +373,12 @@ def process_single_user_file(
     start = time.monotonic()
 
     redis_client = get_redis_client(tenant_id=tenant_id)
+
+    # Clear the "queued" guard set by the beat generator so that the next beat
+    # cycle can re-enqueue this file if it is still in PROCESSING state after
+    # this task completes or fails.
+    redis_client.delete(_user_file_queued_key(user_file_id))
+
     file_lock: RedisLock = redis_client.lock(
         _user_file_lock_key(user_file_id),
         timeout=CELERY_USER_FILE_PROCESSING_LOCK_TIMEOUT,

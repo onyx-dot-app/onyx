@@ -943,10 +943,18 @@ from onyx.db.tools import get_builtin_tool
 from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import FileDescriptor
 from onyx.server.features.projects.api import upload_user_files
+from onyx.server.query_and_chat.chat_backend import get_chat_session
 from onyx.server.query_and_chat.models import SendMessageRequest
+from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.server.query_and_chat.streaming_models import PythonToolDelta
+from onyx.server.query_and_chat.streaming_models import PythonToolStart
+from onyx.server.query_and_chat.streaming_models import SectionEnd
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
+from tests.external_dependency_unit.answer.stream_test_builder import StreamTestBuilder
 from tests.external_dependency_unit.answer.stream_test_utils import create_chat_session
+from tests.external_dependency_unit.answer.stream_test_utils import create_placement
 from tests.external_dependency_unit.conftest import create_test_user
+from tests.external_dependency_unit.mock_llm import LLMAnswerResponse
 from tests.external_dependency_unit.mock_llm import LLMToolCallResponse
 from tests.external_dependency_unit.mock_llm import use_mock_llm
 
@@ -1174,3 +1182,134 @@ def test_code_interpreter_receives_chat_files(
     assert execute_body["code"] == code
     assert len(execute_body["files"]) == 1
     assert execute_body["files"][0]["path"] == "data.csv"
+
+
+def test_code_interpreter_replay_packets_include_code_and_output(
+    db_session: Session,
+    mock_ci_server: MockCodeInterpreterServer,
+    _attach_python_tool_to_default_persona: None,
+    initialize_file_store: None,  # noqa: ARG001
+) -> None:
+    """After a code interpreter message completes, retrieving the message
+    via translate_assistant_message_to_packets should emit PythonToolStart
+    (containing the executed code) and PythonToolDelta (containing
+    stdout/stderr), not generic CustomTool packets."""
+    mock_ci_server.captured_requests.clear()
+    mock_ci_server._file_counter = 0
+    mock_url = mock_ci_server.url
+
+    user = create_test_user(db_session, "ci_replay_test")
+    chat_session = create_chat_session(db_session=db_session, user=user)
+
+    code = 'x = 2 + 2\nprint(f"Result: {x}")'
+    msg_req = SendMessageRequest(
+        message="Calculate 2 + 2",
+        chat_session_id=chat_session.id,
+        stream=True,
+    )
+
+    original_defaults = ci_mod.CodeInterpreterClient.__init__.__defaults__
+    with (
+        use_mock_llm() as mock_llm,
+        patch(
+            "onyx.tools.tool_implementations.python.python_tool.CODE_INTERPRETER_BASE_URL",
+            mock_url,
+        ),
+        patch(
+            "onyx.tools.tool_implementations.python.code_interpreter_client.CODE_INTERPRETER_BASE_URL",
+            mock_url,
+        ),
+    ):
+        answer_tokens = ["The ", "result ", "is ", "4."]
+
+        ci_mod.CodeInterpreterClient.__init__.__defaults__ = (mock_url,)
+        try:
+            handler = StreamTestBuilder(llm_controller=mock_llm)
+
+            stream = handle_stream_message_objects(
+                new_msg_req=msg_req, user=user, db_session=db_session
+            )
+            # First packet is always MessageResponseIDInfo
+            next(stream)
+
+            # Phase 1: LLM requests python tool execution.
+            handler.add_response(
+                LLMToolCallResponse(
+                    tool_name="python",
+                    tool_call_id="call_replay_test",
+                    tool_call_argument_tokens=[json.dumps({"code": code})],
+                )
+            ).expect(
+                Packet(
+                    placement=create_placement(0),
+                    obj=PythonToolStart(code=code),
+                ),
+                forward=2,
+            ).expect(
+                Packet(
+                    placement=create_placement(0),
+                    obj=PythonToolDelta(stdout="mock output\n", stderr="", file_ids=[]),
+                ),
+                forward=False,
+            ).expect(
+                Packet(
+                    placement=create_placement(0),
+                    obj=SectionEnd(),
+                ),
+                forward=False,
+            ).run_and_validate(
+                stream=stream
+            )
+
+            # Phase 2: LLM produces a final answer after tool execution.
+            handler.add_response(
+                LLMAnswerResponse(answer_tokens=answer_tokens)
+            ).expect_agent_response(
+                answer_tokens=answer_tokens,
+                turn_index=1,
+            ).run_and_validate(
+                stream=stream
+            )
+
+            with pytest.raises(StopIteration):
+                next(stream)
+
+        finally:
+            ci_mod.CodeInterpreterClient.__init__.__defaults__ = original_defaults
+
+    # Retrieve the chat session through the same endpoint the frontend uses
+    chat_detail = get_chat_session(
+        session_id=chat_session.id,
+        user=user,
+        db_session=db_session,
+    )
+
+    assert len(mock_ci_server.get_requests(method="POST", path="/v1/execute")) == 1
+
+    # The response contains `packets` — a list of packet-lists, one per
+    # assistant message. We should have exactly one assistant message.
+    assert (
+        len(chat_detail.packets) == 1
+    ), f"Expected 1 assistant packet list, got {len(chat_detail.packets)}"
+    packets = chat_detail.packets[0]
+
+    # Extract PythonToolStart packets – these must contain the code
+    start_packets = [p for p in packets if isinstance(p.obj, PythonToolStart)]
+    assert len(start_packets) == 1, (
+        f"Expected 1 PythonToolStart packet, got {len(start_packets)}. "
+        f"Packet types: {[type(p.obj).__name__ for p in packets]}"
+    )
+    start_obj = start_packets[0].obj
+    assert isinstance(start_obj, PythonToolStart)
+    assert start_obj.code == code
+
+    # Extract PythonToolDelta packets – these must contain stdout/stderr
+    delta_packets = [p for p in packets if isinstance(p.obj, PythonToolDelta)]
+    assert len(delta_packets) >= 1, (
+        f"Expected at least 1 PythonToolDelta packet, got {len(delta_packets)}. "
+        f"Packet types: {[type(p.obj).__name__ for p in packets]}"
+    )
+    # The mock CI server returns "mock output\n" as stdout
+    delta_obj = delta_packets[0].obj
+    assert isinstance(delta_obj, PythonToolDelta)
+    assert "mock output" in delta_obj.stdout

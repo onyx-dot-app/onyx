@@ -97,6 +97,7 @@ class TestScimDALUserMappings:
         assert model_attrs(added_obj) == {
             "external_id": "ext-1",
             "user_id": user_id,
+            "scim_username": None,
         }
 
     def test_delete_user_mapping(

@@ -2,14 +2,18 @@ import {
   QuestionCardProps,
   DocumentCardProps,
 } from "@/components/search/results/Citation";
-import { LoadedOnyxDocument, OnyxDocument } from "@/lib/search/interfaces";
+import {
+  LoadedOnyxDocument,
+  MinimalOnyxDocument,
+  OnyxDocument,
+} from "@/lib/search/interfaces";
 import React, { memo, JSX, useMemo, useCallback } from "react";
 import { SourceIcon } from "@/components/SourceIcon";
 import { WebResultIcon } from "@/components/WebResultIcon";
 import { SubQuestionDetail, CitationMap } from "../interfaces";
 import { ValidSources } from "@/lib/types";
 import { ProjectFile } from "../projects/projectsService";
-import { BlinkingDot } from "./BlinkingDot";
+import { BlinkingBar } from "./BlinkingBar";
 import Text from "@/refresh-components/texts/Text";
 import SourceTag from "@/refresh-components/buttons/source-tag/SourceTag";
 import {
@@ -36,7 +40,7 @@ export const MemoizedAnchor = memo(
     docs?: OnyxDocument[] | null;
     userFiles?: ProjectFile[] | null;
     citations?: CitationMap;
-    updatePresentingDocument: (doc: OnyxDocument) => void;
+    updatePresentingDocument: (doc: MinimalOnyxDocument) => void;
     href?: string;
     children: React.ReactNode;
   }): JSX.Element => {
@@ -153,7 +157,7 @@ export const MemoizedLink = memo(
     }, [document, updatePresentingDocument, question, openQuestion]);
 
     if (value?.toString().startsWith("*")) {
-      return <BlinkingDot addMargin />;
+      return <BlinkingBar addMargin />;
     } else if (value?.toString().startsWith("[")) {
       const sourceInfo = documentSourceInfo || questionSourceInfo;
       if (!sourceInfo) {
@@ -166,7 +170,7 @@ export const MemoizedLink = memo(
 
       return (
         <SourceTag
-          inlineCitation
+          variant="inlineCitation"
           displayName={displayName}
           sources={[sourceInfo]}
           onSourceClick={handleSourceClick}
@@ -177,6 +181,28 @@ export const MemoizedLink = memo(
     }
 
     const url = ensureHrefProtocol(href);
+
+    // Check if the link is to a file on the backend
+    const isChatFile = url?.includes("/api/chat/file/");
+    if (isChatFile && updatePresentingDocument) {
+      const fileId = url!.split("/api/chat/file/")[1]?.split(/[?#]/)[0] || "";
+      const filename = value?.toString() || "download";
+      return (
+        <a
+          href="#"
+          onClick={(e) => {
+            e.preventDefault();
+            updatePresentingDocument({
+              document_id: fileId,
+              semantic_identifier: filename,
+            });
+          }}
+          className="cursor-pointer text-link hover:text-link-hover"
+        >
+          {rest.children}
+        </a>
+      );
+    }
 
     return (
       <a

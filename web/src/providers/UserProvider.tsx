@@ -15,7 +15,7 @@ import {
 } from "@/lib/types";
 import { getCurrentUser } from "@/lib/user";
 import { usePostHog } from "posthog-js/react";
-import { CombinedSettings } from "@/app/admin/settings/interfaces";
+import { CombinedSettings } from "@/interfaces/settings";
 import { SettingsContext } from "@/providers/SettingsProvider";
 import { useTokenRefresh } from "@/hooks/useTokenRefresh";
 import { AuthTypeMetadata } from "@/lib/userSS";
