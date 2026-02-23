@@ -224,7 +224,7 @@ ods run-ci 7353
 Cherry-pick one or more commits to release branches and automatically create PRs.
 
 ```shell
-ods cherry-pick <commit-sha> [<commit-sha>...] [--release <version>] [--latest-release]
+ods cherry-pick <commit-sha> [<commit-sha>...] [--release <version>]
 ```
 
 **Examples:**
@@ -242,8 +242,6 @@ ods cherry-pick abc123 --release 2.5 --release 2.6
 # Cherry-pick multiple commits
 ods cherry-pick abc123 def456 ghi789 --release 2.5
 
-# Cherry-pick to the latest release branch
-ods cherry-pick abc123 --latest-release
 ```
 
 ### `screenshot-diff` - Visual Regression Testing
