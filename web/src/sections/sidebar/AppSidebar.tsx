@@ -2,7 +2,7 @@
 
 import { useCallback, memo, useMemo, useState, useEffect, useRef } from "react";
 import useSWR from "swr";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import Text from "@/refresh-components/texts/Text";
@@ -715,6 +715,10 @@ MemoizedAppSidebarInner.displayName = "AppSidebar";
 export default function AppSidebar() {
   const { folded, setFolded } = useAppSidebarContext();
   const { isMobile } = useScreenSize();
+  const pathname = usePathname();
+
+  // Don't render the sidebar in the side panel — it should be chat-only
+  if (pathname?.includes("/nrf/side-panel")) return null;
 
   if (!isMobile)
     return (
