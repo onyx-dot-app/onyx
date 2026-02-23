@@ -27,6 +27,7 @@ const SETTINGS_LAYOUT_PREFIXES = [
   "/admin/document-index-migration",
   "/admin/discord-bot",
   "/admin/theme",
+  "/admin/configuration/llm",
 ];
 
 export function ClientLayout({
