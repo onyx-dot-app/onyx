@@ -15,10 +15,10 @@ from onyx.chat.emitter import Emitter
 from onyx.chat.llm_step import extract_tool_calls_from_response_text
 from onyx.chat.llm_step import run_llm_step
 from onyx.chat.models import ChatMessageSimple
-from onyx.chat.models import ExtractedProjectFiles
+from onyx.chat.models import ContextFileMetadata
+from onyx.chat.models import ExtractedContextFiles
 from onyx.chat.models import FileToolMetadata
 from onyx.chat.models import LlmStepResult
-from onyx.chat.models import ProjectFileMetadata
 from onyx.chat.models import ToolCallSimple
 from onyx.chat.prompt_utils import build_reminder_message
 from onyx.chat.prompt_utils import build_system_prompt
@@ -203,17 +203,17 @@ def _try_fallback_tool_extraction(
 MAX_LLM_CYCLES = 6
 
 
-def _build_project_file_citation_mapping(
-    project_file_metadata: list[ProjectFileMetadata],
+def _build_context_file_citation_mapping(
+    file_metadata: list[ContextFileMetadata],
     starting_citation_num: int = 1,
 ) -> CitationMapping:
-    """Build citation mapping for project files.
+    """Build citation mapping for context files.
 
-    Converts project file metadata into SearchDoc objects that can be cited.
+    Converts context file metadata into SearchDoc objects that can be cited.
     Citation numbers start from the provided starting number.
 
     Args:
-        project_file_metadata: List of project file metadata
+        file_metadata: List of context file metadata
         starting_citation_num: Starting citation number (default: 1)
 
     Returns:
@@ -221,8 +221,7 @@ def _build_project_file_citation_mapping(
     """
     citation_mapping: CitationMapping = {}
 
-    for idx, file_meta in enumerate(project_file_metadata, start=starting_citation_num):
-        # Create a SearchDoc for each project file
+    for idx, file_meta in enumerate(file_metadata, start=starting_citation_num):
         search_doc = SearchDoc(
             document_id=file_meta.file_id,
             chunk_ind=0,
@@ -242,22 +241,21 @@ def _build_project_file_citation_mapping(
 
 
 def _build_project_message(
-    project_files: ExtractedProjectFiles | None,
+    project_files: ExtractedContextFiles | None,
     token_counter: Callable[[str], int] | None,
 ) -> list[ChatMessageSimple]:
-    """Build messages for project / tool-backed files.
+    """Build messages for context-injected / tool-backed files.
 
     Returns up to two messages:
-    1. The full-text project files message (if project_file_texts is populated).
+    1. The full-text files message (if file_texts is populated).
     2. A lightweight metadata message for files the LLM should access via the
-       FileReaderTool (e.g. oversized chat-attached files or project files that
-       don't fit in context).
+       FileReaderTool (e.g. oversized files that don't fit in context).
     """
     if not project_files:
         return []
 
     messages: list[ChatMessageSimple] = []
-    if project_files.project_file_texts:
+    if project_files.file_texts:
         messages.append(
             _create_project_files_message(project_files, token_counter=None)
         )
@@ -275,7 +273,7 @@ def construct_message_history(
     custom_agent_prompt: ChatMessageSimple | None,
     simple_chat_history: list[ChatMessageSimple],
     reminder_message: ChatMessageSimple | None,
-    project_files: ExtractedProjectFiles | None,
+    project_files: ExtractedContextFiles | None,
     available_tokens: int,
     last_n_user_messages: int | None = None,
     token_counter: Callable[[str], int] | None = None,
@@ -445,13 +443,13 @@ def construct_message_history(
                     )
 
     # Attach project images to the last user message
-    if project_files and project_files.project_image_files:
+    if project_files and project_files.image_files:
         existing_images = last_user_message.image_files or []
         last_user_message = ChatMessageSimple(
             message=last_user_message.message,
             token_count=last_user_message.token_count,
             message_type=last_user_message.message_type,
-            image_files=existing_images + project_files.project_image_files,
+            image_files=existing_images + project_files.image_files,
         )
 
     # Build the final message list according to README ordering:
@@ -548,10 +546,10 @@ def _create_file_tool_metadata_message(
 
 
 def _create_project_files_message(
-    project_files: ExtractedProjectFiles,
+    project_files: ExtractedContextFiles,
     token_counter: Callable[[str], int] | None,  # noqa: ARG001
 ) -> ChatMessageSimple:
-    """Convert project files to a ChatMessageSimple message.
+    """Convert context files to a ChatMessageSimple message.
 
     Format follows the README specification for document representation.
     """
@@ -559,7 +557,7 @@ def _create_project_files_message(
 
     # Format as documents JSON as described in README
     documents_list = []
-    for idx, file_text in enumerate(project_files.project_file_texts, start=1):
+    for idx, file_text in enumerate(project_files.file_texts, start=1):
         documents_list.append(
             {
                 "document": idx,
@@ -584,7 +582,7 @@ def run_llm_loop(
     simple_chat_history: list[ChatMessageSimple],
     tools: list[Tool],
     custom_agent_prompt: str | None,
-    project_files: ExtractedProjectFiles,
+    project_files: ExtractedContextFiles,
     persona: Persona | None,
     user_memory_context: UserMemoryContext | None,
     llm: LLM,
@@ -627,9 +625,9 @@ def run_llm_loop(
 
         # Add project file citation mappings if project files are present
         project_citation_mapping: CitationMapping = {}
-        if project_files.project_file_metadata:
-            project_citation_mapping = _build_project_file_citation_mapping(
-                project_files.project_file_metadata
+        if project_files.file_metadata:
+            project_citation_mapping = _build_context_file_citation_mapping(
+                project_files.file_metadata
             )
             citation_processor.update_citation_mapping(project_citation_mapping)
 
@@ -647,7 +645,7 @@ def run_llm_loop(
         # TODO allow citing of images in Projects. Since attached to the last user message, it has no text associated with it.
         # One future workaround is to include the images as separate user messages with citation information and process those.
         always_cite_documents: bool = bool(
-            project_files.project_as_filter or project_files.project_file_texts
+            project_files.use_as_search_filter or project_files.file_texts
         )
         should_cite_documents: bool = False
         ran_image_gen: bool = False

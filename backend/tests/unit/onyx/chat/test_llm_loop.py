@@ -7,10 +7,10 @@ from onyx.chat.llm_loop import _try_fallback_tool_extraction
 from onyx.chat.llm_loop import construct_message_history
 from onyx.chat.models import ChatLoadedFile
 from onyx.chat.models import ChatMessageSimple
-from onyx.chat.models import ExtractedProjectFiles
+from onyx.chat.models import ContextFileMetadata
+from onyx.chat.models import ExtractedContextFiles
 from onyx.chat.models import FileToolMetadata
 from onyx.chat.models import LlmStepResult
-from onyx.chat.models import ProjectFileMetadata
 from onyx.chat.models import ToolCallSimple
 from onyx.configs.constants import MessageType
 from onyx.file_store.models import ChatFileType
@@ -76,18 +76,18 @@ def create_tool_response(
 
 def create_project_files(
     num_files: int = 0, num_images: int = 0, tokens_per_file: int = 100
-) -> ExtractedProjectFiles:
-    """Helper to create ExtractedProjectFiles for testing."""
-    project_file_texts = [f"Project file {i} content" for i in range(num_files)]
-    project_file_metadata = [
-        ProjectFileMetadata(
+) -> ExtractedContextFiles:
+    """Helper to create ExtractedContextFiles for testing."""
+    file_texts = [f"Project file {i} content" for i in range(num_files)]
+    file_metadata = [
+        ContextFileMetadata(
             file_id=f"file_{i}",
             filename=f"file_{i}.txt",
             file_content=f"Project file {i} content",
         )
         for i in range(num_files)
     ]
-    project_image_files = [
+    image_files = [
         ChatLoadedFile(
             file_id=f"image_{i}",
             content=b"",
@@ -98,13 +98,13 @@ def create_project_files(
         )
         for i in range(num_images)
     ]
-    return ExtractedProjectFiles(
-        project_file_texts=project_file_texts,
-        project_image_files=project_image_files,
-        project_as_filter=False,
+    return ExtractedContextFiles(
+        file_texts=file_texts,
+        image_files=image_files,
+        use_as_search_filter=False,
         total_token_count=num_files * tokens_per_file,
-        project_file_metadata=project_file_metadata,
-        project_uncapped_token_count=num_files * tokens_per_file,
+        file_metadata=file_metadata,
+        uncapped_token_count=num_files * tokens_per_file,
     )
 
 
