@@ -1,7 +1,4 @@
 name: Post-Merge Beta Cherry-Pick
-concurrency:
-  group: Post-Merge-Beta-Cherry-Pick-${{ github.workflow }}-${{ github.ref_name }}-${{ github.run_id }}
-  cancel-in-progress: true
 
 on:
   push:
@@ -21,21 +18,20 @@ jobs:
         id: gate
         env:
           GH_TOKEN: ${{ github.token }}
-          COMMIT_SHA: ${{ github.sha }}
         run: |
           # For the commit that triggered this workflow (HEAD on main), fetch all
           # associated PRs and keep only the PR that was actually merged into main
           # with this exact merge commit SHA.
-          pr_numbers="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${COMMIT_SHA}/pulls" | jq -r --arg sha "${COMMIT_SHA}" '.[] | select(.merged_at != null and .base.ref == "main" and .merge_commit_sha == $sha) | .number')"
+          pr_numbers="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls" | jq -r --arg sha "${GITHUB_SHA}" '.[] | select(.merged_at != null and .base.ref == "main" and .merge_commit_sha == $sha) | .number')"
           match_count="$(printf '%s\n' "$pr_numbers" | sed '/^[[:space:]]*$/d' | wc -l | tr -d ' ')"
           pr_number="$(printf '%s\n' "$pr_numbers" | sed '/^[[:space:]]*$/d' | head -n 1)"
 
           if [ "${match_count}" -gt 1 ]; then
-            echo "::warning::Multiple merged PRs matched commit ${COMMIT_SHA}. Using PR #${pr_number}."
+            echo "::warning::Multiple merged PRs matched commit ${GITHUB_SHA}. Using PR #${pr_number}."
           fi
 
           if [ -z "$pr_number" ]; then
-            echo "No merged PR associated with commit ${COMMIT_SHA}; skipping."
+            echo "No merged PR associated with commit ${GITHUB_SHA}; skipping."
             echo "should_cherrypick=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -79,6 +75,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_TOKEN: ${{ github.token }}
-          COMMIT_SHA: ${{ github.sha }}
         run: |
-          uv run --no-sync --with onyx-devtools ods cherry-pick "${COMMIT_SHA}" --yes --no-verify
+          uv run --no-sync --with onyx-devtools ods cherry-pick "${GITHUB_SHA}" --yes --no-verify

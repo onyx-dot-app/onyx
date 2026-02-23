@@ -241,7 +241,6 @@ ods cherry-pick abc123 --release 2.5 --release 2.6
 
 # Cherry-pick multiple commits
 ods cherry-pick abc123 def456 ghi789 --release 2.5
-
 ```
 
 ### `screenshot-diff` - Visual Regression Testing
