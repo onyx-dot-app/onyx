@@ -64,6 +64,19 @@ def fetch_user_project_ids_for_user_files(
     }
 
 
+def fetch_persona_ids_for_user_files(
+    user_file_ids: list[str],
+    db_session: Session,
+) -> dict[str, list[int]]:
+    """Fetch persona (assistant) ids for specified user files."""
+    stmt = select(UserFile).where(UserFile.id.in_(user_file_ids))
+    results = db_session.execute(stmt).scalars().all()
+    return {
+        str(user_file.id): [persona.id for persona in user_file.assistants]
+        for user_file in results
+    }
+
+
 def update_last_accessed_at_for_user_files(
     user_file_ids: list[UUID],
     db_session: Session,
