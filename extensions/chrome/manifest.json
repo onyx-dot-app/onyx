@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Onyx",
-  "version": "1.0",
+  "version": "1.1",
   "description": "Onyx lets you research, create, and automate with LLMs powered by your team's unique knowledge",
   "permissions": [
     "sidePanel",
