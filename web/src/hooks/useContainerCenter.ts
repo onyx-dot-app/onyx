@@ -55,8 +55,7 @@ export default function useContainerCenter(): ContainerCenter {
     }
 
     const update = () => {
-      const el = document.querySelector<HTMLElement>(SELECTOR);
-      const m = el ? measure(el) : null;
+      const m = measure(container);
       setCenter(m ?? NULL_CENTER);
     };
 
