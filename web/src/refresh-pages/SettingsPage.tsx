@@ -65,6 +65,7 @@ import { Interactive } from "@opal/core";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import { useCloudSubscription } from "@/hooks/useCloudSubscription";
 
 interface PAT {
   id: number;
@@ -937,6 +938,8 @@ function AccountsAccessSettings() {
     useState<CreatedTokenState | null>(null);
   const [tokenToDelete, setTokenToDelete] = useState<PAT | null>(null);
 
+  const canCreateTokens = useCloudSubscription();
+
   const showPasswordSection = Boolean(user?.password_configured);
   const showTokensSection = authType !== null;
 
@@ -1245,93 +1248,104 @@ function AccountsAccessSettings() {
         {showTokensSection && (
           <Section gap={0.75}>
             <InputLayouts.Title title="Access Tokens" />
-            <Card padding={0.25}>
-              <Section gap={0}>
-                {/* Header with search/empty state and create button */}
-                <Section flexDirection="row" padding={0.25} gap={0.5}>
-                  {pats.length === 0 ? (
-                    <Section padding={0.5} alignItems="start">
-                      <Text as="span" text03 secondaryBody>
-                        {isLoading
-                          ? "Loading tokens..."
-                          : "No access tokens created."}
-                      </Text>
-                    </Section>
-                  ) : (
-                    <InputTypeIn
-                      placeholder="Search..."
-                      value={query}
-                      onChange={(e) => setQuery(e.target.value)}
-                      leftSearchIcon
-                      variant="internal"
-                    />
-                  )}
-                  <CreateButton
-                    onClick={() => setShowCreateModal(true)}
-                    secondary={false}
-                    internal
-                    transient={showCreateModal}
-                    rightIcon
-                  >
-                    New Access Token
-                  </CreateButton>
-                </Section>
+            {canCreateTokens ? (
+              <Card padding={0.25}>
+                <Section gap={0}>
+                  <Section flexDirection="row" padding={0.25} gap={0.5}>
+                    {pats.length === 0 ? (
+                      <Section padding={0.5} alignItems="start">
+                        <Text text03 secondaryBody>
+                          {isLoading
+                            ? "Loading tokens..."
+                            : "No access tokens created."}
+                        </Text>
+                      </Section>
+                    ) : (
+                      <InputTypeIn
+                        placeholder="Search..."
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        leftSearchIcon
+                        variant="internal"
+                      />
+                    )}
+                    <CreateButton
+                      onClick={() => setShowCreateModal(true)}
+                      secondary={false}
+                      internal
+                      transient={showCreateModal}
+                      rightIcon
+                    >
+                      New Access Token
+                    </CreateButton>
+                  </Section>
 
-                {/* Token List */}
-                <Section gap={0.25}>
-                  {filteredPats.map((pat) => {
-                    const now = new Date();
-                    const createdDate = new Date(pat.created_at);
-                    const daysSinceCreation = Math.floor(
-                      (now.getTime() - createdDate.getTime()) /
-                        (1000 * 60 * 60 * 24)
-                    );
-
-                    let expiryText = "Never expires";
-                    if (pat.expires_at) {
-                      const expiresDate = new Date(pat.expires_at);
-                      const daysUntilExpiry = Math.ceil(
-                        (expiresDate.getTime() - now.getTime()) /
+                  <Section gap={0.25}>
+                    {filteredPats.map((pat) => {
+                      const now = new Date();
+                      const createdDate = new Date(pat.created_at);
+                      const daysSinceCreation = Math.floor(
+                        (now.getTime() - createdDate.getTime()) /
                           (1000 * 60 * 60 * 24)
                       );
-                      expiryText = `Expires in ${daysUntilExpiry} day${
-                        daysUntilExpiry === 1 ? "" : "s"
-                      }`;
-                    }
 
-                    const middleText = `Created ${daysSinceCreation} day${
-                      daysSinceCreation === 1 ? "" : "s"
-                    } ago - ${expiryText}`;
+                      let expiryText = "Never expires";
+                      if (pat.expires_at) {
+                        const expiresDate = new Date(pat.expires_at);
+                        const daysUntilExpiry = Math.ceil(
+                          (expiresDate.getTime() - now.getTime()) /
+                            (1000 * 60 * 60 * 24)
+                        );
+                        expiryText = `Expires in ${daysUntilExpiry} day${
+                          daysUntilExpiry === 1 ? "" : "s"
+                        }`;
+                      }
 
-                    return (
-                      <Interactive.Container
-                        key={pat.id}
-                        heightVariant="fit"
-                        widthVariant="full"
-                      >
-                        <div className="w-full bg-background-tint-01">
-                          <AttachmentItemLayout
-                            icon={SvgKey}
-                            title={pat.name}
-                            description={pat.token_display}
-                            middleText={middleText}
-                            rightChildren={
-                              <OpalButton
-                                icon={SvgTrash}
-                                onClick={() => setTokenToDelete(pat)}
-                                prominence="tertiary"
-                                size="sm"
-                                aria-label={`Delete token ${pat.name}`}
-                              />
-                            }
-                          />
-                        </div>
-                      </Interactive.Container>
-                    );
-                  })}
+                      const middleText = `Created ${daysSinceCreation} day${
+                        daysSinceCreation === 1 ? "" : "s"
+                      } ago - ${expiryText}`;
+
+                      return (
+                        <Interactive.Container
+                          key={pat.id}
+                          heightVariant="fit"
+                          widthVariant="full"
+                        >
+                          <div className="w-full bg-background-tint-01">
+                            <AttachmentItemLayout
+                              icon={SvgKey}
+                              title={pat.name}
+                              description={pat.token_display}
+                              middleText={middleText}
+                              rightChildren={
+                                <OpalButton
+                                  icon={SvgTrash}
+                                  onClick={() => setTokenToDelete(pat)}
+                                  prominence="tertiary"
+                                  size="sm"
+                                  aria-label={`Delete token ${pat.name}`}
+                                />
+                              }
+                            />
+                          </div>
+                        </Interactive.Container>
+                      );
+                    })}
+                  </Section>
                 </Section>
-              </Section>
-            </Card>
+              </Card>
+            ) : (
+              <Card>
+                <Section flexDirection="row" justifyContent="between">
+                  <Text text03 secondaryBody>
+                    Access tokens require an active paid subscription.
+                  </Text>
+                  <Button secondary href="/admin/billing">
+                    Upgrade Plan
+                  </Button>
+                </Section>
+              </Card>
+            )}
           </Section>
         )}
       </Section>
