@@ -36,10 +36,11 @@
 import BackButton from "@/refresh-components/buttons/BackButton";
 import { cn } from "@/lib/utils";
 import Separator from "@/refresh-components/Separator";
-import Text from "@/refresh-components/texts/Text";
 import { WithoutStyles } from "@/types";
-import { IconProps } from "@opal/types";
+import { IconFunctionComponent } from "@opal/types";
 import { HtmlHTMLAttributes, useEffect, useRef, useState } from "react";
+import { Content } from "@opal/layouts";
+import Spacer from "@/refresh-components/Spacer";
 
 const widthClasses = {
   md: "w-[min(50rem,100%)]",
@@ -163,7 +164,7 @@ function SettingsRoot({ width = "md", ...props }: SettingsRootProps) {
  * ```
  */
 export interface SettingsHeaderProps {
-  icon: React.FunctionComponent<IconProps>;
+  icon: IconFunctionComponent;
   title: string;
   description?: string;
   children?: React.ReactNode;
@@ -184,7 +185,10 @@ function SettingsHeader({
 }: SettingsHeaderProps) {
   const [showShadow, setShowShadow] = useState(false);
   const headerRef = useRef<HTMLDivElement>(null);
-  const isSticky = !!rightChildren; //headers with actions are always sticky, others are not
+
+  // # NOTE (@Subash-Mohan)
+  // Headers with actions are always sticky, others are not.
+  const isSticky = !!rightChildren;
 
   useEffect(() => {
     if (!isSticky) return;
@@ -221,34 +225,35 @@ function SettingsHeader({
           <BackButton behaviorOverride={onBack} />
         </div>
       )}
-      <div
-        className={cn("flex flex-col gap-6 px-4", backButton ? "pt-2" : "pt-4")}
-      >
-        <div className="flex flex-col">
-          <div className="flex flex-row justify-between items-center gap-4">
-            <Icon className="stroke-text-04 h-[1.75rem] w-[1.75rem]" />
-            {rightChildren}
+
+      <Spacer vertical rem={1} />
+
+      <div className="flex flex-col gap-6 px-4">
+        <div className="flex w-full justify-between">
+          <div aria-label="admin-page-title">
+            <Content
+              icon={Icon}
+              title={title}
+              description={description}
+              sizePreset="headline"
+              variant="heading"
+            />
           </div>
-          <div className={cn("flex flex-col", separator ? "pb-6" : "pb-2")}>
-            <div aria-label="admin-page-title">
-              <Text as="p" headingH2>
-                {title}
-              </Text>
-            </div>
-            {description && (
-              <Text secondaryBody text03>
-                {description}
-              </Text>
-            )}
-          </div>
+          {rightChildren}
         </div>
+
         {children}
       </div>
-      {separator && (
+
+      {separator ? (
         <>
+          <Spacer vertical rem={1.5} />
           <Separator noPadding className="px-4" />
         </>
+      ) : (
+        <Spacer vertical rem={0.5} />
       )}
+
       {isSticky && (
         <div
           className={cn(
