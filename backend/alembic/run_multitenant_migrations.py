@@ -27,7 +27,6 @@ from alembic.config import Config
 from alembic.script import ScriptDirectory
 from sqlalchemy import text
 
-from onyx.db.engine.sql_engine import is_valid_schema_name
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.db.engine.tenant_utils import get_all_tenant_ids
 from shared_configs.configs import TENANT_ID_PREFIX
@@ -108,51 +107,72 @@ def get_head_revision() -> str | None:
 def get_schemas_needing_migration(
     tenant_schemas: List[str], head_rev: str
 ) -> List[str]:
-    """Return only schemas whose current alembic version is not at head."""
+    """Return only schemas whose current alembic version is not at head.
+
+    Uses a server-side PL/pgSQL loop to collect each schema's alembic version
+    into a temp table one at a time. This avoids building a massive UNION ALL
+    query (which locks the DB and times out at 17k+ schemas) and instead
+    acquires locks sequentially, one schema per iteration.
+    """
     if not tenant_schemas:
         return []
 
     engine = SqlEngine.get_engine()
 
     with engine.connect() as conn:
-        # Find which schemas actually have an alembic_version table
-        rows = conn.execute(
+        conn.execute(text("DROP TABLE IF EXISTS _alembic_version_snapshot"))
+        conn.execute(
             text(
-                "SELECT table_schema FROM information_schema.tables "
-                "WHERE table_name = 'alembic_version' "
-                "AND table_schema = ANY(:schemas)"
-            ),
-            {"schemas": tenant_schemas},
-        )
-        schemas_with_table = set(row[0] for row in rows)
-
-        # Schemas without the table definitely need migration
-        needs_migration = [s for s in tenant_schemas if s not in schemas_with_table]
-
-        if not schemas_with_table:
-            return needs_migration
-
-        # Validate schema names before interpolating into SQL
-        for schema in schemas_with_table:
-            if not is_valid_schema_name(schema):
-                raise ValueError(f"Invalid schema name: {schema}")
-
-        # Single query to get every schema's current revision at once.
-        # Use integer tags instead of interpolating schema names into
-        # string literals to avoid quoting issues.
-        schema_list = list(schemas_with_table)
-        union_parts = [
-            f'SELECT {i} AS idx, version_num FROM "{schema}".alembic_version'
-            for i, schema in enumerate(schema_list)
-        ]
-        rows = conn.execute(text(" UNION ALL ".join(union_parts)))
-        version_by_schema = {schema_list[row[0]]: row[1] for row in rows}
-
-        needs_migration.extend(
-            s for s in schemas_with_table if version_by_schema.get(s) != head_rev
+                "CREATE TEMP TABLE _alembic_version_snapshot "
+                "(schema_name text, version_num text)"
+            )
         )
 
-    return needs_migration
+        conn.execute(
+            text(
+                """
+                DO $$
+                DECLARE
+                    s        text;
+                    schemas  text[];
+                BEGIN
+                    SELECT array_agg(nspname) INTO schemas
+                    FROM pg_namespace
+                    WHERE nspname LIKE 'tenant_%';
+
+                    IF schemas IS NULL THEN
+                        RAISE NOTICE 'No tenant schemas found.';
+                        RETURN;
+                    END IF;
+
+                    FOREACH s IN ARRAY schemas LOOP
+                        BEGIN
+                            EXECUTE format(
+                                'INSERT INTO _alembic_version_snapshot
+                                 SELECT %L, version_num FROM %I.alembic_version',
+                                s, s
+                            );
+                        EXCEPTION
+                            WHEN undefined_table OR invalid_schema_name THEN NULL;
+                        END;
+                    END LOOP;
+                END;
+                $$
+                """
+            )
+        )
+
+        rows = conn.execute(
+            text("SELECT schema_name, version_num FROM _alembic_version_snapshot")
+        )
+        version_by_schema = {row[0]: row[1] for row in rows}
+
+        conn.execute(text("DROP TABLE IF EXISTS _alembic_version_snapshot"))
+
+    # Schemas missing from the snapshot have no alembic_version table yet and
+    # also need migration. version_by_schema.get(s) returns None for those,
+    # and None != head_rev, so they are included automatically.
+    return [s for s in tenant_schemas if version_by_schema.get(s) != head_rev]
 
 
 def run_migrations_parallel(
