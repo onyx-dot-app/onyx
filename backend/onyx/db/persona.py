@@ -765,6 +765,9 @@ def mark_persona_as_deleted(
 ) -> None:
     persona = get_persona_by_id(persona_id=persona_id, user=user, db_session=db_session)
     persona.deleted = True
+    affected_file_ids = [uf.id for uf in persona.user_files]
+    if affected_file_ids:
+        _mark_files_need_persona_sync(db_session, affected_file_ids)
     db_session.commit()
 
 
@@ -776,11 +779,13 @@ def mark_persona_as_not_deleted(
     persona = get_persona_by_id(
         persona_id=persona_id, user=user, db_session=db_session, include_deleted=True
     )
-    if persona.deleted:
-        persona.deleted = False
-        db_session.commit()
-    else:
+    if not persona.deleted:
         raise ValueError(f"Persona with ID {persona_id} is not deleted.")
+    persona.deleted = False
+    affected_file_ids = [uf.id for uf in persona.user_files]
+    if affected_file_ids:
+        _mark_files_need_persona_sync(db_session, affected_file_ids)
+    db_session.commit()
 
 
 def mark_delete_persona_by_name(
@@ -844,6 +849,20 @@ def update_personas_display_priority(
 
     if commit_db_txn:
         db_session.commit()
+
+
+def _mark_files_need_persona_sync(
+    db_session: Session,
+    user_file_ids: list[UUID],
+) -> None:
+    """Flag the given UserFile rows so the background sync task picks them up
+    and updates their persona metadata in the vector DB."""
+    if not user_file_ids:
+        return
+    db_session.query(UserFile).filter(UserFile.id.in_(user_file_ids)).update(
+        {UserFile.needs_persona_sync: True},
+        synchronize_session=False,
+    )
 
 
 def upsert_persona(
@@ -1034,8 +1053,13 @@ def upsert_persona(
             existing_persona.tools = tools or []
 
         if user_file_ids is not None:
+            old_file_ids = {uf.id for uf in existing_persona.user_files}
+            new_file_ids = {uf.id for uf in (user_files or [])}
+            affected_file_ids = old_file_ids | new_file_ids
             existing_persona.user_files.clear()
             existing_persona.user_files = user_files or []
+            if affected_file_ids:
+                _mark_files_need_persona_sync(db_session, list(affected_file_ids))
 
         if hierarchy_node_ids is not None:
             existing_persona.hierarchy_nodes.clear()
@@ -1089,6 +1113,8 @@ def upsert_persona(
             attached_documents=attached_documents or [],
         )
         db_session.add(new_persona)
+        if user_files:
+            _mark_files_need_persona_sync(db_session, [uf.id for uf in user_files])
         persona = new_persona
     if commit:
         db_session.commit()

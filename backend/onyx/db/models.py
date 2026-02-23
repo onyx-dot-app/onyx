@@ -4270,6 +4270,9 @@ class UserFile(Base):
     needs_project_sync: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
     )
+    needs_persona_sync: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
     last_project_sync_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
