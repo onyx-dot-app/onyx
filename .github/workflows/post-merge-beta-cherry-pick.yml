@@ -1,0 +1,79 @@
+name: Post-Merge Beta Cherry-Pick
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  cherry-pick-to-latest-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Resolve merged PR and checkbox state
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # For the commit that triggered this workflow (HEAD on main), fetch all
+          # associated PRs and keep only the PR that was actually merged into main
+          # with this exact merge commit SHA.
+          pr_numbers="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls" | jq -r --arg sha "${GITHUB_SHA}" '.[] | select(.merged_at != null and .base.ref == "main" and .merge_commit_sha == $sha) | .number')"
+          match_count="$(printf '%s\n' "$pr_numbers" | sed '/^[[:space:]]*$/d' | wc -l | tr -d ' ')"
+          pr_number="$(printf '%s\n' "$pr_numbers" | sed '/^[[:space:]]*$/d' | head -n 1)"
+
+          if [ "${match_count}" -gt 1 ]; then
+            echo "::warning::Multiple merged PRs matched commit ${GITHUB_SHA}. Using PR #${pr_number}."
+          fi
+
+          if [ -z "$pr_number" ]; then
+            echo "No merged PR associated with commit ${GITHUB_SHA}; skipping."
+            echo "should_cherrypick=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Read the PR body and check whether the helper checkbox is checked.
+          pr_body="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}" --jq '.body // ""')"
+          echo "pr_number=$pr_number" >> "$GITHUB_OUTPUT"
+
+          if echo "$pr_body" | grep -qiE "\\[x\\][[:space:]]*(\\[[^]]+\\][[:space:]]*)?Please cherry-pick this PR to the latest release version"; then
+            echo "should_cherrypick=true" >> "$GITHUB_OUTPUT"
+            echo "Cherry-pick checkbox checked for PR #${pr_number}."
+            exit 0
+          fi
+
+          echo "should_cherrypick=false" >> "$GITHUB_OUTPUT"
+          echo "Cherry-pick checkbox not checked for PR #${pr_number}. Skipping."
+
+      - name: Checkout repository
+        if: steps.gate.outputs.should_cherrypick == 'true'
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+          ref: main
+
+      - name: Install the latest version of uv
+        if: steps.gate.outputs.should_cherrypick == 'true'
+        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b # ratchet:astral-sh/setup-uv@v7
+        with:
+          enable-cache: false
+          version: "0.9.9"
+
+      - name: Configure git identity
+        if: steps.gate.outputs.should_cherrypick == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Create cherry-pick PR to latest release
+        if: steps.gate.outputs.should_cherrypick == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          uv run --no-sync --with onyx-devtools ods cherry-pick "${GITHUB_SHA}" --yes --no-verify
