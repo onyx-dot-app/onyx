@@ -143,8 +143,8 @@ test.describe("File preview modal from chat file links", () => {
     // Verify the file name is shown in the header
     await expect(modal.getByText("notes.txt")).toBeVisible();
 
-    // Verify the download button exists
-    await expect(modal.getByText("Download File")).toBeVisible();
+    // Verify the download link exists
+    await expect(modal.locator("a[download]")).toBeVisible();
 
     // Verify the file content is rendered
     await expect(modal.getByText("Hello from the mock file!")).toBeVisible();
@@ -217,9 +217,9 @@ test.describe("File preview modal from chat file links", () => {
     const modal = page.getByRole("dialog");
     await expect(modal).toBeVisible({ timeout: 5000 });
 
-    // Click the download button and verify a download starts
+    // Click the download link and verify a download starts
     const downloadPromise = page.waitForEvent("download");
-    await modal.getByText("Download File").last().click();
+    await modal.locator("a[download]").last().click();
     const download = await downloadPromise;
 
     expect(download.suggestedFilename()).toContain("data.csv");
