@@ -190,7 +190,7 @@ def _build_user_information_section(
     if not sections:
         return ""
 
-    return USER_INFORMATION_HEADER + "".join(sections)
+    return USER_INFORMATION_HEADER + "\n".join(sections)
 
 
 def build_system_prompt(
@@ -228,23 +228,21 @@ def build_system_prompt(
         system_prompt += REQUIRE_CITATION_GUIDANCE
 
     if include_all_guidance:
-        system_prompt += (
-            TOOL_SECTION_HEADER
-            + TOOL_DESCRIPTION_SEARCH_GUIDANCE
-            + INTERNAL_SEARCH_GUIDANCE
-            + WEB_SEARCH_GUIDANCE.format(
+        tool_sections = [
+            TOOL_DESCRIPTION_SEARCH_GUIDANCE,
+            INTERNAL_SEARCH_GUIDANCE,
+            WEB_SEARCH_GUIDANCE.format(
                 site_colon_disabled=WEB_SEARCH_SITE_DISABLED_GUIDANCE
-            )
-            + OPEN_URLS_GUIDANCE
-            + PYTHON_TOOL_GUIDANCE
-            + GENERATE_IMAGE_GUIDANCE
-            + MEMORY_GUIDANCE
-        )
+            ),
+            OPEN_URLS_GUIDANCE,
+            PYTHON_TOOL_GUIDANCE,
+            GENERATE_IMAGE_GUIDANCE,
+            MEMORY_GUIDANCE,
+        ]
+        system_prompt += TOOL_SECTION_HEADER + "\n".join(tool_sections)
         return system_prompt
 
     if tools:
-        system_prompt += TOOL_SECTION_HEADER
-
         has_web_search = any(isinstance(tool, WebSearchTool) for tool in tools)
         has_internal_search = any(isinstance(tool, SearchTool) for tool in tools)
         has_open_urls = any(isinstance(tool, OpenURLTool) for tool in tools)
@@ -254,12 +252,14 @@ def build_system_prompt(
         )
         has_memory = any(isinstance(tool, MemoryTool) for tool in tools)
 
+        tool_guidance_sections: list[str] = []
+
         if has_web_search or has_internal_search or include_all_guidance:
-            system_prompt += TOOL_DESCRIPTION_SEARCH_GUIDANCE
+            tool_guidance_sections.append(TOOL_DESCRIPTION_SEARCH_GUIDANCE)
 
         # These are not included at the Tool level because the ordering may matter.
         if has_internal_search or include_all_guidance:
-            system_prompt += INTERNAL_SEARCH_GUIDANCE
+            tool_guidance_sections.append(INTERNAL_SEARCH_GUIDANCE)
 
         if has_web_search or include_all_guidance:
             site_disabled_guidance = ""
@@ -269,20 +269,23 @@ def build_system_prompt(
                 )
                 if web_search_tool and not web_search_tool.supports_site_filter:
                     site_disabled_guidance = WEB_SEARCH_SITE_DISABLED_GUIDANCE
-            system_prompt += WEB_SEARCH_GUIDANCE.format(
-                site_colon_disabled=site_disabled_guidance
+            tool_guidance_sections.append(
+                WEB_SEARCH_GUIDANCE.format(site_colon_disabled=site_disabled_guidance)
             )
 
         if has_open_urls or include_all_guidance:
-            system_prompt += OPEN_URLS_GUIDANCE
+            tool_guidance_sections.append(OPEN_URLS_GUIDANCE)
 
         if has_python or include_all_guidance:
-            system_prompt += PYTHON_TOOL_GUIDANCE
+            tool_guidance_sections.append(PYTHON_TOOL_GUIDANCE)
 
         if has_generate_image or include_all_guidance:
-            system_prompt += GENERATE_IMAGE_GUIDANCE
+            tool_guidance_sections.append(GENERATE_IMAGE_GUIDANCE)
 
         if has_memory or include_all_guidance:
-            system_prompt += MEMORY_GUIDANCE
+            tool_guidance_sections.append(MEMORY_GUIDANCE)
+
+        if tool_guidance_sections:
+            system_prompt += TOOL_SECTION_HEADER + "\n".join(tool_guidance_sections)
 
     return system_prompt

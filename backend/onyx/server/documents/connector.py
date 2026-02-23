@@ -1939,6 +1939,7 @@ Tenant ID: {tenant_id}
 class BasicCCPairInfo(BaseModel):
     has_successful_run: bool
     source: DocumentSource
+    status: ConnectorCredentialPairStatus
 
 
 @router.get("/connector-status", tags=PUBLIC_API_TAGS)
@@ -1958,6 +1959,7 @@ def get_basic_connector_indexing_status(
         BasicCCPairInfo(
             has_successful_run=cc_pair.last_successful_index_time is not None,
             source=cc_pair.connector.source,
+            status=cc_pair.status,
         )
         for cc_pair in cc_pairs
         if cc_pair.connector.source != DocumentSource.INGESTION_API

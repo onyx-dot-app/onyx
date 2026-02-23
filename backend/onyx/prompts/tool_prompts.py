@@ -1,6 +1,6 @@
 # ruff: noqa: E501, W605 start
 # If there are any tools, this section is included, the sections below are for the available tools
-TOOL_SECTION_HEADER = "\n\n# Tools\n"
+TOOL_SECTION_HEADER = "\n# Tools\n\n"
 
 
 # This section is included if there are search type tools, currently internal_search and web_search
@@ -16,11 +16,10 @@ When searching for information, if the initial results cannot fully answer the u
 Do not repeat the same or very similar queries if it already has been run in the chat history.
 
 If it is unclear which tool to use, consider using multiple in parallel to be efficient with time.
-"""
+""".lstrip()
 
 
 INTERNAL_SEARCH_GUIDANCE = """
-
 ## internal_search
 Use the `internal_search` tool to search connected applications for information. Some examples of when to use `internal_search` include:
 - Internal information: any time where there may be some information stored in internal applications that could help better answer the query.
@@ -28,34 +27,31 @@ Use the `internal_search` tool to search connected applications for information.
 - Keyword Queries: queries that are heavily keyword based are often internal document search queries.
 - Ambiguity: questions about something that is not widely known or understood.
 Never provide more than 3 queries at once to `internal_search`.
-"""
+""".lstrip()
 
 
 WEB_SEARCH_GUIDANCE = """
-
 ## web_search
 Use the `web_search` tool to access up-to-date information from the web. Some examples of when to use `web_search` include:
 - Freshness: when the answer might be enhanced by up-to-date information on a topic. Very important for topics that are changing or evolving.
 - Accuracy: if the cost of outdated/inaccurate information is high.
 - Niche Information: when detailed info is not widely known or understood (but is likely found on the internet).{site_colon_disabled}
-"""
+""".lstrip()
 
 WEB_SEARCH_SITE_DISABLED_GUIDANCE = """
 Do not use the "site:" operator in your web search queries.
-""".rstrip()
+""".lstrip()
 
 
 OPEN_URLS_GUIDANCE = """
-
 ## open_url
 Use the `open_url` tool to read the content of one or more URLs. Use this tool to access the contents of the most promising web pages from your web searches or user specified URLs. \
 You can open many URLs at once by passing multiple URLs in the array if multiple pages seem promising. Prioritize the most promising pages and reputable sources. \
 Do not open URLs that are image files like .png, .jpg, etc.
 You should almost always use open_url after a web_search call. Use this tool when a user asks about a specific provided URL.
-"""
+""".lstrip()
 
 PYTHON_TOOL_GUIDANCE = """
-
 ## python
 Use the `python` tool to execute Python code in an isolated sandbox. The tool will respond with the output of the execution or time out after 60.0 seconds.
 Any files uploaded to the chat will be automatically be available in the execution environment's current directory. \
@@ -64,23 +60,21 @@ Use this to give the user a way to download the file OR to display generated ima
 Internet access for this session is disabled. Do not make external web requests or API calls as they will fail.
 Use `openpyxl` to read and write Excel files. You have access to libraries like numpy, pandas, scipy, matplotlib, and PIL.
 IMPORTANT: each call to this tool is independent. Variables from previous calls will NOT be available in the current call.
-"""
+""".lstrip()
 
 GENERATE_IMAGE_GUIDANCE = """
-
 ## generate_image
 NEVER use generate_image unless the user specifically requests an image.
 For edits/variations of a previously generated image, pass `reference_image_file_ids` with
 the `file_id` values returned by earlier `generate_image` tool results.
-"""
+""".lstrip()
 
 MEMORY_GUIDANCE = """
-
 ## add_memory
 Use the `add_memory` tool for facts shared by the user that should be remembered for future conversations. \
 Only add memories that are specific, likely to remain true, and likely to be useful later. \
 Focus on enduring preferences, long-term goals, stable constraints, and explicit "remember this" type requests.
-"""
+""".lstrip()
 
 TOOL_CALL_FAILURE_PROMPT = """
 LLM attempted to call a tool but failed. Most likely the tool name or arguments were misspelled.

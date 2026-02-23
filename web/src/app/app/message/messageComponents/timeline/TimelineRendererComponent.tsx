@@ -34,8 +34,6 @@ export interface TimelineRendererComponentProps {
   packets: Packet[];
   /** Chat state for rendering */
   chatState: FullChatState;
-  /** Completion callback */
-  onComplete: () => void;
   /** Whether to animate streaming */
   animate: boolean;
   /** Whether stop packet has been seen */
@@ -77,7 +75,6 @@ export const TimelineRendererComponent = React.memo(
   function TimelineRendererComponent({
     packets,
     chatState,
-    onComplete,
     animate,
     stopPacketSeen,
     stopReason,
@@ -125,7 +122,7 @@ export const TimelineRendererComponent = React.memo(
       <RendererFn
         packets={packets as any}
         state={chatState}
-        onComplete={onComplete}
+        onComplete={() => {}}
         animate={animate}
         renderType={renderType}
         stopPacketSeen={stopPacketSeen}
