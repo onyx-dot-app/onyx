@@ -15,6 +15,18 @@ import {
   let iframeLoadTimeout;
   let authRequired = false;
 
+  // Returns the origin of the Onyx app loaded in the iframe.
+  // Using "*" is unsafe; we derive the origin from iframe.src instead so
+  // postMessage payloads (including tab URLs) are only delivered to the
+  // expected page.
+  function getIframeOrigin() {
+    try {
+      return new URL(iframe.src).origin;
+    } catch {
+      return "*";
+    }
+  }
+
   async function checkPendingInput() {
     try {
       const result = await chrome.storage.session.get("pendingInput");
@@ -57,7 +69,7 @@ import {
           type: WEB_MESSAGE.PAGE_CHANGE,
           url: pageUrl,
         },
-        "*",
+        getIframeOrigin(),
       );
       currentUrl = pageUrl;
     }
@@ -83,7 +95,10 @@ import {
       iframeLoaded = true;
       showIframe();
       if (iframe.contentWindow) {
-        iframe.contentWindow.postMessage({ type: "PANEL_READY" }, "*");
+        iframe.contentWindow.postMessage(
+          { type: "PANEL_READY" },
+          getIframeOrigin(),
+        );
       }
     } else if (event.data.type === CHROME_MESSAGE.AUTH_REQUIRED) {
       authRequired = true;
@@ -127,7 +142,7 @@ import {
       if (iframe.contentWindow) {
         iframe.contentWindow.postMessage(
           { type: CHROME_MESSAGE.TAB_URL_UPDATED, url: request.url },
-          "*",
+          getIframeOrigin(),
         );
       }
     }

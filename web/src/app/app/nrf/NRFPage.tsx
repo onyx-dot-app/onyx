@@ -11,7 +11,7 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import Modal from "@/refresh-components/Modal";
 import { useFilters, useLlmManager } from "@/lib/hooks";
 import Dropzone from "react-dropzone";
-import { useSendMessageToParent } from "@/lib/extension/utils";
+import { useSendMessageToParent, getPanelOrigin } from "@/lib/extension/utils";
 import { useNRFPreferences } from "@/components/context/NRFPreferencesContext";
 import SidePanelHeader from "@/app/app/nrf/side-panel/SidePanelHeader";
 import { CHROME_MESSAGE } from "@/lib/extension/constants";
@@ -137,6 +137,9 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   );
   const setCurrentSession = useChatSessionStore(
     (state) => state.setCurrentSession
+  );
+  const currentSessionId = useChatSessionStore(
+    (state) => state.currentSessionId
   );
 
   // Memoized callback for closing document sidebar
@@ -364,7 +367,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     // Notify the service worker so it stops sending tab URL updates
     window.parent.postMessage(
       { type: CHROME_MESSAGE.TAB_READING_DISABLED },
-      "*"
+      getPanelOrigin()
     );
   }, [setCurrentSession, resetInputBar]);
 
@@ -380,7 +383,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
           ? CHROME_MESSAGE.TAB_READING_ENABLED
           : CHROME_MESSAGE.TAB_READING_DISABLED,
       },
-      "*"
+      getPanelOrigin()
     );
   }, [tabReadingEnabled]);
 
@@ -410,7 +413,12 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       )}
 
       {/* Side panel header */}
-      {isSidePanel && <SidePanelHeader onNewChat={handleNewChat} />}
+      {isSidePanel && (
+        <SidePanelHeader
+          onNewChat={handleNewChat}
+          chatSessionId={currentSessionId}
+        />
+      )}
 
       {/* Settings button */}
       {!isSidePanel && (
