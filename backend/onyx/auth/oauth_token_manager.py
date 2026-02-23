@@ -58,6 +58,14 @@ class OAuthTokenManager:
         if not user_token.token_data:
             raise ValueError("No token data available for refresh")
 
+        if (
+            self.oauth_config.client_id is None
+            or self.oauth_config.client_secret is None
+        ):
+            raise ValueError(
+                "OAuth client_id and client_secret are required for token refresh"
+            )
+
         token_data = self._unwrap_token_data(user_token.token_data)
 
         response = requests.post(
@@ -117,6 +125,14 @@ class OAuthTokenManager:
 
     def exchange_code_for_token(self, code: str, redirect_uri: str) -> dict[str, Any]:
         """Exchange authorization code for access token"""
+        if (
+            self.oauth_config.client_id is None
+            or self.oauth_config.client_secret is None
+        ):
+            raise ValueError(
+                "OAuth client_id and client_secret are required for code exchange"
+            )
+
         response = requests.post(
             self.oauth_config.token_url,
             data={
@@ -145,6 +161,9 @@ class OAuthTokenManager:
         oauth_config: OAuthConfig, redirect_uri: str, state: str
     ) -> str:
         """Build OAuth authorization URL"""
+        if oauth_config.client_id is None:
+            raise ValueError("OAuth client_id is required to build authorization URL")
+
         params: dict[str, Any] = {
             "client_id": oauth_config.client_id.get_value(apply_mask=False),
             "redirect_uri": redirect_uri,
