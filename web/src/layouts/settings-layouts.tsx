@@ -230,13 +230,15 @@ function SettingsHeader({
 
       <div className="flex flex-col gap-6 px-4">
         <div className="flex w-full justify-between">
-          <Content
-            icon={Icon}
-            title={title}
-            description={description}
-            sizePreset="headline"
-            variant="heading"
-          />
+          <div aria-label="admin-page-title">
+            <Content
+              icon={Icon}
+              title={title}
+              description={description}
+              sizePreset="headline"
+              variant="heading"
+            />
+          </div>
           {rightChildren}
         </div>
 
