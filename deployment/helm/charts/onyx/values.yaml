@@ -957,7 +957,7 @@ minio:
 
 # Code Interpreter - Python code execution service
 codeInterpreter:
-  enabled: true
+  enabled: false  # Disabled by default (beta feature)
 
   replicaCount: 1
 
