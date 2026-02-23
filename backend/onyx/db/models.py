@@ -4987,4 +4987,4 @@ class CodeInterpreterServer(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     url: Mapped[str] = mapped_column(String, nullable=False)
-    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    server_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

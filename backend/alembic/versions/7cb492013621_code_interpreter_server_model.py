@@ -22,7 +22,9 @@ def upgrade() -> None:
         "code_interpreter_server",
         sa.Column("id", sa.Integer, primary_key=True),
         sa.Column("url", sa.String, nullable=False),
-        sa.Column("enabled", sa.Boolean, nullable=False, server_default=sa.true()),
+        sa.Column(
+            "server_enabled", sa.Boolean, nullable=False, server_default=sa.true()
+        ),
     )
 
 
