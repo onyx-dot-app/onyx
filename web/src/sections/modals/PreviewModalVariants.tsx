@@ -230,16 +230,9 @@ const pdfVariant: PreviewVariant = {
     />
   ),
 
-  renderFooterLeft: (ctx) => (
-    <ZoomControls
-      zoom={ctx.zoom}
-      onZoomIn={ctx.onZoomIn}
-      onZoomOut={ctx.onZoomOut}
-    />
-  ),
+  renderFooterLeft: (ctx) => null,
   renderFooterRight: (ctx) => (
     <Section flexDirection="row" width="fit">
-      <CopyButton getText={() => ctx.fileContent} />
       <DownloadButton fileUrl={ctx.fileUrl} fileName={ctx.fileName} />
     </Section>
   ),
