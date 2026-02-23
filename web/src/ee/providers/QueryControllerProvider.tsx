@@ -67,7 +67,7 @@ export function QueryControllerProvider({
           searchQuery,
           {
             filters,
-            numHits: 50,
+            numHits: 30,
             includeContent: false,
             signal: controller.signal,
           }

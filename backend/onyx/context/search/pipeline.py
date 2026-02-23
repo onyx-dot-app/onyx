@@ -59,12 +59,11 @@ def _build_index_filters(
 
     base_filters = user_provided_filters or BaseFilters()
 
-    if (
-        user_provided_filters
-        and user_provided_filters.document_set is None
-        and persona_document_sets is not None
-    ):
-        base_filters.document_set = persona_document_sets
+    document_set_filter = (
+        base_filters.document_set
+        if base_filters.document_set is not None
+        else persona_document_sets
+    )
 
     time_filter = base_filters.time_cutoff or persona_time_cutoff
     source_filter = base_filters.source_type
@@ -120,7 +119,7 @@ def _build_index_filters(
         user_file_ids=user_file_ids,
         project_id=project_id,
         source_type=source_filter,
-        document_set=persona_document_sets,
+        document_set=document_set_filter,
         time_cutoff=time_filter,
         tags=base_filters.tags,
         access_control_list=user_acl_filters,
