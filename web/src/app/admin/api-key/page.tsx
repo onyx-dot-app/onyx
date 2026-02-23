@@ -41,8 +41,7 @@ function Main() {
     error,
   } = useSWR<APIKey[]>("/api/admin/api-key", errorHandlingFetcher);
 
-  // const canCreateKeys = useCloudSubscription();
-  const canCreateKeys = false;
+  const canCreateKeys = useCloudSubscription();
 
   const [fullApiKey, setFullApiKey] = useState<string | null>(null);
   const [keyIsGenerating, setKeyIsGenerating] = useState(false);

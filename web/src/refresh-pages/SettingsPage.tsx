@@ -939,8 +939,7 @@ function AccountsAccessSettings() {
     useState<CreatedTokenState | null>(null);
   const [tokenToDelete, setTokenToDelete] = useState<PAT | null>(null);
 
-  // const canCreateTokens = useCloudSubscription();
-  const canCreateTokens = false;
+  const canCreateTokens = useCloudSubscription();
 
   const showPasswordSection = Boolean(user?.password_configured);
   const showTokensSection = authType !== null;
