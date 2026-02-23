@@ -13,6 +13,8 @@ import { useFilters, useLlmManager } from "@/lib/hooks";
 import Dropzone from "react-dropzone";
 import { useSendMessageToParent } from "@/lib/extension/utils";
 import { useNRFPreferences } from "@/components/context/NRFPreferencesContext";
+import SidePanelHeader from "@/app/app/nrf/side-panel/SidePanelHeader";
+import { CHROME_MESSAGE } from "@/lib/extension/constants";
 import { SettingsPanel } from "@/app/components/nrf/SettingsPanel";
 import LoginPage from "@/app/auth/login/LoginPage";
 import { sendSetDefaultNewTabMessage } from "@/lib/extension/utils";
@@ -33,16 +35,10 @@ import ChatScrollContainer from "@/sections/chat/ChatScrollContainer";
 import WelcomeMessage from "@/app/app/components/WelcomeMessage";
 import useChatSessions from "@/hooks/useChatSessions";
 import { cn } from "@/lib/utils";
-import Logo from "@/refresh-components/Logo";
 import Spacer from "@/refresh-components/Spacer";
 import { useAppSidebarContext } from "@/providers/AppSidebarProvider";
 import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
-import {
-  SvgUser,
-  SvgMenu,
-  SvgExternalLink,
-  SvgAlertTriangle,
-} from "@opal/icons";
+import { SvgUser, SvgMenu, SvgAlertTriangle } from "@opal/icons";
 import { useAppBackground } from "@/providers/AppBackgroundProvider";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import DocumentsSidebar from "@/sections/document-sidebar/DocumentsSidebar";
@@ -129,6 +125,8 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   // State
   const [message, setMessage] = useState("");
   const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
+  const [tabReadingEnabled, setTabReadingEnabled] = useState<boolean>(false);
+  const [currentTabUrl, setCurrentTabUrl] = useState<string | null>(null);
   const [presentingDocument, setPresentingDocument] =
     useState<MinimalOnyxDocument | null>(null);
 
@@ -200,6 +198,20 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   const anchorSelector = anchorNodeId ? `#message-${anchorNodeId}` : undefined;
 
   useSendMessageToParent();
+
+  // Listen for tab URL updates from the Chrome extension
+  useEffect(() => {
+    if (!isSidePanel) return;
+
+    function handleExtensionMessage(event: MessageEvent) {
+      if (event.data?.type === CHROME_MESSAGE.TAB_URL_UPDATED) {
+        setCurrentTabUrl(event.data.url as string);
+      }
+    }
+
+    window.addEventListener("message", handleExtensionMessage);
+    return () => window.removeEventListener("message", handleExtensionMessage);
+  }, [isSidePanel]);
 
   const toggleSettings = () => {
     setSettingsOpen((prev) => !prev);
@@ -285,12 +297,18 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   const handleChatInputSubmit = useCallback(
     async (submittedMessage: string) => {
       if (!submittedMessage.trim()) return;
+
+      const messageWithContext =
+        tabReadingEnabled && currentTabUrl
+          ? `${submittedMessage}\n\nContext: I'm currently viewing ${currentTabUrl}. Please use the open_url tool to read this page and use it as additional context for your response.`
+          : submittedMessage;
+
       // If we already have messages (chat session started), always use chat mode
       // (matches AppPage behavior where existing sessions bypass classification)
       if (hasMessages) {
         resetInputBar();
         onSubmit({
-          message: submittedMessage,
+          message: messageWithContext,
           currentMessageFiles: currentMessageFiles,
           deepResearch: deepResearchEnabled,
         });
@@ -299,7 +317,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       // Use submitQuery which will classify the query and either:
       // - Route to search (sets classification to "search" and shows SearchUI)
       // - Route to chat (calls onChat callback)
-      await submitQuery(submittedMessage, onChat);
+      await submitQuery(messageWithContext, onChat);
     },
     [
       hasMessages,
@@ -309,6 +327,8 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       resetInputBar,
       submitQuery,
       onChat,
+      tabReadingEnabled,
+      currentTabUrl,
     ]
   );
 
@@ -331,9 +351,21 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     });
   }, [messageHistory, onSubmit, currentMessageFiles, deepResearchEnabled]);
 
-  const handleOpenInOnyx = () => {
-    window.open(`${window.location.origin}/app`, "_blank");
-  };
+  const handleToggleTabReading = useCallback(() => {
+    const next = !tabReadingEnabled;
+    setTabReadingEnabled(next);
+    if (!next) {
+      setCurrentTabUrl(null);
+    }
+    window.parent.postMessage(
+      {
+        type: next
+          ? CHROME_MESSAGE.TAB_READING_ENABLED
+          : CHROME_MESSAGE.TAB_READING_DISABLED,
+      },
+      "*"
+    );
+  }, [tabReadingEnabled]);
 
   // Handle search result document click
   const handleSearchDocumentClick = useCallback(
@@ -362,18 +394,11 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
       {/* Side panel header */}
       {isSidePanel && (
-        <header className="flex items-center justify-between px-4 py-3 border-b border-border-01 bg-background">
-          <div className="flex items-center gap-2">
-            <Logo />
-          </div>
-          <Button
-            tertiary
-            rightIcon={SvgExternalLink}
-            onClick={handleOpenInOnyx}
-          >
-            Open in Onyx
-          </Button>
-        </header>
+        <SidePanelHeader
+          tabReadingEnabled={tabReadingEnabled}
+          currentTabUrl={currentTabUrl}
+          onToggleTabReading={handleToggleTabReading}
+        />
       )}
 
       {/* Settings button */}

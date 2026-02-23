@@ -85,6 +85,10 @@ import {
       }
     } else if (event.data.type === CHROME_MESSAGE.AUTH_REQUIRED) {
       authRequired = true;
+    } else if (event.data.type === CHROME_MESSAGE.TAB_READING_ENABLED) {
+      chrome.runtime.sendMessage({ action: ACTIONS.TAB_READING_ENABLED });
+    } else if (event.data.type === CHROME_MESSAGE.TAB_READING_DISABLED) {
+      chrome.runtime.sendMessage({ action: ACTIONS.TAB_READING_DISABLED });
     }
   }
 
@@ -117,6 +121,13 @@ import {
       setIframeSrc(request.url, request.pageUrl);
     } else if (request.action === ACTIONS.UPDATE_PAGE_URL) {
       sendWebsiteToIframe(request.pageUrl);
+    } else if (request.action === ACTIONS.TAB_URL_UPDATED) {
+      if (iframe.contentWindow) {
+        iframe.contentWindow.postMessage(
+          { type: CHROME_MESSAGE.TAB_URL_UPDATED, url: request.url },
+          "*",
+        );
+      }
     }
   });
 
