@@ -92,6 +92,22 @@ def _prompt_to_dicts(prompt: LanguageModelInput) -> list[dict[str, Any]]:
     return [prompt.model_dump(exclude_none=True)]
 
 
+def _prompt_has_tool_history(prompt: LanguageModelInput) -> bool:
+    """Return True when prompt includes prior tool call/result messages."""
+    prompt_messages = prompt if isinstance(prompt, list) else [prompt]
+
+    for message in prompt_messages:
+        role = getattr(message, "role", None)
+        if role == "tool":
+            return True
+
+        tool_calls = getattr(message, "tool_calls", None)
+        if role == "assistant" and tool_calls:
+            return True
+
+    return False
+
+
 def _is_vertex_model_rejecting_output_config(model_name: str) -> bool:
     normalized_model_name = model_name.lower()
     return any(
@@ -278,12 +294,17 @@ class LitellmLLM(LLM):
         is_ollama = self._model_provider == LlmProviderNames.OLLAMA_CHAT
         is_mistral = self._model_provider == LlmProviderNames.MISTRAL
         is_vertex_ai = self._model_provider == LlmProviderNames.VERTEX_AI
+        is_bedrock = self._model_provider in {
+            LlmProviderNames.BEDROCK,
+            LlmProviderNames.BEDROCK_CONVERSE,
+        }
         # Some Vertex Anthropic models reject output_config.
         # Keep this guard until LiteLLM/Vertex accept the field for these models.
         is_vertex_model_rejecting_output_config = (
             is_vertex_ai
             and _is_vertex_model_rejecting_output_config(self.config.model_name)
         )
+        bedrock_has_tool_history = is_bedrock and _prompt_has_tool_history(prompt)
 
         #########################
         # Build arguments
@@ -341,17 +362,24 @@ class LitellmLLM(LLM):
                 )
 
                 if budget_tokens is not None:
-                    if max_tokens is not None:
-                        # Anthropic has a weird rule where max token has to be at least as much as budget tokens if set
-                        # and the minimum budget tokens is 1024
-                        # Will note that overwriting a developer set max tokens is not ideal but is the best we can do for now
-                        # It is better to allow the LLM to output more reasoning tokens even if it results in a fairly small tool
-                        # call as compared to reducing the budget for reasoning.
-                        max_tokens = max(budget_tokens + 1, max_tokens)
-                    optional_kwargs["thinking"] = {
-                        "type": "enabled",
-                        "budget_tokens": budget_tokens,
-                    }
+                    if bedrock_has_tool_history:
+                        logger.info(
+                            "Skipping Claude thinking for Bedrock request with tool "
+                            "history to avoid converse API thinking/tool ordering "
+                            "validation errors."
+                        )
+                    else:
+                        if max_tokens is not None:
+                            # Anthropic has a weird rule where max token has to be at least as much as budget tokens if set
+                            # and the minimum budget tokens is 1024
+                            # Will note that overwriting a developer set max tokens is not ideal but is the best we can do for now
+                            # It is better to allow the LLM to output more reasoning tokens even if it results in a fairly small
+                            # tool call as compared to reducing the budget for reasoning.
+                            max_tokens = max(budget_tokens + 1, max_tokens)
+                        optional_kwargs["thinking"] = {
+                            "type": "enabled",
+                            "budget_tokens": budget_tokens,
+                        }
 
                 # LiteLLM just does some mapping like this anyway but is incomplete for Anthropic
                 optional_kwargs.pop("reasoning_effort", None)

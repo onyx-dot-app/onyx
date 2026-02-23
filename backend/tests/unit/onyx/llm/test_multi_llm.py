@@ -21,6 +21,7 @@ from onyx.llm.models import FunctionCall
 from onyx.llm.models import LanguageModelInput
 from onyx.llm.models import ReasoningEffort
 from onyx.llm.models import ToolCall
+from onyx.llm.models import ToolMessage
 from onyx.llm.models import UserMessage
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.utils import get_max_input_tokens
@@ -472,6 +473,79 @@ def test_openai_auto_reasoning_effort_maps_to_medium() -> None:
 
         kwargs = mock_completion.call_args.kwargs
         assert kwargs["reasoning"]["effort"] == "medium"
+
+
+def test_bedrock_claude_with_tool_history_omits_thinking() -> None:
+    llm = LitellmLLM(
+        api_key=None,
+        timeout=30,
+        model_provider=LlmProviderNames.BEDROCK,
+        model_name="us-gov.anthropic.claude-sonnet-4-5-20250929-v1:0",
+        max_input_tokens=200000,
+    )
+
+    messages: LanguageModelInput = [
+        AssistantMessage(
+            role="assistant",
+            content=None,
+            tool_calls=[
+                ToolCall(
+                    id="call_1",
+                    function=FunctionCall(
+                        name="internal_search",
+                        arguments='{"query":"revenue by product"}',
+                    ),
+                )
+            ],
+        ),
+        ToolMessage(
+            role="tool",
+            content='{"rows":[{"product":"a","revenue":10}]}',
+            tool_call_id="call_1",
+        ),
+        UserMessage(content="summarize the result"),
+    ]
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "internal_search",
+                "parameters": {"type": "object", "properties": {}},
+            },
+        }
+    ]
+
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.multi_llm.model_is_reasoning_model", return_value=True),
+    ):
+        mock_completion.return_value = []
+        list(llm.stream(messages, tools=tools, reasoning_effort=ReasoningEffort.AUTO))
+
+        kwargs = mock_completion.call_args.kwargs
+        assert "thinking" not in kwargs
+
+
+def test_bedrock_claude_without_tool_history_keeps_thinking() -> None:
+    llm = LitellmLLM(
+        api_key=None,
+        timeout=30,
+        model_provider=LlmProviderNames.BEDROCK,
+        model_name="us-gov.anthropic.claude-sonnet-4-5-20250929-v1:0",
+        max_input_tokens=200000,
+    )
+
+    messages: LanguageModelInput = [UserMessage(content="hello")]
+
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.multi_llm.model_is_reasoning_model", return_value=True),
+    ):
+        mock_completion.return_value = []
+        list(llm.stream(messages, reasoning_effort=ReasoningEffort.AUTO))
+
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["thinking"] == {"type": "enabled", "budget_tokens": 2048}
 
 
 @pytest.mark.parametrize("model_name", VERTEX_OPUS_MODELS_REJECTING_OUTPUT_CONFIG)
