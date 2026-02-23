@@ -118,7 +118,7 @@ func runCI(cmd *cobra.Command, args []string, opts *RunCIOptions) {
 	// Create the CI branch
 	ciBranch := fmt.Sprintf("run-ci/%s", prNumber)
 	prTitle := fmt.Sprintf("chore: [Running GitHub actions for #%s]", prNumber)
-	prBody := fmt.Sprintf("This PR runs GitHub Actions CI for #%s.\n\n- [x] I have considered whether this PR needs to be cherry-picked to the latest beta branch.\n- [x] Override Linear Check\n\n**This PR should be closed (not merged) after CI completes.**", prNumber)
+	prBody := fmt.Sprintf("This PR runs GitHub Actions CI for #%s.\n\n- [x] Override Linear Check\n\n**This PR should be closed (not merged) after CI completes.**", prNumber)
 
 	// Fetch the fork's branch
 	if forkRepo == "" {

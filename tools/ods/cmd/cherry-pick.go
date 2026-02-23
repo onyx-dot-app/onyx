@@ -490,7 +490,6 @@ func createCherryPickPR(headBranch, baseBranch, title string, commitSHAs, commit
 
 	// Add standard checklist
 	body += "\n\n"
-	body += "- [x] [Required] I have considered whether this PR needs to be cherry-picked to the latest beta branch.\n"
 	body += "- [x] [Optional] Override Linear Check\n"
 
 	cmd := exec.Command("gh", "pr", "create",
