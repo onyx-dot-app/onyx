@@ -25,9 +25,7 @@ import { AppPopup } from "@/app/app/components/AppPopup";
 import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
 import { useUser } from "@/providers/UserProvider";
 import NoAssistantModal from "@/components/modals/NoAssistantModal";
-import TextViewModal from "@/sections/modals/TextViewModal";
-import CodeViewModal from "@/sections/modals/CodeViewModal";
-import { getCodeLanguage } from "@/lib/languages";
+import PreviewModal from "@/sections/modals/PreviewModal";
 import Modal from "@/refresh-components/Modal";
 import { useSendMessageToParent } from "@/lib/extension/utils";
 import { SUBMIT_MESSAGE_TYPES } from "@/lib/extension/constants";
@@ -686,18 +684,12 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
         </div>
       )}
 
-      {presentingDocument &&
-        (getCodeLanguage(presentingDocument.semantic_identifier || "") ? (
-          <CodeViewModal
-            presentingDocument={presentingDocument}
-            onClose={() => setPresentingDocument(null)}
-          />
-        ) : (
-          <TextViewModal
-            presentingDocument={presentingDocument}
-            onClose={() => setPresentingDocument(null)}
-          />
-        ))}
+      {presentingDocument && (
+        <PreviewModal
+          presentingDocument={presentingDocument}
+          onClose={() => setPresentingDocument(null)}
+        />
+      )}
 
       {stackTraceModalContent && (
         <ExceptionTraceModal
