@@ -285,20 +285,24 @@ def verify_email_domain(email: str) -> None:
         if domain == "googlemail.com":
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Please use @gmail.com instead of @googlemail.com.",
+                detail={"reason": "Please use @gmail.com instead of @googlemail.com."},
             )
 
         if "+" in local_part and domain != "onyx.app":
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Email addresses with '+' are not allowed. Please use your base email address.",
+                detail={
+                    "reason": "Email addresses with '+' are not allowed. Please use your base email address."
+                },
             )
 
         # Check if email uses a disposable/temporary domain
         if is_disposable_email(email):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Disposable email addresses are not allowed. Please use a permanent email address.",
+                detail={
+                    "reason": "Disposable email addresses are not allowed. Please use a permanent email address."
+                },
             )
 
     # Check domain whitelist if configured

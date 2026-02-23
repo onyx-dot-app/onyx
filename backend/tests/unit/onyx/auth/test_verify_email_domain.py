@@ -47,7 +47,7 @@ def test_verify_email_domain_rejects_plus_addressing(
     with pytest.raises(HTTPException) as exc:
         verify_email_domain("user+tag@gmail.com")
     assert exc.value.status_code == 400
-    assert "'+'" in exc.value.detail
+    assert "'+'" in exc.value.detail["reason"]
 
 
 def test_verify_email_domain_allows_plus_for_onyx_app(
@@ -69,4 +69,4 @@ def test_verify_email_domain_rejects_googlemail(
     with pytest.raises(HTTPException) as exc:
         verify_email_domain("user@googlemail.com")
     assert exc.value.status_code == 400
-    assert "gmail.com" in exc.value.detail
+    assert "gmail.com" in exc.value.detail["reason"]

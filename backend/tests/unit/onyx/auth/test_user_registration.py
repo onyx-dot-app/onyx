@@ -71,6 +71,7 @@ class TestDisposableEmailValidation:
     """Test disposable email validation before tenant provisioning."""
 
     @pytest.mark.asyncio
+    @patch("onyx.auth.users.AUTH_TYPE", AuthType.CLOUD)
     @patch("onyx.auth.users.is_disposable_email")
     @patch("onyx.auth.users.fetch_ee_implementation_or_noop")
     @patch("onyx.auth.users.get_async_session_context_manager")
