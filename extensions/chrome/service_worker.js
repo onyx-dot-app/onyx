@@ -43,8 +43,12 @@ async function openSidePanel(tabId) {
   }
 }
 
+function encodeUserPrompt(text) {
+  return encodeURIComponent(text).replace(/\(/g, "%28").replace(/\)/g, "%29");
+}
+
 async function sendToOnyx(info, tab) {
-  const selectedText = encodeURIComponent(info.selectionText);
+  const selectedText = encodeUserPrompt(info.selectionText);
   const currentUrl = encodeURIComponent(tab.url);
 
   try {
@@ -205,7 +209,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       chrome.storage.local.get(
         { [CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN]: DEFAULT_ONYX_DOMAIN },
         (result) => {
-          const encodedText = encodeURIComponent(selectedText);
+          const encodedText = encodeUserPrompt(selectedText);
           const onyxDomain = result[CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN];
           const url = `${onyxDomain}${SIDE_PANEL_PATH}?user-prompt=${encodedText}`;
 
