@@ -164,7 +164,7 @@ def get_schemas_needing_migration(
                                 s, s
                             );
                         EXCEPTION
-                            WHEN undefined_table OR invalid_schema_name THEN NULL;
+                            WHEN undefined_table THEN NULL;
                         END;
                     END LOOP;
                 END;
