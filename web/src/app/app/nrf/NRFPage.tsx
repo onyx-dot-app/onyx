@@ -382,9 +382,8 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
           <IconButton
             icon={SvgMenu}
             onClick={toggleSettings}
-            tertiary
+            secondary
             tooltip="Open settings"
-            className="bg-mask-02 backdrop-blur-[12px] rounded-full shadow-01 hover:bg-mask-03"
           />
         </div>
       )}
