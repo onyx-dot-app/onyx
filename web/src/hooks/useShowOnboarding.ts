@@ -43,8 +43,12 @@ export function useShowOnboarding({
       return;
     }
 
-    // Only check once per user
+    // Only check once per user — but allow self-correction from true→false
+    // when provider data arrives (e.g. after a transient fetch error).
     if (hasCheckedOnboardingForUserId.current === userId) {
+      if (showOnboarding && hasAnyProvider) {
+        setShowOnboarding(false);
+      }
       return;
     }
     hasCheckedOnboardingForUserId.current = userId;
@@ -63,6 +67,7 @@ export function useShowOnboarding({
     hasAnyProvider,
     chatSessionsCount,
     userId,
+    showOnboarding,
   ]);
 
   const hideOnboarding = () => {

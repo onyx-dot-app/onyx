@@ -107,7 +107,7 @@ describe("useShowOnboarding", () => {
     expect(result.current.showOnboarding).toBe(false);
   });
 
-  it("only evaluates once per userId", () => {
+  it("self-corrects showOnboarding to false when providers arrive late", () => {
     const { result, rerender } = renderUseShowOnboarding({
       hasAnyProvider: false,
       chatSessionsCount: 0,
@@ -115,7 +115,7 @@ describe("useShowOnboarding", () => {
     });
     expect(result.current.showOnboarding).toBe(true);
 
-    // Re-render with same userId but different provider state
+    // Re-render with same userId but provider data now available
     rerender({
       liveAssistant: undefined,
       isLoadingProviders: false,
@@ -125,8 +125,8 @@ describe("useShowOnboarding", () => {
       userId: "user-1",
     });
 
-    // Should still be true because it was already evaluated for this userId
-    expect(result.current.showOnboarding).toBe(true);
+    // Should correct to false — providers exist, no need for LLM setup flow
+    expect(result.current.showOnboarding).toBe(false);
   });
 
   it("re-evaluates when userId changes", () => {
