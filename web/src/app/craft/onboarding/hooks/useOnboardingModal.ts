@@ -94,26 +94,18 @@ export function useOnboardingModal(): OnboardingModalController {
   );
 
   // Auto-open initial onboarding modal on first load
-  // Shows if: user info is missing OR (admin AND no providers configured)
+  // Shows if: admin AND no providers configured
   useEffect(() => {
     if (hasInitialized || isLoadingLlm || !user) return;
 
-    const needsUserInfo = !hasUserInfo;
     const needsLlmSetup = isAdmin && !hasAnyProvider;
 
-    if (needsUserInfo || needsLlmSetup) {
+    if (needsLlmSetup) {
       setMode({ type: "initial-onboarding" });
     }
 
     setHasInitialized(true);
-  }, [
-    hasInitialized,
-    isLoadingLlm,
-    user,
-    hasUserInfo,
-    isAdmin,
-    hasAnyProvider,
-  ]);
+  }, [hasInitialized, isLoadingLlm, user, isAdmin, hasAnyProvider]);
 
   // Complete user info callback
   const completeUserInfo = useCallback(
