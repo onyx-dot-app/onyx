@@ -7,31 +7,52 @@ import {
   SvgCloud,
   SvgAws,
   SvgOpenrouter,
+  SvgServer,
 } from "@opal/icons";
-
-const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
-  openai: "OpenAI",
-  anthropic: "Anthropic",
-  ollama_chat: "Ollama",
-  azure: "Microsoft Azure Cloud",
-  bedrock: "AWS Bedrock",
-  vertex_ai: "Google Cloud Vertex AI",
-  openrouter: "OpenRouter",
-  custom: "Custom LLM",
-};
 
 const PROVIDER_ICONS: Record<string, IconFunctionComponent> = {
   openai: SvgOpenai,
   anthropic: SvgClaude,
-  ollama_chat: SvgOllama,
-  azure: SvgCloud,
-  bedrock: SvgAws,
   vertex_ai: SvgCloud,
+  bedrock: SvgAws,
+  azure: SvgCloud,
+
+  ollama_chat: SvgOllama,
   openrouter: SvgOpenrouter,
-  custom: SvgCpu,
+  custom: SvgServer,
 };
 
-export function getProviderDisplayName(providerName: string): string {
+const PROVIDER_PRODUCT_NAMES: Record<string, string> = {
+  openai: "GPT",
+  anthropic: "Claude",
+  vertex_ai: "Gemini",
+  bedrock: "Amazon Bedrock",
+  azure: "Azure OpenAI",
+  litellm: "LiteLLM",
+  ollama_chat: "Ollama",
+  openrouter: "OpenRouter",
+
+  custom: "Custom Models",
+};
+
+const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
+  openai: "OpenAI",
+  anthropic: "Anthropic",
+  vertex_ai: "Google Cloud Vertex AI",
+  bedrock: "AWS",
+  azure: "Microsoft Azure",
+  litellm: "LiteLLM",
+  ollama_chat: "Ollama",
+  openrouter: "OpenRouter",
+
+  custom: "Other providers or self-hosted",
+};
+
+export function getProviderTitle(providerName: string): string {
+  return PROVIDER_PRODUCT_NAMES[providerName] ?? providerName;
+}
+
+export function getProviderDescription(providerName: string): string {
   return PROVIDER_DISPLAY_NAMES[providerName] ?? providerName;
 }
 

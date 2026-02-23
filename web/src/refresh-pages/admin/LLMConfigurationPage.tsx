@@ -11,8 +11,9 @@ import { Button } from "@opal/components";
 import { SvgCpu, SvgArrowExchange } from "@opal/icons";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import {
-  getProviderDisplayName,
+  getProviderDescription,
   getProviderIcon,
+  getProviderTitle,
 } from "@/lib/llmConfig/providers";
 import { setDefaultLLMProvider } from "@/lib/llmConfig/svc";
 import { Horizontal as HorizontalInput } from "@/layouts/input-layouts";
@@ -73,8 +74,8 @@ function ProviderConnectCard({ provider, children }: ProviderConnectCardProps) {
       <div className="flex items-center justify-between w-full">
         <Content
           icon={getProviderIcon(provider.name)}
-          title={provider.name}
-          description={getProviderDisplayName(provider.name)}
+          title={getProviderTitle(provider.name)}
+          description={getProviderDescription(provider.name)}
           sizePreset="main-content"
           variant="section"
         />
