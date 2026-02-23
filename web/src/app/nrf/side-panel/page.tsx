@@ -1,6 +1,6 @@
 import { unstable_noStore as noStore } from "next/cache";
 import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
-import NRFPage from "@/app/app/nrf/NRFPage";
+import NRFPage from "@/app/nrf/NRFPage";
 import { NRFPreferencesProvider } from "@/components/context/NRFPreferencesContext";
 
 /**

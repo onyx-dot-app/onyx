@@ -13,7 +13,7 @@ import { useFilters, useLlmManager } from "@/lib/hooks";
 import Dropzone from "react-dropzone";
 import { useSendMessageToParent, getPanelOrigin } from "@/lib/extension/utils";
 import { useNRFPreferences } from "@/components/context/NRFPreferencesContext";
-import SidePanelHeader from "@/app/app/nrf/side-panel/SidePanelHeader";
+import SidePanelHeader from "@/app/nrf/side-panel/SidePanelHeader";
 import { CHROME_MESSAGE } from "@/lib/extension/constants";
 import { SettingsPanel } from "@/app/components/nrf/SettingsPanel";
 import LoginPage from "@/app/auth/login/LoginPage";
@@ -36,7 +36,6 @@ import WelcomeMessage from "@/app/app/components/WelcomeMessage";
 import useChatSessions from "@/hooks/useChatSessions";
 import { cn } from "@/lib/utils";
 import Spacer from "@/refresh-components/Spacer";
-import { useAppSidebarContext } from "@/providers/AppSidebarProvider";
 import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
 import { SvgUser, SvgMenu, SvgAlertTriangle } from "@opal/icons";
 import { useAppBackground } from "@/providers/AppBackgroundProvider";
@@ -63,14 +62,6 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   const searchParams = useSearchParams();
   const filterManager = useFilters();
   const { user, authTypeMetadata } = useUser();
-  const { setFolded } = useAppSidebarContext();
-
-  // Hide sidebar when in side panel mode
-  useEffect(() => {
-    if (isSidePanel) {
-      setFolded(true);
-    }
-  }, [isSidePanel, setFolded]);
 
   // Chat sessions
   const { refreshChatSessions } = useChatSessions();

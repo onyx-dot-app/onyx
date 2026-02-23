@@ -5,7 +5,7 @@ export const THEMES = {
 
 export const DEFAULT_ONYX_DOMAIN = "http://localhost:3000";
 
-export const SIDE_PANEL_PATH = "/app/nrf/side-panel";
+export const SIDE_PANEL_PATH = "/nrf/side-panel";
 
 export const ACTIONS = {
   GET_SELECTED_TEXT: "getSelectedText",
