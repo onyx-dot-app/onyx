@@ -11,22 +11,36 @@ Usage:
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import subprocess
 import sys
 import uuid
+from collections.abc import Callable
 from collections.abc import Generator
 
 import pytest
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
-from alembic.run_multitenant_migrations import get_schemas_needing_migration
 from onyx.db.engine.sql_engine import SqlEngine
 
 # Resolve the backend/ directory once so every helper can use it as cwd.
 _BACKEND_DIR = os.path.normpath(
     os.path.join(os.path.dirname(__file__), "..", "..", "..", "..")
+)
+
+# Load get_schemas_needing_migration directly from its file path to avoid the
+# naming conflict between the local backend/alembic/ directory and the
+# third-party alembic package (which has no __init__.py to shadow it).
+_spec = importlib.util.spec_from_file_location(
+    "run_multitenant_migrations",
+    os.path.join(_BACKEND_DIR, "alembic", "run_multitenant_migrations.py"),
+)
+_mod = importlib.util.module_from_spec(_spec)  # type: ignore[arg-type]
+_spec.loader.exec_module(_mod)  # type: ignore[union-attr]
+get_schemas_needing_migration: Callable[..., list[str]] = (
+    _mod.get_schemas_needing_migration
 )
 
 
