@@ -81,6 +81,7 @@ class CodeInterpreterClient:
         self.base_url = base_url.rstrip("/")
         self.session = requests.Session()
 
+
     def _build_payload(
         self,
         code: str,
@@ -100,6 +101,7 @@ class CodeInterpreterClient:
 
     def health(self) -> bool:
         """Check if the Code Interpreter service is healthy"""
+<<<<<<< HEAD
         url = f"{self.base_url}/health"
         try:
             response = self.session.get(url, timeout=5)
@@ -107,6 +109,12 @@ class CodeInterpreterClient:
             return response.json().get("status") == "ok"
         except Exception as e:
             logger.warning(f"Exception caught when checking health, e={e}")
+=======
+        try:
+            response = self.session.get(f"{self.base_url}/health", timeout=5)
+            return response.ok
+        except Exception:
+>>>>>>> e61878288 (Add stuff)
             return False
 
     def execute(
