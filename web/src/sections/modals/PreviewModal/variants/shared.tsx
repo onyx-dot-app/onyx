@@ -32,15 +32,13 @@ export function CopyButton({ getText }: CopyButtonProps) {
   );
 }
 
-export function ZoomControls({
-  zoom,
-  onZoomIn,
-  onZoomOut,
-}: {
+interface ZoomControlsProps {
   zoom: number;
   onZoomIn: () => void;
   onZoomOut: () => void;
-}) {
+}
+
+export function ZoomControls({ zoom, onZoomIn, onZoomOut }: ZoomControlsProps) {
   return (
     <div className="rounded-12 bg-background-tint-00 p-1 shadow-lg">
       <Section flexDirection="row" width="fit">
