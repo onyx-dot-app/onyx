@@ -23,7 +23,7 @@ import {
 } from "react";
 import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
 import { SourceMetadata } from "./search/interfaces";
-import { parseLlmDescriptor } from "./llm/utils";
+import { parseLlmDescriptor } from "./llmConfig/utils";
 import { ChatSession } from "@/app/app/interfaces";
 import { AllUsersResponse } from "./types";
 import { Credential } from "./connectors/credentials";

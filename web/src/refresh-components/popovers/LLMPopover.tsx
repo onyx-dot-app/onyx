@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
-import { structureValue } from "@/lib/llm/utils";
+import { structureValue } from "@/lib/llmConfig/utils";
 import {
   getProviderIcon,
   AGGREGATOR_PROVIDERS,
