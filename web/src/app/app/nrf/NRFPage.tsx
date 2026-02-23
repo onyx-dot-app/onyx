@@ -135,6 +135,9 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   const updateCurrentDocumentSidebarVisible = useChatSessionStore(
     (state) => state.updateCurrentDocumentSidebarVisible
   );
+  const setCurrentSession = useChatSessionStore(
+    (state) => state.setCurrentSession
+  );
 
   // Memoized callback for closing document sidebar
   const handleDocumentSidebarClose = useCallback(() => {
@@ -280,44 +283,44 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     [handleMessageSpecificFileUpload]
   );
 
-  // Handler for chat submission (used by query controller)
-  const onChat = useCallback(
-    (chatMessage: string) => {
-      resetInputBar();
-      onSubmit({
-        message: chatMessage,
-        currentMessageFiles: currentMessageFiles,
-        deepResearch: deepResearchEnabled,
-      });
-    },
-    [onSubmit, currentMessageFiles, deepResearchEnabled, resetInputBar]
-  );
-
   // Handle submit from AppInputBar - routes through query controller for search/chat classification
   const handleChatInputSubmit = useCallback(
     async (submittedMessage: string) => {
       if (!submittedMessage.trim()) return;
 
-      const messageWithContext =
+      const additionalContext =
         tabReadingEnabled && currentTabUrl
-          ? `${submittedMessage}\n\nContext: I'm currently viewing ${currentTabUrl}. Please use the open_url tool to read this page and use it as additional context for your response.`
-          : submittedMessage;
+          ? `The user is currently viewing: ${currentTabUrl}`
+          : undefined;
 
       // If we already have messages (chat session started), always use chat mode
       // (matches AppPage behavior where existing sessions bypass classification)
       if (hasMessages) {
         resetInputBar();
         onSubmit({
-          message: messageWithContext,
+          message: submittedMessage,
           currentMessageFiles: currentMessageFiles,
           deepResearch: deepResearchEnabled,
+          additionalContext,
         });
         return;
       }
+
+      // Build an onChat closure that captures additionalContext for this submission
+      const onChat = (chatMessage: string) => {
+        resetInputBar();
+        onSubmit({
+          message: chatMessage,
+          currentMessageFiles: currentMessageFiles,
+          deepResearch: deepResearchEnabled,
+          additionalContext,
+        });
+      };
+
       // Use submitQuery which will classify the query and either:
       // - Route to search (sets classification to "search" and shows SearchUI)
       // - Route to chat (calls onChat callback)
-      await submitQuery(messageWithContext, onChat);
+      await submitQuery(submittedMessage, onChat);
     },
     [
       hasMessages,
@@ -326,7 +329,6 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       deepResearchEnabled,
       resetInputBar,
       submitQuery,
-      onChat,
       tabReadingEnabled,
       currentTabUrl,
     ]
@@ -350,6 +352,16 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       messageIdToResend: lastUserMsg.messageId,
     });
   }, [messageHistory, onSubmit, currentMessageFiles, deepResearchEnabled]);
+
+  // Start a new chat session in the side panel
+  const handleNewChat = useCallback(() => {
+    setCurrentSession(null);
+    setTabReadingEnabled(false);
+    setCurrentTabUrl(null);
+    resetInputBar();
+    // Notify the service worker so it stops sending tab URL updates
+    window.parent.postMessage({ type: CHROME_MESSAGE.TAB_READING_DISABLED }, "*");
+  }, [setCurrentSession, resetInputBar]);
 
   const handleToggleTabReading = useCallback(() => {
     const next = !tabReadingEnabled;
@@ -393,13 +405,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       )}
 
       {/* Side panel header */}
-      {isSidePanel && (
-        <SidePanelHeader
-          tabReadingEnabled={tabReadingEnabled}
-          currentTabUrl={currentTabUrl}
-          onToggleTabReading={handleToggleTabReading}
-        />
-      )}
+      {isSidePanel && <SidePanelHeader onNewChat={handleNewChat} />}
 
       {/* Settings button */}
       {!isSidePanel && (
@@ -422,8 +428,8 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
             {/* Chat area with messages */}
             {hasMessages && resolvedAssistant && (
               <>
-                {/* Fake header */}
-                <Spacer rem={2} />
+                {/* Fake header - pushes content below absolute settings button (non-side-panel only) */}
+                {!isSidePanel && <Spacer rem={2} />}
                 <ChatScrollContainer
                   sessionId="nrf-session"
                   anchorSelector={anchorSelector}
@@ -480,6 +486,11 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                 disabled={
                   !llmManager.isLoadingProviders && !llmManager.hasAnyProvider
                 }
+                {...(isSidePanel && {
+                  tabReadingEnabled,
+                  currentTabUrl,
+                  onToggleTabReading: handleToggleTabReading,
+                })}
               />
               <Spacer rem={0.5} />
             </div>
