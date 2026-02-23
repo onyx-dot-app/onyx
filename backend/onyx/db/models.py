@@ -4981,7 +4981,7 @@ class ScimGroupMapping(Base):
 
 
 class CodeInterpreterServer(Base):
-    """An mapping to the code interpreter server details"""
+    """Details about the code interpreter server"""
 
     __tablename__ = "code_interpreter_server"
 
