@@ -16,15 +16,12 @@ import {
   let authRequired = false;
 
   // Returns the origin of the Onyx app loaded in the iframe.
-  // Using "*" is unsafe; we derive the origin from iframe.src instead so
-  // postMessage payloads (including tab URLs) are only delivered to the
-  // expected page.
+  // We derive the origin from iframe.src so postMessage payloads
+  // (including tab URLs) are only delivered to the expected page.
+  // Throws if iframe.src is not a valid URL — this is intentional:
+  // postMessage must never fall back to the unsafe wildcard "*".
   function getIframeOrigin() {
-    try {
-      return new URL(iframe.src).origin;
-    } catch {
-      return "*";
-    }
+    return new URL(iframe.src).origin;
   }
 
   async function checkPendingInput() {
@@ -88,8 +85,18 @@ import {
   }
 
   function handleMessage(event) {
-    // Only trust messages from the Onyx app iframe
+    // Only trust messages from the Onyx app iframe.
+    // Check both source identity and origin so that a cross-origin page
+    // navigated to inside the iframe cannot send privileged extension
+    // messages (e.g. TAB_READING_ENABLED) after iframe.src changes.
+    // getIframeOrigin() throws if iframe.src is not yet a valid URL —
+    // catching it here fails closed (message is rejected, not processed).
     if (event.source !== iframe.contentWindow) return;
+    try {
+      if (event.origin !== getIframeOrigin()) return;
+    } catch {
+      return;
+    }
     if (event.data.type === CHROME_MESSAGE.ONYX_APP_LOADED) {
       clearTimeout(iframeLoadTimeout);
       iframeLoaded = true;

@@ -201,7 +201,11 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     if (!isSidePanel) return;
 
     function handleExtensionMessage(event: MessageEvent) {
-      // Only trust messages from the parent window (the Chrome extension panel)
+      // Only trust messages from the Chrome extension parent.
+      // Checking the origin (chrome-extension://) prevents a non-extension
+      // page that embeds NRFPage as an iframe from injecting arbitrary URLs
+      // into the prompt context via TAB_URL_UPDATED.
+      if (!event.origin.startsWith("chrome-extension://")) return;
       if (event.source !== window.parent) return;
       if (event.data?.type === CHROME_MESSAGE.TAB_URL_UPDATED) {
         setCurrentTabUrl(event.data.url as string);
