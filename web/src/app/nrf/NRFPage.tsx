@@ -286,7 +286,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
       const additionalContext =
         tabReadingEnabled && currentTabUrl
-          ? `The user is currently viewing: ${currentTabUrl}`
+          ? `The user is currently viewing: ${currentTabUrl}. Use the open_url tool to read this page and use its content as additional context for your response.`
           : undefined;
 
       // If we already have messages (chat session started), always use chat mode
