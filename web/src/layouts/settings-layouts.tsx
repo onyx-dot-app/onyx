@@ -220,12 +220,11 @@ function SettingsHeader({
         backButton && "md:pt-4"
       )}
     >
-      {backButton ? (
+      {backButton && (
         <div className="px-2">
           <BackButton behaviorOverride={onBack} />
+          <Spacer vertical rem={1} />
         </div>
-      ) : (
-        <Spacer vertical rem={1} />
       )}
 
       <div className="flex flex-col gap-6 px-4">
