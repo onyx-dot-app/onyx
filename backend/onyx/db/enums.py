@@ -232,6 +232,12 @@ class BuildSessionStatus(str, PyEnum):
     IDLE = "idle"
 
 
+class SharingScope(str, PyEnum):
+    PRIVATE = "private"
+    PUBLIC_ORG = "public_org"
+    PUBLIC_GLOBAL = "public_global"
+
+
 class SandboxStatus(str, PyEnum):
     PROVISIONING = "provisioning"
     RUNNING = "running"
@@ -296,4 +302,4 @@ class HierarchyNodeType(str, PyEnum):
 class LLMModelFlowType(str, PyEnum):
     CHAT = "chat"
     VISION = "vision"
-    EMBEDDINGS = "embeddings"
+    CONTEXTUAL_RAG = "contextual_rag"

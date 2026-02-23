@@ -169,8 +169,6 @@ export const ResearchAgentRenderer: MessageRenderer<
   );
 
   // Stable callbacks to avoid creating new functions on every render
-  const noopComplete = useCallback(() => {}, []);
-
   // renderReport renders the processed content
   // Uses pre-computed processedReportContent since ExpandableTextDisplay
   // passes the same fullReportContent that we processed above
@@ -221,7 +219,6 @@ export const ResearchAgentRenderer: MessageRenderer<
             key={latestGroup.sub_turn_index}
             packets={latestGroup.packets}
             chatState={state}
-            onComplete={noopComplete}
             animate={!stopPacketSeen && !latestGroup.isComplete}
             stopPacketSeen={stopPacketSeen}
             defaultExpanded={false}
@@ -327,7 +324,6 @@ export const ResearchAgentRenderer: MessageRenderer<
               key={group.sub_turn_index}
               packets={group.packets}
               chatState={state}
-              onComplete={noopComplete}
               animate={!stopPacketSeen && !group.isComplete}
               stopPacketSeen={stopPacketSeen}
               defaultExpanded={true}

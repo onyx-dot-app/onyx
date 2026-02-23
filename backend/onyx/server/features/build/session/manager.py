@@ -1765,6 +1765,7 @@ class SessionManager:
                 "webapp_url": None,
                 "status": "no_sandbox",
                 "ready": False,
+                "sharing_scope": session.sharing_scope,
             }
 
         # Return the proxy URL - the proxy handles routing to the correct sandbox
@@ -1777,11 +1778,21 @@ class SessionManager:
             # Quick health check: can the API server reach the NextJS dev server?
             ready = self._check_nextjs_ready(sandbox.id, session.nextjs_port)
 
+            # If not ready, ask the sandbox manager to ensure Next.js is running.
+            # For the local backend this triggers a background restart so that the
+            # frontend poll loop eventually sees ready=True without the user having
+            # to manually recreate the session.
+            if not ready:
+                self._sandbox_manager.ensure_nextjs_running(
+                    sandbox.id, session_id, session.nextjs_port
+                )
+
         return {
             "has_webapp": session.nextjs_port is not None,
             "webapp_url": webapp_url,
             "status": sandbox.status.value,
             "ready": ready,
+            "sharing_scope": session.sharing_scope,
         }
 
     def _check_nextjs_ready(self, sandbox_id: UUID, port: int) -> bool:

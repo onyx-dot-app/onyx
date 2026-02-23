@@ -346,6 +346,7 @@ const ChatScrollContainer = React.memo(
           <div
             key={sessionId}
             ref={scrollContainerRef}
+            data-testid="chat-scroll-container"
             className="flex flex-col flex-1 min-h-0 overflow-y-auto overflow-x-hidden default-scrollbar"
             onScroll={handleScroll}
             style={{

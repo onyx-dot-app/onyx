@@ -26,6 +26,8 @@ import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
 import { useUser } from "@/providers/UserProvider";
 import NoAssistantModal from "@/components/modals/NoAssistantModal";
 import TextViewModal from "@/sections/modals/TextViewModal";
+import CodeViewModal from "@/sections/modals/CodeViewModal";
+import { getCodeLanguage } from "@/lib/languages";
 import Modal from "@/refresh-components/Modal";
 import { useSendMessageToParent } from "@/lib/extension/utils";
 import { SUBMIT_MESSAGE_TYPES } from "@/lib/extension/constants";
@@ -643,7 +645,9 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       ? "0fr auto 1fr"
       : appFocus.isChat()
         ? "1fr auto 0fr"
-        : "1fr auto 1fr",
+        : appFocus.isProject()
+          ? "auto auto 1fr"
+          : "1fr auto 1fr",
   };
 
   if (!isReady) return <OnyxInitializingLoader />;
@@ -682,12 +686,18 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
         </div>
       )}
 
-      {presentingDocument && (
-        <TextViewModal
-          presentingDocument={presentingDocument}
-          onClose={() => setPresentingDocument(null)}
-        />
-      )}
+      {presentingDocument &&
+        (getCodeLanguage(presentingDocument.semantic_identifier || "") ? (
+          <CodeViewModal
+            presentingDocument={presentingDocument}
+            onClose={() => setPresentingDocument(null)}
+          />
+        ) : (
+          <TextViewModal
+            presentingDocument={presentingDocument}
+            onClose={() => setPresentingDocument(null)}
+          />
+        ))}
 
       {stackTraceModalContent && (
         <ExceptionTraceModal
@@ -698,7 +708,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
       <FederatedOAuthModal />
 
-      <AppLayouts.Root enableBackground>
+      <AppLayouts.Root enableBackground={!appFocus.isProject()}>
         <Dropzone
           onDrop={(acceptedFiles) =>
             handleMessageSpecificFileUpload(acceptedFiles)
@@ -751,11 +761,13 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
                   {/* ProjectUI */}
                   {appFocus.isProject() && (
-                    <ProjectContextPanel
-                      projectTokenCount={projectContextTokenCount}
-                      availableContextTokens={availableContextTokens}
-                      setPresentingDocument={setPresentingDocument}
-                    />
+                    <div className="w-full max-h-[50vh] overflow-y-auto overscroll-y-none">
+                      <ProjectContextPanel
+                        projectTokenCount={projectContextTokenCount}
+                        availableContextTokens={availableContextTokens}
+                        setPresentingDocument={setPresentingDocument}
+                      />
+                    </div>
                   )}
 
                   {/* WelcomeMessageUI */}
@@ -792,10 +804,9 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     {/* OnboardingUI */}
                     {(appFocus.isNewSession() || appFocus.isAgent()) &&
                       !classification &&
-                      (showOnboarding ||
-                        (user?.role !== UserRole.ADMIN &&
-                          !user?.personalization?.name)) && (
+                      (showOnboarding || !user?.personalization?.name) && (
                         <OnboardingFlow
+                          showOnboarding={showOnboarding}
                           handleHideOnboarding={hideOnboarding}
                           handleFinishOnboarding={finishOnboarding}
                           state={onboardingState}
@@ -855,10 +866,13 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         selectedAssistant={selectedAssistant || liveAssistant}
                         handleFileUpload={handleMessageSpecificFileUpload}
                         setPresentingDocument={setPresentingDocument}
+                        // Intentionally enabled during name-only onboarding (showOnboarding=false)
+                        // since LLM providers are already configured and the user can chat.
                         disabled={
                           (!llmManager.isLoadingProviders &&
                             llmManager.hasAnyProvider === false) ||
-                          (!isLoadingOnboarding &&
+                          (showOnboarding &&
+                            !isLoadingOnboarding &&
                             onboardingState.currentStep !==
                               OnboardingStep.Complete)
                         }
@@ -870,19 +884,18 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         )}
                       />
                     </div>
-
-                    {/* ProjectChatSessionsUI */}
-                    {appFocus.isProject() && (
-                      <>
-                        <Spacer rem={0.5} />
-                        <ProjectChatSessionList />
-                      </>
-                    )}
                   </div>
                 </div>
 
-                {/* ── Bottom: SearchResults + SourceFilter / Suggestions ── */}
+                {/* ── Bottom: SearchResults + SourceFilter / Suggestions / ProjectChatList ── */}
                 <div className="row-start-3 min-h-0 overflow-hidden flex flex-col items-center w-full">
+                  {/* ProjectChatSessionList */}
+                  {appFocus.isProject() && (
+                    <div className="w-full max-w-[var(--app-page-main-content-width)] h-full overflow-y-auto overscroll-y-none mx-auto">
+                      <ProjectChatSessionList />
+                    </div>
+                  )}
+
                   {/* SuggestionsUI */}
                   <Fade
                     show={

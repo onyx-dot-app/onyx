@@ -6,6 +6,10 @@
       "types": "./src/components/index.ts",
       "default": "./src/components/index.ts"
     },
+    "./layouts": {
+      "types": "./src/layouts/index.ts",
+      "default": "./src/layouts/index.ts"
+    },
     "./core": {
       "types": "./src/core/index.ts",
       "default": "./src/core/index.ts"

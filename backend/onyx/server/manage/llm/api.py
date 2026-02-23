@@ -310,7 +310,7 @@ def list_llm_providers(
     llm_provider_list: list[LLMProviderView] = []
     for llm_provider_model in fetch_existing_llm_providers(
         db_session=db_session,
-        flow_types=[LLMModelFlowType.CHAT, LLMModelFlowType.VISION],
+        flow_type_filter=[],
         exclude_image_generation_providers=not include_image_gen,
     ):
         from_model_start = datetime.now(timezone.utc)
@@ -568,9 +568,7 @@ def list_llm_provider_basics(
     start_time = datetime.now(timezone.utc)
     logger.debug("Starting to fetch user-accessible LLM providers")
 
-    all_providers = fetch_existing_llm_providers(
-        db_session, [LLMModelFlowType.CHAT, LLMModelFlowType.VISION]
-    )
+    all_providers = fetch_existing_llm_providers(db_session, [])
     user_group_ids = fetch_user_group_ids(db_session, user)
     is_admin = user.role == UserRole.ADMIN
 

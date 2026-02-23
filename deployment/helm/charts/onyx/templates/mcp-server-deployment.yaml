@@ -88,6 +88,8 @@ spec:
               value: "true"
             - name: MCP_SERVER_PORT
               value: "{{ .Values.mcpServer.containerPorts.server }}"
+            - name: MCP_SERVER_HOST
+              value: "{{ .Values.global.host }}"
             {{- if .Values.mcpServer.corsOrigins }}
             - name: MCP_SERVER_CORS_ORIGINS
               value: "{{ .Values.mcpServer.corsOrigins }}"

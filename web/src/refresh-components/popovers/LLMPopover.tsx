@@ -8,6 +8,7 @@ import {
   getProviderIcon,
   AGGREGATOR_PROVIDERS,
 } from "@/app/admin/configuration/llm/utils";
+import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { Slider } from "@/components/ui/slider";
 import { useUser } from "@/providers/UserProvider";
 import LineItem from "@/refresh-components/buttons/LineItem";
@@ -26,36 +27,120 @@ import {
   SvgChevronRight,
   SvgRefreshCw,
 } from "@opal/icons";
-import { IconProps } from "@/components/icons/icons";
 import { Section } from "@/layouts/general-layouts";
 import { OpenButton } from "@opal/components";
-
-interface LLMOption {
-  name: string;
-  provider: string;
-  providerDisplayName: string;
-  modelName: string;
-  displayName: string;
-  description?: string;
-  vendor: string | null;
-  maxInputTokens?: number | null;
-  region?: string | null;
-  version?: string | null;
-  supportsReasoning?: boolean;
-  supportsImageInput?: boolean;
-}
+import { LLMOption, LLMOptionGroup } from "./interfaces";
 
 export interface LLMPopoverProps {
   llmManager: LlmManager;
-  requiresImageGeneration?: boolean;
+  requiresImageInput?: boolean;
   folded?: boolean;
   onSelect?: (value: string) => void;
   currentModelName?: string;
   disabled?: boolean;
 }
 
+export function buildLlmOptions(
+  llmProviders: LLMProviderDescriptor[] | undefined,
+  currentModelName?: string
+): LLMOption[] {
+  if (!llmProviders) {
+    return [];
+  }
+
+  // Track seen combinations of provider + exact model name to avoid true duplicates
+  // (same model appearing from multiple LLM provider configs with same provider type)
+  const seenKeys = new Set<string>();
+  const options: LLMOption[] = [];
+
+  llmProviders.forEach((llmProvider) => {
+    llmProvider.model_configurations
+      .filter(
+        (modelConfiguration) =>
+          modelConfiguration.is_visible ||
+          modelConfiguration.name === currentModelName
+      )
+      .forEach((modelConfiguration) => {
+        // Deduplicate by exact provider + model name combination
+        const key = `${llmProvider.provider}:${modelConfiguration.name}`;
+        if (seenKeys.has(key)) {
+          return;
+        }
+        seenKeys.add(key);
+
+        options.push({
+          name: llmProvider.name,
+          provider: llmProvider.provider,
+          providerDisplayName:
+            llmProvider.provider_display_name || llmProvider.provider,
+          modelName: modelConfiguration.name,
+          displayName:
+            modelConfiguration.display_name || modelConfiguration.name,
+          vendor: modelConfiguration.vendor || null,
+          maxInputTokens: modelConfiguration.max_input_tokens,
+          region: modelConfiguration.region || null,
+          version: modelConfiguration.version || null,
+          supportsReasoning: modelConfiguration.supports_reasoning || false,
+          supportsImageInput: modelConfiguration.supports_image_input || false,
+        });
+      });
+  });
+
+  return options;
+}
+
+export function groupLlmOptions(
+  filteredOptions: LLMOption[]
+): LLMOptionGroup[] {
+  const groups = new Map<string, Omit<LLMOptionGroup, "key">>();
+
+  filteredOptions.forEach((option) => {
+    const provider = option.provider.toLowerCase();
+    const isAggregator = AGGREGATOR_PROVIDERS.has(provider);
+    const groupKey =
+      isAggregator && option.vendor
+        ? `${provider}/${option.vendor.toLowerCase()}`
+        : provider;
+
+    if (!groups.has(groupKey)) {
+      let displayName: string;
+
+      if (isAggregator && option.vendor) {
+        const vendorDisplayName =
+          option.vendor.charAt(0).toUpperCase() + option.vendor.slice(1);
+        displayName = `${option.providerDisplayName}/${vendorDisplayName}`;
+      } else {
+        displayName = option.providerDisplayName;
+      }
+
+      groups.set(groupKey, {
+        displayName,
+        options: [],
+        Icon: getProviderIcon(provider),
+      });
+    }
+
+    groups.get(groupKey)!.options.push(option);
+  });
+
+  const sortedKeys = Array.from(groups.keys()).sort((a, b) =>
+    groups.get(a)!.displayName.localeCompare(groups.get(b)!.displayName)
+  );
+
+  return sortedKeys.map((key) => {
+    const group = groups.get(key)!;
+    return {
+      key,
+      displayName: group.displayName,
+      options: group.options,
+      Icon: group.Icon,
+    };
+  });
+}
+
 export default function LLMPopover({
   llmManager,
+  requiresImageInput,
   folded,
   onSelect,
   currentModelName,
@@ -97,133 +182,35 @@ export default function LLMPopover({
     [llmManager]
   );
 
-  const llmOptions = useMemo(() => {
-    if (!llmProviders) {
-      return [];
-    }
+  const llmOptions = useMemo(
+    () => buildLlmOptions(llmProviders, currentModelName),
+    [llmProviders, currentModelName]
+  );
 
-    // Track seen combinations of provider + exact model name to avoid true duplicates
-    // (same model appearing from multiple LLM provider configs with same provider type)
-    const seenKeys = new Set<string>();
-
-    const options: LLMOption[] = [];
-
-    llmProviders.forEach((llmProvider) => {
-      llmProvider.model_configurations
-        .filter(
-          (modelConfiguration) =>
-            modelConfiguration.is_visible ||
-            modelConfiguration.name === currentModelName
-        )
-        .forEach((modelConfiguration) => {
-          // Deduplicate by exact provider + model name combination
-          const key = `${llmProvider.provider}:${modelConfiguration.name}`;
-
-          if (seenKeys.has(key)) {
-            return;
-          }
-          seenKeys.add(key);
-
-          const displayName =
-            modelConfiguration.display_name || modelConfiguration.name;
-
-          options.push({
-            name: llmProvider.name,
-            provider: llmProvider.provider,
-            providerDisplayName:
-              llmProvider.provider_display_name || llmProvider.provider,
-            modelName: modelConfiguration.name,
-            displayName,
-            vendor: modelConfiguration.vendor || null,
-            maxInputTokens: modelConfiguration.max_input_tokens,
-            region: modelConfiguration.region || null,
-            version: modelConfiguration.version || null,
-            supportsReasoning: modelConfiguration.supports_reasoning || false,
-            supportsImageInput:
-              modelConfiguration.supports_image_input || false,
-          });
-        });
-    });
-
-    return options;
-  }, [llmProviders, currentModelName]);
-
-  // Filter options by search query
+  // Filter options by vision capability (when images are uploaded) and search query
   const filteredOptions = useMemo(() => {
-    if (!searchQuery.trim()) {
-      return llmOptions;
+    let result = llmOptions;
+    if (requiresImageInput) {
+      result = result.filter((opt) => opt.supportsImageInput);
     }
-    const query = searchQuery.toLowerCase();
-    return llmOptions.filter(
-      (opt) =>
-        opt.displayName.toLowerCase().includes(query) ||
-        opt.modelName.toLowerCase().includes(query) ||
-        (opt.vendor && opt.vendor.toLowerCase().includes(query))
-    );
-  }, [llmOptions, searchQuery]);
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      result = result.filter(
+        (opt) =>
+          opt.displayName.toLowerCase().includes(query) ||
+          opt.modelName.toLowerCase().includes(query) ||
+          (opt.vendor && opt.vendor.toLowerCase().includes(query))
+      );
+    }
+    return result;
+  }, [llmOptions, searchQuery, requiresImageInput]);
 
   // Group options by provider using backend-provided display names and ordering
   // For aggregator providers (bedrock, openrouter, vertex_ai), flatten to "Provider/Vendor" format
-  const groupedOptions = useMemo(() => {
-    const groups = new Map<
-      string,
-      {
-        displayName: string;
-        options: LLMOption[];
-        Icon: React.FunctionComponent<IconProps>;
-      }
-    >();
-
-    filteredOptions.forEach((option) => {
-      const provider = option.provider.toLowerCase();
-      const isAggregator = AGGREGATOR_PROVIDERS.has(provider);
-
-      // For aggregator providers with vendor info, create flattened groups like "Amazon Bedrock/Anthropic"
-      // For regular providers or aggregators without vendor, use just the provider name
-      const groupKey =
-        isAggregator && option.vendor
-          ? `${provider}/${option.vendor.toLowerCase()}`
-          : provider;
-
-      if (!groups.has(groupKey)) {
-        // Build display name
-        let displayName: string;
-
-        if (isAggregator && option.vendor) {
-          // Flattened format: "Amazon Bedrock/Anthropic"
-          const vendorDisplayName =
-            option.vendor.charAt(0).toUpperCase() + option.vendor.slice(1);
-          displayName = `${option.providerDisplayName}/${vendorDisplayName}`;
-        } else {
-          displayName = option.providerDisplayName;
-        }
-
-        groups.set(groupKey, {
-          displayName,
-          options: [],
-          // Get the icon component - use provider for the icon lookup
-          Icon: getProviderIcon(provider),
-        });
-      }
-
-      groups.get(groupKey)!.options.push(option);
-    });
-
-    // Sort groups alphabetically by display name
-    const sortedKeys = Array.from(groups.keys()).sort((a, b) =>
-      groups.get(a)!.displayName.localeCompare(groups.get(b)!.displayName)
-    );
-
-    return sortedKeys.map((key) => {
-      const group = groups.get(key)!;
-      return {
-        key,
-        displayName: group.displayName,
-        options: group.options,
-        Icon: group.Icon,
-      };
-    });
-  }, [filteredOptions]);
+  const groupedOptions = useMemo(
+    () => groupLlmOptions(filteredOptions),
+    [filteredOptions]
+  );
 
   // Get display name for the model to show in the button
   // Use currentModelName prop if provided (e.g., for regenerate showing the model used),

@@ -2,8 +2,10 @@
 
 from unittest.mock import MagicMock
 
+from onyx.chat.chat_utils import _build_tool_call_response_history_message
 from onyx.chat.chat_utils import get_custom_agent_prompt
 from onyx.configs.constants import DEFAULT_PERSONA_ID
+from onyx.prompts.chat_prompts import TOOL_CALL_RESPONSE_CROSS_MESSAGE
 
 
 class TestGetCustomAgentPrompt:
@@ -150,3 +152,21 @@ class TestGetCustomAgentPrompt:
 
         # Should return None because replace_base_system_prompt=True
         assert result is None
+
+
+class TestBuildToolCallResponseHistoryMessage:
+    def test_image_tool_uses_generated_images(self) -> None:
+        message = _build_tool_call_response_history_message(
+            tool_name="generate_image",
+            generated_images=[{"file_id": "img-1", "revised_prompt": "p1"}],
+            tool_call_response=None,
+        )
+        assert message == '[{"file_id": "img-1", "revised_prompt": "p1"}]'
+
+    def test_non_image_tool_uses_placeholder(self) -> None:
+        message = _build_tool_call_response_history_message(
+            tool_name="web_search",
+            generated_images=None,
+            tool_call_response='{"raw":"value"}',
+        )
+        assert message == TOOL_CALL_RESPONSE_CROSS_MESSAGE

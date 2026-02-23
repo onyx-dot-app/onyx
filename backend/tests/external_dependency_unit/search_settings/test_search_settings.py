@@ -10,11 +10,12 @@ from sqlalchemy.orm import Session
 from onyx.context.search.models import SavedSearchSettings
 from onyx.context.search.models import SearchSettingsCreationRequest
 from onyx.db.enums import EmbeddingPrecision
+from onyx.db.llm import fetch_default_contextual_rag_model
+from onyx.db.llm import update_default_contextual_model
 from onyx.db.llm import upsert_llm_provider
 from onyx.db.models import IndexModelStatus
 from onyx.db.search_settings import create_search_settings
-from onyx.db.search_settings import get_secondary_search_settings
-from onyx.db.search_settings import update_search_settings_status
+from onyx.db.swap_index import check_and_perform_index_swap
 from onyx.indexing.indexing_pipeline import IndexingPipelineResult
 from onyx.indexing.indexing_pipeline import run_indexing_pipeline
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
@@ -131,26 +132,37 @@ def baseline_search_settings(
 ) -> None:
     """Ensure a baseline PRESENT search settings row exists in the DB,
     which is required before set_new_search_settings can be called."""
+    baseline = _make_saved_search_settings(enable_contextual_rag=False)
     create_search_settings(
-        search_settings=_make_saved_search_settings(enable_contextual_rag=False),
+        search_settings=baseline,
         db_session=db_session,
         status=IndexModelStatus.PRESENT,
+    )
+    # Sync default contextual model to match PRESENT (clears any leftover state)
+    update_default_contextual_model(
+        db_session=db_session,
+        enable_contextual_rag=baseline.enable_contextual_rag,
+        contextual_rag_llm_provider=baseline.contextual_rag_llm_provider,
+        contextual_rag_llm_name=baseline.contextual_rag_llm_name,
     )
 
 
 @pytest.mark.skip(reason="Set new search settings is temporarily disabled.")
+@patch("onyx.db.swap_index.get_all_document_indices")
 @patch("onyx.server.manage.search_settings.get_default_document_index")
 @patch("onyx.indexing.indexing_pipeline.get_llm_for_contextual_rag")
 @patch("onyx.indexing.indexing_pipeline.index_doc_batch_with_handler")
 def test_indexing_pipeline_uses_contextual_rag_settings_from_create(
     mock_index_handler: MagicMock,
     mock_get_llm: MagicMock,
+    mock_get_doc_index: MagicMock,  # noqa: ARG001
+    mock_get_all_doc_indices: MagicMock,
     baseline_search_settings: None,  # noqa: ARG001
     db_session: Session,
 ) -> None:
-    """After creating search settings via set_new_search_settings with
-    contextual RAG enabled, run_indexing_pipeline should call
-    get_llm_for_contextual_rag with the LLM names from those settings."""
+    """After creating FUTURE settings and swapping to PRESENT,
+    fetch_default_contextual_rag_model should match the PRESENT settings
+    and run_indexing_pipeline should call get_llm_for_contextual_rag."""
     _create_llm_provider_and_model(
         db_session=db_session,
         provider_name=TEST_CONTEXTUAL_RAG_LLM_PROVIDER,
@@ -163,6 +175,20 @@ def test_indexing_pipeline_uses_contextual_rag_settings_from_create(
         db_session=db_session,
     )
 
+    # PRESENT still has contextual RAG disabled, so default should be None
+    default_model = fetch_default_contextual_rag_model(db_session)
+    assert default_model is None
+
+    # Swap FUTURE → PRESENT (with 0 cc-pairs, REINDEX swaps immediately)
+    mock_get_all_doc_indices.return_value = []
+    old_settings = check_and_perform_index_swap(db_session)
+    assert old_settings is not None, "Swap should have occurred"
+
+    # Now PRESENT has contextual RAG enabled, default should match
+    default_model = fetch_default_contextual_rag_model(db_session)
+    assert default_model is not None
+    assert default_model.name == TEST_CONTEXTUAL_RAG_LLM_NAME
+
     _run_indexing_pipeline_with_mocks(mock_get_llm, mock_index_handler, db_session)
 
     mock_get_llm.assert_called_once_with(
@@ -172,16 +198,21 @@ def test_indexing_pipeline_uses_contextual_rag_settings_from_create(
 
 
 @pytest.mark.skip(reason="Set new search settings is temporarily disabled.")
+@patch("onyx.db.swap_index.get_all_document_indices")
+@patch("onyx.server.manage.search_settings.get_default_document_index")
 @patch("onyx.indexing.indexing_pipeline.get_llm_for_contextual_rag")
 @patch("onyx.indexing.indexing_pipeline.index_doc_batch_with_handler")
 def test_indexing_pipeline_uses_updated_contextual_rag_settings(
     mock_index_handler: MagicMock,
     mock_get_llm: MagicMock,
-    tenant_context: None,  # noqa: ARG001
+    mock_get_doc_index: MagicMock,  # noqa: ARG001
+    mock_get_all_doc_indices: MagicMock,
+    baseline_search_settings: None,  # noqa: ARG001
     db_session: Session,
 ) -> None:
-    """After updating search settings via update_saved_search_settings,
-    run_indexing_pipeline should use the updated LLM names."""
+    """After creating FUTURE settings, swapping to PRESENT, then updating
+    via update_saved_search_settings, run_indexing_pipeline should use
+    the updated LLM names."""
     _create_llm_provider_and_model(
         db_session=db_session,
         provider_name=TEST_CONTEXTUAL_RAG_LLM_PROVIDER,
@@ -193,20 +224,28 @@ def test_indexing_pipeline_uses_updated_contextual_rag_settings(
         model_name=UPDATED_CONTEXTUAL_RAG_LLM_NAME,
     )
 
-    # Create baseline PRESENT settings with contextual RAG already enabled
-    create_search_settings(
-        search_settings=_make_saved_search_settings(),
+    # Create FUTURE settings with contextual RAG enabled
+    set_new_search_settings(
+        search_settings_new=_make_creation_request(),
+        _=MagicMock(),
         db_session=db_session,
-        status=IndexModelStatus.PRESENT,
     )
 
-    # Retire any FUTURE settings left over from other tests so the
-    # pipeline uses the PRESENT (primary) settings we just created.
-    secondary = get_secondary_search_settings(db_session)
-    if secondary:
-        update_search_settings_status(secondary, IndexModelStatus.PAST, db_session)
+    # PRESENT still has contextual RAG disabled, so default should be None
+    default_model = fetch_default_contextual_rag_model(db_session)
+    assert default_model is None
 
-    # Update LLM names via the endpoint function
+    # Swap FUTURE → PRESENT (with 0 cc-pairs, REINDEX swaps immediately)
+    mock_get_all_doc_indices.return_value = []
+    old_settings = check_and_perform_index_swap(db_session)
+    assert old_settings is not None, "Swap should have occurred"
+
+    # Now PRESENT has contextual RAG enabled, default should match
+    default_model = fetch_default_contextual_rag_model(db_session)
+    assert default_model is not None
+    assert default_model.name == TEST_CONTEXTUAL_RAG_LLM_NAME
+
+    # Update the PRESENT LLM names
     update_saved_search_settings(
         search_settings=_make_saved_search_settings(
             llm_name=UPDATED_CONTEXTUAL_RAG_LLM_NAME,
@@ -215,6 +254,10 @@ def test_indexing_pipeline_uses_updated_contextual_rag_settings(
         _=MagicMock(),
         db_session=db_session,
     )
+
+    default_model = fetch_default_contextual_rag_model(db_session)
+    assert default_model is not None
+    assert default_model.name == UPDATED_CONTEXTUAL_RAG_LLM_NAME
 
     _run_indexing_pipeline_with_mocks(mock_get_llm, mock_index_handler, db_session)
 
@@ -231,6 +274,7 @@ def test_indexing_pipeline_uses_updated_contextual_rag_settings(
 def test_indexing_pipeline_skips_llm_when_contextual_rag_disabled(
     mock_index_handler: MagicMock,
     mock_get_llm: MagicMock,
+    mock_get_doc_index: MagicMock,  # noqa: ARG001
     baseline_search_settings: None,  # noqa: ARG001
     db_session: Session,
 ) -> None:
@@ -247,6 +291,10 @@ def test_indexing_pipeline_skips_llm_when_contextual_rag_disabled(
         _=MagicMock(),
         db_session=db_session,
     )
+
+    # PRESENT has contextual RAG disabled, so default should be None
+    default_model = fetch_default_contextual_rag_model(db_session)
+    assert default_model is None
 
     _run_indexing_pipeline_with_mocks(mock_get_llm, mock_index_handler, db_session)
 

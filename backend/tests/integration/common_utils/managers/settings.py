@@ -5,7 +5,6 @@ from typing import Optional
 import requests
 
 from tests.integration.common_utils.constants import API_SERVER_URL
-from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.test_models import DATestSettings
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -13,13 +12,9 @@ from tests.integration.common_utils.test_models import DATestUser
 class SettingsManager:
     @staticmethod
     def get_settings(
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> tuple[Dict[str, Any], str]:
-        headers = (
-            user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS
-        )
+        headers = user_performing_action.headers
         headers.pop("Content-Type", None)
 
         response = requests.get(
@@ -38,13 +33,9 @@ class SettingsManager:
     @staticmethod
     def update_settings(
         settings: DATestSettings,
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> tuple[Dict[str, Any], str]:
-        headers = (
-            user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS
-        )
+        headers = user_performing_action.headers
         headers.pop("Content-Type", None)
 
         payload = settings.model_dump()
@@ -65,7 +56,7 @@ class SettingsManager:
     @staticmethod
     def get_setting(
         key: str,
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> Optional[Any]:
         settings, error = SettingsManager.get_settings(user_performing_action)
         if error:

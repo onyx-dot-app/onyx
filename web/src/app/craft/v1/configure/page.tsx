@@ -68,6 +68,7 @@ const BUILD_CONNECTORS: ValidSources[] = [
   ValidSources.Linear,
   ValidSources.Fireflies,
   ValidSources.Hubspot,
+  ValidSources.Airtable,
   ValidSources.CraftFile, // User's uploaded files
 ];
 

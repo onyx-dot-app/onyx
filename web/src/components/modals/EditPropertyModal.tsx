@@ -24,7 +24,7 @@ export default function EditPropertyModal({
 }: EditPropertyModalProps) {
   return (
     <Modal open onOpenChange={onClose}>
-      <Modal.Content>
+      <Modal.Content width="sm">
         <Modal.Header
           icon={SvgEdit}
           title={`Edit ${propertyTitle}`}
@@ -43,7 +43,7 @@ export default function EditPropertyModal({
             }}
           >
             {({ isSubmitting, isValid, values }) => (
-              <Form className="items-stretch">
+              <Form className="w-full">
                 <TextFormField
                   vertical
                   label={propertyDetails || ""}

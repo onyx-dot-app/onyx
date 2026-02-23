@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useRef, useLayoutEffect, useEffect } from "react";
+import { useState, useMemo, useRef, useEffect, useLayoutEffect } from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import Modal from "@/refresh-components/Modal";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
@@ -81,6 +81,34 @@ function downloadAsTxt(content: string, filename: string) {
   }
 }
 
+/** Block-level HTML tags used by the snap algorithm to recurse into containers. */
+const CONTAINER_TAGS = new Set([
+  "UL",
+  "OL",
+  "LI",
+  "BLOCKQUOTE",
+  "DIV",
+  "DL",
+  "DD",
+  "TABLE",
+  "TBODY",
+  "THEAD",
+  "TR",
+  "TH",
+  "TD",
+  "SECTION",
+  "DETAILS",
+  "PRE",
+  "FIGURE",
+  "FIGCAPTION",
+  "ARTICLE",
+  "ASIDE",
+  "HEADER",
+  "FOOTER",
+  "MAIN",
+  "NAV",
+]);
+
 export default function ExpandableTextDisplay({
   title,
   content,
@@ -94,45 +122,89 @@ export default function ExpandableTextDisplay({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isTruncated, setIsTruncated] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const prevIsStreamingRef = useRef(isStreaming);
+  const contentInnerRef = useRef<HTMLDivElement>(null);
 
   const lineCount = useMemo(() => getLineCount(content), [content]);
   const contentSize = useMemo(() => getContentSize(content), [content]);
   const displaySubtitle = subtitle ?? contentSize;
 
-  // Detect truncation for renderContent mode, streaming, and plain text static
-  useLayoutEffect(() => {
+  // Truncation detection (read-only, doesn't need to block paint)
+  useEffect(() => {
     if (renderContent && scrollRef.current) {
-      // For renderContent mode (streaming or static), use scroll-based detection
-      // CSS line-clamp handles visual truncation, we just need to detect if it happened
       setIsTruncated(
         scrollRef.current.scrollHeight > scrollRef.current.clientHeight
       );
     } else if (isStreaming) {
-      // For plain text streaming, use line-based detection (still works for plain text)
       const textToCheck = displayContent ?? content;
-      const lineCount = getLineCount(textToCheck);
-      setIsTruncated(lineCount > maxLines);
+      setIsTruncated(getLineCount(textToCheck) > maxLines);
     } else if (scrollRef.current) {
-      // For plain text static, use scroll-based detection with line-clamp
       setIsTruncated(
         scrollRef.current.scrollHeight > scrollRef.current.clientHeight
       );
     }
   }, [isStreaming, renderContent, content, displayContent, maxLines]);
 
-  // Scroll to bottom during streaming for renderContent mode
-  // This creates a "scrolling from bottom" effect showing the latest content
+  // Shift content upward during streaming for renderContent mode,
+  // snapping to element boundaries so blocks are never partially clipped.
+  // Must block paint to avoid flicker.
   useLayoutEffect(() => {
-    if (isStreaming && renderContent && scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    if (
+      !isStreaming ||
+      !renderContent ||
+      !scrollRef.current ||
+      !contentInnerRef.current
+    ) {
+      return;
     }
-  }, [isStreaming, renderContent, content, displayContent]);
 
-  // Track streaming state transitions (no longer need scroll management with top-truncation)
-  useEffect(() => {
-    prevIsStreamingRef.current = isStreaming;
-  }, [isStreaming]);
+    const containerHeight = scrollRef.current.clientHeight;
+    const contentHeight = contentInnerRef.current.scrollHeight;
+    let overflow = Math.max(0, contentHeight - containerHeight);
+
+    if (overflow > 0) {
+      let blockParent: Element = contentInnerRef.current;
+      while (
+        blockParent.children.length === 1 &&
+        blockParent.children[0]!.children.length > 0
+      ) {
+        blockParent = blockParent.children[0]!;
+      }
+
+      contentInnerRef.current.style.transform = "translateY(0)";
+      const refTop = contentInnerRef.current.getBoundingClientRect().top;
+
+      let snapParent: Element = blockParent;
+      let snap = overflow;
+      while (true) {
+        let found = false;
+        for (let i = 0; i < snapParent.children.length; i++) {
+          const child = snapParent.children[i] as HTMLElement;
+          const rect = child.getBoundingClientRect();
+          const top = rect.top - refTop;
+          const bottom = top + rect.height;
+          if (top < snap && snap < bottom) {
+            if (
+              child.children.length > 0 &&
+              CONTAINER_TAGS.has(child.tagName)
+            ) {
+              snapParent = child;
+              found = true;
+              break;
+            }
+            snap = bottom;
+            found = true;
+            break;
+          }
+        }
+        if (!found) break;
+        if (snap !== overflow) break;
+      }
+      overflow = snap;
+    }
+
+    contentInnerRef.current.style.transform =
+      overflow > 0 ? `translateY(-${overflow}px)` : "translateY(0)";
+  }, [isStreaming, renderContent, content, displayContent, maxLines]);
 
   const handleDownload = () => {
     const sanitizedTitle = title.replace(/[^a-z0-9]/gi, "_").toLowerCase();
@@ -160,25 +232,25 @@ export default function ExpandableTextDisplay({
     const textToDisplay = displayContent ?? content;
 
     if (isStreaming) {
-      // During streaming: use max-height with overflow-auto to create scrollable container,
-      // then scroll to bottom to show latest content (handled by useLayoutEffect above).
-      // We can't use line-clamp here because it sets overflow:hidden and shows from top,
-      // but we need scrollable overflow to show the latest (bottom) content.
+      // During streaming: use max-height with overflow-hidden and CSS transform to shift
+      // content upward, showing the latest content from the bottom without scroll jitter.
       // Line height is approximately 1.5rem (24px) for body text.
       // We show a top ellipsis indicator when content is truncated.
       return (
         <div>
           {isTruncated && (
-            <Text as="span" mainUiMuted text03>
+            <Text as="p" text03 mainUiMuted className="!my-0">
               …
             </Text>
           )}
           <div
             ref={scrollRef}
-            className="overflow-auto no-scrollbar"
+            className="overflow-hidden"
             style={{ maxHeight: `calc(${maxLines} * 1.5rem)` }}
           >
-            {renderContent!(textToDisplay, false)}
+            <div ref={contentInnerRef}>
+              {renderContent!(textToDisplay, false)}
+            </div>
           </div>
         </div>
       );
@@ -234,7 +306,7 @@ export default function ExpandableTextDisplay({
 
         {/* Expand button - only show when content is truncated */}
 
-        <div className="flex justify-end items-end mt-1 w-8">
+        <div className="flex justify-end self-end mt-1 w-8">
           {isTruncated && (
             <Button
               prominence="tertiary"

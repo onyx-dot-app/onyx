@@ -48,6 +48,7 @@ from onyx.server.query_and_chat.streaming_models import TopLevelBranching
 from onyx.tools.built_in_tools import CITEABLE_TOOLS_NAMES
 from onyx.tools.built_in_tools import STOPPING_TOOLS_NAMES
 from onyx.tools.interface import Tool
+from onyx.tools.models import ChatFile
 from onyx.tools.models import MemoryToolResponseSnapshot
 from onyx.tools.models import ToolCallInfo
 from onyx.tools.models import ToolCallKickoff
@@ -56,6 +57,7 @@ from onyx.tools.tool_implementations.images.models import (
     FinalImageGenerationResponse,
 )
 from onyx.tools.tool_implementations.memory.models import MemoryToolResponse
+from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.utils import extract_url_snippet_map
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
@@ -65,6 +67,18 @@ from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+
+
+def _looks_like_xml_tool_call_payload(text: str | None) -> bool:
+    """Detect XML-style marshaled tool calls emitted as plain text."""
+    if not text:
+        return False
+    lowered = text.lower()
+    return (
+        "<function_calls" in lowered
+        and "<invoke" in lowered
+        and "<parameter" in lowered
+    )
 
 
 def _should_keep_bedrock_tool_definitions(
@@ -121,18 +135,36 @@ def _try_fallback_tool_extraction(
     reasoning_but_no_answer_or_tools = (
         llm_step_result.reasoning and not llm_step_result.answer and no_tool_calls
     )
+    xml_tool_call_text_detected = no_tool_calls and (
+        _looks_like_xml_tool_call_payload(llm_step_result.answer)
+        or _looks_like_xml_tool_call_payload(llm_step_result.raw_answer)
+        or _looks_like_xml_tool_call_payload(llm_step_result.reasoning)
+    )
     should_try_fallback = (
-        tool_choice == ToolChoiceOptions.REQUIRED and no_tool_calls
-    ) or reasoning_but_no_answer_or_tools
+        (tool_choice == ToolChoiceOptions.REQUIRED and no_tool_calls)
+        or reasoning_but_no_answer_or_tools
+        or xml_tool_call_text_detected
+    )
 
     if not should_try_fallback:
         return llm_step_result, False
 
     # Try to extract from answer first, then fall back to reasoning
     extracted_tool_calls: list[ToolCallKickoff] = []
+
     if llm_step_result.answer:
         extracted_tool_calls = extract_tool_calls_from_response_text(
             response_text=llm_step_result.answer,
+            tool_definitions=tool_defs,
+            placement=Placement(turn_index=turn_index),
+        )
+    if (
+        not extracted_tool_calls
+        and llm_step_result.raw_answer
+        and llm_step_result.raw_answer != llm_step_result.answer
+    ):
+        extracted_tool_calls = extract_tool_calls_from_response_text(
+            response_text=llm_step_result.raw_answer,
             tool_definitions=tool_defs,
             placement=Placement(turn_index=turn_index),
         )
@@ -142,17 +174,17 @@ def _try_fallback_tool_extraction(
             tool_definitions=tool_defs,
             placement=Placement(turn_index=turn_index),
         )
-
     if extracted_tool_calls:
         logger.info(
             f"Extracted {len(extracted_tool_calls)} tool call(s) from response text "
-            f"as fallback (tool_choice was REQUIRED but no tool calls returned)"
+            "as fallback"
         )
         return (
             LlmStepResult(
                 reasoning=llm_step_result.reasoning,
                 answer=llm_step_result.answer,
                 tool_calls=extracted_tool_calls,
+                raw_answer=llm_step_result.raw_answer,
             ),
             True,
         )
@@ -450,7 +482,42 @@ def construct_message_history(
     if reminder_message:
         result.append(reminder_message)
 
-    return result
+    return _drop_orphaned_tool_call_responses(result)
+
+
+def _drop_orphaned_tool_call_responses(
+    messages: list[ChatMessageSimple],
+) -> list[ChatMessageSimple]:
+    """Drop tool response messages whose tool_call_id is not in prior assistant tool calls.
+
+    This can happen when history truncation drops an ASSISTANT tool-call message but
+    leaves a later TOOL_CALL_RESPONSE message in context. Some providers (e.g. Ollama)
+    reject such history with an "unexpected tool call id" error.
+    """
+    known_tool_call_ids: set[str] = set()
+    sanitized: list[ChatMessageSimple] = []
+
+    for msg in messages:
+        if msg.message_type == MessageType.ASSISTANT and msg.tool_calls:
+            for tool_call in msg.tool_calls:
+                known_tool_call_ids.add(tool_call.tool_call_id)
+            sanitized.append(msg)
+            continue
+
+        if msg.message_type == MessageType.TOOL_CALL_RESPONSE:
+            if msg.tool_call_id and msg.tool_call_id in known_tool_call_ids:
+                sanitized.append(msg)
+            else:
+                logger.debug(
+                    "Dropping orphaned tool response with tool_call_id=%s while "
+                    "constructing message history",
+                    msg.tool_call_id,
+                )
+            continue
+
+        sanitized.append(msg)
+
+    return sanitized
 
 
 def _create_file_tool_metadata_message(
@@ -525,6 +592,7 @@ def run_llm_loop(
     forced_tool_id: int | None = None,
     user_identity: LLMUserIdentity | None = None,
     chat_session_id: str | None = None,
+    chat_files: list[ChatFile] | None = None,
     include_citations: bool = True,
     all_injected_file_metadata: dict[str, FileToolMetadata] | None = None,
     inject_memories_in_prompt: bool = True,
@@ -584,6 +652,7 @@ def run_llm_loop(
         ran_image_gen: bool = False
         just_ran_web_search: bool = False
         has_called_search_tool: bool = False
+        code_interpreter_file_generated: bool = False
         fallback_extraction_attempted: bool = False
         citation_mapping: dict[int, str] = {}  # Maps citation_num -> document_id/URL
 
@@ -694,6 +763,7 @@ def run_llm_loop(
                     ),
                     include_citation_reminder=should_cite_documents
                     or always_cite_documents,
+                    include_file_reminder=code_interpreter_file_generated,
                     is_last_cycle=out_of_cycles,
                 )
 
@@ -806,6 +876,7 @@ def run_llm_loop(
                 next_citation_num=citation_processor.get_next_citation_number(),
                 max_concurrent_tools=None,
                 skip_search_query_expansion=has_called_search_tool,
+                chat_files=chat_files,
                 url_snippet_map=extract_url_snippet_map(gathered_documents or []),
                 inject_memories_in_prompt=inject_memories_in_prompt,
             )
@@ -831,6 +902,18 @@ def run_llm_loop(
                 # Track if search tool was called (for skipping query expansion on subsequent calls)
                 if tool_call.tool_name == SearchTool.NAME:
                     has_called_search_tool = True
+
+                # Track if code interpreter generated files with download links
+                if (
+                    tool_call.tool_name == PythonTool.NAME
+                    and not code_interpreter_file_generated
+                ):
+                    try:
+                        parsed = json.loads(tool_response.llm_facing_response)
+                        if parsed.get("generated_files"):
+                            code_interpreter_file_generated = True
+                    except (json.JSONDecodeError, AttributeError):
+                        pass
 
                 # Build a mapping of tool names to tool objects for getting tool_id
                 tools_by_name = {tool.name: tool for tool in final_tools}

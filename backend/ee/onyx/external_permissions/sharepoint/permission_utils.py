@@ -1,9 +1,13 @@
 import re
+import time
 from collections import deque
+from collections.abc import Callable
+from collections.abc import Generator
 from typing import Any
 from urllib.parse import unquote
 from urllib.parse import urlparse
 
+import requests as _requests
 from office365.graph_client import GraphClient  # type: ignore[import-untyped]
 from office365.onedrive.driveitems.driveItem import DriveItem  # type: ignore[import-untyped]
 from office365.runtime.client_request import ClientRequestException  # type: ignore
@@ -14,7 +18,10 @@ from pydantic import BaseModel
 from ee.onyx.db.external_perm import ExternalUserGroup
 from onyx.access.models import ExternalAccess
 from onyx.access.utils import build_ext_group_name_for_onyx
+from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.sharepoint.connector import GRAPH_API_MAX_RETRIES
+from onyx.connectors.sharepoint.connector import GRAPH_API_RETRYABLE_STATUSES
 from onyx.connectors.sharepoint.connector import SHARED_DOCUMENTS_MAP_REVERSE
 from onyx.connectors.sharepoint.connector import sleep_and_retry
 from onyx.utils.logger import setup_logger
@@ -31,6 +38,70 @@ MICROSOFT_DOMAIN = ".onmicrosoft"
 # Limited Access role type, limited access is a travel through permission not a actual permission
 LIMITED_ACCESS_ROLE_TYPES = [1, 9]
 LIMITED_ACCESS_ROLE_NAMES = ["Limited Access", "Web-Only Limited Access"]
+
+
+AD_GROUP_ENUMERATION_THRESHOLD = 100_000
+
+
+def _graph_api_get(
+    url: str,
+    get_access_token: Callable[[], str],
+    params: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Authenticated Graph API GET with retry on transient errors."""
+    for attempt in range(GRAPH_API_MAX_RETRIES + 1):
+        access_token = get_access_token()
+        headers = {"Authorization": f"Bearer {access_token}"}
+        try:
+            resp = _requests.get(
+                url, headers=headers, params=params, timeout=REQUEST_TIMEOUT_SECONDS
+            )
+            if (
+                resp.status_code in GRAPH_API_RETRYABLE_STATUSES
+                and attempt < GRAPH_API_MAX_RETRIES
+            ):
+                wait = min(int(resp.headers.get("Retry-After", str(2**attempt))), 60)
+                logger.warning(
+                    f"Graph API {resp.status_code} on attempt {attempt + 1}, "
+                    f"retrying in {wait}s: {url}"
+                )
+                time.sleep(wait)
+                continue
+            resp.raise_for_status()
+            return resp.json()
+        except (_requests.ConnectionError, _requests.Timeout, _requests.HTTPError):
+            if attempt < GRAPH_API_MAX_RETRIES:
+                wait = min(2**attempt, 60)
+                logger.warning(
+                    f"Graph API connection error on attempt {attempt + 1}, "
+                    f"retrying in {wait}s: {url}"
+                )
+                time.sleep(wait)
+                continue
+            raise
+    raise RuntimeError(
+        f"Graph API request failed after {GRAPH_API_MAX_RETRIES + 1} attempts: {url}"
+    )
+
+
+def _iter_graph_collection(
+    initial_url: str,
+    get_access_token: Callable[[], str],
+    params: dict[str, str] | None = None,
+) -> Generator[dict[str, Any], None, None]:
+    """Paginate through a Graph API collection, yielding items one at a time."""
+    url: str | None = initial_url
+    while url:
+        data = _graph_api_get(url, get_access_token, params)
+        params = None
+        yield from data.get("value", [])
+        url = data.get("@odata.nextLink")
+
+
+def _normalize_email(email: str) -> str:
+    if MICROSOFT_DOMAIN in email:
+        return email.replace(MICROSOFT_DOMAIN, "")
+    return email
 
 
 class SharepointGroup(BaseModel):
@@ -572,8 +643,65 @@ def get_external_access_from_sharepoint(
     )
 
 
+def _enumerate_ad_groups_paginated(
+    get_access_token: Callable[[], str],
+    already_resolved: set[str],
+    graph_api_base: str,
+) -> Generator[ExternalUserGroup, None, None]:
+    """Paginate through all Azure AD groups and yield ExternalUserGroup for each.
+
+    Skips groups whose suffixed name is already in *already_resolved*.
+    Stops early if the number of groups exceeds AD_GROUP_ENUMERATION_THRESHOLD.
+    """
+    groups_url = f"{graph_api_base}/groups"
+    groups_params: dict[str, str] = {"$select": "id,displayName", "$top": "999"}
+    total_groups = 0
+
+    for group_json in _iter_graph_collection(
+        groups_url, get_access_token, groups_params
+    ):
+        group_id: str = group_json.get("id", "")
+        display_name: str = group_json.get("displayName", "")
+        if not group_id or not display_name:
+            continue
+
+        total_groups += 1
+        if total_groups > AD_GROUP_ENUMERATION_THRESHOLD:
+            logger.warning(
+                f"Azure AD group enumeration exceeded {AD_GROUP_ENUMERATION_THRESHOLD} "
+                "groups — stopping to avoid excessive memory/API usage. "
+                "Remaining groups will be resolved from role assignments only."
+            )
+            return
+
+        name = f"{display_name}_{group_id}"
+        if name in already_resolved:
+            continue
+
+        member_emails: list[str] = []
+        members_url = f"{graph_api_base}/groups/{group_id}/members"
+        members_params: dict[str, str] = {
+            "$select": "userPrincipalName,mail",
+            "$top": "999",
+        }
+        for member_json in _iter_graph_collection(
+            members_url, get_access_token, members_params
+        ):
+            email = member_json.get("userPrincipalName") or member_json.get("mail")
+            if email:
+                member_emails.append(_normalize_email(email))
+
+        yield ExternalUserGroup(id=name, user_emails=member_emails)
+
+    logger.info(f"Enumerated {total_groups} Azure AD groups via paginated Graph API")
+
+
 def get_sharepoint_external_groups(
-    client_context: ClientContext, graph_client: GraphClient
+    client_context: ClientContext,
+    graph_client: GraphClient,
+    graph_api_base: str,
+    get_access_token: Callable[[], str] | None = None,
+    enumerate_all_ad_groups: bool = False,
 ) -> list[ExternalUserGroup]:
 
     groups: set[SharepointGroup] = set()
@@ -629,57 +757,22 @@ def get_sharepoint_external_groups(
         client_context, graph_client, groups, is_group_sync=True
     )
 
-    # get all Azure AD groups because if any group is assigned to the drive item, we don't want to miss them
-    # We can't assign sharepoint groups to drive items or drives, so we don't need to get all sharepoint groups
-    azure_ad_groups = sleep_and_retry(
-        graph_client.groups.get_all(page_loaded=lambda _: None),
-        "get_sharepoint_external_groups:get_azure_ad_groups",
-    )
-    logger.info(f"Azure AD Groups: {len(azure_ad_groups)}")
-    identified_groups: set[str] = set(groups_and_members.groups_to_emails.keys())
-    ad_groups_to_emails: dict[str, set[str]] = {}
-    for group in azure_ad_groups:
-        # If the group is already identified, we don't need to get the members
-        if group.display_name in identified_groups:
-            continue
-        # AD groups allows same display name for multiple groups, so we need to add the GUID to the name
-        name = group.display_name
-        name = _get_group_name_with_suffix(group.id, name, graph_client)
+    external_user_groups: list[ExternalUserGroup] = [
+        ExternalUserGroup(id=group_name, user_emails=list(emails))
+        for group_name, emails in groups_and_members.groups_to_emails.items()
+    ]
 
-        members = sleep_and_retry(
-            group.members.get_all(page_loaded=lambda _: None),
-            "get_sharepoint_external_groups:get_azure_ad_groups:get_members",
+    if not enumerate_all_ad_groups or get_access_token is None:
+        logger.info(
+            "Skipping exhaustive Azure AD group enumeration. "
+            "Only groups found in site role assignments are included."
         )
-        for member in members:
-            member_data = member.to_json()
-            user_principal_name = member_data.get("userPrincipalName")
-            mail = member_data.get("mail")
-            if not ad_groups_to_emails.get(name):
-                ad_groups_to_emails[name] = set()
-            if user_principal_name:
-                if MICROSOFT_DOMAIN in user_principal_name:
-                    user_principal_name = user_principal_name.replace(
-                        MICROSOFT_DOMAIN, ""
-                    )
-                ad_groups_to_emails[name].add(user_principal_name)
-            elif mail:
-                if MICROSOFT_DOMAIN in mail:
-                    mail = mail.replace(MICROSOFT_DOMAIN, "")
-                ad_groups_to_emails[name].add(mail)
+        return external_user_groups
 
-    external_user_groups: list[ExternalUserGroup] = []
-    for group_name, emails in groups_and_members.groups_to_emails.items():
-        external_user_group = ExternalUserGroup(
-            id=group_name,
-            user_emails=list(emails),
-        )
-        external_user_groups.append(external_user_group)
-
-    for group_name, emails in ad_groups_to_emails.items():
-        external_user_group = ExternalUserGroup(
-            id=group_name,
-            user_emails=list(emails),
-        )
-        external_user_groups.append(external_user_group)
+    already_resolved = set(groups_and_members.groups_to_emails.keys())
+    for group in _enumerate_ad_groups_paginated(
+        get_access_token, already_resolved, graph_api_base
+    ):
+        external_user_groups.append(group)
 
     return external_user_groups

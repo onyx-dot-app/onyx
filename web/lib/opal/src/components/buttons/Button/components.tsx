@@ -4,25 +4,20 @@ import {
   Interactive,
   type InteractiveBaseProps,
   type InteractiveContainerHeightVariant,
+  type InteractiveContainerWidthVariant,
 } from "@opal/core";
 import type { TooltipSide } from "@opal/components";
 import type { IconFunctionComponent } from "@opal/types";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import { cn } from "@opal/utils";
 
-const iconPaddingInRemVariants = {
-  lg: "p-0.5",
-  md: "p-0.5",
-  sm: "p-0",
-  xs: "p-0.5",
-  fit: "p-0.5",
-} as const;
-const iconSizeInRemVariants = {
-  lg: 1,
-  md: 1,
-  sm: 1,
-  xs: 0.75,
-  fit: 1,
+const iconVariants = {
+  lg: { padding: "p-0.5", size: 1 },
+  md: { padding: "p-0.5", size: 1 },
+  sm: { padding: "p-0", size: 1 },
+  xs: { padding: "p-0.5", size: 0.75 },
+  "2xs": { padding: "p-0", size: 0.75 },
+  fit: { padding: "p-0.5", size: 1 },
 } as const;
 
 function iconWrapper(
@@ -30,8 +25,7 @@ function iconWrapper(
   size: InteractiveContainerHeightVariant,
   includeSpacer: boolean
 ) {
-  const p = iconPaddingInRemVariants[size];
-  const s = iconSizeInRemVariants[size];
+  const { padding: p, size: s } = iconVariants[size];
 
   return Icon ? (
     <div className={cn("interactive-foreground-icon", p)}>
@@ -90,6 +84,9 @@ type ButtonProps = InteractiveBaseProps &
     /** Tooltip text shown on hover. */
     tooltip?: string;
 
+    /** Width preset. `"auto"` shrink-wraps, `"full"` stretches to parent width. */
+    width?: InteractiveContainerWidthVariant;
+
     /** Which side the tooltip appears on. */
     tooltipSide?: TooltipSide;
   };
@@ -105,6 +102,7 @@ function Button({
   size = "lg",
   foldable,
   type = "button",
+  width,
   tooltip,
   tooltipSide = "top",
   ...interactiveBaseProps
@@ -128,7 +126,10 @@ function Button({
         type={type}
         border={interactiveBaseProps.prominence === "secondary"}
         heightVariant={size}
-        roundingVariant={isLarge ? "default" : "compact"}
+        widthVariant={width}
+        roundingVariant={
+          isLarge ? "default" : size === "2xs" ? "mini" : "compact"
+        }
       >
         <div
           className={cn(

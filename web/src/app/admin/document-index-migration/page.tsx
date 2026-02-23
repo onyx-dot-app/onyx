@@ -15,6 +15,7 @@ interface MigrationStatus {
   total_chunks_migrated: number;
   created_at: string | null;
   migration_completed_at: string | null;
+  approx_chunk_count_in_vespa: number | null;
 }
 
 interface RetrievalStatus {
@@ -55,6 +56,17 @@ function MigrationStatusSection() {
 
   const hasStarted = data?.created_at != null;
   const hasCompleted = data?.migration_completed_at != null;
+  const isOngoing = hasStarted && !hasCompleted;
+
+  const totalChunksMigrated = data?.total_chunks_migrated ?? 0;
+  const approxTotalChunks = data?.approx_chunk_count_in_vespa;
+
+  // Calculate percentage progress if migration is ongoing and we have approx
+  // total chunks.
+  const shouldShowProgress = isOngoing && approxTotalChunks;
+  const progressPercentage = shouldShowProgress
+    ? Math.min(99, (totalChunksMigrated / approxTotalChunks) * 100)
+    : null;
 
   return (
     <Card>
@@ -74,7 +86,13 @@ function MigrationStatusSection() {
         title="Chunks Migrated"
         variant="secondary"
         rightChildren={
-          <Text mainUiBody>{String(data?.total_chunks_migrated ?? 0)}</Text>
+          <Text mainUiBody>
+            {progressPercentage !== null
+              ? `${totalChunksMigrated} (approx. progress ${Math.round(
+                  progressPercentage
+                )}%)`
+              : String(totalChunksMigrated)}
+          </Text>
         }
       />
 

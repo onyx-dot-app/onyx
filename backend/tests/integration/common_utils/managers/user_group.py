@@ -5,7 +5,6 @@ import requests
 
 from ee.onyx.server.user_group.models import UserGroup
 from tests.integration.common_utils.constants import API_SERVER_URL
-from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.constants import MAX_DELAY
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.common_utils.test_models import DATestUserGroup
@@ -14,10 +13,10 @@ from tests.integration.common_utils.test_models import DATestUserGroup
 class UserGroupManager:
     @staticmethod
     def create(
+        user_performing_action: DATestUser,
         name: str | None = None,
         user_ids: list[str] | None = None,
         cc_pair_ids: list[int] | None = None,
-        user_performing_action: DATestUser | None = None,
     ) -> DATestUserGroup:
         name = f"{name}-user-group" if name else f"test-user-group-{uuid4()}"
 
@@ -29,11 +28,7 @@ class UserGroupManager:
         response = requests.post(
             f"{API_SERVER_URL}/manage/admin/user-group",
             json=request,
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         response.raise_for_status()
         test_user_group = DATestUserGroup(
@@ -47,31 +42,23 @@ class UserGroupManager:
     @staticmethod
     def edit(
         user_group: DATestUserGroup,
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> None:
         response = requests.patch(
             f"{API_SERVER_URL}/manage/admin/user-group/{user_group.id}",
             json=user_group.model_dump(),
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         response.raise_for_status()
 
     @staticmethod
     def delete(
         user_group: DATestUserGroup,
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> None:
         response = requests.delete(
             f"{API_SERVER_URL}/manage/admin/user-group/{user_group.id}",
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         response.raise_for_status()
 
@@ -79,7 +66,7 @@ class UserGroupManager:
     def add_users(
         user_group: DATestUserGroup,
         user_ids: list[str],
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> DATestUserGroup:
         request = {
             "user_ids": user_ids,
@@ -88,11 +75,7 @@ class UserGroupManager:
         response = requests.post(
             f"{API_SERVER_URL}/manage/admin/user-group/{user_group.id}/add-users",
             json=request,
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         response.raise_for_status()
 
@@ -107,8 +90,8 @@ class UserGroupManager:
     def set_curator_status(
         test_user_group: DATestUserGroup,
         user_to_set_as_curator: DATestUser,
+        user_performing_action: DATestUser,
         is_curator: bool = True,
-        user_performing_action: DATestUser | None = None,
     ) -> None:
         set_curator_request = {
             "user_id": user_to_set_as_curator.id,
@@ -117,25 +100,17 @@ class UserGroupManager:
         response = requests.post(
             f"{API_SERVER_URL}/manage/admin/user-group/{test_user_group.id}/set-curator",
             json=set_curator_request,
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         response.raise_for_status()
 
     @staticmethod
     def get_all(
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> list[UserGroup]:
         response = requests.get(
             f"{API_SERVER_URL}/manage/admin/user-group",
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         response.raise_for_status()
         return [UserGroup(**ug) for ug in response.json()]
@@ -143,8 +118,8 @@ class UserGroupManager:
     @staticmethod
     def verify(
         user_group: DATestUserGroup,
+        user_performing_action: DATestUser,
         verify_deleted: bool = False,
-        user_performing_action: DATestUser | None = None,
     ) -> None:
         all_user_groups = UserGroupManager.get_all(user_performing_action)
         for fetched_user_group in all_user_groups:
@@ -167,8 +142,8 @@ class UserGroupManager:
 
     @staticmethod
     def wait_for_sync(
+        user_performing_action: DATestUser,
         user_groups_to_check: list[DATestUserGroup] | None = None,
-        user_performing_action: DATestUser | None = None,
     ) -> None:
         start = time.time()
         while True:
@@ -198,7 +173,7 @@ class UserGroupManager:
     @staticmethod
     def wait_for_deletion_completion(
         user_groups_to_check: list[DATestUserGroup],
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> None:
         start = time.time()
         user_group_ids_to_check = {user_group.id for user_group in user_groups_to_check}

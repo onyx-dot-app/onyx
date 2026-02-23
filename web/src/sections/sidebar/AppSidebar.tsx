@@ -46,6 +46,7 @@ import { cn } from "@/lib/utils";
 import {
   DRAG_TYPES,
   DEFAULT_PERSONA_ID,
+  FEATURE_FLAGS,
   LOCAL_STORAGE_KEYS,
 } from "@/sections/sidebar/constants";
 import { showErrorNotification, handleMoveOperation } from "./sidebarUtils";
@@ -71,10 +72,7 @@ import BuildModeIntroContent from "@/app/craft/components/IntroContent";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
 import { usePostHog } from "posthog-js/react";
 import { motion, AnimatePresence } from "motion/react";
-import {
-  Notification,
-  NotificationType,
-} from "@/app/admin/settings/interfaces";
+import { Notification, NotificationType } from "@/interfaces/settings";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import UserAvatarPopover from "@/sections/sidebar/UserAvatarPopover";
 import ChatSearchCommandMenu from "@/sections/sidebar/ChatSearchCommandMenu";
@@ -220,18 +218,28 @@ const MemoizedAppSidebarInner = memo(
 
     // Auto-show intro once when there's an undismissed notification
     // Don't show if tenant/invitation modal is open (e.g., "join existing team" modal)
+    // Gated by PostHog feature flag: if `craft-animation-disabled` is true (or
+    // PostHog is unavailable), skip the auto-show entirely.
+    const isCraftAnimationDisabled =
+      posthog?.isFeatureEnabled(FEATURE_FLAGS.CRAFT_ANIMATION_DISABLED) ?? true;
     const hasTenantModal = !!(newTenantInfo || invitationInfo);
     useEffect(() => {
       if (
         isOnyxCraftEnabled &&
         buildModeNotification &&
         !hasAutoTriggeredRef.current &&
-        !hasTenantModal
+        !hasTenantModal &&
+        !isCraftAnimationDisabled
       ) {
         hasAutoTriggeredRef.current = true;
         setShowIntroAnimation(true);
       }
-    }, [buildModeNotification, isOnyxCraftEnabled, hasTenantModal]);
+    }, [
+      buildModeNotification,
+      isOnyxCraftEnabled,
+      hasTenantModal,
+      isCraftAnimationDisabled,
+    ]);
 
     // Dismiss the build mode notification
     const dismissBuildModeNotification = useCallback(async () => {

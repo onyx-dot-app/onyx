@@ -839,6 +839,42 @@ export const connectorConfigs: Record<
         description:
           "Index aspx-pages of all SharePoint sites defined above, even if a library or folder is specified.",
       },
+      {
+        type: "text",
+        query: "Microsoft Authority Host:",
+        label: "Authority Host",
+        name: "authority_host",
+        optional: true,
+        default: "https://login.microsoftonline.com",
+        description:
+          "The Microsoft identity authority host used for authentication. " +
+          "For most deployments, leave as default. " +
+          "For GCC High / DoD, use https://login.microsoftonline.us",
+      },
+      {
+        type: "text",
+        query: "Microsoft Graph API Host:",
+        label: "Graph API Host",
+        name: "graph_api_host",
+        optional: true,
+        default: "https://graph.microsoft.com",
+        description:
+          "The Microsoft Graph API host. " +
+          "For most deployments, leave as default. " +
+          "For GCC High / DoD, use https://graph.microsoft.us",
+      },
+      {
+        type: "text",
+        query: "SharePoint Domain Suffix:",
+        label: "SharePoint Domain Suffix",
+        name: "sharepoint_domain_suffix",
+        optional: true,
+        default: "sharepoint.com",
+        description:
+          "The domain suffix for SharePoint sites (e.g. sharepoint.com). " +
+          "For most deployments, leave as default. " +
+          "For GCC High, use sharepoint.us",
+      },
     ],
   },
   teams: {
@@ -853,7 +889,32 @@ export const connectorConfigs: Record<
         description: `Specify 0 or more Teams to index. For example, specifying the Team 'Support' for the 'onyxai' Org will cause us to only index messages sent in channels belonging to the 'Support' Team. If no Teams are specified, all Teams in your organization will be indexed.`,
       },
     ],
-    advanced_values: [],
+    advanced_values: [
+      {
+        type: "text",
+        query: "Microsoft Authority Host:",
+        label: "Authority Host",
+        name: "authority_host",
+        optional: true,
+        default: "https://login.microsoftonline.com",
+        description:
+          "The Microsoft identity authority host used for authentication. " +
+          "For most deployments, leave as default. " +
+          "For GCC High / DoD, use https://login.microsoftonline.us",
+      },
+      {
+        type: "text",
+        query: "Microsoft Graph API Host:",
+        label: "Graph API Host",
+        name: "graph_api_host",
+        optional: true,
+        default: "https://graph.microsoft.com",
+        description:
+          "The Microsoft Graph API host. " +
+          "For most deployments, leave as default. " +
+          "For GCC High / DoD, use https://graph.microsoft.us",
+      },
+    ],
   },
   discourse: {
     description: "Configure Discourse connector",
@@ -1565,19 +1626,48 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
     description: "Configure Airtable connector",
     values: [
       {
-        type: "text",
-        query: "Enter the base ID:",
-        label: "Base ID",
-        name: "base_id",
-        optional: false,
-        description: "The ID of the Airtable base to index.",
-      },
-      {
-        type: "text",
-        query: "Enter the table name or ID:",
-        label: "Table Name or Table ID",
-        name: "table_name_or_id",
-        optional: false,
+        type: "tab",
+        name: "airtable_scope",
+        label: "What should we index from Airtable?",
+        optional: true,
+        tabs: [
+          {
+            value: "everything",
+            label: "Everything",
+            fields: [
+              {
+                type: "string_tab",
+                label: "Everything",
+                name: "everything_description",
+                description:
+                  "This connector will automatically discover and index all bases and tables accessible by your API token.",
+              },
+            ],
+          },
+          {
+            value: "specific",
+            label: "Specific Table",
+            fields: [
+              {
+                type: "text",
+                query: "Paste the Airtable URL:",
+                label: "Airtable URL",
+                name: "airtable_url",
+                optional: false,
+                description:
+                  "Paste the URL from your browser when viewing the table, e.g. https://airtable.com/appXXX/tblYYY/viwZZZ",
+              },
+              {
+                type: "text",
+                label: "Share ID",
+                name: "share_id",
+                optional: true,
+                description:
+                  "Optional. If you want record links to use a shared view URL, put the share ID here e.g. shrkfjEzDmLaDtK83.",
+              },
+            ],
+          },
+        ],
       },
       {
         type: "checkbox",
@@ -1588,24 +1678,7 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
         optional: false,
       },
     ],
-    advanced_values: [
-      {
-        type: "text",
-        label: "View ID",
-        name: "view_id",
-        optional: true,
-        description:
-          "If you need to link to a specific View, put that ID here e.g. viwVUEJjWPd8XYjh8.",
-      },
-      {
-        type: "text",
-        label: "Share ID",
-        name: "share_id",
-        optional: true,
-        description:
-          "If you need to link to a specific Share, put that ID here e.g. shrkfjEzDmLaDtK83.",
-      },
-    ],
+    advanced_values: [],
     overrideDefaultFreq: 60 * 60 * 24,
   },
   highspot: {
@@ -1869,10 +1942,15 @@ export interface SharepointConfig {
   sites?: string[];
   include_site_pages?: boolean;
   include_site_documents?: boolean;
+  authority_host?: string;
+  graph_api_host?: string;
+  sharepoint_domain_suffix?: string;
 }
 
 export interface TeamsConfig {
   teams?: string[];
+  authority_host?: string;
+  graph_api_host?: string;
 }
 
 export interface DiscourseConfig {
@@ -1889,10 +1967,6 @@ export interface DrupalWikiConfig {
   spaces?: string[];
   pages?: string[];
   include_attachments?: boolean;
-}
-
-export interface TeamsConfig {
-  teams?: string[];
 }
 
 export interface ProductboardConfig {}

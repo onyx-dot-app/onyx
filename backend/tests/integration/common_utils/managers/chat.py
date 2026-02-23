@@ -12,13 +12,11 @@ from onyx.context.search.models import SavedSearchDoc
 from onyx.context.search.models import SearchDoc
 from onyx.file_store.models import FileDescriptor
 from onyx.llm.override_models import LLMOverride
-from onyx.llm.override_models import PromptOverride
+from onyx.server.query_and_chat.models import AUTO_PLACE_AFTER_LATEST_MESSAGE
 from onyx.server.query_and_chat.models import ChatSessionCreationRequest
-from onyx.server.query_and_chat.models import CreateChatMessageRequest
-from onyx.server.query_and_chat.models import RetrievalDetails
+from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.server.query_and_chat.streaming_models import StreamingType
 from tests.integration.common_utils.constants import API_SERVER_URL
-from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.test_models import DATestChatMessage
 from tests.integration.common_utils.test_models import DATestChatSession
 from tests.integration.common_utils.test_models import DATestUser
@@ -75,9 +73,9 @@ class StreamPacketData(TypedDict, total=False):
 class ChatSessionManager:
     @staticmethod
     def create(
+        user_performing_action: DATestUser,
         persona_id: int = 0,
         description: str = "Test chat session",
-        user_performing_action: DATestUser | None = None,
     ) -> DATestChatSession:
         chat_session_creation_req = ChatSessionCreationRequest(
             persona_id=persona_id, description=description
@@ -85,11 +83,7 @@ class ChatSessionManager:
         response = requests.post(
             f"{API_SERVER_URL}/chat/create-chat-session",
             json=chat_session_creation_req.model_dump(),
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         response.raise_for_status()
         chat_session_id = response.json()["chat_session_id"]
@@ -101,55 +95,38 @@ class ChatSessionManager:
     def send_message(
         chat_session_id: UUID,
         message: str,
+        user_performing_action: DATestUser,
         parent_message_id: int | None = None,
-        user_performing_action: DATestUser | None = None,
         file_descriptors: list[FileDescriptor] | None = None,
-        search_doc_ids: list[int] | None = None,
-        retrieval_options: RetrievalDetails | None = None,
-        query_override: str | None = None,
-        regenerate: bool | None = None,
-        llm_override: LLMOverride | None = None,
-        prompt_override: PromptOverride | None = None,
-        alternate_assistant_id: int | None = None,
-        use_existing_user_message: bool = False,
         allowed_tool_ids: list[int] | None = None,
         forced_tool_ids: list[int] | None = None,
         chat_session: DATestChatSession | None = None,
         mock_llm_response: str | None = None,
         deep_research: bool = False,
+        llm_override: LLMOverride | None = None,
     ) -> StreamedResponse:
-        chat_message_req = CreateChatMessageRequest(
-            chat_session_id=chat_session_id,
-            parent_message_id=parent_message_id,
+        chat_message_req = SendMessageRequest(
             message=message,
+            chat_session_id=chat_session_id,
+            parent_message_id=(
+                parent_message_id
+                if parent_message_id is not None
+                else AUTO_PLACE_AFTER_LATEST_MESSAGE
+            ),
             file_descriptors=file_descriptors or [],
-            search_doc_ids=search_doc_ids or [],
-            retrieval_options=retrieval_options,
-            query_override=query_override,
-            regenerate=regenerate,
-            llm_override=llm_override,
-            mock_llm_response=mock_llm_response,
-            prompt_override=prompt_override,
-            alternate_assistant_id=alternate_assistant_id,
-            use_existing_user_message=use_existing_user_message,
             allowed_tool_ids=allowed_tool_ids,
-            forced_tool_ids=forced_tool_ids,
+            forced_tool_id=forced_tool_ids[0] if forced_tool_ids else None,
+            mock_llm_response=mock_llm_response,
             deep_research=deep_research,
+            llm_override=llm_override,
         )
-
-        headers = (
-            user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS
-        )
-        cookies = user_performing_action.cookies if user_performing_action else None
 
         response = requests.post(
-            f"{API_SERVER_URL}/chat/send-message",
-            json=chat_message_req.model_dump(),
-            headers=headers,
+            f"{API_SERVER_URL}/chat/send-chat-message",
+            json=chat_message_req.model_dump(mode="json"),
+            headers=user_performing_action.headers,
             stream=True,
-            cookies=cookies,
+            cookies=user_performing_action.cookies,
         )
 
         streamed_response = ChatSessionManager.analyze_response(response)
@@ -178,21 +155,15 @@ class ChatSessionManager:
     def send_message_with_disconnect(
         chat_session_id: UUID,
         message: str,
+        user_performing_action: DATestUser,
         disconnect_after_packets: int = 0,
         parent_message_id: int | None = None,
-        user_performing_action: DATestUser | None = None,
         file_descriptors: list[FileDescriptor] | None = None,
-        search_doc_ids: list[int] | None = None,
-        query_override: str | None = None,
-        regenerate: bool | None = None,
-        llm_override: LLMOverride | None = None,
-        prompt_override: PromptOverride | None = None,
-        alternate_assistant_id: int | None = None,
-        use_existing_user_message: bool = False,
         allowed_tool_ids: list[int] | None = None,
         forced_tool_ids: list[int] | None = None,
         mock_llm_response: str | None = None,
         deep_research: bool = False,
+        llm_override: LLMOverride | None = None,
     ) -> None:
         """
         Send a message and simulate client disconnect before stream completes.
@@ -204,50 +175,35 @@ class ChatSessionManager:
             chat_session_id: The chat session ID
             message: The message to send
             disconnect_after_packets: Disconnect after receiving this many packets.
-                If None, disconnect_after_type must be specified.
-            disconnect_after_type: Disconnect after receiving a packet of this type
-                (e.g., "message_start", "search_tool_start"). If None,
-                disconnect_after_packets must be specified.
             ... (other standard message parameters)
 
         Returns:
-            StreamedResponse containing data received before disconnect,
-            with is_disconnected=True flag set.
+            None. Caller can verify server-side cleanup via get_chat_history etc.
         """
-        chat_message_req = CreateChatMessageRequest(
-            chat_session_id=chat_session_id,
-            parent_message_id=parent_message_id,
+        chat_message_req = SendMessageRequest(
             message=message,
+            chat_session_id=chat_session_id,
+            parent_message_id=(
+                parent_message_id
+                if parent_message_id is not None
+                else AUTO_PLACE_AFTER_LATEST_MESSAGE
+            ),
             file_descriptors=file_descriptors or [],
-            search_doc_ids=search_doc_ids or [],
-            retrieval_options=RetrievalDetails(),  # This will be deprecated soon anyway
-            query_override=query_override,
-            regenerate=regenerate,
-            llm_override=llm_override,
-            mock_llm_response=mock_llm_response,
-            prompt_override=prompt_override,
-            alternate_assistant_id=alternate_assistant_id,
-            use_existing_user_message=use_existing_user_message,
             allowed_tool_ids=allowed_tool_ids,
-            forced_tool_ids=forced_tool_ids,
+            forced_tool_id=forced_tool_ids[0] if forced_tool_ids else None,
+            mock_llm_response=mock_llm_response,
             deep_research=deep_research,
+            llm_override=llm_override,
         )
-
-        headers = (
-            user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS
-        )
-        cookies = user_performing_action.cookies if user_performing_action else None
 
         packets_received = 0
 
         with requests.post(
-            f"{API_SERVER_URL}/chat/send-message",
-            json=chat_message_req.model_dump(),
-            headers=headers,
+            f"{API_SERVER_URL}/chat/send-chat-message",
+            json=chat_message_req.model_dump(mode="json"),
+            headers=user_performing_action.headers,
             stream=True,
-            cookies=cookies,
+            cookies=user_performing_action.cookies,
         ) as response:
             for line in response.iter_lines():
                 if not line:
@@ -384,15 +340,11 @@ class ChatSessionManager:
     @staticmethod
     def get_chat_history(
         chat_session: DATestChatSession,
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> list[DATestChatMessage]:
         response = requests.get(
             f"{API_SERVER_URL}/chat/get-chat-session/{chat_session.id}",
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         response.raise_for_status()
 
@@ -412,7 +364,7 @@ class ChatSessionManager:
     def create_chat_message_feedback(
         message_id: int,
         is_positive: bool,
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
         feedback_text: str | None = None,
         predefined_feedback: str | None = None,
     ) -> None:
@@ -424,18 +376,14 @@ class ChatSessionManager:
                 "feedback_text": feedback_text,
                 "predefined_feedback": predefined_feedback,
             },
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         response.raise_for_status()
 
     @staticmethod
     def delete(
         chat_session: DATestChatSession,
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> bool:
         """
         Delete a chat session and all its related records (messages, agent data, etc.)
@@ -445,18 +393,14 @@ class ChatSessionManager:
         """
         response = requests.delete(
             f"{API_SERVER_URL}/chat/delete-chat-session/{chat_session.id}",
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         return response.ok
 
     @staticmethod
     def soft_delete(
         chat_session: DATestChatSession,
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> bool:
         """
         Soft delete a chat session (marks as deleted but keeps in database).
@@ -467,18 +411,14 @@ class ChatSessionManager:
         # or make a direct call with hard_delete=False parameter via a new endpoint
         response = requests.delete(
             f"{API_SERVER_URL}/chat/delete-chat-session/{chat_session.id}?hard_delete=false",
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         return response.ok
 
     @staticmethod
     def hard_delete(
         chat_session: DATestChatSession,
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> bool:
         """
         Hard delete a chat session (completely removes from database).
@@ -487,18 +427,14 @@ class ChatSessionManager:
         """
         response = requests.delete(
             f"{API_SERVER_URL}/chat/delete-chat-session/{chat_session.id}?hard_delete=true",
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         return response.ok
 
     @staticmethod
     def verify_deleted(
         chat_session: DATestChatSession,
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> bool:
         """
         Verify that a chat session has been deleted by attempting to retrieve it.
@@ -507,11 +443,7 @@ class ChatSessionManager:
         """
         response = requests.get(
             f"{API_SERVER_URL}/chat/get-chat-session/{chat_session.id}",
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         # Chat session should return 404 if it doesn't exist or is deleted
         return response.status_code == 404
@@ -519,7 +451,7 @@ class ChatSessionManager:
     @staticmethod
     def verify_soft_deleted(
         chat_session: DATestChatSession,
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> bool:
         """
         Verify that a chat session has been soft deleted (marked as deleted but still in DB).
@@ -529,11 +461,7 @@ class ChatSessionManager:
         # Try to get the chat session with include_deleted=true
         response = requests.get(
             f"{API_SERVER_URL}/chat/get-chat-session/{chat_session.id}?include_deleted=true",
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
 
         if response.status_code == 200:
@@ -545,7 +473,7 @@ class ChatSessionManager:
     @staticmethod
     def verify_hard_deleted(
         chat_session: DATestChatSession,
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> bool:
         """
         Verify that a chat session has been hard deleted (completely removed from DB).
@@ -555,11 +483,7 @@ class ChatSessionManager:
         # Try to get the chat session with include_deleted=true
         response = requests.get(
             f"{API_SERVER_URL}/chat/get-chat-session/{chat_session.id}?include_deleted=true",
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
 
         # For hard delete, even with include_deleted=true, the record should not exist

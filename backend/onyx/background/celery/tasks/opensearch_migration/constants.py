@@ -41,3 +41,14 @@ assert (
 CHECK_FOR_DOCUMENTS_TASK_LOCK_BLOCKING_TIMEOUT_S = 30  # 30 seconds.
 
 TOTAL_ALLOWABLE_DOC_MIGRATION_ATTEMPTS_BEFORE_PERMANENT_FAILURE = 15
+
+# WARNING: Do not change these values without knowing what changes also need to
+# be made to OpenSearchTenantMigrationRecord.
+GET_VESPA_CHUNKS_PAGE_SIZE = 500
+GET_VESPA_CHUNKS_SLICE_COUNT = 4
+
+# String used to indicate in the vespa_visit_continuation_token mapping that the
+# slice has finished and there is nothing left to visit.
+FINISHED_VISITING_SLICE_CONTINUATION_TOKEN = (
+    "FINISHED_VISITING_SLICE_CONTINUATION_TOKEN"
+)

@@ -41,8 +41,7 @@ jobs:
           version: v3.19.0
 
       - name: Set up chart-testing
-        # NOTE: This is Jamison's patch from https://github.com/helm/chart-testing-action/pull/194
-        uses: helm/chart-testing-action@8958a6ac472cbd8ee9a8fbb6f1acbc1b0e966e44 # zizmor: ignore[impostor-commit]
+        uses: helm/chart-testing-action@b5eebdd9998021f29756c53432f48dab66394810
         with:
           uv_version: "0.9.9"
 
@@ -92,7 +91,7 @@ jobs:
           helm repo add cloudnative-pg https://cloudnative-pg.github.io/charts
           helm repo add ot-container-kit https://ot-container-kit.github.io/helm-charts
           helm repo add minio https://charts.min.io/
-          helm repo add code-interpreter https://onyx-dot-app.github.io/code-interpreter/
+          helm repo add code-interpreter https://onyx-dot-app.github.io/python-sandbox/
           helm repo update
 
       - name: Install Redis operator

@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import type { Locator, Page } from "@playwright/test";
-import { loginAs } from "../utils/auth";
-import { OnyxApiClient } from "../utils/onyxApiClient";
+import { loginAs } from "@tests/e2e/utils/auth";
+import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 
 const LLM_SETUP_URL = "/admin/configuration/llm";
 const BASE_URL = process.env.BASE_URL || "http://localhost:3000";
@@ -105,7 +105,7 @@ test.describe("LLM Provider Setup @exclusive", () => {
     await loginAs(page, "admin");
     await page.goto(LLM_SETUP_URL);
     await page.waitForLoadState("networkidle");
-    await expect(page.getByLabel("admin-page-title")).toHaveText("LLM Setup");
+    await expect(page.getByLabel("admin-page-title")).toHaveText(/^LLM Setup/);
   });
 
   test.afterEach(async ({ page }) => {
@@ -160,7 +160,7 @@ test.describe("LLM Provider Setup @exclusive", () => {
     const editModal = await openProviderEditModal(page, providerName);
     const autoUpdateSwitch = editModal.getByRole("switch").first();
     const initialAutoModeState =
-      (await autoUpdateSwitch.getAttribute("data-state")) === "checked";
+      (await autoUpdateSwitch.getAttribute("aria-checked")) === "true";
     await autoUpdateSwitch.click();
 
     const updateButton = editModal.getByRole("button", { name: "Update" });

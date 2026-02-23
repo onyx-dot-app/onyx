@@ -45,30 +45,34 @@ type InteractiveBaseVariantProps =
  * - `"md"` — 1.75rem (28px), standard compact size
  * - `"sm"` — 1.5rem (24px), for denser UIs
  * - `"xs"` — 1.25rem (20px), for inline elements
+ * - `"2xs"` — 1rem (16px), for micro elements
  * - `"fit"` — Shrink-wraps to content height (`h-fit`), for variable-height layouts
  */
 type InteractiveContainerHeightVariant =
-  keyof typeof interactiveContainerHeightVariants;
-const interactiveContainerHeightVariants = {
-  lg: "h-[2.25rem]",
-  md: "h-[1.75rem]",
-  sm: "h-[1.5rem]",
-  xs: "h-[1.25rem]",
-  fit: "h-fit",
+  keyof typeof interactiveContainerSizeVariants;
+const interactiveContainerSizeVariants = {
+  lg: { height: "h-[2.25rem]", minWidth: "min-w-[2.25rem]", padding: "p-2" },
+  md: { height: "h-[1.75rem]", minWidth: "min-w-[1.75rem]", padding: "p-1" },
+  sm: { height: "h-[1.5rem]", minWidth: "min-w-[1.5rem]", padding: "p-1" },
+  xs: {
+    height: "h-[1.25rem]",
+    minWidth: "min-w-[1.25rem]",
+    padding: "p-0.5",
+  },
+  "2xs": { height: "h-[1rem]", minWidth: "min-w-[1rem]", padding: "p-0.5" },
+  fit: { height: "h-fit", minWidth: "", padding: "p-0" },
 } as const;
-const interactiveContainerMinWidthVariants = {
-  lg: "min-w-[2.25rem]",
-  md: "min-w-[1.75rem]",
-  sm: "min-w-[1.5rem]",
-  xs: "min-w-[1.25rem]",
-  fit: "",
-} as const;
-const interactiveContainerPaddingVariants = {
-  lg: "p-2",
-  md: "p-1",
-  sm: "p-1",
-  xs: "p-0.5",
-  fit: "",
+
+/**
+ * Width presets for `Interactive.Container`.
+ *
+ * - `"auto"` — Shrink-wraps to content width (default)
+ * - `"full"` — Stretches to fill the parent's width (`w-full`)
+ */
+type InteractiveContainerWidthVariant = "auto" | "full";
+const interactiveContainerWidthVariants = {
+  auto: "w-auto",
+  full: "w-full",
 } as const;
 
 /**
@@ -82,6 +86,7 @@ type InteractiveContainerRoundingVariant =
 const interactiveContainerRoundingVariants = {
   default: "rounded-12",
   compact: "rounded-08",
+  mini: "rounded-04",
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -149,9 +154,9 @@ interface InteractiveBasePropsBase
   /**
    * URL to navigate to when clicked.
    *
-   * When provided, renders an `<a>` wrapper element instead of using Radix Slot.
-   * The `<a>` receives all interactive styling (hover/active/transient states)
-   * and children are rendered inside it.
+   * Passed through Slot to the child element (typically `Interactive.Container`),
+   * which renders an `<a>` tag when `href` is present. This keeps all styling
+   * (backgrounds, rounding, overflow) on a single element.
    *
    * @example
    * ```tsx
@@ -261,34 +266,32 @@ function InteractiveBase({
     "aria-disabled": disabled || undefined,
   };
 
-  if (href) {
-    const { children, onClick, ...rest } = props;
-    return (
-      <a
-        ref={ref as React.Ref<HTMLAnchorElement>}
-        href={disabled ? undefined : href}
-        target={target}
-        rel={target === "_blank" ? "noopener noreferrer" : undefined}
-        className={classes}
-        {...dataAttrs}
-        {...rest}
-        onClick={
-          disabled ? (e: React.MouseEvent) => e.preventDefault() : onClick
-        }
-      >
-        {children}
-      </a>
-    );
-  }
-
   const { onClick, ...slotProps } = props;
+
+  // href, target, and rel are passed through Slot to the child element
+  // (typically Interactive.Container), which renders an <a> when href is present.
+  const linkAttrs = href
+    ? {
+        href: disabled ? undefined : href,
+        target,
+        rel: target === "_blank" ? "noopener noreferrer" : undefined,
+      }
+    : {};
+
   return (
     <Slot
       ref={ref}
       className={classes}
       {...dataAttrs}
+      {...linkAttrs}
       {...slotProps}
-      onClick={disabled ? undefined : onClick}
+      onClick={
+        disabled && href
+          ? (e: React.MouseEvent) => e.preventDefault()
+          : disabled
+            ? undefined
+            : onClick
+      }
     />
   );
 }
@@ -315,6 +318,8 @@ interface InteractiveContainerProps
    * When provided, renders a `<button>` element instead of a `<div>`.
    * This keeps all styling (background, rounding, height) on a single
    * element — unlike a wrapper approach which would split them.
+   *
+   * Mutually exclusive with `href`.
    *
    * @example
    * ```tsx
@@ -354,11 +359,22 @@ interface InteractiveContainerProps
    * - `"md"` — 1.75rem (28px), standard compact size
    * - `"sm"` — 1.5rem (24px), for denser UIs
    * - `"xs"` — 1.25rem (20px), for inline elements
+   * - `"2xs"` — 1rem (16px), for micro elements
    * - `"fit"` — Shrink-wraps to content height (`h-fit`)
    *
    * @default "lg"
    */
   heightVariant?: InteractiveContainerHeightVariant;
+
+  /**
+   * Width preset controlling the container's horizontal size.
+   *
+   * - `"auto"` — Shrink-wraps to content width
+   * - `"full"` — Stretches to fill the parent's width (`w-full`)
+   *
+   * @default "auto"
+   */
+  widthVariant?: InteractiveContainerWidthVariant;
 }
 
 /**
@@ -377,7 +393,7 @@ interface InteractiveContainerProps
  * // Standard card-like container
  * <Interactive.Base>
  *   <Interactive.Container border>
- *     <LineItemLayout icon={SvgIcon} title="Option" />
+ *     <Content icon={SvgIcon} title="Option" />
  *   </Interactive.Container>
  * </Interactive.Base>
  *
@@ -397,31 +413,56 @@ function InteractiveContainer({
   border,
   roundingVariant = "default",
   heightVariant = "lg",
+  widthVariant = "auto",
   ...props
 }: InteractiveContainerProps) {
-  // Radix Slot injects className and style at runtime (bypassing WithoutStyles),
-  // so we extract and merge them to preserve the Slot-injected values.
+  // Radix Slot injects className, style, href, target, rel, and other
+  // attributes at runtime (bypassing WithoutStyles), so we extract and
+  // merge them to preserve the Slot-injected values.
   const {
     className: slotClassName,
     style: slotStyle,
+    href,
+    target,
+    rel,
     ...rest
   } = props as typeof props & {
     className?: string;
     style?: React.CSSProperties;
+    href?: string;
+    target?: string;
+    rel?: string;
   };
+  const { height, minWidth, padding } =
+    interactiveContainerSizeVariants[heightVariant];
   const sharedProps = {
     ...rest,
     className: cn(
       "interactive-container",
       interactiveContainerRoundingVariants[roundingVariant],
-      interactiveContainerHeightVariants[heightVariant],
-      interactiveContainerMinWidthVariants[heightVariant],
-      interactiveContainerPaddingVariants[heightVariant],
+      height,
+      minWidth,
+      padding,
+      interactiveContainerWidthVariants[widthVariant],
       slotClassName
     ),
     "data-border": border ? ("true" as const) : undefined,
     style: slotStyle,
   };
+
+  // When href is provided (via Slot from Interactive.Base), render an <a>
+  // so all styling (backgrounds, rounding, overflow) lives on one element.
+  if (href) {
+    return (
+      <a
+        ref={ref as React.Ref<HTMLAnchorElement>}
+        href={href}
+        target={target}
+        rel={rel}
+        {...(sharedProps as React.HTMLAttributes<HTMLAnchorElement>)}
+      />
+    );
+  }
 
   if (type) {
     // When Interactive.Base is disabled it injects aria-disabled via Slot.
@@ -480,5 +521,6 @@ export {
   type InteractiveBaseSelectVariantProps,
   type InteractiveContainerProps,
   type InteractiveContainerHeightVariant,
+  type InteractiveContainerWidthVariant,
   type InteractiveContainerRoundingVariant,
 };

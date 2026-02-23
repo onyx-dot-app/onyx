@@ -365,7 +365,8 @@ class CCPairFullInfo(BaseModel):
             in_repeated_error_state=cc_pair_model.in_repeated_error_state,
             num_docs_indexed=num_docs_indexed,
             connector=ConnectorSnapshot.from_connector_db_model(
-                cc_pair_model.connector
+                cc_pair_model.connector,
+                credential_ids=[cc_pair_model.credential_id],
             ),
             credential=CredentialSnapshot.from_credential_db_model(
                 cc_pair_model.credential

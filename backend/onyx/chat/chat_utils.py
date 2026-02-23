@@ -1,36 +1,29 @@
+import json
 import re
 from collections.abc import Callable
 from typing import cast
 from uuid import UUID
 
-from fastapi import HTTPException
 from fastapi.datastructures import Headers
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import is_user_admin
 from onyx.chat.models import ChatHistoryResult
 from onyx.chat.models import ChatLoadedFile
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import FileToolMetadata
-from onyx.chat.models import PersonaOverrideConfig
 from onyx.chat.models import ToolCallSimple
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import TMP_DRALPHA_PERSONA_NAME
-from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.chat import create_chat_session
 from onyx.db.chat import get_chat_messages_by_session
 from onyx.db.chat import get_or_create_root_message
 from onyx.db.kg_config import get_kg_config_settings
 from onyx.db.kg_config import is_kg_config_settings_enabled_valid
-from onyx.db.llm import fetch_existing_doc_sets
-from onyx.db.llm import fetch_existing_tools
 from onyx.db.models import ChatMessage
 from onyx.db.models import ChatSession
 from onyx.db.models import Persona
 from onyx.db.models import SearchDoc as DbSearchDoc
-from onyx.db.models import Tool
-from onyx.db.models import User
 from onyx.db.models import UserFile
 from onyx.db.projects import check_project_ownership
 from onyx.file_processing.extract_file_text import extract_file_text
@@ -47,15 +40,13 @@ from onyx.prompts.tool_prompts import TOOL_CALL_FAILURE_PROMPT
 from onyx.server.query_and_chat.models import ChatSessionCreationRequest
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.tools.models import ToolCallKickoff
-from onyx.tools.tool_implementations.custom.custom_tool import (
-    build_custom_tools_from_openapi_schema_and_headers,
-)
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from onyx.utils.timing import log_function_time
 
 
 logger = setup_logger()
+IMAGE_GENERATION_TOOL_NAME = "generate_image"
 
 
 def create_chat_session_from_request(
@@ -278,70 +269,6 @@ def extract_headers(
     return extracted_headers
 
 
-def create_temporary_persona(
-    persona_config: PersonaOverrideConfig, db_session: Session, user: User
-) -> Persona:
-    if not is_user_admin(user):
-        raise HTTPException(
-            status_code=403,
-            detail="User is not authorized to create a persona in one shot queries",
-        )
-
-    """Create a temporary Persona object from the provided configuration."""
-    persona = Persona(
-        name=persona_config.name,
-        description=persona_config.description,
-        num_chunks=persona_config.num_chunks,
-        llm_relevance_filter=persona_config.llm_relevance_filter,
-        llm_filter_extraction=persona_config.llm_filter_extraction,
-        recency_bias=RecencyBiasSetting.BASE_DECAY,
-        llm_model_provider_override=persona_config.llm_model_provider_override,
-        llm_model_version_override=persona_config.llm_model_version_override,
-    )
-
-    if persona_config.prompts:
-        # Use the first prompt from the override config for embedded prompt fields
-        first_prompt = persona_config.prompts[0]
-        persona.system_prompt = first_prompt.system_prompt
-        persona.task_prompt = first_prompt.task_prompt
-        persona.datetime_aware = first_prompt.datetime_aware
-
-    persona.tools = []
-    if persona_config.custom_tools_openapi:
-        from onyx.chat.emitter import get_default_emitter
-
-        for schema in persona_config.custom_tools_openapi:
-            tools = cast(
-                list[Tool],
-                build_custom_tools_from_openapi_schema_and_headers(
-                    tool_id=0,  # dummy tool id
-                    openapi_schema=schema,
-                    emitter=get_default_emitter(),
-                ),
-            )
-            persona.tools.extend(tools)
-
-    if persona_config.tools:
-        tool_ids = [tool.id for tool in persona_config.tools]
-        persona.tools.extend(
-            fetch_existing_tools(db_session=db_session, tool_ids=tool_ids)
-        )
-
-    if persona_config.tool_ids:
-        persona.tools.extend(
-            fetch_existing_tools(
-                db_session=db_session, tool_ids=persona_config.tool_ids
-            )
-        )
-
-    fetched_docs = fetch_existing_doc_sets(
-        db_session=db_session, doc_ids=persona_config.document_set_ids
-    )
-    persona.document_sets = fetched_docs
-
-    return persona
-
-
 def process_kg_commands(
     message: str, persona_name: str, tenant_id: str, db_session: Session  # noqa: ARG001
 ) -> None:
@@ -495,6 +422,40 @@ def convert_chat_history_basic(
         total_tokens += msg.token_count
 
     return list(reversed(trimmed_reversed))
+
+
+def _build_tool_call_response_history_message(
+    tool_name: str,
+    generated_images: list[dict] | None,
+    tool_call_response: str | None,
+) -> str:
+    if tool_name != IMAGE_GENERATION_TOOL_NAME:
+        return TOOL_CALL_RESPONSE_CROSS_MESSAGE
+
+    if generated_images:
+        llm_image_context: list[dict[str, str]] = []
+        for image in generated_images:
+            file_id = image.get("file_id")
+            revised_prompt = image.get("revised_prompt")
+            if not isinstance(file_id, str):
+                continue
+
+            llm_image_context.append(
+                {
+                    "file_id": file_id,
+                    "revised_prompt": (
+                        revised_prompt if isinstance(revised_prompt, str) else ""
+                    ),
+                }
+            )
+
+        if llm_image_context:
+            return json.dumps(llm_image_context)
+
+    if tool_call_response:
+        return tool_call_response
+
+    return TOOL_CALL_RESPONSE_CROSS_MESSAGE
 
 
 def convert_chat_history(
@@ -657,10 +618,24 @@ def convert_chat_history(
 
                     # Add TOOL_CALL_RESPONSE messages for each tool call in this turn
                     for tool_call in turn_tool_calls:
+                        tool_name = tool_id_to_name_map.get(
+                            tool_call.tool_id, "unknown"
+                        )
+                        tool_response_message = (
+                            _build_tool_call_response_history_message(
+                                tool_name=tool_name,
+                                generated_images=tool_call.generated_images,
+                                tool_call_response=tool_call.tool_call_response,
+                            )
+                        )
                         simple_messages.append(
                             ChatMessageSimple(
-                                message=TOOL_CALL_RESPONSE_CROSS_MESSAGE,
-                                token_count=20,  # Tiny overestimate
+                                message=tool_response_message,
+                                token_count=(
+                                    token_counter(tool_response_message)
+                                    if tool_name == IMAGE_GENERATION_TOOL_NAME
+                                    else 20
+                                ),
                                 message_type=MessageType.TOOL_CALL_RESPONSE,
                                 tool_call_id=tool_call.tool_call_id,
                                 image_files=None,

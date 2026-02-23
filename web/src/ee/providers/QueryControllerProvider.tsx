@@ -11,6 +11,7 @@ import { classifyQuery, searchDocuments } from "@/ee/lib/search/svc";
 import { useAppMode } from "@/providers/AppModeProvider";
 import useAppFocus from "@/hooks/useAppFocus";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { useSettingsContext } from "@/providers/SettingsProvider";
 import {
   QueryControllerContext,
   QueryClassification,
@@ -27,6 +28,8 @@ export function QueryControllerProvider({
   const { appMode, setAppMode } = useAppMode();
   const appFocus = useAppFocus();
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
+  const settings = useSettingsContext();
+  const { isSearchModeAvailable: searchUiEnabled } = settings;
 
   // Query state
   const [query, setQuery] = useState<string | null>(null);
@@ -149,13 +152,17 @@ export function QueryControllerProvider({
       // We always route through chat if we're not Enterprise Enabled.
       //
       // 2.
+      // We always route through chat if the admin has disabled the Search UI.
+      //
+      // 3.
       // We only go down the classification route if we're in the "New Session" tab.
       // Everywhere else, we always use the chat-flow.
       //
-      // 3.
+      // 4.
       // If we're in the "New Session" tab and the app-mode is "Chat", we continue with the chat-flow anyways.
       if (
         !isPaidEnterpriseFeaturesEnabled ||
+        !searchUiEnabled ||
         !appFocus.isNewSession() ||
         appMode === "chat"
       ) {
@@ -218,6 +225,7 @@ export function QueryControllerProvider({
       performClassification,
       performSearch,
       isPaidEnterpriseFeaturesEnabled,
+      searchUiEnabled,
     ]
   );
 

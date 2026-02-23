@@ -55,7 +55,9 @@ class Settings(BaseModel):
     gpu_enabled: bool | None = None
     application_status: ApplicationStatus = ApplicationStatus.ACTIVE
     anonymous_user_enabled: bool | None = None
+    invite_only_enabled: bool = False
     deep_research_enabled: bool | None = None
+    search_ui_enabled: bool | None = None
 
     # Enterprise features flag - set by license enforcement at runtime
     # When LICENSE_ENFORCEMENT_ENABLED=true, this reflects license status

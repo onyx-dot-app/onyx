@@ -22,7 +22,7 @@ const NameStep = React.memo(
 
     const isActive = onboardingState.currentStep === OnboardingStep.Name;
     const containerClasses = cn(
-      "flex items-center justify-between w-full max-w-[800px] p-3 bg-background-tint-00 rounded-16 border border-border-01"
+      "flex items-center justify-between w-full p-3 bg-background-tint-00 rounded-16 border border-border-01"
     );
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -38,6 +38,7 @@ const NameStep = React.memo(
         className={containerClasses}
         onClick={() => inputRef.current?.focus()}
         role="group"
+        aria-label="onboarding-name-step"
       >
         <div className="flex items-center gap-1 h-full">
           <div className="h-full p-0.5">

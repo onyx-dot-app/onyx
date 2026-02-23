@@ -6,7 +6,6 @@ from uuid import uuid4
 import requests
 
 from tests.integration.common_utils.constants import API_SERVER_URL
-from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.test_models import DATestImageGenerationConfig
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -26,6 +25,7 @@ def _serialize_custom_config(
 class ImageGenerationConfigManager:
     @staticmethod
     def create(
+        user_performing_action: DATestUser,
         image_provider_id: str | None = None,
         model_name: str = "gpt-image-1",
         provider: str = "openai",
@@ -35,7 +35,6 @@ class ImageGenerationConfigManager:
         deployment_name: str | None = None,
         custom_config: dict[str, Any] | None = None,
         is_default: bool = False,
-        user_performing_action: DATestUser | None = None,
     ) -> DATestImageGenerationConfig:
         """Create a new image generation config with new credentials."""
         image_provider_id = image_provider_id or f"test-provider-{uuid4()}"
@@ -53,11 +52,7 @@ class ImageGenerationConfigManager:
                 "custom_config": _serialize_custom_config(custom_config),
                 "is_default": is_default,
             },
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         response.raise_for_status()
         data = response.json()
@@ -74,13 +69,13 @@ class ImageGenerationConfigManager:
     @staticmethod
     def create_from_provider(
         source_llm_provider_id: int,
+        user_performing_action: DATestUser,
         image_provider_id: str | None = None,
         model_name: str = "gpt-image-1",
         api_base: str | None = None,
         api_version: str | None = None,
         deployment_name: str | None = None,
         is_default: bool = False,
-        user_performing_action: DATestUser | None = None,
     ) -> DATestImageGenerationConfig:
         """Create a new image generation config by cloning from an existing LLM provider."""
         image_provider_id = image_provider_id or f"test-provider-{uuid4()}"
@@ -96,11 +91,7 @@ class ImageGenerationConfigManager:
                 "deployment_name": deployment_name,
                 "is_default": is_default,
             },
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         response.raise_for_status()
         data = response.json()
@@ -116,16 +107,12 @@ class ImageGenerationConfigManager:
 
     @staticmethod
     def get_all(
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> list[DATestImageGenerationConfig]:
         """Get all image generation configs."""
         response = requests.get(
             f"{API_SERVER_URL}/admin/image-generation/config",
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         response.raise_for_status()
         return [DATestImageGenerationConfig(**config) for config in response.json()]
@@ -133,16 +120,12 @@ class ImageGenerationConfigManager:
     @staticmethod
     def get_credentials(
         image_provider_id: str,
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> dict:
         """Get credentials for an image generation config."""
         response = requests.get(
             f"{API_SERVER_URL}/admin/image-generation/config/{image_provider_id}/credentials",
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         response.raise_for_status()
         return response.json()
@@ -151,13 +134,13 @@ class ImageGenerationConfigManager:
     def update(
         image_provider_id: str,
         model_name: str,
+        user_performing_action: DATestUser,
         provider: str | None = None,
         api_key: str | None = None,
         source_llm_provider_id: int | None = None,
         api_base: str | None = None,
         api_version: str | None = None,
         deployment_name: str | None = None,
-        user_performing_action: DATestUser | None = None,
     ) -> DATestImageGenerationConfig:
         """Update an existing image generation config."""
         payload: dict = {
@@ -178,14 +161,10 @@ class ImageGenerationConfigManager:
                 f"Got: source_llm_provider_id={source_llm_provider_id}, provider={provider}, api_key={'***' if api_key else None}"
             )
 
-        headers = {**GENERAL_HEADERS}
-        if user_performing_action:
-            headers.update(user_performing_action.headers)
-
         response = requests.put(
             f"{API_SERVER_URL}/admin/image-generation/config/{image_provider_id}",
             json=payload,
-            headers=headers,
+            headers=user_performing_action.headers,
         )
         if not response.ok:
             print(f"Update failed with status {response.status_code}: {response.text}")
@@ -204,40 +183,32 @@ class ImageGenerationConfigManager:
     @staticmethod
     def delete(
         image_provider_id: str,
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> None:
         """Delete an image generation config."""
         response = requests.delete(
             f"{API_SERVER_URL}/admin/image-generation/config/{image_provider_id}",
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         response.raise_for_status()
 
     @staticmethod
     def set_default(
         image_provider_id: str,
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> None:
         """Set an image generation config as the default."""
         response = requests.post(
             f"{API_SERVER_URL}/admin/image-generation/config/{image_provider_id}/default",
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         response.raise_for_status()
 
     @staticmethod
     def verify(
         config: DATestImageGenerationConfig,
+        user_performing_action: DATestUser,
         verify_deleted: bool = False,
-        user_performing_action: DATestUser | None = None,
     ) -> None:
         """Verify that a config exists (or doesn't exist if verify_deleted=True)."""
         all_configs = ImageGenerationConfigManager.get_all(user_performing_action)

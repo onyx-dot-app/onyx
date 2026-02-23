@@ -57,7 +57,7 @@
  */
 "use client";
 
-import { CombinedSettings } from "@/app/admin/settings/interfaces";
+import { CombinedSettings } from "@/interfaces/settings";
 import { UserProvider } from "@/providers/UserProvider";
 import { ProviderContextProvider } from "@/components/chat/ProviderContext";
 import { SettingsProvider } from "@/providers/SettingsProvider";
