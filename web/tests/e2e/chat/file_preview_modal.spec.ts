@@ -150,7 +150,7 @@ test.describe("File preview modal from chat file links", () => {
     await expect(modal.getByText("Hello from the mock file!")).toBeVisible();
   });
 
-  test("clicking a code file link opens the CodeViewModal with syntax highlighting", async ({
+  test("clicking a code file link opens the PreviewModal with syntax highlighting", async ({
     page,
   }) => {
     const mockContent = `Here is your script: [app.py](/api/chat/file/${MOCK_FILE_ID})`;
@@ -173,7 +173,7 @@ test.describe("File preview modal from chat file links", () => {
     await expect(fileLink).toBeVisible({ timeout: 5000 });
     await fileLink.click();
 
-    // Verify the CodeViewModal opens
+    // Verify the PreviewModal opens
     const modal = page.getByRole("dialog");
     await expect(modal).toBeVisible({ timeout: 5000 });
 
