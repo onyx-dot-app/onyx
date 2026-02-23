@@ -32,7 +32,6 @@ import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import Text from "@/refresh-components/texts/Text";
 import { SvgEdit, SvgKey, SvgRefreshCw } from "@opal/icons";
 import { useCloudSubscription } from "@/hooks/useCloudSubscription";
-import Link from "next/link";
 
 function Main() {
   const {
@@ -88,9 +87,7 @@ function Main() {
           <Text as="p" text04>
             This feature requires an active paid subscription.
           </Text>
-          <Link href="/admin/billing">
-            <Button>Upgrade Plan</Button>
-          </Link>
+          <Button href="/admin/billing">Upgrade Plan</Button>
         </div>
       )}
     </div>

@@ -66,7 +66,6 @@ import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidE
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import { useCloudSubscription } from "@/hooks/useCloudSubscription";
-import Link from "next/link";
 
 interface PAT {
   id: number;
@@ -1283,9 +1282,9 @@ function AccountsAccessSettings() {
                       New Access Token
                     </CreateButton>
                   ) : (
-                    <Link href="/admin/billing">
-                      <Button secondary>Upgrade Plan</Button>
-                    </Link>
+                    <Button secondary href="/admin/billing">
+                      Upgrade Plan
+                    </Button>
                   )}
                 </Section>
 
