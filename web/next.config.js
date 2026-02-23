@@ -108,16 +108,6 @@ const nextConfig = {
       // NRF routes: Redirect to /nrf which doesn't require auth
       // (NRFPage handles unauthenticated users gracefully with a login modal)
       {
-        source: "/chat/nrf/side-panel",
-        destination: "/nrf/side-panel",
-        permanent: true,
-      },
-      {
-        source: "/chat/nrf",
-        destination: "/nrf",
-        permanent: true,
-      },
-      {
         source: "/app/nrf/side-panel",
         destination: "/nrf/side-panel",
         permanent: true,
