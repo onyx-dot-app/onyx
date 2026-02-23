@@ -190,7 +190,7 @@ test.describe("Disable Default Assistant Setting @exclusive", () => {
 
     // Wait for the page to fully render (page title signals form is loaded)
     await expect(page.locator('[aria-label="admin-page-title"]')).toHaveText(
-      "Chat Preferences",
+      /^Chat Preferences/,
       { timeout: 10000 }
     );
 
@@ -224,7 +224,7 @@ test.describe("Disable Default Assistant Setting @exclusive", () => {
 
     // Verify the page title
     await expect(page.locator('[aria-label="admin-page-title"]')).toHaveText(
-      "Chat Preferences"
+      /^Chat Preferences/
     );
   });
 

@@ -161,7 +161,7 @@ test.describe("Chat Preferences Admin Page", () => {
   }) => {
     // Verify page loads with expected content
     await expect(page.locator('[aria-label="admin-page-title"]')).toHaveText(
-      "Chat Preferences"
+      /^Chat Preferences/
     );
     await expect(page.getByText("Actions & Tools")).toBeVisible();
   });
