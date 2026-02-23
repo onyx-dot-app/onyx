@@ -231,7 +231,7 @@ describe("useShowOnboarding", () => {
 
       expect(result.current.showOnboarding).toBe(false);
       expect(result.current.onboardingDismissed).toBe(true);
-      expect(localStorage.getItem("onyx:onboardingCompleted")).toBe("true");
+      expect(localStorage.getItem("onyx:onboardingCompleted:1")).toBe("true");
     });
 
     it("hideOnboarding sets localStorage flag and onboardingDismissed", () => {
@@ -245,11 +245,11 @@ describe("useShowOnboarding", () => {
       });
 
       expect(result.current.onboardingDismissed).toBe(true);
-      expect(localStorage.getItem("onyx:onboardingCompleted")).toBe("true");
+      expect(localStorage.getItem("onyx:onboardingCompleted:1")).toBe("true");
     });
 
     it("showOnboarding stays false when localStorage flag is set", () => {
-      localStorage.setItem("onyx:onboardingCompleted", "true");
+      localStorage.setItem("onyx:onboardingCompleted:1", "true");
 
       const { result } = renderUseShowOnboarding({
         hasAnyProvider: false,
@@ -263,6 +263,31 @@ describe("useShowOnboarding", () => {
     it("onboardingDismissed is false when localStorage flag is not set", () => {
       const { result } = renderUseShowOnboarding();
       expect(result.current.onboardingDismissed).toBe(false);
+    });
+
+    it("dismissal for user-1 does not suppress onboarding for user-2", () => {
+      const { result: result1 } = renderUseShowOnboarding({
+        hasAnyProvider: false,
+        chatSessionsCount: 0,
+        userId: "1",
+      });
+      expect(result1.current.showOnboarding).toBe(true);
+
+      act(() => {
+        result1.current.finishOnboarding();
+      });
+      expect(result1.current.onboardingDismissed).toBe(true);
+      expect(localStorage.getItem("onyx:onboardingCompleted:1")).toBe("true");
+
+      // user-2 should still see onboarding
+      const { result: result2 } = renderUseShowOnboarding({
+        hasAnyProvider: false,
+        chatSessionsCount: 0,
+        userId: "2",
+      });
+      expect(result2.current.showOnboarding).toBe(true);
+      expect(result2.current.onboardingDismissed).toBe(false);
+      expect(localStorage.getItem("onyx:onboardingCompleted:2")).toBeNull();
     });
   });
 });
