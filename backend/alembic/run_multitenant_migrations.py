@@ -129,7 +129,7 @@ def get_schemas_needing_migration(
         conn.execute(
             text(
                 "INSERT INTO _tenant_schemas_input (schema_name) "
-                "SELECT unnest(:schemas::text[])"
+                "SELECT unnest(CAST(:schemas AS text[]))"
             ),
             {"schemas": tenant_schemas},
         )
