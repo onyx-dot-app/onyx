@@ -296,14 +296,14 @@ def verify_email_domain(email: str) -> None:
                 },
             )
 
-        # Check if email uses a disposable/temporary domain
-        if is_disposable_email(email):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail={
-                    "reason": "Disposable email addresses are not allowed. Please use a permanent email address."
-                },
-            )
+    # Check if email uses a disposable/temporary domain
+    if is_disposable_email(email):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "reason": "Disposable email addresses are not allowed. Please use a permanent email address."
+            },
+        )
 
     # Check domain whitelist if configured
     if VALID_EMAIL_DOMAINS:
