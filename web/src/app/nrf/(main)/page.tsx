@@ -2,7 +2,7 @@ import { unstable_noStore as noStore } from "next/cache";
 import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
 import NRFPage from "@/app/app/nrf/NRFPage";
 import { NRFPreferencesProvider } from "@/components/context/NRFPreferencesContext";
-import NRFChrome from "./NRFChrome";
+import NRFChrome from "../NRFChrome";
 
 /**
  * NRF (New Tab Page) Route - No Auth Required
