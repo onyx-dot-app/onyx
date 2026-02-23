@@ -1,15 +1,29 @@
+import { unstable_noStore as noStore } from "next/cache";
 import { ProjectsProvider } from "@/providers/ProjectsContext";
+import AppSidebar from "@/sections/sidebar/AppSidebar";
+import { getCurrentUserSS } from "@/lib/userSS";
 
 export interface LayoutProps {
   children: React.ReactNode;
 }
 
 /**
- * NRF Root Layout - Shared by all NRF routes
+ * NRF Layout - Optional Auth
  *
- * Provides ProjectsProvider (needed by NRFPage) without auth redirect.
- * Sidebar and chrome are handled by sub-layouts / individual pages.
+ * Mirrors the /app/app/ layout but does NOT redirect when unauthenticated.
+ * Shows the sidebar only when the user is logged in.
  */
-export default function Layout({ children }: LayoutProps) {
-  return <ProjectsProvider>{children}</ProjectsProvider>;
+export default async function Layout({ children }: LayoutProps) {
+  noStore();
+
+  const user = await getCurrentUserSS();
+
+  return (
+    <ProjectsProvider>
+      <div className="flex flex-row w-full h-full">
+        {user && <AppSidebar />}
+        {children}
+      </div>
+    </ProjectsProvider>
+  );
 }
