@@ -103,7 +103,8 @@ class CodeInterpreterClient:
         """Check if the Code Interpreter service is healthy"""
         try:
             response = self.session.get(f"{self.base_url}/health", timeout=5)
-            return response.ok
+            response.raise_for_status()
+            return response.json().get("status") == "ok"
         except Exception:
             return False
 
