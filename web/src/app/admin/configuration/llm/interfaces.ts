@@ -30,7 +30,6 @@ export interface SimpleKnownModel {
 export interface WellKnownLLMProviderDescriptor {
   name: string;
   known_models: ModelConfiguration[];
-
   recommended_default_model: SimpleKnownModel | null;
 }
 

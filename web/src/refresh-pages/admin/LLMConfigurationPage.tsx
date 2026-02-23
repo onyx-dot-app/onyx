@@ -4,26 +4,25 @@ import { useRef } from "react";
 import useSWR, { useSWRConfig } from "swr";
 import { toast } from "@/hooks/useToast";
 import { errorHandlingFetcher } from "@/lib/fetcher";
+import useWellKnownLLMProviders from "@/hooks/useWellKnownLLMProviders";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { Content } from "@opal/layouts";
 import { Button } from "@opal/components";
-import {
-  SvgCpu,
-  SvgOpenai,
-  SvgClaude,
-  SvgOllama,
-  SvgCloud,
-  SvgAws,
-  SvgOpenrouter,
-  SvgArrowExchange,
-} from "@opal/icons";
-import type { IconFunctionComponent } from "@opal/types";
+import { SvgCpu, SvgArrowExchange } from "@opal/icons";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
+import {
+  getProviderDisplayName,
+  getProviderIcon,
+} from "@/lib/llmConfig/providers";
+import { setDefaultLLMProvider } from "@/lib/llmConfig/svc";
 import { Horizontal as HorizontalInput } from "@/layouts/input-layouts";
 import Card from "@/refresh-components/cards/Card";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import Separator from "@/refresh-components/Separator";
-import { LLMProviderView } from "@/app/admin/configuration/llm/interfaces";
+import {
+  LLMProviderView,
+  WellKnownLLMProviderDescriptor,
+} from "@/app/admin/configuration/llm/interfaces";
 import { LLM_PROVIDERS_ADMIN_URL } from "@/app/admin/configuration/llm/constants";
 import { getFormForExistingProvider } from "@/app/admin/configuration/llm/forms/getForm";
 import { OpenAIForm } from "@/app/admin/configuration/llm/forms/OpenAIForm";
@@ -36,73 +35,32 @@ import { OpenRouterForm } from "@/app/admin/configuration/llm/forms/OpenRouterFo
 import { CustomForm } from "@/app/admin/configuration/llm/forms/CustomForm";
 
 // ============================================================================
-// Provider definitions for the "Add Provider" section
+// Provider form mapping (keyed by provider name from the API)
 // ============================================================================
 
-interface ProviderDefinition {
-  name: string;
-  icon: IconFunctionComponent;
-  form: (shouldMarkAsDefault: boolean) => React.ReactNode;
-}
-
-const PROVIDER_DEFINITIONS: ProviderDefinition[] = [
-  {
-    name: "OpenAI",
-    icon: SvgOpenai,
-    form: (d) => <OpenAIForm shouldMarkAsDefault={d} />,
-  },
-  {
-    name: "Anthropic",
-    icon: SvgClaude,
-    form: (d) => <AnthropicForm shouldMarkAsDefault={d} />,
-  },
-  {
-    name: "Ollama",
-    icon: SvgOllama,
-    form: (d) => <OllamaForm shouldMarkAsDefault={d} />,
-  },
-  {
-    name: "Microsoft Azure Cloud",
-    icon: SvgCloud,
-    form: (d) => <AzureForm shouldMarkAsDefault={d} />,
-  },
-  {
-    name: "AWS Bedrock",
-    icon: SvgAws,
-    form: (d) => <BedrockForm shouldMarkAsDefault={d} />,
-  },
-  {
-    name: "Google Cloud Vertex AI",
-    icon: SvgCloud,
-    form: (d) => <VertexAIForm shouldMarkAsDefault={d} />,
-  },
-  {
-    name: "OpenRouter",
-    icon: SvgOpenrouter,
-    form: (d) => <OpenRouterForm shouldMarkAsDefault={d} />,
-  },
-  {
-    name: "Custom LLM",
-    icon: SvgCpu,
-    form: (d) => <CustomForm shouldMarkAsDefault={d} />,
-  },
-];
+const PROVIDER_FORM_MAP: Record<
+  string,
+  (shouldMarkAsDefault: boolean) => React.ReactNode
+> = {
+  openai: (d) => <OpenAIForm shouldMarkAsDefault={d} />,
+  anthropic: (d) => <AnthropicForm shouldMarkAsDefault={d} />,
+  ollama_chat: (d) => <OllamaForm shouldMarkAsDefault={d} />,
+  azure: (d) => <AzureForm shouldMarkAsDefault={d} />,
+  bedrock: (d) => <BedrockForm shouldMarkAsDefault={d} />,
+  vertex_ai: (d) => <VertexAIForm shouldMarkAsDefault={d} />,
+  openrouter: (d) => <OpenRouterForm shouldMarkAsDefault={d} />,
+};
 
 // ============================================================================
 // ProviderConnectCard — local component for the "Add Provider" list
 // ============================================================================
 
 interface ProviderConnectCardProps {
-  name: string;
-  icon: IconFunctionComponent;
+  provider: WellKnownLLMProviderDescriptor;
   children: React.ReactNode;
 }
 
-function ProviderConnectCard({
-  name,
-  icon,
-  children,
-}: ProviderConnectCardProps) {
+function ProviderConnectCard({ provider, children }: ProviderConnectCardProps) {
   const triggerRef = useRef<HTMLDivElement>(null);
 
   function handleConnect() {
@@ -114,21 +72,20 @@ function ProviderConnectCard({
     <Card variant="secondary">
       <div className="flex items-center justify-between w-full">
         <Content
-          icon={icon}
-          title={name}
+          icon={getProviderIcon(provider.name)}
+          title={provider.name}
+          description={getProviderDisplayName(provider.name)}
           sizePreset="main-content"
-          variant="body"
+          variant="section"
         />
         <Button
           rightIcon={SvgArrowExchange}
-          prominence="secondary"
+          prominence="tertiary"
           onClick={handleConnect}
         >
           Connect
         </Button>
       </div>
-      {/* The form component renders its own card (hidden) + modal (portal).
-          Portals render at the document root, so the modal remains visible. */}
       <div ref={triggerRef} className="hidden">
         {children}
       </div>
@@ -146,6 +103,7 @@ export default function LLMConfigurationPage() {
     LLM_PROVIDERS_ADMIN_URL,
     errorHandlingFetcher
   );
+  const { wellKnownLLMProviders } = useWellKnownLLMProviders();
 
   if (!existingLlmProviders) {
     return <ThreeDotsLoader />;
@@ -163,22 +121,14 @@ export default function LLMConfigurationPage() {
     : undefined;
 
   async function handleDefaultModelChange(compositeValue: string) {
-    const separatorIndex = compositeValue.indexOf(":");
-    const providerId = compositeValue.slice(0, separatorIndex);
-
-    const response = await fetch(
-      `${LLM_PROVIDERS_ADMIN_URL}/${providerId}/default`,
-      { method: "POST" }
-    );
-
-    if (!response.ok) {
-      const errorMsg = (await response.json()).detail;
-      toast.error(`Failed to set default model: ${errorMsg}`);
-      return;
+    try {
+      await setDefaultLLMProvider(compositeValue);
+      mutate(LLM_PROVIDERS_ADMIN_URL);
+      toast.success("Default model updated successfully!");
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Unknown error";
+      toast.error(`Failed to set default model: ${message}`);
     }
-
-    mutate(LLM_PROVIDERS_ADMIN_URL);
-    toast.success("Default model updated successfully!");
   }
 
   return (
@@ -268,15 +218,24 @@ export default function LLMConfigurationPage() {
         />
 
         <div className="grid grid-cols-2 gap-4">
-          {PROVIDER_DEFINITIONS.map((provider) => (
-            <ProviderConnectCard
-              key={provider.name}
-              name={provider.name}
-              icon={provider.icon}
-            >
-              {provider.form(isFirstProvider)}
-            </ProviderConnectCard>
-          ))}
+          {wellKnownLLMProviders?.map((provider) => {
+            const formFn = PROVIDER_FORM_MAP[provider.name];
+            if (!formFn) return null;
+            return (
+              <ProviderConnectCard key={provider.name} provider={provider}>
+                {formFn(isFirstProvider)}
+              </ProviderConnectCard>
+            );
+          })}
+          <ProviderConnectCard
+            provider={{
+              name: "custom",
+              known_models: [],
+              recommended_default_model: null,
+            }}
+          >
+            <CustomForm shouldMarkAsDefault={isFirstProvider} />
+          </ProviderConnectCard>
         </div>
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>

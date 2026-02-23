@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { parseLlmDescriptor, structureValue } from "@/lib/llm/utils";
+import { parseLlmDescriptor, structureValue } from "@/lib/llmConfig/utils";
 import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
