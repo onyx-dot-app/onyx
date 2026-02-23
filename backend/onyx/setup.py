@@ -2,7 +2,6 @@ import time
 
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import CODE_INTERPRETER_BASE_URL
 from onyx.configs.app_configs import DISABLE_INDEX_UPDATE_ON_SWAP
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
@@ -14,8 +13,6 @@ from onyx.configs.embedding_configs import SupportedEmbeddingModel
 from onyx.configs.model_configs import GEN_AI_API_KEY
 from onyx.configs.model_configs import GEN_AI_MODEL_VERSION
 from onyx.context.search.models import SavedSearchSettings
-from onyx.db.code_interpreter import fetch_code_interpreter_servers
-from onyx.db.code_interpreter import insert_code_interpreter_server
 from onyx.db.connector import check_connectors_exist
 from onyx.db.connector import create_initial_default_connector
 from onyx.db.connector_credential_pair import associate_default_cc_pair
@@ -273,19 +270,6 @@ def setup_postgres(db_session: Session) -> None:
             llm_provider_upsert_request=model_req, db_session=db_session
         )
         update_default_provider(provider_id=new_llm_provider.id, db_session=db_session)
-
-    # Seed initial code interpreter value
-    if (
-        CODE_INTERPRETER_BASE_URL
-        and len(fetch_code_interpreter_servers(db_session)) == 0
-    ):
-        logger.notice("Setting up default Code Interpreter Server")
-
-        insert_code_interpreter_server(
-            db_session=db_session,
-            url=CODE_INTERPRETER_BASE_URL,
-            server_enabled=True,
-        )
 
 
 def update_default_multipass_indexing(db_session: Session) -> None:

@@ -6,12 +6,9 @@ from onyx.db.models import CodeInterpreterServer
 
 def insert_code_interpreter_server(
     db_session: Session,
-    url: str,
     server_enabled: bool,
 ) -> CodeInterpreterServer:
-    code_interpreter_server = CodeInterpreterServer(
-        url=url, server_enabled=server_enabled
-    )
+    code_interpreter_server = CodeInterpreterServer(server_enabled=server_enabled)
 
     db_session.add(code_interpreter_server)
     db_session.commit()
