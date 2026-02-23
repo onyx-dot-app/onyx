@@ -9,6 +9,7 @@ import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 
 const PREFLIGHT_TIMEOUT_MS = 60_000;
 const PREFLIGHT_POLL_INTERVAL_MS = 2_000;
+const PREFLIGHT_WARN_AFTER_MS = 15_000;
 
 /**
  * Poll the health endpoint until the server is ready or we time out.
@@ -17,6 +18,8 @@ const PREFLIGHT_POLL_INTERVAL_MS = 2_000;
 async function waitForServer(baseURL: string): Promise<void> {
   const healthURL = baseURL;
   const deadline = Date.now() + PREFLIGHT_TIMEOUT_MS;
+  const startTime = Date.now();
+  let warned = false;
 
   console.log(`[global-setup] Waiting for server at ${healthURL} ...`);
 
@@ -31,6 +34,18 @@ async function waitForServer(baseURL: string): Promise<void> {
     } catch {
       // Connection refused / DNS error — server not up yet.
     }
+
+    if (!warned && Date.now() - startTime >= PREFLIGHT_WARN_AFTER_MS) {
+      warned = true;
+      console.warn(
+        `[global-setup] ⚠ Still waiting for server after ${
+          PREFLIGHT_WARN_AFTER_MS / 1000
+        }s.\n` +
+          `  Please verify that both the backend and frontend are running.\n` +
+          `  You can start them with: ods compose dev`
+      );
+    }
+
     await new Promise((r) => setTimeout(r, PREFLIGHT_POLL_INTERVAL_MS));
   }
 
@@ -39,7 +54,7 @@ async function waitForServer(baseURL: string): Promise<void> {
       `Timed out after ${
         PREFLIGHT_TIMEOUT_MS / 1000
       }s waiting for ${healthURL} to return 200. ` +
-      `Make sure the server is running (e.g. \`ods compose dev\`).`
+      `Make sure the backend and frontend are running (e.g. \`ods compose dev\`).`
   );
 }
 
