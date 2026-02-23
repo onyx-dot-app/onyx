@@ -6,14 +6,15 @@ import { toast } from "@/hooks/useToast";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useWellKnownLLMProviders from "@/hooks/useWellKnownLLMProviders";
 import { ThreeDotsLoader } from "@/components/Loading";
-import { Content } from "@opal/layouts";
+import { Content, ContentAction } from "@opal/layouts";
 import { Button } from "@opal/components";
-import { SvgCpu, SvgArrowExchange } from "@opal/icons";
+import { SvgCpu, SvgArrowExchange, SvgSettings } from "@opal/icons";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
+import * as GeneralLayouts from "@/layouts/general-layouts";
 import {
-  getProviderDescription,
+  getProviderDisplayName,
   getProviderIcon,
-  getProviderTitle,
+  getProviderProductName,
 } from "@/lib/llmConfig/providers";
 import { setDefaultLLMProvider } from "@/lib/llmConfig/svc";
 import { Horizontal as HorizontalInput } from "@/layouts/input-layouts";
@@ -53,15 +54,63 @@ const PROVIDER_FORM_MAP: Record<
 };
 
 // ============================================================================
-// ProviderConnectCard — local component for the "Add Provider" list
+// ExistingProviderCard — card for configured (existing) providers
 // ============================================================================
 
-interface ProviderConnectCardProps {
+interface ExistingProviderCardProps {
+  provider: LLMProviderView;
+  children: React.ReactNode;
+}
+
+function ExistingProviderCard({
+  provider,
+  children,
+}: ExistingProviderCardProps) {
+  const triggerRef = useRef<HTMLDivElement>(null);
+
+  function handleEdit() {
+    const button = triggerRef.current?.querySelector("button");
+    button?.click();
+  }
+
+  return (
+    <Card padding={0.5}>
+      <ContentAction
+        icon={getProviderIcon(provider.provider)}
+        title={provider.name}
+        description={getProviderDisplayName(provider.provider)}
+        sizePreset="main-content"
+        variant="section"
+        tag={
+          provider.is_default_provider
+            ? { title: "Default", color: "blue" }
+            : { title: "Enabled", color: "green" }
+        }
+        rightChildren={
+          <Button
+            icon={SvgSettings}
+            prominence="tertiary"
+            onClick={handleEdit}
+          />
+        }
+      />
+      <div ref={triggerRef} className="hidden">
+        {children}
+      </div>
+    </Card>
+  );
+}
+
+// ============================================================================
+// NewProviderCard — card for the "Add Provider" list
+// ============================================================================
+
+interface NewProviderCardProps {
   provider: WellKnownLLMProviderDescriptor;
   children: React.ReactNode;
 }
 
-function ProviderConnectCard({ provider, children }: ProviderConnectCardProps) {
+function NewProviderCard({ provider, children }: NewProviderCardProps) {
   const triggerRef = useRef<HTMLDivElement>(null);
 
   function handleConnect() {
@@ -70,23 +119,23 @@ function ProviderConnectCard({ provider, children }: ProviderConnectCardProps) {
   }
 
   return (
-    <Card variant="secondary">
-      <div className="flex items-center justify-between w-full">
-        <Content
-          icon={getProviderIcon(provider.name)}
-          title={getProviderTitle(provider.name)}
-          description={getProviderDescription(provider.name)}
-          sizePreset="main-content"
-          variant="section"
-        />
-        <Button
-          rightIcon={SvgArrowExchange}
-          prominence="tertiary"
-          onClick={handleConnect}
-        >
-          Connect
-        </Button>
-      </div>
+    <Card variant="secondary" padding={0.5}>
+      <ContentAction
+        icon={getProviderIcon(provider.name)}
+        title={getProviderProductName(provider.name)}
+        description={getProviderDisplayName(provider.name)}
+        sizePreset="main-content"
+        variant="section"
+        rightChildren={
+          <Button
+            rightIcon={SvgArrowExchange}
+            prominence="tertiary"
+            onClick={handleConnect}
+          >
+            Connect
+          </Button>
+        }
+      />
       <div ref={triggerRef} className="hidden">
         {children}
       </div>
@@ -185,59 +234,74 @@ export default function LLMConfigurationPage() {
         {/* ── Available Providers (only when providers exist) ── */}
         {hasProviders && (
           <>
-            <Content
-              title="Available Providers"
-              sizePreset="main-content"
-              variant="section"
-            />
+            <GeneralLayouts.Section
+              gap={0.5}
+              height="fit"
+              alignItems="stretch"
+              justifyContent="start"
+            >
+              <Content
+                title="Available Providers"
+                sizePreset="main-content"
+                variant="section"
+              />
 
-            <div className="flex flex-col gap-4">
-              {[...existingLlmProviders]
-                .sort((a, b) => {
-                  if (a.is_default_provider && !b.is_default_provider)
-                    return -1;
-                  if (!a.is_default_provider && b.is_default_provider) return 1;
-                  return 0;
-                })
-                .map((provider) => (
-                  <div key={provider.id}>
-                    {getFormForExistingProvider(provider)}
-                  </div>
-                ))}
-            </div>
+              <div className="flex flex-col gap-4">
+                {[...existingLlmProviders]
+                  .sort((a, b) => {
+                    if (a.is_default_provider && !b.is_default_provider)
+                      return -1;
+                    if (!a.is_default_provider && b.is_default_provider)
+                      return 1;
+                    return 0;
+                  })
+                  .map((provider) => (
+                    <ExistingProviderCard key={provider.id} provider={provider}>
+                      {getFormForExistingProvider(provider)}
+                    </ExistingProviderCard>
+                  ))}
+              </div>
+            </GeneralLayouts.Section>
 
             <Separator noPadding />
           </>
         )}
 
         {/* ── Add Provider (always visible) ── */}
-        <Content
-          title="Add Provider"
-          description="Onyx supports both popular providers and self-hosted models."
-          sizePreset="main-content"
-          variant="section"
-        />
+        <GeneralLayouts.Section
+          gap={0.5}
+          height="fit"
+          alignItems="stretch"
+          justifyContent="start"
+        >
+          <Content
+            title="Add Provider"
+            description="Onyx supports both popular providers and self-hosted models."
+            sizePreset="main-content"
+            variant="section"
+          />
 
-        <div className="grid grid-cols-2 gap-4">
-          {wellKnownLLMProviders?.map((provider) => {
-            const formFn = PROVIDER_FORM_MAP[provider.name];
-            if (!formFn) return null;
-            return (
-              <ProviderConnectCard key={provider.name} provider={provider}>
-                {formFn(isFirstProvider)}
-              </ProviderConnectCard>
-            );
-          })}
-          <ProviderConnectCard
-            provider={{
-              name: "custom",
-              known_models: [],
-              recommended_default_model: null,
-            }}
-          >
-            <CustomForm shouldMarkAsDefault={isFirstProvider} />
-          </ProviderConnectCard>
-        </div>
+          <div className="grid grid-cols-2 gap-4">
+            {wellKnownLLMProviders?.map((provider) => {
+              const formFn = PROVIDER_FORM_MAP[provider.name];
+              if (!formFn) return null;
+              return (
+                <NewProviderCard key={provider.name} provider={provider}>
+                  {formFn(isFirstProvider)}
+                </NewProviderCard>
+              );
+            })}
+            <NewProviderCard
+              provider={{
+                name: "custom",
+                known_models: [],
+                recommended_default_model: null,
+              }}
+            >
+              <CustomForm shouldMarkAsDefault={isFirstProvider} />
+            </NewProviderCard>
+          </div>
+        </GeneralLayouts.Section>
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );
