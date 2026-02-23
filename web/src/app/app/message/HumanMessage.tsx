@@ -215,7 +215,11 @@ const HumanMessage = React.memo(function HumanMessage({
               </div>
             </div>
             {onEdit && !isEditing && (
-              <div className="flex flex-row p-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              // HACK: In order to standardize a gap-12 spacing between messages, we apply a
+              // negative margin to the copy and edit buttons. On smaller screens when they wrap
+              // below the message instead of extend to the left, this -mb-11 offsets the size of
+              // the buttons (2.75rem) meaning the only whitespace is being applied by the gap-12.
+              <div className="flex flex-row p-1 -mb-11 opacity-0 group-hover:opacity-100 transition-opacity">
                 <CopyIconButton
                   getCopyText={() => content}
                   prominence="tertiary"
