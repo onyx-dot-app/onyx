@@ -112,7 +112,8 @@ class CodeInterpreterClient:
 =======
         try:
             response = self.session.get(f"{self.base_url}/health", timeout=5)
-            return response.ok
+            response.raise_for_status()
+            return response.json().get("status") == "ok"
         except Exception:
 >>>>>>> e61878288 (Add stuff)
             return False
