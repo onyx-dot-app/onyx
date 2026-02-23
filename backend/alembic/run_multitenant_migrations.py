@@ -120,7 +120,19 @@ def get_schemas_needing_migration(
     engine = SqlEngine.get_engine()
 
     with engine.connect() as conn:
+        # Populate a temp input table with exactly the schemas we care about.
+        # The DO block reads from this table so it only iterates the requested
+        # schemas instead of every tenant_% schema in the database.
         conn.execute(text("DROP TABLE IF EXISTS _alembic_version_snapshot"))
+        conn.execute(text("DROP TABLE IF EXISTS _tenant_schemas_input"))
+        conn.execute(text("CREATE TEMP TABLE _tenant_schemas_input (schema_name text)"))
+        conn.execute(
+            text(
+                "INSERT INTO _tenant_schemas_input (schema_name) "
+                "SELECT unnest(:schemas::text[])"
+            ),
+            {"schemas": tenant_schemas},
+        )
         conn.execute(
             text(
                 "CREATE TEMP TABLE _alembic_version_snapshot "
@@ -136,9 +148,8 @@ def get_schemas_needing_migration(
                     s        text;
                     schemas  text[];
                 BEGIN
-                    SELECT array_agg(nspname) INTO schemas
-                    FROM pg_namespace
-                    WHERE nspname LIKE 'tenant_%';
+                    SELECT array_agg(schema_name) INTO schemas
+                    FROM _tenant_schemas_input;
 
                     IF schemas IS NULL THEN
                         RAISE NOTICE 'No tenant schemas found.';
@@ -168,6 +179,7 @@ def get_schemas_needing_migration(
         version_by_schema = {row[0]: row[1] for row in rows}
 
         conn.execute(text("DROP TABLE IF EXISTS _alembic_version_snapshot"))
+        conn.execute(text("DROP TABLE IF EXISTS _tenant_schemas_input"))
 
     # Schemas missing from the snapshot have no alembic_version table yet and
     # also need migration. version_by_schema.get(s) returns None for those,
