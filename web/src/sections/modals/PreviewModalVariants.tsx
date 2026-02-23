@@ -15,7 +15,7 @@ import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import { cn } from "@/lib/utils";
 import { Section } from "@/layouts/general-layouts";
-import { getCodeLanguage } from "@/lib/languages";
+import { getCodeLanguage, isMarkdownFile } from "@/lib/languages";
 import { CodeBlock } from "@/app/app/message/CodeBlock";
 import { extractCodeText } from "@/app/app/message/codeUtils";
 
@@ -329,14 +329,7 @@ const csvVariant: PreviewVariant = {
 const markdownVariant: PreviewVariant = {
   matches: (name, mime) => {
     if (MARKDOWN_MIMES.some((m) => mime.startsWith(m))) return true;
-    const lower = (name || "").toLowerCase();
-    return (
-      lower.endsWith(".md") ||
-      lower.endsWith(".markdown") ||
-      lower.endsWith(".txt") ||
-      lower.endsWith(".rst") ||
-      lower.endsWith(".org")
-    );
+    return isMarkdownFile(name || "");
   },
   width: "lg",
   height: "full",
