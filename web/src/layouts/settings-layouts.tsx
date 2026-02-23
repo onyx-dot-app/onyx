@@ -223,9 +223,10 @@ function SettingsHeader({
       {backButton && (
         <div className="px-2">
           <BackButton behaviorOverride={onBack} />
-          <Spacer vertical rem={1} />
         </div>
       )}
+
+      <Spacer vertical rem={1} />
 
       <div className="flex flex-col gap-6 px-4">
         <div className="flex w-full justify-between">
