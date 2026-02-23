@@ -9,10 +9,8 @@ import { cn } from "@/lib/utils";
 import { Section } from "@/layouts/general-layouts";
 import { getCodeLanguage } from "@/lib/languages";
 import { fetchChatFile } from "@/lib/chat/svc";
-import {
-  PreviewContext,
-  resolveVariant,
-} from "@/sections/modals/PreviewModalVariants";
+import { PreviewContext } from "@/sections/modals/PreviewModal/interfaces";
+import { resolveVariant } from "@/sections/modals/PreviewModal/variants";
 
 function resolveMimeType(mimeType: string, fileName: string): string {
   if (mimeType !== "application/octet-stream") return mimeType;
@@ -205,12 +203,12 @@ export default function PreviewModal({
             }}
           >
             {/* Left slot */}
-            <div className="pointer-events-auto z-10">
+            <div className="pointer-events-auto">
               {variant.renderFooterLeft(ctx)}
             </div>
 
             {/* Right slot */}
-            <div className="pointer-events-auto z-10 rounded-12 bg-background-tint-00 p-1 shadow-lg">
+            <div className="pointer-events-auto rounded-12 bg-background-tint-00 p-1 shadow-lg">
               {variant.renderFooterRight(ctx)}
             </div>
           </div>
