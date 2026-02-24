@@ -50,6 +50,7 @@ import {
   SvgPaintBrush,
   SvgDiscordMono,
   SvgWallet,
+  SvgTerminal,
 } from "@opal/icons";
 import SvgMcp from "@opal/icons/mcp";
 import UserAvatarPopover from "@/sections/sidebar/UserAvatarPopover";
@@ -206,6 +207,11 @@ const collections = (
                 name: "Image Generation",
                 icon: SvgImage,
                 link: "/admin/configuration/image-generation",
+              },
+              {
+                name: "Code Interpreter",
+                icon: SvgTerminal,
+                link: "/admin/configuration/code-interpreter",
               },
               ...(!enableCloud && vectorDbEnabled
                 ? [
