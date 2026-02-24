@@ -1,11 +1,12 @@
 import json
 import os
 import time
-from dataclasses import dataclass
 from uuid import uuid4
 
 import pytest
 import requests
+from pydantic import BaseModel
+from pydantic import ConfigDict
 
 from onyx.configs import app_configs
 from onyx.configs.constants import DocumentSource
@@ -26,8 +27,9 @@ _ENV_CUSTOM_CONFIG_JSON = "NIGHTLY_LLM_CUSTOM_CONFIG_JSON"
 _ENV_STRICT = "NIGHTLY_LLM_STRICT"
 
 
-@dataclass(frozen=True)
-class NightlyProviderConfig:
+class NightlyProviderConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     provider: str
     model_names: list[str]
     api_key: str | None
