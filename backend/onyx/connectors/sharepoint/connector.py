@@ -47,6 +47,7 @@ from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import IndexingHeartbeatInterface
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnectorWithPermSync
+from onyx.connectors.microsoft_graph_env import resolve_microsoft_environment
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import ConnectorCheckpoint
 from onyx.connectors.models import ConnectorFailure
@@ -837,10 +838,20 @@ class SharepointConnector(
         self._cached_rest_ctx: ClientContext | None = None
         self._cached_rest_ctx_url: str | None = None
         self._cached_rest_ctx_created_at: float = 0.0
-        self.authority_host = authority_host.rstrip("/")
-        self.graph_api_host = graph_api_host.rstrip("/")
+
+        resolved_env = resolve_microsoft_environment(graph_api_host, authority_host)
+        self._azure_environment = resolved_env.environment
+        self.authority_host = resolved_env.authority_host
+        self.graph_api_host = resolved_env.graph_host
         self.graph_api_base = f"{self.graph_api_host}/v1.0"
-        self.sharepoint_domain_suffix = sharepoint_domain_suffix
+        self.sharepoint_domain_suffix = resolved_env.sharepoint_domain_suffix
+        if sharepoint_domain_suffix != resolved_env.sharepoint_domain_suffix:
+            logger.warning(
+                f"Configured sharepoint_domain_suffix '{sharepoint_domain_suffix}' "
+                f"differs from the expected suffix '{resolved_env.sharepoint_domain_suffix}' "
+                f"for the {resolved_env.environment} environment. "
+                f"Using '{resolved_env.sharepoint_domain_suffix}'."
+            )
 
     def validate_connector_settings(self) -> None:
         # Validate that at least one content type is enabled
@@ -1624,7 +1635,9 @@ class SharepointConnector(
                 raise ConnectorValidationError("Failed to acquire token for graph")
             return token
 
-        self._graph_client = GraphClient(_acquire_token_for_graph)
+        self._graph_client = GraphClient(
+            _acquire_token_for_graph, environment=self._azure_environment
+        )
         if auth_method == SharepointAuthMethod.CERTIFICATE.value:
             org = self.graph_client.organization.get().execute_query()
             if not org or len(org) == 0:
