@@ -5,10 +5,10 @@
  *
  * Endpoints:
  * - /api/admin/llm/test/default - Test the default LLM provider connection
- * - /api/admin/llm/provider/{id}/default - Set a provider as the default
+ * - /api/admin/llm/default - Set the default LLM model
  */
 
-import { LLM_PROVIDERS_ADMIN_URL } from "@/app/admin/configuration/llm/constants";
+import { LLM_ADMIN_URL } from "@/app/admin/configuration/llm/constants";
 
 /**
  * Test the default LLM provider.
@@ -16,7 +16,7 @@ import { LLM_PROVIDERS_ADMIN_URL } from "@/app/admin/configuration/llm/constants
  */
 export async function testDefaultProvider(): Promise<boolean> {
   try {
-    const response = await fetch("/api/admin/llm/test/default", {
+    const response = await fetch(`${LLM_ADMIN_URL}/test/default`, {
       method: "POST",
     });
     return response?.ok || false;
@@ -26,20 +26,23 @@ export async function testDefaultProvider(): Promise<boolean> {
 }
 
 /**
- * Set a provider as the default LLM provider.
- * @param compositeValue - A string in the format "{providerId}:{modelName}"
+ * Set the default LLM model.
+ * @param providerId - The provider ID
+ * @param modelName - The model name within that provider
  * @throws Error with the detail message from the API on failure
  */
-export async function setDefaultLLMProvider(
-  compositeValue: string
+export async function setDefaultLlmModel(
+  providerId: number,
+  modelName: string
 ): Promise<void> {
-  const separatorIndex = compositeValue.indexOf(":");
-  const providerId = compositeValue.slice(0, separatorIndex);
-
-  const response = await fetch(
-    `${LLM_PROVIDERS_ADMIN_URL}/${providerId}/default`,
-    { method: "POST" }
-  );
+  const response = await fetch(`${LLM_ADMIN_URL}/default`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      provider_id: providerId,
+      model_name: modelName,
+    }),
+  });
 
   if (!response.ok) {
     const errorMsg = (await response.json()).detail;

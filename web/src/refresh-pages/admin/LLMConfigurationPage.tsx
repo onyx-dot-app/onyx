@@ -16,7 +16,7 @@ import {
   getProviderIcon,
   getProviderProductName,
 } from "@/lib/llmConfig/providers";
-import { setDefaultLLMProvider } from "@/lib/llmConfig/svc";
+import { setDefaultLlmModel } from "@/lib/llmConfig/svc";
 import { Horizontal as HorizontalInput } from "@/layouts/input-layouts";
 import Card from "@/refresh-components/cards/Card";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
@@ -171,8 +171,12 @@ export default function LLMConfigurationPage() {
     : undefined;
 
   async function handleDefaultModelChange(compositeValue: string) {
+    const separatorIndex = compositeValue.indexOf(":");
+    const providerId = Number(compositeValue.slice(0, separatorIndex));
+    const modelName = compositeValue.slice(separatorIndex + 1);
+
     try {
-      await setDefaultLLMProvider(compositeValue);
+      await setDefaultLlmModel(providerId, modelName);
       mutate(LLM_PROVIDERS_ADMIN_URL);
       toast.success("Default model updated successfully!");
     } catch (e) {
