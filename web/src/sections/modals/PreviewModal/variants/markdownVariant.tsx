@@ -1,6 +1,7 @@
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
 import { Section } from "@/layouts/general-layouts";
+import { isMarkdownFile } from "@/lib/languages";
 import { PreviewVariant } from "@/sections/modals/PreviewModal/interfaces";
 import {
   CopyButton,
@@ -18,14 +19,7 @@ const MARKDOWN_MIMES = [
 export const markdownVariant: PreviewVariant = {
   matches: (name, mime) => {
     if (MARKDOWN_MIMES.some((m) => mime.startsWith(m))) return true;
-    const lower = (name || "").toLowerCase();
-    return (
-      lower.endsWith(".md") ||
-      lower.endsWith(".markdown") ||
-      lower.endsWith(".txt") ||
-      lower.endsWith(".rst") ||
-      lower.endsWith(".org")
-    );
+    return isMarkdownFile(name || "");
   },
   width: "lg",
   height: "full",
