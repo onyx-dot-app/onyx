@@ -2,7 +2,7 @@
 
 import { Button } from "@opal/components/buttons/Button/components";
 import { Tag, type TagProps } from "@opal/components/Tag/components";
-import type { InteractiveContainerHeightVariant } from "@opal/core";
+import type { SizeVariant } from "@opal/shared";
 import SvgAlertCircle from "@opal/icons/alert-circle";
 import SvgAlertTriangle from "@opal/icons/alert-triangle";
 import SvgEdit from "@opal/icons/edit";
@@ -26,7 +26,8 @@ interface LabelPresetConfig {
   titleFont: string;
   lineHeight: string;
   gap: string;
-  editButtonSize: InteractiveContainerHeightVariant;
+  /** Button `size` prop for the edit button. Uses the shared `SizeVariant` scale. */
+  editButtonSize: SizeVariant;
   editButtonPadding: string;
   optionalFont: string;
   /** Aux icon size = lineHeight − 2 × p-0.5. */
