@@ -68,6 +68,7 @@ from onyx.server.features.build.db.sandbox import create_sandbox__no_commit
 from onyx.server.features.build.db.sandbox import get_running_sandbox_count_by_tenant
 from onyx.server.features.build.db.sandbox import get_sandbox_by_session_id
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
+from onyx.server.features.build.db.sandbox import get_snapshots_for_session
 from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
 from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
 from onyx.server.features.build.sandbox import get_sandbox_manager
@@ -1034,6 +1035,23 @@ class SessionManager:
                 # Log but don't fail - session can still be deleted even if
                 # workspace cleanup fails (e.g., if pod is already terminated)
                 logger.warning(f"Failed to cleanup session workspace {session_id}: {e}")
+
+        # Delete snapshot files from S3 before removing DB records
+        snapshots = get_snapshots_for_session(self._db_session, session_id)
+        if snapshots:
+            from onyx.file_store.file_store import get_default_file_store
+            from onyx.server.features.build.sandbox.manager.snapshot_manager import (
+                SnapshotManager,
+            )
+
+            snapshot_manager = SnapshotManager(get_default_file_store())
+            for snapshot in snapshots:
+                try:
+                    snapshot_manager.delete_snapshot(snapshot.storage_path)
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to delete snapshot file {snapshot.storage_path}: {e}"
+                    )
 
         # Delete session (uses flush, caller commits)
         return delete_build_session__no_commit(session_id, user_id, self._db_session)
