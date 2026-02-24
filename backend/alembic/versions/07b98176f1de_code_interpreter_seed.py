@@ -19,7 +19,7 @@ depends_on = None
 
 def upgrade() -> None:
     # Seed the single instance of code_interpreter_server
-    # NOTE: There should always exist at most and at minimum 1 code_interpreter_server row
+    # NOTE: There should only exist at most and at minimum 1 code_interpreter_server row
     op.execute(
         sa.text("INSERT INTO code_interpreter_server (server_enabled) VALUES (true)")
     )
