@@ -19,7 +19,7 @@ depends_on = None
 
 def upgrade() -> None:
     op.execute(
-        sa.text("INSERT INTO code_interpreter_server (server_enabled) " "VALUES (true)")
+        sa.text("INSERT INTO code_interpreter_server (server_enabled) VALUES (true)")
     )
 
 
