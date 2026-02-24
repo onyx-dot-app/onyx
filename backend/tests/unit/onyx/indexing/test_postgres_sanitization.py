@@ -1,3 +1,5 @@
+from pytest import MonkeyPatch
+
 from onyx.access.models import ExternalAccess
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import Document
@@ -87,7 +89,9 @@ def test_sanitize_hierarchy_node_for_postgres_removes_nul_bytes() -> None:
     assert sanitized.external_access.external_user_group_ids == {"g-1"}
 
 
-def test_index_doc_batch_prepare_sanitizes_before_db_ops(monkeypatch: object) -> None:
+def test_index_doc_batch_prepare_sanitizes_before_db_ops(
+    monkeypatch: MonkeyPatch,
+) -> None:
     document = Document(
         id="doc\x00id",
         source=DocumentSource.FILE,
