@@ -746,7 +746,6 @@ const AppInputBar = React.memo(
                         selected={deepResearchEnabled}
                         foldable={!deepResearchEnabled}
                         disabled={disabled}
-                        tooltip="Deep Research"
                       >
                         Deep Research
                       </Button>
