@@ -34,6 +34,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from ee.onyx.server.scim.filtering import ScimFilter
 from ee.onyx.server.scim.filtering import ScimFilterOperator
+from ee.onyx.server.scim.models import ScimMappingFields
 from onyx.db.dal import DAL
 from onyx.db.models import ScimGroupMapping
 from onyx.db.models import ScimToken
@@ -128,12 +129,19 @@ class ScimDAL(DAL):
         external_id: str,
         user_id: UUID,
         scim_username: str | None = None,
+        fields: ScimMappingFields | None = None,
     ) -> ScimUserMapping:
         """Create a mapping between a SCIM externalId and an Onyx user."""
+        f = fields or ScimMappingFields()
         mapping = ScimUserMapping(
             external_id=external_id,
             user_id=user_id,
             scim_username=scim_username,
+            department=f.department,
+            manager=f.manager,
+            given_name=f.given_name,
+            family_name=f.family_name,
+            scim_emails_json=f.scim_emails_json,
         )
         self._session.add(mapping)
         self._session.flush()
@@ -311,8 +319,14 @@ class ScimDAL(DAL):
         user_id: UUID,
         new_external_id: str | None,
         scim_username: str | None = None,
+        fields: ScimMappingFields | None = None,
     ) -> None:
-        """Create, update, or delete the external ID mapping for a user."""
+        """Create, update, or delete the external ID mapping for a user.
+
+        When *fields* is provided, all mapping fields are written
+        unconditionally — including ``None`` values — so that a caller can
+        clear a previously-set field (e.g. removing a department).
+        """
         mapping = self.get_user_mapping_by_user_id(user_id)
         if new_external_id:
             if mapping:
@@ -320,11 +334,18 @@ class ScimDAL(DAL):
                     mapping.external_id = new_external_id
                 if scim_username is not None:
                     mapping.scim_username = scim_username
+                if fields is not None:
+                    mapping.department = fields.department
+                    mapping.manager = fields.manager
+                    mapping.given_name = fields.given_name
+                    mapping.family_name = fields.family_name
+                    mapping.scim_emails_json = fields.scim_emails_json
             else:
                 self.create_user_mapping(
                     external_id=new_external_id,
                     user_id=user_id,
                     scim_username=scim_username,
+                    fields=fields,
                 )
         elif mapping:
             self.delete_user_mapping(mapping.id)

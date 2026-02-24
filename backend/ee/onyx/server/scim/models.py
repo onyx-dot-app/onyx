@@ -7,12 +7,14 @@ SCIM protocol schemas follow the wire format defined in:
 Admin API schemas are internal to Onyx and used for SCIM token management.
 """
 
+from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 
 from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
+from pydantic import field_validator
 
 
 # ---------------------------------------------------------------------------
@@ -31,6 +33,9 @@ SCIM_SERVICE_PROVIDER_CONFIG_SCHEMA = (
 )
 SCIM_RESOURCE_TYPE_SCHEMA = "urn:ietf:params:scim:schemas:core:2.0:ResourceType"
 SCIM_SCHEMA_SCHEMA = "urn:ietf:params:scim:schemas:core:2.0:Schema"
+SCIM_ENTERPRISE_USER_SCHEMA = (
+    "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User"
+)
 
 
 # ---------------------------------------------------------------------------
@@ -70,6 +75,36 @@ class ScimUserGroupRef(BaseModel):
     display: str | None = None
 
 
+class ScimManagerRef(BaseModel):
+    """Manager sub-attribute for the enterprise extension (RFC 7643 §4.3)."""
+
+    value: str | None = None
+
+
+class ScimEnterpriseExtension(BaseModel):
+    """Enterprise User extension attributes (RFC 7643 §4.3)."""
+
+    department: str | None = None
+    manager: ScimManagerRef | None = None
+
+
+@dataclass
+class ScimMappingFields:
+    """Stored SCIM mapping fields that need to round-trip through the IdP.
+
+    Entra ID sends structured name components, email metadata, and enterprise
+    extension attributes that must be returned verbatim in subsequent GET
+    responses. These fields are persisted on ScimUserMapping and threaded
+    through the DAL, provider, and endpoint layers.
+    """
+
+    department: str | None = None
+    manager: str | None = None
+    given_name: str | None = None
+    family_name: str | None = None
+    scim_emails_json: str | None = None
+
+
 class ScimUserResource(BaseModel):
     """SCIM User resource representation (RFC 7643 §4.1).
 
@@ -77,6 +112,8 @@ class ScimUserResource(BaseModel):
     SCIM, and the shape we return in GET responses. Field names use camelCase
     to match the SCIM wire format (not Python convention).
     """
+
+    model_config = ConfigDict(populate_by_name=True)
 
     schemas: list[str] = Field(default_factory=lambda: [SCIM_USER_SCHEMA])
     id: str | None = None  # Onyx's internal user ID, set on responses
@@ -88,6 +125,10 @@ class ScimUserResource(BaseModel):
     active: bool = True
     groups: list[ScimUserGroupRef] = Field(default_factory=list)
     meta: ScimMeta | None = None
+    enterprise_extension: ScimEnterpriseExtension | None = Field(
+        default=None,
+        alias="urn:ietf:params:scim:schemas:extension:enterprise:2.0:User",
+    )
 
 
 class ScimGroupMember(BaseModel):
@@ -164,6 +205,19 @@ class ScimPatchOperation(BaseModel):
     op: ScimPatchOperationType
     path: str | None = None
     value: ScimPatchValue = None
+
+    @field_validator("op", mode="before")
+    @classmethod
+    def normalize_op(cls, v: object) -> object:
+        """Normalize op to lowercase for case-insensitive matching.
+
+        Some IdPs (e.g. Entra ID) send capitalized ops like ``"Replace"``
+        instead of ``"replace"``. This is safe for all providers since the
+        enum values are lowercase. If a future provider requires other
+        pre-processing quirks, move patch deserialization into the provider
+        subclass instead of adding more special cases here.
+        """
+        return v.lower() if isinstance(v, str) else v
 
 
 class ScimPatchRequest(BaseModel):
