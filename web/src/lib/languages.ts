@@ -10,8 +10,7 @@ interface LinguistLanguage {
 const allLanguages = Object.values(languages) as LinguistLanguage[];
 
 // Collect extensions that linguist-languages assigns to "Markdown" so we can
-// exclude them from the code-language map (some programming languages also
-// claim `.md`).
+// exclude them from the code-language map
 const markdownExtensions = new Set(
   allLanguages
     .find((lang) => lang.name === "Markdown")
