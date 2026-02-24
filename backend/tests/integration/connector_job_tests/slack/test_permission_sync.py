@@ -22,6 +22,9 @@ from tests.integration.common_utils.test_models import DATestConnector
 from tests.integration.common_utils.test_models import DATestCredential
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.common_utils.vespa import vespa_fixture
+from tests.integration.connector_job_tests.slack.conftest import SLACK_ADMIN_EMAIL
+from tests.integration.connector_job_tests.slack.conftest import SLACK_TEST_USER_1_EMAIL
+from tests.integration.connector_job_tests.slack.conftest import SLACK_TEST_USER_2_EMAIL
 from tests.integration.connector_job_tests.slack.slack_api_utils import SlackManager
 
 
@@ -38,19 +41,16 @@ def test_slack_permission_sync(
 ) -> None:
     public_channel, private_channel = slack_test_setup
 
-    # Creating an admin user (first user created is automatically an admin)
     admin_user: DATestUser = UserManager.create(
-        email="admin@example.com",
+        email=SLACK_ADMIN_EMAIL,
     )
 
-    # Creating a non-admin user
     test_user_1: DATestUser = UserManager.create(
-        email="test_user_1@example.com",
+        email=SLACK_TEST_USER_1_EMAIL,
     )
 
-    # Creating a non-admin user
     test_user_2: DATestUser = UserManager.create(
-        email="test_user_2@example.com",
+        email=SLACK_TEST_USER_2_EMAIL,
     )
 
     slack_client = SlackManager.get_slack_client(os.environ["SLACK_BOT_TOKEN"])
@@ -73,6 +73,7 @@ def test_slack_permission_sync(
         source=DocumentSource.SLACK,
         connector_specific_config={
             "channels": [public_channel["name"], private_channel["name"]],
+            "include_bot_messages": True,
         },
         access_type=AccessType.SYNC,
         groups=[],
@@ -102,14 +103,11 @@ def test_slack_permission_sync(
     public_message = "Steve's favorite number is 809752"
     private_message = "Sara's favorite number is 346794"
 
-    # Add messages to channels
-    print(f"\n Adding public message to channel: {public_message}")
     SlackManager.add_message_to_channel(
         slack_client=slack_client,
         channel=public_channel,
         message=public_message,
     )
-    print(f"\n Adding private message to channel: {private_message}")
     SlackManager.add_message_to_channel(
         slack_client=slack_client,
         channel=private_channel,
@@ -127,7 +125,9 @@ def test_slack_permission_sync(
         user_performing_action=admin_user,
     )
 
-    # Run permission sync
+    # Run permission sync. Since initial_index_should_sync=True for Slack,
+    # permissions were already set during indexing above — the explicit sync
+    # should find no changes to apply.
     CCPairManager.sync(
         cc_pair=cc_pair,
         user_performing_action=admin_user,
@@ -135,59 +135,38 @@ def test_slack_permission_sync(
     CCPairManager.wait_for_sync(
         cc_pair=cc_pair,
         after=before,
-        number_of_updated_docs=2,
+        number_of_updated_docs=0,
         user_performing_action=admin_user,
+        should_wait_for_group_sync=False,
+        should_wait_for_vespa_sync=False,
     )
 
-    # Search as admin with access to both channels
-    print("\nSearching as admin user")
-    onyx_doc_message_strings = DocumentSearchManager.search_documents(
+    # Verify admin can see messages from both channels
+    admin_docs = DocumentSearchManager.search_documents(
         query="favorite number",
         user_performing_action=admin_user,
     )
-    print(
-        "\n documents retrieved by admin user: ",
-        onyx_doc_message_strings,
-    )
+    assert public_message in admin_docs
+    assert private_message in admin_docs
 
-    # Ensure admin user can see messages from both channels
-    assert public_message in onyx_doc_message_strings
-    assert private_message in onyx_doc_message_strings
-
-    # Search as test_user_2 with access to only the public channel
-    print("\n Searching as test_user_2")
-    onyx_doc_message_strings = DocumentSearchManager.search_documents(
+    # Verify test_user_2 can only see public channel messages
+    user_2_docs = DocumentSearchManager.search_documents(
         query="favorite number",
         user_performing_action=test_user_2,
     )
-    print(
-        "\n documents retrieved by test_user_2: ",
-        onyx_doc_message_strings,
-    )
+    assert public_message in user_2_docs
+    assert private_message not in user_2_docs
 
-    # Ensure test_user_2 can only see messages from the public channel
-    assert public_message in onyx_doc_message_strings
-    assert private_message not in onyx_doc_message_strings
-
-    # Search as test_user_1 with access to both channels
-    print("\n Searching as test_user_1")
-    onyx_doc_message_strings = DocumentSearchManager.search_documents(
+    # Verify test_user_1 can see both channels (member of private channel)
+    user_1_docs = DocumentSearchManager.search_documents(
         query="favorite number",
         user_performing_action=test_user_1,
     )
-    print(
-        "\n documents retrieved by test_user_1 before being removed from private channel: ",
-        onyx_doc_message_strings,
-    )
+    assert public_message in user_1_docs
+    assert private_message in user_1_docs
 
-    # Ensure test_user_1 can see messages from both channels
-    assert public_message in onyx_doc_message_strings
-    assert private_message in onyx_doc_message_strings
-
-    # ----------------------MAKE THE CHANGES--------------------------
-    print("\n Removing test_user_1 from the private channel")
-    before = datetime.now(timezone.utc)
     # Remove test_user_1 from the private channel
+    before = datetime.now(timezone.utc)
     desired_channel_members = [admin_user]
     SlackManager.set_channel_members(
         slack_client=slack_client,
@@ -206,24 +185,16 @@ def test_slack_permission_sync(
         after=before,
         number_of_updated_docs=1,
         user_performing_action=admin_user,
+        should_wait_for_group_sync=False,
     )
 
-    # ----------------------------VERIFY THE CHANGES---------------------------
-    # Ensure test_user_1 can no longer see messages from the private channel
-    # Search as test_user_1 with access to only the public channel
-
-    onyx_doc_message_strings = DocumentSearchManager.search_documents(
+    # Verify test_user_1 can no longer see private channel after removal
+    user_1_docs = DocumentSearchManager.search_documents(
         query="favorite number",
         user_performing_action=test_user_1,
     )
-    print(
-        "\n documents retrieved by test_user_1 after being removed from private channel: ",
-        onyx_doc_message_strings,
-    )
-
-    # Ensure test_user_1 can only see messages from the public channel
-    assert public_message in onyx_doc_message_strings
-    assert private_message not in onyx_doc_message_strings
+    assert public_message in user_1_docs
+    assert private_message not in user_1_docs
 
 
 # NOTE(rkuo): it isn't yet clear if the reason these were previously xfail'd
@@ -242,14 +213,12 @@ def test_slack_group_permission_sync(
     """
     public_channel, private_channel = slack_test_setup
 
-    # Creating an admin user (first user created is automatically an admin)
     admin_user: DATestUser = UserManager.create(
-        email="admin@example.com",
+        email=SLACK_ADMIN_EMAIL,
     )
 
-    # Creating a non-admin user
     test_user_1: DATestUser = UserManager.create(
-        email="test_user_1@example.com",
+        email=SLACK_TEST_USER_1_EMAIL,
     )
 
     # Create a user group and adding the non-admin user to it
@@ -294,6 +263,7 @@ def test_slack_group_permission_sync(
         source=DocumentSource.SLACK,
         connector_specific_config={
             "channels": [private_channel["name"]],
+            "include_bot_messages": True,
         },
         access_type=AccessType.SYNC,
         groups=[user_group.id],
@@ -326,7 +296,8 @@ def test_slack_group_permission_sync(
         user_performing_action=admin_user,
     )
 
-    # Run permission sync
+    # Run permission sync. Since initial_index_should_sync=True for Slack,
+    # permissions were already set during indexing — no changes expected.
     CCPairManager.sync(
         cc_pair=cc_pair,
         user_performing_action=admin_user,
@@ -334,8 +305,10 @@ def test_slack_group_permission_sync(
     CCPairManager.wait_for_sync(
         cc_pair=cc_pair,
         after=before,
-        number_of_updated_docs=1,
+        number_of_updated_docs=0,
         user_performing_action=admin_user,
+        should_wait_for_group_sync=False,
+        should_wait_for_vespa_sync=False,
     )
 
     # Verify admin can see the message
