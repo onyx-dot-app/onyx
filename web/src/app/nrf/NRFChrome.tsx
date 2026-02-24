@@ -76,6 +76,7 @@ export default function NRFChrome() {
 
   const showModeToggle =
     isPaidEnterpriseFeaturesEnabled &&
+    settings.isSearchModeAvailable &&
     appFocus.isNewSession() &&
     !classification;
 
