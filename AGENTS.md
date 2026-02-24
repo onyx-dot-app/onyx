@@ -548,7 +548,7 @@ class in the utils over directly calling the APIs with a library like `requests`
 calling the utilities directly (e.g. do NOT create admin users with
 `admin_user = UserManager.create(name="admin_user")`, instead use the `admin_user` fixture).
 
-A great example of this type of test is `backend/tests/integration/dev_apis/test_simple_chat_api.py`.
+A great example of this type of test is `backend/tests/integration/tests/streaming_endpoints/test_chat_stream.py`.
 
 To run them:
 
