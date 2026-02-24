@@ -62,12 +62,13 @@ export const CodeBlock = memo(function CodeBlock({
   if (typeof children === "string" && !language) {
     return (
       <span
+        data-testid="code-block"
         className={cn(
           "font-mono",
           "text-text-05",
           "bg-background-tint-00",
           "rounded",
-          "text-xs",
+          "text-[0.75em]",
           "inline",
           "whitespace-pre-wrap",
           "break-words",
