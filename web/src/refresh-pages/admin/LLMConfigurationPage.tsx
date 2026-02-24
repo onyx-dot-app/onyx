@@ -183,12 +183,7 @@ export default function LLMConfigurationPage() {
 
   return (
     <SettingsLayouts.Root>
-      <SettingsLayouts.Header
-        icon={SvgCpu}
-        title="LLM Configuration"
-        description="Configure LLM providers and set the default model for your organization."
-        separator
-      />
+      <SettingsLayouts.Header icon={SvgCpu} title="LLM Models" separator />
 
       <SettingsLayouts.Body>
         {/* ── Default Model Card (only when providers exist) ── */}
