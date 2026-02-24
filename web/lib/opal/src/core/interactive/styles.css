@@ -394,7 +394,7 @@
 }
 .interactive[data-interactive-base-variant="select"][data-disabled] {
   @apply bg-transparent;
-  --interactive-foreground: var(--text-02);
+  --interactive-foreground: var(--text-01);
 }
 .interactive[data-interactive-base-variant="select"][data-selected="true"][data-disabled] {
   --interactive-foreground: var(--action-link-03);
