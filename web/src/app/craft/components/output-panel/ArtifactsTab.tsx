@@ -72,8 +72,12 @@ export default function ArtifactsTab({
       const results = await Promise.all(
         rawEntries.map(async (entry) => {
           if (!entry.is_directory) return entry;
-          const listing = await fetchDirectoryListing(sessionId!, entry.path);
-          if (listing && listing.entries.length > 0) return entry;
+          try {
+            const listing = await fetchDirectoryListing(sessionId!, entry.path);
+            if (listing && listing.entries.length > 0) return entry;
+          } catch {
+            return entry;
+          }
           return null;
         })
       );
