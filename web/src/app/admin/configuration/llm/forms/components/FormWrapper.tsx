@@ -6,7 +6,7 @@ import { toast } from "@/hooks/useToast";
 import {
   LLMProviderView,
   WellKnownLLMProviderDescriptor,
-} from "../../interfaces";
+} from "@/interfaces/llm";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import Modal from "@/refresh-components/Modal";
 import Text from "@/refresh-components/texts/Text";
@@ -14,7 +14,7 @@ import Button from "@/refresh-components/buttons/Button";
 import { SvgSettings } from "@opal/icons";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { LLM_PROVIDERS_ADMIN_URL } from "../../constants";
+import { LLM_PROVIDERS_ADMIN_URL } from "@/lib/llmConfig/constants";
 
 export interface ProviderFormContext {
   onClose: () => void;

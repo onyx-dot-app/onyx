@@ -8,7 +8,7 @@ import {
   LLMProviderFormProps,
   LLMProviderView,
   ModelConfiguration,
-} from "../interfaces";
+} from "@/interfaces/llm";
 import * as Yup from "yup";
 import {
   ProviderFormEntrypointWrapper,

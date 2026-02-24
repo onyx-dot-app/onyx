@@ -33,9 +33,7 @@ export interface OnboardingModalController {
   close: () => void;
 
   // Data needed for modal
-  llmProviders:
-    | import("@/app/admin/configuration/llm/interfaces").LLMProviderDescriptor[]
-    | undefined;
+  llmProviders: import("@/interfaces/llm").LLMProviderDescriptor[] | undefined;
   initialValues: {
     firstName: string;
     lastName: string;
@@ -54,7 +52,6 @@ export interface OnboardingModalController {
   completeUserInfo: (info: BuildUserInfo) => Promise<void>;
   completeLlmSetup: () => Promise<void>;
   refetchLlmProviders: () => Promise<
-    | import("@/app/admin/configuration/llm/interfaces").LLMProviderDescriptor[]
-    | undefined
+    import("@/interfaces/llm").LLMProviderDescriptor[] | undefined
   >;
 }

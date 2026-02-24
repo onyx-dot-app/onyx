@@ -24,7 +24,7 @@ import {
   BedrockFetchParams,
   OllamaFetchParams,
   OpenRouterFetchParams,
-} from "./interfaces";
+} from "@/interfaces/llm";
 import { SvgAws, SvgOpenrouter } from "@opal/icons";
 
 // Aggregator providers that host models from multiple vendors

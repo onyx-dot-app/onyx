@@ -2,8 +2,8 @@ import { LoadingAnimation } from "@/components/Loading";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
 import { SvgTrash } from "@opal/icons";
-import { LLMProviderView } from "../../interfaces";
-import { LLM_PROVIDERS_ADMIN_URL } from "../../constants";
+import { LLMProviderView } from "@/interfaces/llm";
+import { LLM_PROVIDERS_ADMIN_URL } from "@/lib/llmConfig/constants";
 
 interface FormActionButtonsProps {
   isTesting: boolean;

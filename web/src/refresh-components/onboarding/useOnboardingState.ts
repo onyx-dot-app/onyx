@@ -7,7 +7,7 @@ import {
   OnboardingState,
   OnboardingStep,
 } from "./types";
-import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
+import { WellKnownLLMProviderDescriptor } from "@/interfaces/llm";
 import { updateUserPersonalization } from "@/lib/userSettings";
 import { useUser } from "@/providers/UserProvider";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";

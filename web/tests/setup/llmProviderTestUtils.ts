@@ -1,4 +1,4 @@
-import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
+import { LLMProviderDescriptor } from "@/interfaces/llm";
 
 export function makeProvider(
   overrides: Partial<LLMProviderDescriptor>

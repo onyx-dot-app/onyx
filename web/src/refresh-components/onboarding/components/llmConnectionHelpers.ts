@@ -1,4 +1,4 @@
-import { ModelConfiguration } from "@/app/admin/configuration/llm/interfaces";
+import { ModelConfiguration } from "@/interfaces/llm";
 import { parseAzureTargetUri } from "@/lib/azureTargetUri";
 
 export const buildInitialValues = () => ({

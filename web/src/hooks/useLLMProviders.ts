@@ -5,7 +5,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import {
   LLMProviderDescriptor,
   WellKnownLLMProviderDescriptor,
-} from "@/app/admin/configuration/llm/interfaces";
+} from "@/interfaces/llm";
 
 /**
  * Fetches configured LLM providers accessible to the current user.

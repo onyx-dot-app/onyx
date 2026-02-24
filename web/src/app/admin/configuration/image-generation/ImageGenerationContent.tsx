@@ -7,7 +7,7 @@ import { Select } from "@/refresh-components/cards";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { toast } from "@/hooks/useToast";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { LLMProviderView } from "@/app/admin/configuration/llm/interfaces";
+import { LLMProviderView } from "@/interfaces/llm";
 import {
   IMAGE_PROVIDER_GROUPS,
   ImageProvider,

@@ -1,4 +1,4 @@
-import { ModelConfiguration, SimpleKnownModel } from "../../interfaces";
+import { ModelConfiguration, SimpleKnownModel } from "@/interfaces/llm";
 import { FormikProps } from "formik";
 import { BaseLLMFormValues } from "../formUtils";
 
