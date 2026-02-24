@@ -14,6 +14,7 @@ from unittest.mock import patch
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
     CodeInterpreterClient,
 )
+from onyx.tools.tool_implementations.python.code_interpreter_client import FileInput
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
     StreamOutputEvent,
 )
@@ -152,7 +153,7 @@ def test_execute_streaming_fallback_preserves_files_param() -> None:
             return batch_resp
         raise AssertionError(f"Unexpected URL: {url}")
 
-    files_input = [{"path": "data.csv", "file_id": "file-abc123"}]
+    files_input: list[FileInput] = [{"path": "data.csv", "file_id": "file-abc123"}]
 
     with patch.object(client.session, "post", side_effect=mock_post):
         events = list(

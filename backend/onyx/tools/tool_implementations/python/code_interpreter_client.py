@@ -63,7 +63,9 @@ class StreamErrorEvent(BaseModel):
 
 StreamEvent = Union[StreamOutputEvent, StreamResultEvent, StreamErrorEvent]
 
-_SSE_EVENT_MAP: dict[str, type[BaseModel]] = {
+_SSE_EVENT_MAP: dict[
+    str, type[StreamOutputEvent | StreamResultEvent | StreamErrorEvent]
+] = {
     "output": StreamOutputEvent,
     "result": StreamResultEvent,
     "error": StreamErrorEvent,

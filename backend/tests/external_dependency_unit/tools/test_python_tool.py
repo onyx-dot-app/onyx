@@ -1204,8 +1204,7 @@ def test_code_interpreter_receives_chat_files(
     # Verify: file uploaded, code executed via streaming, staged file cleaned up
     assert len(mock_ci_server.get_requests(method="POST", path="/v1/files")) == 1
     assert (
-        len(mock_ci_server.get_requests(method="POST", path="/v1/execute/streaming"))
-        == 1
+        len(mock_ci_server.get_requests(method="POST", path="/v1/execute/stream")) == 1
     )
 
     delete_requests = mock_ci_server.get_requests(method="DELETE")
@@ -1423,4 +1422,6 @@ def test_code_interpreter_streaming_fallback_to_batch(
         if isinstance(p, Packet) and isinstance(p.obj, PythonToolDelta)
     ]
     assert len(delta_packets) >= 1
-    assert "mock output" in delta_packets[0].obj.stdout
+    first_delta = delta_packets[0].obj
+    assert isinstance(first_delta, PythonToolDelta)
+    assert "mock output" in first_delta.stdout
