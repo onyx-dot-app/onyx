@@ -11,8 +11,10 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import Modal from "@/refresh-components/Modal";
 import { useFilters, useLlmManager } from "@/lib/hooks";
 import Dropzone from "react-dropzone";
-import { useSendMessageToParent } from "@/lib/extension/utils";
+import { useSendMessageToParent, getPanelOrigin } from "@/lib/extension/utils";
 import { useNRFPreferences } from "@/components/context/NRFPreferencesContext";
+import SidePanelHeader from "@/app/nrf/side-panel/SidePanelHeader";
+import { CHROME_MESSAGE } from "@/lib/extension/constants";
 import { SettingsPanel } from "@/app/components/nrf/SettingsPanel";
 import LoginPage from "@/app/auth/login/LoginPage";
 import { sendSetDefaultNewTabMessage } from "@/lib/extension/utils";
@@ -33,16 +35,9 @@ import ChatScrollContainer from "@/sections/chat/ChatScrollContainer";
 import WelcomeMessage from "@/app/app/components/WelcomeMessage";
 import useChatSessions from "@/hooks/useChatSessions";
 import { cn } from "@/lib/utils";
-import Logo from "@/refresh-components/Logo";
 import Spacer from "@/refresh-components/Spacer";
-import { useAppSidebarContext } from "@/providers/AppSidebarProvider";
 import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
-import {
-  SvgUser,
-  SvgMenu,
-  SvgExternalLink,
-  SvgAlertTriangle,
-} from "@opal/icons";
+import { SvgUser, SvgMenu, SvgAlertTriangle } from "@opal/icons";
 import { useAppBackground } from "@/providers/AppBackgroundProvider";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import DocumentsSidebar from "@/sections/document-sidebar/DocumentsSidebar";
@@ -67,14 +62,6 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   const searchParams = useSearchParams();
   const filterManager = useFilters();
   const { user, authTypeMetadata } = useUser();
-  const { setFolded } = useAppSidebarContext();
-
-  // Hide sidebar when in side panel mode
-  useEffect(() => {
-    if (isSidePanel) {
-      setFolded(true);
-    }
-  }, [isSidePanel, setFolded]);
 
   // Chat sessions
   const { refreshChatSessions } = useChatSessions();
@@ -129,6 +116,8 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   // State
   const [message, setMessage] = useState("");
   const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
+  const [tabReadingEnabled, setTabReadingEnabled] = useState<boolean>(false);
+  const [currentTabUrl, setCurrentTabUrl] = useState<string | null>(null);
   const [presentingDocument, setPresentingDocument] =
     useState<MinimalOnyxDocument | null>(null);
 
@@ -136,6 +125,12 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   const documentSidebarVisible = useDocumentSidebarVisible();
   const updateCurrentDocumentSidebarVisible = useChatSessionStore(
     (state) => state.updateCurrentDocumentSidebarVisible
+  );
+  const setCurrentSession = useChatSessionStore(
+    (state) => state.setCurrentSession
+  );
+  const currentSessionId = useChatSessionStore(
+    (state) => state.currentSessionId
   );
 
   // Memoized callback for closing document sidebar
@@ -200,6 +195,26 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   const anchorSelector = anchorNodeId ? `#message-${anchorNodeId}` : undefined;
 
   useSendMessageToParent();
+
+  // Listen for tab URL updates from the Chrome extension
+  useEffect(() => {
+    if (!isSidePanel) return;
+
+    function handleExtensionMessage(event: MessageEvent) {
+      // Only trust messages from the Chrome extension parent.
+      // Checking the origin (chrome-extension://) prevents a non-extension
+      // page that embeds NRFPage as an iframe from injecting arbitrary URLs
+      // into the prompt context via TAB_URL_UPDATED.
+      if (!event.origin.startsWith("chrome-extension://")) return;
+      if (event.source !== window.parent) return;
+      if (event.data?.type === CHROME_MESSAGE.TAB_URL_UPDATED) {
+        setCurrentTabUrl(event.data.url as string);
+      }
+    }
+
+    window.addEventListener("message", handleExtensionMessage);
+    return () => window.removeEventListener("message", handleExtensionMessage);
+  }, [isSidePanel]);
 
   const toggleSettings = () => {
     setSettingsOpen((prev) => !prev);
@@ -268,23 +283,16 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     [handleMessageSpecificFileUpload]
   );
 
-  // Handler for chat submission (used by query controller)
-  const onChat = useCallback(
-    (chatMessage: string) => {
-      resetInputBar();
-      onSubmit({
-        message: chatMessage,
-        currentMessageFiles: currentMessageFiles,
-        deepResearch: deepResearchEnabled,
-      });
-    },
-    [onSubmit, currentMessageFiles, deepResearchEnabled, resetInputBar]
-  );
-
   // Handle submit from AppInputBar - routes through query controller for search/chat classification
   const handleChatInputSubmit = useCallback(
     async (submittedMessage: string) => {
       if (!submittedMessage.trim()) return;
+
+      const additionalContext =
+        tabReadingEnabled && currentTabUrl
+          ? `The user is currently viewing: ${currentTabUrl}. Use the open_url tool to read this page and use its content as additional context for your response.`
+          : undefined;
+
       // If we already have messages (chat session started), always use chat mode
       // (matches AppPage behavior where existing sessions bypass classification)
       if (hasMessages) {
@@ -293,9 +301,22 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
           message: submittedMessage,
           currentMessageFiles: currentMessageFiles,
           deepResearch: deepResearchEnabled,
+          additionalContext,
         });
         return;
       }
+
+      // Build an onChat closure that captures additionalContext for this submission
+      const onChat = (chatMessage: string) => {
+        resetInputBar();
+        onSubmit({
+          message: chatMessage,
+          currentMessageFiles: currentMessageFiles,
+          deepResearch: deepResearchEnabled,
+          additionalContext,
+        });
+      };
+
       // Use submitQuery which will classify the query and either:
       // - Route to search (sets classification to "search" and shows SearchUI)
       // - Route to chat (calls onChat callback)
@@ -308,7 +329,8 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       deepResearchEnabled,
       resetInputBar,
       submitQuery,
-      onChat,
+      tabReadingEnabled,
+      currentTabUrl,
     ]
   );
 
@@ -331,9 +353,34 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     });
   }, [messageHistory, onSubmit, currentMessageFiles, deepResearchEnabled]);
 
-  const handleOpenInOnyx = () => {
-    window.open(`${window.location.origin}/app`, "_blank");
-  };
+  // Start a new chat session in the side panel
+  const handleNewChat = useCallback(() => {
+    setCurrentSession(null);
+    setTabReadingEnabled(false);
+    setCurrentTabUrl(null);
+    resetInputBar();
+    // Notify the service worker so it stops sending tab URL updates
+    window.parent.postMessage(
+      { type: CHROME_MESSAGE.TAB_READING_DISABLED },
+      getPanelOrigin()
+    );
+  }, [setCurrentSession, resetInputBar]);
+
+  const handleToggleTabReading = useCallback(() => {
+    const next = !tabReadingEnabled;
+    setTabReadingEnabled(next);
+    if (!next) {
+      setCurrentTabUrl(null);
+    }
+    window.parent.postMessage(
+      {
+        type: next
+          ? CHROME_MESSAGE.TAB_READING_ENABLED
+          : CHROME_MESSAGE.TAB_READING_DISABLED,
+      },
+      getPanelOrigin()
+    );
+  }, [tabReadingEnabled]);
 
   // Handle search result document click
   const handleSearchDocumentClick = useCallback(
@@ -362,18 +409,10 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
       {/* Side panel header */}
       {isSidePanel && (
-        <header className="flex items-center justify-between px-4 py-3 border-b border-border-01 bg-background">
-          <div className="flex items-center gap-2">
-            <Logo />
-          </div>
-          <Button
-            tertiary
-            rightIcon={SvgExternalLink}
-            onClick={handleOpenInOnyx}
-          >
-            Open in Onyx
-          </Button>
-        </header>
+        <SidePanelHeader
+          onNewChat={handleNewChat}
+          chatSessionId={currentSessionId}
+        />
       )}
 
       {/* Settings button */}
@@ -392,18 +431,22 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
         {({ getRootProps }) => (
           <div
             {...getRootProps()}
-            className="h-full w-full flex flex-col items-center outline-none"
+            className={cn(
+              "flex-1 min-h-0 w-full flex flex-col items-center outline-none",
+              isSidePanel && "px-3"
+            )}
           >
             {/* Chat area with messages */}
             {hasMessages && resolvedAssistant && (
               <>
-                {/* Fake header */}
-                <Spacer rem={2} />
+                {/* Fake header - pushes content below absolute settings button (non-side-panel only) */}
+                {!isSidePanel && <Spacer rem={2} />}
                 <ChatScrollContainer
                   sessionId="nrf-session"
                   anchorSelector={anchorSelector}
                   autoScroll={autoScrollEnabled}
                   isStreaming={isStreaming}
+                  hideScrollbar={isSidePanel}
                 >
                   <ChatUI
                     liveAssistant={resolvedAssistant}
@@ -432,7 +475,11 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
             {/* AppInputBar container - in normal flex flow like AppPage */}
             <div
               ref={inputRef}
-              className="w-full max-w-[var(--app-page-main-content-width)] flex flex-col px-4"
+              className={cn(
+                "w-full flex flex-col",
+                !isSidePanel &&
+                  "max-w-[var(--app-page-main-content-width)] px-4"
+              )}
             >
               <AppInputBar
                 ref={chatInputBarRef}
@@ -455,8 +502,13 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                 disabled={
                   !llmManager.isLoadingProviders && !llmManager.hasAnyProvider
                 }
+                {...(isSidePanel && {
+                  tabReadingEnabled,
+                  currentTabUrl,
+                  onToggleTabReading: handleToggleTabReading,
+                })}
               />
-              <Spacer rem={0.5} />
+              <Spacer rem={isSidePanel ? 1 : 0.5} />
             </div>
 
             {/* Search results - shown when query is classified as search */}
