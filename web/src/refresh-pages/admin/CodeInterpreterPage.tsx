@@ -13,14 +13,6 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import Text from "@/refresh-components/texts/Text";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 
-function DisconnectButton() {
-  return <IconButton tertiary icon={SvgUnplug} />;
-}
-
-function RefreshButton() {
-  return <IconButton tertiary icon={SvgRefreshCw} />;
-}
-
 function ConnectionStatus() {
   return (
     <Section
@@ -46,8 +38,8 @@ function ActionButtons() {
       gap={0}
       padding={0}
     >
-      <DisconnectButton />
-      <RefreshButton />
+      <IconButton tertiary icon={SvgUnplug} />
+      <IconButton tertiary icon={SvgRefreshCw} />
     </GeneralLayouts.Section>
   );
 }
