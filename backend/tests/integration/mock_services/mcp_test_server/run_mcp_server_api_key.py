@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.responses import PlainTextResponse
 from fastmcp import FastMCP
 from fastmcp.server.auth import StaticTokenVerifier
-from fastmcp.server.server import FunctionTool
+from fastmcp.tools import FunctionTool
 
 
 def make_many_tools(mcp: FastMCP) -> list[FunctionTool]:

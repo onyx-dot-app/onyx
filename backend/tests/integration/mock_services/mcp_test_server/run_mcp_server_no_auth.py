@@ -2,7 +2,7 @@ import os
 import sys
 
 from fastmcp import FastMCP
-from fastmcp.server.server import FunctionTool
+from fastmcp.tools import FunctionTool
 
 mcp = FastMCP("My HTTP MCP")
 

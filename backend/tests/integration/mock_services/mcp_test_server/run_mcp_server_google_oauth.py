@@ -28,7 +28,7 @@ from fastmcp import FastMCP
 from fastmcp.server.auth import AccessToken
 from fastmcp.server.auth import TokenVerifier
 from fastmcp.server.dependencies import get_access_token
-from fastmcp.server.server import FunctionTool
+from fastmcp.tools import FunctionTool
 
 # Google's tokeninfo endpoint for validating access tokens
 GOOGLE_TOKENINFO_URL = "https://oauth2.googleapis.com/tokeninfo"

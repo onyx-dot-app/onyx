@@ -15,7 +15,7 @@ from fastapi.responses import Response
 from fastmcp import FastMCP
 from fastmcp.server.auth.providers.jwt import JWTVerifier
 from fastmcp.server.dependencies import get_access_token
-from fastmcp.server.server import FunctionTool
+from fastmcp.tools import FunctionTool
 from starlette.middleware.base import BaseHTTPMiddleware
 
 # uncomment for debug logs
