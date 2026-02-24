@@ -227,6 +227,7 @@ type CherryPickState struct {
 	CommitSHAs        []string `json:"commit_shas"`
 	CommitMessages    []string `json:"commit_messages"`
 	Releases          []string `json:"releases"`
+	Assignees         []string `json:"assignees,omitempty"`
 	CompletedReleases []string `json:"completed_releases,omitempty"`
 	Stashed           bool     `json:"stashed"`
 	NoVerify          bool     `json:"no_verify"`
