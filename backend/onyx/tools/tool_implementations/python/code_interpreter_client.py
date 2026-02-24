@@ -102,6 +102,7 @@ class CodeInterpreterClient:
     def health(self) -> bool:
         """Check if the Code Interpreter service is healthy"""
 <<<<<<< HEAD
+<<<<<<< HEAD
         url = f"{self.base_url}/health"
         try:
             response = self.session.get(url, timeout=5)
@@ -110,8 +111,11 @@ class CodeInterpreterClient:
         except Exception as e:
             logger.warning(f"Exception caught when checking health, e={e}")
 =======
+=======
+        url = f"{self.base_url}/health"
+>>>>>>> 402766296 (.)
         try:
-            response = self.session.get(f"{self.base_url}/health", timeout=5)
+            response = self.session.get(url, timeout=5)
             response.raise_for_status()
             return response.json().get("status") == "ok"
         except Exception:
