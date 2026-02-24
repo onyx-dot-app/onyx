@@ -39,8 +39,8 @@ import DocumentSetCard from "@/sections/cards/DocumentSetCard";
 import {
   getLLMProviderOverrideForPersona,
   getDisplayName,
-} from "@/lib/llm/utils";
-import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
+} from "@/lib/llmConfig/utils";
+import { useLLMProviders } from "@/hooks/useLLMProviders";
 import { Interactive } from "@opal/core";
 
 /**

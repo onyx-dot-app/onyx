@@ -1,5 +1,5 @@
 import useSWR from "swr";
-import { useLLMProviders } from "./useLLMProviders";
+import { useLLMProviders } from "@/hooks/useLLMProviders";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 
 jest.mock("swr", () => ({
