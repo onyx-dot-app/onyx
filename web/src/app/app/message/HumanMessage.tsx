@@ -174,7 +174,7 @@ const HumanMessage = React.memo(function HumanMessage({
       className="group flex flex-col justify-end w-full relative"
     >
       <FileDisplay alignBubble files={files || []} />
-      <div className="md:flex md:flex-wrap justify-end break-words">
+      <div className="md:flex md:flex-wrap relative justify-end break-words">
         {isEditing ? (
           <MessageEditing
             content={content}
