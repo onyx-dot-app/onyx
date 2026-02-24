@@ -675,7 +675,7 @@ The platform architecture document provides additional context on how these impr
     });
 
     test.describe("Header Levels", () => {
-      const HEADERS_RESPONSE = `# Getting Started
+      const HEADINGS_RESPONSE = `# Getting Started
 
 This is the introductory paragraph.
 
@@ -691,13 +691,13 @@ Some details about configuration.
 
 Set \`max_results\` to limit the number of returned documents.`;
 
-      test("h1 through h4 headers with inline code render correctly", async ({
+      test("h1 through h4 headings with inline code render correctly", async ({
         page,
       }) => {
         await openChat(page);
-        await mockChatEndpoint(page, HEADERS_RESPONSE);
+        await mockChatEndpoint(page, HEADINGS_RESPONSE);
 
-        await sendMessage(page, "Show me all header levels");
+        await sendMessage(page, "Show me all heading levels");
 
         const aiMessage = page.getByTestId("onyx-ai-message").first();
 
@@ -721,7 +721,7 @@ Set \`max_results\` to limit the number of returned documents.`;
 
         await screenshotChatContainer(
           page,
-          `chat-header-levels-h1-h4-${theme}`
+          `chat-heading-levels-h1-h4-${theme}`
         );
       });
     });
