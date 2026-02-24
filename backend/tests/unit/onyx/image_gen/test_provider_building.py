@@ -211,13 +211,16 @@ def test_openai_provider_rejects_reference_images_for_unsupported_model() -> Non
         )
 
 
-def test_openai_provider_rejects_multiple_reference_images_for_dalle2() -> None:
+def test_openai_provider_rejects_multiple_reference_images_for_dalle3() -> None:
     provider = OpenAIImageGenerationProvider(api_key="test-key")
 
-    with pytest.raises(ValueError):
+    with pytest.raises(
+        ValueError,
+        match="does not support image edits with reference images",
+    ):
         provider.generate_image(
             prompt="edit this image",
-            model="dall-e-2",
+            model="dall-e-3",
             size="1024x1024",
             n=1,
             reference_images=[
@@ -307,17 +310,20 @@ def test_azure_provider_rejects_reference_images_for_unsupported_model() -> None
         )
 
 
-def test_azure_provider_rejects_multiple_reference_images_for_dalle2() -> None:
+def test_azure_provider_rejects_multiple_reference_images_for_dalle3() -> None:
     provider = AzureImageGenerationProvider(
         api_key="test-key",
         api_base="https://azure.example.com",
         api_version="2024-05-01-preview",
     )
 
-    with pytest.raises(ValueError):
+    with pytest.raises(
+        ValueError,
+        match="does not support image edits with reference images",
+    ):
         provider.generate_image(
             prompt="edit this image",
-            model="dall-e-2",
+            model="dall-e-3",
             size="1024x1024",
             n=1,
             reference_images=[
