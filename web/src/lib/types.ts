@@ -31,6 +31,11 @@ interface UserPreferences {
   theme_preference: ThemePreference | null;
   chat_background: string | null;
   default_app_mode: "AUTO" | "CHAT" | "SEARCH";
+  // Voice preferences
+  voice_auto_send?: boolean;
+  voice_auto_playback?: boolean;
+  voice_playback_speed?: number;
+  preferred_voice?: string;
 }
 
 export interface MemoryItem {

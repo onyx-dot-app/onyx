@@ -746,6 +746,7 @@ function ChatPreferencesSettings() {
     updateUserShortcuts,
     updateUserDefaultModel,
     updateUserDefaultAppMode,
+    updateUserVoiceSettings,
   } = useUser();
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
   const llmManager = useLlmManager();
@@ -901,6 +902,59 @@ function ChatPreferencesSettings() {
           </InputLayouts.Horizontal>
 
           {user?.preferences?.shortcut_enabled && <PromptShortcuts />}
+        </Card>
+      </Section>
+
+      <Section gap={0.75}>
+        <InputLayouts.Title title="Voice" />
+        <Card>
+          <InputLayouts.Horizontal
+            title="Auto-Send"
+            description="Automatically send voice input when recording stops."
+          >
+            <Switch
+              checked={user?.preferences.voice_auto_send ?? false}
+              onCheckedChange={(checked) => {
+                void updateUserVoiceSettings({ auto_send: checked });
+              }}
+            />
+          </InputLayouts.Horizontal>
+
+          <InputLayouts.Horizontal
+            title="Auto-Playback"
+            description="Automatically play voice responses."
+          >
+            <Switch
+              checked={user?.preferences.voice_auto_playback ?? false}
+              onCheckedChange={(checked) => {
+                void updateUserVoiceSettings({ auto_playback: checked });
+              }}
+            />
+          </InputLayouts.Horizontal>
+
+          <InputLayouts.Horizontal
+            title="Playback Speed"
+            description="Adjust the speed of voice playback."
+          >
+            <div className="flex items-center gap-3">
+              <input
+                type="range"
+                min="0.5"
+                max="2"
+                step="0.1"
+                value={user?.preferences.voice_playback_speed ?? 1}
+                onChange={(e) => {
+                  void updateUserVoiceSettings({
+                    playback_speed: parseFloat(e.target.value),
+                  });
+                }}
+                className="w-24 h-2 rounded-lg appearance-none cursor-pointer bg-background-neutral-02"
+              />
+              <span className="text-sm text-text-02 w-10">
+                {(user?.preferences.voice_playback_speed ?? 1).toFixed(1)}x
+              </span>
+            </div>
+          </InputLayouts.Horizontal>
         </Card>
       </Section>
     </Section>

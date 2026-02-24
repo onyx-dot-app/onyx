@@ -285,6 +285,12 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     # organized in typical structured fashion
     # formatted as `displayName__provider__modelName`
 
+    # Voice preferences
+    voice_auto_send: Mapped[bool] = mapped_column(Boolean, default=False)
+    voice_auto_playback: Mapped[bool] = mapped_column(Boolean, default=False)
+    voice_playback_speed: Mapped[float] = mapped_column(Float, default=1.0)
+    preferred_voice: Mapped[str | None] = mapped_column(String, nullable=True)
+
     # relationships
     credentials: Mapped[list["Credential"]] = relationship(
         "Credential", back_populates="user", lazy="joined"
@@ -2958,6 +2964,47 @@ class ImageGenerationConfig(Base):
             "ix_image_generation_config_model_configuration_id",
             "model_configuration_id",
         ),
+    )
+
+
+class VoiceProvider(Base):
+    """Configuration for voice services (STT and TTS)."""
+
+    __tablename__ = "voice_provider"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String, unique=True)
+    provider_type: Mapped[str] = mapped_column(
+        String
+    )  # "openai", "azure", "elevenlabs"
+    api_key: Mapped[SensitiveValue[str] | None] = mapped_column(
+        EncryptedString(), nullable=True
+    )
+    api_base: Mapped[str | None] = mapped_column(String, nullable=True)
+    custom_config: Mapped[dict[str, Any] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
+
+    # Model/voice configuration
+    stt_model: Mapped[str | None] = mapped_column(
+        String, nullable=True
+    )  # e.g., "whisper-1"
+    tts_model: Mapped[str | None] = mapped_column(
+        String, nullable=True
+    )  # e.g., "tts-1", "tts-1-hd"
+    default_voice: Mapped[str | None] = mapped_column(
+        String, nullable=True
+    )  # e.g., "alloy", "echo"
+
+    # STT and TTS can use different providers - only one provider per type
+    is_default_stt: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_default_tts: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    time_updated: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
 

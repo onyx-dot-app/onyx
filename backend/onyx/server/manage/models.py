@@ -73,6 +73,12 @@ class UserPreferences(BaseModel):
     chat_background: str | None = None
     default_app_mode: DefaultAppMode = DefaultAppMode.CHAT
 
+    # Voice preferences
+    voice_auto_send: bool | None = None
+    voice_auto_playback: bool | None = None
+    voice_playback_speed: float | None = None
+    preferred_voice: str | None = None
+
     # controls which tools are enabled for the user for a specific assistant
     assistant_specific_configs: UserSpecificAssistantPreferences | None = None
 
@@ -152,6 +158,10 @@ class UserInfo(BaseModel):
                     theme_preference=user.theme_preference,
                     chat_background=user.chat_background,
                     default_app_mode=user.default_app_mode,
+                    voice_auto_send=user.voice_auto_send,
+                    voice_auto_playback=user.voice_auto_playback,
+                    voice_playback_speed=user.voice_playback_speed,
+                    preferred_voice=user.preferred_voice,
                     assistant_specific_configs=assistant_specific_configs,
                 )
             ),
@@ -226,6 +236,13 @@ class DefaultAppModeRequest(BaseModel):
 
 class ChatBackgroundRequest(BaseModel):
     chat_background: str | None
+
+
+class VoiceSettingsUpdateRequest(BaseModel):
+    auto_send: bool | None = None
+    auto_playback: bool | None = None
+    playback_speed: float | None = Field(default=None, ge=0.5, le=2.0)
+    preferred_voice: str | None = None
 
 
 class PersonalizationUpdateRequest(BaseModel):
