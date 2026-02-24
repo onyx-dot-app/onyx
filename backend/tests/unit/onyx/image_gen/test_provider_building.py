@@ -77,6 +77,8 @@ def test_build_azure_provider_from_api_key_and_base_and_version() -> None:
     assert image_gen_provider._api_key == "test"
     assert image_gen_provider._api_base == "test"
     assert image_gen_provider._api_version == "test"
+    assert image_gen_provider.supports_reference_images is True
+    assert image_gen_provider.max_reference_images == 16
 
 
 def test_build_azure_provider_fails_missing_credential() -> None:
@@ -211,6 +213,106 @@ def test_openai_provider_rejects_reference_images_for_unsupported_model() -> Non
 
 def test_openai_provider_rejects_multiple_reference_images_for_dalle2() -> None:
     provider = OpenAIImageGenerationProvider(api_key="test-key")
+
+    with pytest.raises(ValueError):
+        provider.generate_image(
+            prompt="edit this image",
+            model="dall-e-2",
+            size="1024x1024",
+            n=1,
+            reference_images=[
+                ReferenceImage(data=b"image-1", mime_type="image/png"),
+                ReferenceImage(data=b"image-2", mime_type="image/png"),
+            ],
+        )
+
+
+def test_azure_provider_uses_image_generation_without_reference_images() -> None:
+    provider = AzureImageGenerationProvider(
+        api_key="test-key",
+        api_base="https://azure.example.com",
+        api_version="2024-05-01-preview",
+        deployment_name="img-deployment",
+    )
+    expected_response = object()
+
+    with (
+        patch("litellm.image_generation", return_value=expected_response) as mock_gen,
+        patch("litellm.image_edit") as mock_edit,
+    ):
+        response = provider.generate_image(
+            prompt="draw a skyline",
+            model="gpt-image-1",
+            size="1024x1024",
+            n=1,
+            quality="high",
+        )
+
+    assert response is expected_response
+    mock_gen.assert_called_once()
+    mock_edit.assert_not_called()
+    assert mock_gen.call_args.kwargs["model"] == "azure/img-deployment"
+
+
+def test_azure_provider_uses_image_edit_with_reference_images() -> None:
+    provider = AzureImageGenerationProvider(
+        api_key="test-key",
+        api_base="https://azure.example.com",
+        api_version="2024-05-01-preview",
+        deployment_name="img-deployment",
+    )
+    reference_images = [
+        ReferenceImage(data=b"image-1-bytes", mime_type="image/png"),
+        ReferenceImage(data=b"image-2-bytes", mime_type="image/jpeg"),
+    ]
+    expected_response = object()
+
+    with (
+        patch("litellm.image_generation") as mock_gen,
+        patch("litellm.image_edit", return_value=expected_response) as mock_edit,
+    ):
+        response = provider.generate_image(
+            prompt="make this noir style",
+            model="gpt-image-1",
+            size="1024x1024",
+            n=1,
+            quality="high",
+            reference_images=reference_images,
+        )
+
+    assert response is expected_response
+    mock_gen.assert_not_called()
+    mock_edit.assert_called_once()
+    assert mock_edit.call_args.kwargs["model"] == "azure/img-deployment"
+    assert mock_edit.call_args.kwargs["image"] == [
+        b"image-1-bytes",
+        b"image-2-bytes",
+    ]
+
+
+def test_azure_provider_rejects_reference_images_for_unsupported_model() -> None:
+    provider = AzureImageGenerationProvider(
+        api_key="test-key",
+        api_base="https://azure.example.com",
+        api_version="2024-05-01-preview",
+    )
+
+    with pytest.raises(ValueError):
+        provider.generate_image(
+            prompt="edit this image",
+            model="dall-e-3",
+            size="1024x1024",
+            n=1,
+            reference_images=[ReferenceImage(data=b"image-1", mime_type="image/png")],
+        )
+
+
+def test_azure_provider_rejects_multiple_reference_images_for_dalle2() -> None:
+    provider = AzureImageGenerationProvider(
+        api_key="test-key",
+        api_base="https://azure.example.com",
+        api_version="2024-05-01-preview",
+    )
 
     with pytest.raises(ValueError):
         provider.generate_image(
