@@ -174,7 +174,7 @@ const HumanMessage = React.memo(function HumanMessage({
       className="group flex flex-col justify-end w-full relative"
     >
       <FileDisplay alignBubble files={files || []} />
-      <div className="flex flex-wrap justify-end break-words">
+      <div className="md:flex md:flex-wrap justify-end break-words">
         {isEditing ? (
           <MessageEditing
             content={content}
@@ -215,11 +215,7 @@ const HumanMessage = React.memo(function HumanMessage({
               </div>
             </div>
             {onEdit && !isEditing && (
-              // HACK: In order to standardize a gap-12 spacing between messages, we apply a
-              // negative margin to the copy and edit buttons. On smaller screens when they wrap
-              // below the message instead of extend to the left, this -mb-11 offsets the size of
-              // the buttons (2.75rem) meaning the only whitespace is being applied by the gap-12.
-              <div className="flex flex-row p-1 -mb-11 opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="absolute md:relative right-0 z-content flex flex-row p-1 opacity-0 group-hover:opacity-100 transition-opacity">
                 <CopyIconButton
                   getCopyText={() => content}
                   prominence="tertiary"
