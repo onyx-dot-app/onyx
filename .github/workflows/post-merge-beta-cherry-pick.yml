@@ -75,10 +75,60 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Create cherry-pick PR to latest release
+        id: create_cherry_pick_pr
         if: steps.gate.outputs.should_cherrypick == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_TOKEN: ${{ github.token }}
           CHERRY_PICK_ASSIGNEE: ${{ steps.gate.outputs.merged_by }}
         run: |
-          uv run --no-sync --with onyx-devtools ods cherry-pick "${GITHUB_SHA}" --yes --no-verify
+          set -o pipefail
+          output_file="$(mktemp)"
+          uv run --no-sync --with onyx-devtools ods cherry-pick "${GITHUB_SHA}" --yes --no-verify 2>&1 | tee "$output_file"
+
+          pr_urls="$(grep -Eo 'https://github\.com/[^[:space:]]+/pull/[0-9]+' "$output_file" | sort -u || true)"
+          first_pr_url="$(printf '%s\n' "$pr_urls" | sed '/^[[:space:]]*$/d' | head -n 1)"
+
+          echo "first_pr_url=${first_pr_url}" >> "$GITHUB_OUTPUT"
+          {
+            echo 'pr_urls<<EOF'
+            printf '%s\n' "$pr_urls"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Notify Slack about created cherry-pick PR
+        if: steps.gate.outputs.should_cherrypick == 'true' && steps.create_cherry_pick_pr.outputs.first_pr_url != ''
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_CHANNEL_ID: C0AGDA14971
+          SOURCE_PR_NUMBER: ${{ steps.gate.outputs.pr_number }}
+          CHERRY_PICK_PR_URLS: ${{ steps.create_cherry_pick_pr.outputs.pr_urls }}
+        run: |
+          if [ -z "${SLACK_BOT_TOKEN:-}" ]; then
+            echo "::warning::SLACK_BOT_TOKEN is not configured; skipping Slack notification."
+            exit 0
+          fi
+
+          source_pr_url="https://github.com/${GITHUB_REPOSITORY}/pull/${SOURCE_PR_NUMBER}"
+          cherry_pick_links="$(printf '%s\n' "$CHERRY_PICK_PR_URLS" | sed '/^[[:space:]]*$/d' | sed 's#^\(https://github.com/[^/]*/[^/]*/pull/\)\([0-9][0-9]*\)$#- <\1\2|PR \#\2>#')"
+          message=":cherries: Automated cherry-pick PR created from <${source_pr_url}|#${SOURCE_PR_NUMBER}> (merge commit \`${GITHUB_SHA}\`)."
+          if [ -n "$cherry_pick_links" ]; then
+            message="${message}"$'\n'"${cherry_pick_links}"
+          fi
+
+          payload="$(jq -n \
+            --arg channel "$SLACK_CHANNEL_ID" \
+            --arg text "$message" \
+            '{channel: $channel, text: $text, mrkdwn: true}')"
+
+          if ! response="$(curl -sS -X POST "https://slack.com/api/chat.postMessage" \
+            -H "Authorization: Bearer ${SLACK_BOT_TOKEN}" \
+            -H "Content-Type: application/json; charset=utf-8" \
+            --data "$payload")"; then
+            echo "::warning::Failed to call Slack API."
+            exit 0
+          fi
+
+          if [ "$(echo "$response" | jq -r '.ok // false')" != "true" ]; then
+            echo "::warning::Slack API returned failure: $response"
+          fi
