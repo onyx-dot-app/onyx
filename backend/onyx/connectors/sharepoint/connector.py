@@ -1592,6 +1592,7 @@ class SharepointConnector(
             if certificate_data is None:
                 raise RuntimeError("Failed to load certificate")
 
+            logger.info(f"Creating MSAL app with authority url {authority_url}")
             self.msal_app = msal.ConfidentialClientApplication(
                 authority=authority_url,
                 client_id=sp_client_id,

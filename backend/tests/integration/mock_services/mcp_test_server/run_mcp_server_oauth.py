@@ -15,7 +15,6 @@ from fastapi.responses import Response
 from fastmcp import FastMCP
 from fastmcp.server.auth.providers.jwt import JWTVerifier
 from fastmcp.server.dependencies import get_access_token
-from fastmcp.server.server import FunctionTool
 from starlette.middleware.base import BaseHTTPMiddleware
 
 # uncomment for debug logs
@@ -37,18 +36,15 @@ Enable authorization code and store the client id and secret.
 """
 
 
-def make_many_tools(mcp: FastMCP) -> list[FunctionTool]:
-    def make_tool(i: int) -> FunctionTool:
+def make_many_tools(mcp: FastMCP) -> None:
+    def make_tool(i: int) -> None:
         @mcp.tool(name=f"tool_{i}", description=f"Get secret value {i}")
         def tool_name(name: str) -> str:  # noqa: ARG001
             """Get secret value."""
             return f"Secret value {500 - i}!"
 
-        return tool_name
-
-    tools = []
     for i in range(100):
-        tools.append(make_tool(i))
+        make_tool(i)
 
     @mcp.tool
     async def whoami() -> dict[str, Any]:
@@ -58,9 +54,6 @@ def make_many_tools(mcp: FastMCP) -> list[FunctionTool]:
             "scopes": tok.scopes if tok else [],
             "claims": tok.claims if tok else {},
         }
-
-    tools.append(whoami)
-    return tools
 
 
 # ---------- FASTAPI APP ----------
