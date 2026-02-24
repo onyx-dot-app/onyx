@@ -47,7 +47,7 @@ def test_check_for_user_file_project_sync_applies_queue_backpressure(
 
     task_app = MagicMock()
     with patch.object(check_for_user_file_project_sync, "app", task_app):
-        check_for_user_file_project_sync.run(tenant_id="test-tenant")  # type: ignore[misc]
+        check_for_user_file_project_sync.run(tenant_id="test-tenant")
 
     task_app.send_task.assert_not_called()
     lock.release.assert_called_once()
@@ -89,7 +89,7 @@ def test_check_for_user_file_project_sync_skips_duplicates(
 
     task_app = MagicMock()
     with patch.object(check_for_user_file_project_sync, "app", task_app):
-        check_for_user_file_project_sync.run(tenant_id="test-tenant")  # type: ignore[misc]
+        check_for_user_file_project_sync.run(tenant_id="test-tenant")
 
     assert mock_enqueue.call_count == 2
     lock.release.assert_called_once()
@@ -158,7 +158,7 @@ def test_process_single_user_file_project_sync_clears_queued_guard_on_pickup(
     mock_get_redis_client.return_value = redis_client
 
     user_file_id = str(uuid4())
-    process_single_user_file_project_sync.run(  # type: ignore[misc]
+    process_single_user_file_project_sync.run(
         user_file_id=user_file_id,
         tenant_id="test-tenant",
     )
