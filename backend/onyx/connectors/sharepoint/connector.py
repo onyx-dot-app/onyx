@@ -244,6 +244,12 @@ class SharepointConnectorCheckpoint(ConnectorCheckpoint):
     current_drive_name: str | None = None
     # Drive's web_url from the API - used as raw_node_id for DRIVE hierarchy nodes
     current_drive_web_url: str | None = None
+    # Resolved drive ID — avoids re-resolving on checkpoint resume
+    current_drive_id: str | None = None
+    # Next delta API page URL for per-page checkpointing within a drive.
+    # When set, Phase 3b fetches one page at a time so progress is persisted
+    # between pages.  None means BFS path or no active delta traversal.
+    current_drive_delta_next_link: str | None = None
 
     process_site_pages: bool = False
 
@@ -1403,6 +1409,87 @@ class SharepointConnector(
             if not page_url:
                 break
 
+    def _build_delta_start_url(
+        self,
+        drive_id: str,
+        start: datetime | None = None,
+        page_size: int = 200,
+    ) -> str:
+        """Build the initial delta API URL with query parameters embedded.
+
+        Embeds ``$top`` (and optionally a timestamp ``token``) directly in the
+        URL so that the returned string is fully self-contained and can be
+        stored in a checkpoint without needing a separate params dict.
+        """
+        base_url = f"{self.graph_api_base}/drives/{drive_id}/root/delta"
+        params = [f"$top={page_size}"]
+        if start is not None and start > _EPOCH:
+            token = quote(start.isoformat(timespec="seconds"))
+            params.append(f"token={token}")
+        return f"{base_url}?{'&'.join(params)}"
+
+    def _fetch_one_delta_page(
+        self,
+        page_url: str,
+        drive_id: str,
+        start: datetime | None = None,
+        end: datetime | None = None,
+        page_size: int = 200,
+    ) -> tuple[list[DriveItemData], str | None]:
+        """Fetch a single page of delta API results.
+
+        Returns ``(items, next_page_url)``.  *next_page_url* is ``None`` when
+        the delta enumeration is complete (deltaLink with no nextLink).
+
+        On 410 Gone (expired token) returns ``([], full_resync_url)`` so
+        the caller can store the resync URL in the checkpoint and retry on
+        the next cycle.
+        """
+        try:
+            data = self._graph_api_get_json(page_url)
+        except requests.HTTPError as e:
+            if e.response is not None and e.response.status_code == 410:
+                logger.warning(
+                    "Delta token expired (410 Gone) for drive '%s'. "
+                    "Will restart with full delta enumeration.",
+                    drive_id,
+                )
+                full_url = (
+                    f"{self.graph_api_base}/drives/{drive_id}/root/delta"
+                    f"?$top={page_size}"
+                )
+                return [], full_url
+            raise
+
+        items: list[DriveItemData] = []
+        for item in data.get("value", []):
+            if "folder" in item or "deleted" in item:
+                continue
+            if start is not None or end is not None:
+                raw_ts = item.get("lastModifiedDateTime")
+                if raw_ts:
+                    mod_dt = datetime.fromisoformat(raw_ts.replace("Z", "+00:00"))
+                    if start is not None and mod_dt < start:
+                        continue
+                    if end is not None and mod_dt > end:
+                        continue
+            items.append(DriveItemData.from_graph_json(item))
+
+        next_url = data.get("@odata.nextLink")
+        if next_url:
+            return items, next_url
+        return items, None
+
+    @staticmethod
+    def _clear_drive_checkpoint_state(
+        checkpoint: "SharepointConnectorCheckpoint",
+    ) -> None:
+        """Reset all drive-level fields in the checkpoint."""
+        checkpoint.current_drive_name = None
+        checkpoint.current_drive_id = None
+        checkpoint.current_drive_web_url = None
+        checkpoint.current_drive_delta_next_link = None
+
     def _fetch_slim_documents_from_sharepoint(self) -> GenerateSlimDocumentOutput:
         site_descriptors = self.site_descriptors or self.fetch_sites()
 
@@ -1844,14 +1931,13 @@ class SharepointConnector(
             # Return checkpoint to allow persistence after drive initialization
             return checkpoint
 
-        # Phase 3: Process documents from current drive
+        # Phase 3a: Initialize the next drive for processing
         if (
             checkpoint.current_site_descriptor
             and checkpoint.cached_drive_names
             and len(checkpoint.cached_drive_names) > 0
             and checkpoint.current_drive_name is None
         ):
-
             checkpoint.current_drive_name = checkpoint.cached_drive_names.popleft()
 
             start_dt = datetime.fromtimestamp(start, tz=timezone.utc)
@@ -1859,7 +1945,8 @@ class SharepointConnector(
             site_descriptor = checkpoint.current_site_descriptor
 
             logger.info(
-                f"Processing drive '{checkpoint.current_drive_name}' in site: {site_descriptor.url}"
+                f"Processing drive '{checkpoint.current_drive_name}' "
+                f"in site: {site_descriptor.url}"
             )
             logger.debug(f"Time range: {start_dt} to {end_dt}")
 
@@ -1868,35 +1955,35 @@ class SharepointConnector(
                 logger.warning("Current drive name is None, skipping")
                 return checkpoint
 
-            driveitems: Iterable[DriveItemData] = iter(())
-            drive_web_url: str | None = None
             try:
                 logger.info(
                     f"Fetching drive items for drive name: {current_drive_name}"
                 )
                 result = self._resolve_drive(site_descriptor, current_drive_name)
-                if result is not None:
-                    drive_id, drive_web_url = result
-                    driveitems = self._get_drive_items_for_drive_id(
-                        site_descriptor, drive_id, start_dt, end_dt
-                    )
-                    checkpoint.current_drive_web_url = drive_web_url
+                if result is None:
+                    logger.warning(f"Drive '{current_drive_name}' not found, skipping")
+                    self._clear_drive_checkpoint_state(checkpoint)
+                    return checkpoint
+
+                drive_id, drive_web_url = result
+                checkpoint.current_drive_id = drive_id
+                checkpoint.current_drive_web_url = drive_web_url
             except Exception as e:
                 logger.error(
-                    f"Failed to retrieve items from drive '{current_drive_name}' in site: {site_descriptor.url}: {e}"
+                    f"Failed to retrieve items from drive '{current_drive_name}' "
+                    f"in site: {site_descriptor.url}: {e}"
                 )
                 yield _create_entity_failure(
                     f"{site_descriptor.url}|{current_drive_name}",
-                    f"Failed to access drive '{current_drive_name}' in site '{site_descriptor.url}': {str(e)}",
+                    f"Failed to access drive '{current_drive_name}' "
+                    f"in site '{site_descriptor.url}': {str(e)}",
                     (start_dt, end_dt),
                     e,
                 )
-                checkpoint.current_drive_name = None
-                checkpoint.current_drive_web_url = None
+                self._clear_drive_checkpoint_state(checkpoint)
                 return checkpoint
 
-            # Normalize drive name (e.g., "Documents" -> "Shared Documents")
-            current_drive_name = SHARED_DOCUMENTS_MAP.get(
+            display_drive_name = SHARED_DOCUMENTS_MAP.get(
                 current_drive_name, current_drive_name
             )
 
@@ -1904,8 +1991,72 @@ class SharepointConnector(
                 yield from self._yield_drive_hierarchy_node(
                     site_descriptor.url,
                     drive_web_url,
-                    current_drive_name,
+                    display_drive_name,
                     checkpoint,
+                )
+
+            # For non-folder-scoped drives, use delta API with per-page
+            # checkpointing.  Build the initial URL and fall through to 3b.
+            if not site_descriptor.folder_path:
+                checkpoint.current_drive_delta_next_link = self._build_delta_start_url(
+                    drive_id, start_dt
+                )
+            # else: BFS path — delta_next_link stays None;
+            # Phase 3b will use _iter_drive_items_paged.
+
+        # Phase 3b: Process items from the current drive
+        if (
+            checkpoint.current_site_descriptor
+            and checkpoint.current_drive_name is not None
+            and checkpoint.current_drive_id is not None
+        ):
+            site_descriptor = checkpoint.current_site_descriptor
+            start_dt = datetime.fromtimestamp(start, tz=timezone.utc)
+            end_dt = datetime.fromtimestamp(end, tz=timezone.utc)
+            current_drive_name = SHARED_DOCUMENTS_MAP.get(
+                checkpoint.current_drive_name, checkpoint.current_drive_name
+            )
+            drive_web_url = checkpoint.current_drive_web_url
+
+            # --- determine item source ---
+            driveitems: Iterable[DriveItemData]
+            has_more_delta_pages = False
+
+            if checkpoint.current_drive_delta_next_link:
+                # Delta path: fetch one page at a time for checkpointing
+                try:
+                    page_items, next_url = self._fetch_one_delta_page(
+                        page_url=checkpoint.current_drive_delta_next_link,
+                        drive_id=checkpoint.current_drive_id,
+                        start=start_dt,
+                        end=end_dt,
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"Failed to fetch delta page for drive "
+                        f"'{current_drive_name}': {e}"
+                    )
+                    yield _create_entity_failure(
+                        f"{site_descriptor.url}|{current_drive_name}",
+                        f"Failed to fetch delta page for drive "
+                        f"'{current_drive_name}': {str(e)}",
+                        (start_dt, end_dt),
+                        e,
+                    )
+                    self._clear_drive_checkpoint_state(checkpoint)
+                    return checkpoint
+
+                driveitems = page_items
+                has_more_delta_pages = next_url is not None
+                if next_url:
+                    checkpoint.current_drive_delta_next_link = next_url
+            else:
+                # BFS path (folder-scoped): process all items at once
+                driveitems = self._iter_drive_items_paged(
+                    drive_id=checkpoint.current_drive_id,
+                    folder_path=site_descriptor.folder_path,
+                    start=start_dt,
+                    end=end_dt,
                 )
 
             item_count = 0
@@ -1949,8 +2100,6 @@ class SharepointConnector(
                     if include_permissions:
                         ctx = self._create_rest_client_context(site_descriptor.url)
 
-                    # Re-acquire token in case it expired during a long traversal
-                    # MSAL has a cache that returns the same token while still valid.
                     access_token = self._get_graph_access_token()
                     doc_or_failure = _convert_driveitem_to_document_with_permissions(
                         driveitem,
@@ -1986,8 +2135,11 @@ class SharepointConnector(
                     )
 
             logger.info(f"Processed {item_count} items in drive '{current_drive_name}'")
-            checkpoint.current_drive_name = None
-            checkpoint.current_drive_web_url = None
+
+            if has_more_delta_pages:
+                return checkpoint
+
+            self._clear_drive_checkpoint_state(checkpoint)
 
         # Phase 4: Progression logic - determine next step
         # If we have more drives in current site, continue with current site

@@ -277,13 +277,32 @@ def verify_email_domain(email: str) -> None:
             detail="Email is not valid",
         )
 
-    domain = email.split("@")[-1].lower()
+    local_part, domain = email.split("@")
+    domain = domain.lower()
+
+    if AUTH_TYPE == AuthType.CLOUD:
+        # Normalize googlemail.com to gmail.com (they deliver to the same inbox)
+        if domain == "googlemail.com":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"reason": "Please use @gmail.com instead of @googlemail.com."},
+            )
+
+        if "+" in local_part and domain != "onyx.app":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "reason": "Email addresses with '+' are not allowed. Please use your base email address."
+                },
+            )
 
     # Check if email uses a disposable/temporary domain
     if is_disposable_email(email):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Disposable email addresses are not allowed. Please use a permanent email address.",
+            detail={
+                "reason": "Disposable email addresses are not allowed. Please use a permanent email address."
+            },
         )
 
     # Check domain whitelist if configured

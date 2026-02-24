@@ -49,7 +49,7 @@ export async function searchDocuments(
   const request: SendSearchQueryRequest = {
     search_query: query,
     filters: options?.filters,
-    num_hits: options?.numHits ?? 50,
+    num_hits: options?.numHits ?? 30,
     include_content: options?.includeContent ?? false,
     stream: false,
   };

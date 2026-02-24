@@ -26,6 +26,7 @@ export interface Settings {
   query_history_type: QueryHistoryType;
 
   deep_research_enabled?: boolean;
+  search_ui_enabled?: boolean;
 
   // Image processing settings
   image_extraction_and_analysis_enabled?: boolean;
@@ -117,4 +118,16 @@ export interface CombinedSettings {
   isMobile?: boolean;
   webVersion: string | null;
   webDomain: string | null;
+
+  /**
+   * NOTE (@raunakab):
+   * Whether search mode is actually available to users.
+   *
+   * Prefer this over reading `settings.search_ui_enabled` directly.
+   * `search_ui_enabled` only reflects the admin's *preference* — it does not
+   * account for prerequisites like connectors being configured. This derived
+   * flag combines the admin setting with runtime checks (e.g. connectors
+   * exist) so consumers get a single, accurate boolean.
+   */
+  isSearchModeAvailable: boolean;
 }

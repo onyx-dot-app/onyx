@@ -114,7 +114,7 @@ const heightClasses = {
  * </Modal.Content>
  * ```
  */
-interface ModalContentProps
+export interface ModalContentProps
   extends WithoutStyles<
     React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
   > {

@@ -1,8 +1,8 @@
 "use client";
 
-import Button from "@/refresh-components/buttons/Button";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
+import { Button } from "@opal/components";
 import { SvgArrowLeft } from "@opal/icons";
 
 export interface BackButtonProps {
@@ -18,8 +18,8 @@ export default function BackButton({
 
   return (
     <Button
-      leftIcon={SvgArrowLeft}
-      tertiary
+      icon={SvgArrowLeft}
+      prominence="tertiary"
       onClick={() => {
         if (behaviorOverride) {
           behaviorOverride();

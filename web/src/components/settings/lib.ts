@@ -4,7 +4,7 @@ import {
   ApplicationStatus,
   Settings,
   QueryHistoryType,
-} from "@/app/admin/settings/interfaces";
+} from "@/interfaces/settings";
 import {
   CUSTOM_ANALYTICS_ENABLED,
   HOST_URL,
@@ -126,6 +126,9 @@ export async function fetchSettingsSS(): Promise<CombinedSettings | null> {
       customAnalyticsScript,
       webVersion,
       webDomain: HOST_URL,
+      // Server-side default; the real value is computed client-side in
+      // SettingsProvider where connector data is available via useCCPairs.
+      isSearchModeAvailable: settings.search_ui_enabled !== false,
     };
 
     return combinedSettings;

@@ -137,7 +137,7 @@ test.describe("Signup flow", () => {
 
     // Wait for error message to appear
     await expect(
-      page.getByText("Unknown error", { exact: true })
+      page.getByText("Disposable email addresses are not allowed").first()
     ).toBeVisible();
 
     // Capture the error state with hidden email to avoid non-deterministic diffs
