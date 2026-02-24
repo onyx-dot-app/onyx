@@ -182,6 +182,12 @@ class CodeInterpreterClient:
             elif line.startswith("data:"):
                 data_lines.append(line[len("data:") :].strip())
 
+        if event_type is not None or data_lines:
+            logger.warning(
+                f"SSE stream ended with incomplete event: "
+                f"event_type={event_type}, data_lines={data_lines}"
+            )
+
     def _batch_as_stream(
         self,
         code: str,
