@@ -106,7 +106,8 @@ class CodeInterpreterClient:
             response = self.session.get(url, timeout=5)
             response.raise_for_status()
             return response.json().get("status") == "ok"
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Exception caught when checking health, e={e}")
             return False
 
     def execute(
