@@ -18,7 +18,7 @@ import * as InputLayouts from "@/layouts/input-layouts";
 import { useFormikContext } from "formik";
 import LLMSelector from "@/components/llm/LLMSelector";
 import { parseLlmDescriptor, structureValue } from "@/lib/llmConfig/utils";
-import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
+import { useLLMProviders } from "@/hooks/useLLMProviders";
 import {
   STARTER_MESSAGES_EXAMPLES,
   MAX_CHARACTERS_STARTER_MESSAGE,
