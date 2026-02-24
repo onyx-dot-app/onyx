@@ -1,6 +1,7 @@
 import { test, expect, Page, Browser } from "@playwright/test";
-import { loginAs, loginAsRandomUser } from "@tests/e2e/utils/auth";
+import { loginAs, loginAsWorkerUser } from "@tests/e2e/utils/auth";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
+import { expectScreenshot } from "@tests/e2e/utils/visualRegression";
 
 // --- Locator Helper Functions ---
 const getNameInput = (page: Page) => page.locator('input[name="name"]');
@@ -138,13 +139,11 @@ test.describe("Assistant Creation and Edit Verification", () => {
 
     test("should create assistant with user files when no connectors exist @exclusive", async ({
       page,
-    }: {
-      page: Page;
-    }) => {
+    }, testInfo) => {
       await page.context().clearCookies();
-      await loginAsRandomUser(page);
+      await loginAsWorkerUser(page, testInfo.workerIndex);
 
-      const assistantName = `User Files Test ${Date.now()}`;
+      const assistantName = "E2E User Files Assistant";
       const assistantDescription =
         "Testing user file uploads without connectors";
       const assistantInstructions = "Help users with their documents.";
@@ -220,9 +219,7 @@ test.describe("Assistant Creation and Edit Verification", () => {
 
     test("should create and edit assistant with Knowledge enabled", async ({
       page,
-    }: {
-      page: Page;
-    }) => {
+    }, testInfo) => {
       // Login as admin to create connector and document set (requires admin permissions)
       await page.context().clearCookies();
       await loginAs(page, "admin");
@@ -241,17 +238,17 @@ test.describe("Assistant Creation and Edit Verification", () => {
 
       // Now login as a regular user to test the assistant creation
       await page.context().clearCookies();
-      await loginAsRandomUser(page);
+      await loginAsWorkerUser(page, testInfo.workerIndex);
 
       // --- Initial Values ---
-      const assistantName = `Test Assistant ${Date.now()}`;
+      const assistantName = "Test Assistant 1";
       const assistantDescription = "This is a test assistant description.";
       const assistantInstructions = "These are the test instructions.";
       const assistantReminder = "Initial reminder.";
       const assistantStarterMessage = "Initial starter message?";
 
       // --- Edited Values ---
-      const editedAssistantName = `Edited Assistant ${Date.now()}`;
+      const editedAssistantName = "Edited Assistant";
       const editedAssistantDescription = "This is the edited description.";
       const editedAssistantInstructions = "These are the edited instructions.";
       const editedAssistantReminder = "Edited reminder.";
@@ -296,6 +293,7 @@ test.describe("Assistant Creation and Edit Verification", () => {
       expect(assistantIdMatch).toBeTruthy();
       const assistantId = assistantIdMatch ? assistantIdMatch[1] : null;
       expect(assistantId).not.toBeNull();
+      await expectScreenshot(page, { name: "welcome-page-with-assistant" });
 
       // Store assistant ID for cleanup
       knowledgeAssistantId = Number(assistantId);
