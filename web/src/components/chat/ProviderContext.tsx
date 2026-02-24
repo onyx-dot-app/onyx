@@ -11,9 +11,9 @@ import React, {
   useCallback,
 } from "react";
 import { useUser } from "@/providers/UserProvider";
-import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
+import { useLLMProviders } from "@/hooks/useLLMProviders";
 import { useLLMProviderOptions } from "@/lib/hooks/useLLMProviderOptions";
-import { testDefaultProvider as testDefaultProviderSvc } from "@/lib/llm/svc";
+import { testDefaultProvider as testDefaultProviderSvc } from "@/lib/llmConfig/svc";
 
 interface ProviderContextType {
   shouldShowConfigurationNeeded: boolean;

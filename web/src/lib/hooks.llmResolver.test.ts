@@ -2,7 +2,7 @@ import {
   getDefaultLlmDescriptor,
   getValidLlmDescriptorForProviders,
 } from "@/lib/hooks";
-import { structureValue } from "@/lib/llm/utils";
+import { structureValue } from "@/lib/llmConfig/utils";
 import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { makeProvider } from "@tests/setup/llmProviderTestUtils";
 
