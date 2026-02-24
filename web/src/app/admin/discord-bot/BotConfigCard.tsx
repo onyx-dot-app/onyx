@@ -14,15 +14,11 @@ import {
   useDiscordGuilds,
 } from "@/app/admin/discord-bot/hooks";
 import { createBotConfig, deleteBotConfig } from "@/app/admin/discord-bot/lib";
-import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 import { getFormattedDateTime } from "@/lib/dateUtils";
 
-interface Props {
-  setPopup: (popup: PopupSpec) => void;
-}
-
-export function BotConfigCard({ setPopup }: Props) {
+export function BotConfigCard() {
   const {
     data: botConfig,
     isLoading,
@@ -63,7 +59,7 @@ export function BotConfigCard({ setPopup }: Props) {
 
   const handleSaveToken = async () => {
     if (!botToken.trim()) {
-      setPopup({ type: "error", message: "Please enter a bot token" });
+      toast.error("Please enter a bot token");
       return;
     }
 
@@ -72,13 +68,11 @@ export function BotConfigCard({ setPopup }: Props) {
       await createBotConfig(botToken.trim());
       setBotToken("");
       refreshBotConfig();
-      setPopup({ type: "success", message: "Bot token saved successfully" });
+      toast.success("Bot token saved successfully");
     } catch (err) {
-      setPopup({
-        type: "error",
-        message:
-          err instanceof Error ? err.message : "Failed to save bot token",
-      });
+      toast.error(
+        err instanceof Error ? err.message : "Failed to save bot token"
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -89,13 +83,11 @@ export function BotConfigCard({ setPopup }: Props) {
     try {
       await deleteBotConfig();
       refreshBotConfig();
-      setPopup({ type: "success", message: "Bot token deleted" });
+      toast.success("Bot token deleted");
     } catch (err) {
-      setPopup({
-        type: "error",
-        message:
-          err instanceof Error ? err.message : "Failed to delete bot token",
-      });
+      toast.error(
+        err instanceof Error ? err.message : "Failed to delete bot token"
+      );
     } finally {
       setIsSubmitting(false);
       setShowDeleteConfirm(false);

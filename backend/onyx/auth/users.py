@@ -60,6 +60,7 @@ from sqlalchemy import nulls_last
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
 from onyx.auth.api_key import get_hashed_api_key_from_request
 from onyx.auth.disposable_email_validator import is_disposable_email
@@ -110,6 +111,7 @@ from onyx.db.auth import get_user_db
 from onyx.db.auth import SQLAlchemyUserAdminDB
 from onyx.db.engine.async_sql_engine import get_async_session
 from onyx.db.engine.async_sql_engine import get_async_session_context_manager
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.models import AccessToken
 from onyx.db.models import OAuthAccount
@@ -119,6 +121,7 @@ from onyx.db.pat import fetch_user_for_pat
 from onyx.db.users import get_user_by_email
 from onyx.redis.redis_pool import get_async_redis_connection
 from onyx.redis.redis_pool import get_redis_client
+from onyx.server.settings.store import load_settings
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
@@ -134,6 +137,8 @@ from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+
+REGISTER_INVITE_ONLY_CODE = "REGISTER_INVITE_ONLY"
 
 
 def is_user_admin(user: User) -> bool:
@@ -206,22 +211,34 @@ def anonymous_user_enabled(*, tenant_id: str | None = None) -> bool:
     return int(value.decode("utf-8")) == 1
 
 
+def workspace_invite_only_enabled() -> bool:
+    settings = load_settings()
+    return settings.invite_only_enabled
+
+
 def verify_email_is_invited(email: str) -> None:
     if AUTH_TYPE in {AuthType.SAML, AuthType.OIDC}:
         # SSO providers manage membership; allow JIT provisioning regardless of invites
         return
 
-    whitelist = get_invited_users()
-    if not whitelist:
+    if not workspace_invite_only_enabled():
         return
 
+    whitelist = get_invited_users()
+
     if not email:
-        raise PermissionError("Email must be specified")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"reason": "Email must be specified"},
+        )
 
     try:
         email_info = validate_email(email, check_deliverability=False)
     except EmailUndeliverableError:
-        raise PermissionError("Email is not valid")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"reason": "Email is not valid"},
+        )
 
     for email_whitelist in whitelist:
         try:
@@ -238,7 +255,13 @@ def verify_email_is_invited(email: str) -> None:
         if email_info.normalized.lower() == email_info_whitelist.normalized.lower():
             return
 
-    raise PermissionError("User not on allowed user whitelist")
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail={
+            "code": REGISTER_INVITE_ONLY_CODE,
+            "reason": "This workspace is invite-only. Please ask your admin to invite you.",
+        },
+    )
 
 
 def verify_email_in_whitelist(email: str, tenant_id: str) -> None:
@@ -254,13 +277,32 @@ def verify_email_domain(email: str) -> None:
             detail="Email is not valid",
         )
 
-    domain = email.split("@")[-1].lower()
+    local_part, domain = email.split("@")
+    domain = domain.lower()
+
+    if AUTH_TYPE == AuthType.CLOUD:
+        # Normalize googlemail.com to gmail.com (they deliver to the same inbox)
+        if domain == "googlemail.com":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"reason": "Please use @gmail.com instead of @googlemail.com."},
+            )
+
+        if "+" in local_part and domain != "onyx.app":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "reason": "Email addresses with '+' are not allowed. Please use your base email address."
+                },
+            )
 
     # Check if email uses a disposable/temporary domain
     if is_disposable_email(email):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Disposable email addresses are not allowed. Please use a permanent email address.",
+            detail={
+                "reason": "Disposable email addresses are not allowed. Please use a permanent email address."
+            },
         )
 
     # Check domain whitelist if configured
@@ -270,6 +312,22 @@ def verify_email_domain(email: str) -> None:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Email domain is not valid",
             )
+
+
+def enforce_seat_limit(db_session: Session, seats_needed: int = 1) -> None:
+    """Raise HTTPException(402) if adding users would exceed the seat limit.
+
+    No-op for multi-tenant or CE deployments.
+    """
+    if MULTI_TENANT:
+        return
+
+    result = fetch_ee_implementation_or_noop(
+        "onyx.db.license", "check_seat_availability", None
+    )(db_session, seats_needed=seats_needed)
+
+    if result is not None and not result.available:
+        raise HTTPException(status_code=402, detail=result.error_message)
 
 
 class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
@@ -400,6 +458,12 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         or user_create.email in get_default_admin_user_emails()
                     ):
                         user_create.role = UserRole.ADMIN
+
+                # Check seat availability for new users (single-tenant only)
+                with get_session_with_current_tenant() as sync_db:
+                    existing = get_user_by_email(user_create.email, sync_db)
+                    if existing is None:
+                        enforce_seat_limit(sync_db)
 
                 user_created = False
                 try:
@@ -610,6 +674,10 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         raise exceptions.UserNotExists()
 
                 except exceptions.UserNotExists:
+                    # Check seat availability before creating (single-tenant only)
+                    with get_session_with_current_tenant() as sync_db:
+                        enforce_seat_limit(sync_db)
+
                     password = self.password_helper.generate()
                     user_dict = {
                         "email": account_email,
@@ -1431,6 +1499,7 @@ def get_anonymous_user() -> User:
         is_superuser=False,
         role=UserRole.LIMITED,
         use_memories=False,
+        enable_memory_tool=False,
     )
     return user
 
@@ -1621,7 +1690,10 @@ def get_oauth_router(
         if redirect_url is not None:
             authorize_redirect_url = redirect_url
         else:
-            authorize_redirect_url = str(request.url_for(callback_route_name))
+            # Use WEB_DOMAIN instead of request.url_for() to prevent host
+            # header poisoning — request.url_for() trusts the Host header.
+            callback_path = request.app.url_path_for(callback_route_name)
+            authorize_redirect_url = f"{WEB_DOMAIN}{callback_path}"
 
         next_url = request.query_params.get("next", "/")
 

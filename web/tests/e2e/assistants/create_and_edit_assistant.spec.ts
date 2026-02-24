@@ -1,6 +1,7 @@
 import { test, expect, Page, Browser } from "@playwright/test";
-import { loginAs, loginAsRandomUser } from "../utils/auth";
-import { OnyxApiClient } from "../utils/onyxApiClient";
+import { loginAs, loginAsWorkerUser } from "@tests/e2e/utils/auth";
+import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
+import { expectScreenshot } from "@tests/e2e/utils/visualRegression";
 
 // --- Locator Helper Functions ---
 const getNameInput = (page: Page) => page.locator('input[name="name"]');
@@ -119,15 +120,30 @@ test.describe("Assistant Creation and Edit Verification", () => {
   test.describe.configure({ mode: "serial" });
 
   test.describe("User Files Only", () => {
+    let userFilesAssistantId: number | null = null;
+
+    test.afterAll(async ({ browser }: { browser: Browser }) => {
+      if (userFilesAssistantId !== null) {
+        const context = await browser.newContext({
+          storageState: "admin_auth.json",
+        });
+        const page = await context.newPage();
+        const cleanupClient = new OnyxApiClient(page.request);
+        await cleanupClient.deleteAssistant(userFilesAssistantId);
+        await context.close();
+        console.log(
+          "[test] Cleanup completed - deleted User Files Only assistant"
+        );
+      }
+    });
+
     test("should create assistant with user files when no connectors exist @exclusive", async ({
       page,
-    }: {
-      page: Page;
-    }) => {
+    }, testInfo) => {
       await page.context().clearCookies();
-      await loginAsRandomUser(page);
+      await loginAsWorkerUser(page, testInfo.workerIndex);
 
-      const assistantName = `User Files Test ${Date.now()}`;
+      const assistantName = "E2E User Files Assistant";
       const assistantDescription =
         "Testing user file uploads without connectors";
       const assistantInstructions = "Help users with their documents.";
@@ -163,6 +179,11 @@ test.describe("Assistant Creation and Edit Verification", () => {
       const assistantIdMatch = url.match(/assistantId=(\d+)/);
       expect(assistantIdMatch).toBeTruthy();
 
+      // Store assistant ID for cleanup
+      if (assistantIdMatch) {
+        userFilesAssistantId = Number(assistantIdMatch[1]);
+      }
+
       console.log(
         `[test] Successfully created assistant without connectors: ${assistantName}`
       );
@@ -172,35 +193,39 @@ test.describe("Assistant Creation and Edit Verification", () => {
   test.describe("With Knowledge", () => {
     let ccPairId: number;
     let documentSetId: number;
+    let knowledgeAssistantId: number | null = null;
 
     test.afterAll(async ({ browser }: { browser: Browser }) => {
       // Cleanup using browser fixture (worker-scoped) to avoid per-test fixture limitation
+      const context = await browser.newContext({
+        storageState: "admin_auth.json",
+      });
+      const page = await context.newPage();
+      const cleanupClient = new OnyxApiClient(page.request);
+
+      if (knowledgeAssistantId !== null) {
+        await cleanupClient.deleteAssistant(knowledgeAssistantId);
+      }
       if (ccPairId && documentSetId) {
-        const context = await browser.newContext({
-          storageState: "admin_auth.json",
-        });
-        const page = await context.newPage();
-        const cleanupClient = new OnyxApiClient(page);
         await cleanupClient.deleteDocumentSet(documentSetId);
         await cleanupClient.deleteCCPair(ccPairId);
-        await context.close();
-        console.log(
-          "[test] Cleanup completed - deleted connector and document set"
-        );
       }
+
+      await context.close();
+      console.log(
+        "[test] Cleanup completed - deleted assistant, connector, and document set"
+      );
     });
 
     test("should create and edit assistant with Knowledge enabled", async ({
       page,
-    }: {
-      page: Page;
-    }) => {
+    }, testInfo) => {
       // Login as admin to create connector and document set (requires admin permissions)
       await page.context().clearCookies();
       await loginAs(page, "admin");
 
       // Create a connector and document set to enable the Knowledge toggle
-      const onyxApiClient = new OnyxApiClient(page);
+      const onyxApiClient = new OnyxApiClient(page.request);
       ccPairId = await onyxApiClient.createFileConnector("Test Connector");
       documentSetId = await onyxApiClient.createDocumentSet(
         "Test Document Set",
@@ -213,17 +238,17 @@ test.describe("Assistant Creation and Edit Verification", () => {
 
       // Now login as a regular user to test the assistant creation
       await page.context().clearCookies();
-      await loginAsRandomUser(page);
+      await loginAsWorkerUser(page, testInfo.workerIndex);
 
       // --- Initial Values ---
-      const assistantName = `Test Assistant ${Date.now()}`;
+      const assistantName = "Test Assistant 1";
       const assistantDescription = "This is a test assistant description.";
       const assistantInstructions = "These are the test instructions.";
       const assistantReminder = "Initial reminder.";
       const assistantStarterMessage = "Initial starter message?";
 
       // --- Edited Values ---
-      const editedAssistantName = `Edited Assistant ${Date.now()}`;
+      const editedAssistantName = "Edited Assistant";
       const editedAssistantDescription = "This is the edited description.";
       const editedAssistantInstructions = "These are the edited instructions.";
       const editedAssistantReminder = "Edited reminder.";
@@ -268,6 +293,10 @@ test.describe("Assistant Creation and Edit Verification", () => {
       expect(assistantIdMatch).toBeTruthy();
       const assistantId = assistantIdMatch ? assistantIdMatch[1] : null;
       expect(assistantId).not.toBeNull();
+      await expectScreenshot(page, { name: "welcome-page-with-assistant" });
+
+      // Store assistant ID for cleanup
+      knowledgeAssistantId = Number(assistantId);
 
       // Navigate directly to the edit page
       await page.goto(`/app/agents/edit/${assistantId}`);

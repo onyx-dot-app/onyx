@@ -18,7 +18,7 @@ import {
   SvgServer,
 } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button } from "@opal/components";
 import EnabledCount from "@/refresh-components/EnabledCount";
 
 export interface MCPServer {
@@ -113,10 +113,20 @@ export default function MCPLineItem({
               />
             )}
           {canClickIntoServer && (
-            <IconButton icon={SvgChevronRight} internal onClick={onSelect} />
+            <Button
+              icon={SvgChevronRight}
+              prominence="tertiary"
+              size="sm"
+              onClick={onSelect}
+            />
           )}
           {showReauthButton && (
-            <IconButton icon={SvgKey} internal onClick={onAuthenticate} />
+            <Button
+              icon={SvgKey}
+              prominence="tertiary"
+              size="sm"
+              onClick={onAuthenticate}
+            />
           )}
         </Section>
       }

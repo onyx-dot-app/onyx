@@ -14,11 +14,10 @@ from onyx.db.models import ConnectorCredentialPair
 from onyx.db.utils import DocumentRow
 from onyx.db.utils import SortOrder
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
+from tests.daily.connectors.google_drive.consts_and_utils import _pick
 from tests.daily.connectors.google_drive.consts_and_utils import ACCESS_MAPPING
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_EMAIL
-from tests.daily.connectors.google_drive.consts_and_utils import (
-    ADMIN_MY_DRIVE_ID,
-)
+from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_MY_DRIVE_ID
 from tests.daily.connectors.google_drive.consts_and_utils import (
     assert_hierarchy_nodes_match_expected,
 )
@@ -262,37 +261,35 @@ def test_gdrive_perm_sync_with_real_data(
     hierarchy_connector = _build_connector(google_drive_service_acct_connector_factory)
     output = load_connector_outputs(hierarchy_connector, include_permissions=True)
 
-    # Verify the expected shared drives hierarchy
-    # When include_shared_drives=True and include_my_drives=True, we get ALL drives
-    expected_ids, expected_parents = get_expected_hierarchy_for_shared_drives(
+    expected_nodes = get_expected_hierarchy_for_shared_drives(
         include_drive_1=True,
         include_drive_2=True,
         include_restricted_folder=False,
     )
-
-    # Add additional shared drives in the organization
-    expected_ids.add(PERM_SYNC_DRIVE_ADMIN_ONLY_ID)
-    expected_ids.add(PERM_SYNC_DRIVE_ADMIN_AND_USER_1_A_ID)
-    expected_ids.add(PERM_SYNC_DRIVE_ADMIN_AND_USER_1_B_ID)
-    expected_ids.add(TEST_USER_1_MY_DRIVE_ID)
-    expected_ids.add(TEST_USER_1_MY_DRIVE_FOLDER_ID)
-    expected_ids.add(TEST_USER_1_DRIVE_B_ID)
-    expected_ids.add(TEST_USER_1_DRIVE_B_FOLDER_ID)
-    expected_ids.add(TEST_USER_1_EXTRA_DRIVE_1_ID)
-    expected_ids.add(TEST_USER_1_EXTRA_DRIVE_2_ID)
-    expected_ids.add(ADMIN_MY_DRIVE_ID)
-    expected_ids.add(TEST_USER_2_MY_DRIVE)
-    expected_ids.add(TEST_USER_3_MY_DRIVE_ID)
-    expected_ids.add(PILL_FOLDER_ID)
-    expected_ids.add(RESTRICTED_ACCESS_FOLDER_ID)
-    expected_ids.add(TEST_USER_1_EXTRA_FOLDER_ID)
-    expected_ids.add(EXTERNAL_SHARED_FOLDER_ID)
-    expected_ids.add(FOLDER_3_ID)
-
+    expected_nodes.update(
+        _pick(
+            PERM_SYNC_DRIVE_ADMIN_ONLY_ID,
+            PERM_SYNC_DRIVE_ADMIN_AND_USER_1_A_ID,
+            PERM_SYNC_DRIVE_ADMIN_AND_USER_1_B_ID,
+            TEST_USER_1_MY_DRIVE_ID,
+            TEST_USER_1_MY_DRIVE_FOLDER_ID,
+            TEST_USER_1_DRIVE_B_ID,
+            TEST_USER_1_DRIVE_B_FOLDER_ID,
+            TEST_USER_1_EXTRA_DRIVE_1_ID,
+            TEST_USER_1_EXTRA_DRIVE_2_ID,
+            ADMIN_MY_DRIVE_ID,
+            TEST_USER_2_MY_DRIVE,
+            TEST_USER_3_MY_DRIVE_ID,
+            PILL_FOLDER_ID,
+            RESTRICTED_ACCESS_FOLDER_ID,
+            TEST_USER_1_EXTRA_FOLDER_ID,
+            EXTERNAL_SHARED_FOLDER_ID,
+            FOLDER_3_ID,
+        )
+    )
     assert_hierarchy_nodes_match_expected(
         retrieved_nodes=output.hierarchy_nodes,
-        expected_node_ids=expected_ids,
-        expected_parent_mapping=expected_parents,
+        expected_nodes=expected_nodes,
         ignorable_node_ids={RESTRICTED_ACCESS_FOLDER_ID},
     )
 

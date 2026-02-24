@@ -5,7 +5,6 @@ import { FormField } from "@/refresh-components/form/FormField";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox";
 import InputFile from "@/refresh-components/inputs/InputFile";
 import Separator from "@/refresh-components/Separator";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import { cn, noProp } from "@/lib/utils";
 import { SvgRefreshCw } from "@opal/icons";
 import {
@@ -150,7 +149,7 @@ function VertexAIFormFields(
         )}
       />
 
-      <Separator className="my-0" />
+      <Separator className="py-0" />
 
       <FormikField<string>
         name={FIELD_DEFAULT_MODEL_NAME}

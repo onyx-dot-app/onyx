@@ -147,7 +147,7 @@ Add clear comments:
 
 ## Trunk-based development and feature flags
 
-- **PRs should contain no more than 500 lines of real change**
+- **PRs should contain no more than 500 lines of real change.**
 - **Merge to main frequently.** Avoid long-lived feature branches—they create merge conflicts and integration pain.
 - **Use feature flags for incremental rollout.**
   - Large features should be merged in small, shippable increments behind a flag.
@@ -155,3 +155,11 @@ Add clear comments:
 - **Keep flags short-lived.** Once a feature is fully rolled out, remove the flag and dead code paths promptly.
 - **Flag at the right level.** Prefer flagging at API/UI entry points rather than deep in business logic.
 - **Test both flag states.** Ensure the codebase works correctly with the flag on and off.
+
+---
+
+## Misc
+
+- Any TODOs you add in the code must be accompanied by either the name/username
+  of the owner of that TODO, or an issue number for an issue referencing that
+  piece of work.

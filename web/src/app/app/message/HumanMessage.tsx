@@ -6,9 +6,8 @@ import "katex/dist/katex.min.css";
 import MessageSwitcher from "@/app/app/message/MessageSwitcher";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { SvgEdit } from "@opal/icons";
 import FileDisplay from "./FileDisplay";
 
@@ -73,9 +72,9 @@ function MessageEditing({
             if (e.key === "Enter" && e.metaKey) handleSubmit();
           }}
         />
-        <div className="flex justify-end gap-2">
+        <div className="flex justify-end gap-1">
           <Button onClick={handleSubmit}>Submit</Button>
-          <Button secondary onClick={handleCancel}>
+          <Button prominence="secondary" onClick={handleCancel}>
             Cancel
           </Button>
         </div>
@@ -172,10 +171,10 @@ const HumanMessage = React.memo(function HumanMessage({
   return (
     <div
       id="onyx-human-message"
-      className="group flex flex-col justify-end pt-5 pb-1 w-full -mr-6 relative"
+      className="group flex flex-col justify-end w-full relative"
     >
       <FileDisplay alignBubble files={files || []} />
-      <div className="flex flex-wrap justify-end break-words">
+      <div className="md:flex md:flex-wrap relative justify-end break-words">
         {isEditing ? (
           <MessageEditing
             content={content}
@@ -193,10 +192,10 @@ const HumanMessage = React.memo(function HumanMessage({
           />
         ) : typeof content === "string" ? (
           <>
-            <div className="md:max-w-[25rem] flex basis-[100%] md:basis-auto justify-end md:order-1">
+            <div className="md:max-w-[37.5rem] flex basis-[100%] md:basis-auto justify-end md:order-1">
               <div
                 className={
-                  "max-w-[25rem] whitespace-break-spaces rounded-t-16 rounded-bl-16 bg-background-tint-02 py-2 px-3"
+                  "max-w-[30rem] md:max-w-[37.5rem] whitespace-break-spaces rounded-t-16 rounded-bl-16 bg-background-tint-02 py-2 px-3"
                 }
                 onCopy={(e) => {
                   const selection = window.getSelection();
@@ -215,16 +214,16 @@ const HumanMessage = React.memo(function HumanMessage({
                 </Text>
               </div>
             </div>
-            {onEdit && !isEditing && (!files || files.length === 0) && (
-              <div className="flex flex-row gap-1 p-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            {onEdit && !isEditing && (
+              <div className="absolute md:relative right-0 z-content flex flex-row p-1 opacity-0 group-hover:opacity-100 transition-opacity">
                 <CopyIconButton
                   getCopyText={() => content}
-                  tertiary
+                  prominence="tertiary"
                   data-testid="HumanMessage/copy-button"
                 />
-                <IconButton
+                <Button
                   icon={SvgEdit}
-                  tertiary
+                  prominence="tertiary"
                   tooltip="Edit"
                   onClick={() => setIsEditing(true)}
                   data-testid="HumanMessage/edit-button"
@@ -237,15 +236,15 @@ const HumanMessage = React.memo(function HumanMessage({
             <div
               className={cn(
                 "my-auto",
-                onEdit && !isEditing && (!files || files.length === 0)
+                onEdit && !isEditing
                   ? "opacity-0 group-hover:opacity-100 transition-opacity"
                   : "invisible"
               )}
             >
-              <IconButton
+              <Button
                 icon={SvgEdit}
                 onClick={() => setIsEditing(true)}
-                tertiary
+                prominence="tertiary"
                 tooltip="Edit"
               />
             </div>

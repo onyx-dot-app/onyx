@@ -29,7 +29,7 @@ test.describe("Default Assistant Tests", () => {
     await adminPage.goto("http://localhost:3000/app");
     await adminPage.waitForLoadState("networkidle");
 
-    const apiClient = new OnyxApiClient(adminPage);
+    const apiClient = new OnyxApiClient(adminPage.request);
     try {
       imageGenConfigId = await apiClient.createImageGenerationConfig(
         `test-default-assistant-${Date.now()}`
@@ -51,7 +51,7 @@ test.describe("Default Assistant Tests", () => {
       await adminPage.goto("http://localhost:3000/app");
       await adminPage.waitForLoadState("networkidle");
 
-      const apiClient = new OnyxApiClient(adminPage);
+      const apiClient = new OnyxApiClient(adminPage.request);
       await apiClient.deleteImageGenerationConfig(imageGenConfigId);
 
       await adminContext.close();
@@ -107,7 +107,7 @@ test.describe("Default Assistant Tests", () => {
 
       // Create a custom assistant to test non-default behavior
       await page.getByTestId("AppSidebar/more-agents").click();
-      await page.getByTestId("AgentsPage/new-agent-button").click();
+      await page.getByLabel("AgentsPage/new-agent-button").click();
       await page
         .locator('input[name="name"]')
         .waitFor({ state: "visible", timeout: 10000 });
@@ -150,7 +150,7 @@ test.describe("Default Assistant Tests", () => {
     }) => {
       // Create a custom assistant
       await page.getByTestId("AppSidebar/more-agents").click();
-      await page.getByTestId("AgentsPage/new-agent-button").click();
+      await page.getByLabel("AgentsPage/new-agent-button").click();
       await page
         .locator('input[name="name"]')
         .waitFor({ state: "visible", timeout: 10000 });
@@ -200,7 +200,7 @@ test.describe("Default Assistant Tests", () => {
     }) => {
       // Create a custom assistant with starter messages
       await page.getByTestId("AppSidebar/more-agents").click();
-      await page.getByTestId("AgentsPage/new-agent-button").click();
+      await page.getByLabel("AgentsPage/new-agent-button").click();
       await page
         .locator('input[name="name"]')
         .waitFor({ state: "visible", timeout: 10000 });
@@ -253,7 +253,7 @@ test.describe("Default Assistant Tests", () => {
       // Wait for modal or assistant list to appear
       // The selector might be in a modal or dropdown.
       await page
-        .getByTestId("AgentsPage/new-agent-button")
+        .getByLabel("AgentsPage/new-agent-button")
         .waitFor({ state: "visible", timeout: 5000 });
 
       // Look for default assistant by name - it should NOT be there
@@ -280,7 +280,7 @@ test.describe("Default Assistant Tests", () => {
     }) => {
       // Create a custom assistant
       await page.getByTestId("AppSidebar/more-agents").click();
-      await page.getByTestId("AgentsPage/new-agent-button").click();
+      await page.getByLabel("AgentsPage/new-agent-button").click();
       await page
         .locator('input[name="name"]')
         .waitFor({ state: "visible", timeout: 10000 });
@@ -317,7 +317,7 @@ test.describe("Default Assistant Tests", () => {
       await adminPage.goto("http://localhost:3000/app");
       await adminPage.waitForLoadState("networkidle");
 
-      const apiClient = new OnyxApiClient(adminPage);
+      const apiClient = new OnyxApiClient(adminPage.request);
       try {
         imageGenConfigId = await apiClient.createImageGenerationConfig(
           `test-action-toggle-${Date.now()}`
@@ -339,7 +339,7 @@ test.describe("Default Assistant Tests", () => {
         await adminPage.goto("http://localhost:3000/app");
         await adminPage.waitForLoadState("networkidle");
 
-        const apiClient = new OnyxApiClient(adminPage);
+        const apiClient = new OnyxApiClient(adminPage.request);
         await apiClient.deleteImageGenerationConfig(imageGenConfigId);
 
         await adminContext.close();
@@ -364,7 +364,7 @@ test.describe("Default Assistant Tests", () => {
       await page.goto("/app");
       await page.waitForLoadState("domcontentloaded");
 
-      const apiClient = new OnyxApiClient(page);
+      const apiClient = new OnyxApiClient(page.request);
       let webSearchProviderId: number | null = null;
 
       try {
@@ -555,7 +555,7 @@ test.describe("End-to-End Default Assistant Flow", () => {
     await adminPage.goto("http://localhost:3000/app");
     await adminPage.waitForLoadState("networkidle");
 
-    const apiClient = new OnyxApiClient(adminPage);
+    const apiClient = new OnyxApiClient(adminPage.request);
     try {
       imageGenConfigId = await apiClient.createImageGenerationConfig(
         `test-e2e-journey-${Date.now()}`
@@ -577,7 +577,7 @@ test.describe("End-to-End Default Assistant Flow", () => {
       await adminPage.goto("http://localhost:3000/app");
       await adminPage.waitForLoadState("networkidle");
 
-      const apiClient = new OnyxApiClient(adminPage);
+      const apiClient = new OnyxApiClient(adminPage.request);
       await apiClient.deleteImageGenerationConfig(imageGenConfigId);
 
       await adminContext.close();

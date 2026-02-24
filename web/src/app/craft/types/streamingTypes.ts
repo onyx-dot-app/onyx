@@ -1,4 +1,10 @@
 // =============================================================================
+// Sharing Types
+// =============================================================================
+
+export type SharingScope = "private" | "public_org" | "public_global";
+
+// =============================================================================
 // Session Error Constants
 // =============================================================================
 
@@ -165,6 +171,7 @@ export interface ApiSessionResponse {
   last_activity_at: string;
   sandbox: ApiSandboxResponse | null;
   artifacts: ApiArtifactResponse[];
+  sharing_scope: SharingScope;
 }
 
 export interface ApiDetailedSessionResponse extends ApiSessionResponse {
@@ -196,6 +203,7 @@ export interface ApiWebappInfoResponse {
   webapp_url: string | null;
   status: string;
   ready: boolean;
+  sharing_scope: SharingScope;
 }
 
 export interface FileSystemEntry {

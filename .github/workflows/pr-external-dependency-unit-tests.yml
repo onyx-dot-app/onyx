@@ -45,9 +45,6 @@ env:
   # TODO: debug why this is failing and enable
   CODE_INTERPRETER_BASE_URL: http://localhost:8000
 
-  # OpenSearch
-  OPENSEARCH_ADMIN_PASSWORD: "StrongPassword123!"
-
 jobs:
   discover-test-dirs:
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
@@ -118,9 +115,10 @@ jobs:
       - name: Create .env file for Docker Compose
         run: |
           cat <<EOF > deployment/docker_compose/.env
-          COMPOSE_PROFILES=s3-filestore
+          COMPOSE_PROFILES=s3-filestore,opensearch-enabled
           CODE_INTERPRETER_BETA_ENABLED=true
           DISABLE_TELEMETRY=true
+          OPENSEARCH_FOR_ONYX_ENABLED=true
           EOF
 
       - name: Set up Standard Dependencies
@@ -129,7 +127,6 @@ jobs:
           docker compose \
             -f docker-compose.yml \
             -f docker-compose.dev.yml \
-            -f docker-compose.opensearch.yml \
             up -d \
             minio \
             relational_db \

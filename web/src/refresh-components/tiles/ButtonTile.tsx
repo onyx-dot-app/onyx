@@ -33,7 +33,7 @@ export default function ButtonTile({
   return (
     <Interactive.Base
       variant="default"
-      subvariant="secondary"
+      prominence="secondary"
       group="group/Tile"
       onClick={onClick}
       disabled={disabled}

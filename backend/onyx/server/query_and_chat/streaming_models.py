@@ -34,11 +34,17 @@ class StreamingType(Enum):
     PYTHON_TOOL_DELTA = "python_tool_delta"
     CUSTOM_TOOL_START = "custom_tool_start"
     CUSTOM_TOOL_DELTA = "custom_tool_delta"
+    FILE_READER_START = "file_reader_start"
+    FILE_READER_RESULT = "file_reader_result"
     REASONING_START = "reasoning_start"
     REASONING_DELTA = "reasoning_delta"
     REASONING_DONE = "reasoning_done"
     CITATION_INFO = "citation_info"
     TOOL_CALL_DEBUG = "tool_call_debug"
+
+    MEMORY_TOOL_START = "memory_tool_start"
+    MEMORY_TOOL_DELTA = "memory_tool_delta"
+    MEMORY_TOOL_NO_ACCESS = "memory_tool_no_access"
 
     DEEP_RESEARCH_PLAN_START = "deep_research_plan_start"
     DEEP_RESEARCH_PLAN_DELTA = "deep_research_plan_delta"
@@ -254,6 +260,45 @@ class CustomToolDelta(BaseObj):
 
 
 ################################################
+# File Reader Packets
+################################################
+class FileReaderStart(BaseObj):
+    type: Literal["file_reader_start"] = StreamingType.FILE_READER_START.value
+
+
+class FileReaderResult(BaseObj):
+    type: Literal["file_reader_result"] = StreamingType.FILE_READER_RESULT.value
+
+    file_name: str
+    file_id: str
+    start_char: int
+    end_char: int
+    total_chars: int
+    # Short previews of the retrieved text for the collapsed/expanded UI
+    preview_start: str = ""
+    preview_end: str = ""
+
+
+# Memory Tool Packets
+################################################
+class MemoryToolStart(BaseObj):
+    type: Literal["memory_tool_start"] = StreamingType.MEMORY_TOOL_START.value
+
+
+class MemoryToolDelta(BaseObj):
+    type: Literal["memory_tool_delta"] = StreamingType.MEMORY_TOOL_DELTA.value
+
+    memory_text: str
+    operation: Literal["add", "update"]
+    memory_id: int | None = None
+    index: int | None = None
+
+
+class MemoryToolNoAccess(BaseObj):
+    type: Literal["memory_tool_no_access"] = StreamingType.MEMORY_TOOL_NO_ACCESS.value
+
+
+################################################
 # Deep Research Packets
 ################################################
 class DeepResearchPlanStart(BaseObj):
@@ -322,6 +367,11 @@ PacketObj = Union[
     PythonToolDelta,
     CustomToolStart,
     CustomToolDelta,
+    FileReaderStart,
+    FileReaderResult,
+    MemoryToolStart,
+    MemoryToolDelta,
+    MemoryToolNoAccess,
     # Reasoning Packets
     ReasoningStart,
     ReasoningDelta,

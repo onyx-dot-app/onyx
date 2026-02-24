@@ -8,6 +8,7 @@ const DEFAULT_PERSONALIZATION: UserPersonalization = {
   role: "",
   memories: [],
   use_memories: true,
+  enable_memory_tool: true,
   user_preferences: "",
 };
 
@@ -22,6 +23,9 @@ function derivePersonalizationFromUser(user: User | null): UserPersonalization {
     memories: [...(user.personalization.memories ?? [])],
     use_memories:
       user.personalization.use_memories ?? DEFAULT_PERSONALIZATION.use_memories,
+    enable_memory_tool:
+      user.personalization.enable_memory_tool ??
+      DEFAULT_PERSONALIZATION.enable_memory_tool,
     user_preferences: user.personalization.user_preferences ?? "",
   };
 }
@@ -128,6 +132,13 @@ export default function useUserPersonalization(
     }));
   }, []);
 
+  const toggleEnableMemoryTool = useCallback((enabled: boolean) => {
+    setPersonalizationValues((prev) => ({
+      ...prev,
+      enable_memory_tool: enabled,
+    }));
+  }, []);
+
   const updateUserPreferences = useCallback((value: string) => {
     setPersonalizationValues((prev) => ({
       ...prev,
@@ -164,7 +175,7 @@ export default function useUserPersonalization(
   }, []);
 
   const handleSavePersonalization = useCallback(
-    async (overrides?: Partial<UserPersonalization>) => {
+    async (overrides?: Partial<UserPersonalization>, silent?: boolean) => {
       setIsSavingPersonalization(true);
 
       const valuesToSave = { ...personalizationValues, ...overrides };
@@ -180,11 +191,15 @@ export default function useUserPersonalization(
       try {
         await persistPersonalization(updatedPersonalization);
         setPersonalizationValues(updatedPersonalization);
-        onSuccess?.(updatedPersonalization);
+        if (!silent) {
+          onSuccess?.(updatedPersonalization);
+        }
         return updatedPersonalization;
       } catch (error) {
         setPersonalizationValues(basePersonalization);
-        onError?.(error);
+        if (!silent) {
+          onError?.(error);
+        }
         return null;
       } finally {
         setIsSavingPersonalization(false);
@@ -203,6 +218,7 @@ export default function useUserPersonalization(
     personalizationValues,
     updatePersonalizationField,
     toggleUseMemories,
+    toggleEnableMemoryTool,
     updateUserPreferences,
     updateMemoryAtIndex,
     addMemory,

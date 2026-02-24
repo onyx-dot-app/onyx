@@ -25,7 +25,7 @@ import { useModal } from "@/refresh-components/contexts/ModalContext";
 import { useUser } from "@/providers/UserProvider";
 import { Formik, useFormikContext } from "formik";
 import { useAgent } from "@/hooks/useAgents";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button as OpalButton } from "@opal/components";
 
 const YOUR_ORGANIZATION_TAB = "Your Organization";
 const USERS_AND_GROUPS_TAB = "Users & Groups";
@@ -51,7 +51,7 @@ interface ShareAgentFormContentProps {
 function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
   const { values, setFieldValue, handleSubmit, dirty } =
     useFormikContext<ShareAgentFormValues>();
-  const { data: usersData } = useShareableUsers({ includeApiKeys: false });
+  const { data: usersData } = useShareableUsers({ includeApiKeys: true });
   const { data: groupsData } = useShareableGroups();
   const { user: currentUser } = useUser();
   const { agent: fullAgent } = useAgent(agentId ?? null);
@@ -196,8 +196,9 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
                             ) : (
                               // For all other cases (including for "self-unsharing"),
                               // we render an `IconButton SvgX` to remove a person from the list.
-                              <IconButton
-                                internal
+                              <OpalButton
+                                prominence="tertiary"
+                                size="sm"
                                 icon={SvgX}
                                 onClick={() => handleRemoveUser(user.id)}
                               />
@@ -215,8 +216,9 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
                         key={`group-${group.id}`}
                         icon={SvgUsers}
                         rightChildren={
-                          <IconButton
-                            internal
+                          <OpalButton
+                            prominence="tertiary"
+                            size="sm"
                             icon={SvgX}
                             onClick={() => handleRemoveGroup(group.id)}
                           />

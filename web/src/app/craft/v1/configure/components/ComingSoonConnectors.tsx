@@ -43,7 +43,6 @@ const COMING_SOON_CONNECTORS: ValidSources[] = [
   ValidSources.Asana,
   ValidSources.Clickup,
   ValidSources.Productboard,
-  ValidSources.Airtable,
   // Knowledge Base/Wiki
   ValidSources.Outline,
   ValidSources.Slab,

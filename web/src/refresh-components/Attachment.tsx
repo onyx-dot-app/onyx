@@ -1,5 +1,5 @@
 import Text from "@/refresh-components/texts/Text";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button } from "@opal/components";
 import { SvgFileText, SvgMaximize2 } from "@opal/icons";
 export interface AttachmentsProps {
   fileName: string;
@@ -22,11 +22,12 @@ export default function Attachments({ fileName, open }: AttachmentsProps) {
       </div>
 
       {open && (
-        <IconButton
+        <Button
           aria-label="Expand document"
           onClick={open}
           icon={SvgMaximize2}
-          internal
+          prominence="tertiary"
+          size="sm"
         />
       )}
     </div>

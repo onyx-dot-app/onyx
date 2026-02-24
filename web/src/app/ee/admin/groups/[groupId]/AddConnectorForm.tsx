@@ -2,7 +2,7 @@ import Button from "@/refresh-components/buttons/Button";
 import Modal from "@/refresh-components/Modal";
 import { useState } from "react";
 import { updateUserGroup } from "./lib";
-import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { ConnectorStatus, UserGroup } from "@/lib/types";
 import { ConnectorMultiSelect } from "@/components/ConnectorMultiSelect";
 import { SvgPlus } from "@opal/icons";
@@ -10,14 +10,12 @@ export interface AddConnectorFormProps {
   ccPairs: ConnectorStatus<any, any>[];
   userGroup: UserGroup;
   onClose: () => void;
-  setPopup: (popupSpec: PopupSpec) => void;
 }
 
 export default function AddConnectorForm({
   ccPairs,
   userGroup,
   onClose,
-  setPopup,
 }: AddConnectorFormProps) {
   const [selectedCCPairIds, setSelectedCCPairIds] = useState<number[]>([]);
 
@@ -66,18 +64,12 @@ export default function AddConnectorForm({
                 cc_pair_ids: newCCPairIds,
               });
               if (response.ok) {
-                setPopup({
-                  message: "Successfully added connectors to group",
-                  type: "success",
-                });
+                toast.success("Successfully added connectors to group");
                 onClose();
               } else {
                 const responseJson = await response.json();
                 const errorMsg = responseJson.detail || responseJson.message;
-                setPopup({
-                  message: `Failed to add connectors to group - ${errorMsg}`,
-                  type: "error",
-                });
+                toast.error(`Failed to add connectors to group - ${errorMsg}`);
                 onClose();
               }
             }}

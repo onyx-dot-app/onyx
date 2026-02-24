@@ -10,7 +10,7 @@ import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import Separator from "@/refresh-components/Separator";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button as OpalButton } from "@opal/components";
 import { MethodSpec, ToolSnapshot } from "@/lib/tools/interfaces";
 import {
   validateToolDefinition,
@@ -23,7 +23,7 @@ import { DOCS_ADMINS_PATH } from "@/lib/constants";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import { Formik, Form, useFormikContext } from "formik";
 import * as Yup from "yup";
-import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import {
   SvgActions,
   SvgBracketCurly,
@@ -40,7 +40,6 @@ interface AddOpenAPIActionModalProps {
   skipOverlay?: boolean;
   onSuccess?: (tool: ToolSnapshot) => void;
   onUpdate?: (tool: ToolSnapshot) => void;
-  setPopup: (popup: PopupSpec) => void;
   existingTool?: ToolSnapshot | null;
   onClose?: () => void;
   onEditAuthentication?: (tool: ToolSnapshot) => void;
@@ -266,12 +265,14 @@ function FormContent({
             {values.definition.trim() && (
               <div className="invisible group-hover/DefinitionTextAreaField:visible absolute z-[100000] top-2 right-2 bg-background-tint-00">
                 <CopyIconButton
-                  internal
+                  prominence="tertiary"
+                  size="sm"
                   getCopyText={() => values.definition}
                   tooltip="Copy definition"
                 />
-                <IconButton
-                  internal
+                <OpalButton
+                  prominence="tertiary"
+                  size="sm"
                   icon={SvgBracketCurly}
                   tooltip="Format definition"
                   onClick={handleFormat}
@@ -362,9 +363,9 @@ function FormContent({
               alignItems="center"
               width="fit"
             >
-              <IconButton
+              <OpalButton
                 icon={SvgUnplug}
-                tertiary
+                prominence="tertiary"
                 type="button"
                 tooltip="Disable action"
                 onClick={() => {
@@ -409,7 +410,6 @@ export default function AddOpenAPIActionModal({
   skipOverlay = false,
   onSuccess,
   onUpdate,
-  setPopup,
   existingTool = null,
   onClose,
   onEditAuthentication,
@@ -446,10 +446,7 @@ export default function AddOpenAPIActionModal({
       parsedDefinition = parseJsonWithTrailingCommas(values.definition);
     } catch (error) {
       console.error("Error parsing OpenAPI definition:", error);
-      setPopup({
-        message: "Invalid JSON format in OpenAPI schema definition",
-        type: "error",
-      });
+      toast.error("Invalid JSON format in OpenAPI schema definition");
       return;
     }
 
@@ -477,15 +474,9 @@ export default function AddOpenAPIActionModal({
         const response = await updateCustomTool(existingTool.id, updatePayload);
 
         if (response.error) {
-          setPopup({
-            message: response.error,
-            type: "error",
-          });
+          toast.error(response.error);
         } else {
-          setPopup({
-            message: "OpenAPI action updated successfully",
-            type: "success",
-          });
+          toast.success("OpenAPI action updated successfully");
           handleClose();
           if (response.data && onUpdate) {
             onUpdate(response.data);
@@ -493,10 +484,7 @@ export default function AddOpenAPIActionModal({
         }
       } catch (error) {
         console.error("Error updating OpenAPI action:", error);
-        setPopup({
-          message: "Failed to update OpenAPI action",
-          type: "error",
-        });
+        toast.error("Failed to update OpenAPI action");
       }
       return;
     }
@@ -511,15 +499,9 @@ export default function AddOpenAPIActionModal({
       });
 
       if (response.error) {
-        setPopup({
-          message: response.error,
-          type: "error",
-        });
+        toast.error(response.error);
       } else {
-        setPopup({
-          message: "OpenAPI action created successfully",
-          type: "success",
-        });
+        toast.success("OpenAPI action created successfully");
         handleClose();
         if (response.data && onSuccess) {
           onSuccess(response.data);
@@ -527,10 +509,7 @@ export default function AddOpenAPIActionModal({
       }
     } catch (error) {
       console.error("Error creating OpenAPI action:", error);
-      setPopup({
-        message: "Failed to create OpenAPI action",
-        type: "error",
-      });
+      toast.error("Failed to create OpenAPI action");
     }
   };
 

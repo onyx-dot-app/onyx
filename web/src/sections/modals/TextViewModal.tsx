@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/table";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button as OpalButton } from "@opal/components";
 import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
 import Text from "@/refresh-components/texts/Text";
 import {
@@ -21,6 +21,7 @@ import {
   SvgZoomIn,
   SvgZoomOut,
 } from "@opal/icons";
+import PreviewImage from "@/refresh-components/PreviewImage";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
 import { cn } from "@/lib/utils";
@@ -213,21 +214,21 @@ export default function TextViewModal({
           onClose={onClose}
         >
           <Section flexDirection="row" justifyContent="start" gap={0.25}>
-            <IconButton
-              tertiary
+            <OpalButton
+              prominence="tertiary"
               onClick={handleZoomOut}
               icon={SvgZoomOut}
               tooltip="Zoom Out"
             />
             <Text mainUiBody>{zoom}%</Text>
-            <IconButton
-              tertiary
+            <OpalButton
+              prominence="tertiary"
               onClick={handleZoomIn}
               icon={SvgZoomIn}
               tooltip="Zoom In"
             />
-            <IconButton
-              tertiary
+            <OpalButton
+              prominence="tertiary"
               onClick={handleDownload}
               icon={SvgDownloadCloud}
               tooltip="Download"
@@ -249,10 +250,10 @@ export default function TextViewModal({
                 style={{ transform: `scale(${zoom / 100})` }}
               >
                 {isImageFormat(fileType) ? (
-                  <img
+                  <PreviewImage
                     src={fileUrl}
                     alt={fileName}
-                    className="w-full flex-1 min-h-0 object-contain object-center"
+                    className="w-full flex-1 min-h-0"
                   />
                 ) : isSupportedIframeFormat(fileType) ? (
                   <iframe

@@ -1,7 +1,7 @@
 from collections.abc import Callable
+from typing import Any
 
 from onyx.auth.schemas import UserRole
-from onyx.chat.models import PersonaOverrideConfig
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import LLMModelFlowType
@@ -51,8 +51,32 @@ def _build_provider_extra_headers(
     return {}
 
 
+def _get_model_configured_max_input_tokens(
+    llm_provider: LLMProviderView,
+    model_name: str,
+) -> int | None:
+    for model_configuration in llm_provider.model_configurations:
+        if model_configuration.name == model_name:
+            return model_configuration.max_input_tokens
+    return None
+
+
+def _build_model_kwargs(
+    provider: str,
+    configured_max_input_tokens: int | None,
+) -> dict[str, Any]:
+    model_kwargs: dict[str, Any] = {}
+    if (
+        provider == LlmProviderNames.OLLAMA_CHAT
+        and configured_max_input_tokens
+        and configured_max_input_tokens > 0
+    ):
+        model_kwargs["num_ctx"] = configured_max_input_tokens
+    return model_kwargs
+
+
 def get_llm_for_persona(
-    persona: Persona | PersonaOverrideConfig | None,
+    persona: Persona | None,
     user: User,
     llm_override: LLMOverride | None = None,
     additional_headers: dict[str, str] | None = None,
@@ -77,20 +101,16 @@ def get_llm_for_persona(
         if not provider_model:
             raise ValueError("No LLM provider found")
 
-        # Only check access control for database Persona entities, not PersonaOverrideConfig
-        # PersonaOverrideConfig is used for temporary overrides and doesn't have access restrictions
-        persona_model = persona if isinstance(persona, Persona) else None
-
         # Fetch user group IDs for access control check
         user_group_ids = fetch_user_group_ids(db_session, user)
 
         if not can_user_access_llm_provider(
-            provider_model, user_group_ids, persona_model, user.role == UserRole.ADMIN
+            provider_model, user_group_ids, persona, user.role == UserRole.ADMIN
         ):
             logger.warning(
                 "User %s with persona %s cannot access provider %s. Falling back to default provider.",
                 user.id,
-                getattr(persona_model, "id", None),
+                persona.id,
                 provider_model.name,
             )
             return get_default_llm(
@@ -104,19 +124,11 @@ def get_llm_for_persona(
     if not model:
         raise ValueError("No model name found")
 
-    return get_llm(
-        provider=llm_provider.provider,
-        model=model,
-        deployment_name=llm_provider.deployment_name,
-        api_key=llm_provider.api_key,
-        api_base=llm_provider.api_base,
-        api_version=llm_provider.api_version,
-        custom_config=llm_provider.custom_config,
+    return llm_from_provider(
+        model_name=model,
+        llm_provider=llm_provider,
         temperature=temperature_override,
         additional_headers=additional_headers,
-        max_input_tokens=get_max_input_tokens_from_llm_provider(
-            llm_provider=llm_provider, model_name=model
-        ),
     )
 
 
@@ -134,20 +146,12 @@ def get_default_llm_with_vision(
 
     def create_vision_llm(provider: LLMProviderView, model: str) -> LLM:
         """Helper to create an LLM if the provider supports image input."""
-        return get_llm(
-            provider=provider.provider,
-            model=model,
-            deployment_name=provider.deployment_name,
-            api_key=provider.api_key,
-            api_base=provider.api_base,
-            api_version=provider.api_version,
-            custom_config=provider.custom_config,
+        return llm_from_provider(
+            model_name=model,
+            llm_provider=provider,
             timeout=timeout,
             temperature=temperature,
             additional_headers=additional_headers,
-            max_input_tokens=get_max_input_tokens_from_llm_provider(
-                llm_provider=provider, model_name=model
-            ),
         )
 
     provider_map = {}
@@ -205,6 +209,20 @@ def llm_from_provider(
     temperature: float | None = None,
     additional_headers: dict[str, str] | None = None,
 ) -> LLM:
+    configured_max_input_tokens = _get_model_configured_max_input_tokens(
+        llm_provider=llm_provider, model_name=model_name
+    )
+    model_kwargs = _build_model_kwargs(
+        provider=llm_provider.provider,
+        configured_max_input_tokens=configured_max_input_tokens,
+    )
+    max_input_tokens = (
+        configured_max_input_tokens
+        if configured_max_input_tokens
+        else get_max_input_tokens_from_llm_provider(
+            llm_provider=llm_provider, model_name=model_name
+        )
+    )
     return get_llm(
         provider=llm_provider.provider,
         model=model_name,
@@ -216,9 +234,8 @@ def llm_from_provider(
         timeout=timeout,
         temperature=temperature,
         additional_headers=additional_headers,
-        max_input_tokens=get_max_input_tokens_from_llm_provider(
-            llm_provider=llm_provider, model_name=model_name
-        ),
+        max_input_tokens=max_input_tokens,
+        model_kwargs=model_kwargs,
     )
 
 
@@ -265,6 +282,7 @@ def get_llm(
     temperature: float | None = None,
     timeout: int | None = None,
     additional_headers: dict[str, str] | None = None,
+    model_kwargs: dict[str, Any] | None = None,
 ) -> LLM:
     if temperature is None:
         temperature = GEN_AI_TEMPERATURE
@@ -289,7 +307,7 @@ def get_llm(
         temperature=temperature,
         custom_config=custom_config,
         extra_headers=extra_headers,
-        model_kwargs={},
+        model_kwargs=model_kwargs or {},
         max_input_tokens=max_input_tokens,
     )
 

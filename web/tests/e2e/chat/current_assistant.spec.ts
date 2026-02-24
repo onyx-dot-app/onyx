@@ -1,7 +1,10 @@
 import { test, expect } from "@playwright/test";
-import { dragElementAbove, dragElementBelow } from "../utils/dragUtils";
-import { loginAsRandomUser } from "../utils/auth";
-import { createAssistant, pinAssistantByName } from "../utils/assistantUtils";
+import { dragElementAbove, dragElementBelow } from "@tests/e2e/utils/dragUtils";
+import { loginAsRandomUser } from "@tests/e2e/utils/auth";
+import {
+  createAssistant,
+  pinAssistantByName,
+} from "@tests/e2e/utils/assistantUtils";
 
 // TODO (chris): figure out why this test is flakey
 test.skip("Assistant Drag and Drop", async ({ page }) => {

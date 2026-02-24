@@ -20,7 +20,20 @@ class ImageGenerationProviderCredentials(BaseModel):
     custom_config: dict[str, str] | None = None
 
 
+class ReferenceImage(BaseModel):
+    data: bytes
+    mime_type: str
+
+
 class ImageGenerationProvider(abc.ABC):
+    @property
+    def supports_reference_images(self) -> bool:
+        return False
+
+    @property
+    def max_reference_images(self) -> int:
+        return 0
+
     @classmethod
     @abc.abstractmethod
     def validate_credentials(
@@ -63,6 +76,7 @@ class ImageGenerationProvider(abc.ABC):
         size: str,
         n: int,
         quality: str | None = None,
+        reference_images: list[ReferenceImage] | None = None,
         **kwargs: Any,
     ) -> ImageGenerationResponse:
         """Generates an image based on a prompt."""

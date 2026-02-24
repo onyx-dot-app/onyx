@@ -272,7 +272,7 @@ def make_oauth_provider(
     return OAuthClientProvider(
         server_url=mcp_server.server_url,
         client_metadata=OAuthClientMetadata(
-            client_name=mcp_server.name,
+            client_name=f"Onyx - {mcp_server.name}",
             redirect_uris=[AnyUrl(f"{WEB_DOMAIN}/mcp/oauth/callback")],
             grant_types=["authorization_code", "refresh_token"],
             response_types=["code"],
@@ -870,14 +870,15 @@ def _db_mcp_server_to_api_mcp_server(
                         client_info_raw
                     )
                 if client_info:
-                    if not client_info.client_id or not client_info.client_secret:
-                        raise ValueError(
-                            "Stored client info had empty client ID or secret"
-                        )
+                    if not client_info.client_id:
+                        raise ValueError("Stored client info had empty client ID")
                     admin_credentials = {
                         "client_id": mask_string(client_info.client_id),
-                        "client_secret": mask_string(client_info.client_secret),
                     }
+                    if client_info.client_secret:
+                        admin_credentials["client_secret"] = mask_string(
+                            client_info.client_secret
+                        )
                 else:
                     admin_credentials = {}
                     logger.warning(
@@ -910,13 +911,16 @@ def _db_mcp_server_to_api_mcp_server(
             if client_info_raw:
                 client_info = OAuthClientInformationFull.model_validate(client_info_raw)
             if client_info:
-                if not client_info.client_id or not client_info.client_secret:
-                    raise ValueError("Stored client info had empty client ID or secret")
+                if not client_info.client_id:
+                    raise ValueError("Stored client info had empty client ID")
                 if can_view_admin_credentials:
                     admin_credentials = {
                         "client_id": mask_string(client_info.client_id),
-                        "client_secret": mask_string(client_info.client_secret),
                     }
+                    if client_info.client_secret:
+                        admin_credentials["client_secret"] = mask_string(
+                            client_info.client_secret
+                        )
             elif can_view_admin_credentials:
                 admin_credentials = {}
                 logger.warning(f"No client info found for server {db_server.name}")

@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { SvgDownloadCloud, SvgFold, SvgMaximize2, SvgX } from "@opal/icons";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { FileDescriptor } from "@/app/app/interfaces";
 import { cn } from "@/lib/utils";
@@ -69,19 +69,27 @@ export default function ExpandableContentWrapper({
             {fileDescriptor.name || "Untitled"}
           </Text>
           <div className="flex flex-row items-center justify-end gap-1">
-            <IconButton
-              internal
+            <Button
+              prominence="tertiary"
+              size="sm"
               onClick={downloadFile}
               icon={SvgDownloadCloud}
               tooltip="Download file"
             />
-            <IconButton
-              internal
+            <Button
+              prominence="tertiary"
+              size="sm"
               onClick={toggleExpand}
               icon={expanded ? SvgFold : SvgMaximize2}
               tooltip={expanded ? "Minimize" : "Full screen"}
             />
-            <IconButton internal onClick={close} icon={SvgX} tooltip="Hide" />
+            <Button
+              prominence="tertiary"
+              size="sm"
+              onClick={close}
+              icon={SvgX}
+              tooltip="Hide"
+            />
           </div>
         </div>
       </CardHeader>

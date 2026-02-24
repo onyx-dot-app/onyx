@@ -47,7 +47,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/refresh-components/Collapsible";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { SvgFold, SvgExpand } from "@opal/icons";
 import { WithoutStyles } from "@/types";
@@ -199,18 +199,19 @@ const Header = React.forwardRef<HTMLDivElement, SimpleCollapsibleHeaderProps>(
           {...props}
         >
           <div ref={boundingRef} className="flex flex-col w-full">
-            <Text as="p" mainContentEmphasis>
+            <Text mainContentEmphasis text04>
               {title}
             </Text>
             {description && (
-              <Text as="p" secondaryBody text03>
+              <Text secondaryBody text03>
                 {description}
               </Text>
             )}
           </div>
-          <IconButton
+          <Button
             icon={open ? SvgFold : SvgExpand}
-            internal
+            prominence="tertiary"
+            size="sm"
             transient={inside}
             tooltip={open ? "Fold" : "Expand"}
           />

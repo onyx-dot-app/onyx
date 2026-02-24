@@ -1,5 +1,5 @@
 import { type User } from "@/lib/types";
-import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import userMutationFetcher from "@/lib/admin/users/userMutationFetcher";
 import useSWRMutation from "swr/mutation";
 import Button from "@/refresh-components/buttons/Button";
@@ -8,13 +8,11 @@ import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 
 const DeleteUserButton = ({
   user,
-  setPopup,
   mutate,
   className,
   children,
 }: {
   user: User;
-  setPopup: (spec: PopupSpec) => void;
   mutate: () => void;
   className?: string;
   children?: React.ReactNode;
@@ -25,16 +23,10 @@ const DeleteUserButton = ({
     {
       onSuccess: () => {
         mutate();
-        setPopup({
-          message: "User deleted successfully!",
-          type: "success",
-        });
+        toast.success("User deleted successfully!");
       },
       onError: (errorMsg) =>
-        setPopup({
-          message: `Unable to delete user - ${errorMsg.message}`,
-          type: "error",
-        }),
+        toast.error(`Unable to delete user - ${errorMsg.message}`),
     }
   );
 

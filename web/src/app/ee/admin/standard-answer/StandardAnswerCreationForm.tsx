@@ -1,6 +1,6 @@
 "use client";
 
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { StandardAnswerCategory, StandardAnswer } from "@/lib/types";
 import CardSection from "@/components/admin/CardSection";
 import Button from "@/refresh-components/buttons/Button";
@@ -38,13 +38,11 @@ export const StandardAnswerCreationForm = ({
   existingStandardAnswer?: StandardAnswer;
 }) => {
   const isUpdate = existingStandardAnswer !== undefined;
-  const { popup, setPopup } = usePopup();
   const router = useRouter();
 
   return (
     <div>
       <CardSection>
-        {popup}
         <Formik
           initialValues={{
             keyword: existingStandardAnswer
@@ -99,12 +97,11 @@ export const StandardAnswerCreationForm = ({
             } else {
               const responseJson = await response.json();
               const errorMsg = responseJson.detail || responseJson.message;
-              setPopup({
-                message: isUpdate
+              toast.error(
+                isUpdate
                   ? `Error updating Standard Answer - ${errorMsg}`
-                  : `Error creating Standard Answer - ${errorMsg}`,
-                type: "error",
-              });
+                  : `Error creating Standard Answer - ${errorMsg}`
+              );
             }
           }}
         >

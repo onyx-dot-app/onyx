@@ -27,12 +27,11 @@ import Button from "@/refresh-components/buttons/Button";
 import { useCallback, useMemo, useState, useEffect } from "react";
 import { useAppBackground } from "@/providers/AppBackgroundProvider";
 import { useTheme } from "next-themes";
-import ShareChatSessionModal from "@/app/app/components/modal/ShareChatSessionModal";
+import ShareChatSessionModal from "@/sections/modals/ShareChatSessionModal";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import useChatSessions from "@/hooks/useChatSessions";
-import { usePopup } from "@/components/admin/connectors/Popup";
 import {
   handleMoveOperation,
   shouldShowMoveModal,
@@ -44,21 +43,29 @@ import { useRouter } from "next/navigation";
 import MoveCustomAgentChatModal from "@/components/modals/MoveCustomAgentChatModal";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import FrostedDiv from "@/refresh-components/FrostedDiv";
-import { PopoverMenu } from "@/refresh-components/Popover";
+import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";
 import SimplePopover from "@/refresh-components/SimplePopover";
+import { Interactive } from "@opal/core";
+import { OpenButton } from "@opal/components";
+import { LineItemLayout } from "@/layouts/general-layouts";
 import { useAppSidebarContext } from "@/providers/AppSidebarProvider";
 import useScreenSize from "@/hooks/useScreenSize";
 import {
+  SvgBubbleText,
   SvgFolderIn,
   SvgMoreHorizontal,
+  SvgSearchMenu,
   SvgShare,
   SvgSidebar,
   SvgTrash,
 } from "@opal/icons";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import { useSettingsContext } from "@/providers/SettingsProvider";
+import { AppMode, useAppMode } from "@/providers/AppModeProvider";
 import useAppFocus from "@/hooks/useAppFocus";
+import { useQueryController } from "@/providers/QueryControllerProvider";
+import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 
 /**
  * App Header Component
@@ -75,6 +82,8 @@ import useAppFocus from "@/hooks/useAppFocus";
  * - App-Mode toggle (EE gated)
  */
 function Header() {
+  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
+  const { appMode, setAppMode } = useAppMode();
   const settings = useSettingsContext();
   const { isMobile } = useScreenSize();
   const { setFolded } = useAppSidebarContext();
@@ -89,6 +98,7 @@ function Header() {
   const [searchTerm, setSearchTerm] = useState("");
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [popoverItems, setPopoverItems] = useState<React.ReactNode[]>([]);
+  const [modePopoverOpen, setModePopoverOpen] = useState(false);
   const {
     projects,
     fetchProjects,
@@ -96,11 +106,18 @@ function Header() {
     currentProjectId,
   } = useProjectsContext();
   const { currentChatSession, refreshChatSessions } = useChatSessions();
-  const { popup, setPopup } = usePopup();
   const router = useRouter();
+  const appFocus = useAppFocus();
+  const { classification } = useQueryController();
 
   const customHeaderContent =
     settings?.enterpriseSettings?.custom_header_content;
+  // Some pages don't want the custom header content, namely every page except Chat, Search, and
+  // NewSession. The header provides features such as the open sidebar button on mobile which pages
+  // without this content still use.
+  const pageWithHeaderContent = appFocus.isChat() || appFocus.isNewSession();
+
+  const effectiveMode: AppMode = appFocus.isNewSession() ? appMode : "chat";
 
   const availableProjects = useMemo(() => {
     if (!projects) return [];
@@ -126,17 +143,14 @@ function Header() {
     async (targetProjectId: number) => {
       if (!currentChatSession) return;
       try {
-        await handleMoveOperation(
-          {
-            chatSession: currentChatSession,
-            targetProjectId,
-            refreshChatSessions,
-            refreshCurrentProjectDetails,
-            fetchProjects,
-            currentProjectId,
-          },
-          setPopup
-        );
+        await handleMoveOperation({
+          chatSession: currentChatSession,
+          targetProjectId,
+          refreshChatSessions,
+          refreshCurrentProjectDetails,
+          fetchProjects,
+          currentProjectId,
+        });
         resetMoveState();
         setPopoverOpen(false);
       } catch (error) {
@@ -149,7 +163,6 @@ function Header() {
       refreshCurrentProjectDetails,
       fetchProjects,
       currentProjectId,
-      setPopup,
       resetMoveState,
     ]
   );
@@ -179,18 +192,9 @@ function Header() {
       setDeleteModalOpen(false);
     } catch (error) {
       console.error("Failed to delete chat:", error);
-      showErrorNotification(
-        setPopup,
-        "Failed to delete chat. Please try again."
-      );
+      showErrorNotification("Failed to delete chat. Please try again.");
     }
-  }, [
-    currentChatSession,
-    refreshChatSessions,
-    fetchProjects,
-    router,
-    setPopup,
-  ]);
+  }, [currentChatSession, refreshChatSessions, fetchProjects, router]);
 
   const setDeleteConfirmationModalOpen = useCallback((open: boolean) => {
     setDeleteModalOpen(open);
@@ -246,8 +250,6 @@ function Header() {
 
   return (
     <>
-      {popup}
-
       {showShareModal && currentChatSession && (
         <ShareChatSessionModal
           chatSession={currentChatSession}
@@ -288,28 +290,88 @@ function Header() {
         </ConfirmationModalLayout>
       )}
 
-      <div className="w-full flex flex-row justify-center items-center py-3 px-4 h-16">
+      <div
+        className={cn(
+          "w-full flex flex-row flex-wrap justify-center items-center px-4",
+          // # Note (@raunakab):
+          //
+          // We add an additional top margin to align this header with the `LogoSection` inside of the App-Sidebar.
+          // For more information, check out `SidebarWrapper.tsx`.
+          "mt-2"
+        )}
+      >
         {/*
           Left:
           - (mobile) sidebar toggle
           - app-mode (for Unified S+C [EE gated])
         */}
-        <div className="flex-1">
-          <IconButton
-            icon={SvgSidebar}
-            onClick={() => setFolded(false)}
-            className={cn(!isMobile && "invisible")}
-            internal
-          />
+        <div className="flex-1 flex flex-row items-center gap-2 h-[3.3rem]">
+          {isMobile && (
+            <IconButton
+              icon={SvgSidebar}
+              onClick={() => setFolded(false)}
+              internal
+            />
+          )}
+          {isPaidEnterpriseFeaturesEnabled &&
+            settings.isSearchModeAvailable &&
+            appFocus.isNewSession() &&
+            !classification && (
+              <Popover open={modePopoverOpen} onOpenChange={setModePopoverOpen}>
+                <Popover.Trigger asChild>
+                  <OpenButton
+                    icon={
+                      effectiveMode === "search" ? SvgSearchMenu : SvgBubbleText
+                    }
+                  >
+                    {effectiveMode === "search" ? "Search" : "Chat"}
+                  </OpenButton>
+                </Popover.Trigger>
+                <Popover.Content align="start" width="lg">
+                  <Popover.Menu>
+                    <LineItem
+                      icon={SvgSearchMenu}
+                      selected={effectiveMode === "search"}
+                      description="Quick search for documents"
+                      onClick={noProp(() => {
+                        setAppMode("search");
+                        setModePopoverOpen(false);
+                      })}
+                    >
+                      Search
+                    </LineItem>
+                    <LineItem
+                      icon={SvgBubbleText}
+                      selected={effectiveMode === "chat"}
+                      description="Conversation and research"
+                      onClick={noProp(() => {
+                        setAppMode("chat");
+                        setModePopoverOpen(false);
+                      })}
+                    >
+                      Chat
+                    </LineItem>
+                  </Popover.Menu>
+                </Popover.Content>
+              </Popover>
+            )}
         </div>
 
         {/*
           Center:
           - custom-header-content
+          - Wraps to its own row below left/right on mobile when content is present
         */}
-        <div className="flex-1 flex flex-col items-center overflow-hidden">
+        <div
+          className={cn(
+            "flex flex-col items-center overflow-hidden",
+            pageWithHeaderContent && customHeaderContent
+              ? "order-last basis-full py-2 sm:py-0 sm:order-none sm:basis-auto sm:flex-1"
+              : "flex-1"
+          )}
+        >
           <Text text03 className="text-center w-full">
-            {customHeaderContent}
+            {pageWithHeaderContent && customHeaderContent}
           </Text>
         </div>
 
@@ -318,16 +380,17 @@ function Header() {
           - share button
           - more-options buttons
         */}
-        <div className="flex flex-1 justify-end">
-          {currentChatSession && (
+        <div className="flex flex-1 justify-end items-center h-[3.3rem]">
+          {appFocus.isChat() && currentChatSession && (
             <FrostedDiv className="flex shrink flex-row items-center">
               <Button
                 leftIcon={SvgShare}
                 transient={showShareModal}
                 tertiary
                 onClick={() => setShowShareModal(true)}
+                aria-label="share-chat-button"
               >
-                Share Chat
+                {isMobile ? "" : "Share Chat"}
               </Button>
               <SimplePopover
                 trigger={
@@ -397,16 +460,17 @@ function Footer() {
         // # Note (from @raunakab):
         //
         // The conditional rendering of vertical padding based on the current page is intentional.
-        // The `ChatInputBar` has `shadow-01` applied, which extends ~14px below it.
+        // The `AppInputBar` has `shadow-01` applied, which extends ~14px below it.
         // Because the content area in `Root` uses `overflow-auto`, the shadow would be
         // clipped at the container boundary — causing a visible rendering artefact.
         //
-        // To fix this, `ChatInputBar` has `mb-[14px]` to give the shadow breathing room.
-        // However, that extra margin adds visible space between the input and the Footer.
-        // To compensate, we remove the Footer's top padding when `appFocus.isChat()`.
+        // To fix this, `AppPage.tsx` uses animated spacer divs around `AppInputBar` to
+        // give the shadow breathing room. However, that extra space adds visible gap
+        // between the input and the Footer. To compensate, we remove the Footer's top
+        // padding when `appFocus.isChat()`.
         //
-        // There is a corresponding note inside `ChatInputBar.tsx` explaining the `mb-[14px]`.
-        // Please refer to that note as well.
+        // There is a corresponding note inside `AppInputBar.tsx` and `AppPage.tsx`
+        // explaining this. Please refer to those notes as well.
         appFocus.isChat() ? "pb-2" : "py-2"
       )}
     >
@@ -460,8 +524,12 @@ function Root({ children, enableBackground }: AppRootProps) {
   return (
     /* NOTE: Some elements, markdown tables in particular, refer to this `@container` in order to
       breakout of their immediate containers using cqw units.
+      The `data-main-container` attribute is used by portaled elements (e.g. CommandMenu) to
+      render inside this container so they can be centered relative to the main content area
+      rather than the full viewport (which would include the sidebar).
     */
     <div
+      data-main-container
       className={cn(
         "@container flex flex-col h-full w-full relative overflow-hidden",
         showBackground && "bg-cover bg-center bg-fixed"
@@ -514,7 +582,7 @@ function Root({ children, enableBackground }: AppRootProps) {
       )}
 
       <div className="z-app-layout">
-        <Header />
+        {!appFocus.isSharedChat() && <Header />}
       </div>
       <div className="z-app-layout flex-1 overflow-auto h-full w-full">
         {children}

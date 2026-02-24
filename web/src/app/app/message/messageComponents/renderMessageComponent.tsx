@@ -1,6 +1,7 @@
 import React, { JSX, memo } from "react";
 import {
   ChatPacket,
+  ImageGenerationToolPacket,
   Packet,
   PacketType,
   ReasoningPacket,
@@ -18,7 +19,9 @@ import { ImageToolRenderer } from "./renderers/ImageToolRenderer";
 import { PythonToolRenderer } from "./timeline/renderers/code/PythonToolRenderer";
 import { ReasoningRenderer } from "./timeline/renderers/reasoning/ReasoningRenderer";
 import CustomToolRenderer from "./renderers/CustomToolRenderer";
+import { FileReaderToolRenderer } from "./timeline/renderers/filereader/FileReaderToolRenderer";
 import { FetchToolRenderer } from "./timeline/renderers/fetch/FetchToolRenderer";
+import { MemoryToolRenderer } from "./timeline/renderers/memory/MemoryToolRenderer";
 import { DeepResearchPlanRenderer } from "./timeline/renderers/deepresearch/DeepResearchPlanRenderer";
 import { ResearchAgentRenderer } from "./timeline/renderers/deepresearch/ResearchAgentRenderer";
 import { WebSearchToolRenderer } from "./timeline/renderers/search/WebSearchToolRenderer";
@@ -26,7 +29,7 @@ import { InternalSearchToolRenderer } from "./timeline/renderers/search/Internal
 import { SearchToolStart } from "../../services/streamingModels";
 
 // Different types of chat packets using discriminated unions
-export interface GroupedPackets {
+interface GroupedPackets {
   packets: Packet[];
 }
 
@@ -60,8 +63,19 @@ function isCustomToolPacket(packet: Packet) {
   return packet.obj.type === PacketType.CUSTOM_TOOL_START;
 }
 
+function isFileReaderToolPacket(packet: Packet) {
+  return packet.obj.type === PacketType.FILE_READER_START;
+}
+
 function isFetchToolPacket(packet: Packet) {
   return packet.obj.type === PacketType.FETCH_TOOL_START;
+}
+
+function isMemoryToolPacket(packet: Packet) {
+  return (
+    packet.obj.type === PacketType.MEMORY_TOOL_START ||
+    packet.obj.type === PacketType.MEMORY_TOOL_NO_ACCESS
+  );
 }
 
 function isReasoningPacket(packet: Packet): packet is ReasoningPacket {
@@ -122,16 +136,69 @@ export function findRenderer(
   if (groupedPackets.packets.some((packet) => isPythonToolPacket(packet))) {
     return PythonToolRenderer;
   }
+  if (groupedPackets.packets.some((packet) => isFileReaderToolPacket(packet))) {
+    return FileReaderToolRenderer;
+  }
   if (groupedPackets.packets.some((packet) => isCustomToolPacket(packet))) {
     return CustomToolRenderer;
   }
   if (groupedPackets.packets.some((packet) => isFetchToolPacket(packet))) {
     return FetchToolRenderer;
   }
+  if (groupedPackets.packets.some((packet) => isMemoryToolPacket(packet))) {
+    return MemoryToolRenderer;
+  }
   if (groupedPackets.packets.some((packet) => isReasoningPacket(packet))) {
     return ReasoningRenderer;
   }
   return null;
+}
+
+// Handles display groups containing both chat text and image generation packets
+function MixedContentHandler({
+  chatPackets,
+  imagePackets,
+  chatState,
+  onComplete,
+  animate,
+  stopPacketSeen,
+  stopReason,
+  children,
+}: {
+  chatPackets: Packet[];
+  imagePackets: Packet[];
+  chatState: FullChatState;
+  onComplete: () => void;
+  animate: boolean;
+  stopPacketSeen: boolean;
+  stopReason?: StopReason;
+  children: (result: RendererOutput) => JSX.Element;
+}) {
+  return (
+    <MessageTextRenderer
+      packets={chatPackets as ChatPacket[]}
+      state={chatState}
+      onComplete={() => {}}
+      animate={animate}
+      renderType={RenderType.FULL}
+      stopPacketSeen={stopPacketSeen}
+      stopReason={stopReason}
+    >
+      {(textResults) => (
+        <ImageToolRenderer
+          packets={imagePackets as ImageGenerationToolPacket[]}
+          state={chatState}
+          onComplete={onComplete}
+          animate={animate}
+          renderType={RenderType.FULL}
+          stopPacketSeen={stopPacketSeen}
+          stopReason={stopReason}
+        >
+          {(imageResults) => children([...textResults, ...imageResults])}
+        </ImageToolRenderer>
+      )}
+    </MessageTextRenderer>
+  );
 }
 
 // Props interface for RendererComponent
@@ -142,7 +209,6 @@ interface RendererComponentProps {
   animate: boolean;
   stopPacketSeen: boolean;
   stopReason?: StopReason;
-  useShortRenderer?: boolean;
   children: (result: RendererOutput) => JSX.Element;
 }
 
@@ -156,7 +222,6 @@ function areRendererPropsEqual(
     prev.stopPacketSeen === next.stopPacketSeen &&
     prev.stopReason === next.stopReason &&
     prev.animate === next.animate &&
-    prev.useShortRenderer === next.useShortRenderer &&
     prev.chatState.assistant?.id === next.chatState.assistant?.id
     // Skip: onComplete, children (function refs), chatState (memoized upstream)
   );
@@ -170,11 +235,47 @@ export const RendererComponent = memo(function RendererComponent({
   animate,
   stopPacketSeen,
   stopReason,
-  useShortRenderer = false,
   children,
 }: RendererComponentProps) {
+  // Detect mixed display groups (both chat text and image generation)
+  const hasChatPackets = packets.some((p) => isChatPacket(p));
+  const hasImagePackets = packets.some((p) => isImageToolPacket(p));
+
+  if (hasChatPackets && hasImagePackets) {
+    const sharedTypes = new Set<string>([
+      PacketType.SECTION_END,
+      PacketType.ERROR,
+    ]);
+
+    const chatPackets = packets.filter(
+      (p) =>
+        isChatPacket(p) ||
+        p.obj.type === PacketType.CITATION_INFO ||
+        sharedTypes.has(p.obj.type as string)
+    );
+    const imagePackets = packets.filter(
+      (p) =>
+        isImageToolPacket(p) ||
+        p.obj.type === PacketType.IMAGE_GENERATION_TOOL_DELTA ||
+        sharedTypes.has(p.obj.type as string)
+    );
+
+    return (
+      <MixedContentHandler
+        chatPackets={chatPackets}
+        imagePackets={imagePackets}
+        chatState={chatState}
+        onComplete={onComplete}
+        animate={animate}
+        stopPacketSeen={stopPacketSeen}
+        stopReason={stopReason}
+      >
+        {children}
+      </MixedContentHandler>
+    );
+  }
+
   const RendererFn = findRenderer({ packets });
-  const renderType = useShortRenderer ? RenderType.HIGHLIGHT : RenderType.FULL;
 
   if (!RendererFn) {
     return children([{ icon: null, status: null, content: <></> }]);
@@ -186,7 +287,7 @@ export const RendererComponent = memo(function RendererComponent({
       state={chatState}
       onComplete={onComplete}
       animate={animate}
-      renderType={renderType}
+      renderType={RenderType.FULL}
       stopPacketSeen={stopPacketSeen}
       stopReason={stopReason}
     >

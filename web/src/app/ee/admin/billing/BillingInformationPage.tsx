@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import {
   createCustomerPortalSession,
   useBillingInformation,
@@ -20,8 +20,6 @@ import { SubscriptionSummary } from "./SubscriptionSummary";
 import { BillingAlerts } from "./BillingAlerts";
 import { SvgClipboard, SvgWallet } from "@opal/icons";
 export default function BillingInformationPage() {
-  const { popup, setPopup } = usePopup();
-
   const {
     data: billingInformation,
     error,
@@ -31,15 +29,13 @@ export default function BillingInformationPage() {
   useEffect(() => {
     const url = new URL(window.location.href);
     if (url.searchParams.has("session_id")) {
-      setPopup({
-        message:
-          "Congratulations! Your subscription has been updated successfully.",
-        type: "success",
-      });
+      toast.success(
+        "Congratulations! Your subscription has been updated successfully."
+      );
       url.searchParams.delete("session_id");
       window.history.replaceState({}, "", url.toString());
     }
-  }, [setPopup]);
+  }, []);
 
   if (isLoading) {
     return <div className="text-center py-8">Loading...</div>;
@@ -70,16 +66,12 @@ export default function BillingInformationPage() {
       window.location.href = response.stripe_customer_portal_url;
     } catch (error) {
       console.error("Error creating customer portal session:", error);
-      setPopup({
-        message: "Error creating customer portal session",
-        type: "error",
-      });
+      toast.error("Error creating customer portal session");
     }
   };
 
   return (
     <div className="space-y-8">
-      {popup}
       <Card className="shadow-md">
         <CardHeader>
           <CardTitle className="text-2xl font-bold flex items-center">

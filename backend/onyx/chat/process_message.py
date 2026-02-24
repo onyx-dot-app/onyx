@@ -4,12 +4,12 @@ An overview can be found in the README.md file in this directory.
 """
 
 import re
-import time
 import traceback
 from collections.abc import Callable
 from contextvars import Token
 from uuid import UUID
 
+from pydantic import BaseModel
 from redis.client import Redis
 from sqlalchemy.orm import Session
 
@@ -35,7 +35,7 @@ from onyx.chat.models import ChatLoadedFile
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import CreateChatSessionID
 from onyx.chat.models import ExtractedProjectFiles
-from onyx.chat.models import MessageResponseIDInfo
+from onyx.chat.models import FileToolMetadata
 from onyx.chat.models import ProjectFileMetadata
 from onyx.chat.models import ProjectSearchConfig
 from onyx.chat.models import StreamingError
@@ -44,6 +44,7 @@ from onyx.chat.prompt_utils import calculate_reserved_tokens
 from onyx.chat.save_chat import save_chat_turn
 from onyx.chat.stop_signal_checker import is_connected as check_stop_signal
 from onyx.chat.stop_signal_checker import reset_cancel_status
+from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.constants import DocumentSource
@@ -60,6 +61,7 @@ from onyx.db.models import ChatMessage
 from onyx.db.models import ChatSession
 from onyx.db.models import Persona
 from onyx.db.models import User
+from onyx.db.models import UserFile
 from onyx.db.projects import get_project_token_count
 from onyx.db.projects import get_user_files_from_project
 from onyx.db.tools import get_tools
@@ -77,8 +79,7 @@ from onyx.llm.utils import litellm_exception_to_error_msg
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.query_and_chat.models import AUTO_PLACE_AFTER_LATEST_MESSAGE
-from onyx.server.query_and_chat.models import CreateChatMessageRequest
-from onyx.server.query_and_chat.models import OptionalSearchSetting
+from onyx.server.query_and_chat.models import MessageResponseIDInfo
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
@@ -87,10 +88,15 @@ from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.tools.constants import SEARCH_TOOL_ID
 from onyx.tools.interface import Tool
+from onyx.tools.models import ChatFile
 from onyx.tools.models import SearchToolUsage
 from onyx.tools.tool_constructor import construct_tools
 from onyx.tools.tool_constructor import CustomToolConfig
+from onyx.tools.tool_constructor import FileReaderToolConfig
 from onyx.tools.tool_constructor import SearchToolConfig
+from onyx.tools.tool_implementations.file_reader.file_reader_tool import (
+    FileReaderTool,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.timing import log_function_time
@@ -98,6 +104,53 @@ from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 ERROR_TYPE_CANCELLED = "cancelled"
+
+
+class _AvailableFiles(BaseModel):
+    """Separated file IDs for the FileReaderTool so it knows which loader to use."""
+
+    # IDs from the ``user_file`` table (project / persona-attached files).
+    user_file_ids: list[UUID] = []
+    # IDs from the ``file_record`` table (chat-attached files).
+    chat_file_ids: list[UUID] = []
+
+
+def _collect_available_file_ids(
+    chat_history: list[ChatMessage],
+    project_id: int | None,
+    user_id: UUID | None,
+    db_session: Session,
+) -> _AvailableFiles:
+    """Collect all file IDs the FileReaderTool should be allowed to access.
+
+    Returns *separate* lists for chat-attached files (``file_record`` IDs) and
+    project/user files (``user_file`` IDs) so the tool can pick the right
+    loader without a try/except fallback."""
+    chat_file_ids: set[UUID] = set()
+    user_file_ids: set[UUID] = set()
+
+    for msg in chat_history:
+        if not msg.files:
+            continue
+        for fd in msg.files:
+            try:
+                chat_file_ids.add(UUID(fd["id"]))
+            except (ValueError, KeyError):
+                pass
+
+    if project_id:
+        project_files = get_user_files_from_project(
+            project_id=project_id,
+            user_id=user_id,
+            db_session=db_session,
+        )
+        for uf in project_files:
+            user_file_ids.add(uf.id)
+
+    return _AvailableFiles(
+        user_file_ids=list(user_file_ids),
+        chat_file_ids=list(chat_file_ids),
+    )
 
 
 def _should_enable_slack_search(
@@ -114,6 +167,29 @@ def _should_enable_slack_search(
     return (source_types is not None and DocumentSource.SLACK in source_types) or (
         persona.id == DEFAULT_PERSONA_ID and source_types is None
     )
+
+
+def _convert_loaded_files_to_chat_files(
+    loaded_files: list[ChatLoadedFile],
+) -> list[ChatFile]:
+    """Convert ChatLoadedFile objects to ChatFile for tool usage (e.g., PythonTool).
+
+    Args:
+        loaded_files: List of ChatLoadedFile objects from the chat history
+
+    Returns:
+        List of ChatFile objects that can be passed to tools
+    """
+    chat_files = []
+    for loaded_file in loaded_files:
+        if len(loaded_file.content) > 0:
+            chat_files.append(
+                ChatFile(
+                    filename=loaded_file.filename or f"file_{loaded_file.file_id}",
+                    content=loaded_file.content,
+                )
+            )
+    return chat_files
 
 
 def _extract_project_file_texts_and_images(
@@ -232,6 +308,24 @@ def _extract_project_file_texts_and_images(
                     )
                     project_image_files.append(chat_loaded_file)
     else:
+        if DISABLE_VECTOR_DB:
+            # Without a vector DB we can't use project-as-filter search.
+            # Instead, build lightweight metadata so the LLM can call the
+            # FileReaderTool to inspect individual files on demand.
+            file_metadata_for_tool = _build_file_tool_metadata_for_project(
+                project_id=project_id,
+                user_id=user_id,
+                db_session=db_session,
+            )
+            return ExtractedProjectFiles(
+                project_file_texts=[],
+                project_image_files=[],
+                project_as_filter=False,
+                total_token_count=0,
+                project_file_metadata=[],
+                project_uncapped_token_count=project_tokens,
+                file_metadata_for_tool=file_metadata_for_tool,
+            )
         project_as_filter = True
 
     return ExtractedProjectFiles(
@@ -242,6 +336,49 @@ def _extract_project_file_texts_and_images(
         project_file_metadata=project_file_metadata,
         project_uncapped_token_count=project_tokens,
     )
+
+
+APPROX_CHARS_PER_TOKEN = 4
+
+
+def _build_file_tool_metadata_for_project(
+    project_id: int,
+    user_id: UUID | None,
+    db_session: Session,
+) -> list[FileToolMetadata]:
+    """Build lightweight FileToolMetadata for every file in a project.
+
+    Used when files are too large to fit in context and the vector DB is
+    disabled, so the LLM needs to know which files it can read via the
+    FileReaderTool.
+    """
+    project_user_files = get_user_files_from_project(
+        project_id=project_id,
+        user_id=user_id,
+        db_session=db_session,
+    )
+    return [
+        FileToolMetadata(
+            file_id=str(uf.id),
+            filename=uf.name,
+            approx_char_count=(uf.token_count or 0) * APPROX_CHARS_PER_TOKEN,
+        )
+        for uf in project_user_files
+    ]
+
+
+def _build_file_tool_metadata_for_user_files(
+    user_files: list[UserFile],
+) -> list[FileToolMetadata]:
+    """Build lightweight FileToolMetadata from a list of UserFile records."""
+    return [
+        FileToolMetadata(
+            file_id=str(uf.id),
+            filename=uf.name,
+            approx_char_count=(uf.token_count or 0) * APPROX_CHARS_PER_TOKEN,
+        )
+        for uf in user_files
+    ]
 
 
 def _get_project_search_availability(
@@ -317,7 +454,6 @@ def handle_stream_message_objects(
     external_state_container: ChatStateContainer | None = None,
 ) -> AnswerStream:
     tenant_id = get_current_tenant_id()
-    processing_start_time = time.monotonic()
     mock_response_token: Token[str | None] | None = None
 
     llm: LLM | None = None
@@ -461,24 +597,68 @@ def handle_stream_message_objects(
 
             chat_history.append(user_message)
 
+        # Collect file IDs for the file reader tool *before* summary
+        # truncation so that files attached to older (summarized-away)
+        # messages are still accessible via the FileReaderTool.
+        available_files = _collect_available_file_ids(
+            chat_history=chat_history,
+            project_id=chat_session.project_id,
+            user_id=user_id,
+            db_session=db_session,
+        )
+
         # Find applicable summary for the current branch
         # Summary applies if its parent_message_id is in current chat_history
         summary_message = find_summary_for_branch(db_session, chat_history)
+        # Collect file metadata from messages that will be dropped by
+        # summary truncation.  These become "pre-summarized" file metadata
+        # so the forgotten-file mechanism can still tell the LLM about them.
+        summarized_file_metadata: dict[str, FileToolMetadata] = {}
         if summary_message and summary_message.last_summarized_message_id:
             cutoff_id = summary_message.last_summarized_message_id
+            for msg in chat_history:
+                if msg.id > cutoff_id or not msg.files:
+                    continue
+                for fd in msg.files:
+                    file_id = fd.get("id")
+                    if not file_id:
+                        continue
+                    summarized_file_metadata[file_id] = FileToolMetadata(
+                        file_id=file_id,
+                        filename=fd.get("name") or "unknown",
+                        # We don't know the exact size without loading the
+                        # file, but 0 signals "unknown" to the LLM.
+                        approx_char_count=0,
+                    )
             # Filter chat_history to only messages after the cutoff
             chat_history = [m for m in chat_history if m.id > cutoff_id]
 
         user_memory_context = get_memories(user, db_session)
 
+        # This is the custom prompt which may come from the Agent or Project. We fetch it earlier because the inner loop
+        # (run_llm_loop and run_deep_research_llm_loop) should not need to be aware of the Chat History in the DB form processed
+        # here, however we need this early for token reservation.
         custom_agent_prompt = get_custom_agent_prompt(persona, chat_session)
+
+        # When use_memories is disabled, strip memories from the prompt context
+        # but keep user info/preferences. The full context is still passed
+        # to the LLM loop for memory tool persistence.
+        prompt_memory_context = (
+            user_memory_context
+            if user.use_memories
+            else user_memory_context.without_memories()
+        )
+
+        max_reserved_system_prompt_tokens_str = (persona.system_prompt or "") + (
+            custom_agent_prompt or ""
+        )
 
         reserved_token_count = calculate_reserved_tokens(
             db_session=db_session,
-            persona_system_prompt=custom_agent_prompt or "",
+            persona_system_prompt=max_reserved_system_prompt_tokens_str,
             token_counter=token_counter,
             files=new_msg_req.file_descriptors,
-            user_memory_context=user_memory_context,
+            user_memory_context=prompt_memory_context,
         )
 
         # Process projects, if all of the files fit in the context, it doesn't need to use RAG
@@ -489,6 +669,16 @@ def handle_stream_message_objects(
             reserved_token_count=reserved_token_count,
             db_session=db_session,
         )
+
+        # When the vector DB is disabled, persona-attached user_files have no
+        # search pipeline path. Inject them as file_metadata_for_tool so the
+        # LLM can read them via the FileReaderTool.
+        if DISABLE_VECTOR_DB and persona.user_files:
+            persona_file_metadata = _build_file_tool_metadata_for_user_files(
+                persona.user_files
+            )
+            # Merge persona file metadata into the extracted project files
+            extracted_project_files.file_metadata_for_tool.extend(persona_file_metadata)
 
         # Build a mapping of tool_id to tool_name for history reconstruction
         all_tools = get_tools(db_session)
@@ -516,6 +706,13 @@ def handle_stream_message_objects(
 
         emitter = get_default_emitter()
 
+        # Also grant access to persona-attached user files
+        if persona.user_files:
+            existing = set(available_files.user_file_ids)
+            for uf in persona.user_files:
+                if uf.id not in existing:
+                    available_files.user_file_ids.append(uf.id)
+
         # Construct tools based on the persona configurations
         tool_dict = construct_tools(
             persona=persona,
@@ -542,6 +739,10 @@ def handle_stream_message_objects(
                 additional_headers=custom_tool_additional_headers,
                 mcp_headers=mcp_headers,
             ),
+            file_reader_tool_config=FileReaderToolConfig(
+                user_file_ids=available_files.user_file_ids,
+                chat_file_ids=available_files.chat_file_ids,
+            ),
             allowed_tool_ids=new_msg_req.allowed_tool_ids,
             search_usage_forcing_setting=project_search_config.search_usage,
         )
@@ -555,6 +756,9 @@ def handle_stream_message_objects(
         # TODO Once summarization is done, we don't need to load all the files from the beginning anymore.
         # load all files needed for this chat chain in memory
         files = load_all_chat_files(chat_history, db_session)
+
+        # Convert loaded files to ChatFile format for tools like PythonTool
+        chat_files_for_tools = _convert_loaded_files_to_chat_files(files)
 
         # TODO Need to think of some way to support selected docs from the sidebar
 
@@ -571,9 +775,12 @@ def handle_stream_message_objects(
             reserved_assistant_message_id=assistant_response.id,
         )
 
+        # Check whether the FileReaderTool is among the constructed tools.
+        has_file_reader_tool = any(isinstance(t, FileReaderTool) for t in tools)
+
         # Convert the chat history into a simple format that is free of any DB objects
         # and is easy to parse for the agent loop
-        simple_chat_history = convert_chat_history(
+        chat_history_result = convert_chat_history(
             chat_history=chat_history,
             files=files,
             project_image_files=extracted_project_files.project_image_files,
@@ -581,6 +788,32 @@ def handle_stream_message_objects(
             token_counter=token_counter,
             tool_id_to_name_map=tool_id_to_name_map,
         )
+        simple_chat_history = chat_history_result.simple_messages
+
+        # Metadata for every text file injected into the history.  After
+        # context-window truncation drops older messages, the LLM loop
+        # compares surviving file_id tags against this map to discover
+        # "forgotten" files and provide their metadata to FileReaderTool.
+        all_injected_file_metadata: dict[str, FileToolMetadata] = (
+            chat_history_result.all_injected_file_metadata
+            if has_file_reader_tool
+            else {}
+        )
+
+        # Merge in file metadata from messages dropped by summary
+        # truncation.  These files are no longer in simple_chat_history
+        # so they would otherwise be invisible to the forgotten-file
+        # mechanism.  They will always appear as "forgotten" since no
+        # surviving message carries their file_id tag.
+        if summarized_file_metadata:
+            for fid, meta in summarized_file_metadata.items():
+                all_injected_file_metadata.setdefault(fid, meta)
+
+        if all_injected_file_metadata:
+            logger.debug(
+                "FileReader: file metadata for LLM: "
+                f"{[(fid, m.filename) for fid, m in all_injected_file_metadata.items()]}"
+            )
 
         # Prepend summary message if compression exists
         if summary_message is not None:
@@ -621,8 +854,12 @@ def handle_stream_message_objects(
                 assistant_message=assistant_response,
                 llm=llm,
                 reserved_tokens=reserved_token_count,
-                processing_start_time=processing_start_time,
             )
+
+        # Release any read transaction before entering the long-running LLM stream.
+        # Without this, the request-scoped session can keep a connection checked out
+        # for the full stream duration.
+        db_session.commit()
 
         # The stream generator can resume on a different worker thread after early yields.
         # Set this right before launching the LLM loop so run_in_background copies the right context.
@@ -657,6 +894,7 @@ def handle_stream_message_objects(
                 skip_clarification=skip_clarification,
                 user_identity=user_identity,
                 chat_session_id=str(chat_session.id),
+                all_injected_file_metadata=all_injected_file_metadata,
             )
         else:
             yield from run_chat_loop_with_state_containers(
@@ -677,7 +915,10 @@ def handle_stream_message_objects(
                 forced_tool_id=forced_tool_id,
                 user_identity=user_identity,
                 chat_session_id=str(chat_session.id),
+                chat_files=chat_files_for_tools,
                 include_citations=new_msg_req.include_citations,
+                all_injected_file_metadata=all_injected_file_metadata,
+                inject_memories_in_prompt=user.use_memories,
             )
 
     except ValueError as e:
@@ -751,7 +992,6 @@ def llm_loop_completion_handle(
     assistant_message: ChatMessage,
     llm: LLM,
     reserved_tokens: int,
-    processing_start_time: float | None = None,  # noqa: ARG001
 ) -> None:
     chat_session_id = assistant_message.chat_session_id
 
@@ -812,68 +1052,6 @@ def llm_loop_completion_handle(
             compression_params=compression_params,
             tool_id_to_name=tool_id_to_name,
         )
-
-
-def stream_chat_message_objects(
-    new_msg_req: CreateChatMessageRequest,
-    user: User,
-    db_session: Session,
-    # if specified, uses the last user message and does not create a new user message based
-    # on the `new_msg_req.message`. Currently, requires a state where the last message is a
-    litellm_additional_headers: dict[str, str] | None = None,
-    custom_tool_additional_headers: dict[str, str] | None = None,
-    bypass_acl: bool = False,
-    # Additional context that should be included in the chat history, for example:
-    # Slack threads where the conversation cannot be represented by a chain of User/Assistant
-    # messages. Both of the below are used for Slack
-    # NOTE: is not stored in the database, only passed in to the LLM as context
-    additional_context: str | None = None,
-    # Slack context for federated Slack search
-    slack_context: SlackContext | None = None,
-) -> AnswerStream:
-    forced_tool_id = (
-        new_msg_req.forced_tool_ids[0] if new_msg_req.forced_tool_ids else None
-    )
-    if (
-        new_msg_req.retrieval_options
-        and new_msg_req.retrieval_options.run_search == OptionalSearchSetting.ALWAYS
-    ):
-        all_tools = get_tools(db_session)
-
-        search_tool_id = next(
-            (tool.id for tool in all_tools if tool.in_code_tool_id == SEARCH_TOOL_ID),
-            None,
-        )
-        forced_tool_id = search_tool_id
-
-    translated_new_msg_req = SendMessageRequest(
-        message=new_msg_req.message,
-        llm_override=new_msg_req.llm_override,
-        mock_llm_response=new_msg_req.mock_llm_response,
-        allowed_tool_ids=new_msg_req.allowed_tool_ids,
-        forced_tool_id=forced_tool_id,
-        file_descriptors=new_msg_req.file_descriptors,
-        internal_search_filters=(
-            new_msg_req.retrieval_options.filters
-            if new_msg_req.retrieval_options
-            else None
-        ),
-        deep_research=new_msg_req.deep_research,
-        parent_message_id=new_msg_req.parent_message_id,
-        chat_session_id=new_msg_req.chat_session_id,
-        origin=new_msg_req.origin,
-        include_citations=new_msg_req.include_citations,
-    )
-    return handle_stream_message_objects(
-        new_msg_req=translated_new_msg_req,
-        user=user,
-        db_session=db_session,
-        litellm_additional_headers=litellm_additional_headers,
-        custom_tool_additional_headers=custom_tool_additional_headers,
-        bypass_acl=bypass_acl,
-        additional_context=additional_context,
-        slack_context=slack_context,
-    )
 
 
 def remove_answer_citations(answer: str) -> str:

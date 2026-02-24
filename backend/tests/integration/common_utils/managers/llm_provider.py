@@ -17,6 +17,7 @@ from tests.integration.common_utils.test_models import DATestUser
 class LLMProviderManager:
     @staticmethod
     def create(
+        user_performing_action: DATestUser,
         name: str | None = None,
         provider: str | None = None,
         api_key: str | None = None,
@@ -27,13 +28,8 @@ class LLMProviderManager:
         personas: list[int] | None = None,
         is_public: bool | None = None,
         set_as_default: bool = True,
-        user_performing_action: DATestUser | None = None,
     ) -> DATestLLMProvider:
-        email = "Unknown"
-        if user_performing_action:
-            email = user_performing_action.email
-
-        print(f"Seeding LLM Providers for {email}...")
+        print(f"Seeding LLM Providers for {user_performing_action.email}...")
 
         llm_provider = LLMProviderUpsertRequest(
             name=name or f"test-provider-{uuid4()}",
@@ -60,11 +56,7 @@ class LLMProviderManager:
         llm_response = requests.put(
             f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
             json=llm_provider.model_dump(),
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         llm_response.raise_for_status()
         response_data = llm_response.json()
@@ -105,30 +97,22 @@ class LLMProviderManager:
     @staticmethod
     def delete(
         llm_provider: DATestLLMProvider,
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> bool:
         response = requests.delete(
             f"{API_SERVER_URL}/admin/llm/provider/{llm_provider.id}",
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         response.raise_for_status()
         return True
 
     @staticmethod
     def get_all(
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> list[LLMProviderView]:
         response = requests.get(
             f"{API_SERVER_URL}/admin/llm/provider",
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         response.raise_for_status()
         return [LLMProviderView(**ug) for ug in response.json()]
@@ -136,8 +120,8 @@ class LLMProviderManager:
     @staticmethod
     def verify(
         llm_provider: DATestLLMProvider,
+        user_performing_action: DATestUser,
         verify_deleted: bool = False,
-        user_performing_action: DATestUser | None = None,
     ) -> None:
         all_llm_providers = LLMProviderManager.get_all(user_performing_action)
         default_model = LLMProviderManager.get_default_model(user_performing_action)

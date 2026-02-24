@@ -1,4 +1,4 @@
-{{- if and (.Values.celery_worker_docfetching.autoscaling.enabled) (ne (include "onyx.autoscaling.engine" .) "keda") }}
+{{- if and .Values.vectorDB.enabled (.Values.celery_worker_docfetching.autoscaling.enabled) (ne (include "onyx.autoscaling.engine" .) "keda") }}
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:

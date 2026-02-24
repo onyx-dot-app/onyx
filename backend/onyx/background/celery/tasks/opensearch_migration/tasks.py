@@ -1,12 +1,19 @@
 """Celery tasks for migrating documents from Vespa to OpenSearch."""
 
 import time
+import traceback
 
 from celery import shared_task
 from celery import Task
 from redis.lock import Lock as RedisLock
 
 from onyx.background.celery.apps.app_base import task_logger
+from onyx.background.celery.tasks.opensearch_migration.constants import (
+    FINISHED_VISITING_SLICE_CONTINUATION_TOKEN,
+)
+from onyx.background.celery.tasks.opensearch_migration.constants import (
+    GET_VESPA_CHUNKS_PAGE_SIZE,
+)
 from onyx.background.celery.tasks.opensearch_migration.constants import (
     MIGRATION_TASK_LOCK_BLOCKING_TIMEOUT_S,
 )
@@ -40,14 +47,19 @@ from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.opensearch_document_index import (
     OpenSearchDocumentIndex,
 )
-from onyx.document_index.opensearch.schema import DocumentChunk
 from onyx.document_index.vespa.vespa_document_index import VespaDocumentIndex
 from onyx.redis.redis_pool import get_redis_client
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
 
-GET_VESPA_CHUNKS_PAGE_SIZE = 1000
+def is_continuation_token_done_for_all_slices(
+    continuation_token_map: dict[int, str | None],
+) -> bool:
+    return all(
+        continuation_token == FINISHED_VISITING_SLICE_CONTINUATION_TOKEN
+        for continuation_token in continuation_token_map.values()
+    )
 
 
 # shared_task allows this task to be shared across celery app instances.
@@ -76,11 +88,15 @@ def migrate_chunks_from_vespa_to_opensearch_task(
 
     Uses Vespa's Visit API to iterate through ALL chunks in bulk (not
     per-document), transform them, and index them into OpenSearch. Progress is
-    tracked via a continuation token stored in the
+    tracked via a continuation token map stored in the
     OpenSearchTenantMigrationRecord.
 
-    The first time we see no continuation token and non-zero chunks migrated, we
-    consider the migration complete and all subsequent invocations are no-ops.
+    The first time we see no continuation token map and non-zero chunks
+    migrated, we consider the migration complete and all subsequent invocations
+    are no-ops.
+
+    We divide the index into GET_VESPA_CHUNKS_SLICE_COUNT independent slices
+    where progress is tracked for each slice.
 
     Returns:
         None if OpenSearch migration is not enabled, or if the lock could not be
@@ -118,6 +134,7 @@ def migrate_chunks_from_vespa_to_opensearch_task(
         )
 
     total_chunks_migrated_this_task = 0
+    total_chunks_errored_this_task = 0
     try:
         # Double check that tenant info is correct.
         if tenant_id != get_current_tenant_id():
@@ -152,39 +169,52 @@ def migrate_chunks_from_vespa_to_opensearch_task(
                 f"in {time.monotonic() - sanitized_doc_start_time:.3f} seconds."
             )
 
+            approx_chunk_count_in_vespa: int | None = None
+            get_chunk_count_start_time = time.monotonic()
+            try:
+                approx_chunk_count_in_vespa = vespa_document_index.get_chunk_count()
+            except Exception:
+                task_logger.exception(
+                    "Error getting approximate chunk count in Vespa. Moving on..."
+                )
+            task_logger.debug(
+                f"Took {time.monotonic() - get_chunk_count_start_time:.3f} seconds to attempt to get "
+                f"approximate chunk count in Vespa. Got {approx_chunk_count_in_vespa}."
+            )
+
             while (
                 time.monotonic() - task_start_time < MIGRATION_TASK_SOFT_TIME_LIMIT_S
                 and lock.owned()
             ):
                 (
-                    continuation_token,
+                    continuation_token_map,
                     total_chunks_migrated,
                 ) = get_vespa_visit_state(db_session)
-                if continuation_token is None and total_chunks_migrated > 0:
+                if is_continuation_token_done_for_all_slices(continuation_token_map):
                     task_logger.info(
                         f"OpenSearch migration COMPLETED for tenant {tenant_id}. "
                         f"Total chunks migrated: {total_chunks_migrated}."
                     )
                     mark_migration_completed_time_if_not_set_with_commit(db_session)
-                    return True
+                    break
                 task_logger.debug(
                     f"Read the tenant migration record. Total chunks migrated: {total_chunks_migrated}. "
-                    f"Continuation token: {continuation_token}"
+                    f"Continuation token map: {continuation_token_map}"
                 )
 
                 get_vespa_chunks_start_time = time.monotonic()
-                raw_vespa_chunks, next_continuation_token = (
+                raw_vespa_chunks, next_continuation_token_map = (
                     vespa_document_index.get_all_raw_document_chunks_paginated(
-                        continuation_token=continuation_token,
+                        continuation_token_map=continuation_token_map,
                         page_size=GET_VESPA_CHUNKS_PAGE_SIZE,
                     )
                 )
                 task_logger.debug(
                     f"Read {len(raw_vespa_chunks)} chunks from Vespa in {time.monotonic() - get_vespa_chunks_start_time:.3f} "
-                    f"seconds. Next continuation token: {next_continuation_token}"
+                    f"seconds. Next continuation token map: {next_continuation_token_map}"
                 )
 
-                opensearch_document_chunks: list[DocumentChunk] = (
+                opensearch_document_chunks, errored_chunks = (
                     transform_vespa_chunks_to_opensearch_chunks(
                         raw_vespa_chunks,
                         tenant_state,
@@ -192,9 +222,10 @@ def migrate_chunks_from_vespa_to_opensearch_task(
                     )
                 )
                 if len(opensearch_document_chunks) != len(raw_vespa_chunks):
-                    raise RuntimeError(
-                        f"Bug: Number of candidate chunks to migrate ({len(opensearch_document_chunks)}) does not match "
-                        f"number of chunks in Vespa ({len(raw_vespa_chunks)})."
+                    task_logger.error(
+                        f"Migration task error: Number of candidate chunks to migrate ({len(opensearch_document_chunks)}) does "
+                        f"not match number of chunks in Vespa ({len(raw_vespa_chunks)}). {len(errored_chunks)} chunks "
+                        "errored."
                     )
 
                 index_opensearch_chunks_start_time = time.monotonic()
@@ -207,16 +238,16 @@ def migrate_chunks_from_vespa_to_opensearch_task(
                 )
 
                 total_chunks_migrated_this_task += len(opensearch_document_chunks)
+                total_chunks_errored_this_task += len(errored_chunks)
                 update_vespa_visit_progress_with_commit(
                     db_session,
-                    continuation_token=next_continuation_token,
+                    continuation_token_map=next_continuation_token_map,
                     chunks_processed=len(opensearch_document_chunks),
+                    chunks_errored=len(errored_chunks),
+                    approx_chunk_count_in_vespa=approx_chunk_count_in_vespa,
                 )
-
-                if next_continuation_token is None and len(raw_vespa_chunks) == 0:
-                    task_logger.info("Vespa reported no more chunks to migrate.")
-                    break
     except Exception:
+        traceback.print_exc()
         task_logger.exception("Error in the OpenSearch migration task.")
         return False
     finally:
@@ -230,6 +261,7 @@ def migrate_chunks_from_vespa_to_opensearch_task(
     task_logger.info(
         f"OpenSearch chunk migration task pausing (time limit reached). "
         f"Total chunks migrated this task: {total_chunks_migrated_this_task}. "
+        f"Total chunks errored this task: {total_chunks_errored_this_task}. "
         f"Elapsed: {time.monotonic() - task_start_time:.3f}s. "
         "Will resume from continuation token on next invocation."
     )

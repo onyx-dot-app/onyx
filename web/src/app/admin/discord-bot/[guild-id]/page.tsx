@@ -4,7 +4,7 @@ import { use, useState, useEffect, useCallback, useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { Section, LineItemLayout } from "@/layouts/general-layouts";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import Text from "@/refresh-components/texts/Text";
@@ -144,7 +144,6 @@ function GuildDetailContent({
 export default function Page({ params }: Props) {
   const unwrappedParams = use(params);
   const guildId = Number(unwrappedParams["guild-id"]);
-  const { popup, setPopup } = usePopup();
   const { data: guild, refreshGuild } = useDiscordGuild(guildId);
   const {
     data: channels,
@@ -271,26 +270,20 @@ export default function Page({ params }: Props) {
       );
 
       if (failed > 0) {
-        setPopup({
-          type: "error",
-          message: `Updated ${succeeded} channels, but ${failed} failed`,
-        });
+        toast.error(`Updated ${succeeded} channels, but ${failed} failed`);
         // Refresh to get actual server state when some updates failed
         refreshChannels();
       } else {
-        setPopup({
-          type: "success",
-          message: `Updated ${succeeded} channel${succeeded !== 1 ? "s" : ""}`,
-        });
+        toast.success(
+          `Updated ${succeeded} channel${succeeded !== 1 ? "s" : ""}`
+        );
         // Update original to match local (avoids flash from refresh)
         setOriginalChannels(localChannels);
       }
     } catch (err) {
-      setPopup({
-        type: "error",
-        message:
-          err instanceof Error ? err.message : "Failed to update channels",
-      });
+      toast.error(
+        err instanceof Error ? err.message : "Failed to update channels"
+      );
     } finally {
       setIsUpdating(false);
     }
@@ -305,18 +298,13 @@ export default function Page({ params }: Props) {
         default_persona_id: personaId,
       });
       refreshGuild();
-      setPopup({
-        type: "success",
-        message: personaId
-          ? "Default assistant updated"
-          : "Default assistant cleared",
-      });
+      toast.success(
+        personaId ? "Default assistant updated" : "Default assistant cleared"
+      );
     } catch (err) {
-      setPopup({
-        type: "error",
-        message:
-          err instanceof Error ? err.message : "Failed to update assistant",
-      });
+      toast.error(
+        err instanceof Error ? err.message : "Failed to update assistant"
+      );
     } finally {
       setIsUpdating(false);
     }
@@ -337,7 +325,6 @@ export default function Page({ params }: Props) {
 
   return (
     <SettingsLayouts.Root>
-      {popup}
       <SettingsLayouts.Header
         icon={SvgServer}
         title={guild?.guild_name || `Server #${guildId}`}

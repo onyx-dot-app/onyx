@@ -1,7 +1,9 @@
 import uuid
 from enum import Enum
+from typing import Any
 
 from fastapi_users import schemas
+from typing_extensions import override
 
 
 class UserRole(str, Enum):
@@ -41,7 +43,20 @@ class UserCreate(schemas.BaseUserCreate):
     role: UserRole = UserRole.BASIC
     tenant_id: str | None = None
     # Captcha token for cloud signup protection (optional, only used when captcha is enabled)
+    # Excluded from create_update_dict so it never reaches the DB layer
     captcha_token: str | None = None
+
+    @override
+    def create_update_dict(self) -> dict[str, Any]:
+        d = super().create_update_dict()
+        d.pop("captcha_token", None)
+        return d
+
+    @override
+    def create_update_dict_superuser(self) -> dict[str, Any]:
+        d = super().create_update_dict_superuser()
+        d.pop("captcha_token", None)
+        return d
 
 
 class UserUpdateWithRole(schemas.BaseUserUpdate):

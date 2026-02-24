@@ -61,27 +61,26 @@ Bring up the entire application.
 
 0. Install playwright dependencies
 
-```cd web
+```bash
 npx playwright install
 ```
 
 1. Run playwright
 
-```
-cd web
+```bash
 npx playwright test
 ```
 
 To run a single test:
 
-```
+```bash
 npx playwright test landing-page.spec.ts
 ```
 
 If running locally, interactive options can help you see exactly what is happening in
 the test.
 
-```
+```bash
 npx playwright test --ui
 npx playwright test --headed
 ```
@@ -90,6 +89,17 @@ npx playwright test --headed
 
 By default, playwright.config.ts is configured to output the results to:
 
+```bash
+web/output/playwright/
 ```
-web/test-results
+
+3. Visual regression screenshots
+
+Screenshots are captured automatically during test runs and saved to `web/output/screenshots/`.
+To compare screenshots across CI runs, use:
+
+```bash
+ods screenshot-diff compare --project admin
 ```
+
+For more information, see [tools/ods/README.md](https://github.com/onyx-dot-app/onyx/blob/main/tools/ods/README.md#screenshot-diff---visual-regression-testing).

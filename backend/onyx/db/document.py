@@ -6,6 +6,8 @@ from collections.abc import Sequence
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
+from typing import Any
+from uuid import UUID
 
 from sqlalchemy import and_
 from sqlalchemy import delete
@@ -222,6 +224,50 @@ def get_documents_by_ids(
     document_ids: list[str],
 ) -> list[DbDocument]:
     stmt = select(DbDocument).where(DbDocument.id.in_(document_ids))
+    documents = db_session.execute(stmt).scalars().all()
+    return list(documents)
+
+
+def get_documents_by_source(
+    db_session: Session,
+    source: DocumentSource,
+    creator_id: UUID | None = None,
+) -> list[DbDocument]:
+    """Get all documents associated with a specific source type.
+
+    This queries through the connector relationship to find all documents
+    that were indexed by connectors of the given source type.
+
+    Args:
+        db_session: Database session
+        source: The document source type to filter by
+        creator_id: If provided, only return documents from connectors
+                    created by this user. Filters via ConnectorCredentialPair.
+    """
+    stmt = (
+        select(DbDocument)
+        .join(
+            DocumentByConnectorCredentialPair,
+            DbDocument.id == DocumentByConnectorCredentialPair.id,
+        )
+        .join(
+            ConnectorCredentialPair,
+            and_(
+                DocumentByConnectorCredentialPair.connector_id
+                == ConnectorCredentialPair.connector_id,
+                DocumentByConnectorCredentialPair.credential_id
+                == ConnectorCredentialPair.credential_id,
+            ),
+        )
+        .join(
+            Connector,
+            ConnectorCredentialPair.connector_id == Connector.id,
+        )
+        .where(Connector.source == source)
+    )
+    if creator_id is not None:
+        stmt = stmt.where(ConnectorCredentialPair.creator_id == creator_id)
+    stmt = stmt.distinct()
     documents = db_session.execute(stmt).scalars().all()
     return list(documents)
 
@@ -1527,3 +1573,40 @@ def get_document_kg_entities_and_relationships(
 def get_num_chunks_for_document(db_session: Session, document_id: str) -> int:
     stmt = select(DbDocument.chunk_count).where(DbDocument.id == document_id)
     return db_session.execute(stmt).scalar_one_or_none() or 0
+
+
+def update_document_metadata__no_commit(
+    db_session: Session,
+    document_id: str,
+    doc_metadata: dict[str, Any],
+) -> None:
+    """Update the doc_metadata field for a document.
+
+    Note: Does not commit. Caller is responsible for committing.
+
+    Args:
+        db_session: Database session
+        document_id: The ID of the document to update
+        doc_metadata: The new metadata dictionary to set
+    """
+    stmt = (
+        update(DbDocument)
+        .where(DbDocument.id == document_id)
+        .values(doc_metadata=doc_metadata)
+    )
+    db_session.execute(stmt)
+
+
+def delete_document_by_id__no_commit(
+    db_session: Session,
+    document_id: str,
+) -> None:
+    """Delete a single document and its connector credential pair relationships.
+
+    Note: Does not commit. Caller is responsible for committing.
+
+    This uses delete_documents_complete__no_commit which handles
+    all foreign key relationships (KG entities, relationships, chunk stats,
+    cc pair associations, feedback, tags).
+    """
+    delete_documents_complete__no_commit(db_session, [document_id])

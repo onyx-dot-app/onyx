@@ -6,7 +6,6 @@ import Separator from "@/refresh-components/Separator";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
 import type { ProjectFile } from "../../projects/projectsService";
-import { usePopup } from "@/components/admin/connectors/Popup";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import Button from "@/refresh-components/buttons/Button";
 
@@ -32,8 +31,6 @@ export default function ProjectContextPanel({
   availableContextTokens = 128_000,
   setPresentingDocument,
 }: ProjectContextPanelProps) {
-  const { popup, setPopup } = usePopup();
-
   const addInstructionModal = useCreateModal();
   const projectFilesModal = useCreateModal();
   // Edit project name state
@@ -66,7 +63,7 @@ export default function ProjectContextPanel({
   const handleUploadFiles = useCallback(
     async (files: File[]) => {
       if (!files || files.length === 0) return;
-      beginUpload(Array.from(files), currentProjectId, setPopup);
+      beginUpload(Array.from(files), currentProjectId);
     },
     [currentProjectId, beginUpload]
   );
@@ -116,8 +113,6 @@ export default function ProjectContextPanel({
 
   return (
     <>
-      {popup}
-
       <addInstructionModal.Provider>
         <AddInstructionModal />
       </addInstructionModal.Provider>

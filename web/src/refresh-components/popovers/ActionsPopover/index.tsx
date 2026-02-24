@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  FILE_READER_TOOL_ID,
   IMAGE_GENERATION_TOOL_ID,
   PYTHON_TOOL_ID,
   SEARCH_TOOL_ID,
@@ -28,7 +29,6 @@ import { SourceMetadata } from "@/lib/search/interfaces";
 import { SourceIcon } from "@/components/SourceIcon";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
 import useCCPairs from "@/hooks/useCCPairs";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { useToolOAuthStatus } from "@/lib/hooks/useToolOAuthStatus";
 import LineItem from "@/refresh-components/buttons/LineItem";
@@ -39,6 +39,7 @@ import MCPLineItem, {
 } from "@/refresh-components/popovers/ActionsPopover/MCPLineItem";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import { SvgActions, SvgChevronRight, SvgKey, SvgSliders } from "@opal/icons";
+import { Button } from "@opal/components";
 
 const UNAVAILABLE_TOOL_TOOLTIP_FALLBACK =
   "This action is not configured yet. Ask an admin to enable it.";
@@ -176,6 +177,11 @@ export default function ActionsPopover({
 
   const isDefaultAgent = selectedAssistant.id === 0;
 
+  // Check if the search tool is explicitly enabled on this persona (admin enabled "Use Knowledge")
+  const hasSearchTool = selectedAssistant.tools.some(
+    (tool) => tool.in_code_tool_id === SEARCH_TOOL_ID
+  );
+
   // Get sources the agent has access to via document sets, hierarchy nodes, and attached documents
   // Default agent has access to all sources
   const agentAccessibleSources = useMemo(() => {
@@ -209,19 +215,25 @@ export default function ActionsPopover({
       sourceSet.add(normalized);
     });
 
+    // If agent has search tool but no specific sources, it can search everything
+    if (sourceSet.size === 0 && hasSearchTool) {
+      return null;
+    }
+
     return sourceSet;
   }, [
     isDefaultAgent,
     selectedAssistant.document_sets,
     selectedAssistant.knowledge_sources,
+    hasSearchTool,
   ]);
 
   // Check if non-default agent has no knowledge sources (Internal Search should be disabled)
-  // Knowledge sources include document sets and hierarchy nodes (folders, spaces, channels)
-  // Check if non-default agent has no knowledge sources (Internal Search should be disabled)
   // Knowledge sources include document sets, hierarchy nodes, and attached documents
+  // If the search tool is present, the admin intentionally enabled knowledge search
   const hasNoKnowledgeSources =
     !isDefaultAgent &&
+    !hasSearchTool &&
     selectedAssistant.document_sets.length === 0 &&
     (selectedAssistant.hierarchy_node_count ?? 0) === 0 &&
     (selectedAssistant.attached_document_count ?? 0) === 0;
@@ -416,6 +428,9 @@ export default function ActionsPopover({
 
     // Filter out tools that are not chat-selectable (visibility set by backend)
     if (!tool.chat_selectable) return false;
+
+    // Always hide File Reader from the actions popover
+    if (tool.in_code_tool_id === FILE_READER_TOOL_ID) return false;
 
     // Special handling for Project Search
     // Ensure Project Search is hidden if no files exist
@@ -730,7 +745,9 @@ export default function ActionsPopover({
     <LineItem
       onClick={handleFooterReauthClick}
       icon={selectedMcpServerData?.isLoading ? SimpleLoader : SvgKey}
-      rightChildren={<IconButton icon={SvgChevronRight} internal />}
+      rightChildren={
+        <Button icon={SvgChevronRight} prominence="tertiary" size="sm" />
+      }
     >
       Re-Authenticate
     </LineItem>
@@ -894,7 +911,6 @@ export default function ActionsPopover({
                   setSecondaryView({ type: "sources" })
                 }
                 hasNoConnectors={hasNoConnectors}
-                hasNoKnowledgeSources={hasNoKnowledgeSources}
                 toolAuthStatus={getToolAuthStatus(tool)}
                 onOAuthAuthenticate={() => authenticateTool(tool)}
                 onClose={() => setOpen(false)}
@@ -989,10 +1005,10 @@ export default function ActionsPopover({
       <Popover open={open} onOpenChange={handleOpenChange}>
         <Popover.Trigger asChild>
           <div data-testid="action-management-toggle">
-            <IconButton
+            <Button
               icon={SvgSliders}
               transient={open}
-              tertiary
+              prominence="tertiary"
               tooltip="Manage Actions"
               disabled={disabled}
             />

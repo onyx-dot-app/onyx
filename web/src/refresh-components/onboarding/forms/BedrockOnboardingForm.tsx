@@ -8,7 +8,7 @@ import InputComboBox from "@/refresh-components/inputs/InputComboBox";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import Separator from "@/refresh-components/Separator";
 import Text from "@/refresh-components/texts/Text";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button } from "@opal/components";
 import { cn, noProp } from "@/lib/utils";
 import { SvgAlertCircle, SvgRefreshCw } from "@opal/icons";
 import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
@@ -325,7 +325,7 @@ function BedrockFormFields(props: OnboardingFormChildProps<BedrockFormValues>) {
         />
       )}
 
-      <Separator className="my-0" />
+      <Separator className="py-0" />
 
       <FormikField<string>
         name={FIELD_DEFAULT_MODEL_NAME}
@@ -346,8 +346,9 @@ function BedrockFormFields(props: OnboardingFormChildProps<BedrockFormValues>) {
                   disabled || isFetchingModels || modelOptions.length === 0
                 }
                 rightSection={
-                  <IconButton
-                    internal
+                  <Button
+                    prominence="tertiary"
+                    size="sm"
                     icon={({ className }) => (
                       <SvgRefreshCw
                         className={cn(

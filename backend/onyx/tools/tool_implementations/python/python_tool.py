@@ -28,6 +28,15 @@ from onyx.tools.tool_implementations.python.code_interpreter_client import (
     CodeInterpreterClient,
 )
 from onyx.tools.tool_implementations.python.code_interpreter_client import FileInput
+from onyx.tools.tool_implementations.python.code_interpreter_client import (
+    StreamErrorEvent,
+)
+from onyx.tools.tool_implementations.python.code_interpreter_client import (
+    StreamOutputEvent,
+)
+from onyx.tools.tool_implementations.python.code_interpreter_client import (
+    StreamResultEvent,
+)
 from onyx.utils.logger import setup_logger
 
 
@@ -181,19 +190,50 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
         try:
             logger.debug(f"Executing code: {code}")
 
-            # Execute code with timeout
-            response = client.execute(
+            # Execute code with streaming (falls back to batch if unavailable)
+            stdout_parts: list[str] = []
+            stderr_parts: list[str] = []
+            result_event: StreamResultEvent | None = None
+
+            for event in client.execute_streaming(
                 code=code,
                 timeout_ms=CODE_INTERPRETER_DEFAULT_TIMEOUT_MS,
                 files=files_to_stage or None,
-            )
+            ):
+                if isinstance(event, StreamOutputEvent):
+                    if event.stream == "stdout":
+                        stdout_parts.append(event.data)
+                    else:
+                        stderr_parts.append(event.data)
+                    # Emit incremental delta to frontend
+                    self.emitter.emit(
+                        Packet(
+                            placement=placement,
+                            obj=PythonToolDelta(
+                                stdout=event.data if event.stream == "stdout" else "",
+                                stderr=event.data if event.stream == "stderr" else "",
+                            ),
+                        )
+                    )
+                elif isinstance(event, StreamResultEvent):
+                    result_event = event
+                elif isinstance(event, StreamErrorEvent):
+                    raise RuntimeError(f"Code interpreter error: {event.message}")
+
+            if result_event is None:
+                raise RuntimeError(
+                    "Code interpreter stream ended without a result event"
+                )
+
+            full_stdout = "".join(stdout_parts)
+            full_stderr = "".join(stderr_parts)
 
             # Truncate output for LLM consumption
             truncated_stdout = _truncate_output(
-                response.stdout, CODE_INTERPRETER_MAX_OUTPUT_LENGTH, "stdout"
+                full_stdout, CODE_INTERPRETER_MAX_OUTPUT_LENGTH, "stdout"
             )
             truncated_stderr = _truncate_output(
-                response.stderr, CODE_INTERPRETER_MAX_OUTPUT_LENGTH, "stderr"
+                full_stderr, CODE_INTERPRETER_MAX_OUTPUT_LENGTH, "stderr"
             )
 
             # Handle generated files
@@ -202,7 +242,7 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
             file_ids_to_cleanup: list[str] = []
             file_store = get_default_file_store()
 
-            for workspace_file in response.files:
+            for workspace_file in result_event.files:
                 if workspace_file.kind != "file" or not workspace_file.file_id:
                     continue
 
@@ -258,26 +298,23 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
                         f"Failed to delete Code Interpreter staged file {file_mapping['file_id']}: {e}"
                     )
 
-            # Emit delta with stdout/stderr and generated files
-            self.emitter.emit(
-                Packet(
-                    placement=placement,
-                    obj=PythonToolDelta(
-                        stdout=truncated_stdout,
-                        stderr=truncated_stderr,
-                        file_ids=generated_file_ids,
-                    ),
+            # Emit file_ids once files are processed
+            if generated_file_ids:
+                self.emitter.emit(
+                    Packet(
+                        placement=placement,
+                        obj=PythonToolDelta(file_ids=generated_file_ids),
+                    )
                 )
-            )
 
             # Build result
             result = LlmPythonExecutionResult(
                 stdout=truncated_stdout,
                 stderr=truncated_stderr,
-                exit_code=response.exit_code,
-                timed_out=response.timed_out,
+                exit_code=result_event.exit_code,
+                timed_out=result_event.timed_out,
                 generated_files=generated_files,
-                error=None if response.exit_code == 0 else truncated_stderr,
+                error=None if result_event.exit_code == 0 else truncated_stderr,
             )
 
             # Serialize result for LLM

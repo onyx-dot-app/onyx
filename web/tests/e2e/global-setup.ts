@@ -1,13 +1,15 @@
-import { chromium, FullConfig, request } from "@playwright/test";
-import { loginAs } from "./utils/auth";
+import { FullConfig, request } from "@playwright/test";
 import {
   TEST_ADMIN_CREDENTIALS,
   TEST_ADMIN2_CREDENTIALS,
-  TEST_USER_CREDENTIALS,
-} from "./constants";
+  WORKER_USER_POOL_SIZE,
+  workerUserCredentials,
+} from "@tests/e2e/constants";
+import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 
 const PREFLIGHT_TIMEOUT_MS = 60_000;
 const PREFLIGHT_POLL_INTERVAL_MS = 2_000;
+const PREFLIGHT_WARN_AFTER_MS = 15_000;
 
 /**
  * Poll the health endpoint until the server is ready or we time out.
@@ -16,6 +18,8 @@ const PREFLIGHT_POLL_INTERVAL_MS = 2_000;
 async function waitForServer(baseURL: string): Promise<void> {
   const healthURL = baseURL;
   const deadline = Date.now() + PREFLIGHT_TIMEOUT_MS;
+  const startTime = Date.now();
+  let warned = false;
 
   console.log(`[global-setup] Waiting for server at ${healthURL} ...`);
 
@@ -30,6 +34,18 @@ async function waitForServer(baseURL: string): Promise<void> {
     } catch {
       // Connection refused / DNS error — server not up yet.
     }
+
+    if (!warned && Date.now() - startTime >= PREFLIGHT_WARN_AFTER_MS) {
+      warned = true;
+      console.warn(
+        `[global-setup] ⚠ Still waiting for server after ${
+          PREFLIGHT_WARN_AFTER_MS / 1000
+        }s.\n` +
+          `  Please verify that both the backend and frontend are running.\n` +
+          `  You can start them with: ods compose dev`
+      );
+    }
+
     await new Promise((r) => setTimeout(r, PREFLIGHT_POLL_INTERVAL_MS));
   }
 
@@ -38,7 +54,7 @@ async function waitForServer(baseURL: string): Promise<void> {
       `Timed out after ${
         PREFLIGHT_TIMEOUT_MS / 1000
       }s waiting for ${healthURL} to return 200. ` +
-      `Make sure the server is running (e.g. \`ods compose dev\`).`
+      `Make sure the backend and frontend are running (e.g. \`ods compose dev\`).`
   );
 }
 
@@ -73,6 +89,34 @@ async function ensureUserExists(
         );
       }
     }
+  } finally {
+    await ctx.dispose();
+  }
+}
+
+/**
+ * Log in via the API and save the resulting cookies as a Playwright storage
+ * state file.  No browser is needed — this uses Playwright's lightweight
+ * request context, which is much faster and produces no console noise.
+ */
+async function apiLoginAndSaveState(
+  baseURL: string,
+  email: string,
+  password: string,
+  storageStatePath: string
+): Promise<void> {
+  const ctx = await request.newContext({ baseURL });
+  try {
+    const res = await ctx.post("/api/auth/login", {
+      form: { username: email, password },
+    });
+    if (!res.ok()) {
+      const body = await res.text();
+      throw new Error(
+        `[global-setup] Login failed for ${email}: ${res.status()} ${body}`
+      );
+    }
+    await ctx.storageState({ path: storageStatePath });
   } finally {
     await ctx.dispose();
   }
@@ -130,7 +174,7 @@ async function globalSetup(config: FullConfig) {
 
   // ── Provision test users via API ─────────────────────────────────────
   // The first user registered becomes the admin automatically.
-  // Order matters: admin first, then user, then admin2.
+  // Order matters: admin first, then admin2, then worker users.
   await ensureUserExists(
     baseURL,
     TEST_ADMIN_CREDENTIALS.email,
@@ -138,23 +182,22 @@ async function globalSetup(config: FullConfig) {
   );
   await ensureUserExists(
     baseURL,
-    TEST_USER_CREDENTIALS.email,
-    TEST_USER_CREDENTIALS.password
-  );
-  await ensureUserExists(
-    baseURL,
     TEST_ADMIN2_CREDENTIALS.email,
     TEST_ADMIN2_CREDENTIALS.password
   );
 
-  // ── Login and save storage state ─────────────────────────────────────
-  const browser = await chromium.launch();
+  for (let i = 0; i < WORKER_USER_POOL_SIZE; i++) {
+    const { email, password } = workerUserCredentials(i);
+    await ensureUserExists(baseURL, email, password);
+  }
 
-  const adminContext = await browser.newContext({ baseURL });
-  const adminPage = await adminContext.newPage();
-  await loginAs(adminPage, "admin");
-  await adminContext.storageState({ path: "admin_auth.json" });
-  await adminContext.close();
+  // ── Login via API and save storage state ───────────────────────────
+  await apiLoginAndSaveState(
+    baseURL,
+    TEST_ADMIN_CREDENTIALS.email,
+    TEST_ADMIN_CREDENTIALS.password,
+    "admin_auth.json"
+  );
 
   // Promote admin2 now that we have an admin session
   await promoteToAdmin(
@@ -163,19 +206,49 @@ async function globalSetup(config: FullConfig) {
     TEST_ADMIN2_CREDENTIALS.email
   );
 
-  const userContext = await browser.newContext({ baseURL });
-  const userPage = await userContext.newPage();
-  await loginAs(userPage, "user");
-  await userContext.storageState({ path: "user_auth.json" });
-  await userContext.close();
+  await apiLoginAndSaveState(
+    baseURL,
+    TEST_ADMIN2_CREDENTIALS.email,
+    TEST_ADMIN2_CREDENTIALS.password,
+    "admin2_auth.json"
+  );
 
-  const admin2Context = await browser.newContext({ baseURL });
-  const admin2Page = await admin2Context.newPage();
-  await loginAs(admin2Page, "admin2");
-  await admin2Context.storageState({ path: "admin2_auth.json" });
-  await admin2Context.close();
+  for (let i = 0; i < WORKER_USER_POOL_SIZE; i++) {
+    const { email, password } = workerUserCredentials(i);
+    const storageStatePath = `worker${i}_auth.json`;
+    await apiLoginAndSaveState(baseURL, email, password, storageStatePath);
 
-  await browser.close();
+    const workerCtx = await request.newContext({
+      baseURL,
+      storageState: storageStatePath,
+    });
+    try {
+      const res = await workerCtx.patch("/api/user/personalization", {
+        data: { name: "worker" },
+      });
+      if (!res.ok()) {
+        console.warn(
+          `[global-setup] Failed to set display name for ${email}: ${res.status()}`
+        );
+      }
+    } finally {
+      await workerCtx.dispose();
+    }
+  }
+
+  // ── Ensure a public LLM provider exists ───────────────────────────
+  // Many tests depend on a default LLM being configured (file uploads,
+  // assistant creation, etc.).  Re-use the admin session we just saved.
+  const adminCtx = await request.newContext({
+    baseURL,
+    storageState: "admin_auth.json",
+  });
+  try {
+    const client = new OnyxApiClient(adminCtx, baseURL);
+    await client.ensurePublicProvider();
+  } finally {
+    await adminCtx.dispose();
+  }
 }
 
 export default globalSetup;

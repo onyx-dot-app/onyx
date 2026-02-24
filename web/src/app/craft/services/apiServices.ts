@@ -11,6 +11,7 @@ import {
   StreamPacket,
   UsageLimits,
   DirectoryListing,
+  SharingScope,
 } from "@/app/craft/types/streamingTypes";
 
 // =============================================================================
@@ -196,6 +197,23 @@ export async function updateSessionName(
   if (!res.ok) {
     throw new Error(`Failed to update session name: ${res.status}`);
   }
+}
+
+export async function setSessionSharing(
+  sessionId: string,
+  sharingScope: SharingScope
+): Promise<{ session_id: string; sharing_scope: SharingScope }> {
+  const res = await fetch(`${API_BASE}/sessions/${sessionId}/public`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sharing_scope: sharingScope }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Failed to update session sharing: ${res.status}`);
+  }
+
+  return res.json();
 }
 
 export async function deleteSession(sessionId: string): Promise<void> {
@@ -406,6 +424,38 @@ export async function fetchDirectoryListing(
   return res.json();
 }
 
+/**
+ * Trigger a browser download for a single file from the sandbox.
+ */
+export function downloadArtifactFile(sessionId: string, path: string): void {
+  const encodedPath = path
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+  const link = document.createElement("a");
+  link.href = `${API_BASE}/sessions/${sessionId}/artifacts/${encodedPath}`;
+  link.download = path.split("/").pop() || path;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+/**
+ * Trigger a browser download for a directory as a zip file.
+ */
+export function downloadDirectory(sessionId: string, path: string): void {
+  const encodedPath = path
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+  const link = document.createElement("a");
+  link.href = `${API_BASE}/sessions/${sessionId}/download-directory/${encodedPath}`;
+  link.download = "";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
 export interface FileContentResponse {
   content: string; // For text files: text content. For images: data URL (base64-encoded)
   mimeType: string;
@@ -600,6 +650,43 @@ export async function exportDocx(
 }
 
 // =============================================================================
+// PPTX Preview API
+// =============================================================================
+
+export interface PptxPreviewResponse {
+  slide_count: number;
+  slide_paths: string[];
+  cached: boolean;
+}
+
+/**
+ * Fetch PPTX slide preview images.
+ * Triggers on-demand conversion (soffice → pdftoppm) with disk caching.
+ */
+export async function fetchPptxPreview(
+  sessionId: string,
+  path: string
+): Promise<PptxPreviewResponse> {
+  const encodedPath = path
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+
+  const res = await fetch(
+    `${API_BASE}/sessions/${sessionId}/pptx-preview/${encodedPath}`
+  );
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(
+      errorData.detail || `Failed to generate PPTX preview: ${res.status}`
+    );
+  }
+
+  return res.json();
+}
+
+// =============================================================================
 // Connector Management API
 // =============================================================================
 
@@ -621,5 +708,143 @@ export async function deleteConnector(
     throw new Error(
       errorData.detail || `Failed to delete connector: ${res.status}`
     );
+  }
+}
+
+// =============================================================================
+// User Library API
+// =============================================================================
+
+import {
+  LibraryEntry,
+  CreateDirectoryRequest,
+  UploadResponse,
+} from "@/app/craft/types/user-library";
+
+const USER_LIBRARY_BASE = `${API_BASE}/user-library`;
+
+/**
+ * Fetch the user's library tree (uploaded files).
+ */
+export async function fetchLibraryTree(): Promise<LibraryEntry[]> {
+  const res = await fetch(`${USER_LIBRARY_BASE}/tree`);
+
+  if (!res.ok) {
+    throw new Error(`Failed to fetch library tree: ${res.status}`);
+  }
+
+  return res.json();
+}
+
+/**
+ * Upload files to the user library.
+ */
+export async function uploadLibraryFiles(
+  path: string,
+  files: File[]
+): Promise<UploadResponse> {
+  const formData = new FormData();
+  formData.append("path", path);
+  for (const file of files) {
+    formData.append("files", file);
+  }
+
+  const res = await fetch(`${USER_LIBRARY_BASE}/upload`, {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(
+      errorData.detail || `Failed to upload files: ${res.status}`
+    );
+  }
+
+  return res.json();
+}
+
+/**
+ * Upload and extract a zip file to the user library.
+ */
+export async function uploadLibraryZip(
+  path: string,
+  file: File
+): Promise<UploadResponse> {
+  const formData = new FormData();
+  formData.append("path", path);
+  formData.append("file", file);
+
+  const res = await fetch(`${USER_LIBRARY_BASE}/upload-zip`, {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || `Failed to upload zip: ${res.status}`);
+  }
+
+  return res.json();
+}
+
+/**
+ * Create a directory in the user library.
+ */
+export async function createLibraryDirectory(
+  request: CreateDirectoryRequest
+): Promise<LibraryEntry> {
+  const res = await fetch(`${USER_LIBRARY_BASE}/directories`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(
+      errorData.detail || `Failed to create directory: ${res.status}`
+    );
+  }
+
+  return res.json();
+}
+
+/**
+ * Toggle sync status for a file/directory in the user library.
+ */
+export async function toggleLibraryFileSync(
+  documentId: string,
+  enabled: boolean
+): Promise<void> {
+  const res = await fetch(
+    `${USER_LIBRARY_BASE}/files/${encodeURIComponent(
+      documentId
+    )}/toggle?enabled=${enabled}`,
+    {
+      method: "PATCH",
+    }
+  );
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || `Failed to toggle sync: ${res.status}`);
+  }
+}
+
+/**
+ * Delete a file/directory from the user library.
+ */
+export async function deleteLibraryFile(documentId: string): Promise<void> {
+  const res = await fetch(
+    `${USER_LIBRARY_BASE}/files/${encodeURIComponent(documentId)}`,
+    {
+      method: "DELETE",
+    }
+  );
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || `Failed to delete file: ${res.status}`);
   }
 }

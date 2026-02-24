@@ -24,6 +24,7 @@ import { useDemoDataEnabled } from "@/app/craft/hooks/useBuildSessionStore";
 import { CRAFT_CONFIGURE_PATH } from "@/app/craft/v1/constants";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SelectButton from "@/refresh-components/buttons/SelectButton";
+import { Button } from "@opal/components";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import {
   SvgArrowUp,
@@ -257,17 +258,21 @@ const InputBar = memo(
       );
 
       const handleSubmit = useCallback(() => {
-        if (
-          !message.trim() ||
-          disabled ||
-          isRunning ||
-          hasUploadingFiles ||
-          sandboxInitializing
-        )
+        if (disabled || isRunning || hasUploadingFiles || sandboxInitializing)
           return;
-        onSubmit(message.trim(), currentMessageFiles, demoDataEnabled);
-        setMessage("");
-        clearFiles();
+
+        const hasMessage = message.trim().length > 0;
+        const hasFiles = currentMessageFiles.length > 0;
+
+        if (hasMessage) {
+          onSubmit(message.trim(), currentMessageFiles, demoDataEnabled);
+          setMessage("");
+          clearFiles({ suppressRefetch: true });
+        } else if (hasFiles) {
+          // User hit Enter with only files attached: remove files from input bar
+          // (File stays in session; no way to delete from session for now)
+          clearFiles({ suppressRefetch: true });
+        }
       }, [
         message,
         disabled,
@@ -368,10 +373,10 @@ const InputBar = memo(
               {/* Bottom left controls */}
               <div className="flex flex-row items-center gap-1">
                 {/* (+) button for file upload */}
-                <IconButton
+                <Button
                   icon={SvgPaperclip}
                   tooltip="Attach Files"
-                  tertiary
+                  prominence="tertiary"
                   disabled={disabled}
                   onClick={() => fileInputRef.current?.click()}
                 />

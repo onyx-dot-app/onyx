@@ -8,13 +8,13 @@ import Button from "@/refresh-components/buttons/Button";
 import Separator from "@/refresh-components/Separator";
 import { useEffect } from "react";
 import { DOCS_ADMINS_PATH } from "@/lib/constants";
+import { toast } from "@/hooks/useToast";
 
 export const SlackTokensForm = ({
   isUpdate,
   initialValues,
   existingSlackBotId,
   refreshSlackBot,
-  setPopup,
   router,
   onValuesChange,
 }: {
@@ -22,7 +22,6 @@ export const SlackTokensForm = ({
   initialValues: any;
   existingSlackBotId?: number;
   refreshSlackBot?: () => void;
-  setPopup: (popup: { message: string; type: "error" | "success" }) => void;
   router: any;
   onValuesChange?: (values: any) => void;
 }) => {
@@ -59,12 +58,11 @@ export const SlackTokensForm = ({
           }
           const responseJson = await response.json();
           const botId = isUpdate ? existingSlackBotId : responseJson.id;
-          setPopup({
-            message: isUpdate
+          toast.success(
+            isUpdate
               ? "Successfully updated Slack Bot!"
-              : "Successfully created Slack Bot!",
-            type: "success",
-          });
+              : "Successfully created Slack Bot!"
+          );
           router.push(`/admin/bots/${encodeURIComponent(botId)}`);
         } else {
           const responseJson = await response.json();
@@ -75,12 +73,11 @@ export const SlackTokensForm = ({
           } else if (errorMsg.includes("Invalid app token:")) {
             errorMsg = "Slack App Token is invalid";
           }
-          setPopup({
-            message: isUpdate
+          toast.error(
+            isUpdate
               ? `Error updating Slack Bot - ${errorMsg}`
-              : `Error creating Slack Bot - ${errorMsg}`,
-            type: "error",
-          });
+              : `Error creating Slack Bot - ${errorMsg}`
+          );
         }
       }}
       enableReinitialize={true}

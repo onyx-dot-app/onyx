@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useState, useRef, useEffect } from "react";
+import { Fragment, useState, useRef, useEffect, useCallback } from "react";
 import Modal from "@/refresh-components/Modal";
 import { Section } from "@/layouts/general-layouts";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
@@ -11,7 +11,7 @@ import Button from "@/refresh-components/buttons/Button";
 import CharacterCount from "@/refresh-components/CharacterCount";
 import Separator from "@/refresh-components/Separator";
 import TextSeparator from "@/refresh-components/TextSeparator";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { useModalClose } from "@/refresh-components/contexts/ModalContext";
 import { SvgAddLines, SvgMinusCircle, SvgPlusCircle } from "@opal/icons";
 import {
@@ -21,6 +21,8 @@ import {
   LocalMemory,
 } from "@/hooks/useMemoryManager";
 import { cn } from "@/lib/utils";
+import { useUser } from "@/providers/UserProvider";
+import useUserPersonalization from "@/hooks/useUserPersonalization";
 import type { MemoryItem } from "@/lib/types";
 
 interface MemoryItemProps {
@@ -78,7 +80,8 @@ function MemoryItem({
       className={cn(
         "rounded-08 hover:bg-background-tint-00 w-full p-0.5",
         "transition-colors ",
-        isHighlighting && "bg-background-tint-00 duration-700"
+        isHighlighting &&
+          "bg-action-link-01 border border-action-link-05 duration-700"
       )}
     >
       <Section gap={0.25} alignItems="start">
@@ -116,23 +119,58 @@ function MemoryItem({
 }
 
 interface MemoriesModalProps {
-  memories: MemoryItem[];
-  onSaveMemories: (memories: MemoryItem[]) => Promise<boolean>;
+  memories?: MemoryItem[];
+  onSaveMemories?: (memories: MemoryItem[]) => Promise<boolean>;
   onClose?: () => void;
   initialTargetMemoryId?: number | null;
-  onTargetHandled?: () => void;
+  initialTargetIndex?: number | null;
+  highlightFirstOnOpen?: boolean;
 }
 
 export default function MemoriesModal({
-  memories,
-  onSaveMemories,
+  memories: memoriesProp,
+  onSaveMemories: onSaveMemoriesProp,
   onClose,
   initialTargetMemoryId,
-  onTargetHandled,
+  initialTargetIndex,
+  highlightFirstOnOpen = false,
 }: MemoriesModalProps) {
   const close = useModalClose(onClose);
-  const { popup, setPopup } = usePopup();
   const [focusMemoryId, setFocusMemoryId] = useState<number | null>(null);
+
+  // Self-fetching: when no props provided, fetch from UserProvider
+  const { user, refreshUser, updateUserPersonalization } = useUser();
+  const { handleSavePersonalization } = useUserPersonalization(
+    user,
+    updateUserPersonalization,
+    {
+      onSuccess: () => toast.success("Preferences saved"),
+      onError: () => toast.error("Failed to save preferences"),
+    }
+  );
+
+  useEffect(() => {
+    if (memoriesProp === undefined) {
+      void refreshUser();
+    }
+    // Only run on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const internalSaveMemories = useCallback(
+    async (newMemories: MemoryItem[]): Promise<boolean> => {
+      const result = await handleSavePersonalization(
+        { memories: newMemories },
+        true
+      );
+      return !!result;
+    },
+    [handleSavePersonalization]
+  );
+
+  const effectiveMemories =
+    memoriesProp ?? user?.personalization?.memories ?? [];
+  const effectiveSave = onSaveMemoriesProp ?? internalSaveMemories;
 
   // Drives scroll-into-view + highlight when opening from a FileTile click
   const [highlightMemoryId, setHighlightMemoryId] = useState<number | null>(
@@ -141,9 +179,25 @@ export default function MemoriesModal({
 
   useEffect(() => {
     if (initialTargetMemoryId != null) {
+      // Direct DB id available — use it
       setHighlightMemoryId(initialTargetMemoryId);
+    } else if (initialTargetIndex != null && effectiveMemories.length > 0) {
+      // Backend index is ASC (oldest-first), but the frontend displays DESC
+      // (newest-first). Convert: descIdx = totalCount - 1 - ascIdx
+      const descIdx = effectiveMemories.length - 1 - initialTargetIndex;
+      const target = effectiveMemories[descIdx];
+      if (target) {
+        setHighlightMemoryId(target.id);
+      }
+    } else if (
+      highlightFirstOnOpen &&
+      effectiveMemories.length > 0 &&
+      effectiveMemories[0]
+    ) {
+      // Fallback: highlight the first displayed item (newest)
+      setHighlightMemoryId(effectiveMemories[0].id);
     }
-  }, [initialTargetMemoryId]);
+  }, [initialTargetMemoryId, initialTargetIndex]);
 
   const {
     searchQuery,
@@ -156,9 +210,9 @@ export default function MemoriesModal({
     handleRemoveMemory,
     handleBlurMemory,
   } = useMemoryManager({
-    memories,
-    onSaveMemories,
-    onNotify: (message, type) => setPopup({ message, type }),
+    memories: effectiveMemories,
+    onSaveMemories: effectiveSave,
+    onNotify: (message, type) => toast[type](message),
   });
 
   const onAddLine = () => {
@@ -170,7 +224,6 @@ export default function MemoriesModal({
 
   return (
     <Modal open onOpenChange={(open) => !open && close?.()}>
-      {popup}
       <Modal.Content width="sm" height="lg">
         <Modal.Header
           icon={SvgAddLines}
@@ -227,7 +280,6 @@ export default function MemoriesModal({
                     shouldHighlight={memory.id === highlightMemoryId}
                     onHighlighted={() => {
                       setHighlightMemoryId(null);
-                      onTargetHandled?.();
                     }}
                   />
                   {memory.isNew && <Separator noPadding />}

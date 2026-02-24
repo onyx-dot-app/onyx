@@ -1,11 +1,11 @@
 import { test } from "@playwright/test";
-import { loginAsRandomUser } from "../utils/auth";
+import { loginAsRandomUser } from "@tests/e2e/utils/auth";
 import {
   sendMessage,
   startNewChat,
   verifyAssistantIsChosen,
   verifyDefaultAssistantIsChosen,
-} from "../utils/chatActions";
+} from "@tests/e2e/utils/chatActions";
 
 test("Chat workflow", async ({ page }) => {
   // Clear cookies and log in as a random user
@@ -32,7 +32,7 @@ test("Chat workflow", async ({ page }) => {
 
   // Test creation of a new assistant
   await page.getByTestId("AppSidebar/more-agents").click();
-  await page.getByTestId("AgentsPage/new-agent-button").click();
+  await page.getByLabel("AgentsPage/new-agent-button").click();
   await page.locator('input[name="name"]').click();
   await page.locator('input[name="name"]').fill("Test Assistant");
   await page.locator('textarea[name="description"]').click();

@@ -30,6 +30,7 @@ interface UserPreferences {
   temperature_override_enabled: boolean;
   theme_preference: ThemePreference | null;
   chat_background: string | null;
+  default_app_mode: "AUTO" | "CHAT" | "SEARCH";
 }
 
 export interface MemoryItem {
@@ -42,6 +43,7 @@ export interface UserPersonalization {
   role: string;
   memories: MemoryItem[];
   use_memories: boolean;
+  enable_memory_tool: boolean;
   user_preferences: string;
 }
 
@@ -298,6 +300,7 @@ export interface OAuthConfluenceFinalizeResponse {
 export interface CCPairBasicInfo {
   has_successful_run: boolean;
   source: ValidSources;
+  status: ConnectorCredentialPairStatus;
 }
 
 export type ConnectorSummary = {
@@ -514,6 +517,9 @@ export enum ValidSources {
   Bitbucket = "bitbucket",
   TestRail = "testrail",
 
+  // Craft-specific sources
+  CraftFile = "craft_file",
+
   // Federated Connectors
   FederatedSlack = "federated_slack",
 }
@@ -548,6 +554,7 @@ export type ConfigurableSources = Exclude<
   | ValidSources.IngestionApi
   | ValidSources.FederatedSlack // is part of ValiedSources.Slack
   | ValidSources.UserFile
+  | ValidSources.CraftFile // User Library - managed through dedicated UI
 >;
 
 export const oauthSupportedSources: ConfigurableSources[] = [

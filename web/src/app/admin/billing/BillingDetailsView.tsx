@@ -281,8 +281,10 @@ function SeatsCard({
   });
 
   const totalSeats = billing?.seats ?? license?.seats ?? 0;
-  const acceptedUsers = usersData?.accepted?.length ?? 0;
-  const slackUsers = usersData?.slack_users?.length ?? 0;
+  const acceptedUsers =
+    usersData?.accepted?.filter((u) => u.is_active).length ?? 0;
+  const slackUsers =
+    usersData?.slack_users?.filter((u) => u.is_active).length ?? 0;
   const usedSeats = acceptedUsers + slackUsers;
   const pendingSeats = usersData?.invited?.length ?? 0;
   const remainingSeats = Math.max(0, totalSeats - usedSeats - pendingSeats);

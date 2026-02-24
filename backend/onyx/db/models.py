@@ -77,6 +77,7 @@ from onyx.db.enums import (
     ThemePreference,
     DefaultAppMode,
     SwitchoverType,
+    SharingScope,
 )
 from onyx.configs.constants import NotificationType
 from onyx.configs.constants import SearchFeedbackType
@@ -257,6 +258,9 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     personal_name: Mapped[str | None] = mapped_column(String, nullable=True)
     personal_role: Mapped[str | None] = mapped_column(String, nullable=True)
     use_memories: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    enable_memory_tool: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True
+    )
     user_preferences: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     chosen_assistants: Mapped[list[int] | None] = mapped_column(
@@ -283,7 +287,7 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
 
     # relationships
     credentials: Mapped[list["Credential"]] = relationship(
-        "Credential", back_populates="user", lazy="joined"
+        "Credential", back_populates="user"
     )
     chat_sessions: Mapped[list["ChatSession"]] = relationship(
         "ChatSession", back_populates="user"
@@ -317,7 +321,6 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         "Memory",
         back_populates="user",
         cascade="all, delete-orphan",
-        lazy="selectin",
         order_by="desc(Memory.id)",
     )
     oauth_user_tokens: Mapped[list["OAuthUserToken"]] = relationship(
@@ -803,12 +806,13 @@ class HierarchyNode(Base):
         "HierarchyNode", remote_side=[id], back_populates="children"
     )
     children: Mapped[list["HierarchyNode"]] = relationship(
-        "HierarchyNode", back_populates="parent"
+        "HierarchyNode", back_populates="parent", passive_deletes=True
     )
     child_documents: Mapped[list["Document"]] = relationship(
         "Document",
         back_populates="parent_hierarchy_node",
         foreign_keys="Document.parent_hierarchy_node_id",
+        passive_deletes=True,
     )
     # Personas that have this hierarchy node attached for scoped search
     personas: Mapped[list["Persona"]] = relationship(
@@ -933,6 +937,7 @@ class Document(Base):
         "HierarchyNode",
         back_populates="document",
         foreign_keys="HierarchyNode.document_id",
+        passive_deletes=True,
     )
     # Personas that have this document directly attached for scoped search
     attached_personas: Mapped[list["Persona"]] = relationship(
@@ -1035,11 +1040,19 @@ class OpenSearchTenantMigrationRecord(Base):
         nullable=False,
     )
     # Opaque continuation token from Vespa's Visit API.
-    # NULL means "not started" or "visit completed".
+    # NULL means "not started".
+    # Otherwise contains a serialized mapping between slice ID and continuation
+    # token for that slice.
     vespa_visit_continuation_token: Mapped[str | None] = mapped_column(
         Text, nullable=True
     )
     total_chunks_migrated: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False
+    )
+    total_chunks_errored: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False
+    )
+    total_chunks_in_vespa: Mapped[int] = mapped_column(
         Integer, default=0, nullable=False
     )
     created_at: Mapped[datetime.datetime] = mapped_column(
@@ -1052,6 +1065,9 @@ class OpenSearchTenantMigrationRecord(Base):
     )
     enable_opensearch_retrieval: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
+    )
+    approx_chunk_count_in_vespa: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
     )
 
 
@@ -4694,6 +4710,12 @@ class BuildSession(Base):
     demo_data_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("true")
     )
+    sharing_scope: Mapped[SharingScope] = mapped_column(
+        String,
+        nullable=False,
+        default=SharingScope.PRIVATE,
+        server_default="private",
+    )
 
     # Relationships
     user: Mapped[User | None] = relationship("User", foreign_keys=[user_id])
@@ -4861,3 +4883,105 @@ class BuildMessage(Base):
             "ix_build_message_session_turn", "session_id", "turn_index", "created_at"
         ),
     )
+
+
+"""
+SCIM 2.0 Provisioning Models (Enterprise Edition only)
+Used for automated user/group provisioning from identity providers (Okta, Azure AD).
+"""
+
+
+class ScimToken(Base):
+    """Bearer tokens for IdP SCIM authentication."""
+
+    __tablename__ = "scim_token"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    hashed_token: Mapped[str] = mapped_column(
+        String(64), unique=True, nullable=False
+    )  # SHA256 = 64 hex chars
+    token_display: Mapped[str] = mapped_column(
+        String, nullable=False
+    )  # Last 4 chars for UI identification
+
+    created_by_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), nullable=False
+    )
+
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("true"), nullable=False
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    last_used_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    created_by: Mapped[User] = relationship("User", foreign_keys=[created_by_id])
+
+
+class ScimUserMapping(Base):
+    """Maps SCIM externalId from the IdP to an Onyx User."""
+
+    __tablename__ = "scim_user_mapping"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    external_id: Mapped[str] = mapped_column(String, unique=True, index=True)
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), unique=True, nullable=False
+    )
+    scim_username: Mapped[str | None] = mapped_column(String, nullable=True)
+    department: Mapped[str | None] = mapped_column(String, nullable=True)
+    manager: Mapped[str | None] = mapped_column(String, nullable=True)
+    given_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    family_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    scim_emails_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    user: Mapped[User] = relationship("User", foreign_keys=[user_id])
+
+
+class ScimGroupMapping(Base):
+    """Maps SCIM externalId from the IdP to an Onyx UserGroup."""
+
+    __tablename__ = "scim_group_mapping"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    external_id: Mapped[str] = mapped_column(String, unique=True, index=True)
+    user_group_id: Mapped[int] = mapped_column(
+        ForeignKey("user_group.id", ondelete="CASCADE"), unique=True, nullable=False
+    )
+
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    user_group: Mapped[UserGroup] = relationship(
+        "UserGroup", foreign_keys=[user_group_id]
+    )
+
+
+class CodeInterpreterServer(Base):
+    """Details about the code interpreter server"""
+
+    __tablename__ = "code_interpreter_server"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    server_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

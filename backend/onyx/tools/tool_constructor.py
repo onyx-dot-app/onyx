@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.oauth_token_manager import OAuthTokenManager
 from onyx.chat.emitter import Emitter
+from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.context.search.models import BaseFilters
 from onyx.db.enums import MCPAuthenticationPerformer
@@ -30,10 +31,12 @@ from onyx.tools.models import SearchToolUsage
 from onyx.tools.tool_implementations.custom.custom_tool import (
     build_custom_tools_from_openapi_schema_and_headers,
 )
+from onyx.tools.tool_implementations.file_reader.file_reader_tool import FileReaderTool
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
+from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
 from onyx.tools.tool_implementations.open_url.open_url_tool import (
     OpenURLTool,
 )
@@ -55,6 +58,13 @@ class SearchToolConfig(BaseModel):
     additional_context: str | None = None
     slack_context: SlackContext | None = None
     enable_slack_search: bool = True
+
+
+class FileReaderToolConfig(BaseModel):
+    # IDs from the ``user_file`` table (project / persona-attached files).
+    user_file_ids: list[UUID] = []
+    # IDs from the ``file_record`` table (chat-attached files).
+    chat_file_ids: list[UUID] = []
 
 
 class CustomToolConfig(BaseModel):
@@ -103,6 +113,7 @@ def construct_tools(
     llm: LLM,
     search_tool_config: SearchToolConfig | None = None,
     custom_tool_config: CustomToolConfig | None = None,
+    file_reader_tool_config: FileReaderToolConfig | None = None,
     allowed_tool_ids: list[int] | None = None,
     search_usage_forcing_setting: SearchToolUsage = SearchToolUsage.AUTO,
 ) -> dict[int, list[Tool]]:
@@ -125,7 +136,7 @@ def construct_tools(
 
     search_settings = get_current_search_settings(db_session)
     # This flow is for search so we do not get all indices.
-    document_index = get_default_document_index(search_settings, None)
+    document_index = get_default_document_index(search_settings, None, db_session)
 
     added_search_tool = False
     for db_tool_model in persona.tools:
@@ -160,10 +171,8 @@ def construct_tools(
                 if not search_tool_config:
                     search_tool_config = SearchToolConfig()
 
-                # TODO concerning passing the db_session here.
                 search_tool = SearchTool(
                     tool_id=db_tool_model.id,
-                    db_session=db_session,
                     emitter=emitter,
                     user=user,
                     persona=persona,
@@ -236,6 +245,18 @@ def construct_tools(
             elif tool_cls.__name__ == PythonTool.__name__:
                 tool_dict[db_tool_model.id] = [
                     PythonTool(tool_id=db_tool_model.id, emitter=emitter)
+                ]
+
+            # Handle File Reader Tool
+            elif tool_cls.__name__ == FileReaderTool.__name__:
+                cfg = file_reader_tool_config or FileReaderToolConfig()
+                tool_dict[db_tool_model.id] = [
+                    FileReaderTool(
+                        tool_id=db_tool_model.id,
+                        emitter=emitter,
+                        user_file_ids=cfg.user_file_ids,
+                        chat_file_ids=cfg.chat_file_ids,
+                    )
                 ]
 
             # Handle KG Tool
@@ -388,6 +409,7 @@ def construct_tools(
     if (
         not added_search_tool
         and search_usage_forcing_setting == SearchToolUsage.ENABLED
+        and not DISABLE_VECTOR_DB
     ):
         # Get the database tool model for SearchTool
         search_tool_db_model = get_builtin_tool(db_session, SearchTool)
@@ -398,7 +420,6 @@ def construct_tools(
 
         search_tool = SearchTool(
             tool_id=search_tool_db_model.id,
-            db_session=db_session,
             emitter=emitter,
             user=user,
             persona=persona,
@@ -412,6 +433,23 @@ def construct_tools(
         )
 
         tool_dict[search_tool_db_model.id] = [search_tool]
+
+    # Always inject MemoryTool when the user has the memory tool enabled,
+    # bypassing persona tool associations and allowed_tool_ids filtering
+    if user.enable_memory_tool:
+        try:
+            memory_tool_db_model = get_builtin_tool(db_session, MemoryTool)
+            memory_tool = MemoryTool(
+                tool_id=memory_tool_db_model.id,
+                emitter=emitter,
+                llm=llm,
+            )
+            tool_dict[memory_tool_db_model.id] = [memory_tool]
+        except RuntimeError:
+            logger.warning(
+                "MemoryTool not found in the database. "
+                "Run the latest alembic migration to seed it."
+            )
 
     tools: list[Tool] = []
     for tool_list in tool_dict.values():

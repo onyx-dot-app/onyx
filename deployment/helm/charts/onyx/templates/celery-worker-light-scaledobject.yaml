@@ -14,10 +14,14 @@ spec:
   maxReplicaCount: {{ .Values.celery_worker_light.autoscaling.maxReplicas | default 10 }}
   pollingInterval: {{ .Values.celery_worker_light.autoscaling.pollingInterval | default 30 }}
   cooldownPeriod: {{ .Values.celery_worker_light.autoscaling.cooldownPeriod | default 300 }}
-  idleReplicaCount: {{ .Values.celery_worker_light.autoscaling.idleReplicaCount | default 1 }}
+  {{- if hasKey .Values.celery_worker_light.autoscaling "idleReplicaCount" }}
+  idleReplicaCount: {{ .Values.celery_worker_light.autoscaling.idleReplicaCount }}
+  {{- end }}
+  {{- if .Values.celery_worker_light.autoscaling.customTriggers }}
   fallback:
     failureThreshold: {{ .Values.celery_worker_light.autoscaling.failureThreshold | default 3 }}
     replicas: {{ .Values.celery_worker_light.autoscaling.fallbackReplicas | default 1 }}
+  {{- end }}
   triggers:
     {{- if .Values.celery_worker_light.autoscaling.targetCPUUtilizationPercentage }}
     - type: cpu

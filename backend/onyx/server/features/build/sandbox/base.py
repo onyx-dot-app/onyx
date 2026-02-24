@@ -125,6 +125,7 @@ class SandboxManager(ABC):
         user_work_area: str | None = None,
         user_level: str | None = None,
         use_demo_data: bool = False,
+        excluded_user_library_paths: list[str] | None = None,
     ) -> None:
         """Set up a session workspace within an existing sandbox.
 
@@ -149,6 +150,9 @@ class SandboxManager(ABC):
             user_work_area: User's work area for demo persona (e.g., "engineering")
             user_level: User's level for demo persona (e.g., "ic", "manager")
             use_demo_data: If True, symlink files/ to demo data; else to user files
+            excluded_user_library_paths: List of paths within user_library to exclude
+                from the sandbox (e.g., ["/data/file.xlsx"]). Only applies when
+                use_demo_data=False. Files at these paths won't be accessible.
 
         Raises:
             RuntimeError: If workspace setup fails
@@ -411,6 +415,36 @@ class SandboxManager(ABC):
         ...
 
     @abstractmethod
+    def generate_pptx_preview(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        pptx_path: str,
+        cache_dir: str,
+    ) -> tuple[list[str], bool]:
+        """Convert PPTX to slide JPEG images for preview, with caching.
+
+        Checks if cache_dir already has slides. If the PPTX is newer than the
+        cached images (or no cache exists), runs soffice -> pdftoppm pipeline.
+
+        Args:
+            sandbox_id: The sandbox ID
+            session_id: The session ID
+            pptx_path: Relative path to the PPTX file within the session workspace
+            cache_dir: Relative path for the cache directory
+                       (e.g., "outputs/.pptx-preview/abc123")
+
+        Returns:
+            Tuple of (slide_paths, cached) where slide_paths is a list of
+            relative paths to slide JPEG images (within session workspace)
+            and cached indicates whether the result was served from cache.
+
+        Raises:
+            ValueError: If file not found or conversion fails
+        """
+        ...
+
+    @abstractmethod
     def sync_files(
         self,
         sandbox_id: UUID,
@@ -423,7 +457,9 @@ class SandboxManager(ABC):
         For Kubernetes backend: Executes `s5cmd sync` in the file-sync sidecar container.
         For Local backend: No-op since files are directly accessible via symlink.
 
-        This is idempotent - only downloads changed files.
+        This is idempotent - only downloads changed files. File visibility in
+        sessions is controlled via filtered symlinks in setup_session_workspace(),
+        not at the sync level.
 
         Args:
             sandbox_id: The sandbox UUID
@@ -437,6 +473,23 @@ class SandboxManager(ABC):
             True if sync was successful, False otherwise.
         """
         ...
+
+    def ensure_nextjs_running(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        nextjs_port: int,
+    ) -> None:
+        """Ensure the Next.js server is running for a session.
+
+        Default is a no-op — only meaningful for local backends that manage
+        process lifecycles directly (e.g., LocalSandboxManager).
+
+        Args:
+            sandbox_id: The sandbox ID
+            session_id: The session ID
+            nextjs_port: The port the Next.js server should be listening on
+        """
 
 
 # Singleton instance cache for the factory

@@ -47,6 +47,7 @@ from onyx.tools.tool_implementations.web_search.utils import (
 from onyx.tools.tool_implementations.web_search.utils import MAX_CHARS_PER_URL
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
+from onyx.utils.url import normalize_url as normalize_web_content_url
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -413,10 +414,20 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
 
     @override
     @classmethod
-    def is_available(cls, db_session: Session) -> bool:
-        """OpenURLTool is always available since it falls back to built-in crawler."""
+    def is_available(cls, db_session: Session) -> bool:  # noqa: ARG003
+        """OpenURLTool is available unless the vector DB is disabled.
+
+        The tool uses id_based_retrieval to match URLs to indexed documents,
+        which requires a vector database. When DISABLE_VECTOR_DB is set, the
+        tool is disabled entirely.
+        """
+        from onyx.configs.app_configs import DISABLE_VECTOR_DB
+
+        if DISABLE_VECTOR_DB:
+            return False
+
         # The tool can use either a configured provider or the built-in crawler,
-        # so it's always available
+        # so it's always available when the vector DB is present
         return True
 
     def tool_definition(self) -> dict:
@@ -791,7 +802,9 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
         for url in all_urls:
             doc_id = url_to_doc_id.get(url)
             indexed_section = indexed_by_doc_id.get(doc_id) if doc_id else None
-            crawled_section = crawled_by_url.get(url)
+            # WebContent.link is normalized (query/fragment stripped). Match on the
+            # same normalized form to avoid dropping successful crawl results.
+            crawled_section = crawled_by_url.get(normalize_web_content_url(url))
 
             if indexed_section and indexed_section.combined_content:
                 # Prefer indexed

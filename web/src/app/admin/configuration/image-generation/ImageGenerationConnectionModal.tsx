@@ -4,7 +4,6 @@ import { ModalCreationInterface } from "@/refresh-components/contexts/ModalConte
 import { ImageProvider } from "@/app/admin/configuration/image-generation/constants";
 import { LLMProviderView } from "@/app/admin/configuration/llm/interfaces";
 import { ImageGenerationConfigView } from "@/lib/configuration/imageConfigurationService";
-import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { getImageGenForm } from "./forms";
 
 interface Props {
@@ -13,7 +12,6 @@ interface Props {
   existingProviders: LLMProviderView[];
   existingConfig?: ImageGenerationConfigView;
   onSuccess: () => void;
-  setPopup: (popup: PopupSpec | null) => void;
 }
 
 /**

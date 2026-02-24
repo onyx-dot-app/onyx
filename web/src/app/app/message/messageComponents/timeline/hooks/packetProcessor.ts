@@ -139,7 +139,10 @@ const CONTENT_PACKET_TYPES_SET = new Set<PacketType>([
   PacketType.IMAGE_GENERATION_TOOL_START,
   PacketType.PYTHON_TOOL_START,
   PacketType.CUSTOM_TOOL_START,
+  PacketType.FILE_READER_START,
   PacketType.FETCH_TOOL_START,
+  PacketType.MEMORY_TOOL_START,
+  PacketType.MEMORY_TOOL_NO_ACCESS,
   PacketType.REASONING_START,
   PacketType.DEEP_RESEARCH_PLAN_START,
   PacketType.RESEARCH_AGENT_START,
@@ -346,11 +349,11 @@ function processPacket(state: ProcessorState, packet: Packet): void {
     if (isDisplayPacket(packet)) {
       state.displayGroupKeys.add(groupKey);
     }
+  }
 
-    // Track image generation for header display
-    if (packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_START) {
-      state.isGeneratingImage = true;
-    }
+  // Track image generation for header display (regardless of group position)
+  if (packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_START) {
+    state.isGeneratingImage = true;
   }
 
   // Count generated images from DELTA packets

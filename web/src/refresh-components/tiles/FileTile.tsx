@@ -1,6 +1,6 @@
 import type { FunctionComponent } from "react";
 
-import { cn } from "@/lib/utils";
+import { cn, noProp } from "@/lib/utils";
 import { SvgMaximize2, SvgTextLines, SvgX } from "@opal/icons";
 import type { IconProps } from "@opal/types";
 import IconButton from "../buttons/IconButton";
@@ -72,6 +72,7 @@ export default function FileTile({
   return (
     <div className="group/Tile">
       <div
+        onClick={onOpen && state !== "disabled" ? () => onOpen() : undefined}
         className={cn(
           "relative min-w-[7.5rem] max-w-[15rem] h-full",
           "border rounded-12 p-1",
@@ -83,7 +84,9 @@ export default function FileTile({
             : "bg-background-tint-00 border-border-01",
           // Hover overrides (disabled gets none)
           state !== "disabled" && "group-hover/Tile:border-border-02",
-          state === "default" && "group-hover/Tile:bg-background-tint-02"
+          state === "default" && "group-hover/Tile:bg-background-tint-02",
+          // Clickable cursor when onOpen is provided and not disabled
+          onOpen && state !== "disabled" && "cursor-pointer"
         )}
       >
         {onRemove && <RemoveButton onRemove={onRemove} />}
@@ -146,7 +149,11 @@ export default function FileTile({
             )}
             {onOpen && (
               <div className="h-full">
-                <IconButton small icon={SvgMaximize2} onClick={onOpen} />
+                <IconButton
+                  small
+                  icon={SvgMaximize2}
+                  onClick={noProp(onOpen)}
+                />
               </div>
             )}
           </div>

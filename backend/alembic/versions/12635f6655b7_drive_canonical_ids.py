@@ -11,7 +11,6 @@ import sqlalchemy as sa
 from urllib.parse import urlparse, urlunparse
 from httpx import HTTPStatusError
 import httpx
-from onyx.document_index.factory import get_default_document_index
 from onyx.db.search_settings import SearchSettings
 from onyx.document_index.vespa.shared_utils.utils import get_vespa_http_client
 from onyx.document_index.vespa.shared_utils.utils import (
@@ -519,15 +518,11 @@ def delete_document_from_db(current_doc_id: str, index_name: str) -> None:
 def upgrade() -> None:
     if SKIP_CANON_DRIVE_IDS:
         return
-    current_search_settings, future_search_settings = active_search_settings()
-    document_index = get_default_document_index(
-        current_search_settings,
-        future_search_settings,
-    )
+    current_search_settings, _ = active_search_settings()
 
     # Get the index name
-    if hasattr(document_index, "index_name"):
-        index_name = document_index.index_name
+    if hasattr(current_search_settings, "index_name"):
+        index_name = current_search_settings.index_name
     else:
         # Default index name if we can't get it from the document_index
         index_name = "danswer_index"

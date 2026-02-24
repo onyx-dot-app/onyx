@@ -1,4 +1,4 @@
-{{- if gt (int .Values.celery_worker_docprocessing.replicaCount) 0 }}
+{{- if and .Values.vectorDB.enabled (gt (int .Values.celery_worker_docprocessing.replicaCount) 0) }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -68,7 +68,7 @@ spec:
               "--pool=threads",
               "--concurrency=6",
               "--prefetch-multiplier=1",
-              "--loglevel=INFO",
+              {{ printf "--loglevel=%s" .Values.celery_worker_docprocessing.logLevel | quote }},
               "--hostname=docprocessing@%n",
               "-Q",
               "docprocessing",

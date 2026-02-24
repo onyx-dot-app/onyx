@@ -272,8 +272,6 @@ export function BedrockForm({
       {({
         onClose,
         mutate,
-        popup,
-        setPopup,
         isTesting,
         setIsTesting,
         testError,
@@ -315,62 +313,58 @@ export function BedrockForm({
         });
 
         return (
-          <>
-            {popup}
-            <Formik
-              initialValues={initialValues}
-              validationSchema={validationSchema}
-              validateOnMount={true}
-              onSubmit={async (values, { setSubmitting }) => {
-                // Filter out empty custom_config values
-                const filteredCustomConfig = Object.fromEntries(
-                  Object.entries(values.custom_config || {}).filter(
-                    ([, v]) => v !== ""
-                  )
-                );
+          <Formik
+            initialValues={initialValues}
+            validationSchema={validationSchema}
+            validateOnMount={true}
+            onSubmit={async (values, { setSubmitting }) => {
+              // Filter out empty custom_config values
+              const filteredCustomConfig = Object.fromEntries(
+                Object.entries(values.custom_config || {}).filter(
+                  ([, v]) => v !== ""
+                )
+              );
 
-                const submitValues = {
-                  ...values,
-                  custom_config:
-                    Object.keys(filteredCustomConfig).length > 0
-                      ? filteredCustomConfig
-                      : undefined,
-                };
+              const submitValues = {
+                ...values,
+                custom_config:
+                  Object.keys(filteredCustomConfig).length > 0
+                    ? filteredCustomConfig
+                    : undefined,
+              };
 
-                await submitLLMProvider({
-                  providerName: BEDROCK_PROVIDER_NAME,
-                  values: submitValues,
-                  initialValues,
-                  modelConfigurations:
-                    fetchedModels.length > 0
-                      ? fetchedModels
-                      : modelConfigurations,
-                  existingLlmProvider,
-                  shouldMarkAsDefault,
-                  setIsTesting,
-                  setTestError,
-                  setPopup,
-                  mutate,
-                  onClose,
-                  setSubmitting,
-                });
-              }}
-            >
-              {(formikProps) => (
-                <BedrockFormInternals
-                  formikProps={formikProps}
-                  existingLlmProvider={existingLlmProvider}
-                  fetchedModels={fetchedModels}
-                  setFetchedModels={setFetchedModels}
-                  modelConfigurations={modelConfigurations}
-                  isTesting={isTesting}
-                  testError={testError}
-                  mutate={mutate}
-                  onClose={onClose}
-                />
-              )}
-            </Formik>
-          </>
+              await submitLLMProvider({
+                providerName: BEDROCK_PROVIDER_NAME,
+                values: submitValues,
+                initialValues,
+                modelConfigurations:
+                  fetchedModels.length > 0
+                    ? fetchedModels
+                    : modelConfigurations,
+                existingLlmProvider,
+                shouldMarkAsDefault,
+                setIsTesting,
+                setTestError,
+                mutate,
+                onClose,
+                setSubmitting,
+              });
+            }}
+          >
+            {(formikProps) => (
+              <BedrockFormInternals
+                formikProps={formikProps}
+                existingLlmProvider={existingLlmProvider}
+                fetchedModels={fetchedModels}
+                setFetchedModels={setFetchedModels}
+                modelConfigurations={modelConfigurations}
+                isTesting={isTesting}
+                testError={testError}
+                mutate={mutate}
+                onClose={onClose}
+              />
+            )}
+          </Formik>
         );
       }}
     </ProviderFormEntrypointWrapper>

@@ -1,7 +1,6 @@
 "use client";
 
 import { CCPairFullInfo, ConnectorCredentialPairStatus } from "./types";
-import { usePopup } from "@/components/admin/connectors/Popup";
 import { mutate } from "swr";
 import { buildCCPairInfoUrl } from "./lib";
 import { setCCPairStatus } from "@/lib/ccPair";
@@ -10,7 +9,6 @@ import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 
 // Export the status change functionality separately
 export function useStatusChange(ccPair: CCPairFullInfo | null) {
-  const { setPopup } = usePopup();
   const [isUpdating, setIsUpdating] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
 
@@ -21,7 +19,7 @@ export function useStatusChange(ccPair: CCPairFullInfo | null) {
 
     try {
       // Call the backend to update the status
-      await setCCPairStatus(ccPair.id, newStatus, setPopup);
+      await setCCPairStatus(ccPair.id, newStatus);
 
       // Use mutate to revalidate the status on the backend
       await mutate(buildCCPairInfoUrl(ccPair.id));

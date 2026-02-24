@@ -27,12 +27,14 @@ class SearchFlowClassificationResponse(BaseModel):
     is_search_flow: bool
 
 
+# NOTE: This model is used for the core flow of the Onyx application, any changes to it should be reviewed and approved by an
+# experienced team member. It is very important to 1. avoid bloat and 2. that this remains backwards compatible across versions.
 class SendSearchQueryRequest(BaseModel):
     search_query: str
     filters: BaseFilters | None = None
     num_docs_fed_to_llm_selection: int | None = None
     run_query_expansion: bool = False
-    num_hits: int = 50
+    num_hits: int = 30
 
     include_content: bool = False
     stream: bool = False

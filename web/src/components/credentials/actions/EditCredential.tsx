@@ -4,7 +4,7 @@ import Text from "@/components/ui/text";
 import { FaNewspaper, FaTrash } from "react-icons/fa";
 import { TextFormField, TypedFileUploadFormField } from "@/components/Field";
 import { Form, Formik, FormikHelpers } from "formik";
-import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import {
   Credential,
   getDisplayNameForCredentialKey,
@@ -16,7 +16,6 @@ import { SvgTrash } from "@opal/icons";
 export interface EditCredentialProps {
   credential: Credential<dictionaryType>;
   onClose: () => void;
-  setPopup: (popupSpec: PopupSpec | null) => void;
   onUpdate: (
     selectedCredentialId: Credential<any>,
     details: any,
@@ -27,7 +26,6 @@ export interface EditCredentialProps {
 export default function EditCredential({
   credential,
   onClose,
-  setPopup,
   onUpdate,
 }: EditCredentialProps) {
   const validationSchema = createEditingValidationSchema(
@@ -44,7 +42,7 @@ export default function EditCredential({
       await onUpdate(credential, values, onClose);
     } catch (error) {
       console.error("Error updating credential:", error);
-      setPopup({ message: "Error updating credential", type: "error" });
+      toast.error("Error updating credential");
     } finally {
       formikHelpers.setSubmitting(false);
     }

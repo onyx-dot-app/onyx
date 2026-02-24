@@ -6,7 +6,6 @@ import {
   ImageGenerationCredentials,
 } from "@/lib/configuration/imageConfigurationService";
 import { ModalCreationInterface } from "@/refresh-components/contexts/ModalContext";
-import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { APIFormFieldState } from "@/refresh-components/form/types";
 
 // Base props for all image generation forms
@@ -16,7 +15,6 @@ export interface ImageGenFormBaseProps {
   existingProviders: LLMProviderView[];
   existingConfig?: ImageGenerationConfigView;
   onSuccess: () => void;
-  setPopup: (popup: PopupSpec | null) => void;
 }
 
 // Base type for form values - allows any object structure

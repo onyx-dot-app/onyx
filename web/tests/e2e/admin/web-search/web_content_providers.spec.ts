@@ -1,5 +1,5 @@
 import { test, expect, Page, Locator } from "@playwright/test";
-import { loginAs } from "../../utils/auth";
+import { loginAs } from "@tests/e2e/utils/auth";
 
 const WEB_SEARCH_URL = "/admin/configuration/web-search";
 
@@ -73,8 +73,8 @@ test.describe("Web Content Provider Configuration", () => {
       await baseUrlInput.waitFor({ state: "visible", timeout: 5000 });
       // Don't check value - it might have a custom value from previous config
 
-      // Enter API key - clear first in case modal opened with masked credentials
-      const apiKeyInput = page.locator('input[type="password"]');
+      // Enter API key - clear first in case modal opened with masked credentials.
+      const apiKeyInput = modalDialog.getByTestId("web-provider-api-key-input");
       await apiKeyInput.waitFor({ state: "visible", timeout: 5000 });
       await apiKeyInput.clear();
       await apiKeyInput.fill(FIRECRAWL_API_KEY!);
@@ -130,8 +130,10 @@ test.describe("Web Content Provider Configuration", () => {
           page.getByText("Set up Firecrawl", { exact: false })
         ).toBeVisible();
 
-        // Enter API key - clear first in case modal opened with masked credentials
-        const apiKeyInput = page.locator('input[type="password"]');
+        // Enter API key - clear first in case modal opened with masked credentials.
+        const apiKeyInput = modalDialog.getByTestId(
+          "web-provider-api-key-input"
+        );
         await apiKeyInput.waitFor({ state: "visible", timeout: 5000 });
         await apiKeyInput.clear();
         await apiKeyInput.fill(FIRECRAWL_API_KEY!);
@@ -139,7 +141,7 @@ test.describe("Web Content Provider Configuration", () => {
         await modalDialog
           .getByRole("button", { name: "Connect", exact: true })
           .click();
-        await expect(modalDialog).not.toBeVisible({ timeout: 30000 });
+        await expect(modalDialog).not.toBeVisible({ timeout: 60000 });
         await page.waitForLoadState("networkidle");
       } else if (await setDefaultButton.isVisible()) {
         // If already configured but not active, set as default
