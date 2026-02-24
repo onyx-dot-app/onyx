@@ -1957,7 +1957,8 @@ class SessionManager:
                         files.extend(collect_files(entry.path))
                     else:
                         # arcname is relative to the target directory
-                        arcname = entry.path.replace(f"{path}/", "", 1)
+                        prefix_len = len(path) + 1  # +1 for trailing slash
+                        arcname = entry.path[prefix_len:]
                         files.append((entry.path, arcname))
             except ValueError:
                 pass
