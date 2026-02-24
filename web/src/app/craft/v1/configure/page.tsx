@@ -46,7 +46,7 @@ import Switch from "@/refresh-components/inputs/Switch";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import NotAllowedModal from "@/app/craft/onboarding/components/NotAllowedModal";
 import { useOnboarding } from "@/app/craft/onboarding/BuildOnboardingProvider";
-import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
+import { useLLMProviders } from "@/hooks/useLLMProviders";
 import { useUser } from "@/providers/UserProvider";
 import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
 import {

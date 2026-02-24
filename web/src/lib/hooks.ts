@@ -39,7 +39,7 @@ import { AuthType, NEXT_PUBLIC_CLOUD_ENABLED } from "./constants";
 import { useUser } from "@/providers/UserProvider";
 import { SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
 import { updateTemperatureOverrideForChatSession } from "@/app/app/services/lib";
-import { useLLMProviders } from "./hooks/useLLMProviders";
+import { useLLMProviders } from "@/hooks/useLLMProviders";
 
 const CREDENTIAL_URL = "/api/manage/admin/credential";
 
