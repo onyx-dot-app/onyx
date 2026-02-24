@@ -27,7 +27,7 @@ for (const lang of allLanguages) {
 
   const name = lang.name.toLowerCase();
   for (const ext of lang.extensions ?? []) {
-    if (markdownExtensions.has(ext)) continue;
+    if (markdownExtensions.has(ext.toLowerCase())) continue;
     // First language to claim an extension wins
     if (!extensionMap.has(ext)) {
       extensionMap.set(ext, name);
