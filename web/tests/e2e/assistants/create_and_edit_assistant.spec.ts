@@ -1,6 +1,7 @@
 import { test, expect, Page, Browser } from "@playwright/test";
 import { loginAs, loginAsRandomUser } from "@tests/e2e/utils/auth";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
+import { expectScreenshot } from "@tests/e2e/utils/visualRegression";
 
 // --- Locator Helper Functions ---
 const getNameInput = (page: Page) => page.locator('input[name="name"]');
@@ -244,14 +245,14 @@ test.describe("Assistant Creation and Edit Verification", () => {
       await loginAsRandomUser(page);
 
       // --- Initial Values ---
-      const assistantName = `Test Assistant ${Date.now()}`;
+      const assistantName = "Test Assistant 1";
       const assistantDescription = "This is a test assistant description.";
       const assistantInstructions = "These are the test instructions.";
       const assistantReminder = "Initial reminder.";
       const assistantStarterMessage = "Initial starter message?";
 
       // --- Edited Values ---
-      const editedAssistantName = `Edited Assistant ${Date.now()}`;
+      const editedAssistantName = "Edited Assistant";
       const editedAssistantDescription = "This is the edited description.";
       const editedAssistantInstructions = "These are the edited instructions.";
       const editedAssistantReminder = "Edited reminder.";
@@ -296,6 +297,7 @@ test.describe("Assistant Creation and Edit Verification", () => {
       expect(assistantIdMatch).toBeTruthy();
       const assistantId = assistantIdMatch ? assistantIdMatch[1] : null;
       expect(assistantId).not.toBeNull();
+      await expectScreenshot(page, { name: "welcome-page-with-assistant" });
 
       // Store assistant ID for cleanup
       knowledgeAssistantId = Number(assistantId);
