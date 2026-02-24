@@ -7,7 +7,6 @@ on:
 
 permissions:
   contents: write
-  issues: write
   pull-requests: write
 
 jobs:
@@ -76,26 +75,10 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Create cherry-pick PR to latest release
-        id: create_cherry_pick_pr
         if: steps.gate.outputs.should_cherrypick == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_TOKEN: ${{ github.token }}
           CHERRY_PICK_ASSIGNEE: ${{ steps.gate.outputs.merged_by }}
         run: |
-          set -euo pipefail
-          output_file="$(mktemp)"
-          uv run --no-sync --with onyx-devtools ods cherry-pick "${GITHUB_SHA}" --yes --no-verify 2>&1 | tee "$output_file"
-
-          pr_url="$(grep -Eo 'https://github\.com/[^[:space:]]+/pull/[0-9]+' "$output_file" | tail -n 1 || true)"
-          if [ -n "$pr_url" ]; then
-            echo "pr_url=$pr_url" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Ensure cherry-pick label is applied
-        if: steps.gate.outputs.should_cherrypick == 'true' && steps.create_cherry_pick_pr.outputs.pr_url != ''
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR_URL: ${{ steps.create_cherry_pick_pr.outputs.pr_url }}
-        run: |
-          gh pr edit "$PR_URL" --add-label "cherry-pick 🍒"
+          uv run --no-sync --with onyx-devtools ods cherry-pick "${GITHUB_SHA}" --yes --no-verify
