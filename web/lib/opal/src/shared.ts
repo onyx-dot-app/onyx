@@ -1,8 +1,16 @@
+/**
+ * @opal/shared — Shared constants and types for the opal design system.
+ *
+ * This module holds design tokens that are referenced by multiple opal
+ * packages (core, components, layouts). Centralising them here avoids
+ * circular imports and gives every consumer a single source of truth.
+ */
+
 // ---------------------------------------------------------------------------
 // Size Variants
 //
-// Shared size-variant scale used across the opal design system.
-// Maps named size presets to Tailwind height, min-width, and padding classes.
+// A named scale of size presets (lg → 2xs, plus fit) that map to Tailwind
+// utility classes for height, min-width, and padding.
 //
 // Consumers:
 //   - Interactive.Container  (height + min-width + padding)

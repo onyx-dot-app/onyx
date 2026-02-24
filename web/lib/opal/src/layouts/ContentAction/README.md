@@ -68,7 +68,7 @@ import SvgSettings from "@opal/icons/settings";
 ```tsx
 import { ContentAction } from "@opal/layouts";
 import { Button } from "@opal/components";
-import { SvgArrowExchange } from "@opal/icons";
+import { SvgArrowExchange, SvgCloud } from "@opal/icons";
 
 <ContentAction
   icon={SvgCloud}
