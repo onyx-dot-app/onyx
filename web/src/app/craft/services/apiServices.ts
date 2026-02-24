@@ -424,6 +424,38 @@ export async function fetchDirectoryListing(
   return res.json();
 }
 
+/**
+ * Trigger a browser download for a single file from the sandbox.
+ */
+export function downloadArtifactFile(sessionId: string, path: string): void {
+  const encodedPath = path
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+  const link = document.createElement("a");
+  link.href = `${API_BASE}/sessions/${sessionId}/artifacts/${encodedPath}`;
+  link.download = path.split("/").pop() || path;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+/**
+ * Trigger a browser download for a directory as a zip file.
+ */
+export function downloadDirectory(sessionId: string, path: string): void {
+  const encodedPath = path
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+  const link = document.createElement("a");
+  link.href = `${API_BASE}/sessions/${sessionId}/download-directory/${encodedPath}`;
+  link.download = "";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
 export interface FileContentResponse {
   content: string; // For text files: text content. For images: data URL (base64-encoded)
   mimeType: string;
