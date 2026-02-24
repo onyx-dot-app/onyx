@@ -990,7 +990,7 @@ class _MockCIHandler(BaseHTTPRequestHandler):
             self._respond_json(
                 200, {"file_id": f"mock-ci-file-{self.server._file_counter}"}
             )
-        elif self.path == "/v1/execute/streaming":
+        elif self.path == "/v1/execute/stream":
             if self.server.streaming_enabled:
                 self._respond_sse(
                     [
@@ -1320,8 +1320,7 @@ def test_code_interpreter_replay_packets_include_code_and_output(
     )
 
     assert (
-        len(mock_ci_server.get_requests(method="POST", path="/v1/execute/streaming"))
-        == 1
+        len(mock_ci_server.get_requests(method="POST", path="/v1/execute/stream")) == 1
     )
 
     # The response contains `packets` — a list of packet-lists, one per
@@ -1410,8 +1409,7 @@ def test_code_interpreter_streaming_fallback_to_batch(
 
     # Streaming was attempted first (returned 404), then fell back to batch
     assert (
-        len(mock_ci_server.get_requests(method="POST", path="/v1/execute/streaming"))
-        == 1
+        len(mock_ci_server.get_requests(method="POST", path="/v1/execute/stream")) == 1
     )
     assert len(mock_ci_server.get_requests(method="POST", path="/v1/execute")) == 1
 

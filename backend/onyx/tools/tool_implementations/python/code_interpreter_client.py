@@ -166,8 +166,6 @@ class CodeInterpreterClient:
             if line is None:
                 continue
 
-            logger.critical(line)
-
             if line == "":
                 # Blank line marks end of an SSE event
                 if event_type is not None and data_lines:
