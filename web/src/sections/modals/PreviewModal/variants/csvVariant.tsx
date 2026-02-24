@@ -14,6 +14,7 @@ import {
   CopyButton,
   DownloadButton,
 } from "@/sections/modals/PreviewModal/variants/shared";
+import TextSeparator from "@/refresh-components/TextSeparator";
 
 interface CsvData {
   headers: string[];
@@ -36,7 +37,7 @@ export const csvVariant: PreviewVariant = {
   headerDescription: (ctx) => {
     if (!ctx.fileContent) return "";
     const { rows } = parseCsv(ctx.fileContent);
-    return `CSV - ${rows.length} rows · ${ctx.fileSize}`;
+    return `CSV - ${rows.length} rows • ${ctx.fileSize}`;
   },
 
   renderContent: (ctx) => {
@@ -46,15 +47,10 @@ export const csvVariant: PreviewVariant = {
       <Section justifyContent="start" alignItems="start" padding={1}>
         <Table>
           <TableHeader className="sticky top-0 z-sticky">
-            <TableRow className="bg-background-tint-02">
+            <TableRow noHover>
               {headers.map((h: string, i: number) => (
                 <TableHead key={i}>
-                  <Text
-                    as="p"
-                    className="line-clamp-2 font-medium"
-                    text03
-                    mainUiBody
-                  >
+                  <Text as="p" className="line-clamp-2" text04 secondaryAction>
                     {h}
                   </Text>
                 </TableHead>
@@ -63,22 +59,33 @@ export const csvVariant: PreviewVariant = {
           </TableHeader>
           <TableBody>
             {rows.map((row: string[], rIdx: number) => (
-              <TableRow key={rIdx}>
+              <TableRow key={rIdx} noHover>
                 {headers.map((_: string, cIdx: number) => (
                   <TableCell
                     key={cIdx}
                     className={cn(
-                      cIdx === 0 && "sticky left-0 bg-background-tint-01",
-                      "py-0 px-4 whitespace-normal break-words"
+                      cIdx === 0 && "sticky left-0",
+                      "py-4 px-4 whitespace-normal break-words"
                     )}
                   >
-                    {row?.[cIdx] ?? ""}
+                    <Text
+                      as="p"
+                      {...(cIdx === 0
+                        ? { text04: true, secondaryAction: true }
+                        : { text03: true, secondaryBody: true })}
+                    >
+                      {row?.[cIdx] ?? ""}
+                    </Text>
                   </TableCell>
                 ))}
               </TableRow>
             ))}
           </TableBody>
         </Table>
+        <TextSeparator
+          count={rows.length}
+          text={rows.length === 1 ? "row" : "rows"}
+        />
       </Section>
     );
   },
@@ -88,7 +95,7 @@ export const csvVariant: PreviewVariant = {
     const { headers, rows } = parseCsv(ctx.fileContent);
     return (
       <Text text03 mainUiBody className="select-none">
-        {headers.length} {headers.length === 1 ? "column" : "columns"} ·{" "}
+        {headers.length} {headers.length === 1 ? "column" : "columns"} •{" "}
         {rows.length} {rows.length === 1 ? "row" : "rows"}
       </Text>
     );
