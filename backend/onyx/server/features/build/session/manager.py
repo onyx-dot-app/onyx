@@ -646,15 +646,29 @@ class SessionManager:
 
             if sandbox and sandbox.status.is_active():
                 # Quick health check to verify sandbox is actually responsive
-                if self._sandbox_manager.health_check(sandbox.id, timeout=5.0):
+                # AND verify the session workspace still exists on disk
+                # (it may have been wiped if the sandbox was re-provisioned)
+                is_healthy = self._sandbox_manager.health_check(sandbox.id, timeout=5.0)
+                workspace_exists = (
+                    is_healthy
+                    and self._sandbox_manager.session_workspace_exists(
+                        sandbox.id, existing.id
+                    )
+                )
+                if is_healthy and workspace_exists:
                     logger.info(
                         f"Returning existing empty session {existing.id} for user {user_id}"
                     )
                     return existing
-                else:
+                elif not is_healthy:
                     logger.warning(
                         f"Empty session {existing.id} has unhealthy sandbox {sandbox.id}. "
                         f"Deleting and creating fresh session."
+                    )
+                else:
+                    logger.warning(
+                        f"Empty session {existing.id} workspace missing in sandbox "
+                        f"{sandbox.id}. Deleting and creating fresh session."
                     )
             else:
                 logger.warning(
@@ -2025,11 +2039,18 @@ class SessionManager:
             return None
 
         # Use sandbox manager to list directory (works for both local and K8s)
-        raw_entries = self._sandbox_manager.list_directory(
-            sandbox_id=sandbox.id,
-            session_id=session_id,
-            path=path,
-        )
+        # If the directory doesn't exist (e.g., session workspace not yet loaded),
+        # return an empty listing rather than erroring out.
+        try:
+            raw_entries = self._sandbox_manager.list_directory(
+                sandbox_id=sandbox.id,
+                session_id=session_id,
+                path=path,
+            )
+        except ValueError as e:
+            if "path traversal" in str(e).lower():
+                raise
+            return DirectoryListing(path=path, entries=[])
 
         # Filter hidden files and directories
         entries: list[FileSystemEntry] = [
