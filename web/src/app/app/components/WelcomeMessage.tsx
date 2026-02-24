@@ -58,6 +58,11 @@ export default function WelcomeMessage({
             {agent.name}
           </Text>
         </div>
+        {agent.description && (
+          <Text as="p" secondaryBody text03>
+            {agent.description}
+          </Text>
+        )}
       </>
     );
   }
