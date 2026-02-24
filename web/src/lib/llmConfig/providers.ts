@@ -8,15 +8,18 @@ import {
   SvgAws,
   SvgOpenrouter,
   SvgServer,
+  SvgAzure,
+  SvgGemini,
+  SvgLitellm,
 } from "@opal/icons";
 
 const PROVIDER_ICONS: Record<string, IconFunctionComponent> = {
   openai: SvgOpenai,
   anthropic: SvgClaude,
-  vertex_ai: SvgCloud,
+  vertex_ai: SvgGemini,
   bedrock: SvgAws,
-  azure: SvgCloud,
-  // litellm: TODO (@raunakab),
+  azure: SvgAzure,
+  litellm: SvgLitellm,
   ollama_chat: SvgOllama,
   openrouter: SvgOpenrouter,
 
