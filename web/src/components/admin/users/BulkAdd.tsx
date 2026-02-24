@@ -17,7 +17,7 @@ const addUsers = async (url: string, { arg }: { arg: Array<string> }) => {
 };
 
 interface FormProps {
-  onSuccess: () => void;
+  onSuccess: (emailInviteStatus: string) => void;
   onFailure: (res: Response) => void;
 }
 
@@ -82,9 +82,10 @@ const AddUserForm = withFormik<FormProps, FormValues>({
     const emails = normalizeEmails(values.emails);
     formikBag.setSubmitting(true);
     await addUsers("/api/manage/admin/users", { arg: emails })
-      .then((res) => {
+      .then(async (res) => {
         if (res.ok) {
-          formikBag.props.onSuccess();
+          const data = await res.json();
+          formikBag.props.onSuccess(data.email_invite_status);
         } else {
           formikBag.props.onFailure(res);
         }

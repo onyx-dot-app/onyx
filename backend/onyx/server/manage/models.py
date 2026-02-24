@@ -35,6 +35,18 @@ if TYPE_CHECKING:
     pass
 
 
+class EmailInviteStatus(str, Enum):
+    sent = "sent"
+    not_configured = "not_configured"
+    send_failed = "send_failed"
+    disabled = "disabled"
+
+
+class BulkInviteResponse(BaseModel):
+    invited_count: int
+    email_invite_status: EmailInviteStatus
+
+
 class VersionResponse(BaseModel):
     backend_version: str
 

@@ -267,12 +267,21 @@ const SearchableTables = () => {
 function AddUserButton() {
   const [bulkAddUsersModal, setBulkAddUsersModal] = useState(false);
 
-  const onSuccess = () => {
+  const onSuccess = (emailInviteStatus: string) => {
     mutate(
       (key) => typeof key === "string" && key.startsWith("/api/manage/users")
     );
     setBulkAddUsersModal(false);
     toast.success("Users invited!");
+    if (emailInviteStatus === "not_configured") {
+      toast.warning(
+        "No email server is configured. Share the signup link with invited users manually."
+      );
+    } else if (emailInviteStatus === "send_failed") {
+      toast.warning(
+        "Email sending failed. Check your SMTP/SendGrid configuration."
+      );
+    }
   };
 
   const onFailure = async (res: Response) => {

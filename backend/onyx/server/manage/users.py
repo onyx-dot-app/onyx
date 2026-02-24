@@ -36,6 +36,7 @@ from onyx.configs.app_configs import AUTH_BACKEND
 from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import AuthBackend
 from onyx.configs.app_configs import DEV_MODE
+from onyx.configs.app_configs import EMAIL_CONFIGURED
 from onyx.configs.app_configs import ENABLE_EMAIL_INVITES
 from onyx.configs.app_configs import NUM_FREE_TRIAL_USER_INVITES
 from onyx.configs.app_configs import REDIS_AUTH_KEY_PREFIX
@@ -77,6 +78,8 @@ from onyx.redis.redis_pool import get_raw_redis_client
 from onyx.server.documents.models import PaginatedReturn
 from onyx.server.features.projects.models import UserFileSnapshot
 from onyx.server.manage.models import AllUsersResponse
+from onyx.server.manage.models import BulkInviteResponse
+from onyx.server.manage.models import EmailInviteStatus
 from onyx.server.manage.models import AutoScrollRequest
 from onyx.server.manage.models import ChatBackgroundRequest
 from onyx.server.manage.models import DefaultAppModeRequest
@@ -368,7 +371,7 @@ def bulk_invite_users(
     emails: list[str] = Body(..., embed=True),
     current_user: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
-) -> int:
+) -> BulkInviteResponse:
     """emails are string validated. If any email fails validation, no emails are
     invited and an exception is raised."""
     tenant_id = get_current_tenant_id()
@@ -427,15 +430,24 @@ def bulk_invite_users(
     number_of_invited_users = write_invited_users(all_emails)
 
     # send out email invitations only to new users (not already invited or existing)
-    if ENABLE_EMAIL_INVITES:
+    if not ENABLE_EMAIL_INVITES:
+        email_invite_status = EmailInviteStatus.disabled
+    elif not EMAIL_CONFIGURED:
+        email_invite_status = EmailInviteStatus.not_configured
+    else:
         try:
             for email in emails_needing_seats:
                 send_user_email_invite(email, current_user, AUTH_TYPE)
+            email_invite_status = EmailInviteStatus.sent
         except Exception as e:
             logger.error(f"Error sending email invite to invited users: {e}")
+            email_invite_status = EmailInviteStatus.send_failed
 
     if not MULTI_TENANT or DEV_MODE:
-        return number_of_invited_users
+        return BulkInviteResponse(
+            invited_count=number_of_invited_users,
+            email_invite_status=email_invite_status,
+        )
 
     # for billing purposes, write to the control plane about the number of new users
     try:
@@ -444,7 +456,10 @@ def bulk_invite_users(
             "onyx.server.tenants.billing", "register_tenant_users", None
         )(tenant_id, get_live_users_count(db_session))
 
-        return number_of_invited_users
+        return BulkInviteResponse(
+            invited_count=number_of_invited_users,
+            email_invite_status=email_invite_status,
+        )
     except Exception as e:
         logger.error(f"Failed to register tenant users: {str(e)}")
         logger.info(
