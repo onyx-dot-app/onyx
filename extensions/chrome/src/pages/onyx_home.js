@@ -132,9 +132,7 @@ import { getOnyxDomain } from "../utils/storage.js";
           return;
         }
 
-        setIframeSrc(
-          items[CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN] + "/chat/nrf",
-        );
+        setIframeSrc(items[CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN] + "/nrf");
       },
     );
   }
