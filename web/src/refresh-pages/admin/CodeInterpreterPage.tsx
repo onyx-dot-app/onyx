@@ -52,7 +52,7 @@ export default function CodeInterpreterPage() {
       />
 
       <SettingsLayouts.Body>
-        <Card padding={1}>
+        <Card>
           <Section flexDirection="row" alignItems="start" padding={0} gap={0}>
             <GeneralLayouts.LineItemLayout
               icon={SvgTerminal}
