@@ -68,16 +68,17 @@ class OAuthTokenManager:
 
         token_data = self._unwrap_token_data(user_token.token_data)
 
+        data: dict[str, str] = {
+            "grant_type": "refresh_token",
+            "refresh_token": token_data["refresh_token"],
+            "client_id": self.oauth_config.client_id.get_value(apply_mask=False),
+            "client_secret": self.oauth_config.client_secret.get_value(
+                apply_mask=False
+            ),
+        }
         response = requests.post(
             self.oauth_config.token_url,
-            data={
-                "grant_type": "refresh_token",
-                "refresh_token": token_data["refresh_token"],
-                "client_id": self.oauth_config.client_id.get_value(apply_mask=False),
-                "client_secret": self.oauth_config.client_secret.get_value(
-                    apply_mask=False
-                ),
-            },
+            data=data,
             headers={"Accept": "application/json"},
         )
         response.raise_for_status()
@@ -133,17 +134,18 @@ class OAuthTokenManager:
                 "OAuth client_id and client_secret are required for code exchange"
             )
 
+        data: dict[str, str] = {
+            "grant_type": "authorization_code",
+            "code": code,
+            "client_id": self.oauth_config.client_id.get_value(apply_mask=False),
+            "client_secret": self.oauth_config.client_secret.get_value(
+                apply_mask=False
+            ),
+            "redirect_uri": redirect_uri,
+        }
         response = requests.post(
             self.oauth_config.token_url,
-            data={
-                "grant_type": "authorization_code",
-                "code": code,
-                "client_id": self.oauth_config.client_id.get_value(apply_mask=False),
-                "client_secret": self.oauth_config.client_secret.get_value(
-                    apply_mask=False
-                ),
-                "redirect_uri": redirect_uri,
-            },
+            data=data,
             headers={"Accept": "application/json"},
         )
         response.raise_for_status()
