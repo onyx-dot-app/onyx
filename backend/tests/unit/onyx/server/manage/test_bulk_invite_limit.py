@@ -48,7 +48,7 @@ def test_trial_tenant_can_invite_within_limit(*_mocks: None) -> None:
     result = bulk_invite_users(emails=emails)
 
     assert result.invited_count == 3
-    assert result.email_invite_status == EmailInviteStatus.disabled
+    assert result.email_invite_status == EmailInviteStatus.DISABLED
 
 
 # --- email_invite_status tests ---
@@ -75,7 +75,7 @@ def test_email_invite_status_disabled(*_mocks: None) -> None:
     """When email invites are disabled, status is disabled."""
     result = bulk_invite_users(emails=["user@example.com"])
 
-    assert result.email_invite_status == EmailInviteStatus.disabled
+    assert result.email_invite_status == EmailInviteStatus.DISABLED
 
 
 @_with_common_patches
@@ -85,7 +85,7 @@ def test_email_invite_status_not_configured(*_mocks: None) -> None:
     """When email invites are enabled but no server is configured, status is not_configured."""
     result = bulk_invite_users(emails=["user@example.com"])
 
-    assert result.email_invite_status == EmailInviteStatus.not_configured
+    assert result.email_invite_status == EmailInviteStatus.NOT_CONFIGURED
 
 
 @_with_common_patches
@@ -97,7 +97,7 @@ def test_email_invite_status_sent(mock_send: MagicMock, *_mocks: None) -> None:
     result = bulk_invite_users(emails=["user@example.com"])
 
     mock_send.assert_called_once()
-    assert result.email_invite_status == EmailInviteStatus.sent
+    assert result.email_invite_status == EmailInviteStatus.SENT
 
 
 @_with_common_patches
@@ -111,5 +111,5 @@ def test_email_invite_status_send_failed(*_mocks: None) -> None:
     """When email sending throws, status is send_failed and invite is still saved."""
     result = bulk_invite_users(emails=["user@example.com"])
 
-    assert result.email_invite_status == EmailInviteStatus.send_failed
+    assert result.email_invite_status == EmailInviteStatus.SEND_FAILED
     assert result.invited_count == 1

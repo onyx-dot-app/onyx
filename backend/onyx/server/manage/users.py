@@ -431,17 +431,17 @@ def bulk_invite_users(
 
     # send out email invitations only to new users (not already invited or existing)
     if not ENABLE_EMAIL_INVITES:
-        email_invite_status = EmailInviteStatus.disabled
+        email_invite_status = EmailInviteStatus.DISABLED
     elif not EMAIL_CONFIGURED:
-        email_invite_status = EmailInviteStatus.not_configured
+        email_invite_status = EmailInviteStatus.NOT_CONFIGURED
     else:
         try:
             for email in emails_needing_seats:
                 send_user_email_invite(email, current_user, AUTH_TYPE)
-            email_invite_status = EmailInviteStatus.sent
+            email_invite_status = EmailInviteStatus.SENT
         except Exception as e:
             logger.error(f"Error sending email invite to invited users: {e}")
-            email_invite_status = EmailInviteStatus.send_failed
+            email_invite_status = EmailInviteStatus.SEND_FAILED
 
     if not MULTI_TENANT or DEV_MODE:
         return BulkInviteResponse(

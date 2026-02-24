@@ -36,10 +36,10 @@ if TYPE_CHECKING:
 
 
 class EmailInviteStatus(str, Enum):
-    sent = "sent"
-    not_configured = "not_configured"
-    send_failed = "send_failed"
-    disabled = "disabled"
+    SENT = "SENT"
+    NOT_CONFIGURED = "NOT_CONFIGURED"
+    SEND_FAILED = "SEND_FAILED"
+    DISABLED = "DISABLED"
 
 
 class BulkInviteResponse(BaseModel):
