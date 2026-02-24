@@ -107,27 +107,23 @@ def get_or_create_craft_connector(db_session: Session, user: User) -> tuple[int,
     )
 
     for cc_pair in cc_pairs:
-        if cc_pair.connector.source == DocumentSource.CRAFT_FILE:
+        if (
+            cc_pair.connector.source == DocumentSource.CRAFT_FILE
+            and cc_pair.creator_id == user.id
+        ):
             return cc_pair.connector.id, cc_pair.credential.id
 
-    # Check for orphaned connector (created but cc_pair creation failed previously)
+    # No cc_pair for this user — find or create the shared CRAFT_FILE connector
     existing_connectors = fetch_connectors(
         db_session, sources=[DocumentSource.CRAFT_FILE]
     )
-    orphaned_connector = None
+    connector_id: int | None = None
     for conn in existing_connectors:
-        if conn.name != USER_LIBRARY_CONNECTOR_NAME:
-            continue
-        if not conn.credentials:
-            orphaned_connector = conn
+        if conn.name == USER_LIBRARY_CONNECTOR_NAME:
+            connector_id = conn.id
             break
 
-    if orphaned_connector:
-        connector_id = orphaned_connector.id
-        logger.info(
-            f"Found orphaned User Library connector {connector_id}, completing setup"
-        )
-    else:
+    if connector_id is None:
         connector_data = ConnectorBase(
             name=USER_LIBRARY_CONNECTOR_NAME,
             source=DocumentSource.CRAFT_FILE,
