@@ -871,14 +871,18 @@ def _db_mcp_server_to_api_mcp_server(
                     )
                 if client_info:
                     if not client_info.client_id:
-                        raise ValueError("Stored client info had empty client ID")
-                    admin_credentials = {
-                        "client_id": mask_string(client_info.client_id),
-                    }
-                    if client_info.client_secret:
-                        admin_credentials["client_secret"] = mask_string(
-                            client_info.client_secret
+                        logger.warning(
+                            f"Stored client info had empty client ID for server {db_server.name}"
                         )
+                        admin_credentials = {}
+                    else:
+                        admin_credentials = {
+                            "client_id": mask_string(client_info.client_id),
+                        }
+                        if client_info.client_secret:
+                            admin_credentials["client_secret"] = mask_string(
+                                client_info.client_secret
+                            )
                 else:
                     admin_credentials = {}
                     logger.warning(
@@ -912,8 +916,12 @@ def _db_mcp_server_to_api_mcp_server(
                 client_info = OAuthClientInformationFull.model_validate(client_info_raw)
             if client_info:
                 if not client_info.client_id:
-                    raise ValueError("Stored client info had empty client ID")
-                if can_view_admin_credentials:
+                    logger.warning(
+                        f"Stored client info had empty client ID for server {db_server.name}"
+                    )
+                    if can_view_admin_credentials:
+                        admin_credentials = {}
+                elif can_view_admin_credentials:
                     admin_credentials = {
                         "client_id": mask_string(client_info.client_id),
                     }
