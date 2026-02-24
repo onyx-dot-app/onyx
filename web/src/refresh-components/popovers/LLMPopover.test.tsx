@@ -1,6 +1,6 @@
 import { buildLlmOptions, groupLlmOptions } from "./LLMPopover";
 import { LLMOption } from "./interfaces";
-import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
+import { LLMProviderDescriptor } from "@/interfaces/llm";
 import { makeProvider } from "@tests/setup/llmProviderTestUtils";
 
 describe("LLMPopover helpers", () => {

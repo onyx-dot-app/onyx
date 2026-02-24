@@ -14,7 +14,7 @@ import {
 import {
   EMBEDDING_PROVIDERS_ADMIN_URL,
   LLM_PROVIDERS_ADMIN_URL,
-} from "@/app/admin/configuration/llm/constants";
+} from "@/lib/llmConfig/constants";
 import { mutate } from "swr";
 import { testEmbedding } from "@/app/admin/embeddings/pages/utils";
 import { SvgSettings } from "@opal/icons";

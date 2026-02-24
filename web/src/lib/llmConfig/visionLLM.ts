@@ -1,4 +1,4 @@
-import { VisionProvider } from "@/app/admin/configuration/llm/interfaces";
+import { VisionProvider } from "@/interfaces/llm";
 
 export async function fetchVisionProviders(): Promise<VisionProvider[]> {
   const response = await fetch("/api/admin/llm/vision-providers", {

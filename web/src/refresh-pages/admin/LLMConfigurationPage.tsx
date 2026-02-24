@@ -24,8 +24,8 @@ import Separator from "@/refresh-components/Separator";
 import {
   LLMProviderView,
   WellKnownLLMProviderDescriptor,
-} from "@/app/admin/configuration/llm/interfaces";
-import { LLM_PROVIDERS_ADMIN_URL } from "@/app/admin/configuration/llm/constants";
+} from "@/interfaces/llm";
+import { LLM_PROVIDERS_ADMIN_URL } from "@/lib/llmConfig/constants";
 import { getFormForExistingProvider } from "@/app/admin/configuration/llm/forms/getForm";
 import { OpenAIForm } from "@/app/admin/configuration/llm/forms/OpenAIForm";
 import { AnthropicForm } from "@/app/admin/configuration/llm/forms/AnthropicForm";

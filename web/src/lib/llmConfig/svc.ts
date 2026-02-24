@@ -8,7 +8,7 @@
  * - /api/admin/llm/default - Set the default LLM model
  */
 
-import { LLM_ADMIN_URL } from "@/app/admin/configuration/llm/constants";
+import { LLM_ADMIN_URL } from "@/lib/llmConfig/constants";
 
 /**
  * Test the default LLM provider.

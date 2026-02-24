@@ -2,7 +2,7 @@
 import {
   WellKnownLLMProviderDescriptor,
   LLMProviderDescriptor,
-} from "@/app/admin/configuration/llm/interfaces";
+} from "@/interfaces/llm";
 import React, {
   createContext,
   useContext,

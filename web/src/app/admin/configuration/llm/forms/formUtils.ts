@@ -2,8 +2,8 @@ import {
   LLMProviderView,
   ModelConfiguration,
   WellKnownLLMProviderDescriptor,
-} from "../interfaces";
-import { LLM_PROVIDERS_ADMIN_URL } from "../constants";
+} from "@/interfaces/llm";
+import { LLM_PROVIDERS_ADMIN_URL } from "@/lib/llmConfig/constants";
 import { toast } from "@/hooks/useToast";
 import * as Yup from "yup";
 import isEqual from "lodash/isEqual";

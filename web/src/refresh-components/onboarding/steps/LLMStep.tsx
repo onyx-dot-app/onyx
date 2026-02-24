@@ -4,7 +4,7 @@ import Button from "@/refresh-components/buttons/Button";
 import Separator from "@/refresh-components/Separator";
 import LLMProviderCard from "../components/LLMProviderCard";
 import { OnboardingActions, OnboardingState, OnboardingStep } from "../types";
-import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
+import { WellKnownLLMProviderDescriptor } from "@/interfaces/llm";
 import {
   getOnboardingForm,
   getProviderDisplayInfo,

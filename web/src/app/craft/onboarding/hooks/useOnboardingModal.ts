@@ -3,7 +3,7 @@
 import { useCallback, useState, useMemo, useEffect } from "react";
 import { useUser } from "@/providers/UserProvider";
 import { useLLMProviders } from "@/hooks/useLLMProviders";
-import { LLMProviderName } from "@/app/admin/configuration/llm/interfaces";
+import { LLMProviderName } from "@/interfaces/llm";
 import {
   OnboardingModalMode,
   OnboardingModalController,
@@ -18,9 +18,7 @@ import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
 
 // Check if all 3 build mode providers are configured (anthropic, openai, openrouter)
 function checkAllProvidersConfigured(
-  llmProviders:
-    | import("@/app/admin/configuration/llm/interfaces").LLMProviderDescriptor[]
-    | undefined
+  llmProviders: import("@/interfaces/llm").LLMProviderDescriptor[] | undefined
 ): boolean {
   if (!llmProviders || llmProviders.length === 0) {
     return false;
@@ -35,9 +33,7 @@ function checkAllProvidersConfigured(
 
 // Check if at least one provider is configured
 function checkHasAnyProvider(
-  llmProviders:
-    | import("@/app/admin/configuration/llm/interfaces").LLMProviderDescriptor[]
-    | undefined
+  llmProviders: import("@/interfaces/llm").LLMProviderDescriptor[] | undefined
 ): boolean {
   return !!(llmProviders && llmProviders.length > 0);
 }

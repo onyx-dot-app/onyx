@@ -2,7 +2,7 @@
 
 import { ModalCreationInterface } from "@/refresh-components/contexts/ModalContext";
 import { ImageProvider } from "@/app/admin/configuration/image-generation/constants";
-import { LLMProviderView } from "@/app/admin/configuration/llm/interfaces";
+import { LLMProviderView } from "@/interfaces/llm";
 import { ImageGenerationConfigView } from "@/lib/configuration/imageConfigurationService";
 import { getImageGenForm } from "./forms";
 

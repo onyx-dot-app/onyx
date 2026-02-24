@@ -7,7 +7,7 @@ import {
   Formik,
   ErrorMessage,
 } from "formik";
-import { LLMProviderFormProps, LLMProviderView } from "../interfaces";
+import { LLMProviderFormProps, LLMProviderView } from "@/interfaces/llm";
 import * as Yup from "yup";
 import { ProviderFormEntrypointWrapper } from "./components/FormWrapper";
 import { DisplayNameField } from "./components/DisplayNameField";

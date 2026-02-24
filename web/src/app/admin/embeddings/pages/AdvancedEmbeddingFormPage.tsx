@@ -15,7 +15,7 @@ import {
 import NumberInput from "../../connectors/[connector]/pages/ConnectorInput/NumberInput";
 import { StringOrNumberOption } from "@/components/Dropdown";
 import useSWR from "swr";
-import { LLM_CONTEXTUAL_COST_ADMIN_URL } from "../../configuration/llm/constants";
+import { LLM_CONTEXTUAL_COST_ADMIN_URL } from "@/lib/llmConfig/constants";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import Button from "@/refresh-components/buttons/Button";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";

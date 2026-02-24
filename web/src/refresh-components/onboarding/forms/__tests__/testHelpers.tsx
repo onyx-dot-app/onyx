@@ -9,7 +9,7 @@ import {
   WellKnownLLMProviderDescriptor,
   LLMProviderName,
   ModelConfiguration,
-} from "@/app/admin/configuration/llm/interfaces";
+} from "@/interfaces/llm";
 import {
   OnboardingState,
   OnboardingActions,

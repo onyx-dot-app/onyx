@@ -5,7 +5,7 @@ import {
   LLMProviderFormProps,
   ModelConfiguration,
   OpenRouterModelResponse,
-} from "../interfaces";
+} from "@/interfaces/llm";
 import * as Yup from "yup";
 import {
   ProviderFormEntrypointWrapper,

@@ -1,4 +1,4 @@
-import { LLMProviderName, LLMProviderView } from "../interfaces";
+import { LLMProviderName, LLMProviderView } from "@/interfaces/llm";
 import { AnthropicForm } from "./AnthropicForm";
 import { OpenAIForm } from "./OpenAIForm";
 import { OllamaForm } from "./OllamaForm";

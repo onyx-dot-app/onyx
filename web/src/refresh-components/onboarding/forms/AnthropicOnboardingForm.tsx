@@ -8,7 +8,7 @@ import Separator from "@/refresh-components/Separator";
 import {
   ModelConfiguration,
   WellKnownLLMProviderDescriptor,
-} from "@/app/admin/configuration/llm/interfaces";
+} from "@/interfaces/llm";
 import {
   OnboardingFormWrapper,
   OnboardingFormChildProps,

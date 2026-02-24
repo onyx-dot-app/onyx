@@ -1,6 +1,6 @@
 import { Form, Formik } from "formik";
 
-import { LLMProviderFormProps } from "../interfaces";
+import { LLMProviderFormProps } from "@/interfaces/llm";
 import * as Yup from "yup";
 import { ProviderFormEntrypointWrapper } from "./components/FormWrapper";
 import { DisplayNameField } from "./components/DisplayNameField";

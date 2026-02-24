@@ -1,8 +1,5 @@
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
-import {
-  LLMProviderDescriptor,
-  ModelConfiguration,
-} from "@/app/admin/configuration/llm/interfaces";
+import { LLMProviderDescriptor, ModelConfiguration } from "@/interfaces/llm";
 import { LlmDescriptor } from "@/lib/hooks";
 
 export function getFinalLLM(
