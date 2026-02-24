@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -492,12 +493,21 @@ func createCherryPickPR(headBranch, baseBranch, title string, commitSHAs, commit
 	body += "\n\n"
 	body += "- [x] [Optional] Override Linear Check\n"
 
-	cmd := exec.Command("gh", "pr", "create",
+	args := []string{
+		"pr", "create",
 		"--base", baseBranch,
 		"--head", headBranch,
 		"--title", title,
 		"--body", body,
-	)
+	}
+
+	// Optional routing for automation callers (e.g. CI workflow).
+	// Accept comma-separated values like "user1,user2".
+	for _, assignee := range parseCSVEnv("CHERRY_PICK_ASSIGNEE") {
+		args = append(args, "--assignee", assignee)
+	}
+
+	cmd := exec.Command("gh", args...)
 
 	output, err := cmd.Output()
 	if err != nil {
@@ -509,4 +519,27 @@ func createCherryPickPR(headBranch, baseBranch, title string, commitSHAs, commit
 
 	prURL := strings.TrimSpace(string(output))
 	return prURL, nil
+}
+
+func parseCSVEnv(name string) []string {
+	raw := strings.TrimSpace(os.Getenv(name))
+	if raw == "" {
+		return nil
+	}
+
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	seen := make(map[string]struct{}, len(parts))
+	for _, p := range parts {
+		v := strings.TrimSpace(p)
+		if v == "" {
+			continue
+		}
+		if _, exists := seen[v]; exists {
+			continue
+		}
+		seen[v] = struct{}{}
+		out = append(out, v)
+	}
+	return out
 }
