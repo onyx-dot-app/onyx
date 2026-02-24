@@ -49,7 +49,8 @@ export default function CodeInterpreterPage() {
         icon={SvgTerminal}
         title="Code Interpreter"
         description="Safe and sandboxed Python runtime available to your LLM. See docs for more details."
-      />
+		separator
+	  />
 
       <SettingsLayouts.Body>
         <Card>
