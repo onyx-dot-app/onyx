@@ -2,10 +2,17 @@
 
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { Card } from "@/refresh-components/cards";
-import { SvgRefreshCw, SvgTerminal, SvgUnplug } from "@opal/icons";
+import {
+  SvgCheckCircle,
+  SvgRefreshCw,
+  SvgTerminal,
+  SvgUnplug,
+} from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Text from "@/refresh-components/texts/Text";
+import LineItem from "@/refresh-components/buttons/LineItem";
+import * as GeneralLayouts from "@/layouts/general-layouts";
 
 function DisconnectButton() {
   return <IconButton tertiary icon={SvgUnplug} />;
@@ -13,6 +20,26 @@ function DisconnectButton() {
 
 function RefreshButton() {
   return <IconButton tertiary icon={SvgRefreshCw} />;
+}
+
+function ConnectionStatus() {
+  return (
+    <Section flexDirection="row" gap={0.5} padding={0} justifyContent="end">
+      <Text mainUiAction text03>
+        Connected
+      </Text>
+      <SvgCheckCircle size={16} color="green" />
+    </Section>
+  );
+}
+
+function ActionButtons() {
+  return (
+    <GeneralLayouts.Section flexDirection="row" justifyContent="end" gap={0}>
+      <DisconnectButton />
+      <RefreshButton />
+    </GeneralLayouts.Section>
+  );
 }
 
 export default function CodeInterpreterPage() {
@@ -26,34 +53,17 @@ export default function CodeInterpreterPage() {
 
       <SettingsLayouts.Body>
         <Card padding={1}>
-          <Section
-            flexDirection="row"
-            padding={0}
-            gap={0}
-            justifyContent="between"
-            alignItems="center"
-          >
-            <Section flexDirection="row" padding={0} gap={0} alignItems="start">
-              <SvgTerminal size={18} />
-              <Section flexDirection="column" padding={0} gap={0}>
-                <Text mainContentBody>Code Interpreter</Text>
-                <Text secondaryBody text03>
-                  Built-in Python runtime
-                </Text>
-              </Section>
-            </Section>
-            <Section
-              flexDirection="column"
-              padding={0}
-              gap={0.5}
-              alignItems="end"
-            >
-              <Text>Connected</Text>
-              <Section flexDirection="row" padding={0} gap={0}>
-                <DisconnectButton />
-                <RefreshButton />
-              </Section>
-            </Section>
+          <Section flexDirection="row" alignItems="start" padding={0} gap={0}>
+            <GeneralLayouts.LineItemLayout
+              icon={SvgTerminal}
+              title="Code Interpreter"
+              description="Built-in Python runtime"
+              variant="tertiary"
+            />
+            <GeneralLayouts.Section flexDirection="column" gap={0.5}>
+              <ConnectionStatus />
+              <ActionButtons />
+            </GeneralLayouts.Section>
           </Section>
         </Card>
       </SettingsLayouts.Body>
