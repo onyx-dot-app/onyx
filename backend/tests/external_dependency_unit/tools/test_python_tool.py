@@ -1212,7 +1212,7 @@ def test_code_interpreter_receives_chat_files(
     assert delete_requests[0].path.startswith("/v1/files/")
 
     execute_body = mock_ci_server.get_requests(
-        method="POST", path="/v1/execute/streaming"
+        method="POST", path="/v1/execute/stream"
     )[0].json_body()
     assert execute_body["code"] == code
     assert len(execute_body["files"]) == 1
