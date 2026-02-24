@@ -81,7 +81,6 @@ class CodeInterpreterClient:
         self.base_url = base_url.rstrip("/")
         self.session = requests.Session()
 
-
     def _build_payload(
         self,
         code: str,
