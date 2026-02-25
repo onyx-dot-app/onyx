@@ -175,7 +175,7 @@ ods pull --tag edge
 Run npm scripts from `web/package.json` without manually changing directories.
 
 ```shell
-ods web <script> [-- <args>]
+ods web <script> [args...]
 ```
 
 Script names are available via shell completion (for supported shells via
@@ -191,7 +191,7 @@ ods web dev
 ods web lint
 
 # Forward extra args to the script
-ods web test -- --watch
+ods web test --watch
 ```
 
 ### `db` - Database Administration

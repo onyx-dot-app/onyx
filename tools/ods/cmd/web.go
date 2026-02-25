@@ -36,6 +36,7 @@ func NewWebCommand() *cobra.Command {
 			runWebScript(args)
 		},
 	}
+	cmd.Flags().SetInterspersed(false)
 
 	return cmd
 }
@@ -46,7 +47,18 @@ func runWebScript(args []string) {
 		log.Fatalf("Failed to find web directory: %v", err)
 	}
 
-	npmArgs := append([]string{"run"}, args...)
+	scriptName := args[0]
+	scriptArgs := args[1:]
+	if len(scriptArgs) > 0 && scriptArgs[0] == "--" {
+		scriptArgs = scriptArgs[1:]
+	}
+
+	npmArgs := []string{"run", scriptName}
+	if len(scriptArgs) > 0 {
+		// npm requires "--" to forward flags to the underlying script.
+		npmArgs = append(npmArgs, "--")
+		npmArgs = append(npmArgs, scriptArgs...)
+	}
 	log.Debugf("Running in %s: npm %v", webDir, npmArgs)
 
 	webCmd := exec.Command("npm", npmArgs...)
@@ -80,7 +92,7 @@ func webHelpDescription() string {
 Examples:
   ods web dev
   ods web lint
-  ods web test -- --watch`
+  ods web test --watch`
 
 	scripts := webScriptNames()
 	if len(scripts) == 0 {
