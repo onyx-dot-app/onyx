@@ -18,8 +18,9 @@ _HTML_TAG_PATTERN = re.compile(
 # Matches fenced code blocks (``` ... ```) so we can skip sanitization inside them
 _FENCED_CODE_BLOCK_PATTERN = re.compile(r"```[\s\S]*?```")
 
-# Matches the start of a citation link: [[1]](
-_CITATION_LINK_PATTERN = re.compile(r"\[\[\d+\]\]\(")
+# Matches the start of any markdown link: [text]( or [[n]](
+# The inner group handles nested brackets for citation links like [[1]](.
+_MARKDOWN_LINK_PATTERN = re.compile(r"\[(?:[^\[\]]|\[[^\]]*\])*\]\(")
 
 
 def _sanitize_html(text: str) -> str:
@@ -74,15 +75,21 @@ def _extract_link_destination(message: str, start_idx: int) -> tuple[str, int | 
     return message[start_idx:], None
 
 
-def _normalize_citation_link_destinations(message: str) -> str:
-    """Wrap citation URLs in angle brackets so markdown parsers handle parentheses safely."""
-    if "[[" not in message:
+def _normalize_link_destinations(message: str) -> str:
+    """Wrap markdown link URLs in angle brackets so the parser handles special chars safely.
+
+    Markdown link syntax [text](url) breaks when the URL contains unescaped
+    parentheses, spaces, or other special characters. Wrapping the URL in angle
+    brackets — [text](<url>) — tells the parser to treat everything inside as
+    a literal URL. This applies to all links, not just citations.
+    """
+    if "](" not in message:
         return message
 
     normalized_parts: list[str] = []
     cursor = 0
 
-    while match := _CITATION_LINK_PATTERN.search(message, cursor):
+    while match := _MARKDOWN_LINK_PATTERN.search(message, cursor):
         normalized_parts.append(message[cursor : match.end()])
         destination_start = match.end()
         destination, end_idx = _extract_link_destination(message, destination_start)
@@ -106,7 +113,7 @@ def format_slack_message(message: str | None) -> str:
     if message is None:
         return ""
     message = _sanitize_for_slack(message)
-    normalized_message = _normalize_citation_link_destinations(message)
+    normalized_message = _normalize_link_destinations(message)
     md = create_markdown(renderer=SlackRenderer(), plugins=["strikethrough"])
     result = md(normalized_message)
     # With HTMLRenderer, result is always str (not AST list)
@@ -188,6 +195,12 @@ class SlackRenderer(HTMLRenderer):
 
     def block_error(self, text: str) -> str:
         return f"```\n{text}\n```\n"
+
+    def text(self, text: str) -> str:
+        # Only escape the three entities Slack recognizes: & < >
+        # HTMLRenderer.text() also escapes " to &quot; which Slack renders
+        # as literal &quot; text since Slack doesn't recognize that entity.
+        return self.escape_special(text)
 
     def paragraph(self, text: str) -> str:
         return f"{text}\n"

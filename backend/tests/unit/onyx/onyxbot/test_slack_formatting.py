@@ -1,4 +1,4 @@
-from onyx.onyxbot.slack.formatting import _normalize_citation_link_destinations
+from onyx.onyxbot.slack.formatting import _normalize_link_destinations
 from onyx.onyxbot.slack.formatting import format_slack_message
 from onyx.onyxbot.slack.utils import remove_slack_text_interactions
 from onyx.utils.text_processing import decode_escapes
@@ -9,7 +9,7 @@ def test_normalize_citation_link_wraps_url_with_parentheses() -> None:
         "See [[1]](https://example.com/Access%20ID%20Card(s)%20Guide.pdf) for details."
     )
 
-    normalized = _normalize_citation_link_destinations(message)
+    normalized = _normalize_link_destinations(message)
 
     assert (
         "See [[1]](<https://example.com/Access%20ID%20Card(s)%20Guide.pdf>) for details."
@@ -20,7 +20,7 @@ def test_normalize_citation_link_wraps_url_with_parentheses() -> None:
 def test_normalize_citation_link_keeps_existing_angle_brackets() -> None:
     message = "[[1]](<https://example.com/Access%20ID%20Card(s)%20Guide.pdf>)"
 
-    normalized = _normalize_citation_link_destinations(message)
+    normalized = _normalize_link_destinations(message)
 
     assert message == normalized
 
@@ -31,7 +31,7 @@ def test_normalize_citation_link_handles_multiple_links() -> None:
         "[[2]](https://example.com/Plan(s)%20Overview.pdf)"
     )
 
-    normalized = _normalize_citation_link_destinations(message)
+    normalized = _normalize_link_destinations(message)
 
     assert "[[1]](<https://example.com/(USA)%20Guide.pdf>)" in normalized
     assert "[[2]](<https://example.com/Plan(s)%20Overview.pdf>)" in normalized
