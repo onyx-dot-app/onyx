@@ -225,21 +225,7 @@ def main() -> None:
         "{{KNOWLEDGE_SOURCES_SECTION}}", knowledge_sources_section
     )
     output_path.write_text(content)
-
-    # Log result
-    source_count = 0
-    if resolved_files_path.exists():
-        source_count = len(
-            [
-                d
-                for d in resolved_files_path.iterdir()
-                if d.is_dir() and not d.name.startswith(".")
-            ]
-        )
-    print(
-        f"Generated knowledge sources in {output_path} "
-        f"({source_count} sources from {resolved_files_path})"
-    )
+    print(f"Generated {output_path} (scanned {resolved_files_path})")
 
 
 if __name__ == "__main__":
