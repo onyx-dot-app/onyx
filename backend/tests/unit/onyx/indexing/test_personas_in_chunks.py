@@ -131,8 +131,7 @@ def _run_adapter_build(
         id_to_boost_map={},
     )
 
-    adapter = UserFileIndexingAdapter.__new__(UserFileIndexingAdapter)
-    adapter.db_session = MagicMock()
+    adapter = UserFileIndexingAdapter(tenant_id="test_tenant", db_session=MagicMock())
 
     with (
         patch(
