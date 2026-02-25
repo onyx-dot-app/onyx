@@ -488,6 +488,22 @@ def fetch_existing_llm_provider(
     return provider_model
 
 
+def fetch_existing_llm_provider_by_id(
+    id: int, db_session: Session
+) -> LLMProviderModel | None:
+    provider_model = db_session.scalar(
+        select(LLMProviderModel)
+        .where(LLMProviderModel.id == id)
+        .options(
+            selectinload(LLMProviderModel.model_configurations),
+            selectinload(LLMProviderModel.groups),
+            selectinload(LLMProviderModel.personas),
+        )
+    )
+
+    return provider_model
+
+
 def fetch_embedding_provider(
     db_session: Session, provider_type: EmbeddingProvider
 ) -> CloudEmbeddingProviderModel | None:

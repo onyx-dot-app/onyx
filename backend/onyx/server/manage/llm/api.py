@@ -23,6 +23,7 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import LLMModelFlowType
 from onyx.db.llm import can_user_access_llm_provider
 from onyx.db.llm import fetch_existing_llm_provider
+from onyx.db.llm import fetch_existing_llm_provider_by_id
 from onyx.db.llm import fetch_existing_llm_providers
 from onyx.db.llm import fetch_existing_models
 from onyx.db.llm import fetch_persona_with_groups
@@ -233,12 +234,9 @@ def test_llm_configuration(
 
     test_api_key = test_llm_request.api_key
     test_custom_config = test_llm_request.custom_config
-    if test_llm_request.name:
-        # NOTE: we are querying by name. we probably should be querying by an invariant id, but
-        # as it turns out the name is not editable in the UI and other code also keys off name,
-        # so we won't rock the boat just yet.
-        existing_provider = fetch_existing_llm_provider(
-            name=test_llm_request.name, db_session=db_session
+    if test_llm_request.id:
+        existing_provider = fetch_existing_llm_provider_by_id(
+            id=test_llm_request.id, db_session=db_session
         )
         if existing_provider:
             test_custom_config = _restore_masked_custom_config_values(
@@ -268,7 +266,7 @@ def test_llm_configuration(
 
     llm = get_llm(
         provider=test_llm_request.provider,
-        model=test_llm_request.default_model_name,
+        model=test_llm_request.model,
         api_key=test_api_key,
         api_base=test_llm_request.api_base,
         api_version=test_llm_request.api_version,
