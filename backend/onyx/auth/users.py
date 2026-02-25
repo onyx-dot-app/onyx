@@ -1,4 +1,5 @@
 import json
+import os
 import random
 import secrets
 import string
@@ -146,10 +147,22 @@ def is_user_admin(user: User) -> bool:
 
 
 def verify_auth_setting() -> None:
-    if AUTH_TYPE == AuthType.CLOUD:
+    """Log warnings for AUTH_TYPE issues.
+
+    This only runs on app startup not during migrations/scripts.
+    """
+    raw_auth_type = (os.environ.get("AUTH_TYPE") or "").lower()
+
+    if raw_auth_type == "cloud":
         raise ValueError(
-            f"{AUTH_TYPE.value} is not a valid auth type for self-hosted deployments."
+            "'cloud' is not a valid auth type for self-hosted deployments."
         )
+    if raw_auth_type == "disabled":
+        logger.warning(
+            "AUTH_TYPE='disabled' is no longer supported. "
+            "Using 'basic' instead. Please update your configuration."
+        )
+
     logger.notice(f"Using Auth Type: {AUTH_TYPE.value}")
 
 

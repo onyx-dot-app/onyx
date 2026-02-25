@@ -57,9 +57,6 @@ def list_messages(
     db_session: Session = Depends(get_session),
 ) -> MessageListResponse:
     """Get all messages for a build session."""
-    if user is None:
-        raise HTTPException(status_code=401, detail="Authentication required")
-
     session_manager = SessionManager(db_session)
 
     messages = session_manager.list_messages(session_id, user.id)

@@ -54,18 +54,14 @@ def _require_opensearch(db_session: Session) -> None:
         )
 
 
-def _get_user_access_info(
-    user: User | None, db_session: Session
-) -> tuple[str | None, list[str]]:
-    if not user:
-        return None, []
+def _get_user_access_info(user: User, db_session: Session) -> tuple[str, list[str]]:
     return user.email, get_user_external_group_ids(db_session, user)
 
 
 @router.get(HIERARCHY_NODES_LIST_PATH)
 def list_accessible_hierarchy_nodes(
     source: DocumentSource,
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> HierarchyNodesResponse:
     _require_opensearch(db_session)
@@ -92,7 +88,7 @@ def list_accessible_hierarchy_nodes(
 @router.post(HIERARCHY_NODE_DOCUMENTS_PATH)
 def list_accessible_hierarchy_node_documents(
     documents_request: HierarchyNodeDocumentsRequest,
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> HierarchyNodeDocumentsResponse:
     _require_opensearch(db_session)
