@@ -271,6 +271,7 @@ export default function LLMConfigurationPage() {
               title="Default Model"
               description="This model will be used by Onyx by default in your chats."
               nonInteractive
+              center
             >
               <InputSelect
                 value={currentDefaultValue}
