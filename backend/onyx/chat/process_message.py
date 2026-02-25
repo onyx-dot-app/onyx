@@ -241,7 +241,7 @@ def _extract_text_from_in_memory_file(f: InMemoryChatFile) -> str | None:
     """
     try:
         if f.file_type == ChatFileType.PLAIN_TEXT:
-            return f.content.decode("utf-8").replace("\x00", "")
+            return f.content.decode("utf-8", errors="ignore").replace("\x00", "")
         return extract_file_text(
             file=io.BytesIO(f.content),
             file_name=f.filename or "",
