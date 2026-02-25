@@ -8,6 +8,7 @@ import CreateButton from "@/refresh-components/buttons/CreateButton";
 import { Button } from "@opal/components";
 import { SvgX } from "@opal/icons";
 import Text from "@/refresh-components/texts/Text";
+
 function ModelConfigurationRow({
   name,
   index,

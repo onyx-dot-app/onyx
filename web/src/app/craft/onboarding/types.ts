@@ -52,6 +52,9 @@ export interface OnboardingModalController {
   completeUserInfo: (info: BuildUserInfo) => Promise<void>;
   completeLlmSetup: () => Promise<void>;
   refetchLlmProviders: () => Promise<
-    import("@/interfaces/llm").LLMProviderDescriptor[] | undefined
+    | import("@/interfaces/llm").LLMProviderResponse<
+        import("@/interfaces/llm").LLMProviderDescriptor
+      >
+    | undefined
   >;
 }

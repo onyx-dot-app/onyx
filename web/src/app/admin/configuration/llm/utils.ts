@@ -106,8 +106,8 @@ export const getProviderIcon = (
   return CPUIcon;
 };
 
-export const isAnthropic = (provider: string, modelName: string) =>
-  provider === "anthropic" || modelName.toLowerCase().includes("claude");
+export const isAnthropic = (provider: string, modelName?: string) =>
+  provider === "anthropic" || !!modelName?.toLowerCase().includes("claude");
 
 /**
  * Fetches Bedrock models directly without any form state dependencies.

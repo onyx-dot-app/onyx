@@ -101,6 +101,17 @@ export interface BedrockModelResponse {
   supports_image_input: boolean;
 }
 
+export interface DefaultModel {
+  provider_id: number;
+  model_name: string;
+}
+
+export interface LLMProviderResponse<T> {
+  providers: T[];
+  default_text: DefaultModel | null;
+  default_vision: DefaultModel | null;
+}
+
 export interface LLMProviderFormProps {
   existingLlmProvider?: LLMProviderView;
   shouldMarkAsDefault?: boolean;

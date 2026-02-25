@@ -1,10 +1,12 @@
 "use client";
 
 import { useRef } from "react";
-import useSWR, { useSWRConfig } from "swr";
+import { useSWRConfig } from "swr";
 import { toast } from "@/hooks/useToast";
-import { errorHandlingFetcher } from "@/lib/fetcher";
-import { useWellKnownLLMProviders } from "@/hooks/useLLMProviders";
+import {
+  useAdminLLMProviders,
+  useWellKnownLLMProviders,
+} from "@/hooks/useLLMProviders";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { Content, ContentAction } from "@opal/layouts";
 import { Button } from "@opal/components";
@@ -149,10 +151,7 @@ function NewProviderCard({ provider, children }: NewProviderCardProps) {
 
 export default function LLMConfigurationPage() {
   const { mutate } = useSWRConfig();
-  const { data: existingLlmProviders } = useSWR<LLMProviderView[]>(
-    LLM_PROVIDERS_ADMIN_URL,
-    errorHandlingFetcher
-  );
+  const { llmProviders: existingLlmProviders } = useAdminLLMProviders();
   const { wellKnownLLMProviders } = useWellKnownLLMProviders();
 
   if (!existingLlmProviders) {
