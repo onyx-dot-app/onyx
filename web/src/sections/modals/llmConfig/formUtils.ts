@@ -222,6 +222,8 @@ export const submitLLMProvider = async <T extends BaseLLMFormValues>({
       body: JSON.stringify({
         provider: providerName,
         ...finalValues,
+        model: finalDefaultModelName,
+        id: existingLlmProvider?.id,
       }),
     });
     setIsTesting(false);
