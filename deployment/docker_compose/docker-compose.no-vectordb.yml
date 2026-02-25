@@ -69,6 +69,4 @@ services:
   inference_model_server:
     profiles: ["inference"]
 
-  # Code interpreter is not needed in minimal mode.
-  code-interpreter:
-    profiles: ["code-interpreter"]
+  code-interpreter: {}
