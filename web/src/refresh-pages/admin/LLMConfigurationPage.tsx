@@ -22,6 +22,7 @@ import { setDefaultLlmModel } from "@/lib/llmConfig/svc";
 import { Horizontal as HorizontalInput } from "@/layouts/input-layouts";
 import Card from "@/refresh-components/cards/Card";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
+import Message from "@/refresh-components/messages/Message";
 import Separator from "@/refresh-components/Separator";
 import {
   LLMProviderView,
@@ -264,8 +265,7 @@ export default function LLMConfigurationPage() {
       <SettingsLayouts.Header icon={SvgCpu} title="LLM Models" separator />
 
       <SettingsLayouts.Body>
-        {/* ── Default Model Card (only when providers exist) ── */}
-        {hasProviders && (
+        {hasProviders ? (
           <Card>
             <HorizontalInput
               title="Default Model"
@@ -303,6 +303,15 @@ export default function LLMConfigurationPage() {
               </InputSelect>
             </HorizontalInput>
           </Card>
+        ) : (
+          <Message
+            info
+            large
+            icon
+            close={false}
+            text="Set up an LLM provider to start chatting."
+            className="w-full"
+          />
         )}
 
         {/* ── Available Providers (only when providers exist) ── */}
