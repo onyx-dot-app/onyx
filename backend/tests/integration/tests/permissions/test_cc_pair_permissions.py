@@ -6,7 +6,7 @@ the permissions of the curator manipulating connector-credential pairs.
 import os
 
 import pytest
-from onyx_openapi_client.exceptions import ApiException  # type: ignore[import-untyped,unused-ignore]
+from onyx_openapi_client.exceptions import ApiException  # type: ignore[import-untyped,unused-ignore,import-not-found]
 
 from onyx.db.enums import AccessType
 from onyx.server.documents.models import DocumentSource
