@@ -135,7 +135,11 @@ export function useWellKnownLLMProviders() {
     mutate,
   } = useSWR<WellKnownLLMProviderDescriptor[]>(
     "/api/admin/llm/built-in/options",
-    errorHandlingFetcher
+    errorHandlingFetcher,
+    {
+      revalidateOnFocus: false,
+      dedupingInterval: 60000,
+    }
   );
 
   return {

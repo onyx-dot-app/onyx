@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useState } from "react";
 import { useSWRConfig } from "swr";
 import { toast } from "@/hooks/useToast";
 import {
@@ -28,31 +28,77 @@ import {
   WellKnownLLMProviderDescriptor,
 } from "@/interfaces/llm";
 import { LLM_PROVIDERS_ADMIN_URL } from "@/lib/llmConfig/constants";
-import { getFormForExistingProvider } from "@/app/admin/configuration/llm/forms/getForm";
-import { OpenAIForm } from "@/app/admin/configuration/llm/forms/OpenAIForm";
-import { AnthropicForm } from "@/app/admin/configuration/llm/forms/AnthropicForm";
-import { OllamaForm } from "@/app/admin/configuration/llm/forms/OllamaForm";
-import { AzureForm } from "@/app/admin/configuration/llm/forms/AzureForm";
-import { BedrockForm } from "@/app/admin/configuration/llm/forms/BedrockForm";
-import { VertexAIForm } from "@/app/admin/configuration/llm/forms/VertexAIForm";
-import { OpenRouterForm } from "@/app/admin/configuration/llm/forms/OpenRouterForm";
-import { CustomForm } from "@/app/admin/configuration/llm/forms/CustomForm";
+import { getModalForExistingProvider } from "@/sections/modals/llmConfig/getModal";
+import { OpenAIModal } from "@/sections/modals/llmConfig/OpenAIModal";
+import { AnthropicModal } from "@/sections/modals/llmConfig/AnthropicModal";
+import { OllamaModal } from "@/sections/modals/llmConfig/OllamaModal";
+import { AzureModal } from "@/sections/modals/llmConfig/AzureModal";
+import { BedrockModal } from "@/sections/modals/llmConfig/BedrockModal";
+import { VertexAIModal } from "@/sections/modals/llmConfig/VertexAIModal";
+import { OpenRouterModal } from "@/sections/modals/llmConfig/OpenRouterModal";
+import { CustomModal } from "@/sections/modals/llmConfig/CustomModal";
 
 // ============================================================================
 // Provider form mapping (keyed by provider name from the API)
 // ============================================================================
 
-const PROVIDER_FORM_MAP: Record<
+const PROVIDER_MODAL_MAP: Record<
   string,
-  (shouldMarkAsDefault: boolean) => React.ReactNode
+  (
+    shouldMarkAsDefault: boolean,
+    open: boolean,
+    onOpenChange: (open: boolean) => void
+  ) => React.ReactNode
 > = {
-  openai: (d) => <OpenAIForm shouldMarkAsDefault={d} />,
-  anthropic: (d) => <AnthropicForm shouldMarkAsDefault={d} />,
-  ollama_chat: (d) => <OllamaForm shouldMarkAsDefault={d} />,
-  azure: (d) => <AzureForm shouldMarkAsDefault={d} />,
-  bedrock: (d) => <BedrockForm shouldMarkAsDefault={d} />,
-  vertex_ai: (d) => <VertexAIForm shouldMarkAsDefault={d} />,
-  openrouter: (d) => <OpenRouterForm shouldMarkAsDefault={d} />,
+  openai: (d, open, onOpenChange) => (
+    <OpenAIModal
+      shouldMarkAsDefault={d}
+      open={open}
+      onOpenChange={onOpenChange}
+    />
+  ),
+  anthropic: (d, open, onOpenChange) => (
+    <AnthropicModal
+      shouldMarkAsDefault={d}
+      open={open}
+      onOpenChange={onOpenChange}
+    />
+  ),
+  ollama_chat: (d, open, onOpenChange) => (
+    <OllamaModal
+      shouldMarkAsDefault={d}
+      open={open}
+      onOpenChange={onOpenChange}
+    />
+  ),
+  azure: (d, open, onOpenChange) => (
+    <AzureModal
+      shouldMarkAsDefault={d}
+      open={open}
+      onOpenChange={onOpenChange}
+    />
+  ),
+  bedrock: (d, open, onOpenChange) => (
+    <BedrockModal
+      shouldMarkAsDefault={d}
+      open={open}
+      onOpenChange={onOpenChange}
+    />
+  ),
+  vertex_ai: (d, open, onOpenChange) => (
+    <VertexAIModal
+      shouldMarkAsDefault={d}
+      open={open}
+      onOpenChange={onOpenChange}
+    />
+  ),
+  openrouter: (d, open, onOpenChange) => (
+    <OpenRouterModal
+      shouldMarkAsDefault={d}
+      open={open}
+      onOpenChange={onOpenChange}
+    />
+  ),
 };
 
 // ============================================================================
@@ -61,19 +107,10 @@ const PROVIDER_FORM_MAP: Record<
 
 interface ExistingProviderCardProps {
   provider: LLMProviderView;
-  children: React.ReactNode;
 }
 
-function ExistingProviderCard({
-  provider,
-  children,
-}: ExistingProviderCardProps) {
-  const triggerRef = useRef<HTMLDivElement>(null);
-
-  function handleEdit() {
-    const button = triggerRef.current?.querySelector("button");
-    button?.click();
-  }
+function ExistingProviderCard({ provider }: ExistingProviderCardProps) {
+  const [isOpen, setIsOpen] = useState(false);
 
   return (
     <Card padding={0.5}>
@@ -92,13 +129,11 @@ function ExistingProviderCard({
           <Button
             icon={SvgSettings}
             prominence="tertiary"
-            onClick={handleEdit}
+            onClick={() => setIsOpen(true)}
           />
         }
       />
-      <div ref={triggerRef} className="hidden">
-        {children}
-      </div>
+      {getModalForExistingProvider(provider, isOpen, setIsOpen)}
     </Card>
   );
 }
@@ -109,16 +144,20 @@ function ExistingProviderCard({
 
 interface NewProviderCardProps {
   provider: WellKnownLLMProviderDescriptor;
-  children: React.ReactNode;
+  isFirstProvider: boolean;
+  formFn: (
+    shouldMarkAsDefault: boolean,
+    open: boolean,
+    onOpenChange: (open: boolean) => void
+  ) => React.ReactNode;
 }
 
-function NewProviderCard({ provider, children }: NewProviderCardProps) {
-  const triggerRef = useRef<HTMLDivElement>(null);
-
-  function handleConnect() {
-    const button = triggerRef.current?.querySelector("button");
-    button?.click();
-  }
+function NewProviderCard({
+  provider,
+  isFirstProvider,
+  formFn,
+}: NewProviderCardProps) {
+  const [isOpen, setIsOpen] = useState(false);
 
   return (
     <Card variant="secondary" padding={0.5}>
@@ -132,15 +171,53 @@ function NewProviderCard({ provider, children }: NewProviderCardProps) {
           <Button
             rightIcon={SvgArrowExchange}
             prominence="tertiary"
-            onClick={handleConnect}
+            onClick={() => setIsOpen(true)}
           >
             Connect
           </Button>
         }
       />
-      <div ref={triggerRef} className="hidden">
-        {children}
-      </div>
+      {formFn(isFirstProvider, isOpen, setIsOpen)}
+    </Card>
+  );
+}
+
+// ============================================================================
+// NewCustomProviderCard — card for adding a custom LLM provider
+// ============================================================================
+
+interface NewCustomProviderCardProps {
+  isFirstProvider: boolean;
+}
+
+function NewCustomProviderCard({
+  isFirstProvider,
+}: NewCustomProviderCardProps) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <Card variant="secondary" padding={0.5}>
+      <ContentAction
+        icon={getProviderIcon("custom")}
+        title={getProviderProductName("custom")}
+        description={getProviderDisplayName("custom")}
+        sizePreset="main-content"
+        variant="section"
+        rightChildren={
+          <Button
+            rightIcon={SvgArrowExchange}
+            prominence="tertiary"
+            onClick={() => setIsOpen(true)}
+          >
+            Connect
+          </Button>
+        }
+      />
+      <CustomModal
+        shouldMarkAsDefault={isFirstProvider}
+        open={isOpen}
+        onOpenChange={setIsOpen}
+      />
     </Card>
   );
 }
@@ -254,9 +331,10 @@ export default function LLMConfigurationPage() {
                     return 0;
                   })
                   .map((provider) => (
-                    <ExistingProviderCard key={provider.id} provider={provider}>
-                      {getFormForExistingProvider(provider)}
-                    </ExistingProviderCard>
+                    <ExistingProviderCard
+                      key={provider.id}
+                      provider={provider}
+                    />
                   ))}
               </div>
             </GeneralLayouts.Section>
@@ -281,23 +359,18 @@ export default function LLMConfigurationPage() {
 
           <div className="grid grid-cols-2 gap-4">
             {wellKnownLLMProviders?.map((provider) => {
-              const formFn = PROVIDER_FORM_MAP[provider.name];
+              const formFn = PROVIDER_MODAL_MAP[provider.name];
               if (!formFn) return null;
               return (
-                <NewProviderCard key={provider.name} provider={provider}>
-                  {formFn(isFirstProvider)}
-                </NewProviderCard>
+                <NewProviderCard
+                  key={provider.name}
+                  provider={provider}
+                  isFirstProvider={isFirstProvider}
+                  formFn={formFn}
+                />
               );
             })}
-            <NewProviderCard
-              provider={{
-                name: "custom",
-                known_models: [],
-                recommended_default_model: null,
-              }}
-            >
-              <CustomForm shouldMarkAsDefault={isFirstProvider} />
-            </NewProviderCard>
+            <NewCustomProviderCard isFirstProvider={isFirstProvider} />
           </div>
         </GeneralLayouts.Section>
       </SettingsLayouts.Body>

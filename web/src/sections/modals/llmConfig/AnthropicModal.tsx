@@ -1,5 +1,4 @@
 import { Form, Formik } from "formik";
-import { TextFormField, FileUploadFormField } from "@/components/Field";
 import { LLMProviderFormProps } from "@/interfaces/llm";
 import * as Yup from "yup";
 import {
@@ -7,40 +6,34 @@ import {
   ProviderFormContext,
 } from "./components/FormWrapper";
 import { DisplayNameField } from "./components/DisplayNameField";
+import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import { FormActionButtons } from "./components/FormActionButtons";
 import {
   buildDefaultInitialValues,
   buildDefaultValidationSchema,
   buildAvailableModelConfigurations,
   submitLLMProvider,
-  BaseLLMFormValues,
   LLM_FORM_CLASS_NAME,
 } from "./formUtils";
 import { AdvancedOptions } from "./components/AdvancedOptions";
 import { DisplayModels } from "./components/DisplayModels";
-import Separator from "@/refresh-components/Separator";
 
-export const VERTEXAI_PROVIDER_NAME = "vertex_ai";
-const VERTEXAI_DISPLAY_NAME = "Google Cloud Vertex AI";
-const VERTEXAI_DEFAULT_MODEL = "gemini-2.5-pro";
-const VERTEXAI_DEFAULT_LOCATION = "global";
+export const ANTHROPIC_PROVIDER_NAME = "anthropic";
+const DEFAULT_DEFAULT_MODEL_NAME = "claude-sonnet-4-5";
 
-interface VertexAIFormValues extends BaseLLMFormValues {
-  custom_config: {
-    vertex_credentials: string;
-    vertex_location: string;
-  };
-}
-
-export function VertexAIForm({
+export function AnthropicModal({
   existingLlmProvider,
   shouldMarkAsDefault,
+  open,
+  onOpenChange,
 }: LLMProviderFormProps) {
   return (
     <ProviderFormEntrypointWrapper
-      providerName={VERTEXAI_DISPLAY_NAME}
-      providerEndpoint={VERTEXAI_PROVIDER_NAME}
+      providerName="Anthropic"
+      providerEndpoint={ANTHROPIC_PROVIDER_NAME}
       existingLlmProvider={existingLlmProvider}
+      open={open}
+      onOpenChange={onOpenChange}
     >
       {({
         onClose,
@@ -55,34 +48,23 @@ export function VertexAIForm({
           existingLlmProvider,
           wellKnownLLMProvider
         );
-        const initialValues: VertexAIFormValues = {
+        const initialValues = {
           ...buildDefaultInitialValues(
             existingLlmProvider,
             modelConfigurations
           ),
+          api_key: existingLlmProvider?.api_key ?? "",
+          api_base: existingLlmProvider?.api_base ?? undefined,
           default_model_name:
             existingLlmProvider?.default_model_name ??
             wellKnownLLMProvider?.recommended_default_model?.name ??
-            VERTEXAI_DEFAULT_MODEL,
-          // Default to auto mode for new Vertex AI providers
+            DEFAULT_DEFAULT_MODEL_NAME,
+          // Default to auto mode for new Anthropic providers
           is_auto_mode: existingLlmProvider?.is_auto_mode ?? true,
-          custom_config: {
-            vertex_credentials:
-              (existingLlmProvider?.custom_config
-                ?.vertex_credentials as string) ?? "",
-            vertex_location:
-              (existingLlmProvider?.custom_config?.vertex_location as string) ??
-              VERTEXAI_DEFAULT_LOCATION,
-          },
         };
 
         const validationSchema = buildDefaultValidationSchema().shape({
-          custom_config: Yup.object({
-            vertex_credentials: Yup.string().required(
-              "Credentials file is required"
-            ),
-            vertex_location: Yup.string(),
-          }),
+          api_key: Yup.string().required("API Key is required"),
         });
 
         return (
@@ -91,24 +73,9 @@ export function VertexAIForm({
             validationSchema={validationSchema}
             validateOnMount={true}
             onSubmit={async (values, { setSubmitting }) => {
-              // Filter out empty custom_config values except for required ones
-              const filteredCustomConfig = Object.fromEntries(
-                Object.entries(values.custom_config || {}).filter(
-                  ([key, v]) => key === "vertex_credentials" || v !== ""
-                )
-              );
-
-              const submitValues = {
-                ...values,
-                custom_config:
-                  Object.keys(filteredCustomConfig).length > 0
-                    ? filteredCustomConfig
-                    : undefined,
-              };
-
               await submitLLMProvider({
-                providerName: VERTEXAI_PROVIDER_NAME,
-                values: submitValues,
+                providerName: ANTHROPIC_PROVIDER_NAME,
+                values,
                 initialValues,
                 modelConfigurations,
                 existingLlmProvider,
@@ -126,21 +93,7 @@ export function VertexAIForm({
                 <Form className={LLM_FORM_CLASS_NAME}>
                   <DisplayNameField disabled={!!existingLlmProvider} />
 
-                  <FileUploadFormField
-                    name="custom_config.vertex_credentials"
-                    label="Credentials File"
-                    subtext="Upload your Google Cloud service account JSON credentials file."
-                  />
-
-                  <TextFormField
-                    name="custom_config.vertex_location"
-                    label="Location"
-                    placeholder={VERTEXAI_DEFAULT_LOCATION}
-                    subtext="The Google Cloud region for your Vertex AI models (e.g., global, us-east1, us-central1, europe-west1). See [Google's documentation](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/locations#google_model_endpoint_locations) to find the appropriate region for your model."
-                    optional
-                  />
-
-                  <Separator />
+                  <PasswordInputTypeInField name="api_key" label="API Key" />
 
                   <DisplayModels
                     modelConfigurations={modelConfigurations}

@@ -115,6 +115,8 @@ export interface LLMProviderResponse<T> {
 export interface LLMProviderFormProps {
   existingLlmProvider?: LLMProviderView;
   shouldMarkAsDefault?: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 // Param types for model fetching functions - use snake_case to match API structure
