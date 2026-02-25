@@ -22,6 +22,11 @@ _FENCED_CODE_BLOCK_PATTERN = re.compile(r"```[\s\S]*?```")
 # The inner group handles nested brackets for citation links like [[1]](.
 _MARKDOWN_LINK_PATTERN = re.compile(r"\[(?:[^\[\]]|\[[^\]]*\])*\]\(")
 
+# Matches Slack-style links <url|text> that LLMs sometimes output directly.
+# Mistune doesn't recognise this syntax, so text() would escape the angle
+# brackets and Slack would render them as literal text instead of links.
+_SLACK_LINK_PATTERN = re.compile(r"<(https?://[^|>]+)\|([^>]+)>")
+
 
 def _sanitize_html(text: str) -> str:
     """Strip HTML tags from a text fragment.
@@ -109,10 +114,21 @@ def _normalize_link_destinations(message: str) -> str:
     return "".join(normalized_parts)
 
 
+def _convert_slack_links_to_markdown(message: str) -> str:
+    """Convert Slack-style <url|text> links to standard markdown [text](url).
+
+    LLMs sometimes emit Slack mrkdwn link syntax directly. Mistune doesn't
+    recognise it, so the angle brackets would be escaped by text() and Slack
+    would render the link as literal text instead of a clickable link.
+    """
+    return _SLACK_LINK_PATTERN.sub(r"[\2](\1)", message)
+
+
 def format_slack_message(message: str | None) -> str:
     if message is None:
         return ""
     message = _sanitize_for_slack(message)
+    message = _convert_slack_links_to_markdown(message)
     normalized_message = _normalize_link_destinations(message)
     md = create_markdown(renderer=SlackRenderer(), plugins=["strikethrough"])
     result = md(normalized_message)
