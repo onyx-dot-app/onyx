@@ -4,6 +4,7 @@ import Button from "@/refresh-components/buttons/Button";
 import { SvgTrash } from "@opal/icons";
 import { LLMProviderView } from "@/interfaces/llm";
 import { LLM_PROVIDERS_ADMIN_URL } from "@/lib/llmConfig/constants";
+import { deleteLlmProvider } from "@/lib/llmConfig/svc";
 
 interface FormActionButtonsProps {
   isTesting: boolean;
@@ -25,21 +26,14 @@ export function FormActionButtons({
   const handleDelete = async () => {
     if (!existingLlmProvider) return;
 
-    const response = await fetch(
-      `${LLM_PROVIDERS_ADMIN_URL}/${existingLlmProvider.id}`,
-      {
-        method: "DELETE",
-      }
-    );
-
-    if (!response.ok) {
-      const errorMsg = (await response.json()).detail;
-      alert(`Failed to delete provider: ${errorMsg}`);
-      return;
+    try {
+      await deleteLlmProvider(existingLlmProvider.id);
+      mutate(LLM_PROVIDERS_ADMIN_URL);
+      onClose();
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Unknown error";
+      alert(`Failed to delete provider: ${message}`);
     }
-
-    mutate(LLM_PROVIDERS_ADMIN_URL);
-    onClose();
   };
 
   return (

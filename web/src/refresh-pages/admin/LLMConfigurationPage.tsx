@@ -10,7 +10,7 @@ import {
 import { ThreeDotsLoader } from "@/components/Loading";
 import { Content, ContentAction } from "@opal/layouts";
 import { Button } from "@opal/components";
-import { SvgCpu, SvgArrowExchange, SvgSettings } from "@opal/icons";
+import { SvgCpu, SvgArrowExchange, SvgSettings, SvgTrash } from "@opal/icons";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import {
@@ -18,11 +18,14 @@ import {
   getProviderIcon,
   getProviderProductName,
 } from "@/lib/llmConfig/providers";
-import { setDefaultLlmModel } from "@/lib/llmConfig/svc";
+import { deleteLlmProvider, setDefaultLlmModel } from "@/lib/llmConfig/svc";
+import Text from "@/refresh-components/texts/Text";
 import { Horizontal as HorizontalInput } from "@/layouts/input-layouts";
 import Card from "@/refresh-components/cards/Card";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import Message from "@/refresh-components/messages/Message";
+import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
+import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import Separator from "@/refresh-components/Separator";
 import {
   LLMProviderView,
@@ -38,6 +41,7 @@ import { BedrockModal } from "@/sections/modals/llmConfig/BedrockModal";
 import { VertexAIModal } from "@/sections/modals/llmConfig/VertexAIModal";
 import { OpenRouterModal } from "@/sections/modals/llmConfig/OpenRouterModal";
 import { CustomModal } from "@/sections/modals/llmConfig/CustomModal";
+import { Section } from "@/layouts/general-layouts";
 
 // ============================================================================
 // Provider form mapping (keyed by provider name from the API)
@@ -115,27 +119,76 @@ function ExistingProviderCard({
   provider,
   isDefault,
 }: ExistingProviderCardProps) {
+  const { mutate } = useSWRConfig();
   const [isOpen, setIsOpen] = useState(false);
+  const deleteModal = useCreateModal();
+
+  const handleDelete = async () => {
+    try {
+      await deleteLlmProvider(provider.id);
+      mutate(LLM_PROVIDERS_ADMIN_URL);
+      deleteModal.toggle(false);
+      toast.success("Provider deleted successfully!");
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Unknown error";
+      toast.error(`Failed to delete provider: ${message}`);
+    }
+  };
 
   return (
-    <Card padding={0.5}>
-      <ContentAction
-        icon={getProviderIcon(provider.provider)}
-        title={provider.name}
-        description={getProviderDisplayName(provider.provider)}
-        sizePreset="main-content"
-        variant="section"
-        tag={isDefault ? { title: "Default", color: "blue" } : undefined}
-        rightChildren={
-          <Button
-            icon={SvgSettings}
-            prominence="tertiary"
-            onClick={() => setIsOpen(true)}
-          />
-        }
-      />
-      {getModalForExistingProvider(provider, isOpen, setIsOpen)}
-    </Card>
+    <>
+      {deleteModal.isOpen && (
+        <ConfirmationModalLayout
+          icon={SvgTrash}
+          title="Delete LLM Provider"
+          onClose={() => deleteModal.toggle(false)}
+          submit={
+            <Button variant="danger" onClick={handleDelete}>
+              Delete
+            </Button>
+          }
+        >
+          <Section alignItems="start">
+            <Text as="p" text03>
+              This will permanently delete <b>{provider.name}</b> and all of its
+              model configurations.
+            </Text>
+            {isDefault && (
+              <Text as="p" text03>
+                This is currently your <b>default provider</b>. Deleting it will
+                require you to set a new default.
+              </Text>
+            )}
+          </Section>
+        </ConfirmationModalLayout>
+      )}
+
+      <Card padding={0.5}>
+        <ContentAction
+          icon={getProviderIcon(provider.provider)}
+          title={provider.name}
+          description={getProviderDisplayName(provider.provider)}
+          sizePreset="main-content"
+          variant="section"
+          tag={isDefault ? { title: "Default", color: "blue" } : undefined}
+          rightChildren={
+            <Section flexDirection="row" gap={0} alignItems="start">
+              <Button
+                icon={SvgTrash}
+                prominence="tertiary"
+                onClick={() => deleteModal.toggle(true)}
+              />
+              <Button
+                icon={SvgSettings}
+                prominence="tertiary"
+                onClick={() => setIsOpen(true)}
+              />
+            </Section>
+          }
+        />
+        {getModalForExistingProvider(provider, isOpen, setIsOpen)}
+      </Card>
+    </>
   );
 }
 

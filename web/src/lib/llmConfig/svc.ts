@@ -6,9 +6,13 @@
  * Endpoints:
  * - /api/admin/llm/test/default - Test the default LLM provider connection
  * - /api/admin/llm/default - Set the default LLM model
+ * - /api/admin/llm/provider/{id} - Delete an LLM provider
  */
 
-import { LLM_ADMIN_URL } from "@/lib/llmConfig/constants";
+import {
+  LLM_ADMIN_URL,
+  LLM_PROVIDERS_ADMIN_URL,
+} from "@/lib/llmConfig/constants";
 
 /**
  * Test the default LLM provider.
@@ -42,6 +46,22 @@ export async function setDefaultLlmModel(
       provider_id: providerId,
       model_name: modelName,
     }),
+  });
+
+  if (!response.ok) {
+    const errorMsg = (await response.json()).detail;
+    throw new Error(errorMsg);
+  }
+}
+
+/**
+ * Delete an LLM provider.
+ * @param providerId - The provider ID to delete
+ * @throws Error with the detail message from the API on failure
+ */
+export async function deleteLlmProvider(providerId: number): Promise<void> {
+  const response = await fetch(`${LLM_PROVIDERS_ADMIN_URL}/${providerId}`, {
+    method: "DELETE",
   });
 
   if (!response.ok) {
