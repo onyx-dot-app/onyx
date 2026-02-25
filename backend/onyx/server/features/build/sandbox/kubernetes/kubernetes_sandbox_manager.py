@@ -1348,10 +1348,12 @@ if [ -d /workspace/skills ]; then
     echo "Linked skills to /workspace/skills"
 fi
 
-# Write agent instructions (scans files dir to populate knowledge sources)
+# Write agent instructions
 echo "Writing AGENTS.md"
-printf '%s' '{agent_instructions_escaped}' \
-  | python3 /usr/local/bin/generate_agents_md.py {session_path}/AGENTS.md {session_path}/files
+printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
+
+# Populate knowledge sources by scanning the files directory
+python3 /usr/local/bin/generate_agents_md.py {session_path}/AGENTS.md {session_path}/files || true
 
 # Write opencode config
 echo "Writing opencode.json"
@@ -1777,11 +1779,12 @@ set -e
 echo "Creating files symlink to {symlink_target}"
 ln -sf {symlink_target} {session_path}/files
 
-# Write agent instructions (scans files dir to populate knowledge sources)
+# Write agent instructions
 echo "Writing AGENTS.md"
-printf '%s' '{agent_instructions_escaped}' \
-  | python3 /usr/local/bin/generate_agents_md.py \
-  {session_path}/AGENTS.md {session_path}/files
+printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
+
+# Populate knowledge sources by scanning the files directory
+python3 /usr/local/bin/generate_agents_md.py {session_path}/AGENTS.md {session_path}/files || true
 
 # Write opencode config
 echo "Writing opencode.json"
