@@ -59,18 +59,21 @@ type ButtonContentProps =
       icon: IconFunctionComponent;
       children: string;
       rightIcon?: IconFunctionComponent;
+      responsiveHideText?: never;
     }
   | {
       foldable?: false;
       icon?: IconFunctionComponent;
       children: string;
       rightIcon?: IconFunctionComponent;
+      responsiveHideText?: never;
     }
   | {
       foldable?: false;
       icon: IconFunctionComponent;
       children?: string;
       rightIcon?: IconFunctionComponent;
+      responsiveHideText?: boolean;
     };
 
 type ButtonProps = InteractiveBaseProps &
@@ -92,9 +95,6 @@ type ButtonProps = InteractiveBaseProps &
 
     /** Which side the tooltip appears on. */
     tooltipSide?: TooltipSide;
-
-    /** Hide button text and right icon on small screens and show at `md` and above. */
-    responsiveHideText?: boolean;
   };
 
 // ---------------------------------------------------------------------------
