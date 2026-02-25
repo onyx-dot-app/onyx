@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Generator
 from typing import Any
 from unittest.mock import MagicMock
@@ -12,7 +13,9 @@ import pytest
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
+from ee.onyx.server.scim.api import ScimJSONResponse
 from ee.onyx.server.scim.models import ScimGroupResource
+from ee.onyx.server.scim.models import ScimListResponse
 from ee.onyx.server.scim.models import ScimName
 from ee.onyx.server.scim.models import ScimUserResource
 from ee.onyx.server.scim.providers.base import ScimProvider
@@ -115,6 +118,11 @@ def make_user_mapping(**kwargs: Any) -> MagicMock:
     mapping.external_id = kwargs.get("external_id", "ext-default")
     mapping.user_id = kwargs.get("user_id", uuid4())
     mapping.scim_username = kwargs.get("scim_username", None)
+    mapping.department = kwargs.get("department", None)
+    mapping.manager = kwargs.get("manager", None)
+    mapping.given_name = kwargs.get("given_name", None)
+    mapping.family_name = kwargs.get("family_name", None)
+    mapping.scim_emails_json = kwargs.get("scim_emails_json", None)
     return mapping
 
 
@@ -122,3 +130,35 @@ def assert_scim_error(result: object, expected_status: int) -> None:
     """Assert *result* is a JSONResponse with the given status code."""
     assert isinstance(result, JSONResponse)
     assert result.status_code == expected_status
+
+
+# ---------------------------------------------------------------------------
+# Response parsing helpers
+# ---------------------------------------------------------------------------
+
+
+def parse_scim_user(result: object, *, status: int = 200) -> ScimUserResource:
+    """Assert *result* is a ScimJSONResponse and parse as ScimUserResource."""
+    assert isinstance(
+        result, ScimJSONResponse
+    ), f"Expected ScimJSONResponse, got {type(result).__name__}"
+    assert result.status_code == status
+    return ScimUserResource.model_validate(json.loads(result.body))
+
+
+def parse_scim_group(result: object, *, status: int = 200) -> ScimGroupResource:
+    """Assert *result* is a ScimJSONResponse and parse as ScimGroupResource."""
+    assert isinstance(
+        result, ScimJSONResponse
+    ), f"Expected ScimJSONResponse, got {type(result).__name__}"
+    assert result.status_code == status
+    return ScimGroupResource.model_validate(json.loads(result.body))
+
+
+def parse_scim_list(result: object) -> ScimListResponse:
+    """Assert *result* is a ScimJSONResponse and parse as ScimListResponse."""
+    assert isinstance(
+        result, ScimJSONResponse
+    ), f"Expected ScimJSONResponse, got {type(result).__name__}"
+    assert result.status_code == 200
+    return ScimListResponse.model_validate(json.loads(result.body))

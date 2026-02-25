@@ -26,14 +26,13 @@ from sqlalchemy.orm import Session
 from ee.onyx.db.scim import ScimDAL
 from ee.onyx.server.scim.auth import verify_scim_token
 from ee.onyx.server.scim.filtering import parse_scim_filter
+from ee.onyx.server.scim.models import SCIM_LIST_RESPONSE_SCHEMA
 from ee.onyx.server.scim.models import ScimError
 from ee.onyx.server.scim.models import ScimGroupMember
 from ee.onyx.server.scim.models import ScimGroupResource
 from ee.onyx.server.scim.models import ScimListResponse
 from ee.onyx.server.scim.models import ScimName
 from ee.onyx.server.scim.models import ScimPatchRequest
-from ee.onyx.server.scim.models import ScimResourceType
-from ee.onyx.server.scim.models import ScimSchemaDefinition
 from ee.onyx.server.scim.models import ScimServiceProviderConfig
 from ee.onyx.server.scim.models import ScimUserResource
 from ee.onyx.server.scim.patch import apply_group_patch
@@ -51,12 +50,24 @@ from onyx.db.models import ScimToken
 from onyx.db.models import User
 from onyx.db.models import UserGroup
 from onyx.db.models import UserRole
+from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
+
+logger = setup_logger()
+
+
+class ScimJSONResponse(JSONResponse):
+    """JSONResponse with Content-Type: application/scim+json (RFC 7644 §3.1)."""
+
+    media_type = "application/scim+json"
+
 
 # NOTE: All URL paths in this router (/ServiceProviderConfig, /ResourceTypes,
 # /Schemas, /Users, /Groups) are mandated by the SCIM spec (RFC 7643/7644).
 # IdPs like Okta and Azure AD hardcode these exact paths, so they cannot be
 # changed to kebab-case.
+
+
 scim_router = APIRouter(prefix="/scim/v2", tags=["SCIM"])
 
 _pw_helper = PasswordHelper()
@@ -86,15 +97,39 @@ def get_service_provider_config() -> ScimServiceProviderConfig:
 
 
 @scim_router.get("/ResourceTypes")
-def get_resource_types() -> list[ScimResourceType]:
-    """List available SCIM resource types (RFC 7643 §6)."""
-    return [USER_RESOURCE_TYPE, GROUP_RESOURCE_TYPE]
+def get_resource_types() -> ScimJSONResponse:
+    """List available SCIM resource types (RFC 7643 §6).
+
+    Wrapped in a ListResponse envelope (RFC 7644 §3.4.2) because IdPs
+    like Entra ID expect a JSON object, not a bare array.
+    """
+    resources = [USER_RESOURCE_TYPE, GROUP_RESOURCE_TYPE]
+    return ScimJSONResponse(
+        content={
+            "schemas": [SCIM_LIST_RESPONSE_SCHEMA],
+            "totalResults": len(resources),
+            "Resources": [
+                r.model_dump(exclude_none=True, by_alias=True) for r in resources
+            ],
+        }
+    )
 
 
 @scim_router.get("/Schemas")
-def get_schemas() -> list[ScimSchemaDefinition]:
-    """Return SCIM schema definitions (RFC 7643 §7)."""
-    return [USER_SCHEMA_DEF, GROUP_SCHEMA_DEF]
+def get_schemas() -> ScimJSONResponse:
+    """Return SCIM schema definitions (RFC 7643 §7).
+
+    Wrapped in a ListResponse envelope (RFC 7644 §3.4.2) because IdPs
+    like Entra ID expect a JSON object, not a bare array.
+    """
+    schemas = [USER_SCHEMA_DEF, GROUP_SCHEMA_DEF]
+    return ScimJSONResponse(
+        content={
+            "schemas": [SCIM_LIST_RESPONSE_SCHEMA],
+            "totalResults": len(schemas),
+            "Resources": [s.model_dump(exclude_none=True) for s in schemas],
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -102,13 +137,43 @@ def get_schemas() -> list[ScimSchemaDefinition]:
 # ---------------------------------------------------------------------------
 
 
-def _scim_error_response(status: int, detail: str) -> JSONResponse:
+def _scim_error_response(status: int, detail: str) -> ScimJSONResponse:
     """Build a SCIM-compliant error response (RFC 7644 §3.12)."""
+    logger.warning("SCIM error response: status=%s detail=%s", status, detail)
     body = ScimError(status=str(status), detail=detail)
-    return JSONResponse(
+    return ScimJSONResponse(
         status_code=status,
         content=body.model_dump(exclude_none=True),
     )
+
+
+def _parse_excluded_attributes(raw: str | None) -> set[str]:
+    """Parse the ``excludedAttributes`` query parameter (RFC 7644 §3.4.2.5).
+
+    Returns a set of lowercased attribute names to omit from responses.
+    """
+    if not raw:
+        return set()
+    return {attr.strip().lower() for attr in raw.split(",") if attr.strip()}
+
+
+def _apply_exclusions(
+    resource: ScimUserResource | ScimGroupResource,
+    excluded: set[str],
+) -> dict:
+    """Serialize a SCIM resource, omitting attributes the IdP excluded.
+
+    RFC 7644 §3.4.2.5 lets the IdP pass ``?excludedAttributes=groups,emails``
+    to reduce response payload size. We strip those fields after serialization
+    so the rest of the pipeline doesn't need to know about them.
+    """
+    data = resource.model_dump(exclude_none=True, by_alias=True)
+    for attr in excluded:
+        # Match case-insensitively against the camelCase field names
+        keys_to_remove = [k for k in data if k.lower() == attr]
+        for k in keys_to_remove:
+            del data[k]
+    return data
 
 
 def _check_seat_availability(dal: ScimDAL) -> str | None:
@@ -124,7 +189,7 @@ def _check_seat_availability(dal: ScimDAL) -> str | None:
     return None
 
 
-def _fetch_user_or_404(user_id: str, dal: ScimDAL) -> User | JSONResponse:
+def _fetch_user_or_404(user_id: str, dal: ScimDAL) -> User | ScimJSONResponse:
     """Parse *user_id* as UUID, look up the user, or return a 404 error."""
     try:
         uid = UUID(user_id)
@@ -144,10 +209,56 @@ def _scim_name_to_str(name: ScimName | None) -> str | None:
     """
     if not name:
         return None
-    # Build from givenName/familyName first — IdPs like Okta may send a stale
-    # ``formatted`` value while updating the individual name components.
+    # If the client explicitly provides ``formatted``, prefer it — the client
+    # knows what display string it wants. Otherwise build from components.
+    if name.formatted:
+        return name.formatted
     parts = " ".join(part for part in [name.givenName, name.familyName] if part)
-    return parts or name.formatted
+    return parts or None
+
+
+def _scim_resource_response(
+    resource: ScimUserResource | ScimGroupResource | ScimListResponse,
+    status_code: int = 200,
+) -> ScimJSONResponse:
+    """Serialize a SCIM resource as ``application/scim+json``."""
+    content = resource.model_dump(exclude_none=True, by_alias=True)
+    return ScimJSONResponse(
+        status_code=status_code,
+        content=content,
+    )
+
+
+def _build_list_response(
+    resources: list[ScimUserResource | ScimGroupResource],
+    total: int,
+    start_index: int,
+    count: int,
+    excluded: set[str] | None = None,
+) -> ScimListResponse | ScimJSONResponse:
+    """Build a SCIM list response, optionally applying attribute exclusions.
+
+    RFC 7644 §3.4.2.5 — IdPs may request certain attributes be omitted via
+    the ``excludedAttributes`` query parameter.
+    """
+    if excluded:
+        envelope = ScimListResponse(
+            totalResults=total,
+            startIndex=start_index,
+            itemsPerPage=count,
+        )
+        data = envelope.model_dump(exclude_none=True)
+        data["Resources"] = [_apply_exclusions(r, excluded) for r in resources]
+        return ScimJSONResponse(content=data)
+
+    return _scim_resource_response(
+        ScimListResponse(
+            totalResults=total,
+            startIndex=start_index,
+            itemsPerPage=count,
+            Resources=resources,
+        )
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -158,12 +269,13 @@ def _scim_name_to_str(name: ScimName | None) -> str | None:
 @scim_router.get("/Users", response_model=None)
 def list_users(
     filter: str | None = Query(None),
+    excludedAttributes: str | None = None,
     startIndex: int = Query(1, ge=1),
     count: int = Query(100, ge=0, le=500),
     _token: ScimToken = Depends(verify_scim_token),
     provider: ScimProvider = Depends(_get_provider),
     db_session: Session = Depends(get_session),
-) -> ScimListResponse | JSONResponse:
+) -> ScimListResponse | ScimJSONResponse:
     """List users with optional SCIM filter and pagination."""
     dal = ScimDAL(db_session)
     dal.update_token_last_used(_token.id)
@@ -189,37 +301,47 @@ def list_users(
         for user, mapping in users_with_mappings
     ]
 
-    return ScimListResponse(
-        totalResults=total,
-        startIndex=startIndex,
-        itemsPerPage=count,
-        Resources=resources,
+    return _build_list_response(
+        resources,
+        total,
+        startIndex,
+        count,
+        excluded=_parse_excluded_attributes(excludedAttributes),
     )
 
 
 @scim_router.get("/Users/{user_id}", response_model=None)
 def get_user(
     user_id: str,
+    excludedAttributes: str | None = None,
     _token: ScimToken = Depends(verify_scim_token),
     provider: ScimProvider = Depends(_get_provider),
     db_session: Session = Depends(get_session),
-) -> ScimUserResource | JSONResponse:
+) -> ScimUserResource | ScimJSONResponse:
     """Get a single user by ID."""
     dal = ScimDAL(db_session)
     dal.update_token_last_used(_token.id)
 
     result = _fetch_user_or_404(user_id, dal)
-    if isinstance(result, JSONResponse):
+    if isinstance(result, ScimJSONResponse):
         return result
     user = result
 
     mapping = dal.get_user_mapping_by_user_id(user.id)
-    return provider.build_user_resource(
+
+    resource = provider.build_user_resource(
         user,
         mapping.external_id if mapping else None,
         groups=dal.get_user_groups(user.id),
         scim_username=mapping.scim_username if mapping else None,
     )
+
+    # RFC 7644 §3.4.2.5 — IdP may request certain attributes be omitted
+    excluded = _parse_excluded_attributes(excludedAttributes)
+    if excluded:
+        return ScimJSONResponse(content=_apply_exclusions(resource, excluded))
+
+    return _scim_resource_response(resource)
 
 
 @scim_router.post("/Users", status_code=201, response_model=None)
@@ -228,7 +350,7 @@ def create_user(
     _token: ScimToken = Depends(verify_scim_token),
     provider: ScimProvider = Depends(_get_provider),
     db_session: Session = Depends(get_session),
-) -> ScimUserResource | JSONResponse:
+) -> ScimUserResource | ScimJSONResponse:
     """Create a new user from a SCIM provisioning request."""
     dal = ScimDAL(db_session)
     dal.update_token_last_used(_token.id)
@@ -276,7 +398,10 @@ def create_user(
 
     dal.commit()
 
-    return provider.build_user_resource(user, external_id, scim_username=scim_username)
+    return _scim_resource_response(
+        provider.build_user_resource(user, external_id, scim_username=scim_username),
+        status_code=201,
+    )
 
 
 @scim_router.put("/Users/{user_id}", response_model=None)
@@ -286,13 +411,13 @@ def replace_user(
     _token: ScimToken = Depends(verify_scim_token),
     provider: ScimProvider = Depends(_get_provider),
     db_session: Session = Depends(get_session),
-) -> ScimUserResource | JSONResponse:
+) -> ScimUserResource | ScimJSONResponse:
     """Replace a user entirely (RFC 7644 §3.5.1)."""
     dal = ScimDAL(db_session)
     dal.update_token_last_used(_token.id)
 
     result = _fetch_user_or_404(user_id, dal)
-    if isinstance(result, JSONResponse):
+    if isinstance(result, ScimJSONResponse):
         return result
     user = result
 
@@ -317,11 +442,13 @@ def replace_user(
 
     dal.commit()
 
-    return provider.build_user_resource(
-        user,
-        new_external_id,
-        groups=dal.get_user_groups(user.id),
-        scim_username=scim_username,
+    return _scim_resource_response(
+        provider.build_user_resource(
+            user,
+            new_external_id,
+            groups=dal.get_user_groups(user.id),
+            scim_username=scim_username,
+        )
     )
 
 
@@ -332,7 +459,7 @@ def patch_user(
     _token: ScimToken = Depends(verify_scim_token),
     provider: ScimProvider = Depends(_get_provider),
     db_session: Session = Depends(get_session),
-) -> ScimUserResource | JSONResponse:
+) -> ScimUserResource | ScimJSONResponse:
     """Partially update a user (RFC 7644 §3.5.2).
 
     This is the primary endpoint for user deprovisioning — Okta sends
@@ -342,7 +469,7 @@ def patch_user(
     dal.update_token_last_used(_token.id)
 
     result = _fetch_user_or_404(user_id, dal)
-    if isinstance(result, JSONResponse):
+    if isinstance(result, ScimJSONResponse):
         return result
     user = result
 
@@ -399,11 +526,13 @@ def patch_user(
 
     dal.commit()
 
-    return provider.build_user_resource(
-        user,
-        patched.externalId,
-        groups=dal.get_user_groups(user.id),
-        scim_username=new_scim_username,
+    return _scim_resource_response(
+        provider.build_user_resource(
+            user,
+            patched.externalId,
+            groups=dal.get_user_groups(user.id),
+            scim_username=new_scim_username,
+        )
     )
 
 
@@ -412,25 +541,29 @@ def delete_user(
     user_id: str,
     _token: ScimToken = Depends(verify_scim_token),
     db_session: Session = Depends(get_session),
-) -> Response | JSONResponse:
+) -> Response | ScimJSONResponse:
     """Delete a user (RFC 7644 §3.6).
 
     Deactivates the user and removes the SCIM mapping. Note that Okta
     typically uses PATCH active=false instead of DELETE.
+    A second DELETE returns 404 per RFC 7644 §3.6.
     """
     dal = ScimDAL(db_session)
     dal.update_token_last_used(_token.id)
 
     result = _fetch_user_or_404(user_id, dal)
-    if isinstance(result, JSONResponse):
+    if isinstance(result, ScimJSONResponse):
         return result
     user = result
 
-    dal.deactivate_user(user)
-
+    # If no SCIM mapping exists, the user was already deleted from
+    # SCIM's perspective — return 404 per RFC 7644 §3.6.
     mapping = dal.get_user_mapping_by_user_id(user.id)
-    if mapping:
-        dal.delete_user_mapping(mapping.id)
+    if not mapping:
+        return _scim_error_response(404, f"User {user_id} not found")
+
+    dal.deactivate_user(user)
+    dal.delete_user_mapping(mapping.id)
 
     dal.commit()
 
@@ -442,7 +575,7 @@ def delete_user(
 # ---------------------------------------------------------------------------
 
 
-def _fetch_group_or_404(group_id: str, dal: ScimDAL) -> UserGroup | JSONResponse:
+def _fetch_group_or_404(group_id: str, dal: ScimDAL) -> UserGroup | ScimJSONResponse:
     """Parse *group_id* as int, look up the group, or return a 404 error."""
     try:
         gid = int(group_id)
@@ -497,12 +630,13 @@ def _validate_and_parse_members(
 @scim_router.get("/Groups", response_model=None)
 def list_groups(
     filter: str | None = Query(None),
+    excludedAttributes: str | None = None,
     startIndex: int = Query(1, ge=1),
     count: int = Query(100, ge=0, le=500),
     _token: ScimToken = Depends(verify_scim_token),
     provider: ScimProvider = Depends(_get_provider),
     db_session: Session = Depends(get_session),
-) -> ScimListResponse | JSONResponse:
+) -> ScimListResponse | ScimJSONResponse:
     """List groups with optional SCIM filter and pagination."""
     dal = ScimDAL(db_session)
     dal.update_token_last_used(_token.id)
@@ -522,36 +656,45 @@ def list_groups(
         for group, ext_id in groups_with_ext_ids
     ]
 
-    return ScimListResponse(
-        totalResults=total,
-        startIndex=startIndex,
-        itemsPerPage=count,
-        Resources=resources,
+    return _build_list_response(
+        resources,
+        total,
+        startIndex,
+        count,
+        excluded=_parse_excluded_attributes(excludedAttributes),
     )
 
 
 @scim_router.get("/Groups/{group_id}", response_model=None)
 def get_group(
     group_id: str,
+    excludedAttributes: str | None = None,
     _token: ScimToken = Depends(verify_scim_token),
     provider: ScimProvider = Depends(_get_provider),
     db_session: Session = Depends(get_session),
-) -> ScimGroupResource | JSONResponse:
+) -> ScimGroupResource | ScimJSONResponse:
     """Get a single group by ID."""
     dal = ScimDAL(db_session)
     dal.update_token_last_used(_token.id)
 
     result = _fetch_group_or_404(group_id, dal)
-    if isinstance(result, JSONResponse):
+    if isinstance(result, ScimJSONResponse):
         return result
     group = result
 
     mapping = dal.get_group_mapping_by_group_id(group.id)
     members = dal.get_group_members(group.id)
 
-    return provider.build_group_resource(
+    resource = provider.build_group_resource(
         group, members, mapping.external_id if mapping else None
     )
+
+    # RFC 7644 §3.4.2.5 — IdP may request certain attributes be omitted
+    excluded = _parse_excluded_attributes(excludedAttributes)
+    if excluded:
+        return ScimJSONResponse(content=_apply_exclusions(resource, excluded))
+
+    return _scim_resource_response(resource)
 
 
 @scim_router.post("/Groups", status_code=201, response_model=None)
@@ -560,7 +703,7 @@ def create_group(
     _token: ScimToken = Depends(verify_scim_token),
     provider: ScimProvider = Depends(_get_provider),
     db_session: Session = Depends(get_session),
-) -> ScimGroupResource | JSONResponse:
+) -> ScimGroupResource | ScimJSONResponse:
     """Create a new group from a SCIM provisioning request."""
     dal = ScimDAL(db_session)
     dal.update_token_last_used(_token.id)
@@ -596,7 +739,10 @@ def create_group(
     dal.commit()
 
     members = dal.get_group_members(db_group.id)
-    return provider.build_group_resource(db_group, members, external_id)
+    return _scim_resource_response(
+        provider.build_group_resource(db_group, members, external_id),
+        status_code=201,
+    )
 
 
 @scim_router.put("/Groups/{group_id}", response_model=None)
@@ -606,13 +752,13 @@ def replace_group(
     _token: ScimToken = Depends(verify_scim_token),
     provider: ScimProvider = Depends(_get_provider),
     db_session: Session = Depends(get_session),
-) -> ScimGroupResource | JSONResponse:
+) -> ScimGroupResource | ScimJSONResponse:
     """Replace a group entirely (RFC 7644 §3.5.1)."""
     dal = ScimDAL(db_session)
     dal.update_token_last_used(_token.id)
 
     result = _fetch_group_or_404(group_id, dal)
-    if isinstance(result, JSONResponse):
+    if isinstance(result, ScimJSONResponse):
         return result
     group = result
 
@@ -627,7 +773,9 @@ def replace_group(
     dal.commit()
 
     members = dal.get_group_members(group.id)
-    return provider.build_group_resource(group, members, group_resource.externalId)
+    return _scim_resource_response(
+        provider.build_group_resource(group, members, group_resource.externalId)
+    )
 
 
 @scim_router.patch("/Groups/{group_id}", response_model=None)
@@ -637,7 +785,7 @@ def patch_group(
     _token: ScimToken = Depends(verify_scim_token),
     provider: ScimProvider = Depends(_get_provider),
     db_session: Session = Depends(get_session),
-) -> ScimGroupResource | JSONResponse:
+) -> ScimGroupResource | ScimJSONResponse:
     """Partially update a group (RFC 7644 §3.5.2).
 
     Handles member add/remove operations from Okta and Azure AD.
@@ -646,7 +794,7 @@ def patch_group(
     dal.update_token_last_used(_token.id)
 
     result = _fetch_group_or_404(group_id, dal)
-    if isinstance(result, JSONResponse):
+    if isinstance(result, ScimJSONResponse):
         return result
     group = result
 
@@ -685,7 +833,9 @@ def patch_group(
     dal.commit()
 
     members = dal.get_group_members(group.id)
-    return provider.build_group_resource(group, members, patched.externalId)
+    return _scim_resource_response(
+        provider.build_group_resource(group, members, patched.externalId)
+    )
 
 
 @scim_router.delete("/Groups/{group_id}", status_code=204, response_model=None)
@@ -693,13 +843,13 @@ def delete_group(
     group_id: str,
     _token: ScimToken = Depends(verify_scim_token),
     db_session: Session = Depends(get_session),
-) -> Response | JSONResponse:
+) -> Response | ScimJSONResponse:
     """Delete a group (RFC 7644 §3.6)."""
     dal = ScimDAL(db_session)
     dal.update_token_last_used(_token.id)
 
     result = _fetch_group_or_404(group_id, dal)
-    if isinstance(result, JSONResponse):
+    if isinstance(result, ScimJSONResponse):
         return result
     group = result
 
