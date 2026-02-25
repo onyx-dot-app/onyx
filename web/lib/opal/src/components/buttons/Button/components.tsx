@@ -162,7 +162,9 @@ function Button({
 
   const resolvedTooltip =
     tooltip ??
-    (interactiveBaseProps.disabled && children ? children : undefined);
+    (foldable && interactiveBaseProps.disabled && children
+      ? children
+      : undefined);
 
   if (!resolvedTooltip) return button;
 
