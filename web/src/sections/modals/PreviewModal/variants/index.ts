@@ -7,7 +7,7 @@ import { markdownVariant } from "@/sections/modals/PreviewModal/variants/markdow
 import { dataVariant } from "@/sections/modals/PreviewModal/variants/dataVariant";
 import { unsupportedVariant } from "@/sections/modals/PreviewModal/variants/unsupportedVariant";
 
-// Note: Order does matter for the filters that are hit
+// Note: Order does matter for the order that filters that are hit
 const PREVIEW_VARIANTS: PreviewVariant[] = [
   codeVariant,
   imageVariant,
