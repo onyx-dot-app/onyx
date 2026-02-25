@@ -52,7 +52,7 @@ def get_default_document_index(
     if opensearch_retrieval_enabled:
         indexing_setting = IndexingSetting.from_db_model(search_settings)
         return OpenSearchOldDocumentIndex(
-            index_name=indexing_setting.index_name,
+            index_name=search_settings.index_name,
             embedding_dim=indexing_setting.final_embedding_dim,
             embedding_precision=indexing_setting.embedding_precision,
             secondary_index_name=secondary_index_name,
@@ -124,7 +124,7 @@ def get_all_document_indices(
     if ENABLE_OPENSEARCH_INDEXING_FOR_ONYX:
         indexing_setting = IndexingSetting.from_db_model(search_settings)
         opensearch_document_index = OpenSearchOldDocumentIndex(
-            index_name=indexing_setting.index_name,
+            index_name=search_settings.index_name,
             embedding_dim=indexing_setting.final_embedding_dim,
             embedding_precision=indexing_setting.embedding_precision,
             secondary_index_name=None,
