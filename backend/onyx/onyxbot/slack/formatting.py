@@ -177,7 +177,7 @@ class SlackRenderer(HTMLRenderer):
         return f"`{text}`"
 
     def block_code(self, code: str, info: str | None = None) -> str:  # noqa: ARG002
-        return f"```\n{code}\n```\n\n"
+        return f"```\n{code.rstrip(chr(10))}\n```\n\n"
 
     def linebreak(self) -> str:
         return "\n"
