@@ -443,33 +443,28 @@ def bulk_invite_users(
             logger.error(f"Error sending email invite to invited users: {e}")
             email_invite_status = EmailInviteStatus.SEND_FAILED
 
-    if not MULTI_TENANT or DEV_MODE:
-        return BulkInviteResponse(
-            invited_count=number_of_invited_users,
-            email_invite_status=email_invite_status,
-        )
+    if MULTI_TENANT and not DEV_MODE:
+        # for billing purposes, write to the control plane about the number of new users
+        try:
+            logger.info("Registering tenant users")
+            fetch_ee_implementation_or_noop(
+                "onyx.server.tenants.billing", "register_tenant_users", None
+            )(tenant_id, get_live_users_count(db_session))
+        except Exception as e:
+            logger.error(f"Failed to register tenant users: {str(e)}")
+            logger.info(
+                "Reverting changes: removing users from tenant and resetting invited users"
+            )
+            write_invited_users(initial_invited_users)  # Reset to original state
+            fetch_ee_implementation_or_noop(
+                "onyx.server.tenants.user_mapping", "remove_users_from_tenant", None
+            )(new_invited_emails, tenant_id)
+            raise e
 
-    # for billing purposes, write to the control plane about the number of new users
-    try:
-        logger.info("Registering tenant users")
-        fetch_ee_implementation_or_noop(
-            "onyx.server.tenants.billing", "register_tenant_users", None
-        )(tenant_id, get_live_users_count(db_session))
-
-        return BulkInviteResponse(
-            invited_count=number_of_invited_users,
-            email_invite_status=email_invite_status,
-        )
-    except Exception as e:
-        logger.error(f"Failed to register tenant users: {str(e)}")
-        logger.info(
-            "Reverting changes: removing users from tenant and resetting invited users"
-        )
-        write_invited_users(initial_invited_users)  # Reset to original state
-        fetch_ee_implementation_or_noop(
-            "onyx.server.tenants.user_mapping", "remove_users_from_tenant", None
-        )(new_invited_emails, tenant_id)
-        raise e
+    return BulkInviteResponse(
+        invited_count=number_of_invited_users,
+        email_invite_status=email_invite_status,
+    )
 
 
 @router.patch("/manage/admin/remove-invited-user", tags=PUBLIC_API_TAGS)

@@ -13,7 +13,7 @@ import { toast } from "@/hooks/useToast";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useSWR, { mutate } from "swr";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import BulkAdd from "@/components/admin/users/BulkAdd";
+import BulkAdd, { EmailInviteStatus } from "@/components/admin/users/BulkAdd";
 import Text from "@/refresh-components/texts/Text";
 import { InvitedUserSnapshot } from "@/lib/types";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
@@ -267,7 +267,7 @@ const SearchableTables = () => {
 function AddUserButton() {
   const [bulkAddUsersModal, setBulkAddUsersModal] = useState(false);
 
-  const onSuccess = (emailInviteStatus: string) => {
+  const onSuccess = (emailInviteStatus: EmailInviteStatus) => {
     mutate(
       (key) => typeof key === "string" && key.startsWith("/api/manage/users")
     );
