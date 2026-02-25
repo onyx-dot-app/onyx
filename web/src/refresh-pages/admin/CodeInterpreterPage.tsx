@@ -23,12 +23,16 @@ import { updateCodeInterpreter } from "@/lib/admin/code-interpreter/svc";
 interface CodeInterpreterCardProps {
   variant?: CardProps["variant"];
   title: string;
+  middleText?: string;
+  strikethrough?: boolean;
   rightContent: React.ReactNode;
 }
 
 function CodeInterpreterCard({
   variant,
   title,
+  middleText,
+  strikethrough,
   rightContent,
 }: CodeInterpreterCardProps) {
   return (
@@ -43,7 +47,9 @@ function CodeInterpreterCard({
           icon={SvgTerminal}
           title={title}
           description="Built-in Python runtime"
+          middleText={middleText}
           variant="tertiary"
+          strikethrough={strikethrough}
         />
         {rightContent}
       </GeneralLayouts.Section>
@@ -110,6 +116,7 @@ function ActionButtons({ onDisconnect, onRefresh }: ActionButtonsProps) {
 export default function CodeInterpreterPage() {
   const { isHealthy, isEnabled, isLoading, refetch } = useCodeInterpreter();
   const [showDisconnectModal, setShowDisconnectModal] = useState(false);
+  const [isReconnecting, setIsReconnecting] = useState(false);
 
   async function handleDisconnect() {
     const response = await updateCodeInterpreter({ enabled: false });
@@ -121,7 +128,9 @@ export default function CodeInterpreterPage() {
   }
 
   async function handleReconnect() {
+    setIsReconnecting(true);
     const response = await updateCodeInterpreter({ enabled: true });
+    setIsReconnecting(false);
     if (!response.ok) {
       return;
     }
@@ -141,6 +150,8 @@ export default function CodeInterpreterPage() {
         {isEnabled ? (
           <CodeInterpreterCard
             title="Code Interpreter"
+            variant={isHealthy ? "primary" : "secondary"}
+            strikethrough={!isHealthy}
             rightContent={
               <GeneralLayouts.Section flexDirection="column" gap={0.5}>
                 <ConnectionStatus healthy={isHealthy} isLoading={isLoading} />
@@ -154,17 +165,34 @@ export default function CodeInterpreterPage() {
         ) : (
           <CodeInterpreterCard
             variant="secondary"
-            title="Code Interpreter (Disconnected)"
+            title="Code Interpreter"
+            middleText="(Disconnected)"
+            strikethrough={true}
             rightContent={
-              <Button
-                tertiary
-                rightIcon={SvgArrowExchange}
-                onClick={handleReconnect}
-              >
-                <Text mainUiAction text03>
-                  Reconnect
-                </Text>
-              </Button>
+              isReconnecting ? (
+                <GeneralLayouts.Section
+                  flexDirection="row"
+                  gap={0.4}
+                  padding={0}
+                  justifyContent="end"
+                  alignItems="center"
+                >
+                  <Text mainUiAction text03>
+                    Checking...
+                  </Text>
+                  <SimpleLoader />
+                </GeneralLayouts.Section>
+              ) : (
+                <Button
+                  tertiary
+                  rightIcon={SvgArrowExchange}
+                  onClick={handleReconnect}
+                >
+                  <Text mainUiAction text03>
+                    Reconnect
+                  </Text>
+                </Button>
+              )
             }
           />
         )}
