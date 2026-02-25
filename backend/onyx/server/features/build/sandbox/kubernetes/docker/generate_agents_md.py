@@ -2,15 +2,15 @@
 """Generate AGENTS.md by scanning the files directory and populating the template.
 
 This script runs during session setup, AFTER files have been synced from S3
-and the files symlink has been created. It scans the knowledge source directory
-to discover what's available and replaces the {{KNOWLEDGE_SOURCES_SECTION}}
-placeholder in an existing AGENTS.md file.
+and the files symlink has been created. It reads the template from stdin,
+replaces the {{KNOWLEDGE_SOURCES_SECTION}} placeholder by scanning the
+knowledge source directory, and writes the final AGENTS.md to the output path.
 
 Usage:
-    python3 generate_agents_md.py <agents_md_path> <files_path>
+    printf '%s' "$TEMPLATE" | python3 generate_agents_md.py <output_path> <files_path>
 
 Arguments:
-    agents_md_path: Path to the AGENTS.md file to update (read + overwrite)
+    output_path: Path to write the final AGENTS.md
     files_path: Path to the files directory to scan for knowledge sources
 """
 
@@ -193,46 +193,38 @@ def build_knowledge_sources_section(files_path: Path) -> str:
 def main() -> None:
     """Main entry point for container startup script.
 
-    Called from the K8s session setup script after AGENTS.md is written with the
-    {{KNOWLEDGE_SOURCES_SECTION}} placeholder still intact.
+    Reads the template from stdin, replaces the {{KNOWLEDGE_SOURCES_SECTION}}
+    placeholder by scanning the files directory, and writes the result.
 
     Usage:
-        python3 generate_agents_md.py <agents_md_path> <files_path>
+        printf '%s' "$TEMPLATE" | python3 generate_agents_md.py <output_path> <files_path>
     """
     if len(sys.argv) != 3:
         print(
-            f"Usage: {sys.argv[0]} <agents_md_path> <files_path>",
+            f"Usage: {sys.argv[0]} <output_path> <files_path>",
             file=sys.stderr,
         )
         sys.exit(1)
 
-    agents_md_path = Path(sys.argv[1])
+    output_path = Path(sys.argv[1])
     files_path = Path(sys.argv[2])
 
-    # Read existing AGENTS.md (contains {{KNOWLEDGE_SOURCES_SECTION}} placeholder)
-    if not agents_md_path.exists():
-        print(f"Error: AGENTS.md not found at {agents_md_path}", file=sys.stderr)
+    # Read template from stdin
+    template = sys.stdin.read()
+    if not template:
+        print("Error: No template content provided on stdin", file=sys.stderr)
         sys.exit(1)
-
-    template = agents_md_path.read_text()
-
-    if "{{KNOWLEDGE_SOURCES_SECTION}}" not in template:
-        print(
-            "Warning: {{KNOWLEDGE_SOURCES_SECTION}} placeholder not found in AGENTS.md",
-            file=sys.stderr,
-        )
-        return
 
     # Resolve symlinks (handles both direct symlinks and dirs containing symlinks)
     resolved_files_path = files_path.resolve()
 
     knowledge_sources_section = build_knowledge_sources_section(resolved_files_path)
 
-    # Replace placeholder and write back
+    # Replace placeholder and write final file
     content = template.replace(
         "{{KNOWLEDGE_SOURCES_SECTION}}", knowledge_sources_section
     )
-    agents_md_path.write_text(content)
+    output_path.write_text(content)
 
     # Log result
     source_count = 0
@@ -245,7 +237,7 @@ def main() -> None:
             ]
         )
     print(
-        f"Generated knowledge sources in {agents_md_path} "
+        f"Generated knowledge sources in {output_path} "
         f"({source_count} sources from {resolved_files_path})"
     )
 

@@ -1348,13 +1348,10 @@ if [ -d /workspace/skills ]; then
     echo "Linked skills to /workspace/skills"
 fi
 
-# Write agent instructions (with {{{{KNOWLEDGE_SOURCES_SECTION}}}} placeholder)
+# Write agent instructions (scans files dir to populate knowledge sources)
 echo "Writing AGENTS.md"
-printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
-
-# Replace knowledge sources placeholder by scanning the files directory
-echo "Populating knowledge sources section"
-python3 /usr/local/bin/generate_agents_md.py {session_path}/AGENTS.md {session_path}/files
+printf '%s' '{agent_instructions_escaped}' \
+  | python3 /usr/local/bin/generate_agents_md.py {session_path}/AGENTS.md {session_path}/files
 
 # Write opencode config
 echo "Writing opencode.json"
@@ -1780,15 +1777,11 @@ set -e
 echo "Creating files symlink to {symlink_target}"
 ln -sf {symlink_target} {session_path}/files
 
-# Write agent instructions (with {{{{KNOWLEDGE_SOURCES_SECTION}}}} placeholder)
+# Write agent instructions (scans files dir to populate knowledge sources)
 echo "Writing AGENTS.md"
-printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
-
-# Replace knowledge sources placeholder by scanning the files directory
-echo "Populating knowledge sources section"
-python3 /usr/local/bin/generate_agents_md.py \
-  {session_path}/AGENTS.md {session_path}/files \
-  || echo "Warning: Failed to populate knowledge sources"
+printf '%s' '{agent_instructions_escaped}' \
+  | python3 /usr/local/bin/generate_agents_md.py \
+  {session_path}/AGENTS.md {session_path}/files
 
 # Write opencode config
 echo "Writing opencode.json"
