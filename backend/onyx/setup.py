@@ -245,7 +245,11 @@ def setup_postgres(db_session: Session) -> None:
     create_initial_default_connector(db_session)
     associate_default_cc_pair(db_session)
 
-    if GEN_AI_API_KEY and fetch_default_llm_model(db_session) is None:
+    if (
+        GEN_AI_API_KEY
+        and fetch_default_llm_model(db_session) is None
+        and not INTEGRATION_TESTS_MODE
+    ):
         # Only for dev flows
         logger.notice("Setting up default OpenAI LLM for dev.")
 
