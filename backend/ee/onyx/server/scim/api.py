@@ -31,6 +31,7 @@ from ee.onyx.server.scim.models import ScimError
 from ee.onyx.server.scim.models import ScimGroupMember
 from ee.onyx.server.scim.models import ScimGroupResource
 from ee.onyx.server.scim.models import ScimListResponse
+from ee.onyx.server.scim.models import ScimMappingFields
 from ee.onyx.server.scim.models import ScimName
 from ee.onyx.server.scim.models import ScimPatchRequest
 from ee.onyx.server.scim.models import ScimServiceProviderConfig
@@ -40,6 +41,7 @@ from ee.onyx.server.scim.patch import apply_user_patch
 from ee.onyx.server.scim.patch import ScimPatchError
 from ee.onyx.server.scim.providers.base import get_default_provider
 from ee.onyx.server.scim.providers.base import ScimProvider
+from ee.onyx.server.scim.providers.base import serialize_emails
 from ee.onyx.server.scim.schema_definitions import GROUP_RESOURCE_TYPE
 from ee.onyx.server.scim.schema_definitions import GROUP_SCHEMA_DEF
 from ee.onyx.server.scim.schema_definitions import SERVICE_PROVIDER_CONFIG
@@ -47,6 +49,7 @@ from ee.onyx.server.scim.schema_definitions import USER_RESOURCE_TYPE
 from ee.onyx.server.scim.schema_definitions import USER_SCHEMA_DEF
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import ScimToken
+from onyx.db.models import ScimUserMapping
 from onyx.db.models import User
 from onyx.db.models import UserGroup
 from onyx.db.models import UserRole
@@ -261,6 +264,30 @@ def _build_list_response(
     )
 
 
+def _mapping_to_fields(
+    mapping: ScimUserMapping | None,
+) -> ScimMappingFields | None:
+    """Extract round-trip fields from a SCIM user mapping."""
+    if not mapping:
+        return None
+    return ScimMappingFields(
+        department=mapping.department,
+        manager=mapping.manager,
+        given_name=mapping.given_name,
+        family_name=mapping.family_name,
+        scim_emails_json=mapping.scim_emails_json,
+    )
+
+
+def _fields_from_resource(resource: ScimUserResource) -> ScimMappingFields:
+    """Build mapping fields from an incoming SCIM user resource."""
+    return ScimMappingFields(
+        given_name=resource.name.givenName if resource.name else None,
+        family_name=resource.name.familyName if resource.name else None,
+        scim_emails_json=serialize_emails(resource.emails),
+    )
+
+
 # ---------------------------------------------------------------------------
 # User CRUD (RFC 7644 §3)
 # ---------------------------------------------------------------------------
@@ -297,6 +324,7 @@ def list_users(
             mapping.external_id if mapping else None,
             groups=user_groups_map.get(user.id, []),
             scim_username=mapping.scim_username if mapping else None,
+            fields=_mapping_to_fields(mapping),
         )
         for user, mapping in users_with_mappings
     ]
@@ -334,6 +362,7 @@ def get_user(
         mapping.external_id if mapping else None,
         groups=dal.get_user_groups(user.id),
         scim_username=mapping.scim_username if mapping else None,
+        fields=_mapping_to_fields(mapping),
     )
 
     # RFC 7644 §3.4.2.5 — IdP may request certain attributes be omitted
@@ -392,14 +421,23 @@ def create_user(
     # Create SCIM mapping (externalId is validated above, always present)
     external_id = user_resource.externalId
     scim_username = user_resource.userName.strip()
+    fields = _fields_from_resource(user_resource)
     dal.create_user_mapping(
-        external_id=external_id, user_id=user.id, scim_username=scim_username
+        external_id=external_id,
+        user_id=user.id,
+        scim_username=scim_username,
+        fields=fields,
     )
 
     dal.commit()
 
     return _scim_resource_response(
-        provider.build_user_resource(user, external_id, scim_username=scim_username),
+        provider.build_user_resource(
+            user,
+            external_id,
+            scim_username=scim_username,
+            fields=fields,
+        ),
         status_code=201,
     )
 
@@ -438,7 +476,13 @@ def replace_user(
 
     new_external_id = user_resource.externalId
     scim_username = user_resource.userName.strip()
-    dal.sync_user_external_id(user.id, new_external_id, scim_username=scim_username)
+    fields = _fields_from_resource(user_resource)
+    dal.sync_user_external_id(
+        user.id,
+        new_external_id,
+        scim_username=scim_username,
+        fields=fields,
+    )
 
     dal.commit()
 
@@ -448,6 +492,7 @@ def replace_user(
             new_external_id,
             groups=dal.get_user_groups(user.id),
             scim_username=scim_username,
+            fields=fields,
         )
     )
 
@@ -476,12 +521,14 @@ def patch_user(
     mapping = dal.get_user_mapping_by_user_id(user.id)
     external_id = mapping.external_id if mapping else None
     current_scim_username = mapping.scim_username if mapping else None
+    current_fields = _mapping_to_fields(mapping)
 
     current = provider.build_user_resource(
         user,
         external_id,
         groups=dal.get_user_groups(user.id),
         scim_username=current_scim_username,
+        fields=current_fields,
     )
 
     try:
@@ -520,8 +567,25 @@ def patch_user(
         personal_name=personal_name,
     )
 
+    # Build updated fields from the patched resource
+    cf = current_fields or ScimMappingFields()
+    fields = ScimMappingFields(
+        department=cf.department,
+        manager=cf.manager,
+        given_name=patched.name.givenName if patched.name else cf.given_name,
+        family_name=patched.name.familyName if patched.name else cf.family_name,
+        scim_emails_json=(
+            serialize_emails(patched.emails)
+            if patched.emails is not None
+            else cf.scim_emails_json
+        ),
+    )
+
     dal.sync_user_external_id(
-        user.id, patched.externalId, scim_username=new_scim_username
+        user.id,
+        patched.externalId,
+        scim_username=new_scim_username,
+        fields=fields,
     )
 
     dal.commit()
@@ -532,6 +596,7 @@ def patch_user(
             patched.externalId,
             groups=dal.get_user_groups(user.id),
             scim_username=new_scim_username,
+            fields=fields,
         )
     )
 

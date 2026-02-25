@@ -16,6 +16,7 @@ from ee.onyx.server.scim.api import get_user
 from ee.onyx.server.scim.api import list_users
 from ee.onyx.server.scim.api import patch_user
 from ee.onyx.server.scim.api import replace_user
+from ee.onyx.server.scim.models import ScimMappingFields
 from ee.onyx.server.scim.models import ScimName
 from ee.onyx.server.scim.models import ScimPatchOperation
 from ee.onyx.server.scim.models import ScimPatchOperationType
@@ -418,6 +419,10 @@ class TestReplaceUser:
             user.id,
             None,
             scim_username="test@example.com",
+            fields=ScimMappingFields(
+                given_name="Test",
+                family_name="User",
+            ),
         )
 
 
