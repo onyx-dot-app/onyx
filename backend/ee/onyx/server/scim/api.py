@@ -42,6 +42,7 @@ from ee.onyx.server.scim.patch import ScimPatchError
 from ee.onyx.server.scim.providers.base import get_default_provider
 from ee.onyx.server.scim.providers.base import ScimProvider
 from ee.onyx.server.scim.providers.base import serialize_emails
+from ee.onyx.server.scim.schema_definitions import ENTERPRISE_USER_SCHEMA_DEF
 from ee.onyx.server.scim.schema_definitions import GROUP_RESOURCE_TYPE
 from ee.onyx.server.scim.schema_definitions import GROUP_SCHEMA_DEF
 from ee.onyx.server.scim.schema_definitions import SERVICE_PROVIDER_CONFIG
@@ -125,7 +126,7 @@ def get_schemas() -> ScimJSONResponse:
     Wrapped in a ListResponse envelope (RFC 7644 §3.4.2) because IdPs
     like Entra ID expect a JSON object, not a bare array.
     """
-    schemas = [USER_SCHEMA_DEF, GROUP_SCHEMA_DEF]
+    schemas = [USER_SCHEMA_DEF, GROUP_SCHEMA_DEF, ENTERPRISE_USER_SCHEMA_DEF]
     return ScimJSONResponse(
         content={
             "schemas": [SCIM_LIST_RESPONSE_SCHEMA],
@@ -264,6 +265,18 @@ def _build_list_response(
     )
 
 
+def _extract_enterprise_fields(
+    resource: ScimUserResource,
+) -> tuple[str | None, str | None]:
+    """Extract department and manager from enterprise extension."""
+    ext = resource.enterprise_extension
+    if not ext:
+        return None, None
+    department = ext.department
+    manager = ext.manager.value if ext.manager else None
+    return department, manager
+
+
 def _mapping_to_fields(
     mapping: ScimUserMapping | None,
 ) -> ScimMappingFields | None:
@@ -281,7 +294,10 @@ def _mapping_to_fields(
 
 def _fields_from_resource(resource: ScimUserResource) -> ScimMappingFields:
     """Build mapping fields from an incoming SCIM user resource."""
+    department, manager = _extract_enterprise_fields(resource)
     return ScimMappingFields(
+        department=department,
+        manager=manager,
         given_name=resource.name.givenName if resource.name else None,
         family_name=resource.name.familyName if resource.name else None,
         scim_emails_json=serialize_emails(resource.emails),
@@ -532,7 +548,7 @@ def patch_user(
     )
 
     try:
-        patched = apply_user_patch(
+        patched, ent_data = apply_user_patch(
             patch_request.Operations, current, provider.ignored_patch_paths
         )
     except ScimPatchError as e:
@@ -567,11 +583,11 @@ def patch_user(
         personal_name=personal_name,
     )
 
-    # Build updated fields from the patched resource
+    # Build updated fields by merging PATCH enterprise data with current values
     cf = current_fields or ScimMappingFields()
     fields = ScimMappingFields(
-        department=cf.department,
-        manager=cf.manager,
+        department=ent_data.get("department", cf.department),
+        manager=ent_data.get("manager", cf.manager),
         given_name=patched.name.givenName if patched.name else cf.given_name,
         family_name=patched.name.familyName if patched.name else cf.family_name,
         scim_emails_json=(

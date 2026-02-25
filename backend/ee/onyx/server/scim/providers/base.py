@@ -10,10 +10,13 @@ from uuid import UUID
 
 from pydantic import ValidationError
 
+from ee.onyx.server.scim.models import SCIM_ENTERPRISE_USER_SCHEMA
 from ee.onyx.server.scim.models import SCIM_USER_SCHEMA
 from ee.onyx.server.scim.models import ScimEmail
+from ee.onyx.server.scim.models import ScimEnterpriseExtension
 from ee.onyx.server.scim.models import ScimGroupMember
 from ee.onyx.server.scim.models import ScimGroupResource
+from ee.onyx.server.scim.models import ScimManagerRef
 from ee.onyx.server.scim.models import ScimMappingFields
 from ee.onyx.server.scim.models import ScimMeta
 from ee.onyx.server.scim.models import ScimName
@@ -95,11 +98,26 @@ class ScimProvider(ABC):
 
         username = scim_username or user.email
 
+        # Build enterprise extension when at least one value is present.
+        # Dynamically add the enterprise URN to schemas per RFC 7643 §3.0.
+        enterprise_ext: ScimEnterpriseExtension | None = None
+        schemas = list(self.user_schemas)
+        if f.department is not None or f.manager is not None:
+            manager_ref = (
+                ScimManagerRef(value=f.manager) if f.manager is not None else None
+            )
+            enterprise_ext = ScimEnterpriseExtension(
+                department=f.department,
+                manager=manager_ref,
+            )
+            if SCIM_ENTERPRISE_USER_SCHEMA not in schemas:
+                schemas.append(SCIM_ENTERPRISE_USER_SCHEMA)
+
         name = self.build_scim_name(user, f)
         emails = _deserialize_emails(f.scim_emails_json, username)
 
-        return ScimUserResource(
-            schemas=list(self.user_schemas),
+        resource = ScimUserResource(
+            schemas=schemas,
             id=str(user.id),
             externalId=external_id,
             userName=username,
@@ -110,6 +128,8 @@ class ScimProvider(ABC):
             groups=group_refs,
             meta=ScimMeta(resourceType="User"),
         )
+        resource.enterprise_extension = enterprise_ext
+        return resource
 
     def build_group_resource(
         self,
