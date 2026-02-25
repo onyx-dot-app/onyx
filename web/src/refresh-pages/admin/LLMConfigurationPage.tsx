@@ -228,7 +228,8 @@ function NewCustomProviderCard({
 
 export default function LLMConfigurationPage() {
   const { mutate } = useSWRConfig();
-  const { llmProviders: existingLlmProviders } = useAdminLLMProviders();
+  const { llmProviders: existingLlmProviders, defaultText } =
+    useAdminLLMProviders();
   const { wellKnownLLMProviders } = useWellKnownLLMProviders();
 
   if (!existingLlmProviders) {
@@ -238,12 +239,9 @@ export default function LLMConfigurationPage() {
   const hasProviders = existingLlmProviders.length > 0;
   const isFirstProvider = !hasProviders;
 
-  // Default model logic
-  const defaultProvider = existingLlmProviders.find(
-    (p) => p.is_default_provider
-  );
-  const currentDefaultValue = defaultProvider
-    ? `${defaultProvider.id}:${defaultProvider.default_model_name}`
+  // Default model logic — use the global default from the API response
+  const currentDefaultValue = defaultText
+    ? `${defaultText.provider_id}:${defaultText.model_name}`
     : undefined;
 
   async function handleDefaultModelChange(compositeValue: string) {
