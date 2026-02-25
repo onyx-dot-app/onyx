@@ -6,7 +6,7 @@ from tests.integration.common_utils.test_models import DATestUser
 
 CODE_INTERPRETER_URL = f"{API_SERVER_URL}/admin/code-interpreter"
 CODE_INTERPRETER_HEALTH_URL = f"{CODE_INTERPRETER_URL}/health"
-PYTHON_TOOL_NAME = "run_python"
+PYTHON_TOOL_NAME = "python"
 
 
 def test_get_code_interpreter_health_as_admin(
