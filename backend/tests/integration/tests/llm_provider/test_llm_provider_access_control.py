@@ -365,7 +365,7 @@ def test_list_llm_provider_basics_excludes_non_public_unrestricted(
         headers=basic_user.headers,
     )
     assert response.status_code == 200
-    providers = response.json()
+    providers = response.json()["providers"]
     provider_names = [p["name"] for p in providers]
 
     # Public provider should be visible
@@ -380,7 +380,7 @@ def test_list_llm_provider_basics_excludes_non_public_unrestricted(
         headers=admin_user.headers,
     )
     assert admin_response.status_code == 200
-    admin_providers = admin_response.json()
+    admin_providers = admin_response.json()["providers"]
     admin_provider_names = [p["name"] for p in admin_providers]
 
     assert public_provider.name in admin_provider_names
