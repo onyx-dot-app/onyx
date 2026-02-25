@@ -51,6 +51,23 @@ function CodeInterpreterCard({
   );
 }
 
+function CheckingStatus() {
+  return (
+    <GeneralLayouts.Section
+      flexDirection="row"
+      gap={0.4}
+      padding={0}
+      justifyContent="end"
+      alignItems="center"
+    >
+      <Text mainUiAction text03>
+        Checking...
+      </Text>
+      <SimpleLoader />
+    </GeneralLayouts.Section>
+  );
+}
+
 interface ConnectionStatusProps {
   healthy: boolean;
   isLoading: boolean;
@@ -58,20 +75,7 @@ interface ConnectionStatusProps {
 
 function ConnectionStatus({ healthy, isLoading }: ConnectionStatusProps) {
   if (isLoading) {
-    return (
-      <GeneralLayouts.Section
-        flexDirection="row"
-        gap={0.4}
-        padding={0}
-        justifyContent="end"
-        alignItems="center"
-      >
-        <Text mainUiAction text03>
-          Checking...
-        </Text>
-        <SimpleLoader />
-      </GeneralLayouts.Section>
-    );
+    return <CheckingStatus />;
   }
 
   const label = healthy ? "Connected" : "Connection Lost";
@@ -179,18 +183,7 @@ export default function CodeInterpreterPage() {
             strikethrough={true}
             rightContent={
               isReconnecting ? (
-                <GeneralLayouts.Section
-                  flexDirection="row"
-                  gap={0.4}
-                  padding={0}
-                  justifyContent="end"
-                  alignItems="center"
-                >
-                  <Text mainUiAction text03>
-                    Checking...
-                  </Text>
-                  <SimpleLoader />
-                </GeneralLayouts.Section>
+                <CheckingStatus />
               ) : (
                 <Button
                   prominence="tertiary"
