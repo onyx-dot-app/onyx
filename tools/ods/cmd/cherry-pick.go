@@ -16,6 +16,8 @@ import (
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/prompt"
 )
 
+const cherryPickPRLabel = "cherry-pick 🍒"
+
 // CherryPickOptions holds options for the cherry-pick command
 type CherryPickOptions struct {
 	Releases []string
@@ -510,6 +512,7 @@ func createCherryPickPR(headBranch, baseBranch, title string, commitSHAs, commit
 		"--head", headBranch,
 		"--title", title,
 		"--body", body,
+		"--label", cherryPickPRLabel,
 	}
 
 	for _, assignee := range assignees {

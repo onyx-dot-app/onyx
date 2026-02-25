@@ -171,10 +171,10 @@ const HumanMessage = React.memo(function HumanMessage({
   return (
     <div
       id="onyx-human-message"
-      className="group flex flex-col justify-end pt-5 pb-1 w-full -mr-6 relative"
+      className="group flex flex-col justify-end w-full relative"
     >
       <FileDisplay alignBubble files={files || []} />
-      <div className="flex flex-wrap justify-end break-words">
+      <div className="md:flex md:flex-wrap relative justify-end break-words">
         {isEditing ? (
           <MessageEditing
             content={content}
@@ -215,7 +215,7 @@ const HumanMessage = React.memo(function HumanMessage({
               </div>
             </div>
             {onEdit && !isEditing && (
-              <div className="flex flex-row p-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="absolute md:relative right-0 z-content flex flex-row p-1 opacity-0 group-hover:opacity-100 transition-opacity">
                 <CopyIconButton
                   getCopyText={() => content}
                   prominence="tertiary"

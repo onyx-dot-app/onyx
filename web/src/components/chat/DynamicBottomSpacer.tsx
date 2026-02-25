@@ -298,6 +298,7 @@ const DynamicBottomSpacer = React.memo(
         ref={spacerRef}
         data-dynamic-spacer="true"
         aria-hidden="true"
+        className="w-full"
         style={{
           height: "0px",
           flexShrink: 0,
