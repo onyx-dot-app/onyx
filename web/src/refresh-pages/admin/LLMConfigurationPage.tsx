@@ -344,7 +344,7 @@ export default function LLMConfigurationPage() {
 
         {/* ── Add Provider (always visible) ── */}
         <GeneralLayouts.Section
-          gap={0.5}
+          gap={0.75}
           height="fit"
           alignItems="stretch"
           justifyContent="start"
