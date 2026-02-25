@@ -12,6 +12,7 @@ from onyx.configs.app_configs import CODE_INTERPRETER_BASE_URL
 from onyx.configs.app_configs import CODE_INTERPRETER_DEFAULT_TIMEOUT_MS
 from onyx.configs.app_configs import CODE_INTERPRETER_MAX_OUTPUT_LENGTH
 from onyx.configs.constants import FileOrigin
+from onyx.db.code_interpreter import fetch_code_interpreter_server
 from onyx.file_store.utils import build_full_frontend_file_url
 from onyx.file_store.utils import get_default_file_store
 from onyx.server.query_and_chat.placement import Placement
@@ -103,8 +104,10 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
     @override
     @classmethod
     def is_available(cls, db_session: Session) -> bool:
-        is_available = bool(CODE_INTERPRETER_BASE_URL)
-        return is_available
+        if not CODE_INTERPRETER_BASE_URL:
+            return False
+        server = fetch_code_interpreter_server(db_session)
+        return server.server_enabled
 
     def tool_definition(self) -> dict:
         return {
