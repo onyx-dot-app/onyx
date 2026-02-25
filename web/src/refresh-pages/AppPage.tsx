@@ -227,6 +227,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const {
     showOnboarding,
+    onboardingDismissed,
     onboardingState,
     onboardingActions,
     llmDescriptors,
@@ -462,7 +463,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
         currentMessageFiles,
         deepResearch: deepResearchEnabled,
       });
-      if (showOnboarding) {
+      if (showOnboarding || !onboardingDismissed) {
         finishOnboarding();
       }
     },
@@ -472,6 +473,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       currentMessageFiles,
       deepResearchEnabled,
       showOnboarding,
+      onboardingDismissed,
       finishOnboarding,
     ]
   );
@@ -505,7 +507,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
           currentMessageFiles,
           deepResearch: deepResearchEnabled,
         });
-        if (showOnboarding) {
+        if (showOnboarding || !onboardingDismissed) {
           finishOnboarding();
         }
         return;
@@ -526,6 +528,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       currentMessageFiles,
       deepResearchEnabled,
       showOnboarding,
+      onboardingDismissed,
       finishOnboarding,
     ]
   );
@@ -797,7 +800,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     {/* OnboardingUI */}
                     {(appFocus.isNewSession() || appFocus.isAgent()) &&
                       !classification &&
-                      (showOnboarding || !user?.personalization?.name) && (
+                      (showOnboarding || !user?.personalization?.name) &&
+                      !onboardingDismissed && (
                         <OnboardingFlow
                           showOnboarding={showOnboarding}
                           handleHideOnboarding={hideOnboarding}
