@@ -621,4 +621,4 @@ Before writing your plan, make sure to do research. Explore the relevant section
 
 In addition to the other content in this file, best practices for contributing
 to the codebase can be found at `contributing_guides/best_practices.md`.
-Understand its contants and follow them.
+Understand its contents and follow them.
