@@ -209,7 +209,7 @@ function NewCustomProviderCard({
             prominence="tertiary"
             onClick={() => setIsOpen(true)}
           >
-            Connect
+            Set Up
           </Button>
         }
       />
@@ -320,7 +320,7 @@ export default function LLMConfigurationPage() {
                 variant="section"
               />
 
-              <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-2">
                 {[...existingLlmProviders]
                   .sort((a, b) => {
                     const aIsDefault = defaultText?.provider_id === a.id;
@@ -357,7 +357,7 @@ export default function LLMConfigurationPage() {
             variant="section"
           />
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-2">
             {wellKnownLLMProviders?.map((provider) => {
               const formFn = PROVIDER_MODAL_MAP[provider.name];
               if (!formFn) return null;
