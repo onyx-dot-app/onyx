@@ -65,7 +65,6 @@ export function VertexAIModal({
             modelConfigurations
           ),
           default_model_name:
-            existingLlmProvider?.default_model_name ??
             wellKnownLLMProvider?.recommended_default_model?.name ??
             VERTEXAI_DEFAULT_MODEL,
           // Default to auto mode for new Vertex AI providers

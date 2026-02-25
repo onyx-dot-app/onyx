@@ -70,8 +70,7 @@ export function useLLMProviders(personaId?: number) {
  *
  * Hits `GET /api/admin/llm/provider` which returns `LLMProviderView` —
  * the full provider object including `id`, `api_key` (masked),
- * `is_default_provider`, group/persona assignments, and all other
- * admin-visible fields.
+ * group/persona assignments, and all other admin-visible fields.
  *
  * Use this hook on admin pages (e.g. the LLM Configuration page) where
  * you need provider IDs for mutations (setting defaults, editing, deleting)
