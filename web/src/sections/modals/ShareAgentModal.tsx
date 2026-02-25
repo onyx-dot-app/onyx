@@ -30,6 +30,8 @@ import { useAgent } from "@/hooks/useAgents";
 import { Button as OpalButton } from "@opal/components";
 import { useLabels } from "@/lib/hooks";
 import { PersonaLabel } from "@/app/admin/assistants/interfaces";
+import { UserRole } from "@/lib/types";
+import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 
 const YOUR_ORGANIZATION_TAB = "Your Organization";
 const USERS_AND_GROUPS_TAB = "Users & Groups";
@@ -67,6 +69,10 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
 
   const acceptedUsers = usersData ?? [];
   const groups = groupsData ?? [];
+  const canUpdateFeaturedStatus =
+    currentUser?.role === UserRole.ADMIN ||
+    currentUser?.role === UserRole.CURATOR ||
+    currentUser?.role === UserRole.GLOBAL_CURATOR;
 
   // Create options for InputComboBox from all accepted users and groups
   const comboBoxOptions = useMemo(() => {
@@ -299,7 +305,20 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
                   title="Feature This Agent"
                   description="Show this agent at the top of the explore agents list and automatically pin it to the sidebar for new users with access."
                 >
-                  <SwitchField name="isFeatured" />
+                  <SimpleTooltip
+                    tooltip={
+                      !canUpdateFeaturedStatus
+                        ? "Only curators and admins can feature agents."
+                        : undefined
+                    }
+                  >
+                    <span className="inline-flex">
+                      <SwitchField
+                        name="isFeatured"
+                        disabled={!canUpdateFeaturedStatus}
+                      />
+                    </span>
+                  </SimpleTooltip>
                 </InputLayouts.Horizontal>
 
                 <InputChipField

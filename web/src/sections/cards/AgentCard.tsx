@@ -18,6 +18,7 @@ import {
   updateAgentFeaturedStatus,
 } from "@/lib/agents";
 import { useUser } from "@/providers/UserProvider";
+import { UserRole } from "@/lib/types";
 import {
   SvgActions,
   SvgBarChart,
@@ -50,6 +51,10 @@ export default function AgentCard({ agent }: AgentCardProps) {
   );
   const { user } = useUser();
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
+  const canUpdateFeaturedStatus =
+    user?.role === UserRole.ADMIN ||
+    user?.role === UserRole.CURATOR ||
+    user?.role === UserRole.GLOBAL_CURATOR;
   const isOwnedByUser = checkUserOwnsAssistant(user, agent);
   const shareAgentModal = useCreateModal();
   const agentViewerModal = useCreateModal();
@@ -90,19 +95,26 @@ export default function AgentCard({ agent }: AgentCardProps) {
         return;
       }
 
-      const featuredError = await updateAgentFeaturedStatus(
-        agent.id,
-        isFeatured
-      );
-      if (featuredError) {
-        toast.error(`Failed to update featured status: ${featuredError}`);
-        return;
+      if (canUpdateFeaturedStatus) {
+        const featuredError = await updateAgentFeaturedStatus(
+          agent.id,
+          isFeatured
+        );
+        if (featuredError) {
+          toast.error(`Failed to update featured status: ${featuredError}`);
+          return;
+        }
       }
 
       refreshAgent();
       shareAgentModal.toggle(false);
     },
-    [agent.id, isPaidEnterpriseFeaturesEnabled, refreshAgent]
+    [
+      agent.id,
+      canUpdateFeaturedStatus,
+      isPaidEnterpriseFeaturesEnabled,
+      refreshAgent,
+    ]
   );
 
   return (
