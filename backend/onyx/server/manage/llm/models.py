@@ -1,5 +1,9 @@
+from __future__ import annotations
+
 from typing import Any
+from typing import Generic
 from typing import TYPE_CHECKING
+from typing import TypeVar
 
 from pydantic import BaseModel
 from pydantic import Field
@@ -20,6 +24,8 @@ if TYPE_CHECKING:
         LLMProvider as LLMProviderModel,
         ModelConfiguration as ModelConfigurationModel,
     )
+
+T = TypeVar("T", bound="LLMProviderDescriptor | LLMProviderView")
 
 
 # TODO: Clear this up on api refactor
@@ -423,3 +429,38 @@ class OpenRouterFinalModelResponse(BaseModel):
         int | None
     )  # From OpenRouter API context_length (may be missing for some models)
     supports_image_input: bool
+
+
+class DefaultModel(BaseModel):
+    provider_id: int
+    model_name: str
+
+    @classmethod
+    def from_model_config(
+        cls, model_config: ModelConfigurationModel | None
+    ) -> DefaultModel | None:
+        if not model_config:
+            return None
+        return cls(
+            provider_id=model_config.llm_provider_id,
+            model_name=model_config.name,
+        )
+
+
+class LLMProviderResponse(BaseModel, Generic[T]):
+    providers: list[T]
+    default_text: DefaultModel | None = None
+    default_vision: DefaultModel | None = None
+
+    @classmethod
+    def from_models(
+        cls,
+        providers: list[T],
+        default_text: DefaultModel | None = None,
+        default_vision: DefaultModel | None = None,
+    ) -> LLMProviderResponse[T]:
+        return cls(
+            providers=providers,
+            default_text=default_text,
+            default_vision=default_vision,
+        )
