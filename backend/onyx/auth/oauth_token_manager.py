@@ -71,9 +71,9 @@ class OAuthTokenManager:
         data: dict[str, str] = {
             "grant_type": "refresh_token",
             "refresh_token": token_data["refresh_token"],
-            "client_id": self.oauth_config.client_id.get_value(apply_mask=False),
-            "client_secret": self.oauth_config.client_secret.get_value(
-                apply_mask=False
+            "client_id": self._unwrap_sensitive_str(self.oauth_config.client_id),
+            "client_secret": self._unwrap_sensitive_str(
+                self.oauth_config.client_secret
             ),
         }
         response = requests.post(
@@ -137,9 +137,9 @@ class OAuthTokenManager:
         data: dict[str, str] = {
             "grant_type": "authorization_code",
             "code": code,
-            "client_id": self.oauth_config.client_id.get_value(apply_mask=False),
-            "client_secret": self.oauth_config.client_secret.get_value(
-                apply_mask=False
+            "client_id": self._unwrap_sensitive_str(self.oauth_config.client_id),
+            "client_secret": self._unwrap_sensitive_str(
+                self.oauth_config.client_secret
             ),
             "redirect_uri": redirect_uri,
         }
@@ -167,7 +167,9 @@ class OAuthTokenManager:
             raise ValueError("OAuth client_id is required to build authorization URL")
 
         params: dict[str, Any] = {
-            "client_id": oauth_config.client_id.get_value(apply_mask=False),
+            "client_id": OAuthTokenManager._unwrap_sensitive_str(
+                oauth_config.client_id
+            ),
             "redirect_uri": redirect_uri,
             "response_type": "code",
             "state": state,
@@ -185,6 +187,12 @@ class OAuthTokenManager:
         separator = "&" if "?" in oauth_config.authorization_url else "?"
 
         return f"{oauth_config.authorization_url}{separator}{urlencode(params)}"
+
+    @staticmethod
+    def _unwrap_sensitive_str(value: SensitiveValue[str] | str) -> str:
+        if isinstance(value, SensitiveValue):
+            return value.get_value(apply_mask=False)
+        return value
 
     @staticmethod
     def _unwrap_token_data(
