@@ -4,6 +4,7 @@ import { imageVariant } from "@/sections/modals/PreviewModal/variants/imageVaria
 import { pdfVariant } from "@/sections/modals/PreviewModal/variants/pdfVariant";
 import { csvVariant } from "@/sections/modals/PreviewModal/variants/csvVariant";
 import { markdownVariant } from "@/sections/modals/PreviewModal/variants/markdownVariant";
+import { dataVariant } from "@/sections/modals/PreviewModal/variants/dataVariant";
 import { unsupportedVariant } from "@/sections/modals/PreviewModal/variants/unsupportedVariant";
 
 const PREVIEW_VARIANTS: PreviewVariant[] = [
@@ -12,6 +13,7 @@ const PREVIEW_VARIANTS: PreviewVariant[] = [
   pdfVariant,
   csvVariant,
   markdownVariant,
+  dataVariant,
 ];
 
 export function resolveVariant(

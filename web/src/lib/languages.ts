@@ -7,6 +7,11 @@ interface LinguistLanguage {
   filenames?: string[];
 }
 
+interface LanguageMaps {
+  extensions: Map<string, string>;
+  filenames: Map<string, string>;
+}
+
 const allLanguages = Object.values(languages) as LinguistLanguage[];
 
 // Collect extensions that linguist-languages assigns to "Markdown" so we can
@@ -17,27 +22,41 @@ const markdownExtensions = new Set(
     ?.extensions?.map((ext) => ext.toLowerCase()) ?? []
 );
 
-// Build extension → language name and filename → language name maps at module load
-const extensionMap = new Map<string, string>();
-const filenameMap = new Map<string, string>();
+function buildLanguageMaps(
+  type: string,
+  excludedExtensions?: Set<string>
+): LanguageMaps {
+  const extensions = new Map<string, string>();
+  const filenames = new Map<string, string>();
 
-for (const lang of allLanguages) {
-  if (lang.type !== "programming") continue;
+  for (const lang of allLanguages) {
+    if (lang.type !== type) continue;
 
-  const name = lang.name.toLowerCase();
-  for (const ext of lang.extensions ?? []) {
-    if (markdownExtensions.has(ext.toLowerCase())) continue;
-    // First language to claim an extension wins
-    if (!extensionMap.has(ext)) {
-      extensionMap.set(ext, name);
+    const name = lang.name.toLowerCase();
+    for (const ext of lang.extensions ?? []) {
+      if (excludedExtensions?.has(ext.toLowerCase())) continue;
+      if (!extensions.has(ext)) {
+        extensions.set(ext, name);
+      }
+    }
+    for (const filename of lang.filenames ?? []) {
+      if (!filenames.has(filename.toLowerCase())) {
+        filenames.set(filename.toLowerCase(), name);
+      }
     }
   }
-  for (const filename of lang.filenames ?? []) {
-    if (!filenameMap.has(filename.toLowerCase())) {
-      filenameMap.set(filename.toLowerCase(), name);
-    }
-  }
+
+  return { extensions, filenames };
 }
+
+function lookupLanguage(name: string, maps: LanguageMaps): string | null {
+  const lower = name.toLowerCase();
+  const ext = lower.match(/\.[^.]+$/)?.[0];
+  return (ext && maps.extensions.get(ext)) ?? maps.filenames.get(lower) ?? null;
+}
+
+const codeMaps = buildLanguageMaps("programming", markdownExtensions);
+const dataMaps = buildLanguageMaps("data");
 
 /**
  * Returns the language name for a given file name, or null if it's not a
@@ -45,9 +64,16 @@ for (const lang of allLanguages) {
  * (e.g. "Dockerfile", "Makefile"). Runs in O(1).
  */
 export function getCodeLanguage(name: string): string | null {
-  const lower = name.toLowerCase();
-  const ext = lower.match(/\.[^.]+$/)?.[0];
-  return (ext && extensionMap.get(ext)) ?? filenameMap.get(lower) ?? null;
+  return lookupLanguage(name, codeMaps);
+}
+
+/**
+ * Returns the language name for a given file name if it's a recognised
+ * "data" type in linguist-languages (e.g. JSON, YAML, TOML, XML).
+ * Returns null otherwise. Runs in O(1).
+ */
+export function getDataLanguage(name: string): string | null {
+  return lookupLanguage(name, dataMaps);
 }
 
 /**
