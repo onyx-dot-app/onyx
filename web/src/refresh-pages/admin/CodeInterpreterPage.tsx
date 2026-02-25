@@ -75,13 +75,19 @@ export default function CodeInterpreterPage() {
   const [showDisconnectModal, setShowDisconnectModal] = useState(false);
 
   async function handleDisconnect() {
-    await updateCodeInterpreter({ enabled: false });
+    const response = await updateCodeInterpreter({ enabled: false });
+    if (!response.ok) {
+      return;
+    }
     setShowDisconnectModal(false);
     refetch();
   }
 
   async function handleReconnect() {
-    await updateCodeInterpreter({ enabled: true });
+    const response = await updateCodeInterpreter({ enabled: true });
+    if (!response.ok) {
+      return;
+    }
     refetch();
   }
 
