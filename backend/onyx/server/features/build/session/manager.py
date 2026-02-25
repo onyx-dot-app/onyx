@@ -68,6 +68,7 @@ from onyx.server.features.build.db.sandbox import create_sandbox__no_commit
 from onyx.server.features.build.db.sandbox import get_running_sandbox_count_by_tenant
 from onyx.server.features.build.db.sandbox import get_sandbox_by_session_id
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
+from onyx.server.features.build.db.sandbox import get_snapshots_for_session
 from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
 from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
 from onyx.server.features.build.sandbox import get_sandbox_manager
@@ -646,15 +647,29 @@ class SessionManager:
 
             if sandbox and sandbox.status.is_active():
                 # Quick health check to verify sandbox is actually responsive
-                if self._sandbox_manager.health_check(sandbox.id, timeout=5.0):
+                # AND verify the session workspace still exists on disk
+                # (it may have been wiped if the sandbox was re-provisioned)
+                is_healthy = self._sandbox_manager.health_check(sandbox.id, timeout=5.0)
+                workspace_exists = (
+                    is_healthy
+                    and self._sandbox_manager.session_workspace_exists(
+                        sandbox.id, existing.id
+                    )
+                )
+                if is_healthy and workspace_exists:
                     logger.info(
                         f"Returning existing empty session {existing.id} for user {user_id}"
                     )
                     return existing
-                else:
+                elif not is_healthy:
                     logger.warning(
                         f"Empty session {existing.id} has unhealthy sandbox {sandbox.id}. "
                         f"Deleting and creating fresh session."
+                    )
+                else:
+                    logger.warning(
+                        f"Empty session {existing.id} workspace missing in sandbox "
+                        f"{sandbox.id}. Deleting and creating fresh session."
                     )
             else:
                 logger.warning(
@@ -1034,6 +1049,23 @@ class SessionManager:
                 # Log but don't fail - session can still be deleted even if
                 # workspace cleanup fails (e.g., if pod is already terminated)
                 logger.warning(f"Failed to cleanup session workspace {session_id}: {e}")
+
+        # Delete snapshot files from S3 before removing DB records
+        snapshots = get_snapshots_for_session(self._db_session, session_id)
+        if snapshots:
+            from onyx.file_store.file_store import get_default_file_store
+            from onyx.server.features.build.sandbox.manager.snapshot_manager import (
+                SnapshotManager,
+            )
+
+            snapshot_manager = SnapshotManager(get_default_file_store())
+            for snapshot in snapshots:
+                try:
+                    snapshot_manager.delete_snapshot(snapshot.storage_path)
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to delete snapshot file {snapshot.storage_path}: {e}"
+                    )
 
         # Delete session (uses flush, caller commits)
         return delete_build_session__no_commit(session_id, user_id, self._db_session)
@@ -1765,6 +1797,7 @@ class SessionManager:
                 "webapp_url": None,
                 "status": "no_sandbox",
                 "ready": False,
+                "sharing_scope": session.sharing_scope,
             }
 
         # Return the proxy URL - the proxy handles routing to the correct sandbox
@@ -1777,11 +1810,21 @@ class SessionManager:
             # Quick health check: can the API server reach the NextJS dev server?
             ready = self._check_nextjs_ready(sandbox.id, session.nextjs_port)
 
+            # If not ready, ask the sandbox manager to ensure Next.js is running.
+            # For the local backend this triggers a background restart so that the
+            # frontend poll loop eventually sees ready=True without the user having
+            # to manually recreate the session.
+            if not ready:
+                self._sandbox_manager.ensure_nextjs_running(
+                    sandbox.id, session_id, session.nextjs_port
+                )
+
         return {
             "has_webapp": session.nextjs_port is not None,
             "webapp_url": webapp_url,
             "status": sandbox.status.value,
             "ready": ready,
+            "sharing_scope": session.sharing_scope,
         }
 
     def _check_nextjs_ready(self, sandbox_id: UUID, port: int) -> bool:
@@ -1892,6 +1935,94 @@ class SessionManager:
 
         return zip_buffer.getvalue(), filename
 
+    def download_directory(
+        self,
+        session_id: UUID,
+        user_id: UUID,
+        path: str,
+    ) -> tuple[bytes, str] | None:
+        """
+        Create a zip file of an arbitrary directory in the session workspace.
+
+        Args:
+            session_id: The session UUID
+            user_id: The user ID to verify ownership
+            path: Relative path to the directory (within session workspace)
+
+        Returns:
+            Tuple of (zip_bytes, filename) or None if session not found
+
+        Raises:
+            ValueError: If path traversal attempted or path is not a directory
+        """
+        # Verify session ownership
+        session = get_build_session(session_id, user_id, self._db_session)
+        if session is None:
+            return None
+
+        sandbox = get_sandbox_by_user_id(self._db_session, user_id)
+        if sandbox is None:
+            return None
+
+        # Check if directory exists
+        try:
+            self._sandbox_manager.list_directory(
+                sandbox_id=sandbox.id,
+                session_id=session_id,
+                path=path,
+            )
+        except ValueError:
+            return None
+
+        # Recursively collect all files
+        def collect_files(dir_path: str) -> list[tuple[str, str]]:
+            """Collect all files recursively, returning (full_path, arcname) tuples."""
+            files: list[tuple[str, str]] = []
+            try:
+                entries = self._sandbox_manager.list_directory(
+                    sandbox_id=sandbox.id,
+                    session_id=session_id,
+                    path=dir_path,
+                )
+                for entry in entries:
+                    if entry.is_directory:
+                        files.extend(collect_files(entry.path))
+                    else:
+                        # arcname is relative to the target directory
+                        prefix_len = len(path) + 1  # +1 for trailing slash
+                        arcname = entry.path[prefix_len:]
+                        files.append((entry.path, arcname))
+            except ValueError:
+                pass
+            return files
+
+        file_list = collect_files(path)
+
+        # Create zip file in memory
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+            for full_path, arcname in file_list:
+                try:
+                    content = self._sandbox_manager.read_file(
+                        sandbox_id=sandbox.id,
+                        session_id=session_id,
+                        path=full_path,
+                    )
+                    zip_file.writestr(arcname, content)
+                except ValueError:
+                    pass
+
+        zip_buffer.seek(0)
+
+        # Use the directory name for the zip filename
+        dir_name = Path(path).name
+        safe_name = "".join(
+            c if c.isalnum() or c in ("-", "_", ".") else "_" for c in dir_name
+        )
+        filename = f"{safe_name}.zip"
+
+        return zip_buffer.getvalue(), filename
+
     # =========================================================================
     # File System Operations
     # =========================================================================
@@ -1926,11 +2057,18 @@ class SessionManager:
             return None
 
         # Use sandbox manager to list directory (works for both local and K8s)
-        raw_entries = self._sandbox_manager.list_directory(
-            sandbox_id=sandbox.id,
-            session_id=session_id,
-            path=path,
-        )
+        # If the directory doesn't exist (e.g., session workspace not yet loaded),
+        # return an empty listing rather than erroring out.
+        try:
+            raw_entries = self._sandbox_manager.list_directory(
+                sandbox_id=sandbox.id,
+                session_id=session_id,
+                path=path,
+            )
+        except ValueError as e:
+            if "path traversal" in str(e).lower():
+                raise
+            return DirectoryListing(path=path, entries=[])
 
         # Filter hidden files and directories
         entries: list[FileSystemEntry] = [

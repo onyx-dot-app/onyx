@@ -28,7 +28,6 @@ from fastmcp import FastMCP
 from fastmcp.server.auth import AccessToken
 from fastmcp.server.auth import TokenVerifier
 from fastmcp.server.dependencies import get_access_token
-from fastmcp.server.server import FunctionTool
 
 # Google's tokeninfo endpoint for validating access tokens
 GOOGLE_TOKENINFO_URL = "https://oauth2.googleapis.com/tokeninfo"
@@ -148,23 +147,18 @@ class GoogleOAuthTokenVerifier(TokenVerifier):
             await self._http_client.aclose()
 
 
-def make_tools(mcp: FastMCP) -> list[FunctionTool]:
+def make_tools(mcp: FastMCP) -> None:
     """Create test tools for the MCP server."""
-    tools: list[FunctionTool] = []
 
     @mcp.tool(name="echo", description="Echo back the input message")
     def echo(message: str) -> str:
         """Echo the message back to the caller."""
         return f"You said: {message}"
 
-    tools.append(echo)
-
     @mcp.tool(name="get_secret", description="Get a secret value (requires auth)")
     def get_secret(secret_name: str) -> str:
         """Get a secret value. This proves the token was validated."""
         return f"Secret value for '{secret_name}': super-secret-value-12345"
-
-    tools.append(get_secret)
 
     @mcp.tool(name="whoami", description="Get information about the authenticated user")
     async def whoami() -> dict[str, Any]:
@@ -182,19 +176,12 @@ def make_tools(mcp: FastMCP) -> list[FunctionTool]:
             "access_type": tok.claims.get("access_type"),
         }
 
-    tools.append(whoami)
-
-    # Add some numbered tools for testing tool discovery
     for i in range(5):
 
         @mcp.tool(name=f"oauth_tool_{i}", description=f"Test tool number {i}")
         def numbered_tool(name: str, _i: int = i) -> str:
             """A numbered test tool."""
             return f"Tool {_i} says hello to {name}!"
-
-        tools.append(numbered_tool)
-
-    return tools
 
 
 if __name__ == "__main__":

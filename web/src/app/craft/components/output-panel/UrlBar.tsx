@@ -14,6 +14,8 @@ import {
 } from "@opal/icons";
 import { IconProps } from "@opal/types";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import ShareButton from "@/app/craft/components/ShareButton";
+import type { SharingScope } from "@/app/craft/types/streamingTypes";
 
 /** SvgLoader wrapped with animate-spin so it can be passed as a Button leftIcon */
 const SpinningLoader: React.FunctionComponent<IconProps> = (props) => (
@@ -38,6 +40,12 @@ export interface UrlBarProps {
   isDownloading?: boolean;
   /** Optional refresh callback — shows a refresh icon at the right edge of the URL pill */
   onRefresh?: () => void;
+  /** Session ID — when present with previewUrl, shows share button for webapp */
+  sessionId?: string;
+  /** Sharing scope for the webapp (used when sessionId + previewUrl) */
+  sharingScope?: SharingScope;
+  /** Callback when sharing scope changes (revalidate webapp info) */
+  onScopeChange?: () => void;
 }
 
 /**
@@ -60,6 +68,9 @@ export default function UrlBar({
   onDownload,
   isDownloading = false,
   onRefresh,
+  sessionId,
+  sharingScope = "private",
+  onScopeChange,
 }: UrlBarProps) {
   const handleOpenInNewTab = () => {
     if (previewUrl) {
@@ -111,7 +122,7 @@ export default function UrlBar({
           </div>
         )}
         {/* URL display */}
-        <div className="flex-1 flex items-center px-3 py-1.5 bg-background-tint-02 rounded-full gap-2 min-h-[2.25rem]">
+        <div className="flex-1 min-w-0 flex items-center px-3 py-1.5 bg-background-tint-02 rounded-full gap-2 min-h-[2.25rem]">
           {/* Download raw file button */}
           {onDownloadRaw && (
             <SimpleTooltip tooltip={downloadRawTooltip} delayDuration={200}>
@@ -136,7 +147,7 @@ export default function UrlBar({
               </button>
             </SimpleTooltip>
           )}
-          <Text secondaryBody text03 className="truncate">
+          <Text secondaryBody text03 className="min-w-0 flex-1 truncate">
             {displayUrl}
           </Text>
         </div>
@@ -151,6 +162,16 @@ export default function UrlBar({
           >
             {isDownloading ? "Exporting..." : "Export to .docx"}
           </Button>
+        )}
+        {/* Share button — shown when webapp preview is active */}
+        {previewUrl && sessionId && (
+          <ShareButton
+            key={sessionId}
+            sessionId={sessionId}
+            webappUrl={previewUrl}
+            sharingScope={sharingScope}
+            onScopeChange={onScopeChange}
+          />
         )}
       </div>
     </div>

@@ -147,6 +147,7 @@ export default function ImageGenerationContent() {
             info
             static
             large
+            close={false}
             text="Connect an image generation model to use in chat."
             className="w-full"
           />

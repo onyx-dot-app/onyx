@@ -222,6 +222,7 @@ ods run-ci 7353
 ### `cherry-pick` - Backport Commits to Release Branches
 
 Cherry-pick one or more commits to release branches and automatically create PRs.
+Cherry-pick PRs created by this command are labeled `cherry-pick 🍒`.
 
 ```shell
 ods cherry-pick <commit-sha> [<commit-sha>...] [--release <version>]

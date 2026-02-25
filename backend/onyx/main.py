@@ -52,6 +52,7 @@ from onyx.configs.app_configs import USER_AUTH_SECRET
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import AuthType
 from onyx.configs.constants import POSTGRES_WEB_APP_NAME
+from onyx.db.engine.async_sql_engine import get_sqlalchemy_async_engine
 from onyx.db.engine.connection_warmup import warm_up_connections
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.sql_engine import SqlEngine
@@ -63,7 +64,7 @@ from onyx.server.documents.connector import router as connector_router
 from onyx.server.documents.credential import router as credential_router
 from onyx.server.documents.document import router as document_router
 from onyx.server.documents.standard_oauth import router as standard_oauth_router
-from onyx.server.features.build.api.api import nextjs_assets_router
+from onyx.server.features.build.api.api import public_build_router
 from onyx.server.features.build.api.api import router as build_router
 from onyx.server.features.default_assistant.api import (
     router as default_assistant_router,
@@ -96,6 +97,9 @@ from onyx.server.features.web_search.api import router as web_search_router
 from onyx.server.federated.api import router as federated_router
 from onyx.server.kg.api import admin_router as kg_admin_router
 from onyx.server.manage.administrative import router as admin_router
+from onyx.server.manage.code_interpreter.api import (
+    admin_router as code_interpreter_admin_router,
+)
 from onyx.server.manage.discord_bot.api import router as discord_bot_router
 from onyx.server.manage.embedding.api import admin_router as embedding_admin_router
 from onyx.server.manage.embedding.api import basic_router as embedding_router
@@ -114,13 +118,16 @@ from onyx.server.manage.users import router as user_router
 from onyx.server.manage.web_search.api import (
     admin_router as web_search_admin_router,
 )
+from onyx.server.metrics.postgres_connection_pool import (
+    setup_postgres_connection_pool_metrics,
+)
+from onyx.server.metrics.prometheus_setup import setup_prometheus_metrics
 from onyx.server.middleware.latency_logging import add_latency_logging_middleware
 from onyx.server.middleware.rate_limiting import close_auth_limiter
 from onyx.server.middleware.rate_limiting import get_auth_rate_limiters
 from onyx.server.middleware.rate_limiting import setup_auth_limiter
 from onyx.server.onyx_api.ingestion import router as onyx_api_router
 from onyx.server.pat.api import router as pat_router
-from onyx.server.prometheus_instrumentation import setup_prometheus_metrics
 from onyx.server.query_and_chat.chat_backend import router as chat_router
 from onyx.server.query_and_chat.query_backend import (
     admin_router as admin_query_router,
@@ -138,6 +145,7 @@ from onyx.setup import setup_onyx
 from onyx.tracing.setup import setup_tracing
 from onyx.utils.logger import setup_logger
 from onyx.utils.logger import setup_uvicorn_logger
+from onyx.utils.middleware import add_endpoint_context_middleware
 from onyx.utils.middleware import add_onyx_request_id_middleware
 from onyx.utils.telemetry import get_or_generate_uuid
 from onyx.utils.telemetry import optional_telemetry
@@ -266,6 +274,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
         max_overflow=POSTGRES_API_SERVER_READ_ONLY_POOL_OVERFLOW,
     )
 
+    # Register pool metrics now that engines are created.
+    # HTTP instrumentation is set up earlier in get_application() since it
+    # adds middleware (which Starlette forbids after the app has started).
+    setup_postgres_connection_pool_metrics(
+        engines={
+            "sync": SqlEngine.get_engine(),
+            "async": get_sqlalchemy_async_engine(),
+            "readonly": SqlEngine.get_readonly_engine(),
+        },
+    )
+
     verify_auth = fetch_versioned_implementation(
         "onyx.auth.users", "verify_auth_setting"
     )
@@ -378,8 +397,8 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, admin_input_prompt_router)
     include_router_with_global_prefix_prepended(application, cc_pair_router)
     include_router_with_global_prefix_prepended(application, projects_router)
+    include_router_with_global_prefix_prepended(application, public_build_router)
     include_router_with_global_prefix_prepended(application, build_router)
-    include_router_with_global_prefix_prepended(application, nextjs_assets_router)
     include_router_with_global_prefix_prepended(application, document_set_router)
     include_router_with_global_prefix_prepended(application, hierarchy_router)
     include_router_with_global_prefix_prepended(application, search_settings_router)
@@ -405,6 +424,9 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, llm_admin_router)
     include_router_with_global_prefix_prepended(application, kg_admin_router)
     include_router_with_global_prefix_prepended(application, llm_router)
+    include_router_with_global_prefix_prepended(
+        application, code_interpreter_admin_router
+    )
     include_router_with_global_prefix_prepended(
         application, image_generation_admin_router
     )
@@ -560,11 +582,17 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
 
     add_onyx_request_id_middleware(application, "API", logger)
 
+    # Set endpoint context for per-endpoint DB pool attribution metrics.
+    # Must be registered after all routes are added.
+    add_endpoint_context_middleware(application)
+
+    # HTTP request metrics (latency histograms, in-progress gauge, slow request
+    # counter). Must be called here — before the app starts — because the
+    # instrumentator adds middleware via app.add_middleware().
+    setup_prometheus_metrics(application)
+
     # Ensure all routes have auth enabled or are explicitly marked as public
     check_router_auth(application)
-
-    # Initialize and instrument the app with production Prometheus config
-    setup_prometheus_metrics(application)
 
     use_route_function_names_as_operation_ids(application)
 

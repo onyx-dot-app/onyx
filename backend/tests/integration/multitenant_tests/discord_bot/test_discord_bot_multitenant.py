@@ -106,13 +106,13 @@ class TestGuildDataIsolation:
 
         # Create admin user for tenant 1
         admin_user1: DATestUser = UserManager.create(
-            email=f"discord_admin1+{unique}@example.com",
+            email=f"discord_admin1_{unique}@example.com",
         )
         assert UserManager.is_role(admin_user1, UserRole.ADMIN)
 
         # Create admin user for tenant 2
         admin_user2: DATestUser = UserManager.create(
-            email=f"discord_admin2+{unique}@example.com",
+            email=f"discord_admin2_{unique}@example.com",
         )
         assert UserManager.is_role(admin_user2, UserRole.ADMIN)
 
@@ -170,10 +170,10 @@ class TestGuildDataIsolation:
 
         # Create admin users for two tenants
         admin_user1: DATestUser = UserManager.create(
-            email=f"discord_list1+{unique}@example.com",
+            email=f"discord_list1_{unique}@example.com",
         )
         admin_user2: DATestUser = UserManager.create(
-            email=f"discord_list2+{unique}@example.com",
+            email=f"discord_list2_{unique}@example.com",
         )
 
         # Create 1 guild in tenant 1
@@ -350,10 +350,10 @@ class TestGuildAccessIsolation:
 
         # Create admin users for two tenants
         admin_user1: DATestUser = UserManager.create(
-            email=f"discord_access1+{unique}@example.com",
+            email=f"discord_access1_{unique}@example.com",
         )
         admin_user2: DATestUser = UserManager.create(
-            email=f"discord_access2+{unique}@example.com",
+            email=f"discord_access2_{unique}@example.com",
         )
 
         # Create a guild in tenant 1

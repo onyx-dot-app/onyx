@@ -163,7 +163,8 @@ def get_application() -> FastAPI:
         # Tenant management
         include_router_with_global_prefix_prepended(application, tenants_router)
 
-    # SCIM 2.0 — service discovery endpoints (unauthenticated).
+    # SCIM 2.0 — protocol endpoints (unauthenticated by Onyx session auth;
+    # they use their own SCIM bearer token auth).
     # Not behind APP_API_PREFIX because IdPs expect /scim/v2/... directly.
     application.include_router(scim_router)
 

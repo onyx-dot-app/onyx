@@ -51,7 +51,7 @@ export default function NonAdminStep() {
     <>
       {showHeader && (
         <div
-          className="flex items-center justify-between w-full max-w-[800px] min-h-11 py-1 pl-3 pr-2 bg-background-tint-00 rounded-16 shadow-01 mb-2"
+          className="flex items-center justify-between w-full min-h-11 py-1 pl-3 pr-2 bg-background-tint-00 rounded-16 shadow-01 mb-2"
           aria-label="non-admin-confirmation"
         >
           <div className="flex items-center gap-1">

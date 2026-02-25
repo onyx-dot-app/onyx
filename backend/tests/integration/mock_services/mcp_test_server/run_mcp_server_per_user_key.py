@@ -10,7 +10,6 @@ from fastmcp import FastMCP
 from fastmcp.server.auth.auth import AccessToken
 from fastmcp.server.auth.auth import TokenVerifier
 from fastmcp.server.dependencies import get_access_token
-from fastmcp.server.server import FunctionTool
 
 # pip install fastmcp bcrypt
 
@@ -93,19 +92,15 @@ class ApiKeyVerifier(TokenVerifier):
 # ---- server -----------------------------------------------------------------
 
 
-def make_many_tools(mcp: FastMCP) -> list[FunctionTool]:
-    def make_tool(i: int) -> FunctionTool:
+def make_many_tools(mcp: FastMCP) -> None:
+    def make_tool(i: int) -> None:
         @mcp.tool(name=f"tool_{i}", description=f"Get secret value {i}")
         def tool_name(name: str) -> str:  # noqa: ARG001
             """Get secret value."""
             return f"Secret value {400 - i}!"
 
-        return tool_name
-
-    tools = []
     for i in range(100):
-        tools.append(make_tool(i))
-    return tools
+        make_tool(i)
 
 
 if __name__ == "__main__":

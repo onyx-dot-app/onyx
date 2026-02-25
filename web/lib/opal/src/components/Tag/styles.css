@@ -1,0 +1,30 @@
+/* ---------------------------------------------------------------------------
+   AuxiliaryTag
+
+   Fixed height of 1rem (16px). Icon is 0.75rem (12px) with p-0.5 (2px)
+   padding to match the font-figure-small-value line-height (12px).
+   --------------------------------------------------------------------------- */
+
+.opal-auxiliary-tag {
+  @apply flex flex-row items-center shrink-0;
+  height: 1rem;
+  border-radius: 0.25rem;
+  padding: 0 0.25rem;
+  gap: 0;
+}
+
+.opal-auxiliary-tag-icon-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1px;
+}
+
+.opal-auxiliary-tag-icon {
+  width: 10px;
+  height: 10px;
+}
+
+.opal-auxiliary-tag-title {
+  white-space: nowrap;
+}

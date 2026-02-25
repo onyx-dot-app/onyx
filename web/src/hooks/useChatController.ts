@@ -89,6 +89,8 @@ export interface OnSubmitProps {
   isSeededChat?: boolean;
   modelOverride?: LlmDescriptor;
   regenerationRequest?: RegenerationRequest | null;
+  // Additional context injected into the LLM call but not stored/shown in chat.
+  additionalContext?: string;
 }
 
 interface RegenerationRequest {
@@ -368,6 +370,7 @@ export default function useChatController({
       isSeededChat,
       modelOverride,
       regenerationRequest,
+      additionalContext,
     }: OnSubmitProps) => {
       const projectId = params(SEARCH_PARAM_NAMES.PROJECT_ID);
       {
@@ -725,6 +728,7 @@ export default function useChatController({
               : undefined,
           forcedToolId: effectiveForcedToolId,
           origin: messageOrigin,
+          additionalContext,
         });
 
         const delay = (ms: number) => {

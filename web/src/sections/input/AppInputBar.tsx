@@ -22,7 +22,7 @@ import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import { useAppMode } from "@/providers/AppModeProvider";
 import useAppFocus from "@/hooks/useAppFocus";
 import { getFormattedDateRangeString } from "@/lib/dateUtils";
-import { truncateString, cn } from "@/lib/utils";
+import { truncateString, cn, isImageFile } from "@/lib/utils";
 import { Disabled } from "@/refresh-components/Disabled";
 import { useUser } from "@/providers/UserProvider";
 import { SettingsContext } from "@/providers/SettingsProvider";
@@ -43,6 +43,7 @@ import {
   SvgCalendar,
   SvgFiles,
   SvgFileText,
+  SvgGlobe,
   SvgHourglass,
   SvgPlus,
   SvgPlusCircle,
@@ -128,6 +129,10 @@ export interface AppInputBarProps {
   toggleDeepResearch: () => void;
   disabled: boolean;
   ref?: React.Ref<AppInputBarHandle>;
+  // Side panel tab reading
+  tabReadingEnabled?: boolean;
+  currentTabUrl?: string | null;
+  onToggleTabReading?: () => void;
 }
 
 const AppInputBar = React.memo(
@@ -153,6 +158,9 @@ const AppInputBar = React.memo(
     setPresentingDocument,
     disabled,
     ref,
+    tabReadingEnabled,
+    currentTabUrl,
+    onToggleTabReading,
   }: AppInputBarProps) => {
     // Internal message state - kept local to avoid parent re-renders on every keystroke
     const [message, setMessage] = useState(initialMessage);
@@ -382,6 +390,11 @@ const AppInputBar = React.memo(
     const shouldCompactImages = useMemo(() => {
       return currentMessageFiles.length > 1;
     }, [currentMessageFiles]);
+
+    const hasImageFiles = useMemo(
+      () => currentMessageFiles.some((f) => isImageFile(f.name)),
+      [currentMessageFiles]
+    );
 
     // Check if the assistant has search tools available (internal search or web search)
     // AND if deep research is globally enabled in admin settings
@@ -703,17 +716,40 @@ const AppInputBar = React.memo(
                       disabled={disabled}
                     />
                   )}
-                  {showDeepResearch && (
+                  {onToggleTabReading ? (
                     <Button
-                      icon={SvgHourglass}
-                      onClick={toggleDeepResearch}
+                      icon={SvgGlobe}
+                      onClick={onToggleTabReading}
                       variant="select"
-                      selected={deepResearchEnabled}
-                      foldable={!deepResearchEnabled}
+                      selected={tabReadingEnabled}
+                      foldable={!tabReadingEnabled}
                       disabled={disabled}
                     >
-                      Deep Research
+                      {tabReadingEnabled
+                        ? currentTabUrl
+                          ? (() => {
+                              try {
+                                return new URL(currentTabUrl).hostname;
+                              } catch {
+                                return currentTabUrl;
+                              }
+                            })()
+                          : "Reading tab..."
+                        : "Read this tab"}
                     </Button>
+                  ) : (
+                    showDeepResearch && (
+                      <Button
+                        icon={SvgHourglass}
+                        onClick={toggleDeepResearch}
+                        variant="select"
+                        selected={deepResearchEnabled}
+                        foldable={!deepResearchEnabled}
+                        disabled={disabled}
+                      >
+                        Deep Research
+                      </Button>
+                    )
                   )}
 
                   {selectedAssistant &&
@@ -754,7 +790,7 @@ const AppInputBar = React.memo(
                 >
                   <LLMPopover
                     llmManager={llmManager}
-                    requiresImageGeneration={false}
+                    requiresImageInput={hasImageFiles}
                     disabled={disabled}
                   />
                 </div>

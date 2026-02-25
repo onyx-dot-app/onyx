@@ -1,9 +1,13 @@
 from collections.abc import Generator
 
+from office365.sharepoint.client_context import ClientContext  # type: ignore[import-untyped]
+
 from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.sharepoint.permission_utils import (
     get_sharepoint_external_groups,
 )
+from onyx.configs.app_configs import SHAREPOINT_EXHAUSTIVE_AD_ENUMERATION
+from onyx.connectors.sharepoint.connector import acquire_token_for_rest
 from onyx.connectors.sharepoint.connector import SharepointConnector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.utils.logger import setup_logger
@@ -43,14 +47,27 @@ def sharepoint_group_sync(
 
     logger.info(f"Processing {len(site_descriptors)} sites for group sync")
 
-    # Process each site
+    enumerate_all = connector_config.get(
+        "exhaustive_ad_enumeration", SHAREPOINT_EXHAUSTIVE_AD_ENUMERATION
+    )
+
+    msal_app = connector.msal_app
+    sp_tenant_domain = connector.sp_tenant_domain
+    sp_domain_suffix = connector.sharepoint_domain_suffix
     for site_descriptor in site_descriptors:
         logger.debug(f"Processing site: {site_descriptor.url}")
 
-        ctx = connector._create_rest_client_context(site_descriptor.url)
+        ctx = ClientContext(site_descriptor.url).with_access_token(
+            lambda: acquire_token_for_rest(msal_app, sp_tenant_domain, sp_domain_suffix)
+        )
 
-        # Get external groups for this site
-        external_groups = get_sharepoint_external_groups(ctx, connector.graph_client)
+        external_groups = get_sharepoint_external_groups(
+            ctx,
+            connector.graph_client,
+            graph_api_base=connector.graph_api_base,
+            get_access_token=connector._get_graph_access_token,
+            enumerate_all_ad_groups=enumerate_all,
+        )
 
         # Yield each group
         for group in external_groups:

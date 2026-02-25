@@ -16,14 +16,12 @@ import { ErrorCallout } from "@/components/ErrorCallout";
 import BulkAdd from "@/components/admin/users/BulkAdd";
 import Text from "@/refresh-components/texts/Text";
 import { InvitedUserSnapshot } from "@/lib/types";
-import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
-import { AuthType, NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
+import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import PendingUsersTable from "@/components/admin/users/PendingUsersTable";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import Button from "@/refresh-components/buttons/Button";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { Spinner } from "@/components/Spinner";
-import { useAuthType } from "@/lib/hooks";
 import { SvgDownloadCloud, SvgUser, SvgUserPlus } from "@opal/icons";
 interface CountDisplayProps {
   label: string;
@@ -266,24 +264,8 @@ const SearchableTables = () => {
   );
 };
 
-const AddUserButton = () => {
+function AddUserButton() {
   const [bulkAddUsersModal, setBulkAddUsersModal] = useState(false);
-  const [firstUserConfirmationModal, setFirstUserConfirmationModal] =
-    useState(false);
-  const authType = useAuthType();
-
-  const { data: invitedUsers } = useSWR<InvitedUserSnapshot[]>(
-    "/api/manage/users/invited",
-    errorHandlingFetcher
-  );
-
-  const shouldShowFirstInviteWarning =
-    !NEXT_PUBLIC_CLOUD_ENABLED &&
-    authType !== null &&
-    authType !== AuthType.SAML &&
-    authType !== AuthType.OIDC &&
-    invitedUsers &&
-    invitedUsers.length === 0;
 
   const onSuccess = () => {
     mutate(
@@ -299,15 +281,6 @@ const AddUserButton = () => {
   };
 
   const handleInviteClick = () => {
-    if (shouldShowFirstInviteWarning) {
-      setFirstUserConfirmationModal(true);
-    } else {
-      setBulkAddUsersModal(true);
-    }
-  };
-
-  const handleConfirmFirstInvite = () => {
-    setFirstUserConfirmationModal(false);
     setBulkAddUsersModal(true);
   };
 
@@ -316,17 +289,6 @@ const AddUserButton = () => {
       <CreateButton primary onClick={handleInviteClick}>
         Invite Users
       </CreateButton>
-
-      {firstUserConfirmationModal && (
-        <ConfirmEntityModal
-          entityType="First User Invitation"
-          entityName="your Access Logic"
-          onClose={() => setFirstUserConfirmationModal(false)}
-          onSubmit={handleConfirmFirstInvite}
-          additionalDetails="After inviting the first user, only invited users will be able to join this platform. This is a security measure to control access to your team."
-          actionButtonText="Continue"
-        />
-      )}
 
       {bulkAddUsersModal && (
         <Modal open onOpenChange={() => setBulkAddUsersModal(false)}>
@@ -351,7 +313,7 @@ const AddUserButton = () => {
       )}
     </>
   );
-};
+}
 
 const Page = () => {
   return (

@@ -21,7 +21,7 @@ def test_admin_can_invite_users(reset_multitenant: None) -> None:  # noqa: ARG00
 
     # Admin user invites the previously registered and non-registered user
     UserManager.invite_user(invited_user.email, admin_user)
-    UserManager.invite_user(f"{INVITED_BASIC_USER}+{unique}@example.com", admin_user)
+    UserManager.invite_user(f"{INVITED_BASIC_USER}_{unique}@example.com", admin_user)
 
     # Verify users are in the invited users list
     invited_users = UserManager.get_invited_users(admin_user)
@@ -40,7 +40,7 @@ def test_non_registered_user_gets_basic_role(
     assert UserManager.is_role(admin_user, UserRole.ADMIN)
 
     # Admin user invites a non-registered user
-    invited_email = f"{INVITED_BASIC_USER}+{unique}@example.com"
+    invited_email = f"{INVITED_BASIC_USER}_{unique}@example.com"
     UserManager.invite_user(invited_email, admin_user)
 
     # Non-registered user registers
@@ -58,7 +58,7 @@ def test_user_can_accept_invitation(reset_multitenant: None) -> None:  # noqa: A
     assert UserManager.is_role(admin_user, UserRole.ADMIN)
 
     # Create a user to be invited
-    invited_user_email = f"invited_user+{unique}@example.com"
+    invited_user_email = f"invited_user_{unique}@example.com"
 
     # User registers with the same email as the invitation
     invited_user: DATestUser = UserManager.create(

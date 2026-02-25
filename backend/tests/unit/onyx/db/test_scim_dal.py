@@ -1,3 +1,4 @@
+import logging
 from unittest.mock import MagicMock
 from uuid import uuid4
 
@@ -96,6 +97,7 @@ class TestScimDALUserMappings:
         assert model_attrs(added_obj) == {
             "external_id": "ext-1",
             "user_id": user_id,
+            "scim_username": None,
         }
 
     def test_delete_user_mapping(
@@ -108,13 +110,19 @@ class TestScimDALUserMappings:
 
         mock_db_session.delete.assert_called_once_with(mapping)
 
-    def test_delete_nonexistent_user_mapping_raises(
-        self, scim_dal: ScimDAL, mock_db_session: MagicMock
+    def test_delete_nonexistent_user_mapping_is_idempotent(
+        self,
+        scim_dal: ScimDAL,
+        mock_db_session: MagicMock,
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         mock_db_session.get.return_value = None
 
-        with pytest.raises(ValueError, match="not found"):
+        with caplog.at_level(logging.WARNING):
             scim_dal.delete_user_mapping(999)
+
+        mock_db_session.delete.assert_not_called()
+        assert "SCIM user mapping 999 not found" in caplog.text
 
     def test_update_user_mapping_external_id(
         self, scim_dal: ScimDAL, mock_db_session: MagicMock
@@ -163,10 +171,16 @@ class TestScimDALGroupMappings:
 
         mock_db_session.delete.assert_called_once_with(mapping)
 
-    def test_delete_nonexistent_group_mapping_raises(
-        self, scim_dal: ScimDAL, mock_db_session: MagicMock
+    def test_delete_nonexistent_group_mapping_is_idempotent(
+        self,
+        scim_dal: ScimDAL,
+        mock_db_session: MagicMock,
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         mock_db_session.get.return_value = None
 
-        with pytest.raises(ValueError, match="not found"):
+        with caplog.at_level(logging.WARNING):
             scim_dal.delete_group_mapping(999)
+
+        mock_db_session.delete.assert_not_called()
+        assert "SCIM group mapping 999 not found" in caplog.text

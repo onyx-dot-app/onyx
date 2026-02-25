@@ -63,7 +63,7 @@ jest.mock("@/components/modals/ProviderModal", () => ({
 const mockFetchModels = jest.fn().mockResolvedValue({
   models: [
     { name: "anthropic.claude-3-sonnet", is_visible: true },
-    { name: "anthropic.claude-3-haiku", is_visible: true },
+    { name: "anthropic.claude-sonnet-4-5-20250929-v1:0", is_visible: true },
   ],
   error: null,
 });

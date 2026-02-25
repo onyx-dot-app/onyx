@@ -146,7 +146,7 @@ MAX_REDIRECTS = 10
 def _make_ssrf_safe_request(
     url: str,
     headers: dict[str, str] | None = None,
-    timeout: int = 15,
+    timeout: float | tuple[float, float] = 15,
     **kwargs: Any,
 ) -> requests.Response:
     """
@@ -204,7 +204,7 @@ def _make_ssrf_safe_request(
 def ssrf_safe_get(
     url: str,
     headers: dict[str, str] | None = None,
-    timeout: int = 15,
+    timeout: float | tuple[float, float] = 15,
     follow_redirects: bool = True,
     **kwargs: Any,
 ) -> requests.Response:

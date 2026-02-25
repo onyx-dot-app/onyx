@@ -136,7 +136,7 @@ async function verifyAdminPageNavigation(
 
   try {
     await expect(page.locator('[aria-label="admin-page-title"]')).toHaveText(
-      pageTitle,
+      new RegExp(`^${pageTitle}`),
       {
         timeout: 10000,
       }

@@ -1,5 +1,5 @@
 import { expect, Page, test } from "@playwright/test";
-import { loginAs } from "@tests/e2e/utils/auth";
+import { loginAs, loginAsWorkerUser } from "@tests/e2e/utils/auth";
 import {
   selectModelFromInputPopover,
   sendMessage,
@@ -28,10 +28,14 @@ async function openChat(page: Page): Promise<void> {
 
 async function loginWithCleanCookies(
   page: Page,
-  user: "admin" | "user"
+  user: "admin" | number
 ): Promise<void> {
   await page.context().clearCookies();
-  await loginAs(page, user);
+  if (typeof user === "number") {
+    await loginAsWorkerUser(page, user);
+  } else {
+    await loginAs(page, user);
+  }
 }
 
 async function createLlmProvider(
@@ -157,10 +161,10 @@ test.describe("LLM Runtime Selection", () => {
   let providersToCleanup: number[] = [];
   let groupsToCleanup: number[] = [];
 
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async ({ page }, testInfo) => {
     providersToCleanup = [];
     groupsToCleanup = [];
-    await loginWithCleanCookies(page, "user");
+    await loginWithCleanCookies(page, testInfo.workerIndex);
   });
 
   test.afterEach(async ({ page }) => {
@@ -191,7 +195,7 @@ test.describe("LLM Runtime Selection", () => {
 
   test("model selection persists across refresh and subsequent messages in the same chat", async ({
     page,
-  }) => {
+  }, testInfo) => {
     await loginWithCleanCookies(page, "admin");
 
     const persistenceProviderName = uniqueName("PW Runtime Persist Provider");
@@ -207,7 +211,7 @@ test.describe("LLM Runtime Selection", () => {
       persistenceProviderName,
     ]);
 
-    await loginWithCleanCookies(page, "user");
+    await loginWithCleanCookies(page, testInfo.workerIndex);
     await openChat(page);
 
     let turn = 0;
@@ -293,13 +297,11 @@ test.describe("LLM Runtime Selection", () => {
 
     const regenerateDialog = page.locator('[role="dialog"]');
     const alternateModelOption = regenerateDialog
-      .locator('button[data-selected="false"]')
+      .locator('[data-selected="false"]')
       .first();
 
     test.skip(
-      (await regenerateDialog
-        .locator('button[data-selected="false"]')
-        .count()) === 0,
+      (await regenerateDialog.locator('[data-selected="false"]').count()) === 0,
       "Regenerate model picker requires at least two runtime model options"
     );
 
@@ -352,7 +354,7 @@ test.describe("LLM Runtime Selection", () => {
 
   test("same model name across providers resolves to provider-specific runtime payloads", async ({
     page,
-  }) => {
+  }, testInfo) => {
     await loginWithCleanCookies(page, "admin");
 
     const sharedModelName = `shared-runtime-model-${Date.now()}`;
@@ -379,7 +381,7 @@ test.describe("LLM Runtime Selection", () => {
       anthropicProviderName,
     ]);
 
-    await loginWithCleanCookies(page, "user");
+    await loginWithCleanCookies(page, testInfo.workerIndex);
 
     const capturedPayloads: SendChatMessagePayload[] = [];
     let turn = 0;
@@ -403,11 +405,11 @@ test.describe("LLM Runtime Selection", () => {
     const dialog = page.locator('[role="dialog"]');
     await dialog.getByPlaceholder("Search models...").fill(sharedModelName);
 
-    const sharedModelOptions = dialog.locator("button[data-selected]");
+    const sharedModelOptions = dialog.locator("[data-selected]");
     await expect(sharedModelOptions).toHaveCount(2);
     const openAiModelOption = dialog
       .getByRole("region", { name: /openai/i })
-      .locator("button[data-selected]")
+      .locator("[data-selected]")
       .first();
     await expect(openAiModelOption).toBeVisible();
     await openAiModelOption.click();
@@ -428,13 +430,11 @@ test.describe("LLM Runtime Selection", () => {
       .getByPlaceholder("Search models...")
       .fill(sharedModelName);
 
-    const secondSharedModelOptions = secondDialog.locator(
-      "button[data-selected]"
-    );
+    const secondSharedModelOptions = secondDialog.locator("[data-selected]");
     await expect(secondSharedModelOptions).toHaveCount(2);
     const anthropicModelOption = secondDialog
       .getByRole("region", { name: /anthropic/i })
-      .locator("button[data-selected]")
+      .locator("[data-selected]")
       .first();
     await expect(anthropicModelOption).toBeVisible();
     await anthropicModelOption.click();
@@ -445,7 +445,7 @@ test.describe("LLM Runtime Selection", () => {
     const verifyDialog = page.locator('[role="dialog"]');
     const selectedAnthropicOption = verifyDialog
       .getByRole("region", { name: /anthropic/i })
-      .locator('button[data-selected="true"]');
+      .locator('[data-selected="true"]');
     await expect(selectedAnthropicOption).toHaveCount(1);
     await page.keyboard.press("Escape");
     await page.waitForSelector('[role="dialog"]', { state: "hidden" });
@@ -469,7 +469,7 @@ test.describe("LLM Runtime Selection", () => {
 
   test("restricted provider model is unavailable to unauthorized runtime user selection", async ({
     page,
-  }) => {
+  }, testInfo) => {
     await loginWithCleanCookies(page, "admin");
 
     const client = new OnyxApiClient(page.request);
@@ -502,7 +502,7 @@ test.describe("LLM Runtime Selection", () => {
     });
     providersToCleanup.push(restrictedProviderId);
 
-    await loginWithCleanCookies(page, "user");
+    await loginWithCleanCookies(page, testInfo.workerIndex);
     await openChat(page);
 
     await page.getByTestId("AppInputBar/llm-popover-trigger").click();
@@ -512,7 +512,7 @@ test.describe("LLM Runtime Selection", () => {
     await dialog.getByPlaceholder("Search models...").fill(restrictedModelName);
 
     const restrictedModelOption = dialog
-      .locator("button[data-selected]")
+      .locator("[data-selected]")
       .filter({ hasText: restrictedModelName });
 
     await expect(restrictedModelOption).toHaveCount(0);

@@ -112,6 +112,10 @@ function Header() {
 
   const customHeaderContent =
     settings?.enterpriseSettings?.custom_header_content;
+  // Some pages don't want the custom header content, namely every page except Chat, Search, and
+  // NewSession. The header provides features such as the open sidebar button on mobile which pages
+  // without this content still use.
+  const pageWithHeaderContent = appFocus.isChat() || appFocus.isNewSession();
 
   const effectiveMode: AppMode = appFocus.isNewSession() ? appMode : "chat";
 
@@ -288,7 +292,7 @@ function Header() {
 
       <div
         className={cn(
-          "w-full flex flex-row justify-center items-center px-4 h-[3.3rem]",
+          "w-full flex flex-row flex-wrap justify-center items-center px-4",
           // # Note (@raunakab):
           //
           // We add an additional top margin to align this header with the `LogoSection` inside of the App-Sidebar.
@@ -301,7 +305,7 @@ function Header() {
           - (mobile) sidebar toggle
           - app-mode (for Unified S+C [EE gated])
         */}
-        <div className="flex-1 flex flex-row items-center gap-2">
+        <div className="flex-1 flex flex-row items-center gap-2 h-[3.3rem]">
           {isMobile && (
             <IconButton
               icon={SvgSidebar}
@@ -310,6 +314,7 @@ function Header() {
             />
           )}
           {isPaidEnterpriseFeaturesEnabled &&
+            settings.isSearchModeAvailable &&
             appFocus.isNewSession() &&
             !classification && (
               <Popover open={modePopoverOpen} onOpenChange={setModePopoverOpen}>
@@ -355,10 +360,18 @@ function Header() {
         {/*
           Center:
           - custom-header-content
+          - Wraps to its own row below left/right on mobile when content is present
         */}
-        <div className="flex-1 flex flex-col items-center overflow-hidden">
+        <div
+          className={cn(
+            "flex flex-col items-center overflow-hidden",
+            pageWithHeaderContent && customHeaderContent
+              ? "order-last basis-full py-2 sm:py-0 sm:order-none sm:basis-auto sm:flex-1"
+              : "flex-1"
+          )}
+        >
           <Text text03 className="text-center w-full">
-            {customHeaderContent}
+            {pageWithHeaderContent && customHeaderContent}
           </Text>
         </div>
 
@@ -367,7 +380,7 @@ function Header() {
           - share button
           - more-options buttons
         */}
-        <div className="flex flex-1 justify-end">
+        <div className="flex flex-1 justify-end items-center h-[3.3rem]">
           {appFocus.isChat() && currentChatSession && (
             <FrostedDiv className="flex shrink flex-row items-center">
               <Button
@@ -377,7 +390,7 @@ function Header() {
                 onClick={() => setShowShareModal(true)}
                 aria-label="share-chat-button"
               >
-                Share Chat
+                {isMobile ? "" : "Share Chat"}
               </Button>
               <SimplePopover
                 trigger={

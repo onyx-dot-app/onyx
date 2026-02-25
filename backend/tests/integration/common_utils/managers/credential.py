@@ -6,7 +6,6 @@ import requests
 from onyx.server.documents.models import CredentialSnapshot
 from onyx.server.documents.models import DocumentSource
 from tests.integration.common_utils.constants import API_SERVER_URL
-from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.test_models import DATestCredential
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -14,13 +13,13 @@ from tests.integration.common_utils.test_models import DATestUser
 class CredentialManager:
     @staticmethod
     def create(
+        user_performing_action: DATestUser,
         credential_json: dict[str, Any] | None = None,
         admin_public: bool = True,
         name: str | None = None,
         source: DocumentSource = DocumentSource.FILE,
         curator_public: bool = True,
         groups: list[int] | None = None,
-        user_performing_action: DATestUser | None = None,
     ) -> DATestCredential:
         name = f"{name}-credential" if name else f"test-credential-{uuid4()}"
 
@@ -36,11 +35,7 @@ class CredentialManager:
         response = requests.post(
             url=f"{API_SERVER_URL}/manage/credential",
             json=credential_request,
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
 
         response.raise_for_status()
@@ -57,61 +52,46 @@ class CredentialManager:
     @staticmethod
     def edit(
         credential: DATestCredential,
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> None:
         request = credential.model_dump(include={"name", "credential_json"})
         response = requests.put(
             url=f"{API_SERVER_URL}/manage/admin/credential/{credential.id}",
             json=request,
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         response.raise_for_status()
 
     @staticmethod
     def delete(
         credential: DATestCredential,
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> None:
         response = requests.delete(
             url=f"{API_SERVER_URL}/manage/credential/{credential.id}",
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         response.raise_for_status()
 
     @staticmethod
     def get(
-        credential_id: int, user_performing_action: DATestUser | None = None
+        credential_id: int,
+        user_performing_action: DATestUser,
     ) -> CredentialSnapshot:
         response = requests.get(
             url=f"{API_SERVER_URL}/manage/credential/{credential_id}",
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         response.raise_for_status()
         return CredentialSnapshot(**response.json())
 
     @staticmethod
     def get_all(
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> list[CredentialSnapshot]:
         response = requests.get(
             f"{API_SERVER_URL}/manage/credential",
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         response.raise_for_status()
         return [CredentialSnapshot(**cred) for cred in response.json()]
@@ -119,8 +99,8 @@ class CredentialManager:
     @staticmethod
     def verify(
         credential: DATestCredential,
+        user_performing_action: DATestUser,
         verify_deleted: bool = False,
-        user_performing_action: DATestUser | None = None,
     ) -> None:
         all_credentials = CredentialManager.get_all(user_performing_action)
         for fetched_credential in all_credentials:

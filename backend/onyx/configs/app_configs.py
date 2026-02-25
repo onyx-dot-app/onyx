@@ -251,7 +251,9 @@ DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S = int(
     os.environ.get("DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S") or 50
 )
 OPENSEARCH_ADMIN_USERNAME = os.environ.get("OPENSEARCH_ADMIN_USERNAME", "admin")
-OPENSEARCH_ADMIN_PASSWORD = os.environ.get("OPENSEARCH_ADMIN_PASSWORD", "")
+OPENSEARCH_ADMIN_PASSWORD = os.environ.get(
+    "OPENSEARCH_ADMIN_PASSWORD", "StrongPassword123!"
+)
 USING_AWS_MANAGED_OPENSEARCH = (
     os.environ.get("USING_AWS_MANAGED_OPENSEARCH", "").lower() == "true"
 )
@@ -263,6 +265,18 @@ OPENSEARCH_PROFILING_DISABLED = (
     os.environ.get("OPENSEARCH_PROFILING_DISABLED", "").lower() == "true"
 )
 
+# When enabled, OpenSearch returns detailed score breakdowns for each hit.
+# Useful for debugging and tuning search relevance. Has ~10-30% performance overhead according to documentation.
+# Seems for Hybrid Search in practice, the impact is actually more like 1000x slower.
+OPENSEARCH_EXPLAIN_ENABLED = (
+    os.environ.get("OPENSEARCH_EXPLAIN_ENABLED", "").lower() == "true"
+)
+
+# Analyzer used for full-text fields (title, content). Use OpenSearch built-in analyzer
+# names (e.g. "english", "standard", "german"). Affects stemming and tokenization;
+# existing indices need reindexing after a change.
+OPENSEARCH_TEXT_ANALYZER = os.environ.get("OPENSEARCH_TEXT_ANALYZER") or "english"
+
 # This is the "base" config for now, the idea is that at least for our dev
 # environments we always want to be dual indexing into both OpenSearch and Vespa
 # to stress test the new codepaths. Only enable this if there is some instance
@@ -270,6 +284,9 @@ OPENSEARCH_PROFILING_DISABLED = (
 ENABLE_OPENSEARCH_INDEXING_FOR_ONYX = (
     os.environ.get("ENABLE_OPENSEARCH_INDEXING_FOR_ONYX", "").lower() == "true"
 )
+# NOTE: This effectively does nothing anymore, admins can now toggle whether
+# retrieval is through OpenSearch. This value is only used as a final fallback
+# in case that doesn't work for whatever reason.
 # Given that the "base" config above is true, this enables whether we want to
 # retrieve from OpenSearch or Vespa. We want to be able to quickly toggle this
 # in the event we see issues with OpenSearch retrieval in our dev environments.
@@ -623,6 +640,14 @@ DRUPAL_WIKI_ATTACHMENT_SIZE_THRESHOLD = int(
 # Default size threshold for SharePoint files (20MB)
 SHAREPOINT_CONNECTOR_SIZE_THRESHOLD = int(
     os.environ.get("SHAREPOINT_CONNECTOR_SIZE_THRESHOLD", 20 * 1024 * 1024)
+)
+
+# When True, group sync enumerates every Azure AD group in the tenant (expensive).
+# When False (default), only groups found in site role assignments are synced.
+# Can be overridden per-connector via the "exhaustive_ad_enumeration" key in
+# connector_specific_config.
+SHAREPOINT_EXHAUSTIVE_AD_ENUMERATION = (
+    os.environ.get("SHAREPOINT_EXHAUSTIVE_AD_ENUMERATION", "").lower() == "true"
 )
 
 BLOB_STORAGE_SIZE_THRESHOLD = int(
