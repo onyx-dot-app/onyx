@@ -3,7 +3,7 @@ import type { Locator, Page } from "@playwright/test";
 import { loginAs } from "@tests/e2e/utils/auth";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 
-const LLM_SETUP_URL = "/admin/configuration/llm";
+const LLM_CONFIG_URL = "/admin/configuration/llm";
 const BASE_URL = process.env.BASE_URL || "http://localhost:3000";
 const PROVIDER_API_KEY =
   process.env.E2E_LLM_PROVIDER_API_KEY ||
@@ -13,18 +13,32 @@ const PROVIDER_API_KEY =
 type AdminLLMProvider = {
   id: number;
   name: string;
-  is_default_provider: boolean | null;
   is_auto_mode: boolean;
+};
+
+type AdminLLMProviderResponse = {
+  providers: AdminLLMProvider[];
+  default_text: { provider_id: number; model_name: string } | null;
 };
 
 function uniqueName(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-async function listAdminLLMProviders(page: Page): Promise<AdminLLMProvider[]> {
+async function listAdminLLMProviders(
+  page: Page
+): Promise<AdminLLMProviderResponse> {
   const response = await page.request.get(`${BASE_URL}/api/admin/llm/provider`);
   expect(response.ok()).toBeTruthy();
-  return (await response.json()) as AdminLLMProvider[];
+  return (await response.json()) as AdminLLMProviderResponse;
+}
+
+async function getProviderByName(
+  page: Page,
+  providerName: string
+): Promise<AdminLLMProvider | null> {
+  const { providers } = await listAdminLLMProviders(page);
+  return providers.find((provider) => provider.name === providerName) ?? null;
 }
 
 async function createPublicProvider(
@@ -50,48 +64,78 @@ async function createPublicProvider(
   return data.id;
 }
 
-async function getProviderByName(
-  page: Page,
-  providerName: string
-): Promise<AdminLLMProvider | null> {
-  const providers = await listAdminLLMProviders(page);
-  return providers.find((provider) => provider.name === providerName) ?? null;
-}
-
-async function findProviderCard(
+/**
+ * Find the provider card in the "Available Providers" section by name.
+ */
+async function findExistingProviderCard(
   page: Page,
   providerName: string
 ): Promise<Locator> {
   return page
-    .locator("div.rounded-16")
+    .locator("div")
     .filter({ hasText: providerName })
+    .filter({ has: page.locator("button[aria-label='Settings']") })
     .first();
 }
 
-async function openOpenAiSetupModal(page: Page): Promise<Locator> {
-  const openAiCard = page
-    .locator("div.rounded-16")
-    .filter({ hasText: "OpenAI" })
-    .filter({ has: page.getByRole("button", { name: "Set up" }) })
+/**
+ * Find the "Add Provider" card for a well-known provider (e.g. "OpenAI").
+ */
+async function findNewProviderCard(
+  page: Page,
+  providerProductName: string
+): Promise<Locator> {
+  return page
+    .locator("div")
+    .filter({ hasText: providerProductName })
+    .filter({ has: page.getByRole("button", { name: "Connect" }) })
     .first();
+}
 
-  await expect(openAiCard).toBeVisible({ timeout: 10000 });
-  await openAiCard.getByRole("button", { name: "Set up" }).click();
+/**
+ * Open the setup modal for a well-known provider from the "Add Provider" grid.
+ */
+async function openSetupModal(
+  page: Page,
+  providerProductName: string
+): Promise<Locator> {
+  const card = await findNewProviderCard(page, providerProductName);
+  await expect(card).toBeVisible({ timeout: 10000 });
+  await card.getByRole("button", { name: "Connect" }).click();
 
-  const modal = page.getByRole("dialog", { name: /setup openai/i });
+  const modal = page.getByRole("dialog");
   await expect(modal).toBeVisible({ timeout: 10000 });
   return modal;
 }
 
-async function openProviderEditModal(
+/**
+ * Open the edit modal for an existing provider via the settings icon.
+ */
+async function openEditModal(
   page: Page,
   providerName: string
 ): Promise<Locator> {
-  const providerCard = await findProviderCard(page, providerName);
-  await expect(providerCard).toBeVisible({ timeout: 10000 });
-  await providerCard.getByRole("button", { name: "Edit" }).click();
+  const card = await findExistingProviderCard(page, providerName);
+  await expect(card).toBeVisible({ timeout: 10000 });
+  await card.locator("button[aria-label='Settings']").click();
 
-  const modal = page.getByRole("dialog", { name: /configure/i });
+  const modal = page.getByRole("dialog");
+  await expect(modal).toBeVisible({ timeout: 10000 });
+  return modal;
+}
+
+/**
+ * Click the trash icon on an existing provider card to open the delete confirmation.
+ */
+async function openDeleteConfirmation(
+  page: Page,
+  providerName: string
+): Promise<Locator> {
+  const card = await findExistingProviderCard(page, providerName);
+  await expect(card).toBeVisible({ timeout: 10000 });
+  await card.locator("button[aria-label='Trash']").click();
+
+  const modal = page.getByRole("dialog", { name: /delete llm provider/i });
   await expect(modal).toBeVisible({ timeout: 10000 });
   return modal;
 }
@@ -103,9 +147,9 @@ test.describe("LLM Provider Setup @exclusive", () => {
     providersToCleanup = [];
     await page.context().clearCookies();
     await loginAs(page, "admin");
-    await page.goto(LLM_SETUP_URL);
+    await page.goto(LLM_CONFIG_URL);
     await page.waitForLoadState("networkidle");
-    await expect(page.getByLabel("admin-page-title")).toHaveText(/^LLM Setup/);
+    await expect(page.getByLabel("admin-page-title")).toHaveText(/^LLM Models/);
   });
 
   test.afterEach(async ({ page }) => {
@@ -123,10 +167,8 @@ test.describe("LLM Provider Setup @exclusive", () => {
     }
   });
 
-  test("admin can create, edit, and delete a provider from the LLM setup page", async ({
-    page,
-  }) => {
-    // Keep this flow deterministic without external LLM connectivity.
+  test("admin can create, edit, and delete a provider", async ({ page }) => {
+    // Mock the test endpoint so we don't need real LLM connectivity.
     await page.route("**/api/admin/llm/test", async (route) => {
       await route.fulfill({
         status: 200,
@@ -136,11 +178,11 @@ test.describe("LLM Provider Setup @exclusive", () => {
     });
 
     const providerName = uniqueName("PW OpenAI Provider");
-    const apiKey = PROVIDER_API_KEY;
 
-    const setupModal = await openOpenAiSetupModal(page);
+    // ── Create ──
+    const setupModal = await openSetupModal(page, "OpenAI");
     await setupModal.getByLabel("Display Name").fill(providerName);
-    await setupModal.getByLabel("API Key").fill(apiKey);
+    await setupModal.getByLabel("API Key").fill(PROVIDER_API_KEY);
 
     const enableButton = setupModal.getByRole("button", { name: "Enable" });
     await expect(enableButton).toBeEnabled({ timeout: 10000 });
@@ -157,7 +199,11 @@ test.describe("LLM Provider Setup @exclusive", () => {
     expect(createdProvider).not.toBeNull();
     providersToCleanup.push(createdProvider!.id);
 
-    const editModal = await openProviderEditModal(page, providerName);
+    // ── Edit ──
+    await page.reload();
+    await page.waitForLoadState("networkidle");
+
+    const editModal = await openEditModal(page, providerName);
     const autoUpdateSwitch = editModal.getByRole("switch").first();
     const initialAutoModeState =
       (await autoUpdateSwitch.getAttribute("aria-checked")) === "true";
@@ -175,7 +221,13 @@ test.describe("LLM Provider Setup @exclusive", () => {
       })
       .toBe(!initialAutoModeState);
 
-    const deleteModal = await openProviderEditModal(page, providerName);
+    // ── Delete (via confirmation modal) ──
+    await page.reload();
+    await page.waitForLoadState("networkidle");
+
+    const deleteModal = await openDeleteConfirmation(page, providerName);
+    await expect(deleteModal.getByText("permanently delete")).toBeVisible();
+
     await deleteModal.getByRole("button", { name: "Delete" }).click();
     await expect(deleteModal).not.toBeVisible({ timeout: 15000 });
 
@@ -186,70 +238,85 @@ test.describe("LLM Provider Setup @exclusive", () => {
       .toBeNull();
 
     providersToCleanup = providersToCleanup.filter(
-      (providerId) => providerId !== createdProvider!.id
+      (id) => id !== createdProvider!.id
     );
   });
 
-  test("admin can switch the default provider from the enabled provider list", async ({
+  test("admin can change the default model via the dropdown", async ({
     page,
   }) => {
     const apiClient = new OnyxApiClient(page.request);
-    const initialDefaultProvider = (await listAdminLLMProviders(page)).find(
-      (provider) => provider.is_default_provider
-    );
-    const firstProviderName = uniqueName("PW Baseline Provider");
-    const secondProviderName = uniqueName("PW Target Provider");
+    const { default_text: initialDefault } = await listAdminLLMProviders(page);
 
-    const firstProviderId = await createPublicProvider(page, firstProviderName);
-    const secondProviderId = await createPublicProvider(
-      page,
-      secondProviderName
-    );
-    providersToCleanup.push(firstProviderId, secondProviderId);
+    const providerName = uniqueName("PW Default Test Provider");
+    const providerId = await createPublicProvider(page, providerName);
+    providersToCleanup.push(providerId);
 
-    try {
-      await apiClient.setProviderAsDefault(firstProviderId);
+    await apiClient.setProviderAsDefault(providerId, "gpt-4o");
 
-      await page.reload();
-      await page.waitForLoadState("networkidle");
+    await page.reload();
+    await page.waitForLoadState("networkidle");
 
-      const secondProviderCard = await findProviderCard(
-        page,
-        secondProviderName
-      );
-      await expect(secondProviderCard).toBeVisible({ timeout: 10000 });
-      await secondProviderCard.getByText("Set as default").click();
+    // The Default Model card should be visible
+    await expect(page.getByText("Default Model")).toBeVisible({
+      timeout: 10000,
+    });
 
-      await expect(secondProviderCard.getByText("Default")).toBeVisible({
-        timeout: 10000,
-      });
+    // The provider should appear in the Available Providers section with "Default" tag
+    const providerCard = await findExistingProviderCard(page, providerName);
+    await expect(providerCard).toBeVisible({ timeout: 10000 });
+    await expect(providerCard.getByText("Default")).toBeVisible();
 
-      await expect
-        .poll(
-          async () =>
-            (await getProviderByName(page, secondProviderName))
-              ?.is_default_provider
-        )
-        .toBeTruthy();
+    // Restore initial default if there was one
+    if (initialDefault) {
+      try {
+        await apiClient.setProviderAsDefault(
+          initialDefault.provider_id,
+          initialDefault.model_name
+        );
+      } catch (error) {
+        console.warn(`Failed to restore initial default: ${String(error)}`);
+      }
+    }
+  });
 
-      await expect
-        .poll(
-          async () =>
-            (await getProviderByName(page, firstProviderName))
-              ?.is_default_provider
-        )
-        .toBeFalsy();
-    } finally {
-      if (initialDefaultProvider) {
-        try {
-          await apiClient.setProviderAsDefault(initialDefaultProvider.id);
-        } catch (error) {
-          console.warn(
-            `Failed to restore initial default provider ${
-              initialDefaultProvider.id
-            }: ${String(error)}`
-          );
-        }
+  test("delete confirmation warns when deleting the default provider", async ({
+    page,
+  }) => {
+    const apiClient = new OnyxApiClient(page.request);
+    const { default_text: initialDefault } = await listAdminLLMProviders(page);
+
+    const providerName = uniqueName("PW Default Delete Test");
+    const providerId = await createPublicProvider(page, providerName);
+    providersToCleanup.push(providerId);
+
+    await apiClient.setProviderAsDefault(providerId, "gpt-4o");
+
+    await page.reload();
+    await page.waitForLoadState("networkidle");
+
+    const deleteModal = await openDeleteConfirmation(page, providerName);
+
+    // Should show the default provider warning
+    await expect(deleteModal.getByText("default provider")).toBeVisible();
+
+    // Cancel instead of deleting
+    await deleteModal.getByRole("button", { name: "Cancel" }).click();
+    await expect(deleteModal).not.toBeVisible({ timeout: 5000 });
+
+    // Provider should still exist
+    const provider = await getProviderByName(page, providerName);
+    expect(provider).not.toBeNull();
+
+    // Restore initial default if there was one
+    if (initialDefault) {
+      try {
+        await apiClient.setProviderAsDefault(
+          initialDefault.provider_id,
+          initialDefault.model_name
+        );
+      } catch (error) {
+        console.warn(`Failed to restore initial default: ${String(error)}`);
       }
     }
   });

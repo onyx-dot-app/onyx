@@ -38,7 +38,7 @@ const E2E_IMAGE_GEN_API_KEY =
  * - `listLlmProviders()` - Lists LLM providers (admin endpoint, includes is_public)
  * - `ensurePublicProvider(name?)` - Idempotently creates a public default LLM provider
  * - `createRestrictedProvider(name, groupId)` - Creates a restricted LLM provider assigned to a group
- * - `setProviderAsDefault(id)` - Sets an LLM provider as the default for chat
+ * - `setProviderAsDefault(id, modelName?)` - Sets an LLM provider as the default for chat
  * - `deleteProvider(id)` - Deletes an LLM provider
  *
  * **User Groups:**
@@ -498,11 +498,16 @@ export class OnyxApiClient {
    * Sets an LLM provider as the default for chat.
    *
    * @param providerId - The provider ID to set as default
+   * @param modelName - The model name to set as default (defaults to "gpt-4o")
    */
-  async setProviderAsDefault(providerId: number): Promise<void> {
-    const response = await this.post(
-      `/admin/llm/provider/${providerId}/default`
-    );
+  async setProviderAsDefault(
+    providerId: number,
+    modelName: string = "gpt-4o"
+  ): Promise<void> {
+    const response = await this.post(`/admin/llm/default`, {
+      provider_id: providerId,
+      model_name: modelName,
+    });
 
     await this.handleResponseSoft(
       response,
