@@ -103,7 +103,7 @@ function ActionButtons({ onDisconnect, onRefresh }: ActionButtonsProps) {
     <GeneralLayouts.Section
       flexDirection="row"
       justifyContent="end"
-      gap={0}
+      gap={0.5}
       padding={0}
     >
       <Button
