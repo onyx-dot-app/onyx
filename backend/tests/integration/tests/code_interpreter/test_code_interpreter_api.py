@@ -1,10 +1,12 @@
 import requests
 
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.managers.tool import ToolManager
 from tests.integration.common_utils.test_models import DATestUser
 
 CODE_INTERPRETER_URL = f"{API_SERVER_URL}/admin/code-interpreter"
 CODE_INTERPRETER_HEALTH_URL = f"{CODE_INTERPRETER_URL}/health"
+PYTHON_TOOL_NAME = "run_python"
 
 
 def test_get_code_interpreter_health_as_admin(
@@ -94,3 +96,35 @@ def test_code_interpreter_endpoints_require_admin(
         headers=basic_user.headers,
     )
     assert put_response.status_code == 403
+
+
+def test_python_tool_hidden_from_tool_list_when_disabled(
+    admin_user: DATestUser,
+) -> None:
+    """When code interpreter is disabled, the Python tool should not appear
+    in the GET /tool response (i.e. the frontend tool list)."""
+    # Disable
+    response = requests.put(
+        CODE_INTERPRETER_URL,
+        json={"enabled": False},
+        headers=admin_user.headers,
+    )
+    assert response.status_code == 200
+
+    # Python tool should not be in the tool list
+    tools = ToolManager.list_tools(user_performing_action=admin_user)
+    tool_names = [t.name for t in tools]
+    assert PYTHON_TOOL_NAME not in tool_names
+
+    # Re-enable
+    response = requests.put(
+        CODE_INTERPRETER_URL,
+        json={"enabled": True},
+        headers=admin_user.headers,
+    )
+    assert response.status_code == 200
+
+    # Python tool should reappear
+    tools = ToolManager.list_tools(user_performing_action=admin_user)
+    tool_names = [t.name for t in tools]
+    assert PYTHON_TOOL_NAME in tool_names
