@@ -605,13 +605,13 @@ def test_upload_with_custom_config_then_change(
                 )
 
             # Check inside the database and check that custom_config is the same as the original
-            provider = fetch_existing_llm_provider(name=name, db_session=db_session)
-            if not provider:
+            db_provider = fetch_existing_llm_provider(name=name, db_session=db_session)
+            if not db_provider:
                 assert False, "Provider not found in the database"
 
-            assert provider.custom_config == custom_config, (
+            assert db_provider.custom_config == custom_config, (
                 f"Expected custom_config {custom_config}, "
-                f"but got {provider.custom_config}"
+                f"but got {db_provider.custom_config}"
             )
     finally:
         db_session.rollback()
