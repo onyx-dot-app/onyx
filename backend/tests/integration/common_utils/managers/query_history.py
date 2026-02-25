@@ -104,4 +104,10 @@ class QueryHistoryManager:
             headers=user_performing_action.headers,
         )
         download_response.raise_for_status()
+
+        if not download_response.content:
+            raise RuntimeError(
+                "Query history CSV download returned zero-length content"
+            )
+
         return download_response.headers, download_response.content.decode()
