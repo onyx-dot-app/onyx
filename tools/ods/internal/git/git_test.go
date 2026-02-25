@@ -78,6 +78,7 @@ func TestCherryPickStateRoundTrip(t *testing.T) {
 		CommitSHAs:     []string{"abc123", "def456"},
 		CommitMessages: []string{"fix: something", "feat: another"},
 		Releases:       []string{"v2.12"},
+		Assignees:      []string{"alice", "bob"},
 		Stashed:        true,
 		NoVerify:       false,
 		DryRun:         true,
@@ -105,6 +106,9 @@ func TestCherryPickStateRoundTrip(t *testing.T) {
 	}
 	if loaded.DryRun != state.DryRun {
 		t.Errorf("DryRun = %v, want %v", loaded.DryRun, state.DryRun)
+	}
+	if len(loaded.Assignees) != len(state.Assignees) {
+		t.Errorf("Assignees len = %d, want %d", len(loaded.Assignees), len(state.Assignees))
 	}
 
 	CleanCherryPickState()

@@ -6,6 +6,8 @@ aioboto3==15.1.0
     # via onyx
 aiobotocore==2.24.0
     # via aioboto3
+aiofile==3.9.0
+    # via py-key-value-aio
 aiofiles==25.1.0
     # via
     #   aioboto3
@@ -40,8 +42,10 @@ anyio==4.11.0
     #   httpx
     #   mcp
     #   openai
+    #   py-key-value-aio
     #   sse-starlette
     #   starlette
+    #   watchfiles
 argon2-cffi==23.1.0
     # via pwdlib
 argon2-cffi-bindings==25.1.0
@@ -74,9 +78,7 @@ backports-tarfile==1.2.0 ; python_full_version < '3.12'
 bcrypt==4.3.0
     # via pwdlib
 beartype==0.22.6
-    # via
-    #   py-key-value-aio
-    #   py-key-value-shared
+    # via py-key-value-aio
 beautifulsoup4==4.12.3
     # via
     #   atlassian-python-api
@@ -110,6 +112,8 @@ cachetools==6.2.2
     # via
     #   google-auth
     #   py-key-value-aio
+caio==0.9.25
+    # via aiofile
 celery==5.5.1
     # via onyx
 certifi==2025.11.12
@@ -170,7 +174,6 @@ cloudpickle==3.1.2
     # via
     #   dask
     #   distributed
-    #   pydocket
 cobble==0.1.4
     # via mammoth
 cohere==5.6.1
@@ -218,8 +221,6 @@ deprecated==1.3.1
     #   pygithub
 discord-py==2.4.0
     # via onyx
-diskcache==5.6.3
-    # via py-key-value-aio
 distributed==2026.1.1
     # via onyx
 distro==1.9.0
@@ -256,8 +257,6 @@ exceptiongroup==1.3.0
     # via
     #   braintrust
     #   fastmcp
-fakeredis==2.33.0
-    # via pydocket
 fastapi==0.128.0
     # via
     #   fastapi-limiter
@@ -273,7 +272,7 @@ fastapi-users-db-sqlalchemy==7.0.0
     # via onyx
 fastavro==1.12.1
     # via cohere
-fastmcp==2.14.2
+fastmcp==3.0.2
     # via onyx
 fastuuid==0.14.0
     # via litellm
@@ -478,7 +477,9 @@ jsonpatch==1.33
 jsonpointer==3.0.0
     # via jsonpatch
 jsonref==1.1.0
-    # via onyx
+    # via
+    #   fastmcp
+    #   onyx
 jsonschema==4.25.1
     # via
     #   litellm
@@ -513,8 +514,6 @@ locket==1.0.0
     # via
     #   distributed
     #   partd
-lupa==2.6
-    # via fakeredis
 lxml==5.3.0
     # via
     #   htmldate
@@ -556,7 +555,7 @@ marshmallow==3.26.2
     # via dataclasses-json
 matrix-client==0.3.2
     # via zulip
-mcp==1.25.0
+mcp==1.26.0
     # via
     #   claude-agent-sdk
     #   fastmcp
@@ -613,7 +612,7 @@ oauthlib==3.2.2
     #   kubernetes
     #   onyx
     #   requests-oauthlib
-office365-rest-python-client==2.5.9
+office365-rest-python-client==2.6.2
     # via onyx
 olefile==0.47
     # via
@@ -642,22 +641,16 @@ opensearch-py==3.0.0
 opentelemetry-api==1.39.1
     # via
     #   ddtrace
+    #   fastmcp
     #   langfuse
     #   openinference-instrumentation
     #   opentelemetry-exporter-otlp-proto-http
-    #   opentelemetry-exporter-prometheus
-    #   opentelemetry-instrumentation
     #   opentelemetry-sdk
     #   opentelemetry-semantic-conventions
-    #   pydocket
 opentelemetry-exporter-otlp-proto-common==1.39.1
     # via opentelemetry-exporter-otlp-proto-http
 opentelemetry-exporter-otlp-proto-http==1.39.1
     # via langfuse
-opentelemetry-exporter-prometheus==0.60b1
-    # via pydocket
-opentelemetry-instrumentation==0.60b1
-    # via pydocket
 opentelemetry-proto==1.39.1
     # via
     #   onyx
@@ -668,17 +661,15 @@ opentelemetry-sdk==1.39.1
     #   langfuse
     #   openinference-instrumentation
     #   opentelemetry-exporter-otlp-proto-http
-    #   opentelemetry-exporter-prometheus
 opentelemetry-semantic-conventions==0.60b1
-    # via
-    #   opentelemetry-instrumentation
-    #   opentelemetry-sdk
+    # via opentelemetry-sdk
 orjson==3.11.4 ; platform_python_implementation != 'PyPy'
     # via langsmith
 packaging==24.2
     # via
     #   dask
     #   distributed
+    #   fastmcp
     #   google-cloud-aiplatform
     #   google-cloud-bigquery
     #   huggingface-hub
@@ -689,7 +680,6 @@ packaging==24.2
     #   langsmith
     #   marshmallow
     #   onnxruntime
-    #   opentelemetry-instrumentation
     #   pytest
     #   pywikibot
 pandas==2.3.3
@@ -702,8 +692,6 @@ passlib==1.7.4
     # via onyx
 pathable==0.4.4
     # via jsonschema-path
-pathvalidate==3.3.1
-    # via py-key-value-aio
 pdfminer-six==20251107
     # via markitdown
 pillow==12.1.1
@@ -723,9 +711,7 @@ ply==3.11
 prometheus-client==0.23.1
     # via
     #   onyx
-    #   opentelemetry-exporter-prometheus
     #   prometheus-fastapi-instrumentator
-    #   pydocket
 prometheus-fastapi-instrumentator==7.1.0
     # via onyx
 prompt-toolkit==3.0.52
@@ -764,12 +750,8 @@ pwdlib==0.3.0
     # via fastapi-users
 py==1.11.0
     # via retry
-py-key-value-aio==0.3.0
-    # via
-    #   fastmcp
-    #   pydocket
-py-key-value-shared==0.3.0
-    # via py-key-value-aio
+py-key-value-aio==0.4.4
+    # via fastmcp
 pyairtable==3.0.1
     # via onyx
 pyasn1==0.6.2
@@ -806,8 +788,6 @@ pydantic-core==2.33.2
     # via pydantic
 pydantic-settings==2.12.0
     # via mcp
-pydocket==0.16.3
-    # via fastmcp
 pyee==13.0.0
     # via playwright
 pygithub==2.5.0
@@ -879,8 +859,6 @@ python-http-client==3.3.7
     # via sendgrid
 python-iso639==2025.11.16
     # via unstructured
-python-json-logger==4.0.0
-    # via pydocket
 python-magic==0.4.27
     # via unstructured
 python-multipart==0.0.22
@@ -918,6 +896,7 @@ pyyaml==6.0.3
     # via
     #   dask
     #   distributed
+    #   fastmcp
     #   huggingface-hub
     #   jsonschema-path
     #   kubernetes
@@ -928,11 +907,8 @@ rapidfuzz==3.13.0
     #   unstructured
 redis==5.0.8
     # via
-    #   fakeredis
     #   fastapi-limiter
     #   onyx
-    #   py-key-value-aio
-    #   pydocket
 referencing==0.36.2
     # via
     #   jsonschema
@@ -1007,7 +983,6 @@ rich==14.2.0
     # via
     #   cyclopts
     #   fastmcp
-    #   pydocket
     #   rich-rst
     #   typer
 rich-rst==1.3.2
@@ -1056,9 +1031,7 @@ sniffio==1.3.1
     #   anyio
     #   openai
 sortedcontainers==2.4.0
-    # via
-    #   distributed
-    #   fakeredis
+    # via distributed
 soupsieve==2.8
     # via beautifulsoup4
 sqlalchemy==2.0.15
@@ -1124,9 +1097,7 @@ tqdm==4.67.1
 trafilatura==1.12.2
     # via onyx
 typer==0.20.0
-    # via
-    #   mcp
-    #   pydocket
+    # via mcp
 types-awscrt==0.28.4
     # via botocore-stubs
 types-openpyxl==3.0.4.7
@@ -1162,11 +1133,10 @@ typing-extensions==4.15.0
     #   opentelemetry-exporter-otlp-proto-http
     #   opentelemetry-sdk
     #   opentelemetry-semantic-conventions
-    #   py-key-value-shared
+    #   py-key-value-aio
     #   pyairtable
     #   pydantic
     #   pydantic-core
-    #   pydocket
     #   pyee
     #   pygithub
     #   python-docx
@@ -1234,6 +1204,8 @@ vine==5.1.0
     #   kombu
 voyageai==0.2.3
     # via onyx
+watchfiles==1.1.1
+    # via fastmcp
 wcwidth==0.2.14
     # via prompt-toolkit
 webencodings==0.5.1
@@ -1254,7 +1226,6 @@ wrapt==1.17.3
     #   deprecated
     #   langfuse
     #   openinference-instrumentation
-    #   opentelemetry-instrumentation
     #   unstructured
 xlrd==2.0.2
     # via markitdown

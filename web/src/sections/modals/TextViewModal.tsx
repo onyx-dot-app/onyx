@@ -21,6 +21,7 @@ import {
   SvgZoomIn,
   SvgZoomOut,
 } from "@opal/icons";
+import PreviewImage from "@/refresh-components/PreviewImage";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
 import { cn } from "@/lib/utils";
@@ -249,10 +250,10 @@ export default function TextViewModal({
                 style={{ transform: `scale(${zoom / 100})` }}
               >
                 {isImageFormat(fileType) ? (
-                  <img
+                  <PreviewImage
                     src={fileUrl}
                     alt={fileName}
-                    className="w-full flex-1 min-h-0 object-contain object-center"
+                    className="w-full flex-1 min-h-0"
                   />
                 ) : isSupportedIframeFormat(fileType) ? (
                   <iframe

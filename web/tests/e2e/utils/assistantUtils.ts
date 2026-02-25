@@ -20,7 +20,7 @@ export async function createAssistant(page: Page, params: AssistantParams) {
 
   // Open Assistants modal/list
   await page.getByTestId("AppSidebar/more-agents").click();
-  await page.getByTestId("AgentsPage/new-agent-button").click();
+  await page.getByLabel("AgentsPage/new-agent-button").click();
 
   // Fill required fields
   await page.locator('input[name="name"]').fill(name);

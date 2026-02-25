@@ -4940,6 +4940,11 @@ class ScimUserMapping(Base):
         ForeignKey("user.id", ondelete="CASCADE"), unique=True, nullable=False
     )
     scim_username: Mapped[str | None] = mapped_column(String, nullable=True)
+    department: Mapped[str | None] = mapped_column(String, nullable=True)
+    manager: Mapped[str | None] = mapped_column(String, nullable=True)
+    given_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    family_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    scim_emails_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -4978,3 +4983,12 @@ class ScimGroupMapping(Base):
     user_group: Mapped[UserGroup] = relationship(
         "UserGroup", foreign_keys=[user_group_id]
     )
+
+
+class CodeInterpreterServer(Base):
+    """Details about the code interpreter server"""
+
+    __tablename__ = "code_interpreter_server"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    server_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

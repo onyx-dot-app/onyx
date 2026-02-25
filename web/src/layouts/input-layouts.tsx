@@ -119,10 +119,10 @@ function HorizontalInputLayout({
         justifyContent="between"
         alignItems={center ? "center" : "start"}
       >
-        <div className="flex flex-col self-stretch flex-[2]">
+        <div className="flex flex-col flex-1 self-stretch">
           <TitleLayout {...titleLayoutProps} />
         </div>
-        <div className="flex flex-col flex-[1] items-end">{children}</div>
+        <div className="flex flex-col items-end">{children}</div>
       </Section>
       {name && <ErrorLayout name={name} />}
     </Section>

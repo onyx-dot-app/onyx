@@ -23,6 +23,7 @@ from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnectorWithPermSync
+from onyx.connectors.microsoft_graph_env import resolve_microsoft_environment
 from onyx.connectors.models import ConnectorCheckpoint
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import ConnectorMissingCredentialError
@@ -73,8 +74,11 @@ class TeamsConnector(
         self.msal_app: msal.ConfidentialClientApplication | None = None
         self.max_workers = max_workers
         self.requested_team_list: list[str] = teams
-        self.authority_host = authority_host.rstrip("/")
-        self.graph_api_host = graph_api_host.rstrip("/")
+
+        resolved_env = resolve_microsoft_environment(graph_api_host, authority_host)
+        self._azure_environment = resolved_env.environment
+        self.authority_host = resolved_env.authority_host
+        self.graph_api_host = resolved_env.graph_host
 
     # impls for BaseConnector
 
@@ -106,7 +110,9 @@ class TeamsConnector(
 
             return token
 
-        self.graph_client = GraphClient(_acquire_token_func)
+        self.graph_client = GraphClient(
+            _acquire_token_func, environment=self._azure_environment
+        )
         return None
 
     def validate_connector_settings(self) -> None:

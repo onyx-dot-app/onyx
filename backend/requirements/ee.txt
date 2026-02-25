@@ -211,7 +211,7 @@ litellm==1.81.6
     # via onyx
 markupsafe==3.0.3
     # via jinja2
-mcp==1.25.0
+mcp==1.26.0
     # via claude-agent-sdk
 monotonic==1.6
     # via posthog

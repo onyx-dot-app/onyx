@@ -6,6 +6,7 @@ from typing import cast
 
 from pydantic import BaseModel
 from pydantic import Field
+from pydantic import field_validator
 from pydantic import model_validator
 
 from onyx.access.models import ExternalAccess
@@ -166,6 +167,14 @@ class DocumentBase(BaseModel):
     # TODO(andrei): Ideally we could improve this to where each value is just a
     # list of strings.
     metadata: dict[str, str | list[str]]
+
+    @field_validator("metadata", mode="before")
+    @classmethod
+    def _coerce_metadata_values(cls, v: dict[str, Any]) -> dict[str, str | list[str]]:
+        return {
+            key: [str(item) for item in val] if isinstance(val, list) else str(val)
+            for key, val in v.items()
+        }
 
     # UTC time
     doc_updated_at: datetime | None = None

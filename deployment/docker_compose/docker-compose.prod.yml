@@ -352,16 +352,7 @@ services:
 
   code-interpreter:
     image: onyxdotapp/code-interpreter:${CODE_INTERPRETER_IMAGE_TAG:-latest}
-    entrypoint: ["/bin/bash", "-c"]
-    command: >
-      "
-      if [ \"$${CODE_INTERPRETER_BETA_ENABLED}\" = \"True\" ] || [ \"$${CODE_INTERPRETER_BETA_ENABLED}\" = \"true\" ]; then
-        exec bash ./entrypoint.sh code-interpreter-api;
-      else
-        echo 'Skipping code interpreter';
-        exec tail -f /dev/null;
-      fi
-      "
+    command: ["bash", "./entrypoint.sh", "code-interpreter-api"]
     restart: unless-stopped
     env_file:
       - path: .env

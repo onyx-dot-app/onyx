@@ -554,10 +554,9 @@ class VespaDocumentIndex(DocumentIndex):
         num_to_retrieve: int,
     ) -> list[InferenceChunk]:
         vespa_where_clauses = build_vespa_filters(filters)
-        # Needs to be at least as much as the rerank-count value set in the
-        # Vespa schema config. Otherwise we would be getting fewer results than
-        # expected for reranking.
-        target_hits = max(10 * num_to_retrieve, RERANK_COUNT)
+        # Avoid over-fetching a very large candidate set for global-phase reranking.
+        # Keep enough headroom for quality while capping cost on larger indices.
+        target_hits = min(max(4 * num_to_retrieve, 100), RERANK_COUNT)
 
         yql = (
             YQL_BASE.format(index_name=self._index_name)

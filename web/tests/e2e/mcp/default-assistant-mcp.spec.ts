@@ -496,10 +496,7 @@ test.describe("Default Assistant MCP Integration", () => {
     await page.getByTestId("AppSidebar/more-agents").click();
     await page.waitForURL("**/app/agents");
 
-    await page
-      .getByTestId("AgentsPage/new-agent-button")
-      .getByRole("link", { name: "New Agent" })
-      .click();
+    await page.getByLabel("AgentsPage/new-agent-button").click();
     await page.waitForURL("**/app/agents/create");
 
     const assistantName = `MCP Assistant ${Date.now()}`;

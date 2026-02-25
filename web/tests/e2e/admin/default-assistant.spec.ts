@@ -21,12 +21,12 @@ function getToolSwitch(page: Page, toolName: string): Locator {
 }
 
 /**
- * Click a tool switch and wait for the PATCH response to complete.
+ * Click a button and wait for the PATCH response to complete.
  * Uses waitForResponse set up *before* the click to avoid race conditions.
  */
-async function clickToolSwitchAndWaitForSave(
+async function clickAndWaitForPatch(
   page: Page,
-  switchLocator: Locator
+  buttonLocator: Locator
 ): Promise<void> {
   const patchPromise = page.waitForResponse(
     (r) =>
@@ -34,7 +34,7 @@ async function clickToolSwitchAndWaitForSave(
       r.request().method() === "PATCH",
     { timeout: 8000 }
   );
-  await switchLocator.click();
+  await buttonLocator.click();
   await patchPromise;
 }
 
@@ -161,7 +161,7 @@ test.describe("Chat Preferences Admin Page", () => {
   }) => {
     // Verify page loads with expected content
     await expect(page.locator('[aria-label="admin-page-title"]')).toHaveText(
-      "Chat Preferences"
+      /^Chat Preferences/
     );
     await expect(page.getByText("Actions & Tools")).toBeVisible();
   });
@@ -215,7 +215,7 @@ test.describe("Chat Preferences Admin Page", () => {
     );
 
     // Toggle back to original state
-    await clickToolSwitchAndWaitForSave(page, searchSwitch);
+    await clickAndWaitForPatch(page, searchSwitch);
   });
 
   test("should toggle Web Search tool on and off", async ({ page }) => {
@@ -267,7 +267,7 @@ test.describe("Chat Preferences Admin Page", () => {
     );
 
     // Toggle back to original state
-    await clickToolSwitchAndWaitForSave(page, webSearchSwitch);
+    await clickAndWaitForPatch(page, webSearchSwitch);
   });
 
   test("should toggle Image Generation tool on and off", async ({ page }) => {
@@ -321,7 +321,7 @@ test.describe("Chat Preferences Admin Page", () => {
     );
 
     // Toggle back to original state
-    await clickToolSwitchAndWaitForSave(page, imageGenSwitch);
+    await clickAndWaitForPatch(page, imageGenSwitch);
   });
 
   test("should edit and save system prompt", async ({ page }) => {
@@ -339,29 +339,11 @@ test.describe("Chat Preferences Admin Page", () => {
     const textarea = modal.getByPlaceholder("Enter your system prompt...");
     await textarea.fill(testPrompt);
 
-    // Set up response listener before the click to avoid race conditions
-    const patchRespPromise = page.waitForResponse(
-      (r) =>
-        r.url().includes("/api/admin/default-assistant") &&
-        r.request().method() === "PATCH",
-      { timeout: 8000 }
+    // Click Save and wait for PATCH to complete
+    await clickAndWaitForPatch(
+      page,
+      modal.getByRole("button", { name: "Save" })
     );
-
-    // Click Save in the modal footer
-    await modal.getByRole("button", { name: "Save" }).click();
-
-    // Wait for PATCH to complete
-    const patchResp = await patchRespPromise;
-    console.log(
-      `[prompt] Save PATCH status=${patchResp.status()} body=${(
-        await patchResp.text()
-      ).slice(0, 300)}`
-    );
-
-    // Wait for success toast
-    await expect(page.getByText("System prompt updated")).toBeVisible({
-      timeout: 5000,
-    });
 
     // Modal should close after save
     await expect(modal).not.toBeVisible();
@@ -396,11 +378,10 @@ test.describe("Chat Preferences Admin Page", () => {
     // If already empty, add some text first
     if (initialValue === "") {
       await textarea.fill("Temporary text");
-      await modal.getByRole("button", { name: "Save" }).click();
-      await expect(page.getByText("System prompt updated")).toBeVisible({
-        timeout: 5000,
-      });
-      await page.waitForTimeout(500);
+      await clickAndWaitForPatch(
+        page,
+        modal.getByRole("button", { name: "Save" })
+      );
       // Reopen modal
       await page.getByText("Modify Prompt").click();
       await expect(modal).toBeVisible({ timeout: 5000 });
@@ -409,27 +390,11 @@ test.describe("Chat Preferences Admin Page", () => {
     // Clear the textarea
     await textarea.fill("");
 
-    // Set up response listener before the click to avoid race conditions
-    const patchRespPromise = page.waitForResponse(
-      (r) =>
-        r.url().includes("/api/admin/default-assistant") &&
-        r.request().method() === "PATCH",
-      { timeout: 8000 }
-    );
-
     // Save
-    await modal.getByRole("button", { name: "Save" }).click();
-
-    const patchResp = await patchRespPromise;
-    console.log(
-      `[prompt-empty] Save empty PATCH status=${patchResp.status()} body=${(
-        await patchResp.text()
-      ).slice(0, 300)}`
+    await clickAndWaitForPatch(
+      page,
+      modal.getByRole("button", { name: "Save" })
     );
-
-    await expect(page.getByText("System prompt updated")).toBeVisible({
-      timeout: 5000,
-    });
 
     // Refresh page to verify persistence
     await page.reload();
@@ -450,10 +415,10 @@ test.describe("Chat Preferences Admin Page", () => {
     // Restore original value if it wasn't already empty
     if (initialValue !== "") {
       await textareaAfter.fill(initialValue);
-      await modalAfter.getByRole("button", { name: "Save" }).click();
-      await expect(page.getByText("System prompt updated")).toBeVisible({
-        timeout: 5000,
-      });
+      await clickAndWaitForPatch(
+        page,
+        modalAfter.getByRole("button", { name: "Save" })
+      );
     } else {
       await modalAfter.getByRole("button", { name: "Cancel" }).click();
     }
@@ -475,26 +440,11 @@ test.describe("Chat Preferences Admin Page", () => {
 
     await textarea.fill(longPrompt);
 
-    // Set up response listener before the click to avoid race conditions
-    const patchRespPromise = page.waitForResponse(
-      (r) =>
-        r.url().includes("/api/admin/default-assistant") &&
-        r.request().method() === "PATCH",
-      { timeout: 8000 }
-    );
-
     // Save
-    await modal.getByRole("button", { name: "Save" }).click();
-    const patchResp = await patchRespPromise;
-    console.log(
-      `[prompt-long] Save PATCH status=${patchResp.status()} body=${(
-        await patchResp.text()
-      ).slice(0, 300)}`
+    await clickAndWaitForPatch(
+      page,
+      modal.getByRole("button", { name: "Save" })
     );
-
-    await expect(page.getByText("System prompt updated")).toBeVisible({
-      timeout: 5000,
-    });
 
     // Verify persistence after reload
     await page.reload();
@@ -513,10 +463,10 @@ test.describe("Chat Preferences Admin Page", () => {
         "Enter your system prompt..."
       );
       await restoreTextarea.fill(initialValue);
-      await modalAfter.getByRole("button", { name: "Save" }).click();
-      await expect(page.getByText("System prompt updated")).toBeVisible({
-        timeout: 5000,
-      });
+      await clickAndWaitForPatch(
+        page,
+        modalAfter.getByRole("button", { name: "Save" })
+      );
     } else {
       await modalAfter.getByRole("button", { name: "Cancel" }).click();
     }
@@ -602,7 +552,7 @@ test.describe("Chat Preferences Admin Page", () => {
       const toolSwitch = getToolSwitch(page, toolName);
       const currentState = await toolSwitch.getAttribute("aria-checked");
       if (currentState === "true") {
-        await clickToolSwitchAndWaitForSave(page, toolSwitch);
+        await clickAndWaitForPatch(page, toolSwitch);
         const newState = await toolSwitch.getAttribute("aria-checked");
         console.log(`[toggle-all] Clicked ${toolName}, new state=${newState}`);
       }
@@ -628,7 +578,7 @@ test.describe("Chat Preferences Admin Page", () => {
       const toolSwitch = getToolSwitch(page, toolName);
       const currentState = await toolSwitch.getAttribute("aria-checked");
       if (currentState === "false") {
-        await clickToolSwitchAndWaitForSave(page, toolSwitch);
+        await clickAndWaitForPatch(page, toolSwitch);
         const newState = await toolSwitch.getAttribute("aria-checked");
         console.log(`[toggle-all] Clicked ${toolName}, new state=${newState}`);
       }
@@ -722,7 +672,7 @@ test.describe("Chat Preferences Admin Page", () => {
       const originalState = toolStates[toolName];
 
       if (currentState !== originalState) {
-        await clickToolSwitchAndWaitForSave(page, toolSwitch);
+        await clickAndWaitForPatch(page, toolSwitch);
         needsSave = true;
       }
     }

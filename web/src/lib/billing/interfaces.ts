@@ -134,6 +134,19 @@ export function hasActiveSubscription(
 }
 
 /**
+ * Check if the response indicates an active *paid* subscription.
+ * Returns true only for status === "active" (excludes trialing, past_due, etc.).
+ */
+export function hasPaidSubscription(
+  data: BillingInformation | SubscriptionStatus
+): data is BillingInformation {
+  if ("subscribed" in data) {
+    return false;
+  }
+  return data.status === BillingStatus.ACTIVE;
+}
+
+/**
  * Check if a license is valid and active.
  */
 export function isLicenseValid(license: LicenseStatus): boolean {

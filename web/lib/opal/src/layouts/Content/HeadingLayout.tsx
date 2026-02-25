@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@opal/components/buttons/Button/components";
-import type { InteractiveContainerHeightVariant } from "@opal/core";
+import type { SizeVariant } from "@opal/shared";
 import SvgEdit from "@opal/icons/edit";
 import type { IconFunctionComponent } from "@opal/types";
 import { cn } from "@opal/utils";
@@ -25,8 +25,8 @@ interface HeadingPresetConfig {
   titleFont: string;
   /** Title line-height — also used as icon container min-height (CSS value). */
   lineHeight: string;
-  /** Button `size` prop for the edit button. */
-  editButtonSize: InteractiveContainerHeightVariant;
+  /** Button `size` prop for the edit button. Uses the shared `SizeVariant` scale. */
+  editButtonSize: SizeVariant;
   /** Tailwind padding class for the edit button container. */
   editButtonPadding: string;
 }

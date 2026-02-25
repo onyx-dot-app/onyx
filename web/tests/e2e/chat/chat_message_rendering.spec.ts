@@ -674,6 +674,58 @@ The platform architecture document provides additional context on how these impr
       });
     });
 
+    test.describe("Header Levels", () => {
+      const HEADINGS_RESPONSE = `# Getting Started
+
+This is the introductory paragraph.
+
+## Installing the \`onyx-sdk\`
+
+Follow these steps to install the SDK.
+
+### Configuration Options
+
+Some details about configuration.
+
+#### The \`max_results\` Parameter
+
+Set \`max_results\` to limit the number of returned documents.`;
+
+      test("h1 through h4 headings with inline code render correctly", async ({
+        page,
+      }) => {
+        await openChat(page);
+        await mockChatEndpoint(page, HEADINGS_RESPONSE);
+
+        await sendMessage(page, "Show me all heading levels");
+
+        const aiMessage = page.getByTestId("onyx-ai-message").first();
+
+        await expect(aiMessage.locator("h1")).toContainText("Getting Started");
+        await expect(aiMessage.locator("h2")).toContainText("Installing the");
+        await expect(
+          aiMessage.locator("h2").locator('[data-testid="code-block"]')
+        ).toContainText("onyx-sdk");
+        await expect(aiMessage.locator("h3")).toContainText(
+          "Configuration Options"
+        );
+        await expect(aiMessage.locator("h4")).toContainText("Parameter");
+        await expect(
+          aiMessage.locator("h4").locator('[data-testid="code-block"]')
+        ).toContainText("max_results");
+
+        await expect(aiMessage.locator("h1")).toHaveCount(1);
+        await expect(aiMessage.locator("h2")).toHaveCount(1);
+        await expect(aiMessage.locator("h3")).toHaveCount(1);
+        await expect(aiMessage.locator("h4")).toHaveCount(1);
+
+        await screenshotChatContainer(
+          page,
+          `chat-heading-levels-h1-h4-${theme}`
+        );
+      });
+    });
+
     test.describe("Message Interaction States", () => {
       test("hovering over user message shows action buttons", async ({
         page,
