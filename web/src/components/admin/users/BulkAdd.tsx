@@ -16,7 +16,11 @@ const addUsers = async (url: string, { arg }: { arg: Array<string> }) => {
   });
 };
 
-export type EmailInviteStatus = "SENT" | "NOT_CONFIGURED" | "SEND_FAILED" | "DISABLED";
+export type EmailInviteStatus =
+  | "SENT"
+  | "NOT_CONFIGURED"
+  | "SEND_FAILED"
+  | "DISABLED";
 
 interface FormProps {
   onSuccess: (emailInviteStatus: EmailInviteStatus) => void;
