@@ -28,6 +28,7 @@ from onyx.db.document_access import get_accessible_documents_by_ids
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Document
 from onyx.db.models import DocumentSet
+from onyx.db.models import FederatedConnector__DocumentSet
 from onyx.db.models import HierarchyNode
 from onyx.db.models import Persona
 from onyx.db.models import Persona__User
@@ -420,9 +421,16 @@ def get_minimal_persona_snapshots_for_user(
     stmt = stmt.options(
         selectinload(Persona.tools),
         selectinload(Persona.labels),
-        selectinload(Persona.document_sets)
-        .selectinload(DocumentSet.connector_credential_pairs)
-        .selectinload(ConnectorCredentialPair.connector),
+        selectinload(Persona.document_sets).options(
+            selectinload(DocumentSet.connector_credential_pairs).selectinload(
+                ConnectorCredentialPair.connector
+            ),
+            selectinload(DocumentSet.users),
+            selectinload(DocumentSet.groups),
+            selectinload(DocumentSet.federated_connectors).selectinload(
+                FederatedConnector__DocumentSet.federated_connector
+            ),
+        ),
         selectinload(Persona.hierarchy_nodes),
         selectinload(Persona.attached_documents).selectinload(
             Document.parent_hierarchy_node
@@ -453,7 +461,16 @@ def get_persona_snapshots_for_user(
             Document.parent_hierarchy_node
         ),
         selectinload(Persona.labels),
-        selectinload(Persona.document_sets),
+        selectinload(Persona.document_sets).options(
+            selectinload(DocumentSet.connector_credential_pairs).selectinload(
+                ConnectorCredentialPair.connector
+            ),
+            selectinload(DocumentSet.users),
+            selectinload(DocumentSet.groups),
+            selectinload(DocumentSet.federated_connectors).selectinload(
+                FederatedConnector__DocumentSet.federated_connector
+            ),
+        ),
         selectinload(Persona.user),
         selectinload(Persona.user_files),
         selectinload(Persona.users),
@@ -550,9 +567,16 @@ def get_minimal_persona_snapshots_paginated(
             Document.parent_hierarchy_node
         ),
         selectinload(Persona.labels),
-        selectinload(Persona.document_sets)
-        .selectinload(DocumentSet.connector_credential_pairs)
-        .selectinload(ConnectorCredentialPair.connector),
+        selectinload(Persona.document_sets).options(
+            selectinload(DocumentSet.connector_credential_pairs).selectinload(
+                ConnectorCredentialPair.connector
+            ),
+            selectinload(DocumentSet.users),
+            selectinload(DocumentSet.groups),
+            selectinload(DocumentSet.federated_connectors).selectinload(
+                FederatedConnector__DocumentSet.federated_connector
+            ),
+        ),
         selectinload(Persona.user),
     )
 
@@ -611,7 +635,16 @@ def get_persona_snapshots_paginated(
             Document.parent_hierarchy_node
         ),
         selectinload(Persona.labels),
-        selectinload(Persona.document_sets),
+        selectinload(Persona.document_sets).options(
+            selectinload(DocumentSet.connector_credential_pairs).selectinload(
+                ConnectorCredentialPair.connector
+            ),
+            selectinload(DocumentSet.users),
+            selectinload(DocumentSet.groups),
+            selectinload(DocumentSet.federated_connectors).selectinload(
+                FederatedConnector__DocumentSet.federated_connector
+            ),
+        ),
         selectinload(Persona.user),
         selectinload(Persona.user_files),
         selectinload(Persona.users),

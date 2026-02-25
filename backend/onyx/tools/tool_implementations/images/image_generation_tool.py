@@ -11,11 +11,14 @@ from onyx.chat.emitter import Emitter
 from onyx.configs.app_configs import IMAGE_MODEL_NAME
 from onyx.configs.app_configs import IMAGE_MODEL_PROVIDER
 from onyx.db.image_generation import get_default_image_generation_config
+from onyx.file_store.models import ChatFileType
 from onyx.file_store.utils import build_frontend_file_url
+from onyx.file_store.utils import load_chat_file_by_id
 from onyx.file_store.utils import save_files
 from onyx.image_gen.factory import get_image_generation_provider
 from onyx.image_gen.factory import validate_credentials
 from onyx.image_gen.interfaces import ImageGenerationProviderCredentials
+from onyx.image_gen.interfaces import ReferenceImage
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import GeneratedImage
 from onyx.server.query_and_chat.streaming_models import ImageGenerationFinal
@@ -23,6 +26,7 @@ from onyx.server.query_and_chat.streaming_models import ImageGenerationToolHeart
 from onyx.server.query_and_chat.streaming_models import ImageGenerationToolStart
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.tools.interface import Tool
+from onyx.tools.models import ImageGenerationToolOverrideKwargs
 from onyx.tools.models import ToolCallException
 from onyx.tools.models import ToolExecutionException
 from onyx.tools.models import ToolResponse
@@ -31,6 +35,7 @@ from onyx.tools.tool_implementations.images.models import (
 )
 from onyx.tools.tool_implementations.images.models import ImageGenerationResponse
 from onyx.tools.tool_implementations.images.models import ImageShape
+from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
@@ -40,10 +45,10 @@ logger = setup_logger()
 HEARTBEAT_INTERVAL = 5.0
 
 PROMPT_FIELD = "prompt"
+REFERENCE_IMAGE_FILE_IDS_FIELD = "reference_image_file_ids"
 
 
-# override_kwargs is not supported for image generation tools
-class ImageGenerationTool(Tool[None]):
+class ImageGenerationTool(Tool[ImageGenerationToolOverrideKwargs | None]):
     NAME = "generate_image"
     DESCRIPTION = "Generate an image based on a prompt. Do not use unless the user specifically requests an image."
     DISPLAY_NAME = "Image Generation"
@@ -59,6 +64,7 @@ class ImageGenerationTool(Tool[None]):
     ) -> None:
         super().__init__(emitter=emitter)
         self.model = model
+        self.provider = provider
         self.num_imgs = num_imgs
 
         self.img_provider = get_image_generation_provider(
@@ -133,6 +139,16 @@ class ImageGenerationTool(Tool[None]):
                             ),
                             "enum": [shape.value for shape in ImageShape],
                         },
+                        REFERENCE_IMAGE_FILE_IDS_FIELD: {
+                            "type": "array",
+                            "description": (
+                                "Optional image file IDs to use as reference context for edits/variations. "
+                                "Use the file_id values returned by previous generate_image calls."
+                            ),
+                            "items": {
+                                "type": "string",
+                            },
+                        },
                     },
                     "required": [PROMPT_FIELD],
                 },
@@ -148,7 +164,10 @@ class ImageGenerationTool(Tool[None]):
         )
 
     def _generate_image(
-        self, prompt: str, shape: ImageShape
+        self,
+        prompt: str,
+        shape: ImageShape,
+        reference_images: list[ReferenceImage] | None = None,
     ) -> tuple[ImageGenerationResponse, Any]:
         if shape == ImageShape.LANDSCAPE:
             if "gpt-image-1" in self.model:
@@ -169,6 +188,7 @@ class ImageGenerationTool(Tool[None]):
                 model=self.model,
                 size=size,
                 n=1,
+                reference_images=reference_images,
                 # response_format parameter is not supported for gpt-image-1
                 response_format=None if "gpt-image-1" in self.model else "b64_json",
             )
@@ -231,10 +251,117 @@ class ImageGenerationTool(Tool[None]):
                 emit_error_packet=True,
             )
 
+    def _resolve_reference_image_file_ids(
+        self,
+        llm_kwargs: dict[str, Any],
+        override_kwargs: ImageGenerationToolOverrideKwargs | None,
+    ) -> list[str]:
+        raw_reference_ids = llm_kwargs.get(REFERENCE_IMAGE_FILE_IDS_FIELD)
+        if raw_reference_ids is not None:
+            if not isinstance(raw_reference_ids, list) or not all(
+                isinstance(file_id, str) for file_id in raw_reference_ids
+            ):
+                raise ToolCallException(
+                    message=(
+                        f"Invalid {REFERENCE_IMAGE_FILE_IDS_FIELD}: expected array of strings, "
+                        f"got {type(raw_reference_ids)}"
+                    ),
+                    llm_facing_message=(
+                        f"The '{REFERENCE_IMAGE_FILE_IDS_FIELD}' field must be an array of file_id strings."
+                    ),
+                )
+            reference_image_file_ids = [
+                file_id.strip() for file_id in raw_reference_ids if file_id.strip()
+            ]
+        elif (
+            override_kwargs
+            and override_kwargs.recent_generated_image_file_ids
+            and self.img_provider.supports_reference_images
+        ):
+            # If no explicit reference was provided, default to the most recently generated image.
+            reference_image_file_ids = [
+                override_kwargs.recent_generated_image_file_ids[-1]
+            ]
+        else:
+            reference_image_file_ids = []
+
+        # Deduplicate while preserving order.
+        deduped_reference_image_ids: list[str] = []
+        seen_ids: set[str] = set()
+        for file_id in reference_image_file_ids:
+            if file_id in seen_ids:
+                continue
+            seen_ids.add(file_id)
+            deduped_reference_image_ids.append(file_id)
+
+        if not deduped_reference_image_ids:
+            return []
+
+        if not self.img_provider.supports_reference_images:
+            raise ToolCallException(
+                message=(
+                    f"Reference images requested but provider '{self.provider}' "
+                    "does not support image-editing context."
+                ),
+                llm_facing_message=(
+                    "This image provider does not support editing from previous image context. "
+                    "Try text-only generation, or switch to a provider/model that supports image edits."
+                ),
+            )
+
+        max_reference_images = self.img_provider.max_reference_images
+        if max_reference_images > 0:
+            return deduped_reference_image_ids[-max_reference_images:]
+        return deduped_reference_image_ids
+
+    def _load_reference_images(
+        self,
+        reference_image_file_ids: list[str],
+    ) -> list[ReferenceImage]:
+        reference_images: list[ReferenceImage] = []
+
+        for file_id in reference_image_file_ids:
+            try:
+                loaded_file = load_chat_file_by_id(file_id)
+            except Exception as e:
+                raise ToolCallException(
+                    message=f"Could not load reference image file '{file_id}': {e}",
+                    llm_facing_message=(
+                        f"Reference image file '{file_id}' could not be loaded. "
+                        "Use file_id values returned by previous generate_image calls."
+                    ),
+                )
+
+            if loaded_file.file_type != ChatFileType.IMAGE:
+                raise ToolCallException(
+                    message=f"Reference file '{file_id}' is not an image",
+                    llm_facing_message=f"Reference file '{file_id}' is not an image.",
+                )
+
+            try:
+                mime_type = get_image_type_from_bytes(loaded_file.content)
+            except Exception as e:
+                raise ToolCallException(
+                    message=f"Unsupported reference image format for '{file_id}': {e}",
+                    llm_facing_message=(
+                        f"Reference image '{file_id}' has an unsupported format. "
+                        "Only PNG, JPEG, GIF, and WEBP are supported."
+                    ),
+                )
+
+            reference_images.append(
+                ReferenceImage(
+                    data=loaded_file.content,
+                    mime_type=mime_type,
+                )
+            )
+
+        return reference_images
+
     def run(
         self,
         placement: Placement,
-        override_kwargs: None = None,  # noqa: ARG002
+        override_kwargs: ImageGenerationToolOverrideKwargs | None = None,
         **llm_kwargs: Any,
     ) -> ToolResponse:
         if PROMPT_FIELD not in llm_kwargs:
@@ -247,6 +374,11 @@ class ImageGenerationTool(Tool[None]):
             )
         prompt = cast(str, llm_kwargs[PROMPT_FIELD])
         shape = ImageShape(llm_kwargs.get("shape", ImageShape.SQUARE.value))
+        reference_image_file_ids = self._resolve_reference_image_file_ids(
+            llm_kwargs=llm_kwargs,
+            override_kwargs=override_kwargs,
+        )
+        reference_images = self._load_reference_images(reference_image_file_ids)
 
         # Use threading to generate images in parallel while emitting heartbeats
         results: list[tuple[ImageGenerationResponse, Any] | None] = [
@@ -267,6 +399,7 @@ class ImageGenerationTool(Tool[None]):
                                 (
                                     prompt,
                                     shape,
+                                    reference_images or None,
                                 ),
                             )
                             for _ in range(self.num_imgs)
@@ -347,6 +480,7 @@ class ImageGenerationTool(Tool[None]):
         llm_facing_response = json.dumps(
             [
                 {
+                    "file_id": img.file_id,
                     "revised_prompt": img.revised_prompt,
                 }
                 for img in generated_images_metadata

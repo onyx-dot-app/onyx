@@ -112,6 +112,7 @@ function CheckboxInner(
       */}
       <input
         ref={inputRef}
+        id={id}
         type="checkbox"
         role="presentation"
         className="sr-only peer"
@@ -122,7 +123,6 @@ function CheckboxInner(
         {...props}
       />
       <div
-        id={id}
         role="checkbox"
         aria-checked={indeterminate ? "mixed" : checked}
         aria-label={ariaLabel}

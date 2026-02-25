@@ -30,6 +30,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.context.search.models import SearchDocsResponse
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.memory import add_memory
 from onyx.db.memory import update_memory_at_index
 from onyx.db.memory import UserMemoryContext
@@ -656,7 +657,12 @@ def run_llm_loop(
         fallback_extraction_attempted: bool = False
         citation_mapping: dict[int, str] = {}  # Maps citation_num -> document_id/URL
 
-        default_base_system_prompt: str = get_default_base_system_prompt(db_session)
+        # Fetch this in a short-lived session so the long-running stream loop does
+        # not pin a connection just to keep read state alive.
+        with get_session_with_current_tenant() as prompt_db_session:
+            default_base_system_prompt: str = get_default_base_system_prompt(
+                prompt_db_session
+            )
         system_prompt = None
         custom_agent_prompt_msg = None
 

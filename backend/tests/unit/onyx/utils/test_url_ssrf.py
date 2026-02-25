@@ -291,7 +291,7 @@ class TestSsrfSafeGet:
                 assert call_args[1]["headers"]["User-Agent"] == "TestBot/1.0"
 
     def test_passes_timeout(self) -> None:
-        """Test that timeout is passed through."""
+        """Test that timeout is passed through, including tuple form."""
         mock_response = MagicMock()
         mock_response.is_redirect = False
 
@@ -301,7 +301,7 @@ class TestSsrfSafeGet:
             with patch("onyx.utils.url.requests.get") as mock_get:
                 mock_get.return_value = mock_response
 
-                ssrf_safe_get("http://example.com/", timeout=30)
+                ssrf_safe_get("http://example.com/", timeout=(5, 15))
 
                 call_args = mock_get.call_args
-                assert call_args[1]["timeout"] == 30
+                assert call_args[1]["timeout"] == (5, 15)

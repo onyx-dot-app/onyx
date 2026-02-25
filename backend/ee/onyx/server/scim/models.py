@@ -63,6 +63,13 @@ class ScimMeta(BaseModel):
     location: str | None = None
 
 
+class ScimUserGroupRef(BaseModel):
+    """Group reference within a User resource (RFC 7643 §4.1.2, read-only)."""
+
+    value: str
+    display: str | None = None
+
+
 class ScimUserResource(BaseModel):
     """SCIM User resource representation (RFC 7643 §4.1).
 
@@ -76,8 +83,10 @@ class ScimUserResource(BaseModel):
     externalId: str | None = None  # IdP's identifier for this user
     userName: str  # Typically the user's email address
     name: ScimName | None = None
+    displayName: str | None = None
     emails: list[ScimEmail] = Field(default_factory=list)
     active: bool = True
+    groups: list[ScimUserGroupRef] = Field(default_factory=list)
     meta: ScimMeta | None = None
 
 
@@ -121,12 +130,40 @@ class ScimPatchOperationType(str, Enum):
     REMOVE = "remove"
 
 
+class ScimPatchResourceValue(BaseModel):
+    """Partial resource dict for path-less PATCH replace operations.
+
+    When an IdP sends a PATCH without a ``path``, the ``value`` is a dict
+    of resource attributes to set.  IdPs may include read-only fields
+    (``id``, ``schemas``, ``meta``) alongside actual changes — these are
+    stripped by the provider's ``ignored_patch_paths`` before processing.
+
+    ``extra="allow"`` lets unknown attributes pass through so the patch
+    handler can decide what to do with them (ignore or reject).
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    active: bool | None = None
+    userName: str | None = None
+    displayName: str | None = None
+    externalId: str | None = None
+    name: ScimName | None = None
+    members: list[ScimGroupMember] | None = None
+    id: str | None = None
+    schemas: list[str] | None = None
+    meta: ScimMeta | None = None
+
+
+ScimPatchValue = str | bool | list[ScimGroupMember] | ScimPatchResourceValue | None
+
+
 class ScimPatchOperation(BaseModel):
     """Single PATCH operation (RFC 7644 §3.5.2)."""
 
     op: ScimPatchOperationType
     path: str | None = None
-    value: str | list[dict[str, str]] | dict[str, str | bool] | bool | None = None
+    value: ScimPatchValue = None
 
 
 class ScimPatchRequest(BaseModel):

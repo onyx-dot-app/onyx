@@ -4,6 +4,7 @@ from fastapi_users.password import PasswordHelper
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
 from onyx.auth.api_key import ApiKeyDescriptor
@@ -54,6 +55,7 @@ async def fetch_user_for_api_key(
         select(User)
         .join(ApiKey, ApiKey.user_id == User.id)
         .where(ApiKey.hashed_api_key == hashed_api_key)
+        .options(selectinload(User.memories))
     )
 
 

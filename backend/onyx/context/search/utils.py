@@ -64,23 +64,34 @@ def inference_section_from_single_chunk(
     )
 
 
-def get_query_embeddings(queries: list[str], db_session: Session) -> list[Embedding]:
-    search_settings = get_current_search_settings(db_session)
+def get_query_embeddings(
+    queries: list[str],
+    db_session: Session | None = None,
+    embedding_model: EmbeddingModel | None = None,
+) -> list[Embedding]:
+    if embedding_model is None:
+        if db_session is None:
+            raise ValueError("Either db_session or embedding_model must be provided")
+        search_settings = get_current_search_settings(db_session)
+        embedding_model = EmbeddingModel.from_db_model(
+            search_settings=search_settings,
+            server_host=MODEL_SERVER_HOST,
+            server_port=MODEL_SERVER_PORT,
+        )
 
-    model = EmbeddingModel.from_db_model(
-        search_settings=search_settings,
-        # The below are globally set, this flow always uses the indexing one
-        server_host=MODEL_SERVER_HOST,
-        server_port=MODEL_SERVER_PORT,
-    )
-
-    query_embedding = model.encode(queries, text_type=EmbedTextType.QUERY)
+    query_embedding = embedding_model.encode(queries, text_type=EmbedTextType.QUERY)
     return query_embedding
 
 
 @log_function_time(print_only=True, debug_only=True)
-def get_query_embedding(query: str, db_session: Session) -> Embedding:
-    return get_query_embeddings([query], db_session)[0]
+def get_query_embedding(
+    query: str,
+    db_session: Session | None = None,
+    embedding_model: EmbeddingModel | None = None,
+) -> Embedding:
+    return get_query_embeddings(
+        [query], db_session=db_session, embedding_model=embedding_model
+    )[0]
 
 
 def convert_inference_sections_to_search_docs(

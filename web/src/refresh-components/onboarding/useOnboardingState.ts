@@ -1,4 +1,4 @@
-import { useReducer, useCallback, useState, useEffect, useRef } from "react";
+import { useReducer, useCallback, useEffect, useRef } from "react";
 import { onboardingReducer, initialState } from "./reducer";
 import {
   OnboardingActions,
@@ -12,6 +12,7 @@ import { updateUserPersonalization } from "@/lib/userSettings";
 import { useUser } from "@/providers/UserProvider";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
+import { useProviderStatus } from "@/components/chat/ProviderContext";
 
 export function useOnboardingState(liveAssistant?: MinimalPersonaSnapshot): {
   state: OnboardingState;
@@ -21,42 +22,27 @@ export function useOnboardingState(liveAssistant?: MinimalPersonaSnapshot): {
 } {
   const [state, dispatch] = useReducer(onboardingReducer, initialState);
   const { user, refreshUser } = useUser();
-  // Use the SWR hook for LLM providers - no persona ID for the general providers list
+
+  // Get provider data from ProviderContext instead of duplicating the call
   const {
     llmProviders,
-    isLoading: isLoadingProviders,
-    refetch: refreshLlmProviders,
-  } = useLLMProviders();
+    isLoadingProviders,
+    hasProviders: hasLlmProviders,
+    providerOptions,
+    refreshProviderInfo,
+  } = useProviderStatus();
+
+  // Only fetch persona-specific providers (different endpoint)
   const { refetch: refreshPersonaProviders } = useLLMProviders(
     liveAssistant?.id
   );
-  const hasLlmProviders = (llmProviders?.length ?? 0) > 0;
+
   const userName = user?.personalization?.name;
-  const [llmDescriptors, setLlmDescriptors] = useState<
-    WellKnownLLMProviderDescriptor[]
-  >([]);
+  const llmDescriptors = providerOptions;
+
   const nameUpdateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
   );
-
-  useEffect(() => {
-    refreshLlmProviders();
-    const fetchLlmDescriptors = async () => {
-      try {
-        const response = await fetch("/api/admin/llm/built-in/options");
-        if (!response.ok) {
-          setLlmDescriptors([]);
-          return;
-        }
-        const data = await response.json();
-        setLlmDescriptors(Array.isArray(data) ? data : []);
-      } catch (_e) {
-        setLlmDescriptors([]);
-      }
-    };
-
-    fetchLlmDescriptors();
-  }, []);
 
   // Navigate to the earliest incomplete step in the onboarding flow.
   // Step order: Welcome -> Name -> LlmSetup -> Complete
@@ -134,13 +120,13 @@ export function useOnboardingState(liveAssistant?: MinimalPersonaSnapshot): {
     }
 
     if (state.currentStep === OnboardingStep.LlmSetup) {
-      refreshLlmProviders();
+      refreshProviderInfo();
       if (liveAssistant) {
         refreshPersonaProviders();
       }
     }
     dispatch({ type: OnboardingActionType.NEXT_STEP });
-  }, [state, refreshLlmProviders, llmProviders, refreshPersonaProviders]);
+  }, [state, refreshProviderInfo, llmProviders, refreshPersonaProviders]);
 
   const prevStep = useCallback(() => {
     dispatch({ type: OnboardingActionType.PREV_STEP });

@@ -26,12 +26,10 @@ from sqlalchemy.orm import Session
 from ee.onyx.db.scim import ScimDAL
 from ee.onyx.server.scim.auth import verify_scim_token
 from ee.onyx.server.scim.filtering import parse_scim_filter
-from ee.onyx.server.scim.models import ScimEmail
 from ee.onyx.server.scim.models import ScimError
 from ee.onyx.server.scim.models import ScimGroupMember
 from ee.onyx.server.scim.models import ScimGroupResource
 from ee.onyx.server.scim.models import ScimListResponse
-from ee.onyx.server.scim.models import ScimMeta
 from ee.onyx.server.scim.models import ScimName
 from ee.onyx.server.scim.models import ScimPatchRequest
 from ee.onyx.server.scim.models import ScimResourceType
@@ -41,6 +39,8 @@ from ee.onyx.server.scim.models import ScimUserResource
 from ee.onyx.server.scim.patch import apply_group_patch
 from ee.onyx.server.scim.patch import apply_user_patch
 from ee.onyx.server.scim.patch import ScimPatchError
+from ee.onyx.server.scim.providers.base import get_default_provider
+from ee.onyx.server.scim.providers.base import ScimProvider
 from ee.onyx.server.scim.schema_definitions import GROUP_RESOURCE_TYPE
 from ee.onyx.server.scim.schema_definitions import GROUP_SCHEMA_DEF
 from ee.onyx.server.scim.schema_definitions import SERVICE_PROVIDER_CONFIG
@@ -53,7 +53,6 @@ from onyx.db.models import UserGroup
 from onyx.db.models import UserRole
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
-
 # NOTE: All URL paths in this router (/ServiceProviderConfig, /ResourceTypes,
 # /Schemas, /Users, /Groups) are mandated by the SCIM spec (RFC 7643/7644).
 # IdPs like Okta and Azure AD hardcode these exact paths, so they cannot be
@@ -61,6 +60,18 @@ from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 scim_router = APIRouter(prefix="/scim/v2", tags=["SCIM"])
 
 _pw_helper = PasswordHelper()
+
+
+def _get_provider(
+    _token: ScimToken = Depends(verify_scim_token),
+) -> ScimProvider:
+    """Resolve the SCIM provider for the current request.
+
+    Currently returns OktaProvider for all requests. When multi-provider
+    support is added (ENG-3652), this will resolve based on token metadata
+    or tenant configuration — no endpoint changes required.
+    """
+    return get_default_provider()
 
 
 # ---------------------------------------------------------------------------
@@ -100,28 +111,6 @@ def _scim_error_response(status: int, detail: str) -> JSONResponse:
     )
 
 
-def _user_to_scim(user: User, external_id: str | None = None) -> ScimUserResource:
-    """Convert an Onyx User to a SCIM User resource representation."""
-    name = None
-    if user.personal_name:
-        parts = user.personal_name.split(" ", 1)
-        name = ScimName(
-            givenName=parts[0],
-            familyName=parts[1] if len(parts) > 1 else None,
-            formatted=user.personal_name,
-        )
-
-    return ScimUserResource(
-        id=str(user.id),
-        externalId=external_id,
-        userName=user.email,
-        name=name,
-        emails=[ScimEmail(value=user.email, type="work", primary=True)],
-        active=user.is_active,
-        meta=ScimMeta(resourceType="User"),
-    )
-
-
 def _check_seat_availability(dal: ScimDAL) -> str | None:
     """Return an error message if seat limit is reached, else None."""
     check_fn = fetch_ee_implementation_or_noop(
@@ -155,9 +144,10 @@ def _scim_name_to_str(name: ScimName | None) -> str | None:
     """
     if not name:
         return None
-    return name.formatted or " ".join(
-        part for part in [name.givenName, name.familyName] if part
-    )
+    # Build from givenName/familyName first — IdPs like Okta may send a stale
+    # ``formatted`` value while updating the individual name components.
+    parts = " ".join(part for part in [name.givenName, name.familyName] if part)
+    return parts or name.formatted
 
 
 # ---------------------------------------------------------------------------
@@ -171,6 +161,7 @@ def list_users(
     startIndex: int = Query(1, ge=1),
     count: int = Query(100, ge=0, le=500),
     _token: ScimToken = Depends(verify_scim_token),
+    provider: ScimProvider = Depends(_get_provider),
     db_session: Session = Depends(get_session),
 ) -> ScimListResponse | JSONResponse:
     """List users with optional SCIM filter and pagination."""
@@ -183,12 +174,19 @@ def list_users(
         return _scim_error_response(400, str(e))
 
     try:
-        users_with_ext_ids, total = dal.list_users(scim_filter, startIndex, count)
+        users_with_mappings, total = dal.list_users(scim_filter, startIndex, count)
     except ValueError as e:
         return _scim_error_response(400, str(e))
 
+    user_groups_map = dal.get_users_groups_batch([u.id for u, _ in users_with_mappings])
     resources: list[ScimUserResource | ScimGroupResource] = [
-        _user_to_scim(user, ext_id) for user, ext_id in users_with_ext_ids
+        provider.build_user_resource(
+            user,
+            mapping.external_id if mapping else None,
+            groups=user_groups_map.get(user.id, []),
+            scim_username=mapping.scim_username if mapping else None,
+        )
+        for user, mapping in users_with_mappings
     ]
 
     return ScimListResponse(
@@ -203,6 +201,7 @@ def list_users(
 def get_user(
     user_id: str,
     _token: ScimToken = Depends(verify_scim_token),
+    provider: ScimProvider = Depends(_get_provider),
     db_session: Session = Depends(get_session),
 ) -> ScimUserResource | JSONResponse:
     """Get a single user by ID."""
@@ -215,20 +214,26 @@ def get_user(
     user = result
 
     mapping = dal.get_user_mapping_by_user_id(user.id)
-    return _user_to_scim(user, mapping.external_id if mapping else None)
+    return provider.build_user_resource(
+        user,
+        mapping.external_id if mapping else None,
+        groups=dal.get_user_groups(user.id),
+        scim_username=mapping.scim_username if mapping else None,
+    )
 
 
 @scim_router.post("/Users", status_code=201, response_model=None)
 def create_user(
     user_resource: ScimUserResource,
     _token: ScimToken = Depends(verify_scim_token),
+    provider: ScimProvider = Depends(_get_provider),
     db_session: Session = Depends(get_session),
 ) -> ScimUserResource | JSONResponse:
     """Create a new user from a SCIM provisioning request."""
     dal = ScimDAL(db_session)
     dal.update_token_last_used(_token.id)
 
-    email = user_resource.userName.strip().lower()
+    email = user_resource.userName.strip()
 
     # externalId is how the IdP correlates this user on subsequent requests.
     # Without it, the IdP can't find the user and will try to re-create,
@@ -264,11 +269,14 @@ def create_user(
 
     # Create SCIM mapping (externalId is validated above, always present)
     external_id = user_resource.externalId
-    dal.create_user_mapping(external_id=external_id, user_id=user.id)
+    scim_username = user_resource.userName.strip()
+    dal.create_user_mapping(
+        external_id=external_id, user_id=user.id, scim_username=scim_username
+    )
 
     dal.commit()
 
-    return _user_to_scim(user, external_id)
+    return provider.build_user_resource(user, external_id, scim_username=scim_username)
 
 
 @scim_router.put("/Users/{user_id}", response_model=None)
@@ -276,6 +284,7 @@ def replace_user(
     user_id: str,
     user_resource: ScimUserResource,
     _token: ScimToken = Depends(verify_scim_token),
+    provider: ScimProvider = Depends(_get_provider),
     db_session: Session = Depends(get_session),
 ) -> ScimUserResource | JSONResponse:
     """Replace a user entirely (RFC 7644 §3.5.1)."""
@@ -293,19 +302,27 @@ def replace_user(
         if seat_error:
             return _scim_error_response(403, seat_error)
 
+    personal_name = _scim_name_to_str(user_resource.name)
+
     dal.update_user(
         user,
-        email=user_resource.userName.strip().lower(),
+        email=user_resource.userName.strip(),
         is_active=user_resource.active,
-        personal_name=_scim_name_to_str(user_resource.name),
+        personal_name=personal_name,
     )
 
     new_external_id = user_resource.externalId
-    dal.sync_user_external_id(user.id, new_external_id)
+    scim_username = user_resource.userName.strip()
+    dal.sync_user_external_id(user.id, new_external_id, scim_username=scim_username)
 
     dal.commit()
 
-    return _user_to_scim(user, new_external_id)
+    return provider.build_user_resource(
+        user,
+        new_external_id,
+        groups=dal.get_user_groups(user.id),
+        scim_username=scim_username,
+    )
 
 
 @scim_router.patch("/Users/{user_id}", response_model=None)
@@ -313,6 +330,7 @@ def patch_user(
     user_id: str,
     patch_request: ScimPatchRequest,
     _token: ScimToken = Depends(verify_scim_token),
+    provider: ScimProvider = Depends(_get_provider),
     db_session: Session = Depends(get_session),
 ) -> ScimUserResource | JSONResponse:
     """Partially update a user (RFC 7644 §3.5.2).
@@ -330,11 +348,19 @@ def patch_user(
 
     mapping = dal.get_user_mapping_by_user_id(user.id)
     external_id = mapping.external_id if mapping else None
+    current_scim_username = mapping.scim_username if mapping else None
 
-    current = _user_to_scim(user, external_id)
+    current = provider.build_user_resource(
+        user,
+        external_id,
+        groups=dal.get_user_groups(user.id),
+        scim_username=current_scim_username,
+    )
 
     try:
-        patched = apply_user_patch(patch_request.Operations, current)
+        patched = apply_user_patch(
+            patch_request.Operations, current, provider.ignored_patch_paths
+        )
     except ScimPatchError as e:
         return _scim_error_response(e.status, e.detail)
 
@@ -345,22 +371,40 @@ def patch_user(
             if seat_error:
                 return _scim_error_response(403, seat_error)
 
+    # Track the scim_username — if userName was patched, update it
+    new_scim_username = patched.userName.strip() if patched.userName else None
+
+    # If displayName was explicitly patched (different from the original), use
+    # it as personal_name directly.  Otherwise, derive from name components.
+    personal_name: str | None
+    if patched.displayName and patched.displayName != current.displayName:
+        personal_name = patched.displayName
+    else:
+        personal_name = _scim_name_to_str(patched.name)
+
     dal.update_user(
         user,
         email=(
-            patched.userName.strip().lower()
-            if patched.userName.lower() != user.email
+            patched.userName.strip()
+            if patched.userName.strip().lower() != user.email.lower()
             else None
         ),
         is_active=patched.active if patched.active != user.is_active else None,
-        personal_name=_scim_name_to_str(patched.name),
+        personal_name=personal_name,
     )
 
-    dal.sync_user_external_id(user.id, patched.externalId)
+    dal.sync_user_external_id(
+        user.id, patched.externalId, scim_username=new_scim_username
+    )
 
     dal.commit()
 
-    return _user_to_scim(user, patched.externalId)
+    return provider.build_user_resource(
+        user,
+        patched.externalId,
+        groups=dal.get_user_groups(user.id),
+        scim_username=new_scim_username,
+    )
 
 
 @scim_router.delete("/Users/{user_id}", status_code=204, response_model=None)
@@ -396,24 +440,6 @@ def delete_user(
 # ---------------------------------------------------------------------------
 # Group helpers
 # ---------------------------------------------------------------------------
-
-
-def _group_to_scim(
-    group: UserGroup,
-    members: list[tuple[UUID, str | None]],
-    external_id: str | None = None,
-) -> ScimGroupResource:
-    """Convert an Onyx UserGroup to a SCIM Group resource."""
-    scim_members = [
-        ScimGroupMember(value=str(uid), display=email) for uid, email in members
-    ]
-    return ScimGroupResource(
-        id=str(group.id),
-        externalId=external_id,
-        displayName=group.name,
-        members=scim_members,
-        meta=ScimMeta(resourceType="Group"),
-    )
 
 
 def _fetch_group_or_404(group_id: str, dal: ScimDAL) -> UserGroup | JSONResponse:
@@ -474,6 +500,7 @@ def list_groups(
     startIndex: int = Query(1, ge=1),
     count: int = Query(100, ge=0, le=500),
     _token: ScimToken = Depends(verify_scim_token),
+    provider: ScimProvider = Depends(_get_provider),
     db_session: Session = Depends(get_session),
 ) -> ScimListResponse | JSONResponse:
     """List groups with optional SCIM filter and pagination."""
@@ -491,7 +518,7 @@ def list_groups(
         return _scim_error_response(400, str(e))
 
     resources: list[ScimUserResource | ScimGroupResource] = [
-        _group_to_scim(group, dal.get_group_members(group.id), ext_id)
+        provider.build_group_resource(group, dal.get_group_members(group.id), ext_id)
         for group, ext_id in groups_with_ext_ids
     ]
 
@@ -507,6 +534,7 @@ def list_groups(
 def get_group(
     group_id: str,
     _token: ScimToken = Depends(verify_scim_token),
+    provider: ScimProvider = Depends(_get_provider),
     db_session: Session = Depends(get_session),
 ) -> ScimGroupResource | JSONResponse:
     """Get a single group by ID."""
@@ -521,13 +549,16 @@ def get_group(
     mapping = dal.get_group_mapping_by_group_id(group.id)
     members = dal.get_group_members(group.id)
 
-    return _group_to_scim(group, members, mapping.external_id if mapping else None)
+    return provider.build_group_resource(
+        group, members, mapping.external_id if mapping else None
+    )
 
 
 @scim_router.post("/Groups", status_code=201, response_model=None)
 def create_group(
     group_resource: ScimGroupResource,
     _token: ScimToken = Depends(verify_scim_token),
+    provider: ScimProvider = Depends(_get_provider),
     db_session: Session = Depends(get_session),
 ) -> ScimGroupResource | JSONResponse:
     """Create a new group from a SCIM provisioning request."""
@@ -565,7 +596,7 @@ def create_group(
     dal.commit()
 
     members = dal.get_group_members(db_group.id)
-    return _group_to_scim(db_group, members, external_id)
+    return provider.build_group_resource(db_group, members, external_id)
 
 
 @scim_router.put("/Groups/{group_id}", response_model=None)
@@ -573,6 +604,7 @@ def replace_group(
     group_id: str,
     group_resource: ScimGroupResource,
     _token: ScimToken = Depends(verify_scim_token),
+    provider: ScimProvider = Depends(_get_provider),
     db_session: Session = Depends(get_session),
 ) -> ScimGroupResource | JSONResponse:
     """Replace a group entirely (RFC 7644 §3.5.1)."""
@@ -595,7 +627,7 @@ def replace_group(
     dal.commit()
 
     members = dal.get_group_members(group.id)
-    return _group_to_scim(group, members, group_resource.externalId)
+    return provider.build_group_resource(group, members, group_resource.externalId)
 
 
 @scim_router.patch("/Groups/{group_id}", response_model=None)
@@ -603,6 +635,7 @@ def patch_group(
     group_id: str,
     patch_request: ScimPatchRequest,
     _token: ScimToken = Depends(verify_scim_token),
+    provider: ScimProvider = Depends(_get_provider),
     db_session: Session = Depends(get_session),
 ) -> ScimGroupResource | JSONResponse:
     """Partially update a group (RFC 7644 §3.5.2).
@@ -621,11 +654,11 @@ def patch_group(
     external_id = mapping.external_id if mapping else None
 
     current_members = dal.get_group_members(group.id)
-    current = _group_to_scim(group, current_members, external_id)
+    current = provider.build_group_resource(group, current_members, external_id)
 
     try:
         patched, added_ids, removed_ids = apply_group_patch(
-            patch_request.Operations, current
+            patch_request.Operations, current, provider.ignored_patch_paths
         )
     except ScimPatchError as e:
         return _scim_error_response(e.status, e.detail)
@@ -652,7 +685,7 @@ def patch_group(
     dal.commit()
 
     members = dal.get_group_members(group.id)
-    return _group_to_scim(group, members, patched.externalId)
+    return provider.build_group_resource(group, members, patched.externalId)
 
 
 @scim_router.delete("/Groups/{group_id}", status_code=204, response_model=None)

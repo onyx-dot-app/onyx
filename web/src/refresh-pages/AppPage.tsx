@@ -25,7 +25,7 @@ import { AppPopup } from "@/app/app/components/AppPopup";
 import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
 import { useUser } from "@/providers/UserProvider";
 import NoAssistantModal from "@/components/modals/NoAssistantModal";
-import TextViewModal from "@/sections/modals/TextViewModal";
+import PreviewModal from "@/sections/modals/PreviewModal";
 import Modal from "@/refresh-components/Modal";
 import { useSendMessageToParent } from "@/lib/extension/utils";
 import { SUBMIT_MESSAGE_TYPES } from "@/lib/extension/constants";
@@ -38,6 +38,7 @@ import useAgentController from "@/hooks/useAgentController";
 import useChatSessionController from "@/hooks/useChatSessionController";
 import useDeepResearchToggle from "@/hooks/useDeepResearchToggle";
 import useIsDefaultAgent from "@/hooks/useIsDefaultAgent";
+import AgentDescription from "@/app/app/components/AgentDescription";
 import {
   useChatSessionStore,
   useCurrentMessageHistory,
@@ -226,6 +227,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const {
     showOnboarding,
+    onboardingDismissed,
     onboardingState,
     onboardingActions,
     llmDescriptors,
@@ -461,7 +463,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
         currentMessageFiles,
         deepResearch: deepResearchEnabled,
       });
-      if (showOnboarding) {
+      if (showOnboarding || !onboardingDismissed) {
         finishOnboarding();
       }
     },
@@ -471,6 +473,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       currentMessageFiles,
       deepResearchEnabled,
       showOnboarding,
+      onboardingDismissed,
       finishOnboarding,
     ]
   );
@@ -504,7 +507,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
           currentMessageFiles,
           deepResearch: deepResearchEnabled,
         });
-        if (showOnboarding) {
+        if (showOnboarding || !onboardingDismissed) {
           finishOnboarding();
         }
         return;
@@ -525,6 +528,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       currentMessageFiles,
       deepResearchEnabled,
       showOnboarding,
+      onboardingDismissed,
       finishOnboarding,
     ]
   );
@@ -685,7 +689,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       )}
 
       {presentingDocument && (
-        <TextViewModal
+        <PreviewModal
           presentingDocument={presentingDocument}
           onClose={() => setPresentingDocument(null)}
         />
@@ -796,7 +800,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     {/* OnboardingUI */}
                     {(appFocus.isNewSession() || appFocus.isAgent()) &&
                       !classification &&
-                      (showOnboarding || !user?.personalization?.name) && (
+                      (showOnboarding || !user?.personalization?.name) &&
+                      !onboardingDismissed && (
                         <OnboardingFlow
                           showOnboarding={showOnboarding}
                           handleHideOnboarding={hideOnboarding}
@@ -881,6 +886,15 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
                 {/* ── Bottom: SearchResults + SourceFilter / Suggestions / ProjectChatList ── */}
                 <div className="row-start-3 min-h-0 overflow-hidden flex flex-col items-center w-full">
+                  {/* Agent description below input */}
+                  {(appFocus.isNewSession() || appFocus.isAgent()) &&
+                    !isDefaultAgent && (
+                      <>
+                        <Spacer rem={1} />
+                        <AgentDescription agent={liveAssistant} />
+                        <Spacer rem={1.5} />
+                      </>
+                    )}
                   {/* ProjectChatSessionList */}
                   {appFocus.isProject() && (
                     <div className="w-full max-w-[var(--app-page-main-content-width)] h-full overflow-y-auto overscroll-y-none mx-auto">

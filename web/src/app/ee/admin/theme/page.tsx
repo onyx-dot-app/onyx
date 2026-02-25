@@ -12,7 +12,7 @@ import { SettingsContext } from "@/providers/SettingsProvider";
 import { toast } from "@/hooks/useToast";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
-import { EnterpriseSettings } from "@/app/admin/settings/interfaces";
+import { EnterpriseSettings } from "@/interfaces/settings";
 import { useRouter } from "next/navigation";
 
 const CHAR_LIMITS = {

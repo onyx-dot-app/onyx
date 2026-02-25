@@ -31,7 +31,6 @@ import {
   PYTHON_TOOL_ID,
   SEARCH_TOOL_ID,
   OPEN_URL_TOOL_ID,
-  FILE_READER_TOOL_ID,
 } from "@/app/app/components/tools/constants";
 import Text from "@/refresh-components/texts/Text";
 import { Card } from "@/refresh-components/cards";
@@ -525,9 +524,6 @@ export default function AgentEditorPage({
   const codeInterpreterTool = availableTools?.find(
     (t) => t.in_code_tool_id === PYTHON_TOOL_ID
   );
-  const fileReaderTool = availableTools?.find(
-    (t) => t.in_code_tool_id === FILE_READER_TOOL_ID
-  );
   const isImageGenerationAvailable = !!imageGenTool;
   const imageGenerationDisabledTooltip = isImageGenerationAvailable
     ? undefined
@@ -615,14 +611,6 @@ export default function AgentEditorPage({
         (tool) => tool.in_code_tool_id === PYTHON_TOOL_ID
       ) ??
         false),
-    file_reader:
-      !!fileReaderTool &&
-      (existingAgent?.tools?.some(
-        (tool) => tool.in_code_tool_id === FILE_READER_TOOL_ID
-      ) ??
-        // Default to enabled for new assistants when the tool is available
-        !!fileReaderTool),
-
     // MCP servers - dynamically add fields for each server with nested tool fields
     ...Object.fromEntries(
       mcpServersWithTools.map(({ server, tools }) => {
@@ -756,9 +744,6 @@ export default function AgentEditorPage({
         if (vectorDbEnabled && searchTool) {
           toolIds.push(searchTool.id);
         }
-      }
-      if (values.file_reader && fileReaderTool) {
-        toolIds.push(fileReaderTool.id);
       }
       if (values.image_generation && imageGenTool) {
         toolIds.push(imageGenTool.id);
@@ -1319,24 +1304,6 @@ export default function AgentEditorPage({
                                 <SwitchField
                                   name="code_interpreter"
                                   disabled={!codeInterpreterTool}
-                                />
-                              </InputLayouts.Horizontal>
-                            </Card>
-
-                            <Card
-                              variant={
-                                !!fileReaderTool ? undefined : "disabled"
-                              }
-                            >
-                              <InputLayouts.Horizontal
-                                name="file_reader"
-                                title="File Reader"
-                                description="Read sections of uploaded files. Required for files that exceed the context window."
-                                disabled={!fileReaderTool}
-                              >
-                                <SwitchField
-                                  name="file_reader"
-                                  disabled={!fileReaderTool}
                                 />
                               </InputLayouts.Horizontal>
                             </Card>

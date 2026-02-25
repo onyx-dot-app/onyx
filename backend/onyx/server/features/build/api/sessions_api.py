@@ -762,6 +762,43 @@ def download_webapp(
     )
 
 
+@router.get("/{session_id}/download-directory/{path:path}")
+def download_directory(
+    session_id: UUID,
+    path: str,
+    user: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> Response:
+    """
+    Download a directory as a zip file.
+
+    Returns the specified directory as a zip archive.
+    """
+    user_id: UUID = user.id
+    session_manager = SessionManager(db_session)
+
+    try:
+        result = session_manager.download_directory(session_id, user_id, path)
+    except ValueError as e:
+        error_message = str(e)
+        if "path traversal" in error_message.lower():
+            raise HTTPException(status_code=403, detail="Access denied")
+        raise HTTPException(status_code=400, detail=error_message)
+
+    if result is None:
+        raise HTTPException(status_code=404, detail="Directory not found")
+
+    zip_bytes, filename = result
+
+    return Response(
+        content=zip_bytes,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+        },
+    )
+
+
 @router.post("/{session_id}/upload", response_model=UploadResponse)
 def upload_file_endpoint(
     session_id: UUID,

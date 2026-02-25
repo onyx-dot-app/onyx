@@ -9,7 +9,7 @@ import {
   MessageRenderer,
   RenderType,
 } from "@/app/app/message/messageComponents/interfaces";
-import { BlinkingDot } from "@/app/app/message/BlinkingDot";
+import { BlinkingBar } from "@/app/app/message/BlinkingBar";
 import { Section } from "@/layouts/general-layouts";
 import Card from "@/refresh-components/cards/Card";
 import Text from "@/refresh-components/texts/Text";
@@ -142,7 +142,7 @@ export const FileReaderToolRenderer: MessageRenderer<
               )}
             </>
           ) : (
-            !stopPacketSeen && <BlinkingDot />
+            !stopPacketSeen && <BlinkingBar />
           )}
         </Section>
       ),

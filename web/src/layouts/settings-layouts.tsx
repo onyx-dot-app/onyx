@@ -36,11 +36,11 @@
 import BackButton from "@/refresh-components/buttons/BackButton";
 import { cn } from "@/lib/utils";
 import Separator from "@/refresh-components/Separator";
-import Spacer from "@/refresh-components/Spacer";
-import Text from "@/refresh-components/texts/Text";
 import { WithoutStyles } from "@/types";
-import { IconProps } from "@opal/types";
+import { IconFunctionComponent } from "@opal/types";
 import { HtmlHTMLAttributes, useEffect, useRef, useState } from "react";
+import { Content } from "@opal/layouts";
+import Spacer from "@/refresh-components/Spacer";
 
 const widthClasses = {
   md: "w-[min(50rem,100%)]",
@@ -105,7 +105,7 @@ function SettingsRoot({ width = "md", ...props }: SettingsRootProps) {
  * - Sticky positioning at the top of the page
  * - Icon display (1.75rem size)
  * - Title (headingH2 style)
- * - Optional description (supports any React node for dynamic content)
+ * - Optional description (string)
  * - Optional right-aligned action buttons via rightChildren
  * - Optional children content below title/description
  * - Optional back button
@@ -155,24 +155,18 @@ function SettingsRoot({ width = "md", ...props }: SettingsRootProps) {
  *   backButton
  * />
  *
- * // With dynamic description content
+ * // With string description
  * <SettingsLayouts.Header
  *   icon={SvgDatabase}
  *   title="API Keys"
- *   description={
- *     <div>
- *       <Text as="p" secondaryBody text03>
- *         Manage your API keys. Last updated: {lastUpdated}
- *       </Text>
- *     </div>
- *   }
+ *   description="Manage your API keys"
  * />
  * ```
  */
 export interface SettingsHeaderProps {
-  icon: React.FunctionComponent<IconProps>;
+  icon: IconFunctionComponent;
   title: string;
-  description?: React.ReactNode;
+  description?: string;
   children?: React.ReactNode;
   rightChildren?: React.ReactNode;
   backButton?: boolean;
@@ -191,7 +185,10 @@ function SettingsHeader({
 }: SettingsHeaderProps) {
   const [showShadow, setShowShadow] = useState(false);
   const headerRef = useRef<HTMLDivElement>(null);
-  const isSticky = !!rightChildren; //headers with actions are always sticky, others are not
+
+  // # NOTE (@Subash-Mohan)
+  // Headers with actions are always sticky, others are not.
+  const isSticky = !!rightChildren;
 
   useEffect(() => {
     if (!isSticky) return;
@@ -220,7 +217,7 @@ function SettingsHeader({
       className={cn(
         "w-full bg-background-tint-01",
         isSticky && "sticky top-0 z-settings-header",
-        backButton ? "md:pt-4" : "md:pt-10"
+        backButton && "md:pt-4"
       )}
     >
       {backButton && (
@@ -228,38 +225,35 @@ function SettingsHeader({
           <BackButton behaviorOverride={onBack} />
         </div>
       )}
-      <div
-        className={cn("flex flex-col gap-6 px-4", backButton ? "pt-2" : "pt-4")}
-      >
-        <div className="flex flex-col">
-          <div className="flex flex-row justify-between items-center gap-4">
-            <Icon className="stroke-text-04 h-[1.75rem] w-[1.75rem]" />
-            {rightChildren}
+
+      <Spacer vertical rem={1} />
+
+      <div className="flex flex-col gap-6 px-4">
+        <div className="flex w-full justify-between">
+          <div aria-label="admin-page-title">
+            <Content
+              icon={Icon}
+              title={title}
+              description={description}
+              sizePreset="headline"
+              variant="heading"
+            />
           </div>
-          <div className="flex flex-col">
-            <div aria-label="admin-page-title">
-              <Text as="p" headingH2>
-                {title}
-              </Text>
-            </div>
-            {description &&
-              (typeof description === "string" ? (
-                <Text as="p" secondaryBody text03>
-                  {description}
-                </Text>
-              ) : (
-                description
-              ))}
-          </div>
+          {rightChildren}
         </div>
+
         {children}
       </div>
-      {separator && (
+
+      {separator ? (
         <>
-          <Spacer rem={1.5} />
+          <Spacer vertical rem={1.5} />
           <Separator noPadding className="px-4" />
         </>
+      ) : (
+        <Spacer vertical rem={0.5} />
       )}
+
       {isSticky && (
         <div
           className={cn(

@@ -10,41 +10,105 @@ _HTML_NEWLINE_TAG_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
-# Strips any remaining HTML tag (opening, closing, or self-closing)
-_HTML_TAG_PATTERN = re.compile(r"</?[a-zA-Z][^>]*>")
+# Strips HTML tags but excludes autolinks like <https://...> and <mailto:...>
+_HTML_TAG_PATTERN = re.compile(
+    r"<(?!https?://|mailto:)/?[a-zA-Z][^>]*>",
+)
 
-# Matches inline citation hyperlinks: [[1]](url), [[2]](url), etc.
-# Uses balanced-paren matching to handle URLs with parentheses.
-_INLINE_CITATION_LINK_PATTERN = re.compile(r"\[\[(\d+)\]\]\((?:[^()]*|\([^()]*\))*\)")
+# Matches fenced code blocks (``` ... ```) so we can skip sanitization inside them
+_FENCED_CODE_BLOCK_PATTERN = re.compile(r"```[\s\S]*?```")
+
+# Matches the start of a citation link: [[1]](
+_CITATION_LINK_PATTERN = re.compile(r"\[\[\d+\]\]\(")
+
+
+def _sanitize_html(text: str) -> str:
+    """Strip HTML tags from a text fragment.
+
+    Block-level closing tags and <br> are converted to newlines.
+    All other HTML tags are removed. Autolinks (<https://...>) are preserved.
+    """
+    text = _HTML_NEWLINE_TAG_PATTERN.sub("\n", text)
+    text = _HTML_TAG_PATTERN.sub("", text)
+    return text
 
 
 def _sanitize_for_slack(message: str) -> str:
     """Pre-process LLM output before markdown rendering for Slack compatibility.
 
-    Handles two issues that cause broken Slack formatting regardless of source:
-    1. HTML tags from documentation sources (SharePoint, Confluence, Google Drive,
-       etc.) that would appear as literal escaped text in Slack after rendering.
-       Block-level closing tags and <br> are converted to newlines; all other tags
-       are stripped.
-    2. Inline citation hyperlinks [[n]](url) where URLs with special characters
-       (parentheses, pipes, spaces) break markdown link parsing, producing
-       truncated 404 links. The bottom Sources section provides working links.
+    Strips HTML tags from documentation sources (SharePoint, Confluence, Google
+    Drive, etc.) that would otherwise appear as literal escaped text in Slack.
+    Code blocks are preserved intact to avoid mangling code samples containing HTML.
     """
-    # First pass: convert line-break/block-closing tags to newlines
-    message = _HTML_NEWLINE_TAG_PATTERN.sub("\n", message)
-    # Second pass: strip all remaining HTML tags
-    message = _HTML_TAG_PATTERN.sub("", message)
-    # Strip citation hyperlinks, keeping plain [n] markers
-    message = _INLINE_CITATION_LINK_PATTERN.sub(r"[\1]", message)
-    return message
+    parts = _FENCED_CODE_BLOCK_PATTERN.split(message)
+    code_blocks = _FENCED_CODE_BLOCK_PATTERN.findall(message)
+
+    sanitized: list[str] = []
+    for i, part in enumerate(parts):
+        sanitized.append(_sanitize_html(part))
+        if i < len(code_blocks):
+            sanitized.append(code_blocks[i])
+
+    return "".join(sanitized)
+
+
+def _extract_link_destination(message: str, start_idx: int) -> tuple[str, int | None]:
+    """Extract markdown link destination, allowing nested parentheses in the URL."""
+    depth = 0
+    i = start_idx
+
+    while i < len(message):
+        curr = message[i]
+        if curr == "\\":
+            i += 2
+            continue
+
+        if curr == "(":
+            depth += 1
+        elif curr == ")":
+            if depth == 0:
+                return message[start_idx:i], i
+            depth -= 1
+        i += 1
+
+    return message[start_idx:], None
+
+
+def _normalize_citation_link_destinations(message: str) -> str:
+    """Wrap citation URLs in angle brackets so markdown parsers handle parentheses safely."""
+    if "[[" not in message:
+        return message
+
+    normalized_parts: list[str] = []
+    cursor = 0
+
+    while match := _CITATION_LINK_PATTERN.search(message, cursor):
+        normalized_parts.append(message[cursor : match.end()])
+        destination_start = match.end()
+        destination, end_idx = _extract_link_destination(message, destination_start)
+        if end_idx is None:
+            normalized_parts.append(message[destination_start:])
+            return "".join(normalized_parts)
+
+        already_wrapped = destination.startswith("<") and destination.endswith(">")
+        if destination and not already_wrapped:
+            destination = f"<{destination}>"
+
+        normalized_parts.append(destination)
+        normalized_parts.append(")")
+        cursor = end_idx + 1
+
+    normalized_parts.append(message[cursor:])
+    return "".join(normalized_parts)
 
 
 def format_slack_message(message: str | None) -> str:
     if message is None:
         return ""
     message = _sanitize_for_slack(message)
+    normalized_message = _normalize_citation_link_destinations(message)
     md = create_markdown(renderer=SlackRenderer(), plugins=["strikethrough"])
-    result = md(message)
+    result = md(normalized_message)
     # With HTMLRenderer, result is always str (not AST list)
     assert isinstance(result, str)
     return result
@@ -120,7 +184,7 @@ class SlackRenderer(HTMLRenderer):
         return quoted + "\n"
 
     def block_html(self, html: str) -> str:
-        return html + "\n"
+        return _sanitize_html(html) + "\n"
 
     def block_error(self, text: str) -> str:
         return f"```\n{text}\n```\n"

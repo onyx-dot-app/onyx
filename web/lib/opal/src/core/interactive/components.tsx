@@ -3,6 +3,7 @@ import React from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { cn } from "@opal/utils";
 import type { WithoutStyles } from "@opal/types";
+import { sizeVariants, type SizeVariant } from "@opal/shared";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -39,36 +40,15 @@ type InteractiveBaseVariantProps =
     };
 
 /**
- * Height presets for `Interactive.Container`.
+ * Width presets for `Interactive.Container`.
  *
- * - `"lg"` — 2.25rem (36px), suitable for most buttons/items
- * - `"md"` — 1.75rem (28px), standard compact size
- * - `"sm"` — 1.5rem (24px), for denser UIs
- * - `"xs"` — 1.25rem (20px), for inline elements
- * - `"fit"` — Shrink-wraps to content height (`h-fit`), for variable-height layouts
+ * - `"auto"` — Shrink-wraps to content width (default)
+ * - `"full"` — Stretches to fill the parent's width (`w-full`)
  */
-type InteractiveContainerHeightVariant =
-  keyof typeof interactiveContainerHeightVariants;
-const interactiveContainerHeightVariants = {
-  lg: "h-[2.25rem]",
-  md: "h-[1.75rem]",
-  sm: "h-[1.5rem]",
-  xs: "h-[1.25rem]",
-  fit: "h-fit",
-} as const;
-const interactiveContainerMinWidthVariants = {
-  lg: "min-w-[2.25rem]",
-  md: "min-w-[1.75rem]",
-  sm: "min-w-[1.5rem]",
-  xs: "min-w-[1.25rem]",
-  fit: "",
-} as const;
-const interactiveContainerPaddingVariants = {
-  lg: "p-2",
-  md: "p-1",
-  sm: "p-1",
-  xs: "p-0.5",
-  fit: "",
+type InteractiveContainerWidthVariant = "auto" | "full";
+const interactiveContainerWidthVariants = {
+  auto: "w-auto",
+  full: "w-full",
 } as const;
 
 /**
@@ -82,6 +62,7 @@ type InteractiveContainerRoundingVariant =
 const interactiveContainerRoundingVariants = {
   default: "rounded-12",
   compact: "rounded-08",
+  mini: "rounded-04",
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -348,17 +329,23 @@ interface InteractiveContainerProps
   roundingVariant?: InteractiveContainerRoundingVariant;
 
   /**
-   * Height preset controlling the container's vertical size.
-   *
-   * - `"lg"` — 2.25rem (36px), typical button/item height
-   * - `"md"` — 1.75rem (28px), standard compact size
-   * - `"sm"` — 1.5rem (24px), for denser UIs
-   * - `"xs"` — 1.25rem (20px), for inline elements
-   * - `"fit"` — Shrink-wraps to content height (`h-fit`)
+   * Size preset controlling the container's height, min-width, and padding.
+   * Uses the shared `SizeVariant` scale from `@opal/shared`.
    *
    * @default "lg"
+   * @see {@link SizeVariant} for the full list of presets.
    */
-  heightVariant?: InteractiveContainerHeightVariant;
+  heightVariant?: SizeVariant;
+
+  /**
+   * Width preset controlling the container's horizontal size.
+   *
+   * - `"auto"` — Shrink-wraps to content width
+   * - `"full"` — Stretches to fill the parent's width (`w-full`)
+   *
+   * @default "auto"
+   */
+  widthVariant?: InteractiveContainerWidthVariant;
 }
 
 /**
@@ -377,7 +364,7 @@ interface InteractiveContainerProps
  * // Standard card-like container
  * <Interactive.Base>
  *   <Interactive.Container border>
- *     <LineItemLayout icon={SvgIcon} title="Option" />
+ *     <Content icon={SvgIcon} title="Option" />
  *   </Interactive.Container>
  * </Interactive.Base>
  *
@@ -397,6 +384,7 @@ function InteractiveContainer({
   border,
   roundingVariant = "default",
   heightVariant = "lg",
+  widthVariant = "auto",
   ...props
 }: InteractiveContainerProps) {
   // Radix Slot injects className, style, href, target, rel, and other
@@ -416,14 +404,16 @@ function InteractiveContainer({
     target?: string;
     rel?: string;
   };
+  const { height, minWidth, padding } = sizeVariants[heightVariant];
   const sharedProps = {
     ...rest,
     className: cn(
       "interactive-container",
       interactiveContainerRoundingVariants[roundingVariant],
-      interactiveContainerHeightVariants[heightVariant],
-      interactiveContainerMinWidthVariants[heightVariant],
-      interactiveContainerPaddingVariants[heightVariant],
+      height,
+      minWidth,
+      padding,
+      interactiveContainerWidthVariants[widthVariant],
       slotClassName
     ),
     "data-border": border ? ("true" as const) : undefined,
@@ -500,6 +490,6 @@ export {
   type InteractiveBaseVariantProps,
   type InteractiveBaseSelectVariantProps,
   type InteractiveContainerProps,
-  type InteractiveContainerHeightVariant,
+  type InteractiveContainerWidthVariant,
   type InteractiveContainerRoundingVariant,
 };
