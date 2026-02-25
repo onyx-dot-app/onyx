@@ -193,7 +193,7 @@ const collections = (
                 link: "/admin/configuration/chat-preferences",
               },
               {
-                name: "LLM",
+                name: "LLM Models",
                 icon: SvgCpu,
                 link: "/admin/configuration/llm",
               },
