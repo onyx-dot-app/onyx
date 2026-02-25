@@ -56,6 +56,27 @@ interface ConnectionStatusProps {
 }
 
 function ConnectionStatus({ healthy, isLoading }: ConnectionStatusProps) {
+  if (isLoading) {
+    return (
+      <GeneralLayouts.Section
+        flexDirection="row"
+        gap={0.4}
+        padding={0}
+        justifyContent="end"
+        alignItems="center"
+      >
+        <Text mainUiAction text03>
+          Checking...
+        </Text>
+        <SimpleLoader />
+      </GeneralLayouts.Section>
+    );
+  }
+
+  const label = healthy ? "Connected" : "Connection Lost";
+  const Icon = healthy ? SvgCheckCircle : SvgXOctagon;
+  const iconColor = healthy ? "text-status-success-05" : "text-status-error-05";
+
   return (
     <GeneralLayouts.Section
       flexDirection="row"
@@ -64,25 +85,10 @@ function ConnectionStatus({ healthy, isLoading }: ConnectionStatusProps) {
       justifyContent="end"
       alignItems="center"
     >
-      {isLoading ? (
-        <>
-          <Text mainUiAction text03>
-            Checking...
-          </Text>
-          <SimpleLoader />
-        </>
-      ) : (
-        <>
-          <Text mainUiAction text03>
-            {healthy ? "Connected" : "Connection Lost"}
-          </Text>
-          {healthy ? (
-            <SvgCheckCircle size={16} className="text-status-success-05" />
-          ) : (
-            <SvgXOctagon size={16} className="text-status-error-05" />
-          )}
-        </>
-      )}
+      <Text mainUiAction text03>
+        {label}
+      </Text>
+      <Icon size={16} className={iconColor} />
     </GeneralLayouts.Section>
   );
 }
