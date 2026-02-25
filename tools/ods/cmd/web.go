@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -23,12 +24,7 @@ func NewWebCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "web <script> [args...]",
 		Short: "Run web/package.json npm scripts",
-		Long: `Run npm scripts from web/package.json.
-
-Examples:
-  ods web dev
-  ods web lint
-  ods web test -- --watch`,
+		Long:  webHelpDescription(),
 		Args: cobra.MinimumNArgs(1),
 		ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 			if len(args) > 0 {
@@ -76,6 +72,22 @@ func webScriptNames() []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+func webHelpDescription() string {
+	description := `Run npm scripts from web/package.json.
+
+Examples:
+  ods web dev
+  ods web lint
+  ods web test -- --watch`
+
+	scripts := webScriptNames()
+	if len(scripts) == 0 {
+		return description + "\n\nAvailable scripts: (unable to load)"
+	}
+
+	return description + "\n\nAvailable scripts:\n  " + strings.Join(scripts, "\n  ")
 }
 
 func loadWebScripts() (map[string]string, error) {
