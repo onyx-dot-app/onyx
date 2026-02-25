@@ -272,15 +272,16 @@ function AddUserButton() {
       (key) => typeof key === "string" && key.startsWith("/api/manage/users")
     );
     setBulkAddUsersModal(false);
-    toast.success("Users invited!");
     if (emailInviteStatus === "NOT_CONFIGURED") {
       toast.warning(
-        "No email server is configured. Share the signup link with invited users manually."
+        "Users added, but no email notification was sent. There is no SMTP server set up for email sending."
       );
     } else if (emailInviteStatus === "SEND_FAILED") {
       toast.warning(
-        "Email sending failed. Check your SMTP/SendGrid configuration."
+        "Users added, but no email notification was sent due to transient failures."
       );
+    } else {
+      toast.success("Users invited!");
     }
   };
 
