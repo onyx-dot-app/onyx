@@ -24,8 +24,9 @@ def preserve_code_interpreter_state(
 
     yield
 
-    requests.put(
+    restore = requests.put(
         CODE_INTERPRETER_URL,
         json={"enabled": initial_enabled},
         headers=admin_user.headers,
     )
+    restore.raise_for_status()
