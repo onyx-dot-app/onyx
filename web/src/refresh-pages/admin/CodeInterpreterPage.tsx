@@ -39,7 +39,7 @@ function ActionButtons() {
       padding={0}
     >
       <IconButton tertiary icon={SvgUnplug} tooltip="Disconnect" />
-      <IconButton tertiary icon={SvgRefreshCw} tooltip="Refresh" />
+      <IconButton tertiary icon={SvgRefreshCw} tooltip="Test Connection" />
     </GeneralLayouts.Section>
   );
 }
