@@ -92,6 +92,9 @@ type ButtonProps = InteractiveBaseProps &
 
     /** Which side the tooltip appears on. */
     tooltipSide?: TooltipSide;
+
+    /** Hide button text and right icon on small screens and show at `md` and above. */
+    responsiveHideText?: boolean;
   };
 
 // ---------------------------------------------------------------------------
@@ -108,6 +111,7 @@ function Button({
   width,
   tooltip,
   tooltipSide = "top",
+  responsiveHideText = false,
   ...interactiveBaseProps
 }: ButtonProps) {
   const isLarge = size === "lg";
@@ -116,7 +120,8 @@ function Button({
     <span
       className={cn(
         "opal-button-label",
-        isLarge ? "font-main-ui-body " : "font-secondary-body"
+        isLarge ? "font-main-ui-body " : "font-secondary-body",
+        responsiveHideText && "hidden md:inline"
       )}
     >
       {children}
@@ -146,13 +151,25 @@ function Button({
             <div className="opal-button-foldable">
               <div className="opal-button-foldable-inner">
                 {labelEl}
-                {iconWrapper(RightIcon, size, !!children)}
+                {responsiveHideText ? (
+                  <span className="hidden md:inline-flex">
+                    {iconWrapper(RightIcon, size, !!children)}
+                  </span>
+                ) : (
+                  iconWrapper(RightIcon, size, !!children)
+                )}
               </div>
             </div>
           ) : (
             <>
               {labelEl}
-              {iconWrapper(RightIcon, size, !!children)}
+              {responsiveHideText ? (
+                <span className="hidden md:inline-flex">
+                  {iconWrapper(RightIcon, size, !!children)}
+                </span>
+              ) : (
+                iconWrapper(RightIcon, size, !!children)
+              )}
             </>
           )}
         </div>
