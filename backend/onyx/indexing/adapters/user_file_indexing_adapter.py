@@ -20,6 +20,7 @@ from onyx.db.models import Persona
 from onyx.db.models import UserFile
 from onyx.db.notification import create_notification
 from onyx.db.user_file import fetch_chunk_counts_for_user_files
+from onyx.db.user_file import fetch_persona_ids_for_user_files
 from onyx.db.user_file import fetch_user_project_ids_for_user_files
 from onyx.file_store.utils import store_user_file_plaintext
 from onyx.indexing.indexing_pipeline import DocumentBatchPrepareContext
@@ -119,6 +120,10 @@ class UserFileIndexingAdapter:
             user_file_ids=updatable_ids,
             db_session=self.db_session,
         )
+        user_file_id_to_persona_ids = fetch_persona_ids_for_user_files(
+            user_file_ids=updatable_ids,
+            db_session=self.db_session,
+        )
         user_file_id_to_access: dict[str, DocumentAccess] = get_access_for_user_files(
             user_file_ids=updatable_ids,
             db_session=self.db_session,
@@ -182,7 +187,7 @@ class UserFileIndexingAdapter:
                 user_project=user_file_id_to_project_ids.get(
                     chunk.source_document.id, []
                 ),
-                personas=[],
+                personas=user_file_id_to_persona_ids.get(chunk.source_document.id, []),
                 boost=DEFAULT_BOOST,
                 tenant_id=tenant_id,
                 aggregated_chunk_boost_factor=chunk_content_scores[chunk_num],
