@@ -210,7 +210,11 @@ const HumanMessage = React.memo(function HumanMessage({
                   }
                 }}
               >
-                <Text as="p" mainContentBody>
+                <Text
+                  as="p"
+                  className="inline-block align-middle"
+                  mainContentBody
+                >
                   {content}
                 </Text>
               </div>
