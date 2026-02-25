@@ -35,11 +35,11 @@ function ActionButtons() {
     <GeneralLayouts.Section
       flexDirection="row"
       justifyContent="end"
-      gap={0}
+      gap={0.2}
       padding={0}
     >
-      <IconButton tertiary icon={SvgUnplug} />
-      <IconButton tertiary icon={SvgRefreshCw} />
+      <IconButton tertiary icon={SvgUnplug} tooltip="Disconnect" />
+      <IconButton tertiary icon={SvgRefreshCw} tooltip="Refresh" />
     </GeneralLayouts.Section>
   );
 }
@@ -63,7 +63,7 @@ export default function CodeInterpreterPage() {
               description="Built-in Python runtime"
               variant="tertiary"
             />
-            <GeneralLayouts.Section flexDirection="column" gap={0}>
+            <GeneralLayouts.Section flexDirection="column" gap={0.2}>
               <ConnectionStatus />
               <ActionButtons />
             </GeneralLayouts.Section>
