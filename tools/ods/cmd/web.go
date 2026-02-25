@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -68,7 +69,13 @@ func runWebScript(args []string) {
 	webCmd.Stdin = os.Stdin
 
 	if err := webCmd.Run(); err != nil {
-		log.Fatalf("web command failed: %v", err)
+		// For wrapped commands, preserve the child process's exit code and
+		// avoid duplicating already-printed stderr output.
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			os.Exit(exitErr.ExitCode())
+		}
+		log.Fatalf("Failed to run npm: %v", err)
 	}
 }
 
