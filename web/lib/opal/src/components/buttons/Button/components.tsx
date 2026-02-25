@@ -160,7 +160,13 @@ function Button({
     </Interactive.Base>
   );
 
-  if (!tooltip) return button;
+  const resolvedTooltip =
+    tooltip ??
+    (foldable && interactiveBaseProps.disabled && children
+      ? children
+      : undefined);
+
+  if (!resolvedTooltip) return button;
 
   return (
     <TooltipPrimitive.Root>
@@ -171,7 +177,7 @@ function Button({
           side={tooltipSide}
           sideOffset={4}
         >
-          {tooltip}
+          {resolvedTooltip}
         </TooltipPrimitive.Content>
       </TooltipPrimitive.Portal>
     </TooltipPrimitive.Root>
