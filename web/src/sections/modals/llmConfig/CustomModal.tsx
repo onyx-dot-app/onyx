@@ -72,7 +72,15 @@ export function CustomModal({
               ...modelConfiguration,
               max_input_tokens: modelConfiguration.max_input_tokens ?? null,
             })
-          ) ?? [{ name: "", is_visible: true, max_input_tokens: null }],
+          ) ?? [
+            {
+              name: "",
+              is_visible: true,
+              max_input_tokens: null,
+              supports_image_input: false,
+              supports_reasoning: false,
+            },
+          ],
           custom_config_list: existingLlmProvider?.custom_config
             ? Object.entries(existingLlmProvider.custom_config)
             : [],
@@ -116,7 +124,8 @@ export function CustomModal({
                   name: mc.name,
                   is_visible: mc.is_visible,
                   max_input_tokens: mc.max_input_tokens ?? null,
-                  supports_image_input: null,
+                  supports_image_input: mc.supports_image_input ?? false,
+                  supports_reasoning: mc.supports_reasoning ?? false,
                 }))
                 .filter(
                   (mc) => mc.name === values.default_model_name || mc.is_visible
