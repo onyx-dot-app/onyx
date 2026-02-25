@@ -182,7 +182,7 @@ class UserFileIndexingAdapter:
                 user_project=user_file_id_to_project_ids.get(
                     chunk.source_document.id, []
                 ),
-                # we are going to index userfiles only once, so we just set the boost to the default
+                personas=[],
                 boost=DEFAULT_BOOST,
                 tenant_id=tenant_id,
                 aggregated_chunk_boost_factor=chunk_content_scores[chunk_num],
