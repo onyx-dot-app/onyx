@@ -278,7 +278,7 @@ function AddUserButton() {
       );
     } else if (emailInviteStatus === "SEND_FAILED") {
       toast.warning(
-        "Users added, but no email notification was sent due to transient failures."
+        "Users added, but email sending failed. Check your SMTP configuration and try again."
       );
     } else {
       toast.success("Users invited!");
