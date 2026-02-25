@@ -37,9 +37,9 @@ from tests.integration.connector_job_tests.slack.slack_api_utils import SlackMan
 def test_slack_permission_sync(
     reset: None,  # noqa: ARG001
     vespa_client: vespa_fixture,  # noqa: ARG001
-    slack_test_setup: tuple[ChannelType, ChannelType],
+    slack_perm_sync_test_setup: tuple[ChannelType, ChannelType],
 ) -> None:
-    public_channel, private_channel = slack_test_setup
+    public_channel, private_channel = slack_perm_sync_test_setup
 
     admin_user: DATestUser = UserManager.create(
         email=SLACK_ADMIN_EMAIL,
@@ -53,7 +53,8 @@ def test_slack_permission_sync(
         email=SLACK_TEST_USER_2_EMAIL,
     )
 
-    slack_client = SlackManager.get_slack_client(os.environ["SLACK_BOT_TOKEN"])
+    bot_token = os.environ["SLACK_BOT_TOKEN_TEST_SPACE"]
+    slack_client = SlackManager.get_slack_client(bot_token)
     email_id_map = SlackManager.build_slack_user_email_id_map(slack_client)
     admin_user_id = email_id_map[admin_user.email]
 
@@ -63,7 +64,7 @@ def test_slack_permission_sync(
     credential: DATestCredential = CredentialManager.create(
         source=DocumentSource.SLACK,
         credential_json={
-            "slack_bot_token": os.environ["SLACK_BOT_TOKEN"],
+            "slack_bot_token": bot_token,
         },
         user_performing_action=admin_user,
     )
@@ -206,12 +207,12 @@ def test_slack_permission_sync(
 def test_slack_group_permission_sync(
     reset: None,  # noqa: ARG001
     vespa_client: vespa_fixture,  # noqa: ARG001
-    slack_test_setup: tuple[ChannelType, ChannelType],
+    slack_perm_sync_test_setup: tuple[ChannelType, ChannelType],
 ) -> None:
     """
     This test ensures that permission sync overrides onyx group access.
     """
-    public_channel, private_channel = slack_test_setup
+    public_channel, private_channel = slack_perm_sync_test_setup
 
     admin_user: DATestUser = UserManager.create(
         email=SLACK_ADMIN_EMAIL,
@@ -233,7 +234,8 @@ def test_slack_group_permission_sync(
         user_performing_action=admin_user,
     )
 
-    slack_client = SlackManager.get_slack_client(os.environ["SLACK_BOT_TOKEN"])
+    bot_token = os.environ["SLACK_BOT_TOKEN_TEST_SPACE"]
+    slack_client = SlackManager.get_slack_client(bot_token)
     email_id_map = SlackManager.build_slack_user_email_id_map(slack_client)
     admin_user_id = email_id_map[admin_user.email]
 
@@ -251,7 +253,7 @@ def test_slack_group_permission_sync(
     credential = CredentialManager.create(
         source=DocumentSource.SLACK,
         credential_json={
-            "slack_bot_token": os.environ["SLACK_BOT_TOKEN"],
+            "slack_bot_token": bot_token,
         },
         user_performing_action=admin_user,
     )

@@ -11,9 +11,10 @@ SLACK_TEST_USER_1_EMAIL = os.environ.get("SLACK_TEST_USER_1_EMAIL", "evan+1@onyx
 SLACK_TEST_USER_2_EMAIL = os.environ.get("SLACK_TEST_USER_2_EMAIL", "justin@onyx.app")
 
 
-@pytest.fixture()
-def slack_test_setup() -> Generator[tuple[ChannelType, ChannelType], None, None]:
-    slack_client = SlackManager.get_slack_client(os.environ["SLACK_BOT_TOKEN"])
+def _provision_slack_channels(
+    bot_token: str,
+) -> Generator[tuple[ChannelType, ChannelType], None, None]:
+    slack_client = SlackManager.get_slack_client(bot_token)
 
     auth_info = slack_client.auth_test()
     print(f"\nSlack workspace: {auth_info.get('team')} ({auth_info.get('url')})")
@@ -36,5 +37,16 @@ def slack_test_setup() -> Generator[tuple[ChannelType, ChannelType], None, None]
 
     yield public_channel, private_channel
 
-    # This part will always run after the test, even if it fails
     SlackManager.cleanup_after_test(slack_client=slack_client, test_id=run_id)
+
+
+@pytest.fixture()
+def slack_test_setup() -> Generator[tuple[ChannelType, ChannelType], None, None]:
+    yield from _provision_slack_channels(os.environ["SLACK_BOT_TOKEN"])
+
+
+@pytest.fixture()
+def slack_perm_sync_test_setup() -> (
+    Generator[tuple[ChannelType, ChannelType], None, None]
+):
+    yield from _provision_slack_channels(os.environ["SLACK_BOT_TOKEN_TEST_SPACE"])
