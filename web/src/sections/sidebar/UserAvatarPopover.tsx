@@ -87,9 +87,7 @@ function SettingsPopover({
 
         const encodedRedirect = encodeURIComponent(currentUrl);
 
-        router.push(
-          `/auth/login?disableAutoRedirect=true&next=${encodedRedirect}`
-        );
+        router.push(`/auth/login?next=${encodedRedirect}`);
       })
 
       .catch(() => {

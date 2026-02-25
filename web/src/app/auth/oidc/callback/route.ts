@@ -34,5 +34,6 @@ export const GET = async (request: NextRequest) => {
   );
 
   redirectResponse.headers.set("set-cookie", setCookieHeader);
+  redirectResponse.cookies.delete("onyx_force_reauth");
   return redirectResponse;
 };
