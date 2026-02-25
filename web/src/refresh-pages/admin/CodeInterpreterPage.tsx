@@ -133,14 +133,17 @@ export default function CodeInterpreterPage() {
   async function handleToggle(enabled: boolean) {
     const action = enabled ? "reconnect" : "disconnect";
     setIsReconnecting(enabled);
-    const response = await updateCodeInterpreter({ enabled });
-    setIsReconnecting(false);
-    if (!response.ok) {
-      toast.error(`Failed to ${action} Code Interpreter`);
-      return;
+    try {
+      const response = await updateCodeInterpreter({ enabled });
+      if (!response.ok) {
+        toast.error(`Failed to ${action} Code Interpreter`);
+        return;
+      }
+      setShowDisconnectModal(false);
+      refetch();
+    } finally {
+      setIsReconnecting(false);
     }
-    setShowDisconnectModal(false);
-    refetch();
   }
 
   return (
