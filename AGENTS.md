@@ -616,3 +616,9 @@ This is a minimal list - feel free to include more. Do NOT write code as part of
 Keep it high level. You can reference certain files or functions though.
 
 Before writing your plan, make sure to do research. Explore the relevant sections in the codebase.
+
+## Best Practices
+
+In addition to the other content in this file, best practices for contributing
+to the codebase can be found at `contributing_guides/best_practices.md`.
+Understand its contents and follow them.
