@@ -1,5 +1,7 @@
 import * as languages from "linguist-languages";
 
+const LANGUAGE_EXT_PATTERN = /\.[^.]+$/;
+
 interface LinguistLanguage {
   name: string;
   type: string;
@@ -51,7 +53,7 @@ function buildLanguageMaps(
 
 function lookupLanguage(name: string, maps: LanguageMaps): string | null {
   const lower = name.toLowerCase();
-  const ext = lower.match(/\.[^.]+$/)?.[0];
+  const ext = lower.match(LANGUAGE_EXT_PATTERN)?.[0];
   return (ext && maps.extensions.get(ext)) ?? maps.filenames.get(lower) ?? null;
 }
 
@@ -81,6 +83,6 @@ export function getDataLanguage(name: string): string | null {
  * linguist-languages) and should be rendered as rich text rather than code.
  */
 export function isMarkdownFile(name: string): boolean {
-  const ext = name.toLowerCase().match(/\.[^.]+$/)?.[0];
+  const ext = name.toLowerCase().match(LANGUAGE_EXT_PATTERN)?.[0];
   return !!ext && markdownExtensions.has(ext);
 }
