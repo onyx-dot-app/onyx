@@ -23,7 +23,7 @@
 import { cn, ensureHrefProtocol, noProp } from "@/lib/utils";
 import type { Components } from "react-markdown";
 import Text from "@/refresh-components/texts/Text";
-import Button from "@/refresh-components/buttons/Button";
+import RefreshButton from "@/refresh-components/buttons/Button";
 import { useCallback, useMemo, useState, useEffect } from "react";
 import { useAppBackground } from "@/providers/AppBackgroundProvider";
 import { useTheme } from "next-themes";
@@ -47,7 +47,7 @@ import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";
 import SimplePopover from "@/refresh-components/SimplePopover";
 import { Interactive } from "@opal/core";
-import { OpenButton } from "@opal/components";
+import { Button, OpenButton } from "@opal/components";
 import { LineItemLayout } from "@/layouts/general-layouts";
 import { useAppSidebarContext } from "@/providers/AppSidebarProvider";
 import useScreenSize from "@/hooks/useScreenSize";
@@ -280,9 +280,9 @@ function Header() {
           icon={SvgTrash}
           onClose={() => setDeleteModalOpen(false)}
           submit={
-            <Button danger onClick={handleDeleteChat}>
+            <RefreshButton danger onClick={handleDeleteChat}>
               Delete
-            </Button>
+            </RefreshButton>
           }
         >
           Are you sure you want to delete this chat? This action cannot be
@@ -384,13 +384,14 @@ function Header() {
           {appFocus.isChat() && currentChatSession && (
             <FrostedDiv className="flex shrink flex-row items-center">
               <Button
-                leftIcon={SvgShare}
+                icon={SvgShare}
+                prominence="tertiary"
                 transient={showShareModal}
-                tertiary
+                responsiveHideText
                 onClick={() => setShowShareModal(true)}
                 aria-label="share-chat-button"
               >
-                {isMobile ? "" : "Share Chat"}
+                Share Chat
               </Button>
               <SimplePopover
                 trigger={
