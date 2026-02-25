@@ -140,12 +140,12 @@ def _collect_available_file_ids(
                 pass
 
     if project_id:
-        project_files = get_user_files_from_project(
+        user_files = get_user_files_from_project(
             project_id=project_id,
             user_id=user_id,
             db_session=db_session,
         )
-        for uf in project_files:
+        for uf in user_files:
             user_file_ids.add(uf.id)
 
     return _AvailableFiles(
@@ -873,7 +873,7 @@ def handle_stream_message_objects(
                 simple_chat_history=simple_chat_history,
                 tools=tools,
                 custom_agent_prompt=custom_agent_prompt,
-                project_files=extracted_context_files,
+                context_files=extracted_context_files,
                 persona=persona,
                 user_memory_context=user_memory_context,
                 llm=llm,

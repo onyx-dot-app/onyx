@@ -241,7 +241,7 @@ def _build_context_file_citation_mapping(
 
 
 def _build_project_message(
-    project_files: ExtractedContextFiles | None,
+    context_files: ExtractedContextFiles | None,
     token_counter: Callable[[str], int] | None,
 ) -> list[ChatMessageSimple]:
     """Build messages for context-injected / tool-backed files.
@@ -251,18 +251,18 @@ def _build_project_message(
     2. A lightweight metadata message for files the LLM should access via the
        FileReaderTool (e.g. oversized files that don't fit in context).
     """
-    if not project_files:
+    if not context_files:
         return []
 
     messages: list[ChatMessageSimple] = []
-    if project_files.file_texts:
+    if context_files.file_texts:
         messages.append(
-            _create_project_files_message(project_files, token_counter=None)
+            _create_context_files_message(context_files, token_counter=None)
         )
-    if project_files.file_metadata_for_tool and token_counter:
+    if context_files.file_metadata_for_tool and token_counter:
         messages.append(
             _create_file_tool_metadata_message(
-                project_files.file_metadata_for_tool, token_counter
+                context_files.file_metadata_for_tool, token_counter
             )
         )
     return messages
@@ -273,7 +273,7 @@ def construct_message_history(
     custom_agent_prompt: ChatMessageSimple | None,
     simple_chat_history: list[ChatMessageSimple],
     reminder_message: ChatMessageSimple | None,
-    project_files: ExtractedContextFiles | None,
+    context_files: ExtractedContextFiles | None,
     available_tokens: int,
     last_n_user_messages: int | None = None,
     token_counter: Callable[[str], int] | None = None,
@@ -287,7 +287,7 @@ def construct_message_history(
 
     # Build the project / file-metadata messages up front so we can use their
     # actual token counts for the budget.
-    project_messages = _build_project_message(project_files, token_counter)
+    project_messages = _build_project_message(context_files, token_counter)
     project_messages_tokens = sum(m.token_count for m in project_messages)
 
     history_token_budget = available_tokens
@@ -443,17 +443,17 @@ def construct_message_history(
                     )
 
     # Attach project images to the last user message
-    if project_files and project_files.image_files:
+    if context_files and context_files.image_files:
         existing_images = last_user_message.image_files or []
         last_user_message = ChatMessageSimple(
             message=last_user_message.message,
             token_count=last_user_message.token_count,
             message_type=last_user_message.message_type,
-            image_files=existing_images + project_files.image_files,
+            image_files=existing_images + context_files.image_files,
         )
 
     # Build the final message list according to README ordering:
-    # [system], [history_before_last_user], [custom_agent], [project_files],
+    # [system], [history_before_last_user], [custom_agent], [context_files],
     # [forgotten_files], [last_user_message], [messages_after_last_user], [reminder]
     result = [system_prompt] if system_prompt else []
 
@@ -464,14 +464,14 @@ def construct_message_history(
     if custom_agent_prompt:
         result.append(custom_agent_prompt)
 
-    # 3. Add project files / file-metadata messages (inserted before last user message)
+    # 3. Add context files / file-metadata messages (inserted before last user message)
     result.extend(project_messages)
 
     # 4. Add forgotten-files metadata (right before the user's question)
     if forgotten_files_message:
         result.append(forgotten_files_message)
 
-    # 5. Add last user message (with project images attached)
+    # 5. Add last user message (with context images attached)
     result.append(last_user_message)
 
     # 6. Add messages after last user message (tool calls, responses, etc.)
@@ -545,8 +545,8 @@ def _create_file_tool_metadata_message(
     )
 
 
-def _create_project_files_message(
-    project_files: ExtractedContextFiles,
+def _create_context_files_message(
+    context_files: ExtractedContextFiles,
     token_counter: Callable[[str], int] | None,  # noqa: ARG001
 ) -> ChatMessageSimple:
     """Convert context files to a ChatMessageSimple message.
@@ -557,7 +557,7 @@ def _create_project_files_message(
 
     # Format as documents JSON as described in README
     documents_list = []
-    for idx, file_text in enumerate(project_files.file_texts, start=1):
+    for idx, file_text in enumerate(context_files.file_texts, start=1):
         documents_list.append(
             {
                 "document": idx,
@@ -568,10 +568,10 @@ def _create_project_files_message(
     documents_json = json.dumps({"documents": documents_list}, indent=2)
     message_content = f"Here are some documents provided for context, they may not all be relevant:\n{documents_json}"
 
-    # Use pre-calculated token count from project_files
+    # Use pre-calculated token count from context_files
     return ChatMessageSimple(
         message=message_content,
-        token_count=project_files.total_token_count,
+        token_count=context_files.total_token_count,
         message_type=MessageType.USER,
     )
 
@@ -582,7 +582,7 @@ def run_llm_loop(
     simple_chat_history: list[ChatMessageSimple],
     tools: list[Tool],
     custom_agent_prompt: str | None,
-    project_files: ExtractedContextFiles,
+    context_files: ExtractedContextFiles,
     persona: Persona | None,
     user_memory_context: UserMemoryContext | None,
     llm: LLM,
@@ -625,9 +625,9 @@ def run_llm_loop(
 
         # Add project file citation mappings if project files are present
         project_citation_mapping: CitationMapping = {}
-        if project_files.file_metadata:
+        if context_files.file_metadata:
             project_citation_mapping = _build_context_file_citation_mapping(
-                project_files.file_metadata
+                context_files.file_metadata
             )
             citation_processor.update_citation_mapping(project_citation_mapping)
 
@@ -645,7 +645,7 @@ def run_llm_loop(
         # TODO allow citing of images in Projects. Since attached to the last user message, it has no text associated with it.
         # One future workaround is to include the images as separate user messages with citation information and process those.
         always_cite_documents: bool = bool(
-            project_files.use_as_search_filter or project_files.file_texts
+            context_files.use_as_search_filter or context_files.file_texts
         )
         should_cite_documents: bool = False
         ran_image_gen: bool = False
@@ -786,7 +786,7 @@ def run_llm_loop(
                 custom_agent_prompt=custom_agent_prompt_msg,
                 simple_chat_history=simple_chat_history,
                 reminder_message=reminder_msg,
-                project_files=project_files,
+                context_files=context_files,
                 available_tokens=available_tokens,
                 token_counter=token_counter,
                 all_injected_file_metadata=all_injected_file_metadata,
