@@ -159,6 +159,15 @@
       0px 0px 12px 1px var(--shadow-03);
   }
 
+  /* RADIAL GRADIENTS */
+  .radial-00 {
+    background: radial-gradient(
+      236.31% 141.42% at 0% 0%,
+      var(--background-tint-00) 0%,
+      var(--background-tint-01) 100%
+    );
+  }
+
   /* DEBUGGING UTILITIES
   If you ever want to highlight a component for debugging purposes, just type in `className="dbg-red ..."`, and a red box should appear around it.
   This helps with placing things properly on the screen and seeing how they look during active development.
