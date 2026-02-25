@@ -3,7 +3,10 @@ import {
   ModelConfiguration,
   WellKnownLLMProviderDescriptor,
 } from "@/interfaces/llm";
-import { LLM_PROVIDERS_ADMIN_URL } from "@/lib/llmConfig/constants";
+import {
+  LLM_ADMIN_URL,
+  LLM_PROVIDERS_ADMIN_URL,
+} from "@/lib/llmConfig/constants";
 import { toast } from "@/hooks/useToast";
 import * as Yup from "yup";
 import isEqual from "lodash/isEqual";
@@ -248,6 +251,7 @@ export const submitLLMProvider = async <T extends BaseLLMFormValues>({
       body: JSON.stringify({
         provider: providerName,
         ...finalValues,
+        id: existingLlmProvider?.id,
       }),
     }
   );
@@ -263,12 +267,16 @@ export const submitLLMProvider = async <T extends BaseLLMFormValues>({
 
   if (shouldMarkAsDefault) {
     const newLlmProvider = (await response.json()) as LLMProviderView;
-    const setDefaultResponse = await fetch(
-      `${LLM_PROVIDERS_ADMIN_URL}/${newLlmProvider.id}/default`,
-      {
-        method: "POST",
-      }
-    );
+    const setDefaultResponse = await fetch(`${LLM_ADMIN_URL}/default`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        provider_id: newLlmProvider.id,
+        model_name: finalDefaultModelName,
+      }),
+    });
     if (!setDefaultResponse.ok) {
       const errorMsg = (await setDefaultResponse.json()).detail;
       toast.error(`Failed to set provider as default: ${errorMsg}`);
