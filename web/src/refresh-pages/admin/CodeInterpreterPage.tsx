@@ -19,6 +19,7 @@ import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationMo
 import useCodeInterpreter from "@/hooks/useCodeInterpreter";
 import { updateCodeInterpreter } from "@/lib/admin/code-interpreter/svc";
 import { ContentAction } from "@opal/layouts";
+import { toast } from "@/hooks/useToast";
 
 interface CodeInterpreterCardProps {
   variant?: CardProps["variant"];
@@ -129,22 +130,16 @@ export default function CodeInterpreterPage() {
   const [showDisconnectModal, setShowDisconnectModal] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
 
-  async function handleDisconnect() {
-    const response = await updateCodeInterpreter({ enabled: false });
+  async function handleToggle(enabled: boolean) {
+    const action = enabled ? "reconnect" : "disconnect";
+    setIsReconnecting(enabled);
+    const response = await updateCodeInterpreter({ enabled });
+    setIsReconnecting(false);
     if (!response.ok) {
+      toast.error(`Failed to ${action} Code Interpreter`);
       return;
     }
     setShowDisconnectModal(false);
-    refetch();
-  }
-
-  async function handleReconnect() {
-    setIsReconnecting(true);
-    const response = await updateCodeInterpreter({ enabled: true });
-    setIsReconnecting(false);
-    if (!response.ok) {
-      return;
-    }
     refetch();
   }
 
@@ -197,7 +192,7 @@ export default function CodeInterpreterPage() {
                 <Button
                   prominence="tertiary"
                   rightIcon={SvgArrowExchange}
-                  onClick={handleReconnect}
+                  onClick={() => handleToggle(true)}
                 >
                   Reconnect
                 </Button>
@@ -213,7 +208,7 @@ export default function CodeInterpreterPage() {
           title="Disconnect Code Interpreter"
           onClose={() => setShowDisconnectModal(false)}
           submit={
-            <Button variant="danger" onClick={handleDisconnect}>
+            <Button variant="danger" onClick={() => handleToggle(false)}>
               Disconnect
             </Button>
           }
