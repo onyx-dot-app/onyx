@@ -25,7 +25,6 @@ import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateR
 import { SourceMetadata } from "./search/interfaces";
 import { parseLlmDescriptor } from "./llmConfig/utils";
 import { ChatSession } from "@/app/app/interfaces";
-import { AllUsersResponse } from "./types";
 import { Credential } from "./connectors/credentials";
 import { SettingsContext } from "@/providers/SettingsProvider";
 import {
