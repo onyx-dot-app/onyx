@@ -7,7 +7,7 @@
  */
 import React from "react";
 import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
-import { CustomForm } from "./CustomForm";
+import { CustomModal } from "./CustomModal";
 import { toast } from "@/hooks/useToast";
 
 // Mock SWR's mutate function and useSWR
@@ -120,7 +120,7 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       }),
     } as Response);
 
-    render(<CustomForm />);
+    render(<CustomModal />);
 
     await openModalAndFillBasicFields(user, {
       name: "My Custom Provider",
@@ -177,7 +177,7 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       json: async () => ({ detail: "Invalid API key" }),
     } as Response);
 
-    render(<CustomForm />);
+    render(<CustomModal />);
 
     await openModalAndFillBasicFields(user, {
       name: "Bad Provider",
@@ -256,7 +256,7 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       json: async () => ({ ...existingProvider, api_key: "new-key" }),
     } as Response);
 
-    render(<CustomForm existingLlmProvider={existingProvider} />);
+    render(<CustomModal existingLlmProvider={existingProvider} />);
 
     // For existing provider, click "Edit" button to open modal
     const editButton = screen.getByRole("button", { name: /edit/i });
@@ -355,7 +355,7 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       }),
     } as Response);
 
-    render(<CustomForm existingLlmProvider={existingProvider} />);
+    render(<CustomModal existingLlmProvider={existingProvider} />);
 
     const editButton = screen.getByRole("button", { name: /edit/i });
     await user.click(editButton);
@@ -423,7 +423,7 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       json: async () => ({}),
     } as Response);
 
-    render(<CustomForm shouldMarkAsDefault={true} />);
+    render(<CustomModal shouldMarkAsDefault={true} />);
 
     await openModalAndFillBasicFields(user, {
       name: "New Default Provider",
@@ -463,7 +463,7 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       json: async () => ({ detail: "Database error" }),
     } as Response);
 
-    render(<CustomForm />);
+    render(<CustomModal />);
 
     await openModalAndFillBasicFields(user, {
       name: "Test Provider",
@@ -499,7 +499,7 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       json: async () => ({ id: 1, name: "Provider with Custom Config" }),
     } as Response);
 
-    render(<CustomForm />);
+    render(<CustomModal />);
 
     // Open modal
     const openButton = screen.getByRole("button", {

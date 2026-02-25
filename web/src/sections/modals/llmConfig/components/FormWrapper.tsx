@@ -35,6 +35,10 @@ interface ProviderFormEntrypointWrapperProps {
   buttonMode?: boolean;
   /** Custom button text for buttonMode (defaults to "Add {providerName}") */
   buttonText?: string;
+  /** Controlled open state — when defined, the wrapper renders only a modal (no card/button UI) */
+  open?: boolean;
+  /** Callback when controlled modal requests close */
+  onOpenChange?: (open: boolean) => void;
 }
 
 export function ProviderFormEntrypointWrapper({
@@ -44,8 +48,11 @@ export function ProviderFormEntrypointWrapper({
   existingLlmProvider,
   buttonMode,
   buttonText,
+  open,
+  onOpenChange,
 }: ProviderFormEntrypointWrapperProps) {
   const [formIsVisible, setFormIsVisible] = useState(false);
+  const isControlled = open !== undefined;
 
   // Shared hooks
   const { mutate } = useSWRConfig();
@@ -54,15 +61,25 @@ export function ProviderFormEntrypointWrapper({
   const [isTesting, setIsTesting] = useState(false);
   const [testError, setTestError] = useState<string>("");
 
+  // Suppress SWR when controlled + closed to avoid unnecessary API calls
+  const swrKey =
+    providerEndpoint && !(isControlled && !open)
+      ? `/api/admin/llm/built-in/options/${providerEndpoint}`
+      : null;
+
   // Fetch model configurations for this provider
   const { data: wellKnownLLMProvider } = useSWR<WellKnownLLMProviderDescriptor>(
-    providerEndpoint
-      ? `/api/admin/llm/built-in/options/${providerEndpoint}`
-      : null,
+    swrKey,
     errorHandlingFetcher
   );
 
-  const onClose = () => setFormIsVisible(false);
+  const onClose = () => {
+    if (isControlled) {
+      onOpenChange?.(false);
+    } else {
+      setFormIsVisible(false);
+    }
+  };
 
   async function handleSetAsDefault(): Promise<void> {
     if (!existingLlmProvider) return;
@@ -92,6 +109,28 @@ export function ProviderFormEntrypointWrapper({
     setTestError,
     wellKnownLLMProvider,
   };
+
+  // Controlled mode: render nothing when closed, render only modal when open
+  if (isControlled) {
+    if (!open) return null;
+
+    return (
+      <Modal open onOpenChange={onClose}>
+        <Modal.Content>
+          <Modal.Header
+            icon={SvgSettings}
+            title={`${existingLlmProvider ? "Configure" : "Setup"} ${
+              existingLlmProvider?.name
+                ? `"${existingLlmProvider.name}"`
+                : providerName
+            }`}
+            onClose={onClose}
+          />
+          <Modal.Body>{children(context)}</Modal.Body>
+        </Modal.Content>
+      </Modal>
+    );
+  }
 
   // Button mode: simple button that opens a modal
   if (buttonMode && !existingLlmProvider) {

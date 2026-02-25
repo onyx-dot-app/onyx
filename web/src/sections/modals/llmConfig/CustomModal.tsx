@@ -21,7 +21,7 @@ import {
 } from "./formUtils";
 import { AdvancedOptions } from "./components/AdvancedOptions";
 import { TextFormField } from "@/components/Field";
-import { ModelConfigurationField } from "../ModelConfigurationField";
+import { ModelConfigurationField } from "@/app/admin/configuration/llm/ModelConfigurationField";
 import Text from "@/refresh-components/texts/Text";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import IconButton from "@/refresh-components/buttons/IconButton";
@@ -38,9 +38,11 @@ function customConfigProcessing(customConfigsList: [string, string][]) {
   return customConfig;
 }
 
-export function CustomForm({
+export function CustomModal({
   existingLlmProvider,
   shouldMarkAsDefault,
+  open,
+  onOpenChange,
 }: LLMProviderFormProps) {
   return (
     <ProviderFormEntrypointWrapper
@@ -48,6 +50,8 @@ export function CustomForm({
       existingLlmProvider={existingLlmProvider}
       buttonMode={!existingLlmProvider}
       buttonText="Add Custom LLM Provider"
+      open={open}
+      onOpenChange={onOpenChange}
     >
       {({
         onClose,

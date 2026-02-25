@@ -1,10 +1,8 @@
 import { Form, Formik } from "formik";
+
 import { LLMProviderFormProps } from "@/interfaces/llm";
 import * as Yup from "yup";
-import {
-  ProviderFormEntrypointWrapper,
-  ProviderFormContext,
-} from "./components/FormWrapper";
+import { ProviderFormEntrypointWrapper } from "./components/FormWrapper";
 import { DisplayNameField } from "./components/DisplayNameField";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import { FormActionButtons } from "./components/FormActionButtons";
@@ -18,18 +16,22 @@ import {
 import { AdvancedOptions } from "./components/AdvancedOptions";
 import { DisplayModels } from "./components/DisplayModels";
 
-export const ANTHROPIC_PROVIDER_NAME = "anthropic";
-const DEFAULT_DEFAULT_MODEL_NAME = "claude-sonnet-4-5";
+export const OPENAI_PROVIDER_NAME = "openai";
+const DEFAULT_DEFAULT_MODEL_NAME = "gpt-5.2";
 
-export function AnthropicForm({
+export function OpenAIModal({
   existingLlmProvider,
   shouldMarkAsDefault,
+  open,
+  onOpenChange,
 }: LLMProviderFormProps) {
   return (
     <ProviderFormEntrypointWrapper
-      providerName="Anthropic"
-      providerEndpoint={ANTHROPIC_PROVIDER_NAME}
+      providerName="OpenAI"
+      providerEndpoint={OPENAI_PROVIDER_NAME}
       existingLlmProvider={existingLlmProvider}
+      open={open}
+      onOpenChange={onOpenChange}
     >
       {({
         onClose,
@@ -39,7 +41,7 @@ export function AnthropicForm({
         testError,
         setTestError,
         wellKnownLLMProvider,
-      }: ProviderFormContext) => {
+      }) => {
         const modelConfigurations = buildAvailableModelConfigurations(
           existingLlmProvider,
           wellKnownLLMProvider
@@ -50,12 +52,11 @@ export function AnthropicForm({
             modelConfigurations
           ),
           api_key: existingLlmProvider?.api_key ?? "",
-          api_base: existingLlmProvider?.api_base ?? undefined,
           default_model_name:
             existingLlmProvider?.default_model_name ??
             wellKnownLLMProvider?.recommended_default_model?.name ??
             DEFAULT_DEFAULT_MODEL_NAME,
-          // Default to auto mode for new Anthropic providers
+          // Default to auto mode for new OpenAI providers
           is_auto_mode: existingLlmProvider?.is_auto_mode ?? true,
         };
 
@@ -70,7 +71,7 @@ export function AnthropicForm({
             validateOnMount={true}
             onSubmit={async (values, { setSubmitting }) => {
               await submitLLMProvider({
-                providerName: ANTHROPIC_PROVIDER_NAME,
+                providerName: OPENAI_PROVIDER_NAME,
                 values,
                 initialValues,
                 modelConfigurations,
