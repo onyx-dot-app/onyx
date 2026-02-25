@@ -56,7 +56,6 @@ export function AnthropicModal({
           api_key: existingLlmProvider?.api_key ?? "",
           api_base: existingLlmProvider?.api_base ?? undefined,
           default_model_name:
-            existingLlmProvider?.default_model_name ??
             wellKnownLLMProvider?.recommended_default_model?.name ??
             DEFAULT_DEFAULT_MODEL_NAME,
           // Default to auto mode for new Anthropic providers

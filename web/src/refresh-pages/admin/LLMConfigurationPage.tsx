@@ -107,9 +107,13 @@ const PROVIDER_MODAL_MAP: Record<
 
 interface ExistingProviderCardProps {
   provider: LLMProviderView;
+  isDefault: boolean;
 }
 
-function ExistingProviderCard({ provider }: ExistingProviderCardProps) {
+function ExistingProviderCard({
+  provider,
+  isDefault,
+}: ExistingProviderCardProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   return (
@@ -120,11 +124,7 @@ function ExistingProviderCard({ provider }: ExistingProviderCardProps) {
         description={getProviderDisplayName(provider.provider)}
         sizePreset="main-content"
         variant="section"
-        tag={
-          provider.is_default_provider
-            ? { title: "Default", color: "blue" }
-            : { title: "Enabled", color: "green" }
-        }
+        tag={isDefault ? { title: "Default", color: "blue" } : undefined}
         rightChildren={
           <Button
             icon={SvgSettings}
@@ -308,7 +308,7 @@ export default function LLMConfigurationPage() {
         {hasProviders && (
           <>
             <GeneralLayouts.Section
-              gap={0.5}
+              gap={0.75}
               height="fit"
               alignItems="stretch"
               justifyContent="start"
@@ -322,16 +322,17 @@ export default function LLMConfigurationPage() {
               <div className="flex flex-col gap-4">
                 {[...existingLlmProviders]
                   .sort((a, b) => {
-                    if (a.is_default_provider && !b.is_default_provider)
-                      return -1;
-                    if (!a.is_default_provider && b.is_default_provider)
-                      return 1;
+                    const aIsDefault = defaultText?.provider_id === a.id;
+                    const bIsDefault = defaultText?.provider_id === b.id;
+                    if (aIsDefault && !bIsDefault) return -1;
+                    if (!aIsDefault && bIsDefault) return 1;
                     return 0;
                   })
                   .map((provider) => (
                     <ExistingProviderCard
                       key={provider.id}
                       provider={provider}
+                      isDefault={defaultText?.provider_id === provider.id}
                     />
                   ))}
               </div>

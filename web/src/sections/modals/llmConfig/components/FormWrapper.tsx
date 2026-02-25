@@ -174,24 +174,18 @@ export function ProviderFormEntrypointWrapper({
               <Text as="p" secondaryBody text03 className="italic">
                 ({providerName})
               </Text>
-              {!existingLlmProvider.is_default_provider && (
-                <Text
-                  as="p"
-                  className={cn("text-action-link-05", "cursor-pointer")}
-                  onClick={handleSetAsDefault}
-                >
-                  Set as default
-                </Text>
-              )}
+              <Text
+                as="p"
+                className={cn("text-action-link-05", "cursor-pointer")}
+                onClick={handleSetAsDefault}
+              >
+                Set as default
+              </Text>
             </div>
 
             {existingLlmProvider && (
               <div className="my-auto ml-3">
-                {existingLlmProvider.is_default_provider ? (
-                  <Badge variant="agent">Default</Badge>
-                ) : (
-                  <Badge variant="success">Enabled</Badge>
-                )}
+                <Badge variant="success">Enabled</Badge>
               </div>
             )}
 

@@ -116,7 +116,6 @@ describe("Custom LLM Provider Configuration Workflow", () => {
         name: "My Custom Provider",
         provider: "openai",
         api_key: "test-key",
-        default_model_name: "gpt-4",
       }),
     } as Response);
 
@@ -224,7 +223,6 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       api_key: "old-key",
       api_base: "",
       api_version: "",
-      default_model_name: "claude-3-opus",
       model_configurations: [
         {
           name: "claude-3-opus",
@@ -239,9 +237,6 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       groups: [],
       personas: [],
       deployment_name: null,
-      is_default_provider: false,
-      default_vision_model: null,
-      is_default_vision_provider: null,
     };
 
     // Mock POST /api/admin/llm/test
@@ -307,7 +302,6 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       api_key: "old-key",
       api_base: "https://example-openai-compatible.local/v1",
       api_version: "",
-      default_model_name: "gpt-oss-20b-bw-failover",
       model_configurations: [
         {
           name: "gpt-oss-20b-bw-failover",
@@ -322,9 +316,6 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       groups: [],
       personas: [],
       deployment_name: null,
-      is_default_provider: false,
-      default_vision_model: null,
-      is_default_vision_provider: null,
     };
 
     // Mock POST /api/admin/llm/test
