@@ -12,13 +12,13 @@ import {
   SvgXOctagon,
 } from "@opal/icons";
 import * as GeneralLayouts from "@/layouts/general-layouts";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
-import Button from "@/refresh-components/buttons/Button";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import useCodeInterpreter from "@/hooks/useCodeInterpreter";
 import { updateCodeInterpreter } from "@/lib/admin/code-interpreter/svc";
+import { ContentAction } from "@opal/layouts";
 
 interface CodeInterpreterCardProps {
   variant?: CardProps["variant"];
@@ -36,23 +36,16 @@ function CodeInterpreterCard({
   rightContent,
 }: CodeInterpreterCardProps) {
   return (
+    // TODO (@raunakab): Allow Content to accept strikethrough and middleText
     <Card variant={variant}>
-      <GeneralLayouts.Section
-        flexDirection="row"
-        alignItems="start"
-        padding={0}
-        gap={0}
-      >
-        <GeneralLayouts.LineItemLayout
-          icon={SvgTerminal}
-          title={title}
-          description="Built-in Python runtime"
-          middleText={middleText}
-          variant="tertiary"
-          strikethrough={strikethrough}
-        />
-        {rightContent}
-      </GeneralLayouts.Section>
+      <ContentAction
+        icon={SvgTerminal}
+        title={middleText ? `${title} ${middleText}` : title}
+        description="Built-in Python runtime"
+        variant="section"
+        sizePreset="main-ui"
+        rightChildren={rightContent}
+      />
     </Card>
   );
 }
@@ -107,8 +100,20 @@ function ActionButtons({ onDisconnect, onRefresh }: ActionButtonsProps) {
       gap={0}
       padding={0}
     >
-      <IconButton tertiary icon={SvgUnplug} onClick={onDisconnect} />
-      <IconButton tertiary icon={SvgRefreshCw} onClick={onRefresh} />
+      <Button
+        prominence="tertiary"
+        size="sm"
+        icon={SvgUnplug}
+        onClick={onDisconnect}
+        tooltip="Disconnect"
+      />
+      <Button
+        prominence="tertiary"
+        size="sm"
+        icon={SvgRefreshCw}
+        onClick={onRefresh}
+        tooltip="Refresh"
+      />
     </GeneralLayouts.Section>
   );
 }
@@ -184,13 +189,11 @@ export default function CodeInterpreterPage() {
                 </GeneralLayouts.Section>
               ) : (
                 <Button
-                  tertiary
+                  prominence="tertiary"
                   rightIcon={SvgArrowExchange}
                   onClick={handleReconnect}
                 >
-                  <Text mainUiAction text03>
-                    Reconnect
-                  </Text>
+                  Reconnect
                 </Button>
               )
             }
@@ -204,7 +207,7 @@ export default function CodeInterpreterPage() {
           title="Disconnect Code Interpreter"
           onClose={() => setShowDisconnectModal(false)}
           submit={
-            <Button danger onClick={handleDisconnect}>
+            <Button variant="danger" onClick={handleDisconnect}>
               Disconnect
             </Button>
           }
