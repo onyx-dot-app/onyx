@@ -58,16 +58,6 @@ def test_credential_permissions(reset: None) -> None:  # noqa: ARG001
 
     """Tests for things Curators should not be able to do"""
 
-    # Curators should not be able to create a public credential
-    with pytest.raises(HTTPError):
-        CredentialManager.create(
-            name="invalid_credential_1",
-            source=DocumentSource.CONFLUENCE,
-            groups=[user_group_1.id],
-            curator_public=True,
-            user_performing_action=curator,
-        )
-
     # Curators should not be able to create a credential for a user group they are not a curator of
     with pytest.raises(HTTPError):
         CredentialManager.create(
@@ -111,5 +101,18 @@ def test_credential_permissions(reset: None) -> None:  # noqa: ARG001
     CredentialManager.verify(
         credential=valid_credential,
         verify_deleted=True,
+        user_performing_action=curator,
+    )
+
+    # Curators should be able to create a public credential
+    public_credential = CredentialManager.create(
+        name="curator_public_credential",
+        source=DocumentSource.CONFLUENCE,
+        groups=[user_group_1.id],
+        curator_public=True,
+        user_performing_action=curator,
+    )
+    CredentialManager.verify(
+        credential=public_credential,
         user_performing_action=curator,
     )
