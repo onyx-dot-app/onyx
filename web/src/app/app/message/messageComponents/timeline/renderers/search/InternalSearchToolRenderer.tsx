@@ -75,7 +75,7 @@ export const InternalSearchToolRenderer: MessageRenderer<
     return children([
       {
         icon: SvgSearchMenu,
-        status: null,
+        status: queriesHeader,
         content: <></>,
         supportsCollapsible: true,
         timelineLayout: "timeline",
