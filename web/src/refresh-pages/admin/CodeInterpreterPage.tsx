@@ -85,7 +85,7 @@ function ConnectionStatus({ healthy, isLoading }: ConnectionStatusProps) {
   return (
     <GeneralLayouts.Section
       flexDirection="row"
-      gap={0.4}
+      gap={0.5}
       padding={0}
       justifyContent="end"
       alignItems="center"
