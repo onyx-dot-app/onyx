@@ -25,7 +25,7 @@ if TYPE_CHECKING:
         ModelConfiguration as ModelConfigurationModel,
     )
 
-T = TypeVar("T", bound="LLMProviderDescriptor | LLMProviderView")
+T = TypeVar("T", "LLMProviderDescriptor", "LLMProviderView")
 
 
 # TODO: Clear this up on api refactor

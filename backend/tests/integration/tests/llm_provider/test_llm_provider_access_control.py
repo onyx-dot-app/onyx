@@ -272,6 +272,19 @@ def test_get_llm_for_persona_falls_back_when_access_denied(
 
         # Set up ModelConfiguration + LLMModelFlow so get_default_llm() can
         # resolve the default provider when the fallback path is triggered.
+        # First, clear any existing CHAT defaults (setup_postgres may have created one)
+        existing_defaults = (
+            db_session.query(LLMModelFlow)
+            .filter(
+                LLMModelFlow.llm_model_flow_type == LLMModelFlowType.CHAT,
+                LLMModelFlow.is_default == True,  # noqa: E712
+            )
+            .all()
+        )
+        for existing in existing_defaults:
+            existing.is_default = False
+        db_session.flush()
+
         default_model_config = ModelConfiguration(
             llm_provider_id=default_provider.id,
             name=default_provider.default_model_name,
