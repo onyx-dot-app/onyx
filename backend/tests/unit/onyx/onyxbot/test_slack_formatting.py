@@ -1,4 +1,6 @@
+from onyx.onyxbot.slack.formatting import _convert_slack_links_to_markdown
 from onyx.onyxbot.slack.formatting import _normalize_link_destinations
+from onyx.onyxbot.slack.formatting import _sanitize_for_slack
 from onyx.onyxbot.slack.formatting import format_slack_message
 from onyx.onyxbot.slack.utils import remove_slack_text_interactions
 from onyx.utils.text_processing import decode_escapes
@@ -50,3 +52,54 @@ def test_format_slack_message_keeps_parenthesized_citation_links_intact() -> Non
         in rendered
     )
     assert "|[1]>%20Access%20ID%20Card" not in rendered
+
+
+def test_slack_style_links_converted_to_clickable_links() -> None:
+    message = "Visit <https://example.com/page|Example Page> for details."
+
+    formatted = format_slack_message(message)
+
+    assert "<https://example.com/page|Example Page>" in formatted
+    assert "&lt;" not in formatted
+
+
+def test_slack_style_links_preserved_inside_code_blocks() -> None:
+    message = "```\n<https://example.com|click>\n```"
+
+    converted = _convert_slack_links_to_markdown(message)
+
+    assert "<https://example.com|click>" in converted
+
+
+def test_html_tags_stripped_outside_code_blocks() -> None:
+    message = "Hello<br/>world ```<div>code</div>``` after"
+
+    sanitized = _sanitize_for_slack(message)
+
+    assert "<br" not in sanitized
+    assert "<div>code</div>" in sanitized
+
+
+def test_format_slack_message_block_spacing() -> None:
+    message = "Paragraph one.\n\nParagraph two."
+
+    formatted = format_slack_message(message)
+
+    assert "Paragraph one.\n\nParagraph two." == formatted
+
+
+def test_format_slack_message_code_block_no_trailing_blank_line() -> None:
+    message = "```python\nprint('hi')\n```"
+
+    formatted = format_slack_message(message)
+
+    assert formatted.endswith("print('hi')\n```")
+
+
+def test_format_slack_message_ampersand_not_double_escaped() -> None:
+    message = 'She said "hello" & goodbye.'
+
+    formatted = format_slack_message(message)
+
+    assert "&amp;" in formatted
+    assert "&quot;" not in formatted

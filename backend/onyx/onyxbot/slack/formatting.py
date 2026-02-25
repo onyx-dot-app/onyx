@@ -121,7 +121,16 @@ def _convert_slack_links_to_markdown(message: str) -> str:
     recognise it, so the angle brackets would be escaped by text() and Slack
     would render the link as literal text instead of a clickable link.
     """
-    return _SLACK_LINK_PATTERN.sub(r"[\2](\1)", message)
+    parts = _FENCED_CODE_BLOCK_PATTERN.split(message)
+    code_blocks = _FENCED_CODE_BLOCK_PATTERN.findall(message)
+
+    converted: list[str] = []
+    for i, part in enumerate(parts):
+        converted.append(_SLACK_LINK_PATTERN.sub(r"[\2](\1)", part))
+        if i < len(code_blocks):
+            converted.append(code_blocks[i])
+
+    return "".join(converted)
 
 
 def format_slack_message(message: str | None) -> str:
