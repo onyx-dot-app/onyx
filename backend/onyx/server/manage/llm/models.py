@@ -52,18 +52,16 @@ def get_default_vision_model_name(llm_provider_model: "LLMProviderModel") -> str
 
 class TestLLMRequest(BaseModel):
     # provider level
-    name: str | None = None
+    id: int | None = None
     provider: str
+    model: str
     api_key: str | None = None
     api_base: str | None = None
     api_version: str | None = None
     custom_config: dict[str, str] | None = None
 
     # model level
-    default_model_name: str
     deployment_name: str | None = None
-
-    model_configurations: list["ModelConfigurationUpsertRequest"]
 
     # if try and use the existing API/custom config key
     api_key_changed: bool

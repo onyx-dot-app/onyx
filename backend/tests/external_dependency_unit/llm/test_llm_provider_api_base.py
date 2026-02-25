@@ -530,14 +530,8 @@ def test_upload_with_custom_config_then_change(
         with patch("onyx.server.manage.llm.api.test_llm", side_effect=capture_test_llm):
             run_llm_config_test(
                 LLMTestRequest(
-                    name=name,
                     provider=provider_name,
-                    default_model_name=default_model_name,
-                    model_configurations=[
-                        ModelConfigurationUpsertRequest(
-                            name=default_model_name, is_visible=True
-                        )
-                    ],
+                    model=default_model_name,
                     api_key_changed=False,
                     custom_config_changed=True,
                     custom_config=custom_config,
@@ -546,7 +540,7 @@ def test_upload_with_custom_config_then_change(
                 db_session=db_session,
             )
 
-            put_llm_provider(
+            provider = put_llm_provider(
                 llm_provider_upsert_request=LLMProviderUpsertRequest(
                     name=name,
                     provider=provider_name,
@@ -569,14 +563,9 @@ def test_upload_with_custom_config_then_change(
             # Turn auto mode off
             run_llm_config_test(
                 LLMTestRequest(
-                    name=name,
+                    id=provider.id,
                     provider=provider_name,
-                    default_model_name=default_model_name,
-                    model_configurations=[
-                        ModelConfigurationUpsertRequest(
-                            name=default_model_name, is_visible=True
-                        )
-                    ],
+                    model=default_model_name,
                     api_key_changed=False,
                     custom_config_changed=False,
                 ),
@@ -706,7 +695,7 @@ def test_preserves_masked_sensitive_custom_config_on_test_request(
 ) -> None:
     """LLM test should restore masked sensitive custom config values before invocation."""
     name = f"test-provider-vertex-test-{uuid4().hex[:8]}"
-    provider = LlmProviderNames.VERTEX_AI.value
+    provider_name = LlmProviderNames.VERTEX_AI.value
     default_model_name = "gemini-2.5-pro"
     original_custom_config = {
         "vertex_credentials": '{"type":"service_account","private_key":"REAL_PRIVATE_KEY"}',
@@ -719,10 +708,10 @@ def test_preserves_masked_sensitive_custom_config_on_test_request(
         return ""
 
     try:
-        put_llm_provider(
+        provider = put_llm_provider(
             llm_provider_upsert_request=LLMProviderUpsertRequest(
                 name=name,
-                provider=provider,
+                provider=provider_name,
                 default_model_name=default_model_name,
                 custom_config=original_custom_config,
                 model_configurations=[
@@ -742,14 +731,9 @@ def test_preserves_masked_sensitive_custom_config_on_test_request(
         with patch("onyx.server.manage.llm.api.test_llm", side_effect=capture_test_llm):
             run_llm_config_test(
                 LLMTestRequest(
-                    name=name,
-                    provider=provider,
-                    default_model_name=default_model_name,
-                    model_configurations=[
-                        ModelConfigurationUpsertRequest(
-                            name=default_model_name, is_visible=True
-                        )
-                    ],
+                    id=provider.id,
+                    provider=provider_name,
+                    model=default_model_name,
                     api_key_changed=False,
                     custom_config_changed=True,
                     custom_config={
