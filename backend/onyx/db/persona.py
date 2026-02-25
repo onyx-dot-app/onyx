@@ -335,6 +335,7 @@ def update_persona_shared(
     db_session: Session,
     group_ids: list[int] | None = None,
     is_public: bool | None = None,
+    label_ids: list[int] | None = None,
 ) -> None:
     """Simplified version of `create_update_persona` which only touches the
     accessibility rather than any of the logic (e.g. prompt, connected data sources,
@@ -359,6 +360,15 @@ def update_persona_shared(
         user_ids=user_ids,
         group_ids=group_ids,
     )
+
+    if label_ids is not None:
+        labels = (
+            db_session.query(PersonaLabel).filter(PersonaLabel.id.in_(label_ids)).all()
+        )
+        if len(labels) != len(label_ids):
+            raise ValueError("Some label IDs were not found in the database")
+        persona.labels.clear()
+        persona.labels = labels
 
     db_session.commit()
 
@@ -946,6 +956,8 @@ def upsert_persona(
         labels = (
             db_session.query(PersonaLabel).filter(PersonaLabel.id.in_(label_ids)).all()
         )
+        if len(labels) != len(label_ids):
+            raise ValueError("Some label IDs were not found in the database")
 
     # Fetch and attach hierarchy_nodes by IDs
     hierarchy_nodes = None

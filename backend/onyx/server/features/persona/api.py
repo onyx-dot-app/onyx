@@ -405,6 +405,7 @@ class PersonaShareRequest(BaseModel):
     user_ids: list[UUID] | None = None
     group_ids: list[int] | None = None
     is_public: bool | None = None
+    label_ids: list[int] | None = None
 
 
 # We notify each user when a user is shared with them
@@ -422,6 +423,7 @@ def share_persona(
         user_ids=persona_share_request.user_ids,
         group_ids=persona_share_request.group_ids,
         is_public=persona_share_request.is_public,
+        label_ids=persona_share_request.label_ids,
     )
 
 

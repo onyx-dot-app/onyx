@@ -11,7 +11,12 @@ import { cn, noProp } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
-import { checkUserOwnsAssistant, updateAgentSharedStatus } from "@/lib/agents";
+import {
+  checkUserOwnsAssistant,
+  updateAgentSharedStatus,
+  updateAgentLabels,
+  updateAgentFeaturedStatus,
+} from "@/lib/agents";
 import { useUser } from "@/providers/UserProvider";
 import {
   SvgActions,
@@ -58,10 +63,15 @@ export default function AgentCard({ agent }: AgentCardProps) {
     route({ agentId: agent.id });
   }, [pinned, togglePinnedAgent, agent, route]);
 
-  // Handle sharing agent
   const handleShare = useCallback(
-    async (userIds: string[], groupIds: number[], isPublic: boolean) => {
-      const error = await updateAgentSharedStatus(
+    async (
+      userIds: string[],
+      groupIds: number[],
+      isPublic: boolean,
+      isFeatured: boolean,
+      labelIds: number[]
+    ) => {
+      const shareError = await updateAgentSharedStatus(
         agent.id,
         userIds,
         groupIds,
@@ -69,13 +79,28 @@ export default function AgentCard({ agent }: AgentCardProps) {
         isPaidEnterpriseFeaturesEnabled
       );
 
-      if (error) {
-        toast.error(`Failed to share agent: ${error}`);
-      } else {
-        // Revalidate the agent data to reflect the changes
-        refreshAgent();
-        shareAgentModal.toggle(false);
+      if (shareError) {
+        toast.error(`Failed to share agent: ${shareError}`);
+        return;
       }
+
+      const labelError = await updateAgentLabels(agent.id, labelIds);
+      if (labelError) {
+        toast.error(`Failed to update labels: ${labelError}`);
+        return;
+      }
+
+      const featuredError = await updateAgentFeaturedStatus(
+        agent.id,
+        isFeatured
+      );
+      if (featuredError) {
+        toast.error(`Failed to update featured status: ${featuredError}`);
+        return;
+      }
+
+      refreshAgent();
+      shareAgentModal.toggle(false);
     },
     [agent.id, isPaidEnterpriseFeaturesEnabled, refreshAgent]
   );
@@ -88,6 +113,8 @@ export default function AgentCard({ agent }: AgentCardProps) {
           userIds={fullAgent?.users?.map((u) => u.id) ?? []}
           groupIds={fullAgent?.groups ?? []}
           isPublic={fullAgent?.is_public ?? false}
+          isFeatured={fullAgent?.is_default_persona ?? false}
+          labelIds={fullAgent?.labels?.map((l) => l.id) ?? []}
           onShare={handleShare}
         />
       </shareAgentModal.Provider>

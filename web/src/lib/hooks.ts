@@ -257,19 +257,20 @@ export const useLabels = () => {
     return mutate("/api/persona/labels");
   };
 
-  const createLabel = async (name: string) => {
+  const createLabel = async (name: string): Promise<PersonaLabel | null> => {
     const response = await fetch("/api/persona/labels", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name }),
     });
 
-    if (response.ok) {
-      const newLabel = await response.json();
-      mutate("/api/persona/labels", [...(labels || []), newLabel], false);
+    if (!response.ok) {
+      return null;
     }
 
-    return response;
+    const newLabel: PersonaLabel = await response.json();
+    mutate("/api/persona/labels", [...(labels || []), newLabel], false);
+    return newLabel;
   };
 
   const updateLabel = async (id: number, name: string) => {
