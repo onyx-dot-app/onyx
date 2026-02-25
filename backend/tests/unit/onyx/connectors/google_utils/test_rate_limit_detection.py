@@ -1,7 +1,7 @@
 import json
 
-import httplib2
-from googleapiclient.errors import HttpError
+import httplib2  # type: ignore[import-untyped]
+from googleapiclient.errors import HttpError  # type: ignore[import-untyped]
 
 from onyx.connectors.google_utils.google_utils import _is_rate_limit_error
 
