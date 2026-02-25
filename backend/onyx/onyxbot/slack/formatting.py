@@ -118,7 +118,7 @@ def format_slack_message(message: str | None) -> str:
     result = md(normalized_message)
     # With HTMLRenderer, result is always str (not AST list)
     assert isinstance(result, str)
-    return result
+    return result.rstrip("\n")
 
 
 class SlackRenderer(HTMLRenderer):
@@ -136,7 +136,7 @@ class SlackRenderer(HTMLRenderer):
         return text
 
     def heading(self, text: str, level: int, **attrs: Any) -> str:  # noqa: ARG002
-        return f"*{text}*\n"
+        return f"*{text}*\n\n"
 
     def emphasis(self, text: str) -> str:
         return f"_{text}_"
@@ -155,7 +155,7 @@ class SlackRenderer(HTMLRenderer):
                 count += 1
                 prefix = f"{count}. " if ordered else "• "
                 lines[i] = f"{prefix}{line[4:]}"
-        return "\n".join(lines)
+        return "\n".join(lines) + "\n"
 
     def list_item(self, text: str) -> str:
         return f"li: {text}\n"
@@ -177,24 +177,24 @@ class SlackRenderer(HTMLRenderer):
         return f"`{text}`"
 
     def block_code(self, code: str, info: str | None = None) -> str:  # noqa: ARG002
-        return f"```\n{code}\n```\n"
+        return f"```\n{code}\n```\n\n"
 
     def linebreak(self) -> str:
         return "\n"
 
     def thematic_break(self) -> str:
-        return "---\n"
+        return "---\n\n"
 
     def block_quote(self, text: str) -> str:
         lines = text.strip().split("\n")
         quoted = "\n".join(f">{line}" for line in lines)
-        return quoted + "\n"
+        return quoted + "\n\n"
 
     def block_html(self, html: str) -> str:
-        return _sanitize_html(html) + "\n"
+        return _sanitize_html(html) + "\n\n"
 
     def block_error(self, text: str) -> str:
-        return f"```\n{text}\n```\n"
+        return f"```\n{text}\n```\n\n"
 
     def text(self, text: str) -> str:
         # Only escape the three entities Slack recognizes: & < >
@@ -203,4 +203,4 @@ class SlackRenderer(HTMLRenderer):
         return self.escape_special(text)
 
     def paragraph(self, text: str) -> str:
-        return f"{text}\n"
+        return f"{text}\n\n"
