@@ -76,18 +76,21 @@ def test_code_interpreter_endpoints_require_admin(
     basic_user: DATestUser,
 ) -> None:
     """All code interpreter endpoints should reject non-admin users."""
-    for method, url, kwargs in [
-        ("GET", CODE_INTERPRETER_HEALTH_URL, {}),
-        ("GET", CODE_INTERPRETER_URL, {}),
-        ("PUT", CODE_INTERPRETER_URL, {"json": {"enabled": True}}),
-    ]:
-        response = requests.request(
-            method,
-            url,
-            headers=basic_user.headers,
-            **kwargs,
-        )
-        assert response.status_code == 403, (
-            f"{method} {url} should return 403 for non-admin user, "
-            f"got {response.status_code}"
-        )
+    health_response = requests.get(
+        CODE_INTERPRETER_HEALTH_URL,
+        headers=basic_user.headers,
+    )
+    assert health_response.status_code == 403
+
+    get_response = requests.get(
+        CODE_INTERPRETER_URL,
+        headers=basic_user.headers,
+    )
+    assert get_response.status_code == 403
+
+    put_response = requests.put(
+        CODE_INTERPRETER_URL,
+        json={"enabled": True},
+        headers=basic_user.headers,
+    )
+    assert put_response.status_code == 403
