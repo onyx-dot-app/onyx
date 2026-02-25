@@ -73,7 +73,9 @@ func runWebScript(args []string) {
 		// avoid duplicating already-printed stderr output.
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
-			os.Exit(exitErr.ExitCode())
+			if code := exitErr.ExitCode(); code != -1 {
+				os.Exit(code)
+			}
 		}
 		log.Fatalf("Failed to run npm: %v", err)
 	}
