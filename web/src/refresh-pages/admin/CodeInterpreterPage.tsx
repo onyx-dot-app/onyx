@@ -51,6 +51,43 @@ function CodeInterpreterCard({
   );
 }
 
+interface ConnectionStatusProps {
+  healthy: boolean;
+  isLoading: boolean;
+}
+
+function ConnectionStatus({ healthy, isLoading }: ConnectionStatusProps) {
+  return (
+    <GeneralLayouts.Section
+      flexDirection="row"
+      gap={0.4}
+      padding={0}
+      justifyContent="end"
+      alignItems="center"
+    >
+      {isLoading ? (
+        <>
+          <Text mainUiAction text03>
+            Checking...
+          </Text>
+          <SimpleLoader />
+        </>
+      ) : (
+        <>
+          <Text mainUiAction text03>
+            {healthy ? "Connected" : "Connection Lost"}
+          </Text>
+          {healthy ? (
+            <SvgCheckCircle size={16} className="text-status-success-05" />
+          ) : (
+            <SvgXOctagon size={16} className="text-status-error-05" />
+          )}
+        </>
+      )}
+    </GeneralLayouts.Section>
+  );
+}
+
 interface ActionButtonsProps {
   onDisconnect: () => void;
   onRefresh: () => void;
@@ -61,11 +98,11 @@ function ActionButtons({ onDisconnect, onRefresh }: ActionButtonsProps) {
     <GeneralLayouts.Section
       flexDirection="row"
       justifyContent="end"
-      gap={0.2}
+      gap={0}
       padding={0}
     >
-      <IconButton tertiary icon={SvgUnplug} tooltip="Disconnect" />
-      <IconButton tertiary icon={SvgRefreshCw} tooltip="Test Connection" />
+      <IconButton tertiary icon={SvgUnplug} onClick={onDisconnect} />
+      <IconButton tertiary icon={SvgRefreshCw} onClick={onRefresh} />
     </GeneralLayouts.Section>
   );
 }
