@@ -39,6 +39,7 @@ def test_get_code_interpreter_status_as_admin(
 
 def test_update_code_interpreter_disable_and_enable(
     admin_user: DATestUser,
+    preserve_code_interpreter_state: None,  # noqa: ARG001
 ) -> None:
     """PUT endpoint should update the enabled flag and persist across reads."""
     # Disable
@@ -100,6 +101,7 @@ def test_code_interpreter_endpoints_require_admin(
 
 def test_python_tool_hidden_from_tool_list_when_disabled(
     admin_user: DATestUser,
+    preserve_code_interpreter_state: None,  # noqa: ARG001
 ) -> None:
     """When code interpreter is disabled, the Python tool should not appear
     in the GET /tool response (i.e. the frontend tool list)."""
