@@ -3,6 +3,7 @@ from uuid import UUID
 
 from sqlalchemy import func
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
 from onyx.db.models import UserFile
@@ -60,6 +61,23 @@ def fetch_user_project_ids_for_user_files(
     results = db_session.execute(stmt).scalars().all()
     return {
         str(user_file.id): [project.id for project in user_file.projects]
+        for user_file in results
+    }
+
+
+def fetch_persona_ids_for_user_files(
+    user_file_ids: list[str],
+    db_session: Session,
+) -> dict[str, list[int]]:
+    """Fetch persona (assistant) ids for specified user files."""
+    stmt = (
+        select(UserFile)
+        .where(UserFile.id.in_(user_file_ids))
+        .options(selectinload(UserFile.assistants))
+    )
+    results = db_session.execute(stmt).scalars().all()
+    return {
+        str(user_file.id): [persona.id for persona in user_file.assistants]
         for user_file in results
     }
 

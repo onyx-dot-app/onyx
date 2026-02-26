@@ -38,6 +38,7 @@ def _get_search_filters(
         tags=[],
         document_sets=[],
         project_id=None,
+        persona_id=None,
         time_cutoff=None,
         min_chunk_index=None,
         max_chunk_index=None,
