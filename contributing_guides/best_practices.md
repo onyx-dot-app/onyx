@@ -167,11 +167,12 @@ Add clear comments:
   effects. Essentially every piece of meaningful logic should exist within some
   function that has to be explicitly invoked. Acceptable exceptions to this may
   include loading environment variables or setting up loggers.
-  - If you find yourself needing something like this, you maybe want that logic
-    to exist in a `main.py` file which should never be imported by anything else
-    and only run explicitly.
-- Related to the above, never add files which are both modules that are intended
-  to be imported and scripts which are intended to be run directly. If you want
-  to directly invoke the contents of a Python file from the command line for
-  example, always encapsulate that file with a `main.py` file, even if all that
-  main file does is import said module and call a function for example.
+  - If you find yourself needing something like this, you may want that logic to
+    exist in a file dedicated for manual execution (contains `if __name__ ==
+    "__main__":`) which should not be imported by anything else.
+- Related to the above, do not conflate Python scripts you intend to run from
+  the command line (contains `if __name__ == "__main__":`) with modules you
+  intend to import from elsewhere. If for some unlikely reason they have to be
+  the same file, any logic specific to executing the file (including imports)
+  should be contained in the `if __name__ == "__main__":` block.
+  - Generally these executable files exist in `backend/scripts/`.
