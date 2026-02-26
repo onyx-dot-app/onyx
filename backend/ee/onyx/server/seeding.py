@@ -126,20 +126,22 @@ def _seed_llms(
         for llm_upsert_request in llm_upsert_requests
     ]
 
-    first_provider = seeded_providers[0]
-    if not first_provider.model_configurations:
+    default_provider = next(
+        (p for p in seeded_providers if p.model_configurations), None
+    )
+    if not default_provider:
         return
 
     visible_configs = [
-        mc for mc in first_provider.model_configurations if mc.is_visible
+        mc for mc in default_provider.model_configurations if mc.is_visible
     ]
     default_config = (
         visible_configs[0]
         if visible_configs
-        else first_provider.model_configurations[0]
+        else default_provider.model_configurations[0]
     )
     update_default_provider(
-        provider_id=first_provider.id,
+        provider_id=default_provider.id,
         model_name=default_config.name,
         db_session=db_session,
     )
