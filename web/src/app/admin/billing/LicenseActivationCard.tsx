@@ -19,6 +19,7 @@ interface LicenseActivationCardProps {
   onClose: () => void;
   onSuccess: () => void;
   license?: LicenseStatus;
+  hideClose?: boolean;
 }
 
 export default function LicenseActivationCard({
@@ -26,6 +27,7 @@ export default function LicenseActivationCard({
   onClose,
   onSuccess,
   license,
+  hideClose,
 }: LicenseActivationCardProps) {
   const [licenseKey, setLicenseKey] = useState("");
   const [isActivating, setIsActivating] = useState(false);
@@ -120,9 +122,11 @@ export default function LicenseActivationCard({
             <Button main secondary onClick={() => setShowInput(true)}>
               Update Key
             </Button>
-            <Button main tertiary onClick={handleClose}>
-              Close
-            </Button>
+            {!hideClose && (
+              <Button main tertiary onClick={handleClose}>
+                Close
+              </Button>
+            )}
           </Section>
         </Section>
       </Card>
