@@ -256,9 +256,6 @@ def create_update_persona(
     try:
         # Default persona validation
         if create_persona_request.is_default_persona:
-            if not create_persona_request.is_public:
-                raise ValueError("Cannot make a default persona non public")
-
             # Curators can edit default personas, but not make them
             if user.role == UserRole.CURATOR or user.role == UserRole.GLOBAL_CURATOR:
                 pass
@@ -1170,9 +1167,6 @@ def update_persona_is_default(
     persona = fetch_persona_by_id_for_user(
         db_session=db_session, persona_id=persona_id, user=user, get_editable=True
     )
-
-    if not persona.is_public:
-        persona.is_public = True
 
     persona.is_default_persona = is_default
     db_session.commit()
