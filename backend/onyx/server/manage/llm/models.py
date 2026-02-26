@@ -28,34 +28,6 @@ if TYPE_CHECKING:
 T = TypeVar("T", "LLMProviderDescriptor", "LLMProviderView", "VisionProviderResponse")
 
 
-# TODO: Clear this up on api refactor
-# There is still logic that requires sending each providers default model name
-# There is no logic that requires sending the providers default vision model name
-# We only send for the one that is actually the default
-def get_default_llm_model_name(llm_provider_model: "LLMProviderModel") -> str:
-    """Find the default conversation model name for a provider.
-
-    Returns the model name if found, otherwise returns empty string.
-    """
-    for model_config in llm_provider_model.model_configurations:
-        for flow in model_config.llm_model_flows:
-            if flow.is_default and flow.llm_model_flow_type == LLMModelFlowType.CHAT:
-                return model_config.name
-    return ""
-
-
-def get_default_vision_model_name(llm_provider_model: "LLMProviderModel") -> str | None:
-    """Find the default vision model name for a provider.
-
-    Returns the model name if found, otherwise returns None.
-    """
-    for model_config in llm_provider_model.model_configurations:
-        for flow in model_config.llm_model_flows:
-            if flow.is_default and flow.llm_model_flow_type == LLMModelFlowType.VISION:
-                return model_config.name
-    return None
-
-
 class TestLLMRequest(BaseModel):
     # provider level
     id: int | None = None
