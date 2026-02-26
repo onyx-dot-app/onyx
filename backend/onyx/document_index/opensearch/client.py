@@ -211,9 +211,6 @@ class OpenSearchClient(AbstractContextManager):
     def close(self) -> None:
         """Closes the client.
 
-        TODO(andrei): Can we have some way to auto close when the client no
-        longer has any references?
-
         Raises:
             Exception: There was an error closing the client.
         """
