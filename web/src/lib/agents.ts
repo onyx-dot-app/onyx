@@ -131,7 +131,8 @@ export async function updateAgentSharedStatus(
   userIds: string[],
   groupIds: number[],
   isPublic: boolean | undefined,
-  isPaidEnterpriseFeaturesEnabled: boolean
+  isPaidEnterpriseFeaturesEnabled: boolean,
+  labelIds?: number[]
 ): Promise<null | string> {
   // MIT versions should not send group_ids - warn if caller provided non-empty groups
   if (!isPaidEnterpriseFeaturesEnabled && groupIds.length > 0) {
@@ -152,6 +153,7 @@ export async function updateAgentSharedStatus(
         // Only include group_ids for enterprise versions
         group_ids: isPaidEnterpriseFeaturesEnabled ? groupIds : undefined,
         is_public: isPublic,
+        label_ids: labelIds,
       }),
     });
 

@@ -14,7 +14,6 @@ import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidE
 import {
   checkUserOwnsAssistant,
   updateAgentSharedStatus,
-  updateAgentLabels,
   updateAgentFeaturedStatus,
 } from "@/lib/agents";
 import { useUser } from "@/providers/UserProvider";
@@ -81,17 +80,12 @@ export default function AgentCard({ agent }: AgentCardProps) {
         userIds,
         groupIds,
         isPublic,
-        isPaidEnterpriseFeaturesEnabled
+        isPaidEnterpriseFeaturesEnabled,
+        labelIds
       );
 
       if (shareError) {
         toast.error(`Failed to share agent: ${shareError}`);
-        return;
-      }
-
-      const labelError = await updateAgentLabels(agent.id, labelIds);
-      if (labelError) {
-        toast.error(`Failed to update labels: ${labelError}`);
         return;
       }
 

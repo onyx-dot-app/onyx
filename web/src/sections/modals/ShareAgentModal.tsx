@@ -299,27 +299,20 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
                   <SwitchField name="isPublic" />
                 </InputLayouts.Horizontal>
 
-                <div className="border-t border-border-02" />
+                {canUpdateFeaturedStatus && (
+                  <>
+                    <div className="border-t border-border-02" />
 
-                <InputLayouts.Horizontal
-                  title="Feature This Agent"
-                  description="Show this agent at the top of the explore agents list and automatically pin it to the sidebar for new users with access."
-                >
-                  <SimpleTooltip
-                    tooltip={
-                      !canUpdateFeaturedStatus
-                        ? "Only curators and admins can feature agents."
-                        : undefined
-                    }
-                  >
-                    <span className="inline-flex">
-                      <SwitchField
-                        name="isFeatured"
-                        disabled={!canUpdateFeaturedStatus}
-                      />
-                    </span>
-                  </SimpleTooltip>
-                </InputLayouts.Horizontal>
+                    <InputLayouts.Horizontal
+                      title="Feature This Agent"
+                      description="Show this agent at the top of the explore agents list and automatically pin it to the sidebar for new users with access."
+                    >
+                      <span className="inline-flex">
+                        <SwitchField name="isFeatured" />
+                      </span>
+                    </InputLayouts.Horizontal>
+                  </>
+                )}
 
                 <InputChipField
                   chips={chipItems}
