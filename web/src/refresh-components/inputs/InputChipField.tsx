@@ -65,6 +65,10 @@ function InputChipField({
   const inputRef = React.useRef<HTMLInputElement>(null);
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (disabled) {
+      return;
+    }
+
     if (e.key === "Enter") {
       e.preventDefault();
       e.stopPropagation();
@@ -94,7 +98,7 @@ function InputChipField({
       {chips.map((chip) => (
         <Chip
           key={chip.id}
-          onRemove={() => onRemoveChip(chip.id)}
+          onRemove={disabled ? undefined : () => onRemoveChip(chip.id)}
           smallLabel={false}
         >
           {chip.label}
