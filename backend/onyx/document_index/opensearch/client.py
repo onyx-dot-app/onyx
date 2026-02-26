@@ -1010,7 +1010,7 @@ def wait_for_opensearch_with_timeout(
     Returns:
         True if OpenSearch is ready, False otherwise.
     """
-    with nullcontext(client) if client is not None else OpenSearchClient() as client:
+    with nullcontext(client) if client else OpenSearchClient() as client:
         time_start = time.monotonic()
         while True:
             if client.ping():
