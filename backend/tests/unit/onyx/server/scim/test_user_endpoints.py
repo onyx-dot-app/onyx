@@ -320,6 +320,32 @@ class TestCreateUser:
         assert resource.externalId == "ext-123"
         mock_dal.create_user_mapping.assert_called_once()
 
+    @patch("ee.onyx.server.scim.api._check_seat_availability", return_value=None)
+    def test_external_id_conflict_returns_409(
+        self,
+        mock_seats: MagicMock,  # noqa: ARG002
+        mock_db_session: MagicMock,
+        mock_token: MagicMock,
+        mock_dal: MagicMock,
+        provider: ScimProvider,
+    ) -> None:
+        """IntegrityError on create_user_mapping returns 409, not 500."""
+        mock_dal.get_user_by_email.return_value = None
+        mock_dal.create_user_mapping.side_effect = IntegrityError(
+            "dup", {}, Exception()
+        )
+        resource = make_scim_user(externalId="dup-ext-id")
+
+        result = create_user(
+            user_resource=resource,
+            _token=mock_token,
+            provider=provider,
+            db_session=mock_db_session,
+        )
+
+        assert_scim_error(result, 409)
+        mock_dal.rollback.assert_called()
+
 
 class TestReplaceUser:
     """Tests for PUT /scim/v2/Users/{user_id}."""
@@ -424,6 +450,32 @@ class TestReplaceUser:
                 family_name="User",
             ),
         )
+
+    def test_external_id_conflict_returns_409(
+        self,
+        mock_db_session: MagicMock,
+        mock_token: MagicMock,
+        mock_dal: MagicMock,
+        provider: ScimProvider,
+    ) -> None:
+        """IntegrityError on sync_user_external_id returns 409, not 500."""
+        user = make_db_user()
+        mock_dal.get_user.return_value = user
+        mock_dal.sync_user_external_id.side_effect = IntegrityError(
+            "dup", {}, Exception()
+        )
+        resource = make_scim_user(externalId="dup-ext-id")
+
+        result = replace_user(
+            user_id=str(user.id),
+            user_resource=resource,
+            _token=mock_token,
+            provider=provider,
+            db_session=mock_db_session,
+        )
+
+        assert_scim_error(result, 409)
+        mock_dal.rollback.assert_called()
 
 
 class TestPatchUser:
@@ -550,6 +602,40 @@ class TestPatchUser:
         )
 
         assert_scim_error(result, 400)
+
+    def test_external_id_conflict_returns_409(
+        self,
+        mock_db_session: MagicMock,
+        mock_token: MagicMock,
+        mock_dal: MagicMock,
+        provider: ScimProvider,
+    ) -> None:
+        """IntegrityError on sync_user_external_id returns 409, not 500."""
+        user = make_db_user()
+        mock_dal.get_user.return_value = user
+        mock_dal.sync_user_external_id.side_effect = IntegrityError(
+            "dup", {}, Exception()
+        )
+        patch_req = ScimPatchRequest(
+            Operations=[
+                ScimPatchOperation(
+                    op=ScimPatchOperationType.REPLACE,
+                    path="externalId",
+                    value="dup-ext-id",
+                )
+            ]
+        )
+
+        result = patch_user(
+            user_id=str(user.id),
+            patch_request=patch_req,
+            _token=mock_token,
+            provider=provider,
+            db_session=mock_db_session,
+        )
+
+        assert_scim_error(result, 409)
+        mock_dal.rollback.assert_called()
 
 
 class TestDeleteUser:

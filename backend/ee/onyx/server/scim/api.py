@@ -438,12 +438,18 @@ def create_user(
     external_id = user_resource.externalId
     scim_username = user_resource.userName.strip()
     fields = _fields_from_resource(user_resource)
-    dal.create_user_mapping(
-        external_id=external_id,
-        user_id=user.id,
-        scim_username=scim_username,
-        fields=fields,
-    )
+    try:
+        dal.create_user_mapping(
+            external_id=external_id,
+            user_id=user.id,
+            scim_username=scim_username,
+            fields=fields,
+        )
+    except IntegrityError:
+        dal.rollback()
+        return _scim_error_response(
+            409, f"externalId '{external_id}' is already mapped to another user"
+        )
 
     dal.commit()
 
@@ -493,12 +499,19 @@ def replace_user(
     new_external_id = user_resource.externalId
     scim_username = user_resource.userName.strip()
     fields = _fields_from_resource(user_resource)
-    dal.sync_user_external_id(
-        user.id,
-        new_external_id,
-        scim_username=scim_username,
-        fields=fields,
-    )
+    try:
+        dal.sync_user_external_id(
+            user.id,
+            new_external_id,
+            scim_username=scim_username,
+            fields=fields,
+        )
+    except IntegrityError:
+        dal.rollback()
+        return _scim_error_response(
+            409,
+            f"externalId '{new_external_id}' is already mapped to another user",
+        )
 
     dal.commit()
 
@@ -597,12 +610,19 @@ def patch_user(
         ),
     )
 
-    dal.sync_user_external_id(
-        user.id,
-        patched.externalId,
-        scim_username=new_scim_username,
-        fields=fields,
-    )
+    try:
+        dal.sync_user_external_id(
+            user.id,
+            patched.externalId,
+            scim_username=new_scim_username,
+            fields=fields,
+        )
+    except IntegrityError:
+        dal.rollback()
+        return _scim_error_response(
+            409,
+            f"externalId '{patched.externalId}' is already mapped to another user",
+        )
 
     dal.commit()
 
@@ -815,7 +835,14 @@ def create_group(
 
     external_id = group_resource.externalId
     if external_id:
-        dal.create_group_mapping(external_id=external_id, user_group_id=db_group.id)
+        try:
+            dal.create_group_mapping(external_id=external_id, user_group_id=db_group.id)
+        except IntegrityError:
+            dal.rollback()
+            return _scim_error_response(
+                409,
+                f"externalId '{external_id}' is already mapped to another group",
+            )
 
     dal.commit()
 
@@ -849,7 +876,15 @@ def replace_group(
 
     dal.update_group(group, name=group_resource.displayName)
     dal.replace_group_members(group.id, member_uuids)
-    dal.sync_group_external_id(group.id, group_resource.externalId)
+    try:
+        dal.sync_group_external_id(group.id, group_resource.externalId)
+    except IntegrityError:
+        dal.rollback()
+        return _scim_error_response(
+            409,
+            f"externalId '{group_resource.externalId}' is already mapped"
+            " to another group",
+        )
 
     dal.commit()
 

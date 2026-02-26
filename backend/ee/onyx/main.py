@@ -32,6 +32,7 @@ from ee.onyx.server.query_and_chat.search_backend import router as search_router
 from ee.onyx.server.query_history.api import router as query_history_router
 from ee.onyx.server.reporting.usage_export_api import router as usage_export_router
 from ee.onyx.server.scim.api import scim_router
+from ee.onyx.server.scim.error_handlers import register_scim_error_handlers
 from ee.onyx.server.seeding import seed_db
 from ee.onyx.server.tenants.api import router as tenants_router
 from ee.onyx.server.token_rate_limits.api import (
@@ -167,6 +168,7 @@ def get_application() -> FastAPI:
     # they use their own SCIM bearer token auth).
     # Not behind APP_API_PREFIX because IdPs expect /scim/v2/... directly.
     application.include_router(scim_router)
+    register_scim_error_handlers(application)
 
     # Ensure all routes have auth enabled or are explicitly marked as public
     check_ee_router_auth(application)

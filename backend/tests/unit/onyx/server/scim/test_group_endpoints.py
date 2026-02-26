@@ -7,6 +7,7 @@ from unittest.mock import patch
 from uuid import uuid4
 
 from fastapi import Response
+from sqlalchemy.exc import IntegrityError
 
 from ee.onyx.server.scim.api import create_group
 from ee.onyx.server.scim.api import delete_group
@@ -287,6 +288,35 @@ class TestCreateGroup:
         parse_scim_group(result, status=201)
         mock_dal.create_group_mapping.assert_called_once()
 
+    @patch("ee.onyx.server.scim.api._validate_and_parse_members")
+    def test_external_id_conflict_returns_409(
+        self,
+        mock_validate: MagicMock,
+        mock_db_session: MagicMock,
+        mock_token: MagicMock,
+        mock_dal: MagicMock,
+        provider: ScimProvider,
+    ) -> None:
+        """IntegrityError on create_group_mapping returns 409, not 500."""
+        mock_dal.get_group_by_name.return_value = None
+        mock_validate.return_value = ([], None)
+        mock_dal.get_group_members.return_value = []
+        mock_dal.create_group_mapping.side_effect = IntegrityError(
+            "dup", {}, Exception()
+        )
+
+        resource = make_scim_group(externalId="dup-ext-id")
+
+        result = create_group(
+            group_resource=resource,
+            _token=mock_token,
+            provider=provider,
+            db_session=mock_db_session,
+        )
+
+        assert_scim_error(result, 409)
+        mock_dal.rollback.assert_called()
+
 
 class TestReplaceGroup:
     """Tests for PUT /scim/v2/Groups/{group_id}."""
@@ -389,6 +419,36 @@ class TestReplaceGroup:
         )
 
         mock_dal.sync_group_external_id.assert_called_once_with(5, "new-ext")
+
+    @patch("ee.onyx.server.scim.api._validate_and_parse_members")
+    def test_external_id_conflict_returns_409(
+        self,
+        mock_validate: MagicMock,
+        mock_db_session: MagicMock,
+        mock_token: MagicMock,
+        mock_dal: MagicMock,
+        provider: ScimProvider,
+    ) -> None:
+        """IntegrityError on sync_group_external_id returns 409, not 500."""
+        group = make_db_group(id=5)
+        mock_dal.get_group.return_value = group
+        mock_validate.return_value = ([], None)
+        mock_dal.sync_group_external_id.side_effect = IntegrityError(
+            "dup", {}, Exception()
+        )
+
+        resource = make_scim_group(externalId="dup-ext-id")
+
+        result = replace_group(
+            group_id="5",
+            group_resource=resource,
+            _token=mock_token,
+            provider=provider,
+            db_session=mock_db_session,
+        )
+
+        assert_scim_error(result, 409)
+        mock_dal.rollback.assert_called()
 
 
 class TestPatchGroup:
