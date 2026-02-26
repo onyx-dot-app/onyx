@@ -1638,6 +1638,11 @@ class SharepointConnector(
         sp_private_key = credentials.get("sp_private_key")
         sp_certificate_password = credentials.get("sp_certificate_password")
 
+        if not sp_client_id:
+            raise ConnectorValidationError("Client ID is required")
+        if not sp_directory_id:
+            raise ConnectorValidationError("Directory (tenant) ID is required")
+
         authority_url = f"{self.authority_host}/{sp_directory_id}"
 
         if auth_method == SharepointAuthMethod.CERTIFICATE.value:
