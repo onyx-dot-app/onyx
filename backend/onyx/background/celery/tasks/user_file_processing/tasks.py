@@ -12,6 +12,7 @@ from redis import Redis
 from redis.lock import Lock as RedisLock
 from retry import retry
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.apps.app_base import task_logger
@@ -712,7 +713,10 @@ def check_for_user_file_project_sync(self: Task, *, tenant_id: str) -> None:
                 db_session.execute(
                     select(UserFile.id).where(
                         sa.and_(
-                            UserFile.needs_project_sync.is_(True),
+                            sa.or_(
+                                UserFile.needs_project_sync.is_(True),
+                                UserFile.needs_persona_sync.is_(True),
+                            ),
                             UserFile.status == UserFileStatus.COMPLETED,
                         )
                     )
@@ -772,7 +776,11 @@ def process_single_user_file_project_sync(
 
     try:
         with get_session_with_current_tenant() as db_session:
-            user_file = db_session.get(UserFile, _as_uuid(user_file_id))
+            user_file = db_session.execute(
+                select(UserFile)
+                .where(UserFile.id == _as_uuid(user_file_id))
+                .options(selectinload(UserFile.assistants))
+            ).scalar_one_or_none()
             if not user_file:
                 task_logger.info(
                     f"process_single_user_file_project_sync - User file not found id={user_file_id}"
@@ -800,13 +808,17 @@ def process_single_user_file_project_sync(
                 ]
 
                 project_ids = [project.id for project in user_file.projects]
+                persona_ids = [p.id for p in user_file.assistants if not p.deleted]
                 for retry_document_index in retry_document_indices:
                     retry_document_index.update_single(
                         doc_id=str(user_file.id),
                         tenant_id=tenant_id,
                         chunk_count=user_file.chunk_count,
                         fields=None,
-                        user_fields=VespaDocumentUserFields(user_projects=project_ids),
+                        user_fields=VespaDocumentUserFields(
+                            user_projects=project_ids,
+                            personas=persona_ids,
+                        ),
                     )
 
             task_logger.info(
@@ -814,6 +826,7 @@ def process_single_user_file_project_sync(
             )
 
             user_file.needs_project_sync = False
+            user_file.needs_persona_sync = False
             user_file.last_project_sync_at = datetime.datetime.now(
                 datetime.timezone.utc
             )

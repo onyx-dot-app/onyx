@@ -1,5 +1,6 @@
 import pytest
 
+from ee.onyx.server.scim.models import ScimEmail
 from ee.onyx.server.scim.models import ScimGroupMember
 from ee.onyx.server.scim.models import ScimGroupResource
 from ee.onyx.server.scim.models import ScimMeta
@@ -125,9 +126,16 @@ class TestApplyUserPatch:
         with pytest.raises(ScimPatchError, match="Unsupported path"):
             apply_user_patch([_replace_op("unknownField", "value")], user)
 
-    def test_remove_op_on_user_raises(self) -> None:
+    def test_remove_op_clears_field(self) -> None:
+        """Remove op should clear the target field (not raise)."""
+        user = _make_user(externalId="ext-123")
+        result = apply_user_patch([_remove_op("externalId")], user)
+        assert result.externalId is None
+
+    def test_remove_unsupported_path_raises(self) -> None:
+        """Remove op on unsupported path (e.g. 'active') should raise."""
         user = _make_user()
-        with pytest.raises(ScimPatchError, match="Unsupported operation"):
+        with pytest.raises(ScimPatchError, match="Unsupported remove path"):
             apply_user_patch([_remove_op("active")], user)
 
     def test_replace_without_path_ignores_id(self) -> None:
@@ -209,6 +217,34 @@ class TestApplyUserPatch:
         user = _make_user()
         result = apply_user_patch([_add_op("externalId", "ext-456")], user)
         assert result.externalId == "ext-456"
+
+    def test_entra_capitalized_replace_op(self) -> None:
+        """Entra ID sends ``"Replace"`` instead of ``"replace"``."""
+        user = _make_user()
+        op = ScimPatchOperation(op="Replace", path="active", value=False)  # type: ignore[arg-type]
+        result = apply_user_patch([op], user)
+        assert result.active is False
+
+    def test_entra_capitalized_add_op(self) -> None:
+        """Entra ID sends ``"Add"`` instead of ``"add"``."""
+        user = _make_user()
+        op = ScimPatchOperation(op="Add", path="externalId", value="ext-999")  # type: ignore[arg-type]
+        result = apply_user_patch([op], user)
+        assert result.externalId == "ext-999"
+
+    def test_emails_primary_eq_true_value(self) -> None:
+        """emails[primary eq true].value should update the primary email entry."""
+        user = _make_user(
+            emails=[ScimEmail(value="old@example.com", type="work", primary=True)]
+        )
+        result = apply_user_patch(
+            [_replace_op("emails[primary eq true].value", "new@example.com")], user
+        )
+        # userName should remain unchanged — emails and userName are separate
+        assert result.userName == "test@example.com"
+        assert len(result.emails) == 1
+        assert result.emails[0].value == "new@example.com"
+        assert result.emails[0].primary is True
 
 
 class TestApplyGroupPatch:

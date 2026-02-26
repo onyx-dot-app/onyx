@@ -147,7 +147,9 @@ class DriveItemData(BaseModel):
             self.id,
             ResourcePath("items", ResourcePath(self.drive_id, ResourcePath("drives"))),
         )
-        return DriveItem(graph_client, path)
+        item = DriveItem(graph_client, path)
+        item.set_property("id", self.id)
+        return item
 
 
 # The office365 library's ClientContext caches the access token from its

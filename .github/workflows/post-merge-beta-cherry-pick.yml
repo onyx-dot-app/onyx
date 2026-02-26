@@ -11,6 +11,11 @@ permissions:
 
 jobs:
   cherry-pick-to-latest-release:
+    outputs:
+      should_cherrypick: ${{ steps.gate.outputs.should_cherrypick }}
+      pr_number: ${{ steps.gate.outputs.pr_number }}
+      cherry_pick_reason: ${{ steps.run_cherry_pick.outputs.reason }}
+      cherry_pick_details: ${{ steps.run_cherry_pick.outputs.details }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -75,10 +80,82 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Create cherry-pick PR to latest release
+        id: run_cherry_pick
         if: steps.gate.outputs.should_cherrypick == 'true'
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_TOKEN: ${{ github.token }}
           CHERRY_PICK_ASSIGNEE: ${{ steps.gate.outputs.merged_by }}
         run: |
-          uv run --no-sync --with onyx-devtools ods cherry-pick "${GITHUB_SHA}" --yes --no-verify
+          set -o pipefail
+          output_file="$(mktemp)"
+          uv run --no-sync --with onyx-devtools ods cherry-pick "${GITHUB_SHA}" --yes --no-verify 2>&1 | tee "$output_file"
+          exit_code="${PIPESTATUS[0]}"
+
+          if [ "${exit_code}" -eq 0 ]; then
+            echo "status=success" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "status=failure" >> "$GITHUB_OUTPUT"
+
+          reason="command-failed"
+          if grep -qiE "merge conflict during cherry-pick|CONFLICT|could not apply|cherry-pick in progress with staged changes" "$output_file"; then
+            reason="merge-conflict"
+          fi
+          echo "reason=${reason}" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "details<<EOF"
+            tail -n 40 "$output_file"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Mark workflow as failed if cherry-pick failed
+        if: steps.gate.outputs.should_cherrypick == 'true' && steps.run_cherry_pick.outputs.status == 'failure'
+        run: |
+          echo "::error::Automated cherry-pick failed (${{ steps.run_cherry_pick.outputs.reason }})."
+          exit 1
+
+  notify-slack-on-cherry-pick-failure:
+    needs:
+      - cherry-pick-to-latest-release
+    if: always() && needs.cherry-pick-to-latest-release.outputs.should_cherrypick == 'true' && needs.cherry-pick-to-latest-release.result != 'success'
+    runs-on: ubuntu-slim
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Build cherry-pick failure summary
+        id: failure-summary
+        env:
+          SOURCE_PR_NUMBER: ${{ needs.cherry-pick-to-latest-release.outputs.pr_number }}
+          CHERRY_PICK_REASON: ${{ needs.cherry-pick-to-latest-release.outputs.cherry_pick_reason }}
+          CHERRY_PICK_DETAILS: ${{ needs.cherry-pick-to-latest-release.outputs.cherry_pick_details }}
+        run: |
+          source_pr_url="https://github.com/${GITHUB_REPOSITORY}/pull/${SOURCE_PR_NUMBER}"
+
+          reason_text="cherry-pick command failed"
+          if [ "${CHERRY_PICK_REASON}" = "merge-conflict" ]; then
+            reason_text="merge conflict during cherry-pick"
+          fi
+
+          details_excerpt="$(printf '%s' "${CHERRY_PICK_DETAILS}" | tail -n 8 | tr '\n' ' ' | sed "s/[[:space:]]\\+/ /g" | sed "s/\"/'/g" | cut -c1-350)"
+          failed_jobs="• cherry-pick-to-latest-release\\n• source PR: ${source_pr_url}\\n• reason: ${reason_text}"
+          if [ -n "${details_excerpt}" ]; then
+            failed_jobs="${failed_jobs}\\n• excerpt: ${details_excerpt}"
+          fi
+
+          echo "jobs=${failed_jobs}" >> "$GITHUB_OUTPUT"
+
+      - name: Notify #cherry-pick-prs about cherry-pick failure
+        uses: ./.github/actions/slack-notify
+        with:
+          webhook-url: ${{ secrets.CHERRY_PICK_PRS_WEBHOOK }}
+          failed-jobs: ${{ steps.failure-summary.outputs.jobs }}
+          title: "🚨 Automated Cherry-Pick Failed"
+          ref-name: ${{ github.ref_name }}
