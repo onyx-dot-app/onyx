@@ -46,18 +46,18 @@ def list_indices(client: OpenSearchClient) -> None:
 
 def delete_index(client: OpenSearchIndexClient) -> None:
     if not client.index_exists():
-        print(f"Index '{client.index_name}' does not exist.")
+        print(f"Index '{client._index_name}' does not exist.")
         return
 
-    confirm = input(f"Delete index '{client.index_name}'? (yes/no): ")
+    confirm = input(f"Delete index '{client._index_name}'? (yes/no): ")
     if confirm.lower() != "yes":
         print("Aborted.")
         return
 
     if client.delete_index():
-        print(f"Deleted index '{client.index_name}'.")
+        print(f"Deleted index '{client._index_name}'.")
     else:
-        print(f"Failed to delete index '{client.index_name}' for an unknown reason.")
+        print(f"Failed to delete index '{client._index_name}' for an unknown reason.")
 
 
 def main() -> None:
