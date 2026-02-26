@@ -34,7 +34,6 @@ import { toast } from "@/hooks/useToast";
 import LLMPopover from "@/refresh-components/popovers/LLMPopover";
 import { deleteAllChatSessions } from "@/app/app/services/lib";
 import { useAuthType, useLlmManager } from "@/lib/hooks";
-import useOnMount from "@/hooks/useOnMount";
 import useChatSessions from "@/hooks/useChatSessions";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -190,7 +189,6 @@ function GeneralSettings() {
     updateUserChatBackground,
   } = useUser();
   const { theme, setTheme, systemTheme } = useTheme();
-  const mounted = useOnMount();
   const { refreshChatSessions } = useChatSessions();
   const router = useRouter();
   const pathname = usePathname();
@@ -328,13 +326,8 @@ function GeneralSettings() {
               description="Select your preferred color mode for the UI."
               center
             >
-              {/* next-themes injects a blocking <script> that reads the theme
-                 from localStorage before React hydrates, so `theme` is already
-                 "system" on the client's first render while the server saw
-                 `undefined`. Deferring to `mounted` keeps SSR and hydration
-                 in agreement, avoiding a data-placeholder mismatch. */}
               <InputSelect
-                value={mounted ? theme : undefined}
+                value={theme}
                 onValueChange={(value) => {
                   setTheme(value);
                   updateUserThemePreference(value as ThemePreference);
