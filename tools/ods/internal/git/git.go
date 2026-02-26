@@ -3,7 +3,6 @@ package git
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -291,7 +290,7 @@ func LoadCherryPickState() (*CherryPickState, error) {
 	return &state, nil
 }
 
-// CleanCherryPickState removes the state file and stashed binary
+// CleanCherryPickState removes the state file
 func CleanCherryPickState() {
 	path, err := stateFilePath()
 	if err != nil {
@@ -303,95 +302,29 @@ func CleanCherryPickState() {
 	} else {
 		log.Debugf("Cleaned up cherry-pick state file")
 	}
-	cleanStashedBinary()
 }
 
-const odsBinaryFile = "ods-bin"
-
-// odsBinaryOrigPath is captured once at stash time so RestoreOdsBinary
-// knows where to write the binary back after uv-sync overwrites it.
-var odsBinaryOrigPath string
-
-// StashOdsBinary copies the running ods binary into the .git directory so that
-// branch switches that trigger uv-sync can be undone by RestoreOdsBinary.
-func StashOdsBinary() error {
-	self, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("failed to resolve own executable: %w", err)
-	}
-	self, err = filepath.EvalSymlinks(self)
-	if err != nil {
-		return fmt.Errorf("failed to resolve symlinks: %w", err)
-	}
-	odsBinaryOrigPath = self
-
-	gitDir, err := GetGitDir()
-	if err != nil {
-		return fmt.Errorf("failed to get git dir: %w", err)
-	}
-	dst := filepath.Join(gitDir, odsBinaryFile)
-
-	if err := copyFile(self, dst); err != nil {
-		return err
-	}
-
-	log.Debugf("Stashed ods binary to %s", dst)
-	return nil
-}
-
-// RestoreOdsBinary copies the stashed binary back to the original install
-// location (.venv/bin/ods). Call this after any git switch/checkout that may
-// trigger uv-sync and overwrite the installed binary with an older version.
-func RestoreOdsBinary() {
-	if odsBinaryOrigPath == "" {
+// SkipUvSync sets the SKIP environment variable so that pre-commit's
+// post-checkout hook skips the uv-sync hook. This prevents uv-sync from
+// rebuilding the ods binary from the target branch's source during
+// branch switches initiated by ods.
+func SkipUvSync() {
+	const hookID = "uv-sync"
+	skip := os.Getenv("SKIP")
+	if skip == "" {
+		if err := os.Setenv("SKIP", hookID); err != nil {
+			log.Warnf("Failed to set SKIP env var: %v", err)
+		}
+		log.Debugf("Set SKIP=%s to prevent binary overwrite during branch switches", hookID)
 		return
 	}
-	gitDir, err := GetGitDir()
-	if err != nil {
-		return
+	for _, s := range strings.Split(skip, ",") {
+		if strings.TrimSpace(s) == hookID {
+			return
+		}
 	}
-	stashed := filepath.Join(gitDir, odsBinaryFile)
-	if _, err := os.Stat(stashed); err != nil {
-		return
+	if err := os.Setenv("SKIP", skip+","+hookID); err != nil {
+		log.Warnf("Failed to set SKIP env var: %v", err)
 	}
-	if err := copyFile(stashed, odsBinaryOrigPath); err != nil {
-		log.Warnf("Failed to restore ods binary: %v", err)
-	} else {
-		log.Debugf("Restored ods binary to %s", odsBinaryOrigPath)
-	}
-}
-
-// copyFile copies src to dst with executable permissions.
-func copyFile(src, dst string) error {
-	in, err := os.Open(src)
-	if err != nil {
-		return fmt.Errorf("failed to open %s: %w", src, err)
-	}
-	defer func() { _ = in.Close() }()
-
-	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755)
-	if err != nil {
-		return fmt.Errorf("failed to create %s: %w", dst, err)
-	}
-	defer func() { _ = out.Close() }()
-
-	if _, err := io.Copy(out, in); err != nil {
-		_ = os.Remove(dst)
-		return fmt.Errorf("failed to copy %s -> %s: %w", src, dst, err)
-	}
-	return nil
-}
-
-// cleanStashedBinary removes the stashed ods binary from .git
-func cleanStashedBinary() {
-	gitDir, err := GetGitDir()
-	if err != nil {
-		return
-	}
-	path := filepath.Join(gitDir, odsBinaryFile)
-	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-		log.Warnf("Failed to remove stashed binary %s: %v", path, err)
-	} else if err == nil {
-		log.Debugf("Cleaned up stashed ods binary")
-	}
+	log.Debugf("Appended %s to SKIP env var", hookID)
 }

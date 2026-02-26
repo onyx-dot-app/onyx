@@ -88,6 +88,7 @@ Example usage:
 }
 
 func runCherryPick(cmd *cobra.Command, args []string, opts *CherryPickOptions) {
+	git.SkipUvSync()
 	git.CheckGitHubCLI()
 
 	commitSHAs := args
@@ -220,9 +221,6 @@ func runCherryPick(cmd *cobra.Command, args []string, opts *CherryPickOptions) {
 	if err := git.SaveCherryPickState(state); err != nil {
 		log.Warnf("Failed to save cherry-pick state (--continue won't work): %v", err)
 	}
-	if err := git.StashOdsBinary(); err != nil {
-		log.Warnf("Failed to stash ods binary (--continue may not work across branch switches): %v", err)
-	}
 
 	finishCherryPick(state, stashResult)
 }
@@ -288,6 +286,7 @@ func finishCherryPick(state *git.CherryPickState, stashResult *git.StashResult) 
 // It finishes any in-progress git cherry-pick, then falls into the normal
 // cherryPickToRelease path which handles skip-applied-commits, push, and PR creation.
 func runCherryPickContinue() {
+	git.SkipUvSync()
 	git.CheckGitHubCLI()
 
 	state, err := git.LoadCherryPickState()
@@ -329,7 +328,6 @@ func cherryPickToRelease(commitSHAs, commitMessages []string, branchSuffix, vers
 		if err := git.RunCommand("switch", "--quiet", hotfixBranch); err != nil {
 			return "", fmt.Errorf("failed to checkout existing hotfix branch: %w", err)
 		}
-		git.RestoreOdsBinary()
 
 		// Check which commits need to be cherry-picked
 		commitsToCherry := []string{}
@@ -355,7 +353,6 @@ func cherryPickToRelease(commitSHAs, commitMessages []string, branchSuffix, vers
 		if err := git.RunCommand("checkout", "--quiet", "-b", hotfixBranch, fmt.Sprintf("origin/%s", releaseBranch)); err != nil {
 			return "", fmt.Errorf("failed to create hotfix branch: %w", err)
 		}
-		git.RestoreOdsBinary()
 
 		// Cherry-pick all commits
 		if err := performCherryPick(commitSHAs); err != nil {
