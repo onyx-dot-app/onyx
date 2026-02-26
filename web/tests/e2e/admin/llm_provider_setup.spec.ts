@@ -254,28 +254,29 @@ test.describe("LLM Provider Setup @exclusive", () => {
 
     await apiClient.setProviderAsDefault(providerId, "gpt-4o");
 
-    await page.reload();
-    await page.waitForLoadState("networkidle");
+    try {
+      await page.reload();
+      await page.waitForLoadState("networkidle");
 
-    // The Default Model card should be visible
-    await expect(page.getByText("Default Model")).toBeVisible({
-      timeout: 10000,
-    });
+      // The Default Model card should be visible
+      await expect(page.getByText("Default Model")).toBeVisible({
+        timeout: 10000,
+      });
 
-    // The provider should appear in the Available Providers section with "Default" tag
-    const providerCard = await findExistingProviderCard(page, providerName);
-    await expect(providerCard).toBeVisible({ timeout: 10000 });
-    await expect(providerCard.getByText("Default")).toBeVisible();
-
-    // Restore initial default if there was one
-    if (initialDefault) {
-      try {
-        await apiClient.setProviderAsDefault(
-          initialDefault.provider_id,
-          initialDefault.model_name
-        );
-      } catch (error) {
-        console.warn(`Failed to restore initial default: ${String(error)}`);
+      // The provider should appear in the Available Providers section with "Default" tag
+      const providerCard = await findExistingProviderCard(page, providerName);
+      await expect(providerCard).toBeVisible({ timeout: 10000 });
+      await expect(providerCard.getByText("Default")).toBeVisible();
+    } finally {
+      if (initialDefault) {
+        try {
+          await apiClient.setProviderAsDefault(
+            initialDefault.provider_id,
+            initialDefault.model_name
+          );
+        } catch (error) {
+          console.warn(`Failed to restore initial default: ${String(error)}`);
+        }
       }
     }
   });
@@ -292,31 +293,32 @@ test.describe("LLM Provider Setup @exclusive", () => {
 
     await apiClient.setProviderAsDefault(providerId, "gpt-4o");
 
-    await page.reload();
-    await page.waitForLoadState("networkidle");
+    try {
+      await page.reload();
+      await page.waitForLoadState("networkidle");
 
-    const deleteModal = await openDeleteConfirmation(page, providerName);
+      const deleteModal = await openDeleteConfirmation(page, providerName);
 
-    // Should show the default provider warning
-    await expect(deleteModal.getByText("default provider")).toBeVisible();
+      // Should show the default provider warning
+      await expect(deleteModal.getByText("default provider")).toBeVisible();
 
-    // Cancel instead of deleting
-    await deleteModal.getByRole("button", { name: "Cancel" }).click();
-    await expect(deleteModal).not.toBeVisible({ timeout: 5000 });
+      // Cancel instead of deleting
+      await deleteModal.getByRole("button", { name: "Cancel" }).click();
+      await expect(deleteModal).not.toBeVisible({ timeout: 5000 });
 
-    // Provider should still exist
-    const provider = await getProviderByName(page, providerName);
-    expect(provider).not.toBeNull();
-
-    // Restore initial default if there was one
-    if (initialDefault) {
-      try {
-        await apiClient.setProviderAsDefault(
-          initialDefault.provider_id,
-          initialDefault.model_name
-        );
-      } catch (error) {
-        console.warn(`Failed to restore initial default: ${String(error)}`);
+      // Provider should still exist
+      const provider = await getProviderByName(page, providerName);
+      expect(provider).not.toBeNull();
+    } finally {
+      if (initialDefault) {
+        try {
+          await apiClient.setProviderAsDefault(
+            initialDefault.provider_id,
+            initialDefault.model_name
+          );
+        } catch (error) {
+          console.warn(`Failed to restore initial default: ${String(error)}`);
+        }
       }
     }
   });
