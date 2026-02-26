@@ -142,7 +142,9 @@ class LLMProviderManager:
                 if (
                     fetched_llm_groups == llm_provider_groups
                     and llm_provider.provider == fetched_llm_provider.provider
-                    and default_model.model_name in model_names
+                    and (
+                        default_model is None or default_model.model_name in model_names
+                    )
                     and llm_provider.is_public == fetched_llm_provider.is_public
                     and set(fetched_llm_provider.personas) == set(llm_provider.personas)
                 ):
@@ -153,9 +155,9 @@ class LLMProviderManager:
     @staticmethod
     def get_default_model(
         user_performing_action: DATestUser | None = None,
-    ) -> DefaultModel:
+    ) -> DefaultModel | None:
         response = requests.get(
-            f"{API_SERVER_URL}/admin/llm/default",
+            f"{API_SERVER_URL}/admin/llm/provider",
             headers=(
                 user_performing_action.headers
                 if user_performing_action
@@ -163,4 +165,7 @@ class LLMProviderManager:
             ),
         )
         response.raise_for_status()
-        return DefaultModel(**response.json())
+        default_text = response.json().get("default_text")
+        if default_text is None:
+            return None
+        return DefaultModel(**default_text)
