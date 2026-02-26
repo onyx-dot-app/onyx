@@ -171,7 +171,7 @@ Add clear comments:
     to exist in a `main.py` file which should never be imported by anything else
     and only run explicitly.
 - Related to the above, never add files which are both modules that are intended
-  to be imported and scripts which are intended to be ran directly. If you want
+  to be imported and scripts which are intended to be run directly. If you want
   to directly invoke the contents of a Python file from the command line for
   example, always encapsulate that file with a `main.py` file, even if all that
   main file does is import said module and call a function for example.
