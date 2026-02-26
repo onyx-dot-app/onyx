@@ -22,6 +22,8 @@ from onyx.auth.users import current_chat_accessible_user
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import LLMModelFlowType
 from onyx.db.llm import can_user_access_llm_provider
+from onyx.db.llm import fetch_default_llm_model
+from onyx.db.llm import fetch_default_vision_model
 from onyx.db.llm import fetch_existing_llm_provider
 from onyx.db.llm import fetch_existing_llm_provider_by_id
 from onyx.db.llm import fetch_existing_llm_providers
@@ -53,8 +55,10 @@ from onyx.llm.well_known_providers.llm_provider_options import (
 )
 from onyx.server.manage.llm.models import BedrockFinalModelResponse
 from onyx.server.manage.llm.models import BedrockModelsRequest
+from onyx.server.manage.llm.models import DefaultModel
 from onyx.server.manage.llm.models import LLMCost
 from onyx.server.manage.llm.models import LLMProviderDescriptor
+from onyx.server.manage.llm.models import LLMProviderResponse
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
@@ -301,7 +305,7 @@ def list_llm_providers(
     include_image_gen: bool = Query(False),
     _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
-) -> list[LLMProviderView]:
+) -> LLMProviderResponse[LLMProviderView]:
     start_time = datetime.now(timezone.utc)
     logger.debug("Starting to fetch LLM providers")
 
@@ -326,7 +330,15 @@ def list_llm_providers(
     duration = (end_time - start_time).total_seconds()
     logger.debug(f"Completed fetching LLM providers in {duration:.2f} seconds")
 
-    return llm_provider_list
+    return LLMProviderResponse[LLMProviderView].from_models(
+        providers=llm_provider_list,
+        default_text=DefaultModel.from_model_config(
+            fetch_default_llm_model(db_session)
+        ),
+        default_vision=DefaultModel.from_model_config(
+            fetch_default_vision_model(db_session)
+        ),
+    )
 
 
 @admin_router.put("/provider")
@@ -514,7 +526,7 @@ def get_auto_config(
 def get_vision_capable_providers(
     _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
-) -> list[VisionProviderResponse]:
+) -> LLMProviderResponse[VisionProviderResponse]:
     """Return a list of LLM providers and their models that support image input"""
     vision_models = fetch_existing_models(
         db_session=db_session, flow_types=[LLMModelFlowType.VISION]
@@ -543,7 +555,13 @@ def get_vision_capable_providers(
     ]
 
     logger.debug(f"Found {len(vision_provider_response)} vision-capable providers")
-    return vision_provider_response
+
+    return LLMProviderResponse[VisionProviderResponse].from_models(
+        providers=vision_provider_response,
+        default_vision=DefaultModel.from_model_config(
+            fetch_default_vision_model(db_session)
+        ),
+    )
 
 
 """Endpoints for all"""
@@ -553,7 +571,7 @@ def get_vision_capable_providers(
 def list_llm_provider_basics(
     user: User = Depends(current_chat_accessible_user),
     db_session: Session = Depends(get_session),
-) -> list[LLMProviderDescriptor]:
+) -> LLMProviderResponse[LLMProviderDescriptor]:
     """Get LLM providers accessible to the current user.
 
     Returns:
@@ -590,7 +608,15 @@ def list_llm_provider_basics(
         f"Completed fetching {len(accessible_providers)} user-accessible providers in {duration:.2f} seconds"
     )
 
-    return accessible_providers
+    return LLMProviderResponse[LLMProviderDescriptor].from_models(
+        providers=accessible_providers,
+        default_text=DefaultModel.from_model_config(
+            fetch_default_llm_model(db_session)
+        ),
+        default_vision=DefaultModel.from_model_config(
+            fetch_default_vision_model(db_session)
+        ),
+    )
 
 
 def get_valid_model_names_for_persona(

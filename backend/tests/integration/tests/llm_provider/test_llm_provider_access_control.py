@@ -272,6 +272,19 @@ def test_get_llm_for_persona_falls_back_when_access_denied(
 
         # Set up ModelConfiguration + LLMModelFlow so get_default_llm() can
         # resolve the default provider when the fallback path is triggered.
+        # First, clear any existing CHAT defaults (setup_postgres may have created one)
+        existing_defaults = (
+            db_session.query(LLMModelFlow)
+            .filter(
+                LLMModelFlow.llm_model_flow_type == LLMModelFlowType.CHAT,
+                LLMModelFlow.is_default == True,  # noqa: E712
+            )
+            .all()
+        )
+        for existing in existing_defaults:
+            existing.is_default = False
+        db_session.flush()
+
         default_model_config = ModelConfiguration(
             llm_provider_id=default_provider.id,
             name=default_provider.default_model_name,
@@ -365,7 +378,7 @@ def test_list_llm_provider_basics_excludes_non_public_unrestricted(
         headers=basic_user.headers,
     )
     assert response.status_code == 200
-    providers = response.json()
+    providers = response.json()["providers"]
     provider_names = [p["name"] for p in providers]
 
     # Public provider should be visible
@@ -380,7 +393,7 @@ def test_list_llm_provider_basics_excludes_non_public_unrestricted(
         headers=admin_user.headers,
     )
     assert admin_response.status_code == 200
-    admin_providers = admin_response.json()
+    admin_providers = admin_response.json()["providers"]
     admin_provider_names = [p["name"] for p in admin_providers]
 
     assert public_provider.name in admin_provider_names
