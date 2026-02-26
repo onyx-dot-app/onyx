@@ -34,7 +34,6 @@ class LLMProviderManager:
         llm_provider = LLMProviderUpsertRequest(
             name=name or f"test-provider-{uuid4()}",
             provider=provider or LlmProviderNames.OPENAI,
-            default_model_name=default_model_name or "gpt-4o-mini",
             api_key=api_key or os.environ["OPENAI_API_KEY"],
             api_base=api_base,
             api_version=api_version,
@@ -67,7 +66,6 @@ class LLMProviderManager:
             name=response_data["name"],
             provider=response_data["provider"],
             api_key=response_data["api_key"],
-            default_model_name=response_data["default_model_name"],
             is_public=response_data["is_public"],
             is_auto_mode=response_data.get("is_auto_mode", False),
             groups=response_data["groups"],
