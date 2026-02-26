@@ -1,0 +1,18 @@
+/* Hoverable — item transitions */
+.hoverable-item {
+  transition: opacity 200ms ease-in-out;
+}
+
+.hoverable-item[data-hoverable-variant="opacity-on-hover"] {
+  opacity: 0;
+}
+
+/* Group mode — Root controls visibility via React context */
+.hoverable-item[data-hoverable-variant="opacity-on-hover"][data-hoverable-active="true"] {
+  opacity: 1;
+}
+
+/* Local mode — item handles its own :hover */
+.hoverable-item[data-hoverable-variant="opacity-on-hover"][data-hoverable-local="true"]:hover {
+  opacity: 1;
+}

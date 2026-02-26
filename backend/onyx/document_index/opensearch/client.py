@@ -1,5 +1,7 @@
 import logging
 import time
+from contextlib import AbstractContextManager
+from contextlib import nullcontext
 from typing import Any
 from typing import Generic
 from typing import TypeVar
@@ -83,7 +85,7 @@ def get_new_body_without_vectors(body: dict[str, Any]) -> dict[str, Any]:
     return new_body
 
 
-class OpenSearchClient:
+class OpenSearchClient(AbstractContextManager):
     """Client for interacting with OpenSearch for cluster-level operations.
 
     Args:
@@ -128,6 +130,15 @@ class OpenSearchClient:
             # your request body that is less than this value.
             timeout=timeout,
         )
+
+    def __exit__(self, *_: Any) -> None:
+        self.close()
+
+    def __del__(self) -> None:
+        try:
+            self.close()
+        except Exception:
+            pass
 
     @log_function_time(print_only=True, debug_only=True, include_args=True)
     def create_search_pipeline(
@@ -199,9 +210,6 @@ class OpenSearchClient:
     @log_function_time(print_only=True, debug_only=True)
     def close(self) -> None:
         """Closes the client.
-
-        TODO(andrei): Can we have some way to auto close when the client no
-        longer has any references?
 
         Raises:
             Exception: There was an error closing the client.
@@ -324,6 +332,38 @@ class OpenSearchIndexClient(OpenSearchClient):
             True if the index exists, False if it does not.
         """
         return self._client.indices.exists(index=self._index_name)
+
+    @log_function_time(print_only=True, debug_only=True, include_args=True)
+    def put_mapping(self, mappings: dict[str, Any]) -> None:
+        """Updates the index mapping in an idempotent manner.
+
+        - Existing fields with the same definition: No-op (succeeds silently).
+        - New fields: Added to the index.
+        - Existing fields with different types: Raises exception (requires
+          reindex).
+
+        See the OpenSearch documentation for more information:
+        https://docs.opensearch.org/latest/api-reference/index-apis/put-mapping/
+
+        Args:
+            mappings: The complete mapping definition to apply. This will be
+                merged with existing mappings in the index.
+
+        Raises:
+            Exception: There was an error updating the mappings, such as
+                attempting to change the type of an existing field.
+        """
+        logger.debug(
+            f"Putting mappings for index {self._index_name} with mappings {mappings}."
+        )
+        response = self._client.indices.put_mapping(
+            index=self._index_name, body=mappings
+        )
+        if not response.get("acknowledged", False):
+            raise RuntimeError(
+                f"Failed to put the mapping update for index {self._index_name}."
+            )
+        logger.debug(f"Successfully put mappings for index {self._index_name}.")
 
     @log_function_time(print_only=True, debug_only=True, include_args=True)
     def validate_index(self, expected_mappings: dict[str, Any]) -> bool:
@@ -999,11 +1039,7 @@ def wait_for_opensearch_with_timeout(
     Returns:
         True if OpenSearch is ready, False otherwise.
     """
-    made_client = False
-    try:
-        if client is None:
-            client = OpenSearchClient()
-            made_client = True
+    with nullcontext(client) if client else OpenSearchClient() as client:
         time_start = time.monotonic()
         while True:
             if client.ping():
@@ -1020,7 +1056,3 @@ def wait_for_opensearch_with_timeout(
                 f"[OpenSearch] Readiness probe ongoing. elapsed={time_elapsed:.1f} timeout={wait_limit_s:.1f}"
             )
             time.sleep(wait_interval_s)
-    finally:
-        if made_client:
-            assert client is not None
-            client.close()

@@ -651,6 +651,8 @@ export default function AgentEditorPage({
     shared_user_ids: existingAgent?.users?.map((user) => user.id) ?? [],
     shared_group_ids: existingAgent?.groups ?? [],
     is_public: existingAgent?.is_public ?? true,
+    label_ids: existingAgent?.labels?.map((l) => l.id) ?? [],
+    is_default_persona: existingAgent?.is_default_persona ?? false,
   };
 
   const validationSchema = Yup.object().shape({
@@ -812,8 +814,8 @@ export default function AgentEditorPage({
         uploaded_image_id: values.uploaded_image_id,
         icon_name: values.icon_name,
         search_start_date: values.knowledge_cutoff_date || null,
-        label_ids: null,
-        is_default_persona: false,
+        label_ids: values.label_ids,
+        is_default_persona: values.is_default_persona,
         // display_priority: ...,
 
         user_file_ids: values.enable_knowledge ? values.user_file_ids : [],
@@ -1054,10 +1056,20 @@ export default function AgentEditorPage({
                     userIds={values.shared_user_ids}
                     groupIds={values.shared_group_ids}
                     isPublic={values.is_public}
-                    onShare={(userIds, groupIds, isPublic) => {
+                    isFeatured={values.is_default_persona}
+                    labelIds={values.label_ids}
+                    onShare={(
+                      userIds,
+                      groupIds,
+                      isPublic,
+                      isFeatured,
+                      labelIds
+                    ) => {
                       setFieldValue("shared_user_ids", userIds);
                       setFieldValue("shared_group_ids", groupIds);
                       setFieldValue("is_public", isPublic);
+                      setFieldValue("is_default_persona", isFeatured);
+                      setFieldValue("label_ids", labelIds);
                       shareAgentModal.toggle(false);
                     }}
                   />

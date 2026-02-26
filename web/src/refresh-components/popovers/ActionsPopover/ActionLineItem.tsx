@@ -115,14 +115,9 @@ export default function ActionLineItem({
             <Section gap={0.25} flexDirection="row">
               {!isUnavailable && tool?.oauth_config_id && toolAuthStatus && (
                 <Button
-                  icon={({ className }) => (
-                    <SvgKey
-                      className={cn(
-                        className,
-                        "stroke-yellow-500 hover:stroke-yellow-600"
-                      )}
-                    />
-                  )}
+                  icon={SvgKey}
+                  prominence="secondary"
+                  size="sm"
                   onClick={noProp(() => {
                     if (
                       !toolAuthStatus.hasToken ||

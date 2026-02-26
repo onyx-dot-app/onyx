@@ -239,6 +239,119 @@ class TestOpenSearchClient:
         # Should return True after creation.
         assert test_client.validate_index(expected_mappings=mappings) is True
 
+    def test_put_mapping_idempotent(self, test_client: OpenSearchIndexClient) -> None:
+        """Tests put_mapping with same schema is idempotent."""
+        # Precondition.
+        mappings = DocumentSchema.get_document_schema(
+            vector_dimension=128, multitenant=True
+        )
+        settings = DocumentSchema.get_index_settings()
+        test_client.create_index(mappings=mappings, settings=settings)
+
+        # Under test.
+        # Applying the same mappings again should succeed.
+        test_client.put_mapping(mappings)
+
+        # Postcondition.
+        # Index should still be valid.
+        assert test_client.validate_index(expected_mappings=mappings)
+
+    def test_put_mapping_adds_new_field(
+        self, test_client: OpenSearchIndexClient
+    ) -> None:
+        """Tests put_mapping successfully adds new fields to existing index."""
+        # Precondition.
+        # Create index with minimal schema (just required fields).
+        initial_mappings = {
+            "dynamic": "strict",
+            "properties": {
+                "document_id": {"type": "keyword"},
+                "chunk_index": {"type": "integer"},
+                "content": {"type": "text"},
+                "content_vector": {
+                    "type": "knn_vector",
+                    "dimension": 128,
+                    "method": {
+                        "name": "hnsw",
+                        "space_type": "cosinesimil",
+                        "engine": "lucene",
+                        "parameters": {"ef_construction": 512, "m": 16},
+                    },
+                },
+            },
+        }
+        settings = DocumentSchema.get_index_settings()
+        test_client.create_index(mappings=initial_mappings, settings=settings)
+
+        # Under test.
+        # Add a new field using put_mapping.
+        updated_mappings = {
+            "properties": {
+                "document_id": {"type": "keyword"},
+                "chunk_index": {"type": "integer"},
+                "content": {"type": "text"},
+                "content_vector": {
+                    "type": "knn_vector",
+                    "dimension": 128,
+                    "method": {
+                        "name": "hnsw",
+                        "space_type": "cosinesimil",
+                        "engine": "lucene",
+                        "parameters": {"ef_construction": 512, "m": 16},
+                    },
+                },
+                # New field
+                "new_test_field": {"type": "keyword"},
+            },
+        }
+        # Should not raise.
+        test_client.put_mapping(updated_mappings)
+
+        # Postcondition.
+        # Validate the new schema includes the new field.
+        assert test_client.validate_index(expected_mappings=updated_mappings)
+
+    def test_put_mapping_fails_on_type_change(
+        self, test_client: OpenSearchIndexClient
+    ) -> None:
+        """Tests put_mapping fails when trying to change existing field type."""
+        # Precondition.
+        initial_mappings = {
+            "dynamic": "strict",
+            "properties": {
+                "document_id": {"type": "keyword"},
+                "test_field": {"type": "keyword"},
+            },
+        }
+        settings = DocumentSchema.get_index_settings()
+        test_client.create_index(mappings=initial_mappings, settings=settings)
+
+        # Under test and postcondition.
+        # Try to change test_field type from keyword to text.
+        conflicting_mappings = {
+            "properties": {
+                "document_id": {"type": "keyword"},
+                "test_field": {"type": "text"},  # Changed from keyword to text
+            },
+        }
+        # Should raise because field type cannot be changed.
+        with pytest.raises(Exception, match="mapper|illegal_argument_exception"):
+            test_client.put_mapping(conflicting_mappings)
+
+    def test_put_mapping_on_nonexistent_index(
+        self, test_client: OpenSearchIndexClient
+    ) -> None:
+        """Tests put_mapping on non-existent index raises an error."""
+        # Precondition.
+        # Index does not exist yet.
+        mappings = DocumentSchema.get_document_schema(
+            vector_dimension=128, multitenant=True
+        )
+
+        # Under test and postcondition.
+        with pytest.raises(Exception, match="index_not_found_exception|404"):
+            test_client.put_mapping(mappings)
+
     def test_create_duplicate_index(self, test_client: OpenSearchIndexClient) -> None:
         """Tests creating an index twice raises an error."""
         # Precondition.
