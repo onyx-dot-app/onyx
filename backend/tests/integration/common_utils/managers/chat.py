@@ -76,9 +76,12 @@ class ChatSessionManager:
         user_performing_action: DATestUser,
         persona_id: int = 0,
         description: str = "Test chat session",
+        project_id: int | None = None,
     ) -> DATestChatSession:
         chat_session_creation_req = ChatSessionCreationRequest(
-            persona_id=persona_id, description=description
+            persona_id=persona_id,
+            description=description,
+            project_id=project_id,
         )
         response = requests.post(
             f"{API_SERVER_URL}/chat/create-chat-session",

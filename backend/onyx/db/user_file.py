@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
+from onyx.db.models import Project__UserFile
 from onyx.db.models import UserFile
 
 
@@ -57,12 +58,19 @@ def fetch_user_project_ids_for_user_files(
     db_session: Session,
 ) -> dict[str, list[int]]:
     """Fetch user project ids for specified user files"""
-    stmt = select(UserFile).where(UserFile.id.in_(user_file_ids))
-    results = db_session.execute(stmt).scalars().all()
-    return {
-        str(user_file.id): [project.id for project in user_file.projects]
-        for user_file in results
+    user_file_uuid_ids = [UUID(user_file_id) for user_file_id in user_file_ids]
+    stmt = select(Project__UserFile.user_file_id, Project__UserFile.project_id).where(
+        Project__UserFile.user_file_id.in_(user_file_uuid_ids)
+    )
+    rows = db_session.execute(stmt).all()
+
+    user_file_id_to_project_ids: dict[str, list[int]] = {
+        user_file_id: [] for user_file_id in user_file_ids
     }
+    for user_file_id, project_id in rows:
+        user_file_id_to_project_ids[str(user_file_id)].append(project_id)
+
+    return user_file_id_to_project_ids
 
 
 def fetch_persona_ids_for_user_files(
