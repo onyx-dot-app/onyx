@@ -307,9 +307,7 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
                       title="Feature This Agent"
                       description="Show this agent at the top of the explore agents list and automatically pin it to the sidebar for new users with access."
                     >
-                      <span className="inline-flex">
-                        <SwitchField name="isFeatured" />
-                      </span>
+                      <SwitchField name="isFeatured" />
                     </InputLayouts.Horizontal>
                   </>
                 )}
