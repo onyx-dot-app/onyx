@@ -54,6 +54,7 @@ logger = setup_logger()
 class SearchToolConfig(BaseModel):
     user_selected_filters: BaseFilters | None = None
     project_id: int | None = None
+    persona_id: int | None = None
     bypass_acl: bool = False
     additional_context: str | None = None
     slack_context: SlackContext | None = None
@@ -180,6 +181,7 @@ def construct_tools(
                     document_index=document_index,
                     user_selected_filters=search_tool_config.user_selected_filters,
                     project_id=search_tool_config.project_id,
+                    persona_id=search_tool_config.persona_id,
                     bypass_acl=search_tool_config.bypass_acl,
                     slack_context=search_tool_config.slack_context,
                     enable_slack_search=search_tool_config.enable_slack_search,
@@ -427,6 +429,7 @@ def construct_tools(
             document_index=document_index,
             user_selected_filters=search_tool_config.user_selected_filters,
             project_id=search_tool_config.project_id,
+            persona_id=search_tool_config.persona_id,
             bypass_acl=search_tool_config.bypass_acl,
             slack_context=search_tool_config.slack_context,
             enable_slack_search=search_tool_config.enable_slack_search,
