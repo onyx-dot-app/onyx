@@ -13,6 +13,7 @@ import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import InputTypeInElementField from "@/refresh-components/form/InputTypeInElementField";
 import InputDatePickerField from "@/refresh-components/form/InputDatePickerField";
+import Message from "@/refresh-components/messages/Message";
 import Separator from "@/refresh-components/Separator";
 import * as InputLayouts from "@/layouts/input-layouts";
 import { useFormikContext } from "formik";
@@ -56,6 +57,7 @@ import {
   SvgLock,
   SvgOnyxOctagon,
   SvgSliders,
+  SvgUsers,
   SvgTrash,
 } from "@opal/icons";
 import CustomAgentAvatar, {
@@ -86,6 +88,7 @@ import ShareAgentModal from "@/sections/modals/ShareAgentModal";
 import AgentKnowledgePane from "@/sections/knowledge/AgentKnowledgePane";
 import { ValidSources } from "@/lib/types";
 import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useUser } from "@/providers/UserProvider";
 
 interface AgentIconEditorProps {
   existingAgent?: FullPersona | null;
@@ -450,6 +453,8 @@ export default function AgentEditorPage({
   const shareAgentModal = useCreateModal();
   const deleteAgentModal = useCreateModal();
   const settings = useSettingsContext();
+  const { isAdmin, isCurator } = useUser();
+  const canUpdateFeaturedStatus = isAdmin || isCurator;
   const vectorDbEnabled = settings?.settings.vector_db_enabled !== false;
 
   // LLM Model Selection
@@ -997,6 +1002,10 @@ export default function AgentEditorPage({
               (fileId: string) =>
                 fileStatusMap.get(fileId) === UserFileStatus.PROCESSING
             );
+            const isShared =
+              values.is_public ||
+              values.shared_user_ids.length > 0 ||
+              values.shared_group_ids.length > 0;
 
             return (
               <>
@@ -1372,17 +1381,36 @@ export default function AgentEditorPage({
                             <Card>
                               <InputLayouts.Horizontal
                                 title="Share This Agent"
-                                description="Share this agent with other users, groups, or everyone in your organization."
+                                description="with other users, groups, or everyone in your organization."
                                 center
                               >
                                 <Button
                                   secondary
-                                  leftIcon={SvgLock}
+                                  leftIcon={isShared ? SvgUsers : SvgLock}
                                   onClick={() => shareAgentModal.toggle(true)}
                                 >
                                   Share
                                 </Button>
                               </InputLayouts.Horizontal>
+                              {canUpdateFeaturedStatus && (
+                                <>
+                                  <InputLayouts.Horizontal
+                                    name="is_default_persona"
+                                    title="Feature This Agent"
+                                    description="Show this agent at the top of the explore agents list and automatically pin it to the sidebar for new users with access."
+                                  >
+                                    <SwitchField name="is_default_persona" />
+                                  </InputLayouts.Horizontal>
+                                  {values.is_default_persona && !isShared && (
+                                    <Message
+                                      static
+                                      close={false}
+                                      className="w-full"
+                                      text="This agent is private to you and will only be featured for yourself."
+                                    />
+                                  )}
+                                </>
+                              )}
                             </Card>
 
                             <Card>
