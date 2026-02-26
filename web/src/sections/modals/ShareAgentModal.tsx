@@ -12,6 +12,7 @@ import {
   SvgX,
 } from "@opal/icons";
 import InputChipField from "@/refresh-components/inputs/InputChipField";
+import Message from "@/refresh-components/messages/Message";
 import Tabs from "@/refresh-components/Tabs";
 import { Card } from "@/refresh-components/cards";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox/InputComboBox";
@@ -283,6 +284,18 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
                   </Section>
                 )}
               </Section>
+              {values.isPublic && (
+                <Section>
+                  <Message
+                    iconComponent={SvgOrganization}
+                    close={false}
+                    static
+                    className="w-full"
+                    text="This agent is public to your organization."
+                    description="Everyone in your organization has access to this agent."
+                  />
+                </Section>
+              )}
             </Tabs.Content>
 
             <Tabs.Content value={YOUR_ORGANIZATION_TAB} padding={0.5}>
