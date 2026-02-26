@@ -334,6 +334,38 @@ class OpenSearchIndexClient(OpenSearchClient):
         return self._client.indices.exists(index=self._index_name)
 
     @log_function_time(print_only=True, debug_only=True, include_args=True)
+    def put_mapping(self, mappings: dict[str, Any]) -> None:
+        """Updates the index mapping in an idempotent manner.
+
+        - Existing fields with the same definition: No-op (succeeds silently).
+        - New fields: Added to the index.
+        - Existing fields with different types: Raises exception (requires
+          reindex).
+
+        See the OpenSearch documentation for more information:
+        https://docs.opensearch.org/latest/api-reference/index-apis/put-mapping/
+
+        Args:
+            mappings: The complete mapping definition to apply. This will be
+                merged with existing mappings in the index.
+
+        Raises:
+            Exception: There was an error updating the mappings, such as
+                attempting to change the type of an existing field.
+        """
+        logger.debug(
+            f"Putting mappings for index {self._index_name} with mappings {mappings}."
+        )
+        response = self._client.indices.put_mapping(
+            index=self._index_name, body=mappings
+        )
+        if not response.get("acknowledged", False):
+            raise RuntimeError(
+                f"Failed to put the mapping update for index {self._index_name}."
+            )
+        logger.debug(f"Successfully put mappings for index {self._index_name}.")
+
+    @log_function_time(print_only=True, debug_only=True, include_args=True)
     def validate_index(self, expected_mappings: dict[str, Any]) -> bool:
         """Validates the index.
 
