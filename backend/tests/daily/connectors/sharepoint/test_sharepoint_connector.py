@@ -526,19 +526,14 @@ def test_sharepoint_connector_hierarchy_nodes(
 
 @pytest.fixture
 def sharepoint_cert_credentials() -> dict[str, str]:
-    sp_client_id = os.environ.get("PERM_SYNC_SHAREPOINT_CLIENT_ID", "")
-    sp_private_key = os.environ.get("PERM_SYNC_SHAREPOINT_PRIVATE_KEY", "")
-    sp_certificate_password = os.environ.get(
-        "PERM_SYNC_SHAREPOINT_CERTIFICATE_PASSWORD", ""
-    )
-    sp_directory_id = os.environ.get("PERM_SYNC_SHAREPOINT_DIRECTORY_ID", "")
-
     return {
         "authentication_method": SharepointAuthMethod.CERTIFICATE.value,
-        "sp_client_id": sp_client_id,
-        "sp_private_key": sp_private_key,
-        "sp_certificate_password": sp_certificate_password,
-        "sp_directory_id": sp_directory_id,
+        "sp_client_id": os.environ["PERM_SYNC_SHAREPOINT_CLIENT_ID"],
+        "sp_private_key": os.environ["PERM_SYNC_SHAREPOINT_PRIVATE_KEY"],
+        "sp_certificate_password": os.environ[
+            "PERM_SYNC_SHAREPOINT_CERTIFICATE_PASSWORD"
+        ],
+        "sp_directory_id": os.environ["PERM_SYNC_SHAREPOINT_DIRECTORY_ID"],
     }
 
 
