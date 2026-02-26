@@ -13,6 +13,11 @@ on:
         required: false
         default: ""
         type: string
+      bedrock_models:
+        description: "Comma-separated models for bedrock"
+        required: false
+        default: ""
+        type: string
       strict:
         description: "Default NIGHTLY_LLM_STRICT passed to tests"
         required: false
@@ -22,6 +27,8 @@ on:
       openai_api_key:
         required: false
       anthropic_api_key:
+        required: false
+      bedrock_api_key:
         required: false
       DOCKER_USERNAME:
         required: true
@@ -134,6 +141,9 @@ jobs:
           - provider: anthropic
             models: ${{ inputs.anthropic_models }}
             api_key_secret: anthropic_api_key
+          - provider: bedrock
+            models: ${{ inputs.bedrock_models }}
+            api_key_secret: bedrock_api_key
     runs-on:
       - runs-on
       - runner=4cpu-linux-arm64

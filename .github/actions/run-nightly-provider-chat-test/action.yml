@@ -60,6 +60,7 @@ runs:
         DISABLE_TELEMETRY=true
         INTEGRATION_TESTS_MODE=true
         AUTO_LLM_UPDATE_INTERVAL_SECONDS=10
+        AWS_REGION_NAME=us-west-2
         ONYX_BACKEND_IMAGE=${ECR_CACHE}:nightly-llm-it-backend-${RUN_ID}
         ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:nightly-llm-it-model-server-${RUN_ID}
         EOF2
@@ -106,6 +107,7 @@ runs:
             -e REDIS_HOST=cache \
             -e API_SERVER_HOST=api_server \
             -e TEST_WEB_HOSTNAME=test-runner \
+            -e AWS_REGION_NAME=us-west-2 \
             -e NIGHTLY_LLM_PROVIDER="${NIGHTLY_LLM_PROVIDER}" \
             -e NIGHTLY_LLM_MODELS="${MODELS}" \
             -e NIGHTLY_LLM_API_KEY="${NIGHTLY_LLM_API_KEY}" \
