@@ -533,7 +533,7 @@ services:
       - path: .env
         required: false
 
-    # Below is needed for the `docker-out-of-docker` execution mode.
+    # Below is needed for the `docker-out-of-docker` execution mode
     # For Linux rootless Docker, set DOCKER_SOCK_PATH=${XDG_RUNTIME_DIR}/docker.sock
     user: root
     volumes:
