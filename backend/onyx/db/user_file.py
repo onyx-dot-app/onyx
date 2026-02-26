@@ -57,7 +57,11 @@ def fetch_user_project_ids_for_user_files(
     db_session: Session,
 ) -> dict[str, list[int]]:
     """Fetch user project ids for specified user files"""
-    stmt = select(UserFile).where(UserFile.id.in_(user_file_ids))
+    stmt = (
+        select(UserFile)
+        .where(UserFile.id.in_(user_file_ids))
+        .options(selectinload(UserFile.projects))
+    )
     results = db_session.execute(stmt).scalars().all()
     return {
         str(user_file.id): [project.id for project in user_file.projects]
