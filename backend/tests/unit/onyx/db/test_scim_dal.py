@@ -98,6 +98,11 @@ class TestScimDALUserMappings:
             "external_id": "ext-1",
             "user_id": user_id,
             "scim_username": None,
+            "department": None,
+            "manager": None,
+            "given_name": None,
+            "family_name": None,
+            "scim_emails_json": None,
         }
 
     def test_delete_user_mapping(

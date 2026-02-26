@@ -1,0 +1,45 @@
+name: Nightly LLM Provider Chat Tests
+concurrency:
+  group: Nightly-LLM-Provider-Chat-${{ github.workflow }}-${{ github.ref_name }}
+  cancel-in-progress: true
+
+on:
+  schedule:
+    # Runs daily at 10:30 UTC (2:30 AM PST / 3:30 AM PDT)
+    - cron: "30 10 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  provider-chat-test:
+    uses: ./.github/workflows/reusable-nightly-llm-provider-chat.yml
+    with:
+      openai_models: ${{ vars.NIGHTLY_LLM_OPENAI_MODELS }}
+      anthropic_models: ${{ vars.NIGHTLY_LLM_ANTHROPIC_MODELS }}
+      strict: true
+    secrets:
+      openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+      anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
+
+  notify-slack-on-failure:
+    needs: [provider-chat-test]
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Send Slack notification
+        uses: ./.github/actions/slack-notify
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
+          failed-jobs: provider-chat-test
+          title: "🚨 Scheduled LLM Provider Chat Tests failed!"
+          ref-name: ${{ github.ref_name }}

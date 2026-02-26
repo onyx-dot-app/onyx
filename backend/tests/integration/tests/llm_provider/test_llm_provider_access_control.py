@@ -6,11 +6,14 @@ from sqlalchemy.orm import Session
 
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import LLMModelFlowType
 from onyx.db.llm import can_user_access_llm_provider
 from onyx.db.llm import fetch_user_group_ids
+from onyx.db.models import LLMModelFlow
 from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import LLMProvider__Persona
 from onyx.db.models import LLMProvider__UserGroup
+from onyx.db.models import ModelConfiguration
 from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
@@ -266,6 +269,24 @@ def test_get_llm_for_persona_falls_back_when_access_denied(
             name="fallback-persona",
             provider_name=restricted_provider.name,
         )
+
+        # Set up ModelConfiguration + LLMModelFlow so get_default_llm() can
+        # resolve the default provider when the fallback path is triggered.
+        default_model_config = ModelConfiguration(
+            llm_provider_id=default_provider.id,
+            name=default_provider.default_model_name,
+            is_visible=True,
+        )
+        db_session.add(default_model_config)
+        db_session.flush()
+        db_session.add(
+            LLMModelFlow(
+                model_configuration_id=default_model_config.id,
+                llm_model_flow_type=LLMModelFlowType.CHAT,
+                is_default=True,
+            )
+        )
+        db_session.flush()
 
         access_group = UserGroup(name="persona-group")
         db_session.add(access_group)

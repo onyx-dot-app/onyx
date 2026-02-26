@@ -2,19 +2,39 @@
 
 from __future__ import annotations
 
+import json
+import logging
 from abc import ABC
 from abc import abstractmethod
 from uuid import UUID
 
+from pydantic import ValidationError
+
+from ee.onyx.server.scim.models import SCIM_ENTERPRISE_USER_SCHEMA
+from ee.onyx.server.scim.models import SCIM_USER_SCHEMA
 from ee.onyx.server.scim.models import ScimEmail
+from ee.onyx.server.scim.models import ScimEnterpriseExtension
 from ee.onyx.server.scim.models import ScimGroupMember
 from ee.onyx.server.scim.models import ScimGroupResource
+from ee.onyx.server.scim.models import ScimManagerRef
+from ee.onyx.server.scim.models import ScimMappingFields
 from ee.onyx.server.scim.models import ScimMeta
 from ee.onyx.server.scim.models import ScimName
 from ee.onyx.server.scim.models import ScimUserGroupRef
 from ee.onyx.server.scim.models import ScimUserResource
 from onyx.db.models import User
 from onyx.db.models import UserGroup
+
+
+logger = logging.getLogger(__name__)
+
+COMMON_IGNORED_PATCH_PATHS: frozenset[str] = frozenset(
+    {
+        "id",
+        "schemas",
+        "meta",
+    }
+)
 
 
 class ScimProvider(ABC):
@@ -41,12 +61,22 @@ class ScimProvider(ABC):
         """
         ...
 
+    @property
+    def user_schemas(self) -> list[str]:
+        """Schema URIs to include in User resource responses.
+
+        Override in subclasses to advertise additional schemas (e.g. the
+        enterprise extension for Entra ID).
+        """
+        return [SCIM_USER_SCHEMA]
+
     def build_user_resource(
         self,
         user: User,
         external_id: str | None = None,
         groups: list[tuple[int, str]] | None = None,
         scim_username: str | None = None,
+        fields: ScimMappingFields | None = None,
     ) -> ScimUserResource:
         """Build a SCIM User response from an Onyx User.
 
@@ -58,27 +88,48 @@ class ScimProvider(ABC):
                 for newly-created users.
             scim_username: The original-case userName from the IdP. Falls
                 back to ``user.email`` (lowercase) when not available.
+            fields: Stored mapping fields that the IdP expects round-tripped.
         """
+        f = fields or ScimMappingFields()
         group_refs = [
             ScimUserGroupRef(value=str(gid), display=gname)
             for gid, gname in (groups or [])
         ]
 
-        # Use original-case userName if stored, otherwise fall back to the
-        # lowercased email from the User model.
         username = scim_username or user.email
 
-        return ScimUserResource(
+        # Build enterprise extension when at least one value is present.
+        # Dynamically add the enterprise URN to schemas per RFC 7643 §3.0.
+        enterprise_ext: ScimEnterpriseExtension | None = None
+        schemas = list(self.user_schemas)
+        if f.department is not None or f.manager is not None:
+            manager_ref = (
+                ScimManagerRef(value=f.manager) if f.manager is not None else None
+            )
+            enterprise_ext = ScimEnterpriseExtension(
+                department=f.department,
+                manager=manager_ref,
+            )
+            if SCIM_ENTERPRISE_USER_SCHEMA not in schemas:
+                schemas.append(SCIM_ENTERPRISE_USER_SCHEMA)
+
+        name = self.build_scim_name(user, f)
+        emails = _deserialize_emails(f.scim_emails_json, username)
+
+        resource = ScimUserResource(
+            schemas=schemas,
             id=str(user.id),
             externalId=external_id,
             userName=username,
-            name=self._build_scim_name(user),
+            name=name,
             displayName=user.personal_name,
-            emails=[ScimEmail(value=username, type="work", primary=True)],
+            emails=emails,
             active=user.is_active,
             groups=group_refs,
             meta=ScimMeta(resourceType="User"),
         )
+        resource.enterprise_extension = enterprise_ext
+        return resource
 
     def build_group_resource(
         self,
@@ -98,9 +149,24 @@ class ScimProvider(ABC):
             meta=ScimMeta(resourceType="Group"),
         )
 
-    @staticmethod
-    def _build_scim_name(user: User) -> ScimName | None:
-        """Extract SCIM name components from a user's personal name."""
+    def build_scim_name(
+        self,
+        user: User,
+        fields: ScimMappingFields,
+    ) -> ScimName | None:
+        """Build SCIM name components for the response.
+
+        Round-trips stored ``given_name``/``family_name`` when available (so
+        the IdP gets back what it sent). Falls back to splitting
+        ``personal_name`` for users provisioned before we stored components.
+        Providers may override for custom behavior.
+        """
+        if fields.given_name is not None or fields.family_name is not None:
+            return ScimName(
+                givenName=fields.given_name,
+                familyName=fields.family_name,
+                formatted=user.personal_name,
+            )
         if not user.personal_name:
             return None
         parts = user.personal_name.split(" ", 1)
@@ -109,6 +175,27 @@ class ScimProvider(ABC):
             familyName=parts[1] if len(parts) > 1 else None,
             formatted=user.personal_name,
         )
+
+
+def _deserialize_emails(stored_json: str | None, username: str) -> list[ScimEmail]:
+    """Deserialize stored email entries or build a default work email."""
+    if stored_json:
+        try:
+            entries = json.loads(stored_json)
+            if isinstance(entries, list) and entries:
+                return [ScimEmail(**e) for e in entries]
+        except (json.JSONDecodeError, TypeError, ValidationError):
+            logger.warning(
+                "Corrupt scim_emails_json, falling back to default: %s", stored_json
+            )
+    return [ScimEmail(value=username, type="work", primary=True)]
+
+
+def serialize_emails(emails: list[ScimEmail]) -> str | None:
+    """Serialize SCIM email entries to JSON for storage."""
+    if not emails:
+        return None
+    return json.dumps([e.model_dump(exclude_none=True) for e in emails])
 
 
 def get_default_provider() -> ScimProvider:

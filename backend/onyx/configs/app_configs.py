@@ -210,10 +210,10 @@ AUTH_COOKIE_EXPIRE_TIME_SECONDS = int(
 REQUIRE_EMAIL_VERIFICATION = (
     os.environ.get("REQUIRE_EMAIL_VERIFICATION", "").lower() == "true"
 )
-SMTP_SERVER = os.environ.get("SMTP_SERVER") or "smtp.gmail.com"
+SMTP_SERVER = os.environ.get("SMTP_SERVER") or ""
 SMTP_PORT = int(os.environ.get("SMTP_PORT") or "587")
-SMTP_USER = os.environ.get("SMTP_USER", "your-email@gmail.com")
-SMTP_PASS = os.environ.get("SMTP_PASS", "your-gmail-password")
+SMTP_USER = os.environ.get("SMTP_USER") or ""
+SMTP_PASS = os.environ.get("SMTP_PASS") or ""
 EMAIL_FROM = os.environ.get("EMAIL_FROM") or SMTP_USER
 
 SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY") or ""
@@ -293,6 +293,12 @@ ENABLE_OPENSEARCH_INDEXING_FOR_ONYX = (
 ENABLE_OPENSEARCH_RETRIEVAL_FOR_ONYX = (
     ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
     and os.environ.get("ENABLE_OPENSEARCH_RETRIEVAL_FOR_ONYX", "").lower() == "true"
+)
+# Whether we should check for and create an index if necessary every time we
+# instantiate an OpenSearchDocumentIndex on multitenant cloud. Defaults to True.
+VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT = (
+    os.environ.get("VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT", "true").lower()
+    == "true"
 )
 
 VESPA_HOST = os.environ.get("VESPA_HOST") or "localhost"

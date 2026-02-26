@@ -689,6 +689,9 @@ class VespaIndex(DocumentIndex):
         project_ids: set[int] | None = None
         if user_fields is not None and user_fields.user_projects is not None:
             project_ids = set(user_fields.user_projects)
+        persona_ids: set[int] | None = None
+        if user_fields is not None and user_fields.personas is not None:
+            persona_ids = set(user_fields.personas)
         update_request = MetadataUpdateRequest(
             document_ids=[doc_id],
             doc_id_to_chunk_cnt={
@@ -699,6 +702,7 @@ class VespaIndex(DocumentIndex):
             boost=fields.boost if fields is not None else None,
             hidden=fields.hidden if fields is not None else None,
             project_ids=project_ids,
+            persona_ids=persona_ids,
         )
 
         vespa_document_index.update([update_request])

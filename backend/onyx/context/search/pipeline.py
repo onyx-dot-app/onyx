@@ -40,6 +40,7 @@ def _build_index_filters(
     user_provided_filters: BaseFilters | None,
     user: User,  # Used for ACLs, anonymous users only see public docs
     project_id: int | None,
+    persona_id: int | None,
     user_file_ids: list[UUID] | None,
     persona_document_sets: list[str] | None,
     persona_time_cutoff: datetime | None,
@@ -118,6 +119,7 @@ def _build_index_filters(
     final_filters = IndexFilters(
         user_file_ids=user_file_ids,
         project_id=project_id,
+        persona_id=persona_id,
         source_type=source_filter,
         document_set=document_set_filter,
         time_cutoff=time_filter,
@@ -265,6 +267,8 @@ def search_pipeline(
     llm: LLM | None = None,
     # If a project ID is provided, it will be exclusively scoped to that project
     project_id: int | None = None,
+    # If a persona_id is provided, search scopes to files attached to this persona
+    persona_id: int | None = None,
     # Pre-fetched data — when provided, avoids DB queries (no session needed)
     acl_filters: list[str] | None = None,
     embedding_model: EmbeddingModel | None = None,
@@ -299,6 +303,7 @@ def search_pipeline(
         user_provided_filters=chunk_search_request.user_selected_filters,
         user=user,
         project_id=project_id,
+        persona_id=persona_id,
         user_file_ids=user_uploaded_persona_files,
         persona_document_sets=persona_document_sets,
         persona_time_cutoff=persona_time_cutoff,
