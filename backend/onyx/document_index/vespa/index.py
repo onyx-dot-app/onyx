@@ -687,9 +687,12 @@ class VespaIndex(DocumentIndex):
         )
 
         project_ids: set[int] | None = None
+        # NOTE: Empty user_projects is semantically different from None
+        # user_projects.
         if user_fields is not None and user_fields.user_projects is not None:
             project_ids = set(user_fields.user_projects)
         persona_ids: set[int] | None = None
+        # NOTE: Empty personas is semantically different from None personas.
         if user_fields is not None and user_fields.personas is not None:
             persona_ids = set(user_fields.personas)
         update_request = MetadataUpdateRequest(
