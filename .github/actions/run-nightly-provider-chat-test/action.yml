@@ -1,0 +1,120 @@
+name: "Run Nightly Provider Chat Test"
+description: "Starts required compose services and runs nightly provider integration test"
+inputs:
+  provider:
+    description: "Provider slug for NIGHTLY_LLM_PROVIDER"
+    required: true
+  models:
+    description: "Comma-separated model list for NIGHTLY_LLM_MODELS"
+    required: true
+  provider-api-key:
+    description: "API key for NIGHTLY_LLM_API_KEY"
+    required: true
+  strict:
+    description: "String true/false for NIGHTLY_LLM_STRICT"
+    required: true
+  api-base:
+    description: "Optional NIGHTLY_LLM_API_BASE"
+    required: false
+    default: ""
+  custom-config-json:
+    description: "Optional NIGHTLY_LLM_CUSTOM_CONFIG_JSON"
+    required: false
+    default: ""
+  runs-on-ecr-cache:
+    description: "ECR cache registry from runs-on/action"
+    required: true
+  run-id:
+    description: "GitHub run ID used in image tags"
+    required: true
+  docker-username:
+    description: "Docker Hub username"
+    required: true
+  docker-token:
+    description: "Docker Hub token"
+    required: true
+runs:
+  using: "composite"
+  steps:
+    - name: Login to Docker Hub
+      uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # ratchet:docker/login-action@v3
+      with:
+        username: ${{ inputs.docker-username }}
+        password: ${{ inputs.docker-token }}
+
+    - name: Create .env file for Docker Compose
+      shell: bash
+      env:
+        ECR_CACHE: ${{ inputs.runs-on-ecr-cache }}
+        RUN_ID: ${{ inputs.run-id }}
+      run: |
+        cat <<EOF2 > deployment/docker_compose/.env
+        COMPOSE_PROFILES=s3-filestore
+        ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
+        LICENSE_ENFORCEMENT_ENABLED=false
+        AUTH_TYPE=basic
+        POSTGRES_POOL_PRE_PING=true
+        POSTGRES_USE_NULL_POOL=true
+        REQUIRE_EMAIL_VERIFICATION=false
+        DISABLE_TELEMETRY=true
+        INTEGRATION_TESTS_MODE=true
+        AUTO_LLM_UPDATE_INTERVAL_SECONDS=10
+        ONYX_BACKEND_IMAGE=${ECR_CACHE}:nightly-llm-it-backend-${RUN_ID}
+        ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:nightly-llm-it-model-server-${RUN_ID}
+        EOF2
+
+    - name: Start Docker containers
+      shell: bash
+      run: |
+        cd deployment/docker_compose
+        docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --wait \
+          relational_db \
+          index \
+          cache \
+          minio \
+          api_server \
+          inference_model_server
+
+    - name: Run nightly provider integration test
+      uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # ratchet:nick-fields/retry@v3
+      env:
+        MODELS: ${{ inputs.models }}
+        NIGHTLY_LLM_PROVIDER: ${{ inputs.provider }}
+        NIGHTLY_LLM_API_KEY: ${{ inputs.provider-api-key }}
+        NIGHTLY_LLM_API_BASE: ${{ inputs.api-base }}
+        NIGHTLY_LLM_CUSTOM_CONFIG_JSON: ${{ inputs.custom-config-json }}
+        NIGHTLY_LLM_STRICT: ${{ inputs.strict }}
+        RUNS_ON_ECR_CACHE: ${{ inputs.runs-on-ecr-cache }}
+        RUN_ID: ${{ inputs.run-id }}
+      with:
+        timeout_minutes: 20
+        max_attempts: 2
+        retry_wait_seconds: 10
+        command: |
+          if [ -z "${MODELS}" ]; then
+            echo "Input 'models' must be non-empty for provider '${NIGHTLY_LLM_PROVIDER}'."
+            exit 1
+          fi
+
+          docker run --rm --network onyx_default \
+            --name test-runner \
+            -e POSTGRES_HOST=relational_db \
+            -e POSTGRES_USER=postgres \
+            -e POSTGRES_PASSWORD=password \
+            -e POSTGRES_DB=postgres \
+            -e DB_READONLY_USER=db_readonly_user \
+            -e DB_READONLY_PASSWORD=password \
+            -e POSTGRES_POOL_PRE_PING=true \
+            -e POSTGRES_USE_NULL_POOL=true \
+            -e VESPA_HOST=index \
+            -e REDIS_HOST=cache \
+            -e API_SERVER_HOST=api_server \
+            -e TEST_WEB_HOSTNAME=test-runner \
+            -e NIGHTLY_LLM_PROVIDER="${NIGHTLY_LLM_PROVIDER}" \
+            -e NIGHTLY_LLM_MODELS="${MODELS}" \
+            -e NIGHTLY_LLM_API_KEY="${NIGHTLY_LLM_API_KEY}" \
+            -e NIGHTLY_LLM_API_BASE="${NIGHTLY_LLM_API_BASE}" \
+            -e NIGHTLY_LLM_CUSTOM_CONFIG_JSON="${NIGHTLY_LLM_CUSTOM_CONFIG_JSON}" \
+            -e NIGHTLY_LLM_STRICT="${NIGHTLY_LLM_STRICT}" \
+            ${RUNS_ON_ECR_CACHE}:nightly-llm-it-${RUN_ID} \
+            /app/tests/integration/tests/llm_workflows/test_nightly_provider_chat_workflow.py
