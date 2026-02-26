@@ -117,15 +117,32 @@ def _seed_custom_tools(db_session: Session, tools: List[CustomToolSeed]) -> None
 def _seed_llms(
     db_session: Session, llm_upsert_requests: list[LLMProviderUpsertRequest]
 ) -> None:
-    if llm_upsert_requests:
-        logger.notice("Seeding LLMs")
-        seeded_providers = [
-            upsert_llm_provider(llm_upsert_request, db_session)
-            for llm_upsert_request in llm_upsert_requests
-        ]
-        update_default_provider(
-            provider_id=seeded_providers[0].id, db_session=db_session
-        )
+    if not llm_upsert_requests:
+        return
+
+    logger.notice("Seeding LLMs")
+    seeded_providers = [
+        upsert_llm_provider(llm_upsert_request, db_session)
+        for llm_upsert_request in llm_upsert_requests
+    ]
+
+    first_provider = seeded_providers[0]
+    if not first_provider.model_configurations:
+        return
+
+    visible_configs = [
+        mc for mc in first_provider.model_configurations if mc.is_visible
+    ]
+    default_config = (
+        visible_configs[0]
+        if visible_configs
+        else first_provider.model_configurations[0]
+    )
+    update_default_provider(
+        provider_id=first_provider.id,
+        model_name=default_config.name,
+        db_session=db_session,
+    )
 
 
 def _seed_personas(db_session: Session, personas: list[PersonaUpsertRequest]) -> None:

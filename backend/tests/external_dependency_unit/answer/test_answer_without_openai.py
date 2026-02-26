@@ -59,7 +59,7 @@ def test_answer_with_only_anthropic_provider(
     )
 
     try:
-        update_default_provider(anthropic_provider.id, db_session)
+        update_default_provider(anthropic_provider.id, anthropic_model, db_session)
 
         test_user = create_test_user(db_session, email_prefix="anthropic_only")
         chat_session = create_chat_session(
