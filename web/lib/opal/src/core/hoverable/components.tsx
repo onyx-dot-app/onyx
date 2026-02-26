@@ -36,7 +36,7 @@ interface HoverableRootProps
   group: string;
 }
 
-type HoverableItemVariant = "opacity";
+type HoverableItemVariant = "opacity-on-hover";
 
 interface HoverableItemProps
   extends WithoutStyles<React.HTMLAttributes<HTMLDivElement>> {
@@ -63,7 +63,7 @@ interface HoverableItemProps
  * ```tsx
  * <Hoverable.Root group="card">
  *   <Card>
- *     <Hoverable.Item group="card" variant="opacity">
+ *     <Hoverable.Item group="card" variant="opacity-on-hover">
  *       <TrashIcon />
  *     </Hoverable.Item>
  *   </Card>
@@ -98,14 +98,14 @@ function HoverableRoot({ group, children, ...props }: HoverableRootProps) {
  *
  * @example
  * ```tsx
- * <Hoverable.Item group="card" variant="opacity">
+ * <Hoverable.Item group="card" variant="opacity-on-hover">
  *   <TrashIcon />
  * </Hoverable.Item>
  * ```
  */
 function HoverableItem({
   group,
-  variant = "opacity",
+  variant = "opacity-on-hover",
   children,
   ...props
 }: HoverableItemProps) {
@@ -137,7 +137,7 @@ function HoverableItem({
  *   and provides it via React context.
  *
  * - `Hoverable.Item` — An element that reads hover state from the nearest
- *   matching `Hoverable.Root` and applies variant styles (e.g., opacity fade-in).
+ *   matching `Hoverable.Root` and applies variant styles (e.g., `"opacity-on-hover"`).
  *
  * Supports nesting: a child `Hoverable.Root` shadows the parent's context,
  * so each group's items only respond to their own root's hover.
@@ -149,7 +149,7 @@ function HoverableItem({
  * <Hoverable.Root group="card">
  *   <Card>
  *     <span>Card content</span>
- *     <Hoverable.Item group="card" variant="opacity">
+ *     <Hoverable.Item group="card" variant="opacity-on-hover">
  *       <TrashIcon />
  *     </Hoverable.Item>
  *   </Card>

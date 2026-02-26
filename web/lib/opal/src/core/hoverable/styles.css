@@ -3,10 +3,10 @@
   transition: opacity 200ms ease-in-out;
 }
 
-.hoverable-item[data-hoverable-variant="opacity"] {
+.hoverable-item[data-hoverable-variant="opacity-on-hover"] {
   opacity: 0;
 }
 
-.hoverable-item[data-hoverable-variant="opacity"][data-hoverable-active="true"] {
+.hoverable-item[data-hoverable-variant="opacity-on-hover"][data-hoverable-active="true"] {
   opacity: 1;
 }
