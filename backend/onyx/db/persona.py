@@ -366,7 +366,7 @@ def update_persona_shared(
             db_session.query(PersonaLabel).filter(PersonaLabel.id.in_(label_ids)).all()
         )
         if len(labels) != len(label_ids):
-            raise ValueError("Some label IDs were not found in the database")
+            raise HTTPException(status_code=400, detail="Some label IDs were not found in the database")
         persona.labels.clear()
         persona.labels = labels
 
