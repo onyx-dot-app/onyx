@@ -135,7 +135,6 @@ class TestAutoModeSyncFeature:
                         api_key="sk-test-key-00000000000000000000000000000000000",
                         api_key_changed=True,
                         is_auto_mode=True,
-                        default_model_name=expected_default_model,
                         model_configurations=[],  # No model configs provided
                     ),
                     is_creation=True,
@@ -162,11 +161,6 @@ class TestAutoModeSyncFeature:
             for mc in provider.model_configurations:
                 if mc.name in all_expected_models:
                     assert mc.is_visible is True, f"Model '{mc.name}' should be visible"
-
-            # Verify the default model was set correctly
-            assert (
-                provider.default_model_name == expected_default_model
-            ), f"Default model should be '{expected_default_model}'"
 
             # Step 4: Set the provider as default
             update_default_provider(provider.id, expected_default_model, db_session)
@@ -238,7 +232,6 @@ class TestAutoModeSyncFeature:
                         api_key="sk-test-key-00000000000000000000000000000000000",
                         api_key_changed=True,
                         is_auto_mode=True,
-                        default_model_name="gpt-4o",
                         model_configurations=[],
                     ),
                     is_creation=True,
@@ -317,7 +310,6 @@ class TestAutoModeSyncFeature:
                     api_key="sk-test-key-00000000000000000000000000000000000",
                     api_key_changed=True,
                     is_auto_mode=False,  # Not in auto mode initially
-                    default_model_name="gpt-4",
                     model_configurations=initial_models,
                 ),
                 is_creation=True,
@@ -349,7 +341,6 @@ class TestAutoModeSyncFeature:
                         api_key=None,  # Not changing API key
                         api_key_changed=False,
                         is_auto_mode=True,  # Now enabling auto mode
-                        default_model_name=auto_mode_default,
                         model_configurations=[],  # Auto mode will sync from config
                     ),
                     is_creation=False,  # This is an update
@@ -387,9 +378,6 @@ class TestAutoModeSyncFeature:
                     assert (
                         model_visibility[model_name] is False
                     ), f"Model '{model_name}' not in auto config should NOT be visible"
-
-            # Verify the default model was updated
-            assert provider.default_model_name == auto_mode_default
 
         finally:
             db_session.rollback()
@@ -432,8 +420,12 @@ class TestAutoModeSyncFeature:
                         api_key="sk-test-key-00000000000000000000000000000000000",
                         api_key_changed=True,
                         is_auto_mode=True,
-                        default_model_name="gpt-4o",
-                        model_configurations=[],
+                        model_configurations=[
+                            ModelConfigurationUpsertRequest(
+                                name="gpt-4o",
+                                is_visible=True,
+                            )
+                        ],
                     ),
                     is_creation=True,
                     _=_create_mock_admin(),
@@ -535,7 +527,6 @@ class TestAutoModeSyncFeature:
                         api_key=provider_1_api_key,
                         api_key_changed=True,
                         is_auto_mode=True,
-                        default_model_name=provider_1_default_model,
                         model_configurations=[],
                     ),
                     is_creation=True,
@@ -563,7 +554,6 @@ class TestAutoModeSyncFeature:
                         api_key=provider_2_api_key,
                         api_key_changed=True,
                         is_auto_mode=True,
-                        default_model_name=provider_2_default_model,
                         model_configurations=[],
                     ),
                     is_creation=True,
@@ -644,7 +634,6 @@ class TestAutoModeMissingFlows:
                     api_key="sk-test-key-00000000000000000000000000000000000",
                     api_key_changed=True,
                     is_auto_mode=True,
-                    default_model_name="gpt-4o",
                     model_configurations=[],
                 ),
                 is_creation=True,

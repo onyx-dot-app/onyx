@@ -87,10 +87,6 @@ class LLMProviderDescriptor(BaseModel):
     name: str
     provider: str
     provider_display_name: str  # Human-friendly name like "Claude (Anthropic)"
-    default_model_name: str
-    is_default_provider: bool | None
-    is_default_vision_provider: bool | None
-    default_vision_model: str | None
     model_configurations: list["ModelConfigurationView"]
 
     @classmethod
@@ -103,24 +99,11 @@ class LLMProviderDescriptor(BaseModel):
         )
 
         provider = llm_provider_model.provider
-        default_model_name = get_default_llm_model_name(llm_provider_model)
-        default_vision_model = get_default_vision_model_name(llm_provider_model)
-
-        is_default_provider = bool(default_model_name)
-        is_default_vision_provider = default_vision_model is not None
-
-        default_model_name = (
-            default_model_name or llm_provider_model.default_model_name or ""
-        )
 
         return cls(
             name=llm_provider_model.name,
             provider=provider,
             provider_display_name=get_provider_display_name(provider),
-            default_model_name=default_model_name,
-            is_default_provider=is_default_provider,
-            is_default_vision_provider=is_default_vision_provider,
-            default_vision_model=default_vision_model,
             model_configurations=filter_model_configurations(
                 llm_provider_model.model_configurations, provider
             ),
@@ -134,13 +117,11 @@ class LLMProvider(BaseModel):
     api_base: str | None = None
     api_version: str | None = None
     custom_config: dict[str, str] | None = None
-    default_model_name: str
     is_public: bool = True
     is_auto_mode: bool = False
     groups: list[int] = Field(default_factory=list)
     personas: list[int] = Field(default_factory=list)
     deployment_name: str | None = None
-    default_vision_model: str | None = None
 
 
 class LLMProviderUpsertRequest(LLMProvider):
@@ -161,8 +142,6 @@ class LLMProviderView(LLMProvider):
     """Stripped down representation of LLMProvider for display / limited access info only"""
 
     id: int
-    is_default_provider: bool | None = None
-    is_default_vision_provider: bool | None = None
     model_configurations: list["ModelConfigurationView"]
 
     @classmethod
@@ -184,16 +163,6 @@ class LLMProviderView(LLMProvider):
 
         provider = llm_provider_model.provider
 
-        default_model_name = get_default_llm_model_name(llm_provider_model)
-        default_vision_model = get_default_vision_model_name(llm_provider_model)
-
-        is_default_provider = bool(default_model_name)
-        is_default_vision_provider = default_vision_model is not None
-
-        default_model_name = (
-            default_model_name or llm_provider_model.default_model_name or ""
-        )
-
         return cls(
             id=llm_provider_model.id,
             name=llm_provider_model.name,
@@ -206,10 +175,6 @@ class LLMProviderView(LLMProvider):
             api_base=llm_provider_model.api_base,
             api_version=llm_provider_model.api_version,
             custom_config=llm_provider_model.custom_config,
-            default_model_name=default_model_name,
-            is_default_provider=is_default_provider,
-            is_default_vision_provider=is_default_vision_provider,
-            default_vision_model=default_vision_model,
             is_public=llm_provider_model.is_public,
             is_auto_mode=llm_provider_model.is_auto_mode,
             groups=groups,

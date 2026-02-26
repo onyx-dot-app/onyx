@@ -116,7 +116,6 @@ class DATestLLMProvider(BaseModel):
     name: str
     provider: str
     api_key: str
-    default_model_name: str
     is_public: bool
     is_auto_mode: bool = False
     groups: list[int]

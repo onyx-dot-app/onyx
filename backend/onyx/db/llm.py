@@ -238,11 +238,7 @@ def upsert_llm_provider(
     existing_llm_provider.api_base = api_base
     existing_llm_provider.api_version = llm_provider_upsert_request.api_version
     existing_llm_provider.custom_config = custom_config
-    # TODO: Remove default model name on api change
-    # Needed due to /provider/{id}/default endpoint not disclosing the default model name
-    existing_llm_provider.default_model_name = (
-        llm_provider_upsert_request.default_model_name
-    )
+
     existing_llm_provider.is_public = llm_provider_upsert_request.is_public
     existing_llm_provider.is_auto_mode = llm_provider_upsert_request.is_auto_mode
     existing_llm_provider.deployment_name = llm_provider_upsert_request.deployment_name
@@ -811,12 +807,6 @@ def sync_auto_mode_models(
                 display_name=model_config.display_name,
             )
             changes += 1
-
-    # In Auto mode, default model is always set from GitHub config
-    default_model = llm_recommendations.get_default_model(provider.provider)
-    if default_model and provider.default_model_name != default_model.name:
-        provider.default_model_name = default_model.name
-        changes += 1
 
     db_session.commit()
     return changes
