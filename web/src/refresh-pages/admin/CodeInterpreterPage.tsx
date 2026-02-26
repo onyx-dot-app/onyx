@@ -11,7 +11,7 @@ import {
   SvgUnplug,
   SvgXOctagon,
 } from "@opal/icons";
-import * as GeneralLayouts from "@/layouts/general-layouts";
+import { Section } from "@/layouts/general-layouts";
 import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
@@ -53,18 +53,18 @@ function CodeInterpreterCard({
 
 function CheckingStatus() {
   return (
-    <GeneralLayouts.Section
+    <Section
       flexDirection="row"
-      gap={0.4}
-      padding={0}
       justifyContent="end"
       alignItems="center"
+      gap={0.5}
+      padding={0}
     >
       <Text mainUiAction text03>
         Checking...
       </Text>
       <SimpleLoader />
-    </GeneralLayouts.Section>
+    </Section>
   );
 }
 
@@ -83,18 +83,18 @@ function ConnectionStatus({ healthy, isLoading }: ConnectionStatusProps) {
   const iconColor = healthy ? "text-status-success-05" : "text-status-error-05";
 
   return (
-    <GeneralLayouts.Section
+    <Section
       flexDirection="row"
-      gap={0.5}
-      padding={0}
       justifyContent="end"
       alignItems="center"
+      gap={0.5}
+      padding={0}
     >
       <Text mainUiAction text03>
         {label}
       </Text>
       <Icon size={16} className={iconColor} />
-    </GeneralLayouts.Section>
+    </Section>
   );
 }
 
@@ -105,9 +105,10 @@ interface ActionButtonsProps {
 
 function ActionButtons({ onDisconnect, onRefresh }: ActionButtonsProps) {
   return (
-    <GeneralLayouts.Section
+    <Section
       flexDirection="row"
       justifyContent="end"
+      alignItems="center"
       gap={0.5}
       padding={0}
     >
@@ -125,7 +126,7 @@ function ActionButtons({ onDisconnect, onRefresh }: ActionButtonsProps) {
         onClick={onRefresh}
         tooltip="Refresh"
       />
-    </GeneralLayouts.Section>
+    </Section>
   );
 }
 
@@ -166,13 +167,19 @@ export default function CodeInterpreterPage() {
             variant={isHealthy ? "primary" : "secondary"}
             strikethrough={!isHealthy}
             rightContent={
-              <GeneralLayouts.Section flexDirection="column" gap={0.5}>
+              <Section
+                flexDirection="column"
+                justifyContent="center"
+                alignItems="end"
+                gap={0.5}
+                padding={0.5}
+              >
                 <ConnectionStatus healthy={isHealthy} isLoading={isLoading} />
                 <ActionButtons
                   onDisconnect={() => setShowDisconnectModal(true)}
                   onRefresh={refetch}
                 />
-              </GeneralLayouts.Section>
+              </Section>
             }
           />
         ) : (
@@ -182,17 +189,19 @@ export default function CodeInterpreterPage() {
             middleText="(Disconnected)"
             strikethrough={true}
             rightContent={
-              isReconnecting ? (
-                <CheckingStatus />
-              ) : (
-                <Button
-                  prominence="tertiary"
-                  rightIcon={SvgArrowExchange}
-                  onClick={() => handleToggle(true)}
-                >
-                  Reconnect
-                </Button>
-              )
+              <Section flexDirection="row" alignItems="center" padding={0.5}>
+                {isReconnecting || isLoading ? (
+                  <CheckingStatus />
+                ) : (
+                  <Button
+                    prominence="tertiary"
+                    rightIcon={SvgArrowExchange}
+                    onClick={() => handleToggle(true)}
+                  >
+                    Reconnect
+                  </Button>
+                )}
+              </Section>
             }
           />
         )}
