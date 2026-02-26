@@ -17,7 +17,7 @@ jobs:
     uses: ./.github/workflows/reusable-nightly-llm-provider-chat.yml
     with:
       provider: openai
-      models: ${{ vars.NIGHTLY_LLM_OPENAI_MODELS || 'gpt-4o-mini' }}
+      models: ${{ vars.NIGHTLY_LLM_OPENAI_MODELS }}
       strict: true
     secrets:
       provider_api_key: ${{ secrets.OPENAI_API_KEY }}
