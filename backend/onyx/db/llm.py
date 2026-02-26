@@ -619,7 +619,7 @@ def update_default_provider(provider_id: int, db_session: Session) -> None:
     _update_default_model(
         db_session,
         provider_id,
-        provider.default_model_name,
+        provider.default_model_name,  # type: ignore[arg-type]
         LLMModelFlowType.CHAT,
     )
 

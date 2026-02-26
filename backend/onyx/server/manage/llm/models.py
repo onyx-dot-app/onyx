@@ -105,7 +105,7 @@ class LLMProviderDescriptor(BaseModel):
         is_default_provider = bool(default_model_name)
         is_default_vision_provider = default_vision_model is not None
 
-        default_model_name = default_model_name or llm_provider_model.default_model_name
+        default_model_name = default_model_name or llm_provider_model.default_model_name or ""  # type: ignore[assignment]
 
         return cls(
             name=llm_provider_model.name,
@@ -184,7 +184,7 @@ class LLMProviderView(LLMProvider):
         is_default_provider = bool(default_model_name)
         is_default_vision_provider = default_vision_model is not None
 
-        default_model_name = default_model_name or llm_provider_model.default_model_name
+        default_model_name = default_model_name or llm_provider_model.default_model_name or ""  # type: ignore[assignment]
 
         return cls(
             id=llm_provider_model.id,
