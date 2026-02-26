@@ -23,6 +23,7 @@ jobs:
       azure_models: ${{ vars.NIGHTLY_LLM_AZURE_MODELS }}
       azure_api_base: ${{ vars.NIGHTLY_LLM_AZURE_API_BASE }}
       ollama_models: ${{ vars.NIGHTLY_LLM_OLLAMA_MODELS }}
+      openrouter_models: ${{ vars.NIGHTLY_LLM_OPENROUTER_MODELS }}
       strict: true
     secrets:
       openai_api_key: ${{ secrets.OPENAI_API_KEY }}
@@ -31,6 +32,7 @@ jobs:
       vertex_ai_custom_config_json: ${{ secrets.NIGHTLY_LLM_VERTEX_AI_CUSTOM_CONFIG_JSON }}
       azure_api_key: ${{ secrets.AZURE_API_KEY }}
       ollama_api_key: ${{ secrets.OLLAMA_API_KEY }}
+      openrouter_api_key: ${{ secrets.OPENROUTER_API_KEY }}
       DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
       DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
 
