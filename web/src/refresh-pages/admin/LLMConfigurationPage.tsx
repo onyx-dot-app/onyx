@@ -293,6 +293,23 @@ export default function LLMConfigurationPage() {
   const hasProviders = existingLlmProviders.length > 0;
   const isFirstProvider = !hasProviders;
 
+  // Pre-sort providers so the default appears first
+  const sortedProviders = [...existingLlmProviders].sort((a, b) => {
+    const aIsDefault = defaultText?.provider_id === a.id;
+    const bIsDefault = defaultText?.provider_id === b.id;
+    if (aIsDefault && !bIsDefault) return -1;
+    if (!aIsDefault && bIsDefault) return 1;
+    return 0;
+  });
+
+  // Pre-filter to providers that have at least one visible model
+  const providersWithVisibleModels = existingLlmProviders
+    .map((provider) => ({
+      provider,
+      visibleModels: provider.model_configurations.filter((m) => m.is_visible),
+    }))
+    .filter(({ visibleModels }) => visibleModels.length > 0);
+
   // Default model logic — use the global default from the API response
   const currentDefaultValue = defaultText
     ? `${defaultText.provider_id}:${defaultText.model_name}`
@@ -332,13 +349,8 @@ export default function LLMConfigurationPage() {
               >
                 <InputSelect.Trigger placeholder="Select a default model" />
                 <InputSelect.Content>
-                  {existingLlmProviders.map((provider) => {
-                    const visibleModels = provider.model_configurations.filter(
-                      (m) => m.is_visible
-                    );
-                    if (visibleModels.length === 0) return null;
-
-                    return (
+                  {providersWithVisibleModels.map(
+                    ({ provider, visibleModels }) => (
                       <InputSelect.Group key={provider.id}>
                         <InputSelect.Label>{provider.name}</InputSelect.Label>
                         {visibleModels.map((model) => (
@@ -350,8 +362,8 @@ export default function LLMConfigurationPage() {
                           </InputSelect.Item>
                         ))}
                       </InputSelect.Group>
-                    );
-                  })}
+                    )
+                  )}
                 </InputSelect.Content>
               </InputSelect>
             </HorizontalInput>
@@ -383,21 +395,13 @@ export default function LLMConfigurationPage() {
               />
 
               <div className="flex flex-col gap-2">
-                {[...existingLlmProviders]
-                  .sort((a, b) => {
-                    const aIsDefault = defaultText?.provider_id === a.id;
-                    const bIsDefault = defaultText?.provider_id === b.id;
-                    if (aIsDefault && !bIsDefault) return -1;
-                    if (!aIsDefault && bIsDefault) return 1;
-                    return 0;
-                  })
-                  .map((provider) => (
-                    <ExistingProviderCard
-                      key={provider.id}
-                      provider={provider}
-                      isDefault={defaultText?.provider_id === provider.id}
-                    />
-                  ))}
+                {sortedProviders.map((provider) => (
+                  <ExistingProviderCard
+                    key={provider.id}
+                    provider={provider}
+                    isDefault={defaultText?.provider_id === provider.id}
+                  />
+                ))}
               </div>
             </GeneralLayouts.Section>
 

@@ -44,7 +44,7 @@ import { LLM_PROVIDERS_ADMIN_URL } from "@/lib/llmConfig/constants";
  */
 export function useLLMProviders(personaId?: number) {
   const url =
-    typeof personaId === "number"
+    personaId !== undefined
       ? `/api/llm/persona/${personaId}/providers`
       : "/api/llm/provider";
 
