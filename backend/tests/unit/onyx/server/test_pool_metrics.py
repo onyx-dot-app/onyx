@@ -107,6 +107,9 @@ def test_checkout_event_stores_endpoint_and_increments_gauge() -> None:
             "onyx.server.metrics.postgres_connection_pool.CURRENT_ENDPOINT_CONTEXTVAR"
         ) as mock_ctx,
         patch(
+            "onyx.server.metrics.postgres_connection_pool.CURRENT_TENANT_ID_CONTEXTVAR"
+        ) as mock_tenant_ctx,
+        patch(
             "onyx.server.metrics.postgres_connection_pool._connections_held"
         ) as mock_gauge,
         patch("onyx.server.metrics.postgres_connection_pool._checkout_total"),
@@ -114,12 +117,14 @@ def test_checkout_event_stores_endpoint_and_increments_gauge() -> None:
         mock_labels = MagicMock()
         mock_gauge.labels.return_value = mock_labels
         mock_ctx.get.return_value = "/api/chat/send-message"
+        mock_tenant_ctx.get.return_value = "tenant_xyz"
         listeners["checkout"](None, conn_record, None)
 
     assert conn_record.info["_metrics_endpoint"] == "/api/chat/send-message"
+    assert conn_record.info["_metrics_tenant_id"] == "tenant_xyz"
     assert "_metrics_checkout_time" in conn_record.info
     mock_gauge.labels.assert_called_with(
-        handler="/api/chat/send-message", engine="sync"
+        handler="/api/chat/send-message", engine="sync", tenant_id="tenant_xyz"
     )
     mock_labels.inc.assert_called_once()
 
@@ -144,6 +149,7 @@ def test_checkin_event_observes_hold_duration() -> None:
 
     conn_record = _make_conn_record()
     conn_record.info["_metrics_endpoint"] = "/api/search"
+    conn_record.info["_metrics_tenant_id"] = "tenant_abc"
     conn_record.info["_metrics_checkout_time"] = time.monotonic() - 0.5
 
     with (
@@ -162,7 +168,9 @@ def test_checkin_event_observes_hold_duration() -> None:
 
         listeners["checkin"](None, conn_record)
 
-        mock_gauge.labels.assert_called_with(handler="/api/search", engine="sync")
+        mock_gauge.labels.assert_called_with(
+            handler="/api/search", engine="sync", tenant_id="tenant_abc"
+        )
         mock_labels.dec.assert_called_once()
         mock_hist.labels.assert_called_with(handler="/api/search", engine="sync")
         mock_hist_labels.observe.assert_called_once()
@@ -172,11 +180,12 @@ def test_checkin_event_observes_hold_duration() -> None:
 
     # conn_record.info should be cleaned up
     assert "_metrics_endpoint" not in conn_record.info
+    assert "_metrics_tenant_id" not in conn_record.info
     assert "_metrics_checkout_time" not in conn_record.info
 
 
 def test_checkin_with_missing_endpoint_uses_unknown() -> None:
-    """Verify checkin gracefully handles missing endpoint info."""
+    """Verify checkin gracefully handles missing endpoint and tenant info."""
     engine = MagicMock()
     engine.pool = MagicMock()
     listeners: dict[str, Any] = {}
@@ -207,7 +216,9 @@ def test_checkin_with_missing_endpoint_uses_unknown() -> None:
 
         listeners["checkin"](None, conn_record)
 
-        mock_gauge.labels.assert_called_with(handler="unknown", engine="sync")
+        mock_gauge.labels.assert_called_with(
+            handler="unknown", engine="sync", tenant_id="unknown"
+        )
 
 
 # --- setup_postgres_connection_pool_metrics tests ---
