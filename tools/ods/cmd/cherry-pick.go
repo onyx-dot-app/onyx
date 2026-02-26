@@ -220,6 +220,9 @@ func runCherryPick(cmd *cobra.Command, args []string, opts *CherryPickOptions) {
 	if err := git.SaveCherryPickState(state); err != nil {
 		log.Warnf("Failed to save cherry-pick state (--continue won't work): %v", err)
 	}
+	if err := git.StashOdsBinary(); err != nil {
+		log.Warnf("Failed to stash ods binary (--continue may not work across branch switches): %v", err)
+	}
 
 	finishCherryPick(state, stashResult)
 }
@@ -285,6 +288,10 @@ func finishCherryPick(state *git.CherryPickState, stashResult *git.StashResult) 
 // It finishes any in-progress git cherry-pick, then falls into the normal
 // cherryPickToRelease path which handles skip-applied-commits, push, and PR creation.
 func runCherryPickContinue() {
+	// If uv-sync on a release branch overwrote the installed ods with an older
+	// version, re-exec from the stashed copy so that --continue / cp still work.
+	git.ReExecFromStashedBinary()
+
 	git.CheckGitHubCLI()
 
 	state, err := git.LoadCherryPickState()
