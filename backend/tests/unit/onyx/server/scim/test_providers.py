@@ -2,6 +2,7 @@ from unittest.mock import MagicMock
 from uuid import UUID
 from uuid import uuid4
 
+from ee.onyx.server.scim.models import SCIM_ENTERPRISE_USER_SCHEMA
 from ee.onyx.server.scim.models import SCIM_USER_SCHEMA
 from ee.onyx.server.scim.models import ScimEmail
 from ee.onyx.server.scim.models import ScimGroupMember
@@ -12,6 +13,8 @@ from ee.onyx.server.scim.models import ScimUserGroupRef
 from ee.onyx.server.scim.models import ScimUserResource
 from ee.onyx.server.scim.providers.base import COMMON_IGNORED_PATCH_PATHS
 from ee.onyx.server.scim.providers.base import get_default_provider
+from ee.onyx.server.scim.providers.entra import _ENTRA_IGNORED_PATCH_PATHS
+from ee.onyx.server.scim.providers.entra import EntraProvider
 from ee.onyx.server.scim.providers.okta import OktaProvider
 
 
@@ -165,6 +168,42 @@ class TestOktaProvider:
         result = provider.build_group_resource(group, [])
 
         assert result.members == []
+
+
+class TestEntraProvider:
+    def test_name(self) -> None:
+        assert EntraProvider().name == "entra"
+
+    def test_ignored_patch_paths(self) -> None:
+        paths = EntraProvider().ignored_patch_paths
+        assert paths == _ENTRA_IGNORED_PATCH_PATHS
+        # Enterprise extension URN is now handled (not ignored)
+        assert paths >= COMMON_IGNORED_PATCH_PATHS
+
+    def test_build_user_resource_includes_enterprise_schema(self) -> None:
+        provider = EntraProvider()
+        user = _make_mock_user()
+        result = provider.build_user_resource(user, "ext-entra-1")
+
+        assert result.schemas == [SCIM_USER_SCHEMA, SCIM_ENTERPRISE_USER_SCHEMA]
+
+    def test_build_user_resource_basic(self) -> None:
+        provider = EntraProvider()
+        user = _make_mock_user()
+        result = provider.build_user_resource(user, "ext-entra-1")
+
+        assert result == ScimUserResource(
+            schemas=[SCIM_USER_SCHEMA, SCIM_ENTERPRISE_USER_SCHEMA],
+            id=str(user.id),
+            externalId="ext-entra-1",
+            userName="test@example.com",
+            name=ScimName(givenName="Test", familyName="User", formatted="Test User"),
+            displayName="Test User",
+            emails=[ScimEmail(value="test@example.com", type="work", primary=True)],
+            active=True,
+            groups=[],
+            meta=ScimMeta(resourceType="User"),
+        )
 
 
 class TestGetDefaultProvider:

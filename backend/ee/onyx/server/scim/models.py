@@ -33,6 +33,9 @@ SCIM_SERVICE_PROVIDER_CONFIG_SCHEMA = (
 )
 SCIM_RESOURCE_TYPE_SCHEMA = "urn:ietf:params:scim:schemas:core:2.0:ResourceType"
 SCIM_SCHEMA_SCHEMA = "urn:ietf:params:scim:schemas:core:2.0:Schema"
+SCIM_ENTERPRISE_USER_SCHEMA = (
+    "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User"
+)
 
 
 # ---------------------------------------------------------------------------
@@ -72,6 +75,19 @@ class ScimUserGroupRef(BaseModel):
     display: str | None = None
 
 
+class ScimManagerRef(BaseModel):
+    """Manager sub-attribute for the enterprise extension (RFC 7643 §4.3)."""
+
+    value: str | None = None
+
+
+class ScimEnterpriseExtension(BaseModel):
+    """Enterprise User extension attributes (RFC 7643 §4.3)."""
+
+    department: str | None = None
+    manager: ScimManagerRef | None = None
+
+
 @dataclass
 class ScimMappingFields:
     """Stored SCIM mapping fields that need to round-trip through the IdP.
@@ -97,6 +113,8 @@ class ScimUserResource(BaseModel):
     to match the SCIM wire format (not Python convention).
     """
 
+    model_config = ConfigDict(populate_by_name=True)
+
     schemas: list[str] = Field(default_factory=lambda: [SCIM_USER_SCHEMA])
     id: str | None = None  # Onyx's internal user ID, set on responses
     externalId: str | None = None  # IdP's identifier for this user
@@ -107,6 +125,10 @@ class ScimUserResource(BaseModel):
     active: bool = True
     groups: list[ScimUserGroupRef] = Field(default_factory=list)
     meta: ScimMeta | None = None
+    enterprise_extension: ScimEnterpriseExtension | None = Field(
+        default=None,
+        alias="urn:ietf:params:scim:schemas:extension:enterprise:2.0:User",
+    )
 
 
 class ScimGroupMember(BaseModel):

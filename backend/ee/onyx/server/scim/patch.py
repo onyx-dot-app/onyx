@@ -14,10 +14,13 @@ responsible for persisting changes.
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
+from dataclasses import field
 from typing import Any
 
+from ee.onyx.server.scim.models import SCIM_ENTERPRISE_USER_SCHEMA
 from ee.onyx.server.scim.models import ScimGroupMember
 from ee.onyx.server.scim.models import ScimGroupResource
 from ee.onyx.server.scim.models import ScimPatchOperation
@@ -25,6 +28,11 @@ from ee.onyx.server.scim.models import ScimPatchOperationType
 from ee.onyx.server.scim.models import ScimPatchResourceValue
 from ee.onyx.server.scim.models import ScimPatchValue
 from ee.onyx.server.scim.models import ScimUserResource
+
+logger = logging.getLogger(__name__)
+
+# Lowercased enterprise extension URN for case-insensitive matching
+_ENTERPRISE_URN_LOWER = SCIM_ENTERPRISE_USER_SCHEMA.lower()
 
 # Pattern for email filter paths, e.g.:
 #   emails[primary eq true].value  (Okta)
@@ -86,6 +94,7 @@ class _UserPatchCtx:
 
     data: dict[str, Any]
     name_data: dict[str, Any]
+    ent_data: dict[str, str | None] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -97,7 +106,7 @@ def apply_user_patch(
     operations: list[ScimPatchOperation],
     current: ScimUserResource,
     ignored_paths: frozenset[str] = frozenset(),
-) -> ScimUserResource:
+) -> tuple[ScimUserResource, dict[str, str | None]]:
     """Apply SCIM PATCH operations to a user resource.
 
     Args:
@@ -105,8 +114,10 @@ def apply_user_patch(
         current: The current user resource state.
         ignored_paths: SCIM attribute paths to silently skip (from provider).
 
-    Returns a new ``ScimUserResource`` with the modifications applied.
-    The original object is not mutated.
+    Returns:
+        A tuple of (modified user resource, enterprise extension data dict).
+        The enterprise dict has keys ``"department"`` and ``"manager"``
+        with values set only when a PATCH operation touched them.
 
     Raises:
         ScimPatchError: If an operation targets an unsupported path.
@@ -125,7 +136,7 @@ def apply_user_patch(
             )
 
     ctx.data["name"] = ctx.name_data
-    return ScimUserResource.model_validate(ctx.data)
+    return ScimUserResource.model_validate(ctx.data), ctx.ent_data
 
 
 def _apply_user_replace(
@@ -209,6 +220,8 @@ def _set_user_field(
             ctx.data["emails"] = value
     elif _EMAIL_FILTER_RE.match(path):
         _update_primary_email(ctx.data, value)
+    elif path.startswith(_ENTERPRISE_URN_LOWER):
+        _set_enterprise_field(path, value, ctx.ent_data)
     elif not strict:
         return
     else:
@@ -225,6 +238,54 @@ def _update_primary_email(data: dict[str, Any], value: ScimPatchValue) -> None:
     else:
         emails.append({"value": value, "type": "work", "primary": True})
     data["emails"] = emails
+
+
+def _to_dict(value: ScimPatchValue) -> dict | None:
+    """Coerce a SCIM patch value to a plain dict if possible.
+
+    Pydantic may parse raw dicts as ``ScimPatchResourceValue`` (which uses
+    ``extra="allow"``), so we also dump those back to a dict.
+    """
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, ScimPatchResourceValue):
+        return value.model_dump(exclude_unset=True)
+    return None
+
+
+def _set_enterprise_field(
+    path: str,
+    value: ScimPatchValue,
+    ent_data: dict[str, str | None],
+) -> None:
+    """Handle enterprise extension URN paths or value dicts."""
+    # Full URN as key with dict value (path-less PATCH)
+    # e.g. key="urn:...:user", value={"department": "Eng", "manager": {...}}
+    if path == _ENTERPRISE_URN_LOWER:
+        d = _to_dict(value)
+        if d is not None:
+            if "department" in d:
+                ent_data["department"] = d["department"]
+            if "manager" in d:
+                mgr = d["manager"]
+                if isinstance(mgr, dict):
+                    ent_data["manager"] = mgr.get("value")
+        return
+
+    # Dotted URN path, e.g. "urn:...:user:department"
+    suffix = path[len(_ENTERPRISE_URN_LOWER) :].lstrip(":").lower()
+    if suffix == "department":
+        ent_data["department"] = str(value) if value is not None else None
+    elif suffix == "manager":
+        d = _to_dict(value)
+        if d is not None:
+            ent_data["manager"] = d.get("value")
+        elif isinstance(value, str):
+            ent_data["manager"] = value
+    else:
+        # Unknown enterprise attributes are silently ignored rather than
+        # rejected — IdPs may send attributes we don't model yet.
+        logger.warning("Ignoring unknown enterprise extension attribute '%s'", suffix)
 
 
 # ---------------------------------------------------------------------------
