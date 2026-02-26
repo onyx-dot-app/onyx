@@ -28,6 +28,11 @@ on:
         required: false
         default: ""
         type: string
+      ollama_models:
+        description: "Comma-separated models for ollama_chat"
+        required: false
+        default: ""
+        type: string
       azure_api_base:
         description: "API base for azure provider"
         required: false
@@ -48,6 +53,8 @@ on:
       vertex_ai_custom_config_json:
         required: false
       azure_api_key:
+        required: false
+      ollama_api_key:
         required: false
       DOCKER_USERNAME:
         required: true
@@ -192,6 +199,14 @@ jobs:
             custom_config_secret: ""
             api_base: ${{ inputs.azure_api_base }}
             api_version: "2025-04-01-preview"
+            deployment_name: ""
+            required: false
+          - provider: ollama_chat
+            models: ${{ inputs.ollama_models }}
+            api_key_secret: ollama_api_key
+            custom_config_secret: ""
+            api_base: "https://ollama.com"
+            api_version: ""
             deployment_name: ""
             required: false
     runs-on:
