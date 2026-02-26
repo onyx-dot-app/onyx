@@ -20,12 +20,15 @@ jobs:
       anthropic_models: ${{ vars.NIGHTLY_LLM_ANTHROPIC_MODELS }}
       bedrock_models: ${{ vars.NIGHTLY_LLM_BEDROCK_MODELS }}
       vertex_ai_models: ${{ vars.NIGHTLY_LLM_VERTEX_AI_MODELS }}
+      azure_models: ${{ vars.NIGHTLY_LLM_AZURE_MODELS }}
+      azure_api_base: ${{ vars.NIGHTLY_LLM_AZURE_API_BASE }}
       strict: true
     secrets:
       openai_api_key: ${{ secrets.OPENAI_API_KEY }}
       anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
       bedrock_api_key: ${{ secrets.BEDROCK_API_KEY }}
       vertex_ai_custom_config_json: ${{ secrets.NIGHTLY_LLM_VERTEX_AI_CUSTOM_CONFIG_JSON }}
+      azure_api_key: ${{ secrets.AZURE_API_KEY }}
       DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
       DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
 
