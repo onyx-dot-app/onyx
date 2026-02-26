@@ -1372,13 +1372,13 @@ export default function AgentEditorPage({
                               {canUpdateFeaturedStatus && (
                                 <>
                                   <InputLayouts.Horizontal
-                                    name="is_default_persona"
+                                    name="featured"
                                     title="Feature This Agent"
                                     description="Show this agent at the top of the explore agents list and automatically pin it to the sidebar for new users with access."
                                   >
-                                    <SwitchField name="is_default_persona" />
+                                    <SwitchField name="featured" />
                                   </InputLayouts.Horizontal>
-                                  {values.is_default_persona && !isShared && (
+                                  {values.featured && !isShared && (
                                     <Message
                                       static
                                       close={false}
