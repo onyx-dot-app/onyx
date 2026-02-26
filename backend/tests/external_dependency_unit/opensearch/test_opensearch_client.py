@@ -1,4 +1,4 @@
-"""External dependency unit tests for OpenSearchClient.
+"""External dependency unit tests for OpenSearchIndexClient.
 
 These tests assume OpenSearch is running and test all implemented methods
 using real schemas, pipelines, and search queries from the codebase.
@@ -19,7 +19,7 @@ from onyx.access.utils import prefix_user_email
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import IndexFilters
 from onyx.document_index.interfaces_new import TenantState
-from onyx.document_index.opensearch.client import OpenSearchClient
+from onyx.document_index.opensearch.client import OpenSearchIndexClient
 from onyx.document_index.opensearch.client import wait_for_opensearch_with_timeout
 from onyx.document_index.opensearch.constants import DEFAULT_MAX_CHUNK_SIZE
 from onyx.document_index.opensearch.opensearch_document_index import (
@@ -125,10 +125,10 @@ def opensearch_available() -> None:
 @pytest.fixture(scope="function")
 def test_client(
     opensearch_available: None,  # noqa: ARG001
-) -> Generator[OpenSearchClient, None, None]:
+) -> Generator[OpenSearchIndexClient, None, None]:
     """Creates an OpenSearch client for testing with automatic cleanup."""
     test_index_name = f"test_index_{uuid.uuid4().hex[:8]}"
-    client = OpenSearchClient(index_name=test_index_name)
+    client = OpenSearchIndexClient(index_name=test_index_name)
 
     yield client  # Test runs here.
 
@@ -142,7 +142,7 @@ def test_client(
 
 
 @pytest.fixture(scope="function")
-def search_pipeline(test_client: OpenSearchClient) -> Generator[None, None, None]:
+def search_pipeline(test_client: OpenSearchIndexClient) -> Generator[None, None, None]:
     """Creates a search pipeline for testing with automatic cleanup."""
     test_client.create_search_pipeline(
         pipeline_id=MIN_MAX_NORMALIZATION_PIPELINE_NAME,
@@ -158,9 +158,9 @@ def search_pipeline(test_client: OpenSearchClient) -> Generator[None, None, None
 
 
 class TestOpenSearchClient:
-    """Tests for OpenSearchClient."""
+    """Tests for OpenSearchIndexClient."""
 
-    def test_create_index(self, test_client: OpenSearchClient) -> None:
+    def test_create_index(self, test_client: OpenSearchIndexClient) -> None:
         """Tests creating an index with a real schema."""
         # Precondition.
         mappings = DocumentSchema.get_document_schema(
@@ -176,7 +176,7 @@ class TestOpenSearchClient:
         # Verify index exists.
         assert test_client.validate_index(expected_mappings=mappings) is True
 
-    def test_delete_existing_index(self, test_client: OpenSearchClient) -> None:
+    def test_delete_existing_index(self, test_client: OpenSearchIndexClient) -> None:
         """Tests deleting an existing index returns True."""
         # Precondition.
         mappings = DocumentSchema.get_document_schema(
@@ -193,7 +193,7 @@ class TestOpenSearchClient:
         assert result is True
         assert test_client.validate_index(expected_mappings=mappings) is False
 
-    def test_delete_nonexistent_index(self, test_client: OpenSearchClient) -> None:
+    def test_delete_nonexistent_index(self, test_client: OpenSearchIndexClient) -> None:
         """Tests deleting a nonexistent index returns False."""
         # Under test.
         # Don't create index, just try to delete.
@@ -202,7 +202,7 @@ class TestOpenSearchClient:
         # Postcondition.
         assert result is False
 
-    def test_index_exists(self, test_client: OpenSearchClient) -> None:
+    def test_index_exists(self, test_client: OpenSearchIndexClient) -> None:
         """Tests checking if an index exists."""
         # Precondition.
         # Index should not exist before creation.
@@ -219,7 +219,7 @@ class TestOpenSearchClient:
         # Index should exist after creation.
         assert test_client.index_exists() is True
 
-    def test_validate_index(self, test_client: OpenSearchClient) -> None:
+    def test_validate_index(self, test_client: OpenSearchIndexClient) -> None:
         """Tests validating an index."""
         # Precondition.
         mappings = DocumentSchema.get_document_schema(
@@ -239,7 +239,7 @@ class TestOpenSearchClient:
         # Should return True after creation.
         assert test_client.validate_index(expected_mappings=mappings) is True
 
-    def test_create_duplicate_index(self, test_client: OpenSearchClient) -> None:
+    def test_create_duplicate_index(self, test_client: OpenSearchIndexClient) -> None:
         """Tests creating an index twice raises an error."""
         # Precondition.
         mappings = DocumentSchema.get_document_schema(
@@ -254,14 +254,14 @@ class TestOpenSearchClient:
         with pytest.raises(Exception, match="already exists"):
             test_client.create_index(mappings=mappings, settings=settings)
 
-    def test_update_settings(self, test_client: OpenSearchClient) -> None:
+    def test_update_settings(self, test_client: OpenSearchIndexClient) -> None:
         """Tests that update_settings raises NotImplementedError."""
         # Under test and postcondition.
         with pytest.raises(NotImplementedError):
             test_client.update_settings(settings={})
 
     def test_create_and_delete_search_pipeline(
-        self, test_client: OpenSearchClient
+        self, test_client: OpenSearchIndexClient
     ) -> None:
         """Tests creating and deleting a search pipeline."""
         # Under test and postcondition.
@@ -278,7 +278,7 @@ class TestOpenSearchClient:
         )
 
     def test_index_document(
-        self, test_client: OpenSearchClient, monkeypatch: pytest.MonkeyPatch
+        self, test_client: OpenSearchIndexClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Tests indexing a document."""
         # Precondition.
@@ -306,7 +306,7 @@ class TestOpenSearchClient:
         )
 
     def test_bulk_index_documents(
-        self, test_client: OpenSearchClient, monkeypatch: pytest.MonkeyPatch
+        self, test_client: OpenSearchIndexClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Tests bulk indexing documents."""
         # Precondition.
@@ -337,7 +337,7 @@ class TestOpenSearchClient:
         )
 
     def test_index_duplicate_document(
-        self, test_client: OpenSearchClient, monkeypatch: pytest.MonkeyPatch
+        self, test_client: OpenSearchIndexClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Tests indexing a duplicate document raises an error."""
         # Precondition.
@@ -365,7 +365,7 @@ class TestOpenSearchClient:
             test_client.index_document(document=doc, tenant_state=tenant_state)
 
     def test_get_document(
-        self, test_client: OpenSearchClient, monkeypatch: pytest.MonkeyPatch
+        self, test_client: OpenSearchIndexClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Tests getting a document."""
         # Precondition.
@@ -401,7 +401,7 @@ class TestOpenSearchClient:
         assert retrieved_doc == original_doc
 
     def test_get_nonexistent_document(
-        self, test_client: OpenSearchClient, monkeypatch: pytest.MonkeyPatch
+        self, test_client: OpenSearchIndexClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Tests getting a nonexistent document raises an error."""
         # Precondition.
@@ -419,7 +419,7 @@ class TestOpenSearchClient:
             )
 
     def test_delete_existing_document(
-        self, test_client: OpenSearchClient, monkeypatch: pytest.MonkeyPatch
+        self, test_client: OpenSearchIndexClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Tests deleting an existing document returns True."""
         # Precondition.
@@ -455,7 +455,7 @@ class TestOpenSearchClient:
             test_client.get_document(document_chunk_id=doc_chunk_id)
 
     def test_delete_nonexistent_document(
-        self, test_client: OpenSearchClient, monkeypatch: pytest.MonkeyPatch
+        self, test_client: OpenSearchIndexClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Tests deleting a nonexistent document returns False."""
         # Precondition.
@@ -476,7 +476,7 @@ class TestOpenSearchClient:
         assert result is False
 
     def test_delete_by_query(
-        self, test_client: OpenSearchClient, monkeypatch: pytest.MonkeyPatch
+        self, test_client: OpenSearchIndexClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Tests deleting documents by query."""
         # Precondition.
@@ -552,7 +552,7 @@ class TestOpenSearchClient:
         assert len(keep_ids) == 1
 
     def test_update_document(
-        self, test_client: OpenSearchClient, monkeypatch: pytest.MonkeyPatch
+        self, test_client: OpenSearchIndexClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Tests updating a document's properties."""
         # Precondition.
@@ -601,7 +601,7 @@ class TestOpenSearchClient:
         assert updated_doc.public == doc.public
 
     def test_update_nonexistent_document(
-        self, test_client: OpenSearchClient, monkeypatch: pytest.MonkeyPatch
+        self, test_client: OpenSearchIndexClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Tests updating a nonexistent document raises an error."""
         # Precondition.
@@ -623,7 +623,7 @@ class TestOpenSearchClient:
 
     def test_hybrid_search_with_pipeline(
         self,
-        test_client: OpenSearchClient,
+        test_client: OpenSearchIndexClient,
         search_pipeline: None,  # noqa: ARG002
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
@@ -704,7 +704,7 @@ class TestOpenSearchClient:
 
     def test_search_empty_index(
         self,
-        test_client: OpenSearchClient,
+        test_client: OpenSearchIndexClient,
         search_pipeline: None,  # noqa: ARG002
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
@@ -743,7 +743,7 @@ class TestOpenSearchClient:
 
     def test_hybrid_search_with_pipeline_and_filters(
         self,
-        test_client: OpenSearchClient,
+        test_client: OpenSearchIndexClient,
         search_pipeline: None,  # noqa: ARG002
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
@@ -863,7 +863,7 @@ class TestOpenSearchClient:
 
     def test_hybrid_search_with_pipeline_and_filters_returns_chunks_with_related_content_first(
         self,
-        test_client: OpenSearchClient,
+        test_client: OpenSearchIndexClient,
         search_pipeline: None,  # noqa: ARG002
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
@@ -993,7 +993,7 @@ class TestOpenSearchClient:
             previous_score = current_score
 
     def test_delete_by_query_multitenant_isolation(
-        self, test_client: OpenSearchClient, monkeypatch: pytest.MonkeyPatch
+        self, test_client: OpenSearchIndexClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """
         Tests delete_by_query respects tenant boundaries in multi-tenant mode.
@@ -1087,7 +1087,7 @@ class TestOpenSearchClient:
         assert set(remaining_y_ids) == expected_y_ids
 
     def test_delete_by_query_nonexistent_document(
-        self, test_client: OpenSearchClient, monkeypatch: pytest.MonkeyPatch
+        self, test_client: OpenSearchIndexClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """
         Tests delete_by_query for non-existent document returns 0 deleted.
@@ -1116,7 +1116,7 @@ class TestOpenSearchClient:
         assert num_deleted == 0
 
     def test_search_for_document_ids(
-        self, test_client: OpenSearchClient, monkeypatch: pytest.MonkeyPatch
+        self, test_client: OpenSearchIndexClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Tests search_for_document_ids method returns correct chunk IDs."""
         # Precondition.
@@ -1181,7 +1181,7 @@ class TestOpenSearchClient:
         assert set(chunk_ids) == expected_ids
 
     def test_search_with_no_document_access_can_retrieve_all_documents(
-        self, test_client: OpenSearchClient, monkeypatch: pytest.MonkeyPatch
+        self, test_client: OpenSearchIndexClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """
         Tests search with no document access can retrieve all documents, even
@@ -1259,7 +1259,7 @@ class TestOpenSearchClient:
 
     def test_time_cutoff_filter(
         self,
-        test_client: OpenSearchClient,
+        test_client: OpenSearchIndexClient,
         search_pipeline: None,  # noqa: ARG002
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
@@ -1352,7 +1352,7 @@ class TestOpenSearchClient:
         )
 
     def test_random_search(
-        self, test_client: OpenSearchClient, monkeypatch: pytest.MonkeyPatch
+        self, test_client: OpenSearchIndexClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Tests the random search query works."""
         # Precondition.
