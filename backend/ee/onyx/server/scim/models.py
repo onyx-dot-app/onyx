@@ -7,6 +7,7 @@ SCIM protocol schemas follow the wire format defined in:
 Admin API schemas are internal to Onyx and used for SCIM token management.
 """
 
+from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 
@@ -69,6 +70,23 @@ class ScimUserGroupRef(BaseModel):
 
     value: str
     display: str | None = None
+
+
+@dataclass
+class ScimMappingFields:
+    """Stored SCIM mapping fields that need to round-trip through the IdP.
+
+    Entra ID sends structured name components, email metadata, and enterprise
+    extension attributes that must be returned verbatim in subsequent GET
+    responses. These fields are persisted on ScimUserMapping and threaded
+    through the DAL, provider, and endpoint layers.
+    """
+
+    department: str | None = None
+    manager: str | None = None
+    given_name: str | None = None
+    family_name: str | None = None
+    scim_emails_json: str | None = None
 
 
 class ScimUserResource(BaseModel):
