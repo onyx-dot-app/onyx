@@ -345,9 +345,7 @@ def update_persona_shared(
     )
 
     if user and user.role != UserRole.ADMIN and persona.user_id != user.id:
-        raise HTTPException(
-            status_code=403, detail="You don't have permission to modify this persona"
-        )
+        raise PermissionError("You don't have permission to modify this persona")
 
     versioned_update_persona_access = fetch_versioned_implementation(
         "onyx.db.persona", "update_persona_access"
@@ -366,7 +364,7 @@ def update_persona_shared(
             db_session.query(PersonaLabel).filter(PersonaLabel.id.in_(label_ids)).all()
         )
         if len(labels) != len(label_ids):
-            raise HTTPException(status_code=400, detail="Some label IDs were not found in the database")
+            raise ValueError("Some label IDs were not found in the database")
         persona.labels.clear()
         persona.labels = labels
 
