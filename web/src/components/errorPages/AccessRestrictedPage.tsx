@@ -41,8 +41,14 @@ export default function AccessRestricted() {
   const [error, setError] = useState<string | null>(null);
   const { data: license } = useLicense();
 
-  // Distinguish between "never had a license" vs "license lapsed"
-  const hasLicenseLapsed = license?.has_license === true;
+  const hadPreviousLicense = license?.has_license === true;
+  const showRenewalMessage = NEXT_PUBLIC_CLOUD_ENABLED || hadPreviousLicense;
+
+  const initialModalMessage = showRenewalMessage
+    ? NEXT_PUBLIC_CLOUD_ENABLED
+      ? "Your access to Onyx has been temporarily suspended due to a lapse in your subscription."
+      : "Your access to Onyx has been temporarily suspended due to a lapse in your license."
+    : "An Enterprise license is required to use Onyx. Your data is protected and will be available once a license is activated.";
 
   const handleResubscribe = async () => {
     setIsLoading(true);
@@ -72,11 +78,7 @@ export default function AccessRestricted() {
         <SvgLock className="stroke-status-error-05 w-[1.5rem] h-[1.5rem]" />
       </div>
 
-      <Text text03>
-        {hasLicenseLapsed
-          ? "Your access to Onyx has been temporarily suspended due to a lapse in your subscription."
-          : "An Enterprise license is required to use Onyx. Your data is protected and will be available once a license is activated."}
-      </Text>
+      <Text text03>{initialModalMessage}</Text>
 
       {NEXT_PUBLIC_CLOUD_ENABLED ? (
         <>
@@ -111,7 +113,7 @@ export default function AccessRestricted() {
       ) : (
         <>
           <Text text03>
-            {hasLicenseLapsed
+            {hadPreviousLicense
               ? "To reinstate your access and continue using Onyx, please contact your system administrator to renew your license."
               : "To get started, please contact your system administrator to obtain an Enterprise license."}
           </Text>
@@ -121,8 +123,8 @@ export default function AccessRestricted() {
             <Link className={linkClassName} href="/admin/billing">
               Admin Billing
             </Link>{" "}
-            page to {hasLicenseLapsed ? "renew" : "activate"} your license, sign
-            up through Stripe or reach out to{" "}
+            page to {hadPreviousLicense ? "renew" : "activate"} your license,
+            sign up through Stripe or reach out to{" "}
             <a className={linkClassName} href="mailto:support@onyx.app">
               support@onyx.app
             </a>
