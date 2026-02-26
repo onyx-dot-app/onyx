@@ -45,15 +45,25 @@ def _env_true(env_var: str, default: bool = False) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
-def _split_csv_env(env_var: str) -> list[str]:
-    return [
-        part.strip() for part in os.environ.get(env_var, "").split(",") if part.strip()
-    ]
+def _parse_models_env(env_var: str) -> list[str]:
+    raw_value = os.environ.get(env_var, "").strip()
+    if not raw_value:
+        return []
+
+    try:
+        parsed_json = json.loads(raw_value)
+    except json.JSONDecodeError:
+        parsed_json = None
+
+    if isinstance(parsed_json, list):
+        return [str(model).strip() for model in parsed_json if str(model).strip()]
+
+    return [part.strip() for part in raw_value.split(",") if part.strip()]
 
 
 def _load_provider_config() -> NightlyProviderConfig:
     provider = os.environ.get(_ENV_PROVIDER, "").strip().lower()
-    model_names = _split_csv_env(_ENV_MODELS)
+    model_names = _parse_models_env(_ENV_MODELS)
     api_key = os.environ.get(_ENV_API_KEY) or None
     api_base = os.environ.get(_ENV_API_BASE) or None
     strict = _env_true(_ENV_STRICT, default=False)
@@ -313,10 +323,21 @@ def test_nightly_provider_chat_workflow(admin_user: DATestUser) -> None:
     _seed_connector_for_search_tool(admin_user)
     search_tool_id = _get_internal_search_tool_id(admin_user)
 
+    failures: list[str] = []
     for model_name in config.model_names:
-        _create_and_test_provider_for_model(
-            admin_user=admin_user,
-            config=config,
-            model_name=model_name,
-            search_tool_id=search_tool_id,
-        )
+        try:
+            _create_and_test_provider_for_model(
+                admin_user=admin_user,
+                config=config,
+                model_name=model_name,
+                search_tool_id=search_tool_id,
+            )
+        except BaseException as exc:
+            if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+                raise
+            failures.append(
+                f"provider={config.provider} model={model_name} error={type(exc).__name__}: {exc}"
+            )
+
+    if failures:
+        pytest.fail("Nightly provider chat failures:\n" + "\n".join(failures))
