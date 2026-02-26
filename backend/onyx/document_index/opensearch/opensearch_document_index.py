@@ -534,12 +534,21 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 mappings=expected_mappings,
                 settings=index_settings,
             )
-        if not self._os_client.validate_index(
-            expected_mappings=expected_mappings,
-        ):
-            raise RuntimeError(
-                f"The index {self._index_name} is not valid. The expected mappings do not match the actual mappings."
-            )
+        else:
+            # Index exists - ensure schema is up to date by applying mappings.
+            # This is idempotent: existing fields with same type = no-op, new fields = added.
+            # Will raise an exception if someone changed a field type (requires reindex).
+            try:
+                self._os_client.put_mapping(expected_mappings)
+                logger.info(
+                    f"Successfully ensured schema is up to date for index {self._index_name}"
+                )
+            except Exception as e:
+                logger.error(
+                    f"Failed to update mappings for index {self._index_name}. "
+                    f"This likely means a field type was changed which requires reindexing. Error: {e}"
+                )
+                raise
 
         self._os_client.create_search_pipeline(
             pipeline_id=MIN_MAX_NORMALIZATION_PIPELINE_NAME,
