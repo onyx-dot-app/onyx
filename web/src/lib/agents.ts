@@ -131,7 +131,8 @@ export async function updateAgentSharedStatus(
   userIds: string[],
   groupIds: number[],
   isPublic: boolean | undefined,
-  isPaidEnterpriseFeaturesEnabled: boolean
+  isPaidEnterpriseFeaturesEnabled: boolean,
+  labelIds?: number[]
 ): Promise<null | string> {
   // MIT versions should not send group_ids - warn if caller provided non-empty groups
   if (!isPaidEnterpriseFeaturesEnabled && groupIds.length > 0) {
@@ -152,6 +153,7 @@ export async function updateAgentSharedStatus(
         // Only include group_ids for enterprise versions
         group_ids: isPaidEnterpriseFeaturesEnabled ? groupIds : undefined,
         is_public: isPublic,
+        label_ids: labelIds,
       }),
     });
 
@@ -163,6 +165,66 @@ export async function updateAgentSharedStatus(
     return errorMessage;
   } catch (error) {
     console.error("updateAgentSharedStatus: Network error", error);
+    return "Network error. Please check your connection and try again.";
+  }
+}
+
+/**
+ * Updates the labels assigned to an agent via the share endpoint.
+ *
+ * @param agentId - The ID of the agent to update
+ * @param labelIds - Array of label IDs to assign to the agent
+ * @returns null on success, or an error message string on failure
+ */
+export async function updateAgentLabels(
+  agentId: number,
+  labelIds: number[]
+): Promise<string | null> {
+  try {
+    const response = await fetch(`/api/persona/${agentId}/share`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ label_ids: labelIds }),
+    });
+
+    if (response.ok) {
+      return null;
+    }
+
+    const errorMessage = (await response.json()).detail || "Unknown error";
+    return errorMessage;
+  } catch (error) {
+    console.error("updateAgentLabels: Network error", error);
+    return "Network error. Please check your connection and try again.";
+  }
+}
+
+/**
+ * Updates the featured (default) status of an agent.
+ *
+ * @param agentId - The ID of the agent to update
+ * @param isFeatured - Whether the agent should be featured
+ * @returns null on success, or an error message string on failure
+ */
+export async function updateAgentFeaturedStatus(
+  agentId: number,
+  isFeatured: boolean
+): Promise<string | null> {
+  try {
+    const response = await fetch(`/api/admin/persona/${agentId}/default`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ is_default_persona: isFeatured }),
+    });
+
+    if (response.ok) {
+      return null;
+    }
+
+    const errorMessage = (await response.json()).detail || "Unknown error";
+    return errorMessage;
+  } catch (error) {
+    console.error("updateAgentFeaturedStatus: Network error", error);
     return "Network error. Please check your connection and try again.";
   }
 }
