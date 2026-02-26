@@ -533,10 +533,12 @@ services:
       - path: .env
         required: false
 
-    # Below is needed for the `docker-out-of-docker` execution mode
+    # Below is needed for the `docker-out-of-docker` execution mode.
+    # Prefer rootless Linux socket at ${XDG_RUNTIME_DIR}/docker.sock when available.
+    # Fallback keeps macOS / Docker Desktop compatibility via /var/run/docker.sock.
     user: root
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+      - ${XDG_RUNTIME_DIR:-/var/run}/docker.sock:/var/run/docker.sock
 
     # uncomment below + comment out the above to use the `docker-in-docker` execution mode
     # privileged: true
