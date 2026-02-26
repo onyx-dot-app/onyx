@@ -72,6 +72,7 @@ export function ClientLayout({
             enableEnterpriseSS={enableEnterprise}
           />
           <div
+            data-main-container
             className={cn(
               "flex flex-1 flex-col min-w-0 min-h-0 overflow-y-auto",
               !hasOwnLayout && "py-10 px-4 md:px-12"
