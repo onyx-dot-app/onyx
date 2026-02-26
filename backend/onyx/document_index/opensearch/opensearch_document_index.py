@@ -7,6 +7,7 @@ from opensearchpy import NotFoundError
 
 from onyx.access.models import DocumentAccess
 from onyx.configs.app_configs import USING_AWS_MANAGED_OPENSEARCH
+from onyx.configs.app_configs import VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT
 from onyx.configs.chat_configs import NUM_RETURNED_HITS
 from onyx.configs.chat_configs import TITLE_CONTENT_RATIO
 from onyx.configs.constants import PUBLIC_DOC_PAT
@@ -40,6 +41,7 @@ from onyx.document_index.interfaces_new import IndexingMetadata
 from onyx.document_index.interfaces_new import MetadataUpdateRequest
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.client import OpenSearchClient
+from onyx.document_index.opensearch.client import OpenSearchIndexClient
 from onyx.document_index.opensearch.client import SearchHit
 from onyx.document_index.opensearch.cluster_settings import OPENSEARCH_CLUSTER_SETTINGS
 from onyx.document_index.opensearch.schema import ACCESS_CONTROL_LIST_FIELD_NAME
@@ -91,6 +93,25 @@ def generate_opensearch_filtered_access_control_list(
     access_control_list = access.to_acl()
     access_control_list.discard(PUBLIC_DOC_PAT)
     return list(access_control_list)
+
+
+def set_cluster_state(client: OpenSearchClient) -> None:
+    if not client.put_cluster_settings(settings=OPENSEARCH_CLUSTER_SETTINGS):
+        logger.error(
+            "Failed to put cluster settings. If the settings have never been set before, "
+            "this may cause unexpected index creation when indexing documents into an "
+            "index that does not exist, or may cause expected logs to not appear. If this "
+            "is not the first time running Onyx against this instance of OpenSearch, these "
+            "settings have likely already been set. Not taking any further action..."
+        )
+    client.create_search_pipeline(
+        pipeline_id=MIN_MAX_NORMALIZATION_PIPELINE_NAME,
+        pipeline_body=MIN_MAX_NORMALIZATION_PIPELINE_CONFIG,
+    )
+    client.create_search_pipeline(
+        pipeline_id=ZSCORE_NORMALIZATION_PIPELINE_NAME,
+        pipeline_body=ZSCORE_NORMALIZATION_PIPELINE_CONFIG,
+    )
 
 
 def _convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
@@ -248,6 +269,8 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
     def __init__(
         self,
         index_name: str,
+        embedding_dim: int,
+        embedding_precision: EmbeddingPrecision,
         secondary_index_name: str | None,
         large_chunks_enabled: bool,  # noqa: ARG002
         secondary_large_chunks_enabled: bool | None,  # noqa: ARG002
@@ -258,10 +281,6 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
             index_name=index_name,
             secondary_index_name=secondary_index_name,
         )
-        if multitenant:
-            raise ValueError(
-                "Bug: OpenSearch is not yet ready for multitenant environments but something tried to use it."
-            )
         if multitenant != MULTI_TENANT:
             raise ValueError(
                 "Bug: Multitenant mismatch when initializing an OpenSearchDocumentIndex. "
@@ -269,8 +288,10 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
             )
         tenant_id = get_current_tenant_id()
         self._real_index = OpenSearchDocumentIndex(
-            index_name=index_name,
             tenant_state=TenantState(tenant_id=tenant_id, multitenant=multitenant),
+            index_name=index_name,
+            embedding_dim=embedding_dim,
+            embedding_precision=embedding_precision,
         )
 
     @staticmethod
@@ -279,9 +300,8 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
         embedding_dims: list[int],
         embedding_precisions: list[EmbeddingPrecision],
     ) -> None:
-        # TODO(andrei): Implement.
         raise NotImplementedError(
-            "Multitenant index registration is not yet implemented for OpenSearch."
+            "Bug: Multitenant index registration is not supported for OpenSearch."
         )
 
     def ensure_indices_exist(
@@ -471,19 +491,37 @@ class OpenSearchDocumentIndex(DocumentIndex):
     for an OpenSearch search engine instance. It handles the complete lifecycle
     of document chunks within a specific OpenSearch index/schema.
 
-    Although not yet used in this way in the codebase, each kind of embedding
-    used should correspond to a different instance of this class, and therefore
-    a different index in OpenSearch.
+    Each kind of embedding used should correspond to a different instance of
+    this class, and therefore a different index in OpenSearch.
+
+    If in a multitenant environment and
+    VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT, will verify and create the index
+    if necessary on initialization. This is because there is no logic which runs
+    on cluster restart which scans through all search settings over all tenants
+    and creates the relevant indices.
+
+    Args:
+        tenant_state: The tenant state of the caller.
+        index_name: The name of the index to interact with.
+        embedding_dim: The dimensionality of the embeddings used for the index.
+        embedding_precision: The precision of the embeddings used for the index.
     """
 
     def __init__(
         self,
-        index_name: str,
         tenant_state: TenantState,
+        index_name: str,
+        embedding_dim: int,
+        embedding_precision: EmbeddingPrecision,
     ) -> None:
         self._index_name: str = index_name
         self._tenant_state: TenantState = tenant_state
-        self._os_client = OpenSearchClient(index_name=self._index_name)
+        self._client = OpenSearchIndexClient(index_name=self._index_name)
+
+        if self._tenant_state.multitenant and VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT:
+            self.verify_and_create_index_if_necessary(
+                embedding_dim=embedding_dim, embedding_precision=embedding_precision
+            )
 
     def verify_and_create_index_if_necessary(
         self,
@@ -492,10 +530,15 @@ class OpenSearchDocumentIndex(DocumentIndex):
     ) -> None:
         """Verifies and creates the index if necessary.
 
-        Also puts the desired cluster settings.
+        Also puts the desired cluster settings if not in a multitenant
+        environment.
 
-        Also puts the desired search pipeline state, creating the pipelines if
-        they do not exist and updating them otherwise.
+        Also puts the desired search pipeline state if not in a multitenant
+        environment, creating the pipelines if they do not exist and updating
+        them otherwise.
+
+        In a multitenant environment, the above steps happen explicitly on
+        setup.
 
         Args:
             embedding_dim: Vector dimensionality for the vector similarity part
@@ -508,47 +551,35 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 search pipelines.
         """
         logger.debug(
-            f"[OpenSearchDocumentIndex] Verifying and creating index {self._index_name} if necessary, "
-            f"with embedding dimension {embedding_dim}."
+            f"[OpenSearchDocumentIndex] Verifying and creating index {self._index_name} if "
+            f"necessary, with embedding dimension {embedding_dim}."
         )
+
+        if not self._tenant_state.multitenant:
+            set_cluster_state(self._client)
+
         expected_mappings = DocumentSchema.get_document_schema(
             embedding_dim, self._tenant_state.multitenant
         )
-        if not self._os_client.put_cluster_settings(
-            settings=OPENSEARCH_CLUSTER_SETTINGS
-        ):
-            logger.error(
-                f"Failed to put cluster settings for index {self._index_name}. If the settings have never been set before this "
-                "may cause unexpected index creation when indexing documents into an index that does not exist, or may cause "
-                "expected logs to not appear. If this is not the first time running Onyx against this instance of OpenSearch, "
-                "these settings have likely already been set. Not taking any further action..."
-            )
-        if not self._os_client.index_exists():
+
+        if not self._client.index_exists():
             if USING_AWS_MANAGED_OPENSEARCH:
                 index_settings = (
                     DocumentSchema.get_index_settings_for_aws_managed_opensearch()
                 )
             else:
                 index_settings = DocumentSchema.get_index_settings()
-            self._os_client.create_index(
+            self._client.create_index(
                 mappings=expected_mappings,
                 settings=index_settings,
             )
-        if not self._os_client.validate_index(
+        if not self._client.validate_index(
             expected_mappings=expected_mappings,
         ):
             raise RuntimeError(
-                f"The index {self._index_name} is not valid. The expected mappings do not match the actual mappings."
+                f"The index {self._index_name} is not valid. The expected mappings do not match "
+                "the actual mappings."
             )
-
-        self._os_client.create_search_pipeline(
-            pipeline_id=MIN_MAX_NORMALIZATION_PIPELINE_NAME,
-            pipeline_body=MIN_MAX_NORMALIZATION_PIPELINE_CONFIG,
-        )
-        self._os_client.create_search_pipeline(
-            pipeline_id=ZSCORE_NORMALIZATION_PIPELINE_NAME,
-            pipeline_body=ZSCORE_NORMALIZATION_PIPELINE_CONFIG,
-        )
 
     def index(
         self,
@@ -620,7 +651,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             )
             # Now index. This will raise if a chunk of the same ID exists, which
             # we do not expect because we should have deleted all chunks.
-            self._os_client.bulk_index_documents(
+            self._client.bulk_index_documents(
                 documents=chunk_batch,
                 tenant_state=self._tenant_state,
             )
@@ -660,7 +691,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             tenant_state=self._tenant_state,
         )
 
-        return self._os_client.delete_by_query(query_body)
+        return self._client.delete_by_query(query_body)
 
     def update(
         self,
@@ -760,7 +791,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
                         document_id=doc_id,
                         chunk_index=chunk_index,
                     )
-                    self._os_client.update_document(
+                    self._client.update_document(
                         document_chunk_id=document_chunk_id,
                         properties_to_update=properties_to_update,
                     )
@@ -799,7 +830,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 min_chunk_index=chunk_request.min_chunk_ind,
                 max_chunk_index=chunk_request.max_chunk_ind,
             )
-            search_hits = self._os_client.search(
+            search_hits = self._client.search(
                 body=query_body,
                 search_pipeline_id=None,
             )
@@ -849,7 +880,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
         # NOTE: Using z-score normalization here because it's better for hybrid search from a theoretical standpoint.
         # Empirically on a small dataset of up to 10K docs, it's not very different. Likely more impactful at scale.
         # https://opensearch.org/blog/introducing-the-z-score-normalization-technique-for-hybrid-search/
-        search_hits: list[SearchHit[DocumentChunk]] = self._os_client.search(
+        search_hits: list[SearchHit[DocumentChunk]] = self._client.search(
             body=query_body,
             search_pipeline_id=ZSCORE_NORMALIZATION_PIPELINE_NAME,
         )
@@ -881,7 +912,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             index_filters=filters,
             num_to_retrieve=num_to_retrieve,
         )
-        search_hits: list[SearchHit[DocumentChunk]] = self._os_client.search(
+        search_hits: list[SearchHit[DocumentChunk]] = self._client.search(
             body=query_body,
             search_pipeline_id=None,
         )
@@ -909,6 +940,6 @@ class OpenSearchDocumentIndex(DocumentIndex):
         # Do not raise if the document already exists, just update. This is
         # because the document may already have been indexed during the
         # OpenSearch transition period.
-        self._os_client.bulk_index_documents(
+        self._client.bulk_index_documents(
             documents=chunks, tenant_state=self._tenant_state, update_if_exists=True
         )
