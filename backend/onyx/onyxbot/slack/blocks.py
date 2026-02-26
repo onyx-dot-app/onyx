@@ -592,11 +592,8 @@ def build_slack_response_blocks(
         )
 
     citations_blocks = []
-    document_blocks = []
     if answer.citation_info:
         citations_blocks = _build_citations_blocks(answer)
-    else:
-        document_blocks = _priority_ordered_documents_blocks(answer)
 
     citations_divider = [DividerBlock()] if citations_blocks else []
     buttons_divider = [DividerBlock()] if web_follow_up_block or follow_up_block else []
@@ -608,7 +605,6 @@ def build_slack_response_blocks(
         + ai_feedback_block
         + citations_divider
         + citations_blocks
-        + document_blocks
         + buttons_divider
         + web_follow_up_block
         + follow_up_block
