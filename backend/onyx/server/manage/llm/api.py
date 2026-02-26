@@ -359,6 +359,17 @@ def put_llm_provider(
             id=llm_provider_upsert_request.id, db_session=db_session
         )
 
+    # Check that the name is unique
+    # TODO: Once port from name to id is complete, unique name will no longer be required
+    found_provider = fetch_existing_llm_provider(
+        name=llm_provider_upsert_request.name, db_session=db_session
+    )
+    if found_provider is not None and found_provider is not existing_provider:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Provider with name={llm_provider_upsert_request.name} already exists",
+        )
+
     if existing_provider and is_creation:
         raise HTTPException(
             status_code=400,
