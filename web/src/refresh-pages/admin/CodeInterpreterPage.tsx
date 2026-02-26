@@ -38,7 +38,7 @@ function CodeInterpreterCard({
 }: CodeInterpreterCardProps) {
   return (
     // TODO (@raunakab): Allow Content to accept strikethrough and middleText
-    <Card variant={variant}>
+    <Card variant={variant} padding={0.5}>
       <ContentAction
         icon={SvgTerminal}
         title={middleText ? `${title} ${middleText}` : title}
@@ -87,8 +87,8 @@ function ConnectionStatus({ healthy, isLoading }: ConnectionStatusProps) {
       flexDirection="row"
       justifyContent="end"
       alignItems="center"
-      gap={0.5}
-      padding={0}
+      gap={0.25}
+      padding={0.5}
     >
       <Text mainUiAction text03>
         {label}
@@ -109,8 +109,8 @@ function ActionButtons({ onDisconnect, onRefresh }: ActionButtonsProps) {
       flexDirection="row"
       justifyContent="end"
       alignItems="center"
-      gap={0.5}
-      padding={0}
+      gap={0.25}
+      padding={0.25}
     >
       <Button
         prominence="tertiary"
@@ -171,8 +171,8 @@ export default function CodeInterpreterPage() {
                 flexDirection="column"
                 justifyContent="center"
                 alignItems="end"
-                gap={0.5}
-                padding={0.5}
+                gap={0}
+                padding={0}
               >
                 <ConnectionStatus healthy={isHealthy} isLoading={isLoading} />
                 <ActionButtons
