@@ -103,7 +103,7 @@ def main() -> None:
             "--use-aws-managed-opensearch",
             help="Whether to use AWS-managed OpenSearch. If not provided, will fall back to checking "
             "USING_AWS_MANAGED_OPENSEARCH=='true', then default to False.",
-            type=bool,
+            action=argparse.BooleanOptionalAction,
             default=os.environ.get("USING_AWS_MANAGED_OPENSEARCH", "").lower()
             == "true",
         )
