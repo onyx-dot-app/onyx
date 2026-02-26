@@ -23,7 +23,6 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.serialization import pkcs12
 from office365.graph_client import GraphClient  # type: ignore[import-untyped]
-from office365.intune.organizations.organization import Organization  # type: ignore[import-untyped]
 from office365.onedrive.driveitems.driveItem import DriveItem  # type: ignore[import-untyped]
 from office365.onedrive.sites.site import Site  # type: ignore[import-untyped]
 from office365.onedrive.sites.sites_with_root import SitesWithRoot  # type: ignore[import-untyped]
@@ -872,6 +871,56 @@ class SharepointConnector(
                     "Site URLs must be full Sharepoint URLs (e.g. https://your-tenant.sharepoint.com/sites/your-site or https://your-tenant.sharepoint.com/teams/your-team)"
                 )
 
+    def _extract_tenant_domain_from_sites(self) -> str | None:
+        """Extract the tenant domain from configured site URLs.
+
+        Site URLs look like https://{tenant}.sharepoint.com/sites/... so the
+        tenant domain is the first label of the hostname.
+        """
+        for site_url in self.sites:
+            try:
+                hostname = urlsplit(site_url.strip()).hostname
+            except ValueError:
+                continue
+            if not hostname:
+                continue
+            tenant = hostname.split(".")[0]
+            if tenant:
+                return tenant
+        logger.warning(f"No tenant domain found from {len(self.sites)} sites")
+        return None
+
+    def _resolve_tenant_domain_from_root_site(self) -> str:
+        """Resolve tenant domain via GET /v1.0/sites/root which only requires
+        Sites.Read.All (a permission the connector already needs)."""
+        root_site = self.graph_client.sites.root.get().execute_query()
+        hostname = root_site.site_collection.hostname
+        if not hostname:
+            raise ConnectorValidationError(
+                "Could not determine tenant domain from root site"
+            )
+        tenant_domain = hostname.split(".")[0]
+        logger.info(
+            "Resolved tenant domain '%s' from root site hostname '%s'",
+            tenant_domain,
+            hostname,
+        )
+        return tenant_domain
+
+    def _resolve_tenant_domain(self) -> str:
+        """Determine the tenant domain, preferring site URLs over a Graph API
+        call to avoid needing extra permissions."""
+        from_sites = self._extract_tenant_domain_from_sites()
+        if from_sites:
+            logger.info(
+                "Resolved tenant domain '%s' from site URLs",
+                from_sites,
+            )
+            return from_sites
+
+        logger.info("No site URLs available; resolving tenant domain from root site")
+        return self._resolve_tenant_domain_from_root_site()
+
     @property
     def graph_client(self) -> GraphClient:
         if self._graph_client is None:
@@ -1589,6 +1638,11 @@ class SharepointConnector(
         sp_private_key = credentials.get("sp_private_key")
         sp_certificate_password = credentials.get("sp_certificate_password")
 
+        if not sp_client_id:
+            raise ConnectorValidationError("Client ID is required")
+        if not sp_directory_id:
+            raise ConnectorValidationError("Directory (tenant) ID is required")
+
         authority_url = f"{self.authority_host}/{sp_directory_id}"
 
         if auth_method == SharepointAuthMethod.CERTIFICATE.value:
@@ -1641,21 +1695,7 @@ class SharepointConnector(
             _acquire_token_for_graph, environment=self._azure_environment
         )
         if auth_method == SharepointAuthMethod.CERTIFICATE.value:
-            org = self.graph_client.organization.get().execute_query()
-            if not org or len(org) == 0:
-                raise ConnectorValidationError("No organization found")
-
-            tenant_info: Organization = org[
-                0
-            ]  # Access first item directly from collection
-            if not tenant_info.verified_domains:
-                raise ConnectorValidationError("No verified domains found for tenant")
-
-            sp_tenant_domain = tenant_info.verified_domains[0].name
-            if not sp_tenant_domain:
-                raise ConnectorValidationError("No verified domains found for tenant")
-            # remove the .onmicrosoft.com part
-            self.sp_tenant_domain = sp_tenant_domain.split(".")[0]
+            self.sp_tenant_domain = self._resolve_tenant_domain()
         return None
 
     def _get_drive_names_for_site(self, site_url: str) -> list[str]:
