@@ -2,6 +2,7 @@ from unittest.mock import MagicMock
 from uuid import UUID
 from uuid import uuid4
 
+from ee.onyx.server.scim.models import SCIM_USER_SCHEMA
 from ee.onyx.server.scim.models import ScimEmail
 from ee.onyx.server.scim.models import ScimGroupMember
 from ee.onyx.server.scim.models import ScimGroupResource
@@ -9,6 +10,7 @@ from ee.onyx.server.scim.models import ScimMeta
 from ee.onyx.server.scim.models import ScimName
 from ee.onyx.server.scim.models import ScimUserGroupRef
 from ee.onyx.server.scim.models import ScimUserResource
+from ee.onyx.server.scim.providers.base import COMMON_IGNORED_PATCH_PATHS
 from ee.onyx.server.scim.providers.base import get_default_provider
 from ee.onyx.server.scim.providers.okta import OktaProvider
 
@@ -39,9 +41,7 @@ class TestOktaProvider:
         assert OktaProvider().name == "okta"
 
     def test_ignored_patch_paths(self) -> None:
-        assert OktaProvider().ignored_patch_paths == frozenset(
-            {"id", "schemas", "meta"}
-        )
+        assert OktaProvider().ignored_patch_paths == COMMON_IGNORED_PATCH_PATHS
 
     def test_build_user_resource_basic(self) -> None:
         provider = OktaProvider()
@@ -59,6 +59,12 @@ class TestOktaProvider:
             groups=[],
             meta=ScimMeta(resourceType="User"),
         )
+
+    def test_build_user_resource_has_core_schema_only(self) -> None:
+        provider = OktaProvider()
+        user = _make_mock_user()
+        result = provider.build_user_resource(user, "ext-123")
+        assert result.schemas == [SCIM_USER_SCHEMA]
 
     def test_build_user_resource_with_groups(self) -> None:
         provider = OktaProvider()

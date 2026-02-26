@@ -16,6 +16,14 @@ from ee.onyx.server.scim.models import ScimUserResource
 from onyx.db.models import User
 from onyx.db.models import UserGroup
 
+COMMON_IGNORED_PATCH_PATHS: frozenset[str] = frozenset(
+    {
+        "id",
+        "schemas",
+        "meta",
+    }
+)
+
 
 class ScimProvider(ABC):
     """Base class for provider-specific SCIM behavior.
