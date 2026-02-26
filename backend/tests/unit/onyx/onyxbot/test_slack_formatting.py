@@ -1,6 +1,7 @@
 from onyx.onyxbot.slack.formatting import _convert_slack_links_to_markdown
 from onyx.onyxbot.slack.formatting import _normalize_link_destinations
-from onyx.onyxbot.slack.formatting import _sanitize_for_slack
+from onyx.onyxbot.slack.formatting import _sanitize_html
+from onyx.onyxbot.slack.formatting import _transform_outside_code_blocks
 from onyx.onyxbot.slack.formatting import format_slack_message
 from onyx.onyxbot.slack.utils import remove_slack_text_interactions
 from onyx.utils.text_processing import decode_escapes
@@ -74,7 +75,7 @@ def test_slack_style_links_preserved_inside_code_blocks() -> None:
 def test_html_tags_stripped_outside_code_blocks() -> None:
     message = "Hello<br/>world ```<div>code</div>``` after"
 
-    sanitized = _sanitize_for_slack(message)
+    sanitized = _transform_outside_code_blocks(message, _sanitize_html)
 
     assert "<br" not in sanitized
     assert "<div>code</div>" in sanitized

@@ -1,4 +1,5 @@
 import re
+from collections.abc import Callable
 from typing import Any
 
 from mistune import create_markdown
@@ -39,23 +40,20 @@ def _sanitize_html(text: str) -> str:
     return text
 
 
-def _sanitize_for_slack(message: str) -> str:
-    """Pre-process LLM output before markdown rendering for Slack compatibility.
-
-    Strips HTML tags from documentation sources (SharePoint, Confluence, Google
-    Drive, etc.) that would otherwise appear as literal escaped text in Slack.
-    Code blocks are preserved intact to avoid mangling code samples containing HTML.
-    """
+def _transform_outside_code_blocks(
+    message: str, transform: Callable[[str], str]
+) -> str:
+    """Apply *transform* only to text outside fenced code blocks."""
     parts = _FENCED_CODE_BLOCK_PATTERN.split(message)
     code_blocks = _FENCED_CODE_BLOCK_PATTERN.findall(message)
 
-    sanitized: list[str] = []
+    result: list[str] = []
     for i, part in enumerate(parts):
-        sanitized.append(_sanitize_html(part))
+        result.append(transform(part))
         if i < len(code_blocks):
-            sanitized.append(code_blocks[i])
+            result.append(code_blocks[i])
 
-    return "".join(sanitized)
+    return "".join(result)
 
 
 def _extract_link_destination(message: str, start_idx: int) -> tuple[str, int | None]:
@@ -121,22 +119,15 @@ def _convert_slack_links_to_markdown(message: str) -> str:
     recognise it, so the angle brackets would be escaped by text() and Slack
     would render the link as literal text instead of a clickable link.
     """
-    parts = _FENCED_CODE_BLOCK_PATTERN.split(message)
-    code_blocks = _FENCED_CODE_BLOCK_PATTERN.findall(message)
-
-    converted: list[str] = []
-    for i, part in enumerate(parts):
-        converted.append(_SLACK_LINK_PATTERN.sub(r"[\2](\1)", part))
-        if i < len(code_blocks):
-            converted.append(code_blocks[i])
-
-    return "".join(converted)
+    return _transform_outside_code_blocks(
+        message, lambda text: _SLACK_LINK_PATTERN.sub(r"[\2](\1)", text)
+    )
 
 
 def format_slack_message(message: str | None) -> str:
     if message is None:
         return ""
-    message = _sanitize_for_slack(message)
+    message = _transform_outside_code_blocks(message, _sanitize_html)
     message = _convert_slack_links_to_markdown(message)
     normalized_message = _normalize_link_destinations(message)
     md = create_markdown(renderer=SlackRenderer(), plugins=["strikethrough"])
