@@ -846,46 +846,54 @@ def handle_stream_message_objects(
             # (user has already responded to a clarification question)
             skip_clarification = is_last_assistant_message_clarification(chat_history)
 
+            # NOTE: we _could_ pass in a zero argument function since emitter and state_container
+            # are just passed in immediately anyways, but the abstraction is cleaner this way.
             yield from run_chat_loop_with_state_containers(
-                run_deep_research_llm_loop,
+                lambda emitter, state_container: run_deep_research_llm_loop(
+                    emitter=emitter,
+                    state_container=state_container,
+                    simple_chat_history=simple_chat_history,
+                    tools=tools,
+                    custom_agent_prompt=custom_agent_prompt,
+                    llm=llm,
+                    token_counter=token_counter,
+                    db_session=db_session,
+                    skip_clarification=skip_clarification,
+                    user_identity=user_identity,
+                    chat_session_id=str(chat_session.id),
+                    all_injected_file_metadata=all_injected_file_metadata,
+                ),
                 llm_loop_completion_callback,
                 is_connected=check_is_connected,
                 emitter=emitter,
                 state_container=state_container,
-                simple_chat_history=simple_chat_history,
-                tools=tools,
-                custom_agent_prompt=custom_agent_prompt,
-                llm=llm,
-                token_counter=token_counter,
-                db_session=db_session,
-                skip_clarification=skip_clarification,
-                user_identity=user_identity,
-                chat_session_id=str(chat_session.id),
-                all_injected_file_metadata=all_injected_file_metadata,
             )
         else:
             yield from run_chat_loop_with_state_containers(
-                run_llm_loop,
+                lambda emitter, state_container: run_llm_loop(
+                    emitter=emitter,
+                    state_container=state_container,
+                    simple_chat_history=simple_chat_history,
+                    tools=tools,
+                    custom_agent_prompt=custom_agent_prompt,
+                    context_files=extracted_context_files,
+                    persona=persona,
+                    user_memory_context=user_memory_context,
+                    llm=llm,
+                    token_counter=token_counter,
+                    db_session=db_session,
+                    forced_tool_id=forced_tool_id,
+                    user_identity=user_identity,
+                    chat_session_id=str(chat_session.id),
+                    chat_files=chat_files_for_tools,
+                    include_citations=new_msg_req.include_citations,
+                    all_injected_file_metadata=all_injected_file_metadata,
+                    inject_memories_in_prompt=user.use_memories,
+                ),
                 llm_loop_completion_callback,
                 is_connected=check_is_connected,  # Not passed through to run_llm_loop
                 emitter=emitter,
                 state_container=state_container,
-                simple_chat_history=simple_chat_history,
-                tools=tools,
-                custom_agent_prompt=custom_agent_prompt,
-                context_files=extracted_context_files,
-                persona=persona,
-                user_memory_context=user_memory_context,
-                llm=llm,
-                token_counter=token_counter,
-                db_session=db_session,
-                forced_tool_id=forced_tool_id,
-                user_identity=user_identity,
-                chat_session_id=str(chat_session.id),
-                chat_files=chat_files_for_tools,
-                include_citations=new_msg_req.include_citations,
-                all_injected_file_metadata=all_injected_file_metadata,
-                inject_memories_in_prompt=user.use_memories,
             )
 
     except ValueError as e:
