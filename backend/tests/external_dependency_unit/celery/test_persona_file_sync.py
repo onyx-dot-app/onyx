@@ -267,11 +267,11 @@ class TestSyncTaskWritesPersonaIds:
             )
 
         mock_doc_index.update_single.assert_called_once()
-        call_kwargs = mock_doc_index.update_single.call_args.kwargs
-        user_fields: VespaDocumentUserFields = call_kwargs["user_fields"]
+        call_args = mock_doc_index.update_single.call_args
+        user_fields: VespaDocumentUserFields = call_args.kwargs["user_fields"]
         assert user_fields.personas is not None
         assert persona.id in user_fields.personas
-        assert call_kwargs["doc_id"] == str(uf.id)
+        assert call_args.args[0] == str(uf.id)
 
     def test_clears_persona_sync_flag(
         self,
