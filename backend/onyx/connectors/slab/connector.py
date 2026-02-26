@@ -11,6 +11,7 @@ from dateutil import parser
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import LoadConnector
@@ -258,3 +259,21 @@ class SlabConnector(LoadConnector, PollConnector, SlimConnectorWithPermSync):
                 slim_doc_batch = []
         if slim_doc_batch:
             yield slim_doc_batch
+
+    def validate_connector_settings(self) -> None:
+        """
+        Very basic validation, we could do more here
+        """
+        if not self.base_url.startswith("https://") and not self.base_url.startswith(
+            "http://"
+        ):
+            raise ConnectorValidationError(
+                "Base URL must start with https:// or http://"
+            )
+
+        try:
+            get_all_post_ids(self.slab_bot_token)
+        except ConnectorMissingCredentialError:
+            raise
+        except Exception as e:
+            raise ConnectorValidationError(f"Failed to fetch posts from Slab: {e}")

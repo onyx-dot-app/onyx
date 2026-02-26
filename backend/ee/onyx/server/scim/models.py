@@ -13,6 +13,7 @@ from enum import Enum
 from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
+from pydantic import field_validator
 
 
 # ---------------------------------------------------------------------------
@@ -164,6 +165,19 @@ class ScimPatchOperation(BaseModel):
     op: ScimPatchOperationType
     path: str | None = None
     value: ScimPatchValue = None
+
+    @field_validator("op", mode="before")
+    @classmethod
+    def normalize_operation(cls, v: object) -> object:
+        """Normalize op to lowercase for case-insensitive matching.
+
+        Some IdPs (e.g. Entra ID) send capitalized ops like ``"Replace"``
+        instead of ``"replace"``. This is safe for all providers since the
+        enum values are lowercase. If a future provider requires other
+        pre-processing quirks, move patch deserialization into the provider
+        subclass instead of adding more special cases here.
+        """
+        return v.lower() if isinstance(v, str) else v
 
 
 class ScimPatchRequest(BaseModel):

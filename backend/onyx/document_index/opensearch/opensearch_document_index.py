@@ -50,6 +50,7 @@ from onyx.document_index.opensearch.schema import DocumentSchema
 from onyx.document_index.opensearch.schema import get_opensearch_doc_chunk_id
 from onyx.document_index.opensearch.schema import GLOBAL_BOOST_FIELD_NAME
 from onyx.document_index.opensearch.schema import HIDDEN_FIELD_NAME
+from onyx.document_index.opensearch.schema import PERSONAS_FIELD_NAME
 from onyx.document_index.opensearch.schema import USER_PROJECTS_FIELD_NAME
 from onyx.document_index.opensearch.search import DocumentQuery
 from onyx.document_index.opensearch.search import (
@@ -215,6 +216,7 @@ def _convert_onyx_chunk_to_opensearch_document(
         # OpenSearch and it will not store any data at all for this field, which
         # is different from supplying an empty list.
         user_projects=chunk.user_project or None,
+        personas=chunk.personas or None,
         primary_owners=get_experts_stores_representations(
             chunk.source_document.primary_owners
         ),
@@ -360,6 +362,11 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
             project_ids=(
                 set(user_fields.user_projects)
                 if user_fields and user_fields.user_projects
+                else None
+            ),
+            persona_ids=(
+                set(user_fields.personas)
+                if user_fields and user_fields.personas
                 else None
             ),
         )
@@ -708,6 +715,10 @@ class OpenSearchDocumentIndex(DocumentIndex):
             if update_request.project_ids is not None:
                 properties_to_update[USER_PROJECTS_FIELD_NAME] = list(
                     update_request.project_ids
+                )
+            if update_request.persona_ids is not None:
+                properties_to_update[PERSONAS_FIELD_NAME] = list(
+                    update_request.persona_ids
                 )
 
             if not properties_to_update:

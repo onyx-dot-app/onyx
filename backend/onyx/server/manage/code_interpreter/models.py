@@ -1,7 +1,7 @@
 from pydantic import BaseModel
 
 
-class CodeInterpreterServerUpdate(BaseModel):
+class CodeInterpreterServer(BaseModel):
     enabled: bool
 
 

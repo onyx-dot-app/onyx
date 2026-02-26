@@ -16,7 +16,6 @@ from ee.onyx.server.scim.api import get_user
 from ee.onyx.server.scim.api import list_users
 from ee.onyx.server.scim.api import patch_user
 from ee.onyx.server.scim.api import replace_user
-from ee.onyx.server.scim.models import ScimListResponse
 from ee.onyx.server.scim.models import ScimName
 from ee.onyx.server.scim.models import ScimPatchOperation
 from ee.onyx.server.scim.models import ScimPatchOperationType
@@ -28,6 +27,8 @@ from tests.unit.onyx.server.scim.conftest import assert_scim_error
 from tests.unit.onyx.server.scim.conftest import make_db_user
 from tests.unit.onyx.server.scim.conftest import make_scim_user
 from tests.unit.onyx.server.scim.conftest import make_user_mapping
+from tests.unit.onyx.server.scim.conftest import parse_scim_list
+from tests.unit.onyx.server.scim.conftest import parse_scim_user
 
 
 class TestListUsers:
@@ -51,9 +52,9 @@ class TestListUsers:
             db_session=mock_db_session,
         )
 
-        assert isinstance(result, ScimListResponse)
-        assert result.totalResults == 0
-        assert result.Resources == []
+        parsed = parse_scim_list(result)
+        assert parsed.totalResults == 0
+        assert parsed.Resources == []
 
     def test_returns_users_with_scim_shape(
         self,
@@ -77,10 +78,10 @@ class TestListUsers:
             db_session=mock_db_session,
         )
 
-        assert isinstance(result, ScimListResponse)
-        assert result.totalResults == 1
-        assert len(result.Resources) == 1
-        resource = result.Resources[0]
+        parsed = parse_scim_list(result)
+        assert parsed.totalResults == 1
+        assert len(parsed.Resources) == 1
+        resource = parsed.Resources[0]
         assert isinstance(resource, ScimUserResource)
         assert resource.userName == "Alice@example.com"
         assert resource.externalId == "ext-abc"
@@ -146,9 +147,9 @@ class TestGetUser:
             db_session=mock_db_session,
         )
 
-        assert isinstance(result, ScimUserResource)
-        assert result.userName == "alice@example.com"
-        assert result.id == str(user.id)
+        resource = parse_scim_user(result)
+        assert resource.userName == "alice@example.com"
+        assert resource.id == str(user.id)
 
     def test_invalid_uuid_returns_404(
         self,
@@ -207,8 +208,8 @@ class TestCreateUser:
             db_session=mock_db_session,
         )
 
-        assert isinstance(result, ScimUserResource)
-        assert result.userName == "new@example.com"
+        resource = parse_scim_user(result, status=201)
+        assert resource.userName == "new@example.com"
         mock_dal.add_user.assert_called_once()
         mock_dal.commit.assert_called_once()
 
@@ -314,8 +315,8 @@ class TestCreateUser:
             db_session=mock_db_session,
         )
 
-        assert isinstance(result, ScimUserResource)
-        assert result.externalId == "ext-123"
+        resource = parse_scim_user(result, status=201)
+        assert resource.externalId == "ext-123"
         mock_dal.create_user_mapping.assert_called_once()
 
 
@@ -344,7 +345,7 @@ class TestReplaceUser:
             db_session=mock_db_session,
         )
 
-        assert isinstance(result, ScimUserResource)
+        parse_scim_user(result)
         mock_dal.update_user.assert_called_once()
         mock_dal.commit.assert_called_once()
 
@@ -412,9 +413,11 @@ class TestReplaceUser:
             db_session=mock_db_session,
         )
 
-        assert isinstance(result, ScimUserResource)
+        parse_scim_user(result)
         mock_dal.sync_user_external_id.assert_called_once_with(
-            user.id, None, scim_username="test@example.com"
+            user.id,
+            None,
+            scim_username="test@example.com",
         )
 
 
@@ -448,7 +451,7 @@ class TestPatchUser:
             db_session=mock_db_session,
         )
 
-        assert isinstance(result, ScimUserResource)
+        parse_scim_user(result)
         mock_dal.update_user.assert_called_once()
 
     def test_not_found_returns_404(
@@ -507,7 +510,7 @@ class TestPatchUser:
             db_session=mock_db_session,
         )
 
-        assert isinstance(result, ScimUserResource)
+        parse_scim_user(result)
         # Verify the update_user call received the new display name
         call_kwargs = mock_dal.update_user.call_args
         assert call_kwargs[1]["personal_name"] == "New Display Name"
@@ -605,10 +608,12 @@ class TestDeleteUser:
 class TestScimNameToStr:
     """Tests for _scim_name_to_str helper."""
 
-    def test_prefers_given_family_over_formatted(self) -> None:
-        """Okta may send stale formatted while updating givenName/familyName."""
-        name = ScimName(givenName="Jane", familyName="Smith", formatted="Old Name")
-        assert _scim_name_to_str(name) == "Jane Smith"
+    def test_prefers_formatted_over_components(self) -> None:
+        """When client provides formatted, use it — the client knows what it wants."""
+        name = ScimName(
+            givenName="Jane", familyName="Smith", formatted="Dr. Jane Smith"
+        )
+        assert _scim_name_to_str(name) == "Dr. Jane Smith"
 
     def test_given_name_only(self) -> None:
         name = ScimName(givenName="Jane")
@@ -653,9 +658,9 @@ class TestEmailCasePreservation:
             db_session=mock_db_session,
         )
 
-        assert isinstance(result, ScimUserResource)
-        assert result.userName == "Alice@Example.COM"
-        assert result.emails[0].value == "Alice@Example.COM"
+        resource = parse_scim_user(result, status=201)
+        assert resource.userName == "Alice@Example.COM"
+        assert resource.emails[0].value == "Alice@Example.COM"
 
     def test_get_preserves_username_case(
         self,
@@ -681,6 +686,6 @@ class TestEmailCasePreservation:
             db_session=mock_db_session,
         )
 
-        assert isinstance(result, ScimUserResource)
-        assert result.userName == "Alice@Example.COM"
-        assert result.emails[0].value == "Alice@Example.COM"
+        resource = parse_scim_user(result)
+        assert resource.userName == "Alice@Example.COM"
+        assert resource.emails[0].value == "Alice@Example.COM"
