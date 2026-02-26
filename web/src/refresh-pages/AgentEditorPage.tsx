@@ -814,7 +814,7 @@ export default function AgentEditorPage({
         uploaded_image_id: values.uploaded_image_id,
         icon_name: values.icon_name,
         search_start_date: values.knowledge_cutoff_date || null,
-        label_ids: values.label_ids.length > 0 ? values.label_ids : null,
+        label_ids: values.label_ids,
         is_default_persona: values.is_default_persona,
         // display_priority: ...,
 

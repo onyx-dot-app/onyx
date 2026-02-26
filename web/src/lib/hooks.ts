@@ -269,7 +269,14 @@ export const useLabels = () => {
     }
 
     const newLabel: PersonaLabel = await response.json();
-    mutate("/api/persona/labels", [...(labels || []), newLabel], false);
+    mutate(
+      "/api/persona/labels",
+      (currentLabels: PersonaLabel[] | undefined) => [
+        ...(currentLabels || []),
+        newLabel,
+      ],
+      false
+    );
     return newLabel;
   };
 
