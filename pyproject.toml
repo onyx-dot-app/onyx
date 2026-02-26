@@ -92,7 +92,7 @@ backend = [
     "python-gitlab==5.6.0",
     "python-pptx==0.6.23",
     "pypandoc_binary==1.16.2",
-    "pypdf==6.6.2",
+    "pypdf==6.7.3",
     "pytest-mock==3.12.0",
     "pytest-playwright==0.7.0",
     "python-docx==1.1.2",
