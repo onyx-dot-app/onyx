@@ -30,7 +30,7 @@
 
 import { SvgEmpty } from "@opal/icons";
 import Card from "@/refresh-components/cards/Card";
-import { LineItemLayout } from "@/layouts/general-layouts";
+import { Content } from "@opal/layouts";
 import { IconProps } from "@opal/types";
 
 export interface EmptyMessageProps {
@@ -46,11 +46,12 @@ export default function EmptyMessage({
 }: EmptyMessageProps) {
   return (
     <Card variant="tertiary">
-      <LineItemLayout
+      <Content
         icon={Icon}
         title={title}
         description={description}
-        variant="tertiary-muted"
+        sizePreset="main-ui"
+        variant="section"
       />
     </Card>
   );

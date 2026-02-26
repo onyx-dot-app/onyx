@@ -3,11 +3,8 @@
 import { useRef, useCallback, useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import * as InputLayouts from "@/layouts/input-layouts";
-import {
-  LineItemLayout,
-  Section,
-  AttachmentItemLayout,
-} from "@/layouts/general-layouts";
+import { Section, AttachmentItemLayout } from "@/layouts/general-layouts";
+import { Content, ContentAction } from "@opal/layouts";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import {
@@ -1363,10 +1360,12 @@ function IndexedConnectorCard({ source, isActive }: IndexedConnectorCardProps) {
 
   return (
     <Card>
-      <LineItemLayout
+      <Content
         icon={sourceMetadata.icon}
         title={sourceMetadata.displayName}
         description={isActive ? "Connected" : "Paused"}
+        sizePreset="main-content"
+        variant="section"
       />
     </Card>
   );
@@ -1440,12 +1439,15 @@ function FederatedConnectorCard({
       )}
 
       <Card padding={0.5}>
-        <LineItemLayout
+        <ContentAction
           icon={sourceMetadata.icon}
           title={sourceMetadata.displayName}
           description={
             connector.has_oauth_token ? "Connected" : "Not connected"
           }
+          sizePreset="main-content"
+          variant="section"
+          paddingVariant="sm"
           rightChildren={
             connector.has_oauth_token ? (
               <OpalButton
@@ -1466,7 +1468,6 @@ function FederatedConnectorCard({
               </Button>
             ) : undefined
           }
-          reducedPadding
         />
       </Card>
     </>

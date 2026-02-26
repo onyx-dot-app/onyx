@@ -7,6 +7,7 @@ import { FullPersona } from "@/app/admin/assistants/interfaces";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import Modal from "@/refresh-components/Modal";
 import { Section, LineItemLayout } from "@/layouts/general-layouts";
+import { Content } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import Separator from "@/refresh-components/Separator";
@@ -82,10 +83,11 @@ function ViewerMCPServerCard({ server, tools }: ViewerMCPServerCardProps) {
         <ActionsLayouts.Content>
           {tools.map((tool) => (
             <Section key={tool.id} padding={0.25}>
-              <LineItemLayout
+              <Content
                 title={tool.display_name}
                 description={tool.description}
-                variant="secondary"
+                sizePreset="main-ui"
+                variant="section"
               />
             </Section>
           ))}
@@ -340,10 +342,11 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
             <SimpleCollapsible.Content>
               <Section gap={0.5} alignItems="start">
                 {agent.system_prompt && (
-                  <LineItemLayout
+                  <Content
                     title="Instructions"
                     description={agent.system_prompt}
-                    variant="secondary"
+                    sizePreset="main-ui"
+                    variant="section"
                   />
                 )}
                 {defaultModel && (
@@ -401,10 +404,12 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
                     prominence="tertiary"
                   >
                     <Interactive.Container>
-                      <LineItemLayout
+                      <Content
                         icon={SvgBubbleText}
                         title={starter.message}
-                        variant="tertiary-muted"
+                        sizePreset="main-ui"
+                        variant="body"
+                        prominence="muted"
                       />
                     </Interactive.Container>
                   </Interactive.Base>

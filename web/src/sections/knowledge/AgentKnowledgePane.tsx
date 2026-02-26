@@ -9,6 +9,7 @@ import React, {
   useEffect,
 } from "react";
 import * as GeneralLayouts from "@/layouts/general-layouts";
+import { Content } from "@opal/layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
 import * as InputLayouts from "@/layouts/input-layouts";
 import { Card } from "@/refresh-components/cards";
@@ -318,10 +319,11 @@ function DocumentSetsTableContent({
       header: "Name",
       sortable: true,
       render: (ds) => (
-        <GeneralLayouts.LineItemLayout
+        <Content
           icon={SvgFolder}
           title={ds.name}
-          variant="secondary"
+          sizePreset="main-ui"
+          variant="section"
         />
       ),
     },
@@ -443,10 +445,11 @@ function RecentFilesTableContent({
       header: "Name",
       sortable: true,
       render: (file) => (
-        <GeneralLayouts.LineItemLayout
+        <Content
           icon={SvgFiles}
           title={file.name}
-          variant="secondary"
+          sizePreset="main-ui"
+          variant="section"
         />
       ),
     },

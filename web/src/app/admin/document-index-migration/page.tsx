@@ -5,7 +5,7 @@ import useSWR from "swr";
 import { SvgArrowExchange } from "@opal/icons";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import Card from "@/refresh-components/cards/Card";
-import { LineItemLayout } from "@/layouts/general-layouts";
+import { Content, ContentAction } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import Button from "@/refresh-components/buttons/Button";
@@ -72,9 +72,10 @@ function MigrationStatusSection() {
     <Card>
       <Text headingH3>Migration Status</Text>
 
-      <LineItemLayout
+      <ContentAction
         title="Started"
-        variant="secondary"
+        sizePreset="main-ui"
+        variant="section"
         rightChildren={
           <Text mainUiBody>
             {hasStarted ? formatTimestamp(data.created_at!) : "Not started"}
@@ -82,9 +83,10 @@ function MigrationStatusSection() {
         }
       />
 
-      <LineItemLayout
+      <ContentAction
         title="Chunks Migrated"
-        variant="secondary"
+        sizePreset="main-ui"
+        variant="section"
         rightChildren={
           <Text mainUiBody>
             {progressPercentage !== null
@@ -96,9 +98,10 @@ function MigrationStatusSection() {
         }
       />
 
-      <LineItemLayout
+      <ContentAction
         title="Completed"
-        variant="secondary"
+        sizePreset="main-ui"
+        variant="section"
         rightChildren={
           <Text mainUiBody>
             {hasCompleted
@@ -174,10 +177,11 @@ function RetrievalSourceSection() {
 
   return (
     <Card>
-      <LineItemLayout
+      <Content
         title="Retrieval Source"
         description="Controls which document index is used for retrieval."
-        variant="secondary"
+        sizePreset="main-ui"
+        variant="section"
       />
 
       <InputSelect
