@@ -12,7 +12,7 @@ import {
   SvgX,
   SvgXOctagon,
 } from "@opal/icons";
-import type { IconProps } from "@opal/types";
+import type { IconFunctionComponent } from "@opal/types";
 
 const containerClasses = {
   flash: {
@@ -220,7 +220,7 @@ export interface MessageProps extends React.HTMLAttributes<HTMLDivElement> {
 
   // Features:
   icon?: boolean;
-  iconComponent?: React.FunctionComponent<IconProps>;
+  iconComponent?: IconFunctionComponent;
   actions?: boolean | string;
   close?: boolean;
 
