@@ -251,7 +251,6 @@ def test_update_model_configurations(
             "name": name,
             "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000000",
-            "default_model_name": default_model_name,
             "model_configurations": [
                 model_configuration.dict()
                 for model_configuration in model_configurations
@@ -339,19 +338,15 @@ def test_update_model_configurations(
 @pytest.mark.parametrize(
     "model_configurations",
     [
-        (
-            [
-                ModelConfigurationUpsertRequest(
-                    name="gpt-4", is_visible=True, max_input_tokens=4096
-                )
-            ],
-        ),
-        (
-            [
-                ModelConfigurationUpsertRequest(name="gpt-4o", is_visible=True),
-                ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True),
-            ],
-        ),
+        [
+            ModelConfigurationUpsertRequest(
+                name="gpt-4", is_visible=True, max_input_tokens=4096
+            )
+        ],
+        [
+            ModelConfigurationUpsertRequest(name="gpt-4o", is_visible=True),
+            ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True),
+        ],
     ],
 )
 def test_delete_llm_provider(
@@ -1113,8 +1108,6 @@ def test_multiple_providers_default_switching(reset: None) -> None:  # noqa: ARG
             "name": provider_1_name,
             "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000001",
-            "is_default_provider": True,
-            "default_model_name": shared_model_name,
             "model_configurations": [c.model_dump() for c in provider_1_configs],
             "is_public": True,
             "groups": [],

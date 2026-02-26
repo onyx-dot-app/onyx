@@ -64,7 +64,6 @@ def _create_provider(
             name=name,
             provider=provider,
             api_key="sk-ant-api03-...",
-            default_model_name="claude-3-5-sonnet-20240620",
             is_public=is_public,
             model_configurations=[
                 ModelConfigurationUpsertRequest(
