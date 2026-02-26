@@ -359,12 +359,17 @@ def put_llm_provider(
             id=llm_provider_upsert_request.id, db_session=db_session
         )
 
-    # Check that the name is unique
+    # Check name constraints
     # TODO: Once port from name to id is complete, unique name will no longer be required
+    if existing_provider and llm_provider_upsert_request.name != existing_provider.name:
+        raise HTTPException(
+            status_code=400,
+            detail="Renaming providers is not currently supported",
+        )
+
     found_provider = fetch_existing_llm_provider(
         name=llm_provider_upsert_request.name, db_session=db_session
     )
-    # SQLAlchemy returns the same python objects so is comparison is ok
     if found_provider is not None and found_provider is not existing_provider:
         raise HTTPException(
             status_code=400,
@@ -374,14 +379,18 @@ def put_llm_provider(
     if existing_provider and is_creation:
         raise HTTPException(
             status_code=400,
-            detail=f"LLM Provider with name {llm_provider_upsert_request.name} and \
-                id={llm_provider_upsert_request.id} already exists",
+            detail=(
+                f"LLM Provider with name {llm_provider_upsert_request.name} and "
+                f"id={llm_provider_upsert_request.id} already exists"
+            ),
         )
     elif not existing_provider and not is_creation:
         raise HTTPException(
             status_code=400,
-            detail=f"LLM Provider with name {llm_provider_upsert_request.name} and \
-                id={llm_provider_upsert_request.id} does not exist",
+            detail=(
+                f"LLM Provider with name {llm_provider_upsert_request.name} and "
+                f"id={llm_provider_upsert_request.id} does not exist"
+            ),
         )
 
     # SSRF Protection: Validate api_base and custom_config match stored values

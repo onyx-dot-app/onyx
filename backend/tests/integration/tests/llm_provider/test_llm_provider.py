@@ -422,8 +422,8 @@ def test_duplicate_provider_name_rejected(reset: None) -> None:  # noqa: ARG001
     assert "already exists" in response.json()["detail"]
 
 
-def test_rename_provider_to_unique_name(reset: None) -> None:  # noqa: ARG001
-    """Renaming a provider to a new unique name should succeed."""
+def test_rename_provider_rejected(reset: None) -> None:  # noqa: ARG001
+    """Renaming a provider is not currently supported and should return 400."""
     admin_user = UserManager.create(name="admin_user")
 
     create_payload = {
@@ -447,7 +447,7 @@ def test_rename_provider_to_unique_name(reset: None) -> None:  # noqa: ARG001
     assert response.status_code == 200
     provider_id = response.json()["id"]
 
-    # Rename to a new unique name
+    # Attempt to rename — should be rejected
     new_name = f"renamed-provider-{uuid.uuid4()}"
     update_payload = {**create_payload, "id": provider_id, "name": new_name}
     response = requests.put(
@@ -455,52 +455,8 @@ def test_rename_provider_to_unique_name(reset: None) -> None:  # noqa: ARG001
         headers=admin_user.headers,
         json=update_payload,
     )
-    assert response.status_code == 200
-    assert response.json()["name"] == new_name
-
-
-def test_rename_provider_to_existing_name_rejected(reset: None) -> None:  # noqa: ARG001
-    """Renaming a provider to a name that another provider already has should return 400."""
-    admin_user = UserManager.create(name="admin_user")
-
-    base_payload = {
-        "provider": LlmProviderNames.OPENAI,
-        "api_key": "sk-000000000000000000000000000000000000000000000000",
-        "model_configurations": [
-            ModelConfigurationUpsertRequest(
-                name="gpt-4o-mini", is_visible=True
-            ).model_dump()
-        ],
-        "is_public": True,
-        "groups": [],
-    }
-
-    # Create two providers with different names
-    first_name = f"first-provider-{uuid.uuid4()}"
-    response = requests.put(
-        f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
-        headers=admin_user.headers,
-        json={**base_payload, "name": first_name},
-    )
-    assert response.status_code == 200
-
-    second_name = f"second-provider-{uuid.uuid4()}"
-    response = requests.put(
-        f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
-        headers=admin_user.headers,
-        json={**base_payload, "name": second_name},
-    )
-    assert response.status_code == 200
-    second_id = response.json()["id"]
-
-    # Try to rename the second provider to the first provider's name
-    response = requests.put(
-        f"{API_SERVER_URL}/admin/llm/provider?is_creation=false",
-        headers=admin_user.headers,
-        json={**base_payload, "id": second_id, "name": first_name},
-    )
     assert response.status_code == 400
-    assert "already exists" in response.json()["detail"]
+    assert "not currently supported" in response.json()["detail"]
 
 
 def test_model_visibility_preserved_on_edit(reset: None) -> None:  # noqa: ARG001
