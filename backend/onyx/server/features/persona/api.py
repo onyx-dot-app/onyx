@@ -405,6 +405,7 @@ class PersonaShareRequest(BaseModel):
     user_ids: list[UUID] | None = None
     group_ids: list[int] | None = None
     is_public: bool | None = None
+    label_ids: list[int] | None = None
 
 
 # We notify each user when a user is shared with them
@@ -415,14 +416,22 @@ def share_persona(
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> None:
-    update_persona_shared(
-        persona_id=persona_id,
-        user=user,
-        db_session=db_session,
-        user_ids=persona_share_request.user_ids,
-        group_ids=persona_share_request.group_ids,
-        is_public=persona_share_request.is_public,
-    )
+    try:
+        update_persona_shared(
+            persona_id=persona_id,
+            user=user,
+            db_session=db_session,
+            user_ids=persona_share_request.user_ids,
+            group_ids=persona_share_request.group_ids,
+            is_public=persona_share_request.is_public,
+            label_ids=persona_share_request.label_ids,
+        )
+    except PermissionError as e:
+        logger.exception("Failed to share persona")
+        raise HTTPException(status_code=403, detail=str(e))
+    except ValueError as e:
+        logger.exception("Failed to share persona")
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @basic_router.delete("/{persona_id}", tags=PUBLIC_API_TAGS)
