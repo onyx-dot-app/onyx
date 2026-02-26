@@ -533,11 +533,6 @@ def sharepoint_cert_credentials() -> dict[str, str]:
     )
     sp_directory_id = os.environ.get("PERM_SYNC_SHAREPOINT_DIRECTORY_ID", "")
 
-    if not all(
-        [sp_client_id, sp_private_key, sp_certificate_password, sp_directory_id]
-    ):
-        pytest.skip("Certificate auth env vars not set")
-
     return {
         "authentication_method": SharepointAuthMethod.CERTIFICATE.value,
         "sp_client_id": sp_client_id,
