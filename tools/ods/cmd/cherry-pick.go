@@ -329,6 +329,7 @@ func cherryPickToRelease(commitSHAs, commitMessages []string, branchSuffix, vers
 		if err := git.RunCommand("switch", "--quiet", hotfixBranch); err != nil {
 			return "", fmt.Errorf("failed to checkout existing hotfix branch: %w", err)
 		}
+		git.RestoreOdsBinary()
 
 		// Check which commits need to be cherry-picked
 		commitsToCherry := []string{}
@@ -354,6 +355,7 @@ func cherryPickToRelease(commitSHAs, commitMessages []string, branchSuffix, vers
 		if err := git.RunCommand("checkout", "--quiet", "-b", hotfixBranch, fmt.Sprintf("origin/%s", releaseBranch)); err != nil {
 			return "", fmt.Errorf("failed to create hotfix branch: %w", err)
 		}
+		git.RestoreOdsBinary()
 
 		// Cherry-pick all commits
 		if err := performCherryPick(commitSHAs); err != nil {

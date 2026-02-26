@@ -8,7 +8,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -309,9 +308,12 @@ func CleanCherryPickState() {
 
 const odsBinaryFile = "ods-bin"
 
+// odsBinaryOrigPath is captured once at stash time so RestoreOdsBinary
+// knows where to write the binary back after uv-sync overwrites it.
+var odsBinaryOrigPath string
+
 // StashOdsBinary copies the running ods binary into the .git directory so that
-// --continue can re-exec with the same version even after uv-sync overwrites
-// the installed binary on a branch switch.
+// branch switches that trigger uv-sync can be undone by RestoreOdsBinary.
 func StashOdsBinary() error {
 	self, err := os.Executable()
 	if err != nil {
@@ -321,6 +323,7 @@ func StashOdsBinary() error {
 	if err != nil {
 		return fmt.Errorf("failed to resolve symlinks: %w", err)
 	}
+	odsBinaryOrigPath = self
 
 	gitDir, err := GetGitDir()
 	if err != nil {
@@ -328,33 +331,21 @@ func StashOdsBinary() error {
 	}
 	dst := filepath.Join(gitDir, odsBinaryFile)
 
-	src, err := os.Open(self)
-	if err != nil {
-		return fmt.Errorf("failed to open source binary: %w", err)
-	}
-	defer func() { _ = src.Close() }()
-
-	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755)
-	if err != nil {
-		return fmt.Errorf("failed to create stash file: %w", err)
-	}
-	defer func() { _ = out.Close() }()
-
-	if _, err := io.Copy(out, src); err != nil {
-		_ = os.Remove(dst)
-		return fmt.Errorf("failed to copy binary: %w", err)
+	if err := copyFile(self, dst); err != nil {
+		return err
 	}
 
 	log.Debugf("Stashed ods binary to %s", dst)
 	return nil
 }
 
-// ReExecFromStashedBinary re-launches the process using the stashed binary
-// if one exists and the current process is not already running from it.
-// This prevents issues when uv-sync on a release branch overwrites the
-// installed ods with an older version that lacks --continue / cp.
-// On success this function does not return (the process is replaced).
-func ReExecFromStashedBinary() {
+// RestoreOdsBinary copies the stashed binary back to the original install
+// location (.venv/bin/ods). Call this after any git switch/checkout that may
+// trigger uv-sync and overwrite the installed binary with an older version.
+func RestoreOdsBinary() {
+	if odsBinaryOrigPath == "" {
+		return
+	}
 	gitDir, err := GetGitDir()
 	if err != nil {
 		return
@@ -363,33 +354,32 @@ func ReExecFromStashedBinary() {
 	if _, err := os.Stat(stashed); err != nil {
 		return
 	}
+	if err := copyFile(stashed, odsBinaryOrigPath); err != nil {
+		log.Warnf("Failed to restore ods binary: %v", err)
+	} else {
+		log.Debugf("Restored ods binary to %s", odsBinaryOrigPath)
+	}
+}
 
-	self, err := os.Executable()
+// copyFile copies src to dst with executable permissions.
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
 	if err != nil {
-		return
+		return fmt.Errorf("failed to open %s: %w", src, err)
 	}
-	self, err = filepath.EvalSymlinks(self)
-	if err != nil {
-		return
-	}
+	defer func() { _ = in.Close() }()
 
-	stashedAbs, err := filepath.Abs(stashed)
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755)
 	if err != nil {
-		stashedAbs = stashed
+		return fmt.Errorf("failed to create %s: %w", dst, err)
 	}
-	selfAbs, err := filepath.Abs(self)
-	if err != nil {
-		selfAbs = self
-	}
+	defer func() { _ = out.Close() }()
 
-	if selfAbs == stashedAbs {
-		return // already running from the stashed copy
+	if _, err := io.Copy(out, in); err != nil {
+		_ = os.Remove(dst)
+		return fmt.Errorf("failed to copy %s -> %s: %w", src, dst, err)
 	}
-
-	log.Infof("Re-executing from stashed ods binary at %s", stashedAbs)
-	if err := syscall.Exec(stashedAbs, os.Args, os.Environ()); err != nil {
-		log.Warnf("Failed to re-exec from stashed binary: %v", err)
-	}
+	return nil
 }
 
 // cleanStashedBinary removes the stashed ods binary from .git
