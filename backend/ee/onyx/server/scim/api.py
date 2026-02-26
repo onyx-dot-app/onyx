@@ -322,6 +322,7 @@ def list_users(
     """List users with optional SCIM filter and pagination."""
     dal = ScimDAL(db_session)
     dal.update_token_last_used(_token.id)
+    dal.commit()
 
     try:
         scim_filter = parse_scim_filter(filter)
@@ -365,6 +366,7 @@ def get_user(
     """Get a single user by ID."""
     dal = ScimDAL(db_session)
     dal.update_token_last_used(_token.id)
+    dal.commit()
 
     result = _fetch_user_or_404(user_id, dal)
     if isinstance(result, ScimJSONResponse):
@@ -721,6 +723,7 @@ def list_groups(
     """List groups with optional SCIM filter and pagination."""
     dal = ScimDAL(db_session)
     dal.update_token_last_used(_token.id)
+    dal.commit()
 
     try:
         scim_filter = parse_scim_filter(filter)
@@ -757,6 +760,7 @@ def get_group(
     """Get a single group by ID."""
     dal = ScimDAL(db_session)
     dal.update_token_last_used(_token.id)
+    dal.commit()
 
     result = _fetch_group_or_404(group_id, dal)
     if isinstance(result, ScimJSONResponse):
