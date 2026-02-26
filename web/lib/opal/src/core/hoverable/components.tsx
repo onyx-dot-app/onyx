@@ -74,10 +74,30 @@ interface HoverableItemProps
  * </Hoverable.Root>
  * ```
  */
-function HoverableRoot({ group, children, ...props }: HoverableRootProps) {
+function HoverableRoot({
+  group,
+  children,
+  onMouseEnter: consumerMouseEnter,
+  onMouseLeave: consumerMouseLeave,
+  ...props
+}: HoverableRootProps) {
   const [hovered, setHovered] = useState(false);
-  const onMouseEnter = useCallback(() => setHovered(true), []);
-  const onMouseLeave = useCallback(() => setHovered(false), []);
+
+  const onMouseEnter = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      setHovered(true);
+      consumerMouseEnter?.(e);
+    },
+    [consumerMouseEnter]
+  );
+
+  const onMouseLeave = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      setHovered(false);
+      consumerMouseLeave?.(e);
+    },
+    [consumerMouseLeave]
+  );
 
   const GroupContext = getOrCreateContext(group);
 
