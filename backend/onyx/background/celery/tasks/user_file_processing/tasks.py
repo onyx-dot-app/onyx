@@ -76,7 +76,7 @@ def _user_file_queued_key(user_file_id: str | UUID) -> str:
     return f"{OnyxRedisLocks.USER_FILE_QUEUED_PREFIX}:{user_file_id}"
 
 
-def _user_file_project_sync_lock_key(user_file_id: str | UUID) -> str:
+def user_file_project_sync_lock_key(user_file_id: str | UUID) -> str:
     return f"{OnyxRedisLocks.USER_FILE_PROJECT_SYNC_LOCK_PREFIX}:{user_file_id}"
 
 
@@ -764,7 +764,7 @@ def process_single_user_file_project_sync(
     redis_client.delete(_user_file_project_sync_queued_key(user_file_id))
 
     file_lock: RedisLock = redis_client.lock(
-        _user_file_project_sync_lock_key(user_file_id),
+        user_file_project_sync_lock_key(user_file_id),
         timeout=CELERY_USER_FILE_PROJECT_SYNC_LOCK_TIMEOUT,
     )
 

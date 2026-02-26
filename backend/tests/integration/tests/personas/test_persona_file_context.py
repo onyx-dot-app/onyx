@@ -18,7 +18,6 @@ import time
 import requests
 
 from onyx.db.enums import UserFileStatus
-from onyx.server.query_and_chat.models import ChatSessionCreationRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import MAX_DELAY
 from tests.integration.common_utils.managers.chat import ChatSessionManager
@@ -61,30 +60,6 @@ def _poll_file_statuses(
     )
 
 
-def _get_persona_detail(persona_id: int, user: DATestUser) -> dict:
-    """Fetch the full persona snapshot from the API."""
-    response = requests.get(
-        f"{API_SERVER_URL}/persona/{persona_id}",
-        headers=user.headers,
-    )
-    response.raise_for_status()
-    return response.json()
-
-
-def _create_chat_session_with_project(
-    persona_id: int, project_id: int, user: DATestUser
-) -> dict:
-    """Create a chat session explicitly inside a project."""
-    req = ChatSessionCreationRequest(persona_id=persona_id, project_id=project_id)
-    response = requests.post(
-        f"{API_SERVER_URL}/chat/create-chat-session",
-        json=req.model_dump(),
-        headers=user.headers,
-    )
-    response.raise_for_status()
-    return response.json()
-
-
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
@@ -125,9 +100,9 @@ def test_persona_with_files_chat_no_error(
     )
 
     # Verify persona has the file
-    detail = _get_persona_detail(persona.id, admin_user)
-    persona_file_ids = [str(f["id"]) for f in detail.get("user_files", [])]
-    assert user_file_id in persona_file_ids
+    persona_snapshots = PersonaManager.get_one(persona.id, admin_user)
+    assert len(persona_snapshots) == 1
+    assert user_file_id in persona_snapshots[0].user_file_ids
 
     # Chat with the persona
     chat_session = ChatSessionManager.create(
@@ -199,14 +174,17 @@ def test_persona_files_override_project_files(
     project_files = [
         ("project_secret.txt", b"The project's secret word is FLAMINGO."),
     ]
-    ProjectManager.upload_files(
+    project_upload_result = ProjectManager.upload_files(
         project_id=project.id,
         files=project_files,
         user_performing_action=admin_user,
     )
+    assert len(project_upload_result.user_files) == 1
+    project_user_file_id = str(project_upload_result.user_files[0].id)
 
-    # Wait for persona file processing
+    # Wait for both persona and project file processing
     _poll_file_statuses([persona_user_file_id], admin_user, timeout=120)
+    _poll_file_statuses([project_user_file_id], admin_user, timeout=120)
 
     # Create persona with persona file
     persona = PersonaManager.create(
@@ -218,15 +196,14 @@ def test_persona_files_override_project_files(
     )
 
     # Create chat session inside the project but using the custom persona
-    session_data = _create_chat_session_with_project(
+    chat_session = ChatSessionManager.create(
         persona_id=persona.id,
         project_id=project.id,
-        user=admin_user,
+        user_performing_action=admin_user,
     )
-    chat_session_id = session_data["chat_session_id"]
 
     response = ChatSessionManager.send_message(
-        chat_session_id=chat_session_id,
+        chat_session_id=chat_session.id,
         message="What is the secret word?",
         user_performing_action=admin_user,
     )
@@ -265,15 +242,14 @@ def test_default_persona_in_project_uses_project_files(
     _poll_file_statuses([project_file_id], admin_user, timeout=120)
 
     # Create chat session inside project using default persona (id=0)
-    session_data = _create_chat_session_with_project(
+    chat_session = ChatSessionManager.create(
         persona_id=0,
         project_id=project.id,
-        user=admin_user,
+        user_performing_action=admin_user,
     )
-    chat_session_id = session_data["chat_session_id"]
 
     response = ChatSessionManager.send_message(
-        chat_session_id=chat_session_id,
+        chat_session_id=chat_session.id,
         message="What is the project mascot?",
         user_performing_action=admin_user,
     )
@@ -299,11 +275,16 @@ def test_custom_persona_no_files_in_project_ignores_project(
         name="Ignored Project",
         user_performing_action=admin_user,
     )
-    ProjectManager.upload_files(
+    project_upload_result = ProjectManager.upload_files(
         project_id=project.id,
         files=[("project_only.txt", b"The project secret is CAPYBARA.")],
         user_performing_action=admin_user,
     )
+    assert len(project_upload_result.user_files) == 1
+    project_user_file_id = str(project_upload_result.user_files[0].id)
+
+    # Wait for project file processing
+    _poll_file_statuses([project_user_file_id], admin_user, timeout=120)
 
     # Custom persona with no files
     persona = PersonaManager.create(
@@ -316,21 +297,22 @@ def test_custom_persona_no_files_in_project_ignores_project(
         ),
     )
 
-    session_data = _create_chat_session_with_project(
+    chat_session = ChatSessionManager.create(
         persona_id=persona.id,
         project_id=project.id,
-        user=admin_user,
+        user_performing_action=admin_user,
     )
 
     response = ChatSessionManager.send_message(
-        chat_session_id=session_data["chat_session_id"],
+        chat_session_id=chat_session.id,
         message="What is the project secret?",
         user_performing_action=admin_user,
-        mock_llm_response="I do not have that information.",
     )
 
     assert response.error is None
-    # With mock_llm_response the model echoes back the mock.
-    # The key assertion is that the chat completes without error
-    # and the project file content is not injected.
     assert len(response.full_message) > 0
+    assert "capybara" not in response.full_message.lower(), (
+        "Response should NOT reference the project file content (CAPYBARA) "
+        "because the custom persona has no files and should not inherit "
+        f"project files, but got: {response.full_message}"
+    )

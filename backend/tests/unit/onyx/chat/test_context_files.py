@@ -1,8 +1,8 @@
 """Tests for the unified context file extraction logic (Phase 5).
 
 Covers:
-- _resolve_context_user_files: precedence rule (custom persona supersedes project)
-- _extract_context_files: all-or-nothing context window fit check
+- resolve_context_user_files: precedence rule (custom persona supersedes project)
+- extract_context_files: all-or-nothing context window fit check
 - Search filter / search_usage determination in the caller
 """
 
@@ -11,12 +11,15 @@ from unittest.mock import patch
 from uuid import UUID
 from uuid import uuid4
 
-from onyx.chat.process_message import _extract_context_files
-from onyx.chat.process_message import _resolve_context_user_files
+from onyx.chat.models import ExtractedContextFiles
+from onyx.chat.process_message import determine_search_params
+from onyx.chat.process_message import extract_context_files
+from onyx.chat.process_message import resolve_context_user_files
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.db.models import UserFile
 from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import InMemoryChatFile
+from onyx.tools.models import SearchToolUsage
 
 
 # ---------------------------------------------------------------------------
@@ -29,9 +32,10 @@ def _make_user_file(
     name: str = "file.txt",
     file_id: str | None = None,
 ) -> UserFile:
+    file_uuid = UUID(file_id) if file_id else uuid4()
     return UserFile(
-        id=UUID(file_id) if file_id else uuid4(),
-        file_id=file_id,
+        id=file_uuid,
+        file_id=str(file_uuid),
         name=name,
         token_count=token_count,
     )
@@ -62,7 +66,7 @@ def _make_in_memory_file(
 
 
 # ===========================================================================
-# _resolve_context_user_files
+# resolve_context_user_files
 # ===========================================================================
 
 
@@ -74,7 +78,7 @@ class TestResolveContextUserFiles:
         persona = _make_persona(persona_id=42, user_files=persona_files)
         db_session = MagicMock()
 
-        result = _resolve_context_user_files(
+        result = resolve_context_user_files(
             persona=persona, project_id=99, user_id=uuid4(), db_session=db_session
         )
 
@@ -85,7 +89,7 @@ class TestResolveContextUserFiles:
         persona = _make_persona(persona_id=42, user_files=[])
         db_session = MagicMock()
 
-        result = _resolve_context_user_files(
+        result = resolve_context_user_files(
             persona=persona, project_id=99, user_id=uuid4(), db_session=db_session
         )
 
@@ -96,7 +100,7 @@ class TestResolveContextUserFiles:
         persona = _make_persona(persona_id=42, user_files=None)
         db_session = MagicMock()
 
-        result = _resolve_context_user_files(
+        result = resolve_context_user_files(
             persona=persona, project_id=99, user_id=uuid4(), db_session=db_session
         )
 
@@ -112,7 +116,7 @@ class TestResolveContextUserFiles:
         user_id = uuid4()
         db_session = MagicMock()
 
-        result = _resolve_context_user_files(
+        result = resolve_context_user_files(
             persona=persona, project_id=99, user_id=user_id, db_session=db_session
         )
 
@@ -125,7 +129,7 @@ class TestResolveContextUserFiles:
         persona = _make_persona(persona_id=DEFAULT_PERSONA_ID)
         db_session = MagicMock()
 
-        result = _resolve_context_user_files(
+        result = resolve_context_user_files(
             persona=persona, project_id=None, user_id=uuid4(), db_session=db_session
         )
 
@@ -139,7 +143,7 @@ class TestResolveContextUserFiles:
         persona = _make_persona(persona_id=7, user_files=[])
         db_session = MagicMock()
 
-        result = _resolve_context_user_files(
+        result = resolve_context_user_files(
             persona=persona, project_id=99, user_id=uuid4(), db_session=db_session
         )
 
@@ -148,7 +152,7 @@ class TestResolveContextUserFiles:
 
 
 # ===========================================================================
-# _extract_context_files
+# extract_context_files
 # ===========================================================================
 
 
@@ -157,7 +161,7 @@ class TestExtractContextFiles:
 
     def test_empty_user_files_returns_empty(self) -> None:
         db_session = MagicMock()
-        result = _extract_context_files(
+        result = extract_context_files(
             user_files=[],
             llm_max_context_window=10000,
             reserved_token_count=0,
@@ -176,7 +180,7 @@ class TestExtractContextFiles:
             _make_in_memory_file(file_id=file_id, content="file content")
         ]
 
-        result = _extract_context_files(
+        result = extract_context_files(
             user_files=[uf],
             llm_max_context_window=10000,
             reserved_token_count=0,
@@ -193,7 +197,7 @@ class TestExtractContextFiles:
         """When aggregate tokens exceed 60% of available window, nothing is loaded."""
         uf = _make_user_file(token_count=7000)
 
-        result = _extract_context_files(
+        result = extract_context_files(
             user_files=[uf],
             llm_max_context_window=10000,
             reserved_token_count=0,
@@ -211,7 +215,7 @@ class TestExtractContextFiles:
         # Available = (10000 - 0) * 0.6 = 6000. Tokens = 6000 → >= threshold.
         uf = _make_user_file(token_count=6000)
 
-        result = _extract_context_files(
+        result = extract_context_files(
             user_files=[uf],
             llm_max_context_window=10000,
             reserved_token_count=0,
@@ -227,7 +231,7 @@ class TestExtractContextFiles:
         uf = _make_user_file(token_count=5999, file_id=file_id)
         mock_load.return_value = [_make_in_memory_file(file_id=file_id, content="data")]
 
-        result = _extract_context_files(
+        result = extract_context_files(
             user_files=[uf],
             llm_max_context_window=10000,
             reserved_token_count=0,
@@ -243,7 +247,7 @@ class TestExtractContextFiles:
         files = [_make_user_file(token_count=2500) for _ in range(3)]
         # 3 * 2500 = 7500 > 6000 threshold
 
-        result = _extract_context_files(
+        result = extract_context_files(
             user_files=files,
             llm_max_context_window=10000,
             reserved_token_count=0,
@@ -261,7 +265,7 @@ class TestExtractContextFiles:
         uf = _make_user_file(token_count=3000, file_id=file_id)
         # Available = (10000 - 5000) * 0.6 = 3000. Tokens = 3000 → overflow.
 
-        result = _extract_context_files(
+        result = extract_context_files(
             user_files=[uf],
             llm_max_context_window=10000,
             reserved_token_count=5000,
@@ -284,7 +288,7 @@ class TestExtractContextFiles:
             )
         ]
 
-        result = _extract_context_files(
+        result = extract_context_files(
             user_files=[uf],
             llm_max_context_window=10000,
             reserved_token_count=0,
@@ -301,7 +305,7 @@ class TestExtractContextFiles:
         """When vector DB is disabled, overflow produces FileToolMetadata."""
         uf = _make_user_file(token_count=7000, name="bigfile.txt")
 
-        result = _extract_context_files(
+        result = extract_context_files(
             user_files=[uf],
             llm_max_context_window=10000,
             reserved_token_count=0,
@@ -319,150 +323,104 @@ class TestExtractContextFiles:
 
 
 class TestSearchFilterDetermination:
-    """Verify that the caller correctly determines search_project_id,
-    search_persona_id, and search_usage based on the extraction result
-    and the precedence rule.
-
-    These test the logic inline in handle_stream_message_objects by
-    exercising the same conditionals in isolation.
+    """Verify that determine_search_params correctly resolves
+    search_project_id, search_persona_id, and search_usage based on
+    the extraction result and the precedence rule.
     """
 
     @staticmethod
-    def _determine_search_params(
-        persona_id: int,
-        has_persona_files: bool,  # noqa: ARG004
-        project_id: int | None,
-        use_as_search_filter: bool,
+    def _make_context(
+        use_as_search_filter: bool = False,
         file_texts: list[str] | None = None,
         uncapped_token_count: int | None = None,
-    ) -> dict:
-        """Replicate the search filter + search_usage logic from
-        handle_stream_message_objects."""
-        from onyx.tools.models import SearchToolUsage
-
-        is_custom_persona = persona_id != DEFAULT_PERSONA_ID
-        search_project_id: int | None = None
-        search_persona_id: int | None = None
-
-        if use_as_search_filter:
-            if is_custom_persona:
-                search_persona_id = persona_id
-            else:
-                search_project_id = project_id
-
-        search_usage = SearchToolUsage.AUTO
-        if not is_custom_persona and project_id:
-            has_context_files = bool(uncapped_token_count)
-            files_loaded_in_context = bool(file_texts)
-
-            if use_as_search_filter:
-                search_usage = SearchToolUsage.ENABLED
-            elif files_loaded_in_context or not has_context_files:
-                search_usage = SearchToolUsage.DISABLED
-
-        return {
-            "search_project_id": search_project_id,
-            "search_persona_id": search_persona_id,
-            "search_usage": search_usage,
-        }
+    ) -> ExtractedContextFiles:
+        return ExtractedContextFiles(
+            file_texts=file_texts or [],
+            image_files=[],
+            use_as_search_filter=use_as_search_filter,
+            total_token_count=0,
+            file_metadata=[],
+            uncapped_token_count=uncapped_token_count,
+        )
 
     def test_custom_persona_files_fit_no_filter(self) -> None:
         """Custom persona, files fit → no search filter, AUTO."""
-        from onyx.tools.models import SearchToolUsage
-
-        result = self._determine_search_params(
+        result = determine_search_params(
             persona_id=42,
-            has_persona_files=True,
             project_id=99,
-            use_as_search_filter=False,
-            file_texts=["content"],
-            uncapped_token_count=100,
+            extracted_context_files=self._make_context(
+                file_texts=["content"],
+                uncapped_token_count=100,
+            ),
         )
-        assert result["search_project_id"] is None
-        assert result["search_persona_id"] is None
-        assert result["search_usage"] == SearchToolUsage.AUTO
+        assert result.search_project_id is None
+        assert result.search_persona_id is None
+        assert result.search_usage == SearchToolUsage.AUTO
 
     def test_custom_persona_files_overflow_persona_filter(self) -> None:
         """Custom persona, files overflow → persona_id filter, AUTO."""
-        from onyx.tools.models import SearchToolUsage
-
-        result = self._determine_search_params(
+        result = determine_search_params(
             persona_id=42,
-            has_persona_files=True,
             project_id=99,
-            use_as_search_filter=True,
+            extracted_context_files=self._make_context(use_as_search_filter=True),
         )
-        assert result["search_persona_id"] == 42
-        assert result["search_project_id"] is None
-        assert result["search_usage"] == SearchToolUsage.AUTO
+        assert result.search_persona_id == 42
+        assert result.search_project_id is None
+        assert result.search_usage == SearchToolUsage.AUTO
 
     def test_custom_persona_no_files_no_project_leak(self) -> None:
         """Custom persona (no files) in project → nothing leaks from project."""
-        from onyx.tools.models import SearchToolUsage
-
-        result = self._determine_search_params(
+        result = determine_search_params(
             persona_id=42,
-            has_persona_files=False,
             project_id=99,
-            use_as_search_filter=False,
+            extracted_context_files=self._make_context(),
         )
-        assert result["search_project_id"] is None
-        assert result["search_persona_id"] is None
-        assert result["search_usage"] == SearchToolUsage.AUTO
+        assert result.search_project_id is None
+        assert result.search_persona_id is None
+        assert result.search_usage == SearchToolUsage.AUTO
 
     def test_default_persona_project_files_fit_disables_search(self) -> None:
         """Default persona, project files fit → DISABLED."""
-        from onyx.tools.models import SearchToolUsage
-
-        result = self._determine_search_params(
+        result = determine_search_params(
             persona_id=DEFAULT_PERSONA_ID,
-            has_persona_files=False,
             project_id=99,
-            use_as_search_filter=False,
-            file_texts=["content"],
-            uncapped_token_count=100,
+            extracted_context_files=self._make_context(
+                file_texts=["content"],
+                uncapped_token_count=100,
+            ),
         )
-        assert result["search_project_id"] is None
-        assert result["search_usage"] == SearchToolUsage.DISABLED
+        assert result.search_project_id is None
+        assert result.search_usage == SearchToolUsage.DISABLED
 
     def test_default_persona_project_files_overflow_enables_search(self) -> None:
         """Default persona, project files overflow → ENABLED + project_id filter."""
-        from onyx.tools.models import SearchToolUsage
-
-        result = self._determine_search_params(
+        result = determine_search_params(
             persona_id=DEFAULT_PERSONA_ID,
-            has_persona_files=False,
             project_id=99,
-            use_as_search_filter=True,
-            uncapped_token_count=7000,
+            extracted_context_files=self._make_context(
+                use_as_search_filter=True,
+                uncapped_token_count=7000,
+            ),
         )
-        assert result["search_project_id"] == 99
-        assert result["search_persona_id"] is None
-        assert result["search_usage"] == SearchToolUsage.ENABLED
+        assert result.search_project_id == 99
+        assert result.search_persona_id is None
+        assert result.search_usage == SearchToolUsage.ENABLED
 
     def test_default_persona_no_project_auto(self) -> None:
         """Default persona, no project → AUTO."""
-        from onyx.tools.models import SearchToolUsage
-
-        result = self._determine_search_params(
+        result = determine_search_params(
             persona_id=DEFAULT_PERSONA_ID,
-            has_persona_files=False,
             project_id=None,
-            use_as_search_filter=False,
+            extracted_context_files=self._make_context(),
         )
-        assert result["search_project_id"] is None
-        assert result["search_usage"] == SearchToolUsage.AUTO
+        assert result.search_project_id is None
+        assert result.search_usage == SearchToolUsage.AUTO
 
     def test_default_persona_project_no_files_disables_search(self) -> None:
         """Default persona in project with no files → DISABLED."""
-        from onyx.tools.models import SearchToolUsage
-
-        result = self._determine_search_params(
+        result = determine_search_params(
             persona_id=DEFAULT_PERSONA_ID,
-            has_persona_files=False,
             project_id=99,
-            use_as_search_filter=False,
-            file_texts=None,
-            uncapped_token_count=None,
+            extracted_context_files=self._make_context(),
         )
-        assert result["search_usage"] == SearchToolUsage.DISABLED
+        assert result.search_usage == SearchToolUsage.DISABLED

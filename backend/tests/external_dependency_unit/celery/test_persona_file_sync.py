@@ -28,13 +28,13 @@ from uuid import uuid4
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.tasks.user_file_processing.tasks import (
-    _user_file_project_sync_lock_key,
-)
-from onyx.background.celery.tasks.user_file_processing.tasks import (
     check_for_user_file_project_sync,
 )
 from onyx.background.celery.tasks.user_file_processing.tasks import (
     process_single_user_file_project_sync,
+)
+from onyx.background.celery.tasks.user_file_processing.tasks import (
+    user_file_project_sync_lock_key,
 )
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.enums import UserFileStatus
@@ -241,7 +241,7 @@ class TestSyncTaskWritesPersonaIds:
         mock_search_settings.secondary = None
 
         redis_client = get_redis_client(tenant_id=TEST_TENANT_ID)
-        lock_key = _user_file_project_sync_lock_key(str(uf.id))
+        lock_key = user_file_project_sync_lock_key(str(uf.id))
         redis_client.delete(lock_key)
 
         with (
@@ -271,7 +271,7 @@ class TestSyncTaskWritesPersonaIds:
         uf = _create_completed_user_file(db_session, user, needs_persona_sync=True)
 
         redis_client = get_redis_client(tenant_id=TEST_TENANT_ID)
-        lock_key = _user_file_project_sync_lock_key(str(uf.id))
+        lock_key = user_file_project_sync_lock_key(str(uf.id))
         redis_client.delete(lock_key)
 
         with patch(_PATCH_DISABLE_VDB, True):
@@ -313,7 +313,7 @@ class TestSyncTaskWritesPersonaIds:
         mock_search_settings.secondary = None
 
         redis_client = get_redis_client(tenant_id=TEST_TENANT_ID)
-        lock_key = _user_file_project_sync_lock_key(str(uf.id))
+        lock_key = user_file_project_sync_lock_key(str(uf.id))
         redis_client.delete(lock_key)
 
         with (
@@ -358,7 +358,7 @@ class TestSyncTaskWritesPersonaIds:
         mock_search_settings.secondary = None
 
         redis_client = get_redis_client(tenant_id=TEST_TENANT_ID)
-        lock_key = _user_file_project_sync_lock_key(str(uf.id))
+        lock_key = user_file_project_sync_lock_key(str(uf.id))
         redis_client.delete(lock_key)
 
         with (

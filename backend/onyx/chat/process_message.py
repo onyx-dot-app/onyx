@@ -38,6 +38,7 @@ from onyx.chat.models import ContextFileMetadata
 from onyx.chat.models import CreateChatSessionID
 from onyx.chat.models import ExtractedContextFiles
 from onyx.chat.models import FileToolMetadata
+from onyx.chat.models import SearchParams
 from onyx.chat.models import StreamingError
 from onyx.chat.models import ToolCallResponse
 from onyx.chat.prompt_utils import calculate_reserved_tokens
@@ -193,7 +194,7 @@ def _convert_loaded_files_to_chat_files(
     return chat_files
 
 
-def _resolve_context_user_files(
+def resolve_context_user_files(
     persona: Persona,
     project_id: int | None,
     user_id: UUID | None,
@@ -252,7 +253,7 @@ def _extract_text_from_in_memory_file(f: InMemoryChatFile) -> str | None:
         return None
 
 
-def _extract_context_files(
+def extract_context_files(
     user_files: list[UserFile],
     llm_max_context_window: int,
     reserved_token_count: int,
@@ -377,6 +378,49 @@ def _build_file_tool_metadata_for_user_files(
         )
         for uf in user_files
     ]
+
+
+def determine_search_params(
+    persona_id: int,
+    project_id: int | None,
+    extracted_context_files: ExtractedContextFiles,
+) -> SearchParams:
+    """Decide which search filter IDs and search-tool usage apply for a chat turn.
+
+    A custom persona fully supersedes the project — project files are never
+    searchable and the search tool config is entirely controlled by the
+    persona.  The project_id filter is only set for the default persona.
+
+    For the default persona inside a project:
+      - Files overflow  → ENABLED  (vector DB scopes to these files)
+      - Files fit       → DISABLED (content already in prompt)
+      - No files at all → DISABLED (nothing to search)
+    """
+    is_custom_persona = persona_id != DEFAULT_PERSONA_ID
+
+    search_project_id: int | None = None
+    search_persona_id: int | None = None
+    if extracted_context_files.use_as_search_filter:
+        if is_custom_persona:
+            search_persona_id = persona_id
+        else:
+            search_project_id = project_id
+
+    search_usage = SearchToolUsage.AUTO
+    if not is_custom_persona and project_id:
+        has_context_files = bool(extracted_context_files.uncapped_token_count)
+        files_loaded_in_context = bool(extracted_context_files.file_texts)
+
+        if extracted_context_files.use_as_search_filter:
+            search_usage = SearchToolUsage.ENABLED
+        elif files_loaded_in_context or not has_context_files:
+            search_usage = SearchToolUsage.DISABLED
+
+    return SearchParams(
+        search_project_id=search_project_id,
+        search_persona_id=search_persona_id,
+        search_usage=search_usage,
+    )
 
 
 def handle_stream_message_objects(
@@ -611,37 +655,25 @@ def handle_stream_message_objects(
         # supersedes the project — project files are never loaded or
         # searchable when a custom persona is in play.  Only the default
         # persona inside a project uses the project's files.
-        context_user_files = _resolve_context_user_files(
+        context_user_files = resolve_context_user_files(
             persona=persona,
             project_id=chat_session.project_id,
             user_id=user_id,
             db_session=db_session,
         )
 
-        extracted_context_files = _extract_context_files(
+        extracted_context_files = extract_context_files(
             user_files=context_user_files,
             llm_max_context_window=llm.config.max_input_tokens,
             reserved_token_count=reserved_token_count,
             db_session=db_session,
         )
 
-        # Figure out which search filter to pass.  When all attached files
-        # fit in context we omit the filter (content is already in prompt).
-        # When they overflow, we pass the appropriate filter so the vector
-        # DB scopes results to these files.
-        #
-        # A custom persona fully supersedes the project — project files are
-        # never loaded, never searchable, and the search tool config is
-        # entirely controlled by the persona.  The project_id filter is
-        # only set for the default persona.
-        is_custom_persona = persona.id != DEFAULT_PERSONA_ID
-        search_project_id: int | None = None
-        search_persona_id: int | None = None
-        if extracted_context_files.use_as_search_filter:
-            if is_custom_persona:
-                search_persona_id = persona.id
-            else:
-                search_project_id = chat_session.project_id
+        search_params = determine_search_params(
+            persona_id=persona.id,
+            project_id=chat_session.project_id,
+            extracted_context_files=extracted_context_files,
+        )
 
         # Also grant access to persona-attached user files for FileReaderTool
         if persona.user_files:
@@ -658,28 +690,14 @@ def handle_stream_message_objects(
             None,
         )
 
-        # Determine search forcing based on context file state.
-        # Custom personas always get AUTO — their tool config is never
-        # overridden.  Only the default persona in a project gets special
-        # treatment (ENABLED when files overflow, DISABLED when loaded or
-        # absent).
         forced_tool_id = new_msg_req.forced_tool_id
-        search_usage = SearchToolUsage.AUTO
-
-        if not is_custom_persona and chat_session.project_id:
-            has_context_files = bool(extracted_context_files.uncapped_token_count)
-            files_loaded_in_context = bool(extracted_context_files.file_texts)
-
-            if extracted_context_files.use_as_search_filter:
-                search_usage = SearchToolUsage.ENABLED
-            elif files_loaded_in_context or not has_context_files:
-                search_usage = SearchToolUsage.DISABLED
-                if (
-                    forced_tool_id is not None
-                    and search_tool_id is not None
-                    and forced_tool_id == search_tool_id
-                ):
-                    forced_tool_id = None
+        if (
+            search_params.search_usage == SearchToolUsage.DISABLED
+            and forced_tool_id is not None
+            and search_tool_id is not None
+            and forced_tool_id == search_tool_id
+        ):
+            forced_tool_id = None
 
         emitter = get_default_emitter()
 
@@ -692,8 +710,8 @@ def handle_stream_message_objects(
             llm=llm,
             search_tool_config=SearchToolConfig(
                 user_selected_filters=new_msg_req.internal_search_filters,
-                project_id=search_project_id,
-                persona_id=search_persona_id,
+                project_id=search_params.search_project_id,
+                persona_id=search_params.search_persona_id,
                 bypass_acl=bypass_acl,
                 slack_context=slack_context,
                 enable_slack_search=_should_enable_slack_search(
@@ -711,7 +729,7 @@ def handle_stream_message_objects(
                 chat_file_ids=available_files.chat_file_ids,
             ),
             allowed_tool_ids=new_msg_req.allowed_tool_ids,
-            search_usage_forcing_setting=search_usage,
+            search_usage_forcing_setting=search_params.search_usage,
         )
         tools: list[Tool] = []
         for tool_list in tool_dict.values():

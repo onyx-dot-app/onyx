@@ -11,6 +11,7 @@ from onyx.server.query_and_chat.models import MessageResponseIDInfo
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.query_and_chat.streaming_models import GeneratedImage
 from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.tools.models import SearchToolUsage
 from onyx.tools.models import ToolCallKickoff
 from onyx.tools.tool_implementations.custom.base_tool_types import ToolResultType
 
@@ -171,6 +172,14 @@ class ExtractedContextFiles(BaseModel):
     file_metadata: list[ContextFileMetadata]
     uncapped_token_count: int | None
     file_metadata_for_tool: list[FileToolMetadata] = []
+
+
+class SearchParams(BaseModel):
+    """Resolved search filter IDs and search-tool usage for a chat turn."""
+
+    search_project_id: int | None
+    search_persona_id: int | None
+    search_usage: SearchToolUsage
 
 
 class LlmStepResult(BaseModel):
