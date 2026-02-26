@@ -478,6 +478,7 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:  # noqa: ARG00
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=false",
         headers=admin_user.headers,
         json={
+            "id": created_provider["id"],
             "name": "test-visibility-provider",
             "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000000",
@@ -525,6 +526,7 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:  # noqa: ARG00
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=false",
         headers=admin_user.headers,
         json={
+            "id": created_provider["id"],
             "name": "test-visibility-provider",
             "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000000",
@@ -898,6 +900,7 @@ def test_default_model_persistence_and_update(reset: None) -> None:  # noqa: ARG
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=false",
         headers=admin_user.headers,
         json={
+            "id": create_response.json()["id"],
             "name": provider_name,
             "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000000",
@@ -1032,11 +1035,6 @@ def _set_default_vision_provider(
         headers=admin_user.headers,
     )
     assert response.status_code == 200
-
-
-def _find_default_vision_provider(providers: list[dict]) -> dict | None:
-    """Find the default vision provider from a list of providers."""
-    return next((p for p in providers if p.get("is_default_vision_provider")), None)
 
 
 def test_multiple_providers_default_switching(reset: None) -> None:  # noqa: ARG001
@@ -1213,6 +1211,7 @@ def test_multiple_providers_default_switching(reset: None) -> None:  # noqa: ARG
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=false",
         headers=admin_user.headers,
         json={
+            "id": provider_2["id"],
             "name": provider_2_name,
             "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000002",
@@ -1301,6 +1300,7 @@ def test_multiple_providers_default_switching(reset: None) -> None:  # noqa: ARG
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=false",
         headers=admin_user.headers,
         json={
+            "id": provider_2["id"],
             "name": provider_2_name,
             "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000002",

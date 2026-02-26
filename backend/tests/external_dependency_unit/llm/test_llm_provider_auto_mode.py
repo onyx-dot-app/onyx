@@ -18,6 +18,7 @@ from onyx.db.enums import LLMModelFlowType
 from onyx.db.llm import fetch_default_llm_model
 from onyx.db.llm import fetch_existing_llm_provider
 from onyx.db.llm import fetch_existing_llm_providers
+from onyx.db.llm import fetch_llm_provider_view
 from onyx.db.llm import remove_llm_provider
 from onyx.db.llm import sync_auto_mode_models
 from onyx.db.llm import update_default_provider
@@ -303,7 +304,7 @@ class TestAutoModeSyncFeature:
 
         try:
             # Step 1: Upload provider WITHOUT auto mode, with initial models
-            put_llm_provider(
+            provider = put_llm_provider(
                 llm_provider_upsert_request=LLMProviderUpsertRequest(
                     name=provider_name,
                     provider=LlmProviderNames.OPENAI,
@@ -336,6 +337,7 @@ class TestAutoModeSyncFeature:
             ):
                 put_llm_provider(
                     llm_provider_upsert_request=LLMProviderUpsertRequest(
+                        id=provider.id,
                         name=provider_name,
                         provider=LlmProviderNames.OPENAI,
                         api_key=None,  # Not changing API key
@@ -351,8 +353,8 @@ class TestAutoModeSyncFeature:
             # Step 3: Verify model visibility after auto mode transition
             # Expire session cache to force fresh fetch after sync_auto_mode_models committed
             db_session.expire_all()
-            provider = fetch_existing_llm_provider(
-                name=provider_name, db_session=db_session
+            provider = fetch_llm_provider_view(
+                provider_name=provider_name, db_session=db_session
             )
             assert provider is not None
             assert provider.is_auto_mode is True

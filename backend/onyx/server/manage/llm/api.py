@@ -353,18 +353,23 @@ def put_llm_provider(
     # validate request (e.g. if we're intending to create but the name already exists we should throw an error)
     # NOTE: may involve duplicate fetching to Postgres, but we're assuming SQLAlchemy is smart enough to cache
     # the result
-    existing_provider = fetch_existing_llm_provider(
-        name=llm_provider_upsert_request.name, db_session=db_session
-    )
+    existing_provider = None
+    if llm_provider_upsert_request.id:
+        existing_provider = fetch_existing_llm_provider_by_id(
+            id=llm_provider_upsert_request.id, db_session=db_session
+        )
+
     if existing_provider and is_creation:
         raise HTTPException(
             status_code=400,
-            detail=f"LLM Provider with name {llm_provider_upsert_request.name} already exists",
+            detail=f"LLM Provider with name {llm_provider_upsert_request.name} and \
+                id={llm_provider_upsert_request.id} already exists",
         )
     elif not existing_provider and not is_creation:
         raise HTTPException(
             status_code=400,
-            detail=f"LLM Provider with name {llm_provider_upsert_request.name} does not exist",
+            detail=f"LLM Provider with name {llm_provider_upsert_request.name} and \
+                id={llm_provider_upsert_request.id} does not exist",
         )
 
     # SSRF Protection: Validate api_base and custom_config match stored values
