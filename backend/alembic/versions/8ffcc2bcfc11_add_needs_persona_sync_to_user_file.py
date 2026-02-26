@@ -1,7 +1,7 @@
 """add needs_persona_sync to user_file
 
 Revision ID: 8ffcc2bcfc11
-Revises: 7cb492013621
+Revises: 7616121f6e97
 Create Date: 2026-02-23 10:48:48.343826
 
 """
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "8ffcc2bcfc11"
-down_revision = "7cb492013621"
+down_revision = "7616121f6e97"
 branch_labels = None
 depends_on = None
 
