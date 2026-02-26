@@ -17,6 +17,7 @@ import {
   SvgPlus,
   SvgWallet,
   SvgFileText,
+  SvgOrganization,
 } from "@opal/icons";
 import { BillingInformation, LicenseStatus } from "@/lib/billing/interfaces";
 import {
@@ -143,17 +144,20 @@ function SubscriptionCard({
   license,
   onViewPlans,
   disabled,
+  isManualLicenseOnly,
   onReconnect,
 }: {
   billing?: BillingInformation;
   license?: LicenseStatus;
   onViewPlans: () => void;
   disabled?: boolean;
+  isManualLicenseOnly?: boolean;
   onReconnect?: () => Promise<void>;
 }) {
   const [isReconnecting, setIsReconnecting] = useState(false);
 
-  const planName = "Business Plan";
+  const planName = isManualLicenseOnly ? "Enterprise Plan" : "Business Plan";
+  const PlanIcon = isManualLicenseOnly ? SvgOrganization : SvgUsers;
   const expirationDate = billing?.current_period_end ?? license?.expires_at;
   const formattedDate = formatDateShort(expirationDate);
 
@@ -211,7 +215,7 @@ function SubscriptionCard({
         height="auto"
       >
         <Section gap={0.25} alignItems="start" height="auto" width="auto">
-          <SvgUsers className="w-5 h-5 stroke-text-03" />
+          <PlanIcon className="w-5 h-5" />
           <Text headingH3Muted text04>
             {planName}
           </Text>
@@ -226,7 +230,19 @@ function SubscriptionCard({
           height="auto"
           width="fit"
         >
-          {disabled ? (
+          {isManualLicenseOnly ? (
+            <Text secondaryBody text03 className="text-right">
+              Your plan is managed through sales.
+              <br />
+              <a
+                href="mailto:support@onyx.app?subject=Billing%20change%20request"
+                className="underline"
+              >
+                Contact billing
+              </a>{" "}
+              to make changes.
+            </Text>
+          ) : disabled ? (
             <Button
               main
               secondary
@@ -266,11 +282,13 @@ function SeatsCard({
   license,
   onRefresh,
   disabled,
+  hideUpdateSeats,
 }: {
   billing?: BillingInformation;
   license?: LicenseStatus;
   onRefresh?: () => Promise<void>;
   disabled?: boolean;
+  hideUpdateSeats?: boolean;
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -484,15 +502,17 @@ function SeatsCard({
           <Button main tertiary href="/admin/users" leftIcon={SvgExternalLink}>
             View Users
           </Button>
-          <Button
-            main
-            secondary
-            onClick={handleStartEdit}
-            leftIcon={SvgPlus}
-            disabled={isLoadingUsers || disabled || !billing}
-          >
-            Update Seats
-          </Button>
+          {!hideUpdateSeats && (
+            <Button
+              main
+              secondary
+              onClick={handleStartEdit}
+              leftIcon={SvgPlus}
+              disabled={isLoadingUsers || disabled || !billing}
+            >
+              Update Seats
+            </Button>
+          )}
         </Section>
       </Section>
     </Card>
@@ -593,7 +613,9 @@ interface BillingDetailsViewProps {
   onViewPlans: () => void;
   onRefresh?: () => Promise<void>;
   isAirGapped?: boolean;
+  isManualLicenseOnly?: boolean;
   hasStripeError?: boolean;
+  licenseCard?: React.ReactNode;
 }
 
 export default function BillingDetailsView({
@@ -602,10 +624,13 @@ export default function BillingDetailsView({
   onViewPlans,
   onRefresh,
   isAirGapped,
+  isManualLicenseOnly,
   hasStripeError,
+  licenseCard,
 }: BillingDetailsViewProps) {
   const expirationState = billing ? getExpirationState(billing, license) : null;
-  const disableBillingActions = isAirGapped || hasStripeError;
+  const disableBillingActions =
+    isAirGapped || hasStripeError || isManualLicenseOnly;
 
   return (
     <Section gap={1} height="auto" width="full">
@@ -622,7 +647,7 @@ export default function BillingDetailsView({
       )}
 
       {/* Air-gapped mode info banner */}
-      {isAirGapped && !hasStripeError && (
+      {isAirGapped && !hasStripeError && !isManualLicenseOnly && (
         <Message
           static
           info
@@ -665,9 +690,13 @@ export default function BillingDetailsView({
           license={license}
           onViewPlans={onViewPlans}
           disabled={disableBillingActions}
+          isManualLicenseOnly={isManualLicenseOnly}
           onReconnect={onRefresh}
         />
       )}
+
+      {/* License card (inline for manual license users) */}
+      {licenseCard}
 
       {/* Seats card */}
       <SeatsCard
@@ -675,6 +704,7 @@ export default function BillingDetailsView({
         license={license}
         onRefresh={onRefresh}
         disabled={disableBillingActions}
+        hideUpdateSeats={isManualLicenseOnly}
       />
 
       {/* Payment section */}
