@@ -643,7 +643,7 @@ def list_llm_providers_for_persona(
     persona_id: int,
     user: User = Depends(current_chat_accessible_user),
     db_session: Session = Depends(get_session),
-) -> list[LLMProviderDescriptor]:
+) -> LLMProviderResponse[LLMProviderDescriptor]:
     """Get LLM providers for a specific persona.
 
     Returns providers that the user can access when using this persona:
@@ -690,7 +690,49 @@ def list_llm_providers_for_persona(
         f"Completed fetching {len(llm_provider_list)} LLM providers for persona {persona_id} in {duration:.2f} seconds"
     )
 
-    return llm_provider_list
+    # Get the default model and vision model for the persona
+    # NOTE: This should be ported over to use id as it is blocking on name mutability
+    persona_default_provider = persona.llm_model_provider_override
+    persona_default_model = persona.llm_model_version_override
+
+    default_text_model = fetch_default_llm_model(db_session)
+    default_vision_model = fetch_default_vision_model(db_session)
+
+    # Build default_text and default_vision using persona overrides when available,
+    # falling back to the global defaults.
+    default_text = DefaultModel.from_model_config(default_text_model)
+    default_vision = DefaultModel.from_model_config(default_vision_model)
+
+    if persona_default_provider:
+        provider = fetch_existing_llm_provider(persona_default_provider, db_session)
+        if provider:
+            if persona_default_model:
+                # Persona specifies both provider and model — use them directly
+                default_text = DefaultModel(
+                    provider_id=provider.id,
+                    model_name=persona_default_model,
+                )
+            else:
+                # Persona specifies only the provider — pick a visible (public) model,
+                # falling back to any model on this provider
+                visible_model = next(
+                    (mc for mc in provider.model_configurations if mc.is_visible),
+                    None,
+                )
+                fallback_model = visible_model or next(
+                    iter(provider.model_configurations), None
+                )
+                if fallback_model:
+                    default_text = DefaultModel(
+                        provider_id=provider.id,
+                        model_name=fallback_model.name,
+                    )
+
+    return LLMProviderResponse[LLMProviderDescriptor].from_models(
+        providers=llm_provider_list,
+        default_text=default_text,
+        default_vision=default_vision,
+    )
 
 
 @admin_router.get("/provider-contextual-cost")
