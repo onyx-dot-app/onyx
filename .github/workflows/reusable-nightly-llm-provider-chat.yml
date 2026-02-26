@@ -32,70 +32,6 @@ permissions:
   contents: read
 
 jobs:
-  build-provider-model-matrix:
-    runs-on: ubuntu-slim
-    timeout-minutes: 5
-    outputs:
-      matrix: ${{ steps.construct-matrix.outputs.matrix }}
-    steps:
-      - name: Construct provider/model matrix
-        id: construct-matrix
-        env:
-          OPENAI_MODELS: ${{ inputs.openai_models }}
-          ANTHROPIC_MODELS: ${{ inputs.anthropic_models }}
-          STRICT_VALUE: ${{ inputs.strict && 'true' || 'false' }}
-        run: |
-          node <<'NODE'
-          const fs = require("fs");
-
-          const strict = (process.env.STRICT_VALUE ?? "false") === "true";
-          const providerModels = [
-            {
-              provider: "openai",
-              models: process.env.OPENAI_MODELS ?? "",
-              apiKeySecret: "openai_api_key",
-            },
-            {
-              provider: "anthropic",
-              models: process.env.ANTHROPIC_MODELS ?? "",
-              apiKeySecret: "anthropic_api_key",
-            },
-          ];
-
-          const matrixInclude = [];
-          for (const { provider, models, apiKeySecret } of providerModels) {
-            const parsedModels = models
-              .split(",")
-              .map((model) => model.trim())
-              .filter(Boolean);
-
-            for (const model of parsedModels) {
-              matrixInclude.push({
-                matrix_id: matrixInclude.length,
-                provider,
-                model,
-                api_key_secret: apiKeySecret,
-                strict,
-              });
-            }
-          }
-
-          if (matrixInclude.length === 0) {
-            matrixInclude.push({
-              matrix_id: 0,
-              provider: "",
-              model: "",
-              api_key_secret: "",
-              strict,
-            });
-          }
-
-          fs.appendFileSync(
-            process.env.GITHUB_OUTPUT,
-            `matrix=${JSON.stringify({ include: matrixInclude })}\n`
-          );
-          NODE
-
   build-backend-image:
     runs-on:
       [
@@ -184,18 +120,24 @@ jobs:
   provider-chat-test:
     needs:
       [
-        build-provider-model-matrix,
         build-backend-image,
         build-model-server-image,
         build-integration-image,
       ]
     strategy:
       fail-fast: false
-      matrix: ${{ fromJson(needs.build-provider-model-matrix.outputs.matrix) }}
+      matrix:
+        include:
+          - provider: openai
+            models: ${{ inputs.openai_models }}
+            api_key_secret: openai_api_key
+          - provider: anthropic
+            models: ${{ inputs.anthropic_models }}
+            api_key_secret: anthropic_api_key
     runs-on:
       - runs-on
       - runner=4cpu-linux-arm64
-      - "run-id=${{ github.run_id }}-nightly-${{ matrix.provider }}-${{ matrix.matrix_id }}-provider-chat-test"
+      - "run-id=${{ github.run_id }}-nightly-${{ matrix.provider }}-provider-chat-test"
       - extras=ecr-cache
     timeout-minutes: 45
     steps:
@@ -210,9 +152,9 @@ jobs:
         uses: ./.github/actions/run-nightly-provider-chat-test
         with:
           provider: ${{ matrix.provider }}
-          models: ${{ matrix.model }}
+          models: ${{ matrix.models }}
           provider-api-key: ${{ matrix.api_key_secret && secrets[matrix.api_key_secret] || '' }}
-          strict: ${{ matrix.strict && 'true' || 'false' }}
+          strict: ${{ inputs.strict && 'true' || 'false' }}
           runs-on-ecr-cache: ${{ env.RUNS_ON_ECR_CACHE }}
           run-id: ${{ github.run_id }}
           docker-username: ${{ secrets.DOCKER_USERNAME }}
@@ -234,7 +176,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
-          name: docker-all-logs-nightly-${{ matrix.provider }}-${{ matrix.matrix_id }}-llm-provider
+          name: docker-all-logs-nightly-${{ matrix.provider }}-llm-provider
           path: |
             ${{ github.workspace }}/api_server.log
             ${{ github.workspace }}/docker-compose.log
