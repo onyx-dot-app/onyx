@@ -18,10 +18,12 @@ jobs:
     with:
       openai_models: ${{ vars.NIGHTLY_LLM_OPENAI_MODELS }}
       anthropic_models: ${{ vars.NIGHTLY_LLM_ANTHROPIC_MODELS }}
+      bedrock_models: ${{ vars.NIGHTLY_LLM_BEDROCK_MODELS }}
       strict: true
     secrets:
       openai_api_key: ${{ secrets.OPENAI_API_KEY }}
       anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+      bedrock_api_key: ${{ secrets.BEDROCK_API_KEY }}
       DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
       DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
 

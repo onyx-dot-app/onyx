@@ -105,10 +105,15 @@ def _validate_provider_config(config: NightlyProviderConfig) -> None:
             message=f"{_ENV_MODELS} must include at least one model",
         )
 
-    if config.provider != "ollama_chat" and not config.api_key:
+    if config.provider != "ollama_chat" and not (
+        config.api_key or config.custom_config
+    ):
         _skip_or_fail(
             strict=config.strict,
-            message=(f"{_ENV_API_KEY} is required for provider '{config.provider}'"),
+            message=(
+                f"{_ENV_API_KEY} or {_ENV_CUSTOM_CONFIG_JSON} is required for "
+                f"provider '{config.provider}'"
+            ),
         )
 
     if config.provider == "ollama_chat" and not (
