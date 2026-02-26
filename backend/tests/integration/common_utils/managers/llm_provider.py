@@ -66,6 +66,7 @@ class LLMProviderManager:
             name=response_data["name"],
             provider=response_data["provider"],
             api_key=response_data["api_key"],
+            default_model_name=default_model_name or "gpt-4o-mini",
             is_public=response_data["is_public"],
             is_auto_mode=response_data.get("is_auto_mode", False),
             groups=response_data["groups"],
