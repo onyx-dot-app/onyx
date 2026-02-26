@@ -107,11 +107,10 @@ def assert_response_is_equivalent(
 
 # Test creating an LLM Provider with some various model-configurations.
 @pytest.mark.parametrize(
-    "default_model_name, model_configurations, expected",
+    "model_configurations, expected",
     [
         # Test the case in which a basic model-configuration is passed.
         (
-            "gpt-4",
             [
                 ModelConfigurationUpsertRequest(
                     name="gpt-4", is_visible=True, max_input_tokens=4096
@@ -125,7 +124,6 @@ def assert_response_is_equivalent(
         ),
         # Test the case in which multiple model-configuration are passed.
         (
-            "gpt-4",
             [
                 ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True),
                 ModelConfigurationUpsertRequest(name="gpt-4o", is_visible=True),
@@ -137,7 +135,6 @@ def assert_response_is_equivalent(
         ),
         # Test the case in which duplicate model-configuration are passed.
         (
-            "gpt-4",
             [ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True)] * 4,
             [ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True)],
         ),
@@ -340,7 +337,7 @@ def test_update_model_configurations(
 
 
 @pytest.mark.parametrize(
-    "dmodel_configurations",
+    "model_configurations",
     [
         (
             [
