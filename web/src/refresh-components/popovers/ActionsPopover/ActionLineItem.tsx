@@ -179,7 +179,7 @@ export default function ActionLineItem({
               )}
 
               {isSearchToolAndNotInProject && (
-                <IconButton
+                <Button
                   icon={
                     isSearchToolWithNoConnectors ? SvgSettings : SvgChevronRight
                   }
@@ -188,11 +188,8 @@ export default function ActionLineItem({
                       router.push("/admin/add-connector");
                     else onSourceManagementOpen?.();
                   })}
-                  internal
-                  className={cn(
-                    isSearchToolWithNoConnectors &&
-                      "invisible group-hover/LineItem:visible"
-                  )}
+                  prominence="tertiary"
+                  size="sm"
                   tooltip={
                     isSearchToolWithNoConnectors
                       ? "Add Connectors"
