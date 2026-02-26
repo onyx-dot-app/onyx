@@ -92,6 +92,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
         );
         if (featuredError) {
           toast.error(`Failed to update featured status: ${featuredError}`);
+          refreshAgent();
           return;
         }
       }
