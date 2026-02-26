@@ -235,7 +235,7 @@ def _run_chat_assertions(
 
         time.sleep(attempt)
 
-    pytest.fail(f"Chat/tool-call assertions failed: {last_error}")
+    raise AssertionError(f"Chat/tool-call assertions failed: {last_error}")
 
 
 def _create_and_test_provider_for_model(
@@ -313,10 +313,20 @@ def test_nightly_provider_chat_workflow(admin_user: DATestUser) -> None:
     _seed_connector_for_search_tool(admin_user)
     search_tool_id = _get_internal_search_tool_id(admin_user)
 
+    model_failures: list[str] = []
     for model_name in config.model_names:
-        _create_and_test_provider_for_model(
-            admin_user=admin_user,
-            config=config,
-            model_name=model_name,
-            search_tool_id=search_tool_id,
+        try:
+            _create_and_test_provider_for_model(
+                admin_user=admin_user,
+                config=config,
+                model_name=model_name,
+                search_tool_id=search_tool_id,
+            )
+        except Exception as ex:
+            model_failures.append(f"model={model_name}: {ex}")
+
+    if model_failures:
+        pytest.fail(
+            "Nightly provider chat workflow failed for one or more models:\n"
+            + "\n".join(model_failures)
         )

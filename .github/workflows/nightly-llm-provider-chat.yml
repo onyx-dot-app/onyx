@@ -1,6 +1,6 @@
-name: Nightly LLM Provider Chat Tests (OpenAI)
+name: Nightly LLM Provider Chat Tests
 concurrency:
-  group: Nightly-LLM-Provider-Chat-OpenAI-${{ github.workflow }}-${{ github.ref_name }}
+  group: Nightly-LLM-Provider-Chat-${{ github.workflow }}-${{ github.ref_name }}
   cancel-in-progress: true
 
 on:
@@ -13,19 +13,22 @@ permissions:
   contents: read
 
 jobs:
-  openai-provider-chat-test:
+  llm-provider-chat-tests:
     uses: ./.github/workflows/reusable-nightly-llm-provider-chat.yml
     with:
-      provider: openai
-      models: ${{ vars.NIGHTLY_LLM_OPENAI_MODELS }}
-      strict: true
-    secrets:
-      provider_api_key: ${{ secrets.OPENAI_API_KEY }}
-      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-      DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
+      providers_json: >-
+        [
+          {
+            "provider": "openai",
+            "models": "${{ vars.NIGHTLY_LLM_OPENAI_MODELS }}",
+            "api_key_secret": "OPENAI_API_KEY",
+            "strict": true
+          }
+        ]
+    secrets: inherit
 
   notify-slack-on-failure:
-    needs: [openai-provider-chat-test]
+    needs: [llm-provider-chat-tests]
     if: failure() && github.event_name == 'schedule'
     runs-on: ubuntu-slim
     timeout-minutes: 5
@@ -39,6 +42,6 @@ jobs:
         uses: ./.github/actions/slack-notify
         with:
           webhook-url: ${{ secrets.SLACK_WEBHOOK }}
-          failed-jobs: openai-provider-chat-test
-          title: "🚨 Scheduled OpenAI Provider Chat Tests failed!"
+          failed-jobs: llm-provider-chat-tests
+          title: "🚨 Scheduled LLM Provider Chat Tests failed!"
           ref-name: ${{ github.ref_name }}

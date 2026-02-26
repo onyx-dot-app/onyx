@@ -9,7 +9,8 @@ inputs:
     required: true
   provider-api-key:
     description: "API key for NIGHTLY_LLM_API_KEY"
-    required: true
+    required: false
+    default: ""
   strict:
     description: "String true/false for NIGHTLY_LLM_STRICT"
     required: true
