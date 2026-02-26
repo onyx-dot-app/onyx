@@ -57,8 +57,8 @@ function CheckingStatus() {
       flexDirection="row"
       justifyContent="end"
       alignItems="center"
-      gap={0.5}
-      padding={0}
+      gap={0.25}
+      padding={0.5}
     >
       <Text mainUiAction text03>
         Checking...
@@ -101,9 +101,14 @@ function ConnectionStatus({ healthy, isLoading }: ConnectionStatusProps) {
 interface ActionButtonsProps {
   onDisconnect: () => void;
   onRefresh: () => void;
+  disabled?: boolean;
 }
 
-function ActionButtons({ onDisconnect, onRefresh }: ActionButtonsProps) {
+function ActionButtons({
+  onDisconnect,
+  onRefresh,
+  disabled,
+}: ActionButtonsProps) {
   return (
     <Section
       flexDirection="row"
@@ -118,6 +123,7 @@ function ActionButtons({ onDisconnect, onRefresh }: ActionButtonsProps) {
         icon={SvgUnplug}
         onClick={onDisconnect}
         tooltip="Disconnect"
+        disabled={disabled}
       />
       <Button
         prominence="tertiary"
@@ -125,6 +131,7 @@ function ActionButtons({ onDisconnect, onRefresh }: ActionButtonsProps) {
         icon={SvgRefreshCw}
         onClick={onRefresh}
         tooltip="Refresh"
+        disabled={disabled}
       />
     </Section>
   );
@@ -161,7 +168,7 @@ export default function CodeInterpreterPage() {
       />
 
       <SettingsLayouts.Body>
-        {isEnabled ? (
+        {isEnabled || isLoading ? (
           <CodeInterpreterCard
             title="Code Interpreter"
             variant={isHealthy ? "primary" : "secondary"}
@@ -178,6 +185,7 @@ export default function CodeInterpreterPage() {
                 <ActionButtons
                   onDisconnect={() => setShowDisconnectModal(true)}
                   onRefresh={refetch}
+                  disabled={isLoading}
                 />
               </Section>
             }
@@ -190,7 +198,7 @@ export default function CodeInterpreterPage() {
             strikethrough={true}
             rightContent={
               <Section flexDirection="row" alignItems="center" padding={0.5}>
-                {isReconnecting || isLoading ? (
+                {isReconnecting ? (
                   <CheckingStatus />
                 ) : (
                   <Button
