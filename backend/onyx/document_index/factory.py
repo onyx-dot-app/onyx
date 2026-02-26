@@ -11,6 +11,7 @@ from onyx.document_index.opensearch.opensearch_document_index import (
     OpenSearchOldDocumentIndex,
 )
 from onyx.document_index.vespa.index import VespaIndex
+from onyx.indexing.models import IndexingSetting
 from shared_configs.configs import MULTI_TENANT
 
 
@@ -49,8 +50,11 @@ def get_default_document_index(
 
     opensearch_retrieval_enabled = get_opensearch_retrieval_state(db_session)
     if opensearch_retrieval_enabled:
+        indexing_setting = IndexingSetting.from_db_model(search_settings)
         return OpenSearchOldDocumentIndex(
             index_name=search_settings.index_name,
+            embedding_dim=indexing_setting.final_embedding_dim,
+            embedding_precision=indexing_setting.embedding_precision,
             secondary_index_name=secondary_index_name,
             large_chunks_enabled=search_settings.large_chunks_enabled,
             secondary_large_chunks_enabled=secondary_large_chunks_enabled,
@@ -118,8 +122,11 @@ def get_all_document_indices(
     )
     opensearch_document_index: OpenSearchOldDocumentIndex | None = None
     if ENABLE_OPENSEARCH_INDEXING_FOR_ONYX:
+        indexing_setting = IndexingSetting.from_db_model(search_settings)
         opensearch_document_index = OpenSearchOldDocumentIndex(
             index_name=search_settings.index_name,
+            embedding_dim=indexing_setting.final_embedding_dim,
+            embedding_precision=indexing_setting.embedding_precision,
             secondary_index_name=None,
             large_chunks_enabled=False,
             secondary_large_chunks_enabled=None,
