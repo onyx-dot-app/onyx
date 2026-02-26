@@ -458,6 +458,19 @@ def test_rename_provider_rejected(reset: None) -> None:  # noqa: ARG001
     assert response.status_code == 400
     assert "not currently supported" in response.json()["detail"]
 
+    # Verify no duplicate was created — only the original provider should exist
+    provider = _get_provider_by_id(admin_user, provider_id)
+    assert provider is not None
+    assert provider["name"] == create_payload["name"]
+
+    all_response = requests.get(
+        f"{API_SERVER_URL}/admin/llm/provider",
+        headers=admin_user.headers,
+    )
+    assert all_response.status_code == 200
+    all_names = [p["name"] for p in all_response.json()["providers"]]
+    assert new_name not in all_names
+
 
 def test_model_visibility_preserved_on_edit(reset: None) -> None:  # noqa: ARG001
     """
