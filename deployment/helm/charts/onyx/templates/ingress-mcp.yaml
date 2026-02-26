@@ -8,7 +8,7 @@ metadata:
     kubernetes.io/ingress.class: nginx
     {{- end }}
     nginx.org/rewrite-target: /$2
-    nginx.org/path-regex: "case_sensitive"
+    nginx.org/path-regex: "case_insensitive"
     cert-manager.io/cluster-issuer: {{ include "onyx.fullname" . }}-letsencrypt
 spec:
   {{- if .Values.ingress.className }}
