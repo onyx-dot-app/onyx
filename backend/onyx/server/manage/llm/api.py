@@ -364,6 +364,7 @@ def put_llm_provider(
     found_provider = fetch_existing_llm_provider(
         name=llm_provider_upsert_request.name, db_session=db_session
     )
+    # SQLAlchemy returns the same python objects so is comparison is ok
     if found_provider is not None and found_provider is not existing_provider:
         raise HTTPException(
             status_code=400,
