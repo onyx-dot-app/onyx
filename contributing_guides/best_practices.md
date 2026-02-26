@@ -163,3 +163,15 @@ Add clear comments:
 - Any TODOs you add in the code must be accompanied by either the name/username
   of the owner of that TODO, or an issue number for an issue referencing that
   piece of work.
+- Avoid module-level logic that runs on import, which leads to import-time side
+  effects. Essentially every piece of meaningful logic should exist within some
+  function that has to be explicitly invoked. Acceptable exceptions to this may
+  include loading environment variables or setting up loggers.
+  - If you find yourself needing something like this, you maybe want that logic
+    to exist in a `main.py` file which should never be imported by anything else
+    and only run explicitly.
+- Related to the above, never add files which are both modules that are intended
+  to be imported and scripts which are intended to be ran directly. If you want
+  to directly invoke the contents of a Python file from the command line for
+  example, always encapsulate that file with a `main.py` file, even if all that
+  main file does is import said module and call a function for example.
