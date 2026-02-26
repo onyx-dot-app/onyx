@@ -40,7 +40,6 @@ def test_persona_create_update_share_delete(
         expected_persona,
         name=f"updated-{expected_persona.name}",
         description=f"updated-{expected_persona.description}",
-        num_chunks=expected_persona.num_chunks + 1,
         is_public=False,
         user_performing_action=admin_user,
     )

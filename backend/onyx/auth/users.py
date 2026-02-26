@@ -543,7 +543,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         result = await db_session.execute(
             select(Persona.id)
             .where(
-                Persona.is_default_persona.is_(True),
+                Persona.featured.is_(True),
                 Persona.is_public.is_(True),
                 Persona.is_visible.is_(True),
                 Persona.deleted.is_(False),

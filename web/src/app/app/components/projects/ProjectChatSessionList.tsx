@@ -74,10 +74,10 @@ export default function ProjectChatSessionList() {
                 <div className="flex gap-3 min-w-0 w-full">
                   <div className="flex h-full w-fit pt-1 pl-1">
                     {(() => {
-                      const personaIdToDefault =
-                        currentProjectDetails?.persona_id_to_is_default || {};
-                      const isDefault = personaIdToDefault[chat.persona_id];
-                      if (isDefault === false) {
+                      const personaIdToFeatured =
+                        currentProjectDetails?.persona_id_to_featured || {};
+                      const isFeatured = personaIdToFeatured[chat.persona_id];
+                      if (isFeatured === false) {
                         const assistant = assistants.find(
                           (a) => a.id === chat.persona_id
                         );
