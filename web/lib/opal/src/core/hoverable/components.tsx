@@ -16,7 +16,7 @@ import type { WithoutStyles } from "@opal/types";
  *
  * The default value is `null` (no provider found), which lets
  * `Hoverable.Item` distinguish "no Root ancestor" from "Root says
- * not hovered" and fall back to local `:hover` styling.
+ * not hovered" and throw when `group` was explicitly specified.
  */
 const contextMap = new Map<string, React.Context<boolean | null>>();
 
@@ -97,11 +97,12 @@ function HoverableRoot({ group, children, ...props }: HoverableRootProps) {
 /**
  * An element whose visibility is controlled by hover state.
  *
- * **Group mode** (`group` provided + matching `Hoverable.Root` ancestor):
- * visibility is driven by the Root's hover state via React context.
+ * **Local mode** (`group` omitted): the item handles hover on its own
+ * element via CSS `:hover`. This is the core abstraction.
  *
- * **Local mode** (`group` omitted, or no matching `Hoverable.Root` found):
- * the item handles hover on its own element via CSS `:hover`.
+ * **Group mode** (`group` provided): visibility is driven by a matching
+ * `Hoverable.Root` ancestor's hover state via React context. If no
+ * matching Root is found, an error is thrown.
  *
  * Uses data-attributes for variant styling (see `styles.css`).
  *
@@ -113,10 +114,14 @@ function HoverableRoot({ group, children, ...props }: HoverableRootProps) {
  * </Hoverable.Item>
  *
  * // Group mode — hover on the Root reveals the item
- * <Hoverable.Item group="card" variant="opacity-on-hover">
- *   <TrashIcon />
- * </Hoverable.Item>
+ * <Hoverable.Root group="card">
+ *   <Hoverable.Item group="card" variant="opacity-on-hover">
+ *     <TrashIcon />
+ *   </Hoverable.Item>
+ * </Hoverable.Root>
  * ```
+ *
+ * @throws If `group` is specified but no matching `Hoverable.Root` ancestor exists.
  */
 function HoverableItem({
   group,
@@ -125,9 +130,17 @@ function HoverableItem({
   ...props
 }: HoverableItemProps) {
   const contextValue = useContext(
-    group ? getOrCreateContext(group) : EMPTY_CONTEXT
+    group ? getOrCreateContext(group) : NOOP_CONTEXT
   );
-  const isLocal = contextValue === null;
+
+  if (group && contextValue === null) {
+    throw new Error(
+      `Hoverable.Item group="${group}" has no matching Hoverable.Root ancestor. ` +
+        `Either wrap it in <Hoverable.Root group="${group}"> or remove the group prop for local hover.`
+    );
+  }
+
+  const isLocal = group === undefined;
 
   return (
     <div
@@ -144,8 +157,8 @@ function HoverableItem({
   );
 }
 
-/** Stable context that always returns `null` (no provider). */
-const EMPTY_CONTEXT = createContext<boolean | null>(null);
+/** Stable context used when no group is specified (local mode). */
+const NOOP_CONTEXT = createContext<boolean | null>(null);
 
 // ---------------------------------------------------------------------------
 // Compound export
@@ -159,10 +172,10 @@ const EMPTY_CONTEXT = createContext<boolean | null>(null);
  * - `Hoverable.Root` — A container that tracks hover state for a named group
  *   and provides it via React context.
  *
- * - `Hoverable.Item` — An element that applies variant styles
- *   (e.g., `"opacity-on-hover"`). When `group` is provided and a matching
- *   `Hoverable.Root` ancestor exists, visibility is driven by the Root's
- *   hover state. Otherwise, the item falls back to local CSS `:hover`.
+ * - `Hoverable.Item` — The core abstraction. On its own (no `group`), it
+ *   applies local CSS `:hover` for the variant effect. When `group` is
+ *   specified, it reads hover state from the nearest matching
+ *   `Hoverable.Root` — and throws if no matching Root is found.
  *
  * Supports nesting: a child `Hoverable.Root` shadows the parent's context,
  * so each group's items only respond to their own root's hover.
