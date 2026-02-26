@@ -448,7 +448,7 @@ class TestSlackBotFederatedSearch:
             db_session=db_session,
         )
 
-        update_default_provider(provider_view.id, db_session)
+        update_default_provider(provider_view.id, "gpt-4o", db_session)
 
     def _teardown_common_mocks(self, patches: list) -> None:
         """Stop all patches"""

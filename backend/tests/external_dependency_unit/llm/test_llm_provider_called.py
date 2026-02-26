@@ -154,7 +154,9 @@ def test_user_sends_message_to_private_provider(
     )
     _create_provider(db_session, LlmProviderNames.GOOGLE, "private-provider", False)
 
-    update_default_provider(public_provider_id, db_session)
+    update_default_provider(
+        public_provider_id, "claude-3-5-sonnet-20240620", db_session
+    )
 
     try:
         # Create chat session

@@ -302,6 +302,16 @@ def test_update_model_configurations(
         initial_expected,
     )
 
+    response = requests.post(
+        f"{API_SERVER_URL}/admin/llm/default",
+        headers=admin_user.headers,
+        json={
+            "provider_id": created_provider["id"],
+            "model_name": updated_default_model_name,
+        },
+    )
+    assert response.status_code == 200
+
     response = requests.put(
         f"{API_SERVER_URL}/admin/llm/provider",
         headers=admin_user.headers,
@@ -326,6 +336,16 @@ def test_update_model_configurations(
         updated_expected,
         "sk-0****0000",
     )
+
+    response = requests.post(
+        f"{API_SERVER_URL}/admin/llm/default",
+        headers=admin_user.headers,
+        json={
+            "provider_id": created_provider["id"],
+            "model_name": updated_default_model_name,
+        },
+    )
+    assert response.status_code == 200
 
     response = requests.put(
         f"{API_SERVER_URL}/admin/llm/provider",
@@ -916,7 +936,11 @@ def test_default_model_persistence_and_update(reset: None) -> None:  # noqa: ARG
     assert update_response.status_code == 200
 
     default_provider_response = requests.post(
-        f"{API_SERVER_URL}/admin/llm/provider/{update_response.json()['id']}/default",
+        f"{API_SERVER_URL}/admin/llm/default",
+        json={
+            "provider_id": update_response.json()["id"],
+            "model_name": updated_default_model,
+        },
         headers=admin_user.headers,
     )
     assert default_provider_response.status_code == 200
@@ -1012,10 +1036,16 @@ def _get_all_providers_admin(admin_user: DATestUser) -> list[dict]:
     return response.json()["providers"]
 
 
-def _set_default_provider(admin_user: DATestUser, provider_id: int) -> None:
+def _set_default_provider(
+    admin_user: DATestUser, provider_id: int, model_name: str
+) -> None:
     """Utility function to set a provider as the default."""
     response = requests.post(
-        f"{API_SERVER_URL}/admin/llm/provider/{provider_id}/default",
+        f"{API_SERVER_URL}/admin/llm/default",
+        json={
+            "provider_id": provider_id,
+            "model_name": model_name,
+        },
         headers=admin_user.headers,
     )
     assert response.status_code == 200
@@ -1025,16 +1055,15 @@ def _set_default_vision_provider(
     admin_user: DATestUser, provider_id: int, vision_model: str | None = None
 ) -> None:
     """Utility function to set a provider as the default vision provider."""
-    url = f"{API_SERVER_URL}/admin/llm/provider/{provider_id}/default-vision"
-    if vision_model:
-        url += f"?vision_model={vision_model}"
-    response = requests.post(url, headers=admin_user.headers)
+    response = requests.post(
+        f"{API_SERVER_URL}/admin/llm/default-vision",
+        json={
+            "provider_id": provider_id,
+            "model_name": vision_model,
+        },
+        headers=admin_user.headers,
+    )
     assert response.status_code == 200
-
-
-def _find_default_provider(providers: list[dict]) -> dict | None:
-    """Find the default provider from a list of providers."""
-    return next((p for p in providers if p.get("is_default_provider")), None)
 
 
 def _find_default_vision_provider(providers: list[dict]) -> dict | None:
@@ -1122,6 +1151,8 @@ def test_multiple_providers_default_switching(reset: None) -> None:  # noqa: ARG
     assert create_response_1.status_code == 200
     provider_1 = create_response_1.json()
 
+    _set_default_provider(admin_user, provider_1["id"], shared_model_name)
+
     # Create provider 2 with provider_2_unique_model as default initially
     create_response_2 = requests.put(
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
@@ -1141,7 +1172,7 @@ def test_multiple_providers_default_switching(reset: None) -> None:  # noqa: ARG
     provider_2 = create_response_2.json()
 
     # Step 2: Set provider 1 as the default provider
-    _set_default_provider(admin_user, provider_1["id"])
+    _set_default_provider(admin_user, provider_1["id"], shared_model_name)
 
     # Step 3: Both admin and basic_user query and verify they see the same default
     # Validate via admin endpoint
@@ -1239,7 +1270,7 @@ def test_multiple_providers_default_switching(reset: None) -> None:  # noqa: ARG
     assert update_response.status_code == 200
 
     # Now set provider 2 as the default
-    _set_default_provider(admin_user, provider_2["id"])
+    _set_default_provider(admin_user, provider_2["id"], provider_2_unique_model)
 
     # Step 5: Both admin and basic_user verify they see the updated default
     # Validate via admin endpoint
@@ -1335,6 +1366,10 @@ def test_multiple_providers_default_switching(reset: None) -> None:  # noqa: ARG
         },
     )
     assert update_response.status_code == 200
+
+    _set_default_provider(
+        admin_user, provider_2["id"], shared_model_name
+    )  # Same name as provider 1's model
 
     # Step 7: Both users verify they see provider 2 as default with the shared model name
     # Validate via admin endpoint
@@ -1535,7 +1570,7 @@ def test_default_provider_and_vision_provider_selection(
     provider_2 = create_response_2.json()
 
     # Step 3: Set provider 1 as the general default provider
-    _set_default_provider(admin_user, provider_1["id"])
+    _set_default_provider(admin_user, provider_1["id"], provider_1_non_vision_model)
 
     # Step 4: Set provider 2 with a specific vision model as the default vision provider
     _set_default_vision_provider(
@@ -1732,7 +1767,7 @@ def test_default_provider_is_not_default_vision_provider(
     created_provider = create_response.json()
 
     # Step 2: Set it as the default provider
-    _set_default_provider(admin_user, created_provider["id"])
+    _set_default_provider(admin_user, created_provider["id"], "gpt-4")
 
     # Step 3 & 4: Verify via admin endpoint
     admin_data = _get_providers_admin(admin_user)
@@ -1932,7 +1967,7 @@ def test_all_three_provider_types_no_mixup(reset: None) -> None:  # noqa: ARG001
     regular_provider = create_regular_response.json()
 
     # Set as default provider
-    _set_default_provider(admin_user, regular_provider["id"])
+    _set_default_provider(admin_user, regular_provider["id"], "gpt-4")
 
     # Step 2: Create vision LLM provider
     create_vision_response = requests.put(
