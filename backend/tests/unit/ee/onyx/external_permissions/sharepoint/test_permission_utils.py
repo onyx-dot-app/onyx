@@ -3,6 +3,8 @@ from typing import Any
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
+import pytest
+
 from ee.onyx.external_permissions.sharepoint.permission_utils import (
     _enumerate_ad_groups_paginated,
 )
@@ -14,6 +16,9 @@ from ee.onyx.external_permissions.sharepoint.permission_utils import (
 )
 from ee.onyx.external_permissions.sharepoint.permission_utils import (
     AD_GROUP_ENUMERATION_THRESHOLD,
+)
+from ee.onyx.external_permissions.sharepoint.permission_utils import (
+    get_external_access_from_sharepoint,
 )
 from ee.onyx.external_permissions.sharepoint.permission_utils import (
     get_sharepoint_external_groups,
@@ -266,3 +271,65 @@ def test_enumerate_all_without_token_skips(
 
     assert results == []
     mock_enum.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# get_external_access_from_sharepoint – site page URL handling
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "site_base_url, web_url, expected_relative_url",
+    [
+        (
+            "https://tenant.sharepoint.com/sites/Evan%27sSite",
+            "https://tenant.sharepoint.com/sites/Evan%27sSite/SitePages/Home.aspx",
+            "/sites/Evan%27sSite/SitePages/Home.aspx",
+        ),
+        (
+            "https://tenant.sharepoint.com/sites/NormalSite",
+            "https://tenant.sharepoint.com/sites/NormalSite/SitePages/Page.aspx",
+            "/sites/NormalSite/SitePages/Page.aspx",
+        ),
+        (
+            "https://tenant.sharepoint.com/sites/Site%20With%20Spaces",
+            "https://tenant.sharepoint.com/sites/Site%20With%20Spaces/SitePages/Doc.aspx",
+            "/sites/Site%20With%20Spaces/SitePages/Doc.aspx",
+        ),
+    ],
+    ids=["apostrophe-encoded", "no-special-chars", "space-encoded"],
+)
+@patch(f"{MODULE}._get_groups_and_members_recursively")
+@patch(f"{MODULE}.sleep_and_retry")
+def test_site_page_url_not_duplicated(
+    mock_sleep: MagicMock,  # noqa: ARG001
+    mock_recursive: MagicMock,
+    site_base_url: str,
+    web_url: str,
+    expected_relative_url: str,
+) -> None:
+    """Regression: the server-relative URL passed to
+    get_file_by_server_relative_url must preserve percent-encoding so the
+    Office365 library's SPResPath.create_relative() recognises the site prefix
+    and doesn't duplicate it."""
+    mock_recursive.return_value = GroupsResult(
+        groups_to_emails={},
+        found_public_group=False,
+    )
+
+    ctx = MagicMock()
+    ctx.base_url = site_base_url
+
+    site_page = {"webUrl": web_url}
+
+    get_external_access_from_sharepoint(
+        client_context=ctx,
+        graph_client=MagicMock(),
+        drive_name=None,
+        drive_item=None,
+        site_page=site_page,
+    )
+
+    ctx.web.get_file_by_server_relative_url.assert_called_once_with(
+        expected_relative_url
+    )

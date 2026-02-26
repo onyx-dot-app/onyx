@@ -37,6 +37,7 @@ from onyx.db.opensearch_migration import build_sanitized_to_original_doc_id_mapp
 from onyx.db.search_settings import get_active_search_settings
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.client import OpenSearchClient
+from onyx.document_index.opensearch.client import OpenSearchIndexClient
 from onyx.document_index.opensearch.client import wait_for_opensearch_with_timeout
 from onyx.document_index.opensearch.constants import DEFAULT_MAX_CHUNK_SIZE
 from onyx.document_index.opensearch.schema import DocumentChunk
@@ -74,7 +75,7 @@ CHUNK_COUNT = 5
 
 
 def _get_document_chunks_from_opensearch(
-    opensearch_client: OpenSearchClient, document_id: str, current_tenant_id: str
+    opensearch_client: OpenSearchIndexClient, document_id: str, current_tenant_id: str
 ) -> list[DocumentChunk]:
     opensearch_client.refresh_index()
     filters = IndexFilters(access_control_list=None, tenant_id=current_tenant_id)
@@ -95,7 +96,7 @@ def _get_document_chunks_from_opensearch(
 
 
 def _delete_document_chunks_from_opensearch(
-    opensearch_client: OpenSearchClient, document_id: str, current_tenant_id: str
+    opensearch_client: OpenSearchIndexClient, document_id: str, current_tenant_id: str
 ) -> None:
     opensearch_client.refresh_index()
     query_body = DocumentQuery.delete_from_document_id_query(
@@ -283,10 +284,10 @@ def vespa_document_index(
 def opensearch_client(
     db_session: Session,
     full_deployment_setup: None,  # noqa: ARG001
-) -> Generator[OpenSearchClient, None, None]:
+) -> Generator[OpenSearchIndexClient, None, None]:
     """Creates an OpenSearch client for the test tenant."""
     active = get_active_search_settings(db_session)
-    yield OpenSearchClient(index_name=active.primary.index_name)  # Test runs here.
+    yield OpenSearchIndexClient(index_name=active.primary.index_name)  # Test runs here.
 
 
 @pytest.fixture(scope="module")
@@ -330,7 +331,7 @@ def patch_get_vespa_chunks_page_size() -> Generator[int, None, None]:
 def test_documents(
     db_session: Session,
     vespa_document_index: VespaDocumentIndex,
-    opensearch_client: OpenSearchClient,
+    opensearch_client: OpenSearchIndexClient,
     patch_get_vespa_chunks_page_size: int,
 ) -> Generator[list[Document], None, None]:
     """
@@ -411,7 +412,7 @@ class TestMigrateChunksFromVespaToOpenSearchTask:
         db_session: Session,
         test_documents: list[Document],
         vespa_document_index: VespaDocumentIndex,
-        opensearch_client: OpenSearchClient,
+        opensearch_client: OpenSearchIndexClient,
         test_embedding_dimension: int,
         clean_migration_tables: None,  # noqa: ARG002
         enable_opensearch_indexing_for_onyx: None,  # noqa: ARG002
@@ -480,7 +481,7 @@ class TestMigrateChunksFromVespaToOpenSearchTask:
         db_session: Session,
         test_documents: list[Document],
         vespa_document_index: VespaDocumentIndex,
-        opensearch_client: OpenSearchClient,
+        opensearch_client: OpenSearchIndexClient,
         test_embedding_dimension: int,
         clean_migration_tables: None,  # noqa: ARG002
         enable_opensearch_indexing_for_onyx: None,  # noqa: ARG002
@@ -618,7 +619,7 @@ class TestMigrateChunksFromVespaToOpenSearchTask:
         db_session: Session,
         test_documents: list[Document],
         vespa_document_index: VespaDocumentIndex,
-        opensearch_client: OpenSearchClient,
+        opensearch_client: OpenSearchIndexClient,
         test_embedding_dimension: int,
         clean_migration_tables: None,  # noqa: ARG002
         enable_opensearch_indexing_for_onyx: None,  # noqa: ARG002
@@ -712,7 +713,7 @@ class TestMigrateChunksFromVespaToOpenSearchTask:
         db_session: Session,
         test_documents: list[Document],
         vespa_document_index: VespaDocumentIndex,
-        opensearch_client: OpenSearchClient,
+        opensearch_client: OpenSearchIndexClient,
         test_embedding_dimension: int,
         clean_migration_tables: None,  # noqa: ARG002
         enable_opensearch_indexing_for_onyx: None,  # noqa: ARG002

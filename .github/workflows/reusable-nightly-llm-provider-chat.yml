@@ -1,0 +1,206 @@
+name: Reusable Nightly LLM Provider Chat Tests
+
+on:
+  workflow_call:
+    inputs:
+      provider:
+        description: "Provider slug passed to NIGHTLY_LLM_PROVIDER (e.g. openai, anthropic)"
+        required: true
+        type: string
+      models:
+        description: "Comma-separated model list passed to NIGHTLY_LLM_MODELS"
+        required: true
+        type: string
+      strict:
+        description: "Pass-through value for NIGHTLY_LLM_STRICT"
+        required: false
+        default: true
+        type: boolean
+      api_base:
+        description: "Optional NIGHTLY_LLM_API_BASE override"
+        required: false
+        default: ""
+        type: string
+      custom_config_json:
+        description: "Optional NIGHTLY_LLM_CUSTOM_CONFIG_JSON override"
+        required: false
+        default: ""
+        type: string
+    secrets:
+      provider_api_key:
+        description: "Provider API key passed to NIGHTLY_LLM_API_KEY"
+        required: true
+      DOCKER_USERNAME:
+        required: true
+      DOCKER_TOKEN:
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  NIGHTLY_LLM_PROVIDER: ${{ inputs.provider }}
+  NIGHTLY_LLM_MODELS: ${{ inputs.models }}
+  NIGHTLY_LLM_API_KEY: ${{ secrets.provider_api_key }}
+  NIGHTLY_LLM_API_BASE: ${{ inputs.api_base }}
+  NIGHTLY_LLM_CUSTOM_CONFIG_JSON: ${{ inputs.custom_config_json }}
+  NIGHTLY_LLM_STRICT: ${{ inputs.strict && 'true' || 'false' }}
+
+jobs:
+  validate-inputs:
+    # NOTE: Keep this cheap and fail before image builds if required inputs are missing.
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    steps:
+      - name: Validate required nightly provider inputs
+        run: |
+          if [ -z "${NIGHTLY_LLM_MODELS}" ]; then
+            echo "Input 'models' must be non-empty for provider '${NIGHTLY_LLM_PROVIDER}'."
+            exit 1
+          fi
+
+  build-backend-image:
+    needs: [validate-inputs]
+    runs-on:
+      [
+        runs-on,
+        runner=1cpu-linux-arm64,
+        "run-id=${{ github.run_id }}-build-backend-image",
+        "extras=ecr-cache",
+      ]
+    timeout-minutes: 45
+    steps:
+      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Build backend image
+        uses: ./.github/actions/build-backend-image
+        with:
+          runs-on-ecr-cache: ${{ env.RUNS_ON_ECR_CACHE }}
+          ref-name: ${{ github.ref_name }}
+          pr-number: ${{ github.event.pull_request.number }}
+          github-sha: ${{ github.sha }}
+          run-id: ${{ github.run_id }}
+          docker-username: ${{ secrets.DOCKER_USERNAME }}
+          docker-token: ${{ secrets.DOCKER_TOKEN }}
+          docker-no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' && 'true' || 'false' }}
+
+  build-model-server-image:
+    needs: [validate-inputs]
+    runs-on:
+      [
+        runs-on,
+        runner=1cpu-linux-arm64,
+        "run-id=${{ github.run_id }}-build-model-server-image",
+        "extras=ecr-cache",
+      ]
+    timeout-minutes: 45
+    steps:
+      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Build model server image
+        uses: ./.github/actions/build-model-server-image
+        with:
+          runs-on-ecr-cache: ${{ env.RUNS_ON_ECR_CACHE }}
+          ref-name: ${{ github.ref_name }}
+          pr-number: ${{ github.event.pull_request.number }}
+          github-sha: ${{ github.sha }}
+          run-id: ${{ github.run_id }}
+          docker-username: ${{ secrets.DOCKER_USERNAME }}
+          docker-token: ${{ secrets.DOCKER_TOKEN }}
+
+  build-integration-image:
+    needs: [validate-inputs]
+    runs-on:
+      [
+        runs-on,
+        runner=2cpu-linux-arm64,
+        "run-id=${{ github.run_id }}-build-integration-image",
+        "extras=ecr-cache",
+      ]
+    timeout-minutes: 45
+    steps:
+      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Build integration image
+        uses: ./.github/actions/build-integration-image
+        with:
+          runs-on-ecr-cache: ${{ env.RUNS_ON_ECR_CACHE }}
+          ref-name: ${{ github.ref_name }}
+          pr-number: ${{ github.event.pull_request.number }}
+          github-sha: ${{ github.sha }}
+          run-id: ${{ github.run_id }}
+          docker-username: ${{ secrets.DOCKER_USERNAME }}
+          docker-token: ${{ secrets.DOCKER_TOKEN }}
+
+  provider-chat-test:
+    needs:
+      [build-backend-image, build-model-server-image, build-integration-image]
+    runs-on:
+      - runs-on
+      - runner=4cpu-linux-arm64
+      - "run-id=${{ github.run_id }}-nightly-${{ inputs.provider }}-provider-chat-test"
+      - extras=ecr-cache
+    timeout-minutes: 45
+    steps:
+      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Run nightly provider chat test
+        uses: ./.github/actions/run-nightly-provider-chat-test
+        with:
+          provider: ${{ env.NIGHTLY_LLM_PROVIDER }}
+          models: ${{ env.NIGHTLY_LLM_MODELS }}
+          provider-api-key: ${{ secrets.provider_api_key }}
+          strict: ${{ env.NIGHTLY_LLM_STRICT }}
+          api-base: ${{ env.NIGHTLY_LLM_API_BASE }}
+          custom-config-json: ${{ env.NIGHTLY_LLM_CUSTOM_CONFIG_JSON }}
+          runs-on-ecr-cache: ${{ env.RUNS_ON_ECR_CACHE }}
+          run-id: ${{ github.run_id }}
+          docker-username: ${{ secrets.DOCKER_USERNAME }}
+          docker-token: ${{ secrets.DOCKER_TOKEN }}
+
+      - name: Dump API server logs
+        if: always()
+        run: |
+          cd deployment/docker_compose
+          docker compose logs --no-color api_server > $GITHUB_WORKSPACE/api_server.log || true
+
+      - name: Dump all-container logs
+        if: always()
+        run: |
+          cd deployment/docker_compose
+          docker compose logs --no-color > $GITHUB_WORKSPACE/docker-compose.log || true
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: docker-all-logs-nightly-${{ inputs.provider }}-llm-provider
+          path: |
+            ${{ github.workspace }}/api_server.log
+            ${{ github.workspace }}/docker-compose.log
+
+      - name: Stop Docker containers
+        if: always()
+        run: |
+          cd deployment/docker_compose
+          docker compose down -v

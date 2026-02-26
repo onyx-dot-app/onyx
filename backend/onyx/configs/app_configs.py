@@ -294,6 +294,12 @@ ENABLE_OPENSEARCH_RETRIEVAL_FOR_ONYX = (
     ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
     and os.environ.get("ENABLE_OPENSEARCH_RETRIEVAL_FOR_ONYX", "").lower() == "true"
 )
+# Whether we should check for and create an index if necessary every time we
+# instantiate an OpenSearchDocumentIndex on multitenant cloud. Defaults to True.
+VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT = (
+    os.environ.get("VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT", "true").lower()
+    == "true"
+)
 
 VESPA_HOST = os.environ.get("VESPA_HOST") or "localhost"
 # NOTE: this is used if and only if the vespa config server is accessible via a

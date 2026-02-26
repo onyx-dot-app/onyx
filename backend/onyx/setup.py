@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import DISABLE_INDEX_UPDATE_ON_SWAP
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
+from onyx.configs.app_configs import ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.app_configs import MANAGED_VESPA
 from onyx.configs.app_configs import VESPA_NUM_ATTEMPTS_ON_STARTUP
@@ -32,6 +33,9 @@ from onyx.db.search_settings import update_current_search_settings
 from onyx.db.swap_index import check_and_perform_index_swap
 from onyx.document_index.factory import get_all_document_indices
 from onyx.document_index.interfaces import DocumentIndex
+from onyx.document_index.opensearch.client import OpenSearchClient
+from onyx.document_index.opensearch.client import wait_for_opensearch_with_timeout
+from onyx.document_index.opensearch.opensearch_document_index import set_cluster_state
 from onyx.document_index.vespa.index import VespaIndex
 from onyx.indexing.models import IndexingSetting
 from onyx.key_value_store.factory import get_kv_store
@@ -311,7 +315,14 @@ def setup_multitenant_onyx() -> None:
         logger.notice("DISABLE_VECTOR_DB is set — skipping multitenant Vespa setup.")
         return
 
+    if ENABLE_OPENSEARCH_INDEXING_FOR_ONYX:
+        opensearch_client = OpenSearchClient()
+        if not wait_for_opensearch_with_timeout(client=opensearch_client):
+            raise RuntimeError("Failed to connect to OpenSearch.")
+        set_cluster_state(opensearch_client)
+
     # For Managed Vespa, the schema is sent over via the Vespa Console manually.
+    # NOTE: Pretty sure this code is never hit in any production environment.
     if not MANAGED_VESPA:
         setup_vespa_multitenant(SUPPORTED_EMBEDDING_MODELS)
 
