@@ -104,7 +104,7 @@ class LLMProviderManager:
             headers=user_performing_action.headers,
         )
         response.raise_for_status()
-        return [LLMProviderView(**ug) for ug in response.json()]
+        return [LLMProviderView(**p) for p in response.json()["providers"]]
 
     @staticmethod
     def verify(
