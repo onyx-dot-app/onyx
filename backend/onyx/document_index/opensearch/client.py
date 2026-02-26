@@ -134,7 +134,7 @@ class OpenSearchClient(AbstractContextManager):
     def __exit__(self, *_: Any) -> None:
         self.close()
 
-    def __del__(self):
+    def __del__(self) -> None:
         try:
             self.close()
         except Exception:
