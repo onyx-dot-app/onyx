@@ -92,8 +92,9 @@ export default function ActionLineItem({
 
   return (
     <SimpleTooltip tooltip={tooltipText} className="max-w-[30rem]">
-      <div data-testid={`tool-option-${toolName}`}>
+      <>
         <LineItem
+          data-testid={`tool-option-${toolName}`}
           onClick={() => {
             if (isSearchToolWithNoConnectors) return;
             if (isUnavailable) {
@@ -107,9 +108,8 @@ export default function ActionLineItem({
             else onClose?.();
           }}
           selected={isForced}
-          strikethrough={
-            disabled || isSearchToolWithNoConnectors || isUnavailable
-          }
+          disabled={isSearchToolWithNoConnectors || isUnavailable}
+          strikethrough={disabled}
           icon={Icon}
           rightChildren={
             <Section gap={0.25} flexDirection="row">
@@ -202,7 +202,7 @@ export default function ActionLineItem({
         >
           {label}
         </LineItem>
-      </div>
+      </>
     </SimpleTooltip>
   );
 }
