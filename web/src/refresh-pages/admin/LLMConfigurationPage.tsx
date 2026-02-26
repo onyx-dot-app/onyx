@@ -163,31 +163,58 @@ function ExistingProviderCard({
         </ConfirmationModalLayout>
       )}
 
-      <Card padding={0.5}>
-        <ContentAction
-          icon={getProviderIcon(provider.provider)}
-          title={provider.name}
-          description={getProviderDisplayName(provider.provider)}
-          sizePreset="main-content"
-          variant="section"
-          tag={isDefault ? { title: "Default", color: "blue" } : undefined}
-          rightChildren={
-            <Section flexDirection="row" gap={0} alignItems="start">
-              <Button
-                icon={SvgTrash}
-                prominence="tertiary"
-                onClick={() => deleteModal.toggle(true)}
-              />
-              <Button
-                icon={SvgSettings}
-                prominence="tertiary"
-                onClick={() => setIsOpen(true)}
-              />
-            </Section>
-          }
-        />
-        {getModalForExistingProvider(provider, isOpen, setIsOpen)}
-      </Card>
+      {/*
+        # TODO (@raunakab)
+        Abstract into the hover stylings into a proper, core `Hoverable` component inside of Opal later.
+        The API should look something like:
+
+        ```tsx
+        <Hoverable.Root group="MyGroup">
+          <Card>
+            <ContentAction
+              // ...
+              rightChildren={
+                <Hoverable.Item group="MyGroup" variant="opacity-on-hover">
+                  <Button
+                    icon={SvgTrash}
+                    // ...
+                  />
+                </Hoverable.Item>
+              }
+            />
+          </Card>
+        </Hoverable.Group>
+        ```
+        */}
+      <div className="group/ExistingProviderCard">
+        <Card padding={0.5}>
+          <ContentAction
+            icon={getProviderIcon(provider.provider)}
+            title={provider.name}
+            description={getProviderDisplayName(provider.provider)}
+            sizePreset="main-content"
+            variant="section"
+            tag={isDefault ? { title: "Default", color: "blue" } : undefined}
+            rightChildren={
+              <Section flexDirection="row" gap={0} alignItems="start">
+                <div className="opacity-0 group-hover/ExistingProviderCard:opacity-100 transition-all duration-200">
+                  <Button
+                    icon={SvgTrash}
+                    prominence="tertiary"
+                    onClick={() => deleteModal.toggle(true)}
+                  />
+                </div>
+                <Button
+                  icon={SvgSettings}
+                  prominence="tertiary"
+                  onClick={() => setIsOpen(true)}
+                />
+              </Section>
+            }
+          />
+          {getModalForExistingProvider(provider, isOpen, setIsOpen)}
+        </Card>
+      </div>
     </>
   );
 }
