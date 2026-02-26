@@ -691,7 +691,7 @@ def list_llm_providers_for_persona(
     )
 
     # Get the default model and vision model for the persona
-    # NOTE: This should be ported over to use id as it is blocking on name mutability
+    # TODO: Port persona's over to use ID
     persona_default_provider = persona.llm_model_provider_override
     persona_default_model = persona.llm_model_version_override
 
@@ -705,7 +705,9 @@ def list_llm_providers_for_persona(
 
     if persona_default_provider:
         provider = fetch_existing_llm_provider(persona_default_provider, db_session)
-        if provider:
+        if provider and can_user_access_llm_provider(
+            provider, user_group_ids, persona, is_admin=is_admin
+        ):
             if persona_default_model:
                 # Persona specifies both provider and model — use them directly
                 default_text = DefaultModel(
