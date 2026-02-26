@@ -121,12 +121,24 @@ def _link_file_to_persona(
     db_session.commit()
 
 
+_PATCH_QUEUE_DEPTH = (
+    "onyx.background.celery.tasks.user_file_processing.tasks"
+    ".get_user_file_project_sync_queue_depth"
+)
+
+
 @contextmanager
 def _patch_task_app(task: Any, mock_app: MagicMock) -> Generator[None, None, None]:
     """Patch the ``app`` property on a bound Celery task."""
     task_instance = task.run.__self__
-    with patch.object(
-        type(task_instance), "app", new_callable=PropertyMock, return_value=mock_app
+    with (
+        patch.object(
+            type(task_instance),
+            "app",
+            new_callable=PropertyMock,
+            return_value=mock_app,
+        ),
+        patch(_PATCH_QUEUE_DEPTH, return_value=0),
     ):
         yield
 
