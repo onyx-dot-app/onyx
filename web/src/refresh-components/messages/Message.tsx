@@ -12,6 +12,8 @@ import {
   SvgX,
   SvgXOctagon,
 } from "@opal/icons";
+import type { IconFunctionComponent } from "@opal/types";
+
 const containerClasses = {
   flash: {
     default: {
@@ -218,6 +220,7 @@ export interface MessageProps extends React.HTMLAttributes<HTMLDivElement> {
 
   // Features:
   icon?: boolean;
+  iconComponent?: IconFunctionComponent;
   actions?: boolean | string;
   close?: boolean;
 
@@ -244,6 +247,7 @@ function MessageInner(
     description,
 
     icon = true,
+    iconComponent,
     actions,
     close = true,
 
@@ -279,8 +283,9 @@ function MessageInner(
   const textClass = useMemo(() => textClasses[type].text, [type]);
   const descriptionClass = useMemo(() => textClasses[type].description, [type]);
 
-  const IconComponent =
-    level === "success"
+  const IconComponent = iconComponent
+    ? iconComponent
+    : level === "success"
       ? SvgCheckCircle
       : level === "warning"
         ? SvgAlertTriangle
