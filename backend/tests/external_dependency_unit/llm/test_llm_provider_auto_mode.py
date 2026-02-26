@@ -169,7 +169,7 @@ class TestAutoModeSyncFeature:
             ), f"Default model should be '{expected_default_model}'"
 
             # Step 4: Set the provider as default
-            update_default_provider(provider.id, db_session)
+            update_default_provider(provider.id, expected_default_model, db_session)
 
             # Step 5: Fetch the default provider and verify
             default_model = fetch_default_llm_model(db_session)
@@ -549,7 +549,7 @@ class TestAutoModeSyncFeature:
                 name=provider_1_name, db_session=db_session
             )
             assert provider_1 is not None
-            update_default_provider(provider_1.id, db_session)
+            update_default_provider(provider_1.id, provider_1_default_model, db_session)
 
             with patch(
                 "onyx.server.manage.llm.api.fetch_llm_recommendations_from_github",
@@ -584,7 +584,7 @@ class TestAutoModeSyncFeature:
                 name=provider_2_name, db_session=db_session
             )
             assert provider_2 is not None
-            update_default_provider(provider_2.id, db_session)
+            update_default_provider(provider_2.id, provider_2_default_model, db_session)
 
             # Step 5: Verify provider 2 is now the default
             db_session.expire_all()

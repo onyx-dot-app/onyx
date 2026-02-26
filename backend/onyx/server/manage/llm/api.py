@@ -479,28 +479,29 @@ def delete_llm_provider(
         raise HTTPException(status_code=404, detail=str(e))
 
 
-@admin_router.post("/provider/{provider_id}/default")
+@admin_router.post("/default")
 def set_provider_as_default(
-    provider_id: int,
+    default_model_request: DefaultModel,
     _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
-    update_default_provider(provider_id=provider_id, db_session=db_session)
+    update_default_provider(
+        provider_id=default_model_request.provider_id,
+        model_name=default_model_request.model_name,
+        db_session=db_session,
+    )
 
 
-@admin_router.post("/provider/{provider_id}/default-vision")
+@admin_router.post("/default-vision")
 def set_provider_as_default_vision(
-    provider_id: int,
-    vision_model: str | None = Query(
-        None, description="The default vision model to use"
-    ),
+    default_model: DefaultModel,
     _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
-    if vision_model is None:
-        raise HTTPException(status_code=404, detail="Vision model not provided")
     update_default_vision_provider(
-        provider_id=provider_id, vision_model=vision_model, db_session=db_session
+        provider_id=default_model.provider_id,
+        vision_model=default_model.model_name,
+        db_session=db_session,
     )
 
 

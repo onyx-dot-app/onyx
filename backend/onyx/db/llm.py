@@ -620,22 +620,13 @@ def remove_llm_provider__no_commit(db_session: Session, provider_id: int) -> Non
     db_session.flush()
 
 
-def update_default_provider(provider_id: int, db_session: Session) -> None:
-    # Attempt to get the default_model_name from the provider first
-    # TODO: Remove default_model_name check
-    provider = db_session.scalar(
-        select(LLMProviderModel).where(
-            LLMProviderModel.id == provider_id,
-        )
-    )
-
-    if provider is None:
-        raise ValueError(f"LLM Provider with id={provider_id} does not exist")
-
+def update_default_provider(
+    provider_id: int, model_name: str, db_session: Session
+) -> None:
     _update_default_model(
         db_session,
         provider_id,
-        provider.default_model_name,  # type: ignore[arg-type]
+        model_name,
         LLMModelFlowType.CHAT,
     )
 

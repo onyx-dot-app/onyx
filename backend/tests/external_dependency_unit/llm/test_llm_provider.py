@@ -424,7 +424,7 @@ class TestDefaultProviderEndpoint:
             )
 
             # Set provider 1 as the default provider explicitly
-            update_default_provider(provider_1.id, db_session)
+            update_default_provider(provider_1.id, provider_1_initial_model, db_session)
 
             # Step 2: Call run_test_default_provider - should use provider 1's default model
             with patch(
@@ -484,6 +484,9 @@ class TestDefaultProviderEndpoint:
                 db_session=db_session,
             )
 
+            # Set provider 1's default model to the updated model
+            update_default_provider(provider_1.id, provider_1_updated_model, db_session)
+
             # Step 6: Call run_test_default_provider - should use new model on provider 1
             with patch(
                 "onyx.server.manage.llm.api.test_llm", side_effect=mock_test_llm_capture
@@ -496,7 +499,7 @@ class TestDefaultProviderEndpoint:
             captured_llms.clear()
 
             # Step 7: Change the default provider to provider 2
-            update_default_provider(provider_2.id, db_session)
+            update_default_provider(provider_2.id, provider_2_default_model, db_session)
 
             # Step 8: Call run_test_default_provider - should use provider 2
             with patch(
@@ -577,7 +580,7 @@ class TestDefaultProviderEndpoint:
                 ),
                 db_session=db_session,
             )
-            update_default_provider(provider.id, db_session)
+            update_default_provider(provider.id, "gpt-4o-mini", db_session)
 
             # Test should fail
             with patch(
