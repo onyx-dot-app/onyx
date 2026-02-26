@@ -198,7 +198,6 @@ def patch_slack_channel_config(
             channel_name=channel_config["channel_name"],
             document_set_ids=slack_channel_config_creation_request.document_sets,
             existing_persona_id=existing_persona_id,
-            enable_auto_filters=slack_channel_config_creation_request.enable_auto_filters,
         ).id
 
     slack_channel_config_model = update_slack_channel_config(
