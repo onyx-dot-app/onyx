@@ -77,46 +77,17 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Format branch name for cache
-        id: format-branch
-        env:
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          REF_NAME: ${{ github.ref_name }}
-        run: |
-          if [ -n "${PR_NUMBER}" ]; then
-            CACHE_SUFFIX="${PR_NUMBER}"
-          else
-            # shellcheck disable=SC2001
-            CACHE_SUFFIX=$(echo "${REF_NAME}" | sed 's/[^A-Za-z0-9._-]/-/g')
-          fi
-          echo "cache-suffix=${CACHE_SUFFIX}" >> $GITHUB_OUTPUT
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # ratchet:docker/setup-buildx-action@v3
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # ratchet:docker/login-action@v3
+      - name: Build backend image
+        uses: ./.github/actions/build-backend-image
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
-
-      - name: Build and push Backend Docker image
-        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # ratchet:docker/build-push-action@v6
-        with:
-          context: ./backend
-          file: ./backend/Dockerfile
-          push: true
-          tags: ${{ env.RUNS_ON_ECR_CACHE }}:nightly-llm-it-backend-${{ github.run_id }}
-          cache-from: |
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-${{ github.sha }}
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-${{ steps.format-branch.outputs.cache-suffix }}
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache
-            type=registry,ref=onyxdotapp/onyx-backend:latest
-          cache-to: |
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-${{ github.sha }},mode=max
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-${{ steps.format-branch.outputs.cache-suffix }},mode=max
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache,mode=max
-          no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
+          runs-on-ecr-cache: ${{ env.RUNS_ON_ECR_CACHE }}
+          ref-name: ${{ github.ref_name }}
+          pr-number: ${{ github.event.pull_request.number }}
+          github-sha: ${{ github.sha }}
+          run-id: ${{ github.run_id }}
+          docker-username: ${{ secrets.DOCKER_USERNAME }}
+          docker-token: ${{ secrets.DOCKER_TOKEN }}
+          docker-no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' && 'true' || 'false' }}
 
   build-model-server-image:
     needs: [validate-inputs]
@@ -136,45 +107,16 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Format branch name for cache
-        id: format-branch
-        env:
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          REF_NAME: ${{ github.ref_name }}
-        run: |
-          if [ -n "${PR_NUMBER}" ]; then
-            CACHE_SUFFIX="${PR_NUMBER}"
-          else
-            # shellcheck disable=SC2001
-            CACHE_SUFFIX=$(echo "${REF_NAME}" | sed 's/[^A-Za-z0-9._-]/-/g')
-          fi
-          echo "cache-suffix=${CACHE_SUFFIX}" >> $GITHUB_OUTPUT
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # ratchet:docker/setup-buildx-action@v3
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # ratchet:docker/login-action@v3
+      - name: Build model server image
+        uses: ./.github/actions/build-model-server-image
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
-
-      - name: Build and push Model Server Docker image
-        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # ratchet:docker/build-push-action@v6
-        with:
-          context: ./backend
-          file: ./backend/Dockerfile.model_server
-          push: true
-          tags: ${{ env.RUNS_ON_ECR_CACHE }}:nightly-llm-it-model-server-${{ github.run_id }}
-          cache-from: |
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-${{ github.sha }}
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-${{ steps.format-branch.outputs.cache-suffix }}
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache
-            type=registry,ref=onyxdotapp/onyx-model-server:latest
-          cache-to: |
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-${{ github.sha }},mode=max
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-${{ steps.format-branch.outputs.cache-suffix }},mode=max
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache,mode=max
+          runs-on-ecr-cache: ${{ env.RUNS_ON_ECR_CACHE }}
+          ref-name: ${{ github.ref_name }}
+          pr-number: ${{ github.event.pull_request.number }}
+          github-sha: ${{ github.sha }}
+          run-id: ${{ github.run_id }}
+          docker-username: ${{ secrets.DOCKER_USERNAME }}
+          docker-token: ${{ secrets.DOCKER_TOKEN }}
 
   build-integration-image:
     needs: [validate-inputs]
@@ -194,51 +136,16 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # ratchet:docker/setup-buildx-action@v3
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # ratchet:docker/login-action@v3
+      - name: Build integration image
+        uses: ./.github/actions/build-integration-image
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
-
-      - name: Format branch name for cache
-        id: format-branch
-        env:
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          REF_NAME: ${{ github.ref_name }}
-        run: |
-          if [ -n "${PR_NUMBER}" ]; then
-            CACHE_SUFFIX="${PR_NUMBER}"
-          else
-            # shellcheck disable=SC2001
-            CACHE_SUFFIX=$(echo "${REF_NAME}" | sed 's/[^A-Za-z0-9._-]/-/g')
-          fi
-          echo "cache-suffix=${CACHE_SUFFIX}" >> $GITHUB_OUTPUT
-
-      - name: Build and push integration test image with Docker Bake
-        env:
-          INTEGRATION_REPOSITORY: ${{ env.RUNS_ON_ECR_CACHE }}
-          TAG: nightly-llm-it-${{ github.run_id }}
-          CACHE_SUFFIX: ${{ steps.format-branch.outputs.cache-suffix }}
-          HEAD_SHA: ${{ github.sha }}
-        run: |
-          docker buildx bake --push \
-            --set backend.cache-from=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache-${HEAD_SHA} \
-            --set backend.cache-from=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache-${CACHE_SUFFIX} \
-            --set backend.cache-from=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache \
-            --set backend.cache-from=type=registry,ref=onyxdotapp/onyx-backend:latest \
-            --set backend.cache-to=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache-${HEAD_SHA},mode=max \
-            --set backend.cache-to=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache-${CACHE_SUFFIX},mode=max \
-            --set backend.cache-to=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache,mode=max \
-            --set integration.cache-from=type=registry,ref=${RUNS_ON_ECR_CACHE}:integration-cache-${HEAD_SHA} \
-            --set integration.cache-from=type=registry,ref=${RUNS_ON_ECR_CACHE}:integration-cache-${CACHE_SUFFIX} \
-            --set integration.cache-from=type=registry,ref=${RUNS_ON_ECR_CACHE}:integration-cache \
-            --set integration.cache-to=type=registry,ref=${RUNS_ON_ECR_CACHE}:integration-cache-${HEAD_SHA},mode=max \
-            --set integration.cache-to=type=registry,ref=${RUNS_ON_ECR_CACHE}:integration-cache-${CACHE_SUFFIX},mode=max \
-            --set integration.cache-to=type=registry,ref=${RUNS_ON_ECR_CACHE}:integration-cache,mode=max \
-            integration
+          runs-on-ecr-cache: ${{ env.RUNS_ON_ECR_CACHE }}
+          ref-name: ${{ github.ref_name }}
+          pr-number: ${{ github.event.pull_request.number }}
+          github-sha: ${{ github.sha }}
+          run-id: ${{ github.run_id }}
+          docker-username: ${{ secrets.DOCKER_USERNAME }}
+          docker-token: ${{ secrets.DOCKER_TOKEN }}
 
   provider-chat-test:
     needs:
@@ -257,79 +164,19 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Login to Docker Hub
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # ratchet:docker/login-action@v3
+      - name: Run nightly provider chat test
+        uses: ./.github/actions/run-nightly-provider-chat-test
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
-
-      - name: Create .env file for Docker Compose
-        env:
-          ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
-          RUN_ID: ${{ github.run_id }}
-        run: |
-          cat <<EOF > deployment/docker_compose/.env
-          COMPOSE_PROFILES=s3-filestore
-          ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
-          LICENSE_ENFORCEMENT_ENABLED=false
-          AUTH_TYPE=basic
-          POSTGRES_POOL_PRE_PING=true
-          POSTGRES_USE_NULL_POOL=true
-          REQUIRE_EMAIL_VERIFICATION=false
-          DISABLE_TELEMETRY=true
-          INTEGRATION_TESTS_MODE=true
-          AUTO_LLM_UPDATE_INTERVAL_SECONDS=10
-          ONYX_BACKEND_IMAGE=${ECR_CACHE}:nightly-llm-it-backend-${RUN_ID}
-          ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:nightly-llm-it-model-server-${RUN_ID}
-          EOF
-
-      - name: Start Docker containers
-        run: |
-          cd deployment/docker_compose
-          docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --wait \
-            relational_db \
-            index \
-            cache \
-            minio \
-            api_server \
-            inference_model_server
-
-      - name: Run nightly provider integration test
-        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # ratchet:nick-fields/retry@v3
-        env:
-          MODELS: ${{ env.NIGHTLY_LLM_MODELS }}
-        with:
-          timeout_minutes: 20
-          max_attempts: 2
-          retry_wait_seconds: 10
-          command: |
-            if [ -z "${MODELS}" ]; then
-              echo "Input 'models' must be non-empty for provider '${NIGHTLY_LLM_PROVIDER}'."
-              exit 1
-            fi
-
-            docker run --rm --network onyx_default \
-              --name test-runner \
-              -e POSTGRES_HOST=relational_db \
-              -e POSTGRES_USER=postgres \
-              -e POSTGRES_PASSWORD=password \
-              -e POSTGRES_DB=postgres \
-              -e DB_READONLY_USER=db_readonly_user \
-              -e DB_READONLY_PASSWORD=password \
-              -e POSTGRES_POOL_PRE_PING=true \
-              -e POSTGRES_USE_NULL_POOL=true \
-              -e VESPA_HOST=index \
-              -e REDIS_HOST=cache \
-              -e API_SERVER_HOST=api_server \
-              -e TEST_WEB_HOSTNAME=test-runner \
-              -e NIGHTLY_LLM_PROVIDER="${NIGHTLY_LLM_PROVIDER}" \
-              -e NIGHTLY_LLM_MODELS="${MODELS}" \
-              -e NIGHTLY_LLM_API_KEY="${NIGHTLY_LLM_API_KEY}" \
-              -e NIGHTLY_LLM_API_BASE="${NIGHTLY_LLM_API_BASE}" \
-              -e NIGHTLY_LLM_CUSTOM_CONFIG_JSON="${NIGHTLY_LLM_CUSTOM_CONFIG_JSON}" \
-              -e NIGHTLY_LLM_STRICT="${NIGHTLY_LLM_STRICT}" \
-              ${{ env.RUNS_ON_ECR_CACHE }}:nightly-llm-it-${{ github.run_id }} \
-              /app/tests/integration/tests/llm_workflows/test_nightly_provider_chat_workflow.py
+          provider: ${{ env.NIGHTLY_LLM_PROVIDER }}
+          models: ${{ env.NIGHTLY_LLM_MODELS }}
+          provider-api-key: ${{ secrets.provider_api_key }}
+          strict: ${{ env.NIGHTLY_LLM_STRICT }}
+          api-base: ${{ env.NIGHTLY_LLM_API_BASE }}
+          custom-config-json: ${{ env.NIGHTLY_LLM_CUSTOM_CONFIG_JSON }}
+          runs-on-ecr-cache: ${{ env.RUNS_ON_ECR_CACHE }}
+          run-id: ${{ github.run_id }}
+          docker-username: ${{ secrets.DOCKER_USERNAME }}
+          docker-token: ${{ secrets.DOCKER_TOKEN }}
 
       - name: Dump API server logs
         if: always()
