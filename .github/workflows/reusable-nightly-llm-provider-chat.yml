@@ -18,6 +18,11 @@ on:
         required: false
         default: ""
         type: string
+      vertex_ai_models:
+        description: "Comma-separated models for vertex_ai"
+        required: false
+        default: ""
+        type: string
       strict:
         description: "Default NIGHTLY_LLM_STRICT passed to tests"
         required: false
@@ -29,6 +34,8 @@ on:
       anthropic_api_key:
         required: false
       bedrock_api_key:
+        required: false
+      vertex_ai_custom_config_json:
         required: false
       DOCKER_USERNAME:
         required: true
@@ -138,12 +145,23 @@ jobs:
           - provider: openai
             models: ${{ inputs.openai_models }}
             api_key_secret: openai_api_key
+            custom_config_secret: ""
+            required: true
           - provider: anthropic
             models: ${{ inputs.anthropic_models }}
             api_key_secret: anthropic_api_key
+            custom_config_secret: ""
+            required: true
           - provider: bedrock
             models: ${{ inputs.bedrock_models }}
             api_key_secret: bedrock_api_key
+            custom_config_secret: ""
+            required: false
+          - provider: vertex_ai
+            models: ${{ inputs.vertex_ai_models }}
+            api_key_secret: ""
+            custom_config_secret: vertex_ai_custom_config_json
+            required: false
     runs-on:
       - runs-on
       - runner=4cpu-linux-arm64
@@ -165,6 +183,7 @@ jobs:
           models: ${{ matrix.models }}
           provider-api-key: ${{ matrix.api_key_secret && secrets[matrix.api_key_secret] || '' }}
           strict: ${{ inputs.strict && 'true' || 'false' }}
+          custom-config-json: ${{ matrix.custom_config_secret && secrets[matrix.custom_config_secret] || '' }}
           runs-on-ecr-cache: ${{ env.RUNS_ON_ECR_CACHE }}
           run-id: ${{ github.run_id }}
           docker-username: ${{ secrets.DOCKER_USERNAME }}
