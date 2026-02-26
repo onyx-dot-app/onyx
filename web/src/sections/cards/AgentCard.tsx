@@ -17,7 +17,6 @@ import {
   updateAgentFeaturedStatus,
 } from "@/lib/agents";
 import { useUser } from "@/providers/UserProvider";
-import { UserRole } from "@/lib/types";
 import {
   SvgActions,
   SvgBarChart,
@@ -48,12 +47,9 @@ export default function AgentCard({ agent }: AgentCardProps) {
     () => pinnedAgents.some((pinnedAgent) => pinnedAgent.id === agent.id),
     [agent.id, pinnedAgents]
   );
-  const { user } = useUser();
+  const { user, isAdmin, isCurator } = useUser();
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
-  const canUpdateFeaturedStatus =
-    user?.role === UserRole.ADMIN ||
-    user?.role === UserRole.CURATOR ||
-    user?.role === UserRole.GLOBAL_CURATOR;
+  const canUpdateFeaturedStatus = isAdmin || isCurator;
   const isOwnedByUser = checkUserOwnsAssistant(user, agent);
   const shareAgentModal = useCreateModal();
   const agentViewerModal = useCreateModal();

@@ -30,8 +30,6 @@ import { useAgent } from "@/hooks/useAgents";
 import { Button as OpalButton } from "@opal/components";
 import { useLabels } from "@/lib/hooks";
 import { PersonaLabel } from "@/app/admin/assistants/interfaces";
-import { UserRole } from "@/lib/types";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 
 const YOUR_ORGANIZATION_TAB = "Your Organization";
 const USERS_AND_GROUPS_TAB = "Users & Groups";
@@ -61,7 +59,7 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
     useFormikContext<ShareAgentFormValues>();
   const { data: usersData } = useShareableUsers({ includeApiKeys: true });
   const { data: groupsData } = useShareableGroups();
-  const { user: currentUser } = useUser();
+  const { user: currentUser, isAdmin, isCurator } = useUser();
   const { agent: fullAgent } = useAgent(agentId ?? null);
   const shareAgentModal = useModal();
   const { labels: allLabels, createLabel } = useLabels();
@@ -69,10 +67,7 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
 
   const acceptedUsers = usersData ?? [];
   const groups = groupsData ?? [];
-  const canUpdateFeaturedStatus =
-    currentUser?.role === UserRole.ADMIN ||
-    currentUser?.role === UserRole.CURATOR ||
-    currentUser?.role === UserRole.GLOBAL_CURATOR;
+  const canUpdateFeaturedStatus = isAdmin || isCurator;
 
   // Create options for InputComboBox from all accepted users and groups
   const comboBoxOptions = useMemo(() => {
