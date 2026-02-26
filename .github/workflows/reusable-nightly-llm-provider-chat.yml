@@ -23,6 +23,16 @@ on:
         required: false
         default: ""
         type: string
+      azure_models:
+        description: "Comma-separated models for azure"
+        required: false
+        default: ""
+        type: string
+      azure_api_base:
+        description: "API base for azure provider"
+        required: false
+        default: ""
+        type: string
       strict:
         description: "Default NIGHTLY_LLM_STRICT passed to tests"
         required: false
@@ -36,6 +46,8 @@ on:
       bedrock_api_key:
         required: false
       vertex_ai_custom_config_json:
+        required: false
+      azure_api_key:
         required: false
       DOCKER_USERNAME:
         required: true
@@ -146,21 +158,41 @@ jobs:
             models: ${{ inputs.openai_models }}
             api_key_secret: openai_api_key
             custom_config_secret: ""
+            api_base: ""
+            api_version: ""
+            deployment_name: ""
             required: true
           - provider: anthropic
             models: ${{ inputs.anthropic_models }}
             api_key_secret: anthropic_api_key
             custom_config_secret: ""
+            api_base: ""
+            api_version: ""
+            deployment_name: ""
             required: true
           - provider: bedrock
             models: ${{ inputs.bedrock_models }}
             api_key_secret: bedrock_api_key
             custom_config_secret: ""
+            api_base: ""
+            api_version: ""
+            deployment_name: ""
             required: false
           - provider: vertex_ai
             models: ${{ inputs.vertex_ai_models }}
             api_key_secret: ""
             custom_config_secret: vertex_ai_custom_config_json
+            api_base: ""
+            api_version: ""
+            deployment_name: ""
+            required: false
+          - provider: azure
+            models: ${{ inputs.azure_models }}
+            api_key_secret: azure_api_key
+            custom_config_secret: ""
+            api_base: ${{ inputs.azure_api_base }}
+            api_version: "2025-04-01-preview"
+            deployment_name: ""
             required: false
     runs-on:
       - runs-on
@@ -183,6 +215,9 @@ jobs:
           models: ${{ matrix.models }}
           provider-api-key: ${{ matrix.api_key_secret && secrets[matrix.api_key_secret] || '' }}
           strict: ${{ inputs.strict && 'true' || 'false' }}
+          api-base: ${{ matrix.api_base }}
+          api-version: ${{ matrix.api_version }}
+          deployment-name: ${{ matrix.deployment_name }}
           custom-config-json: ${{ matrix.custom_config_secret && secrets[matrix.custom_config_secret] || '' }}
           runs-on-ecr-cache: ${{ env.RUNS_ON_ECR_CACHE }}
           run-id: ${{ github.run_id }}

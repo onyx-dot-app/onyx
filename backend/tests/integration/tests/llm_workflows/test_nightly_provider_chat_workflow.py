@@ -23,6 +23,8 @@ _ENV_PROVIDER = "NIGHTLY_LLM_PROVIDER"
 _ENV_MODELS = "NIGHTLY_LLM_MODELS"
 _ENV_API_KEY = "NIGHTLY_LLM_API_KEY"
 _ENV_API_BASE = "NIGHTLY_LLM_API_BASE"
+_ENV_API_VERSION = "NIGHTLY_LLM_API_VERSION"
+_ENV_DEPLOYMENT_NAME = "NIGHTLY_LLM_DEPLOYMENT_NAME"
 _ENV_CUSTOM_CONFIG_JSON = "NIGHTLY_LLM_CUSTOM_CONFIG_JSON"
 _ENV_STRICT = "NIGHTLY_LLM_STRICT"
 
@@ -34,6 +36,8 @@ class NightlyProviderConfig(BaseModel):
     model_names: list[str]
     api_key: str | None
     api_base: str | None
+    api_version: str | None
+    deployment_name: str | None
     custom_config: dict[str, str] | None
     strict: bool
 
@@ -66,6 +70,8 @@ def _load_provider_config() -> NightlyProviderConfig:
     model_names = _parse_models_env(_ENV_MODELS)
     api_key = os.environ.get(_ENV_API_KEY) or None
     api_base = os.environ.get(_ENV_API_BASE) or None
+    api_version = os.environ.get(_ENV_API_VERSION) or None
+    deployment_name = os.environ.get(_ENV_DEPLOYMENT_NAME) or None
     strict = _env_true(_ENV_STRICT, default=False)
 
     custom_config: dict[str, str] | None = None
@@ -84,6 +90,8 @@ def _load_provider_config() -> NightlyProviderConfig:
         model_names=model_names,
         api_key=api_key,
         api_base=api_base,
+        api_version=api_version,
+        deployment_name=deployment_name,
         custom_config=custom_config,
         strict=strict,
     )
@@ -124,6 +132,22 @@ def _validate_provider_config(config: NightlyProviderConfig) -> None:
             message=(f"{_ENV_API_BASE} is required for provider '{config.provider}'"),
         )
 
+    if config.provider == "azure":
+        if not config.api_base:
+            _skip_or_fail(
+                strict=config.strict,
+                message=(
+                    f"{_ENV_API_BASE} is required for provider '{config.provider}'"
+                ),
+            )
+        if not config.api_version:
+            _skip_or_fail(
+                strict=config.strict,
+                message=(
+                    f"{_ENV_API_VERSION} is required for provider '{config.provider}'"
+                ),
+            )
+
 
 def _assert_integration_mode_enabled() -> None:
     assert (
@@ -162,6 +186,8 @@ def _create_provider_payload(
     model_name: str,
     api_key: str | None,
     api_base: str | None,
+    api_version: str | None,
+    deployment_name: str | None,
     custom_config: dict[str, str] | None,
 ) -> dict:
     return {
@@ -169,6 +195,8 @@ def _create_provider_payload(
         "provider": provider,
         "api_key": api_key,
         "api_base": api_base,
+        "api_version": api_version,
+        "deployment_name": deployment_name,
         "custom_config": custom_config,
         "default_model_name": model_name,
         "is_public": True,
@@ -270,6 +298,8 @@ def _create_and_test_provider_for_model(
         model_name=model_name,
         api_key=config.api_key,
         api_base=resolved_api_base,
+        api_version=config.api_version,
+        deployment_name=config.deployment_name,
         custom_config=config.custom_config,
     )
 
