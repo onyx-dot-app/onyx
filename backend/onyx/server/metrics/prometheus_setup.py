@@ -14,6 +14,7 @@ from prometheus_fastapi_instrumentator import Instrumentator
 from sqlalchemy.exc import TimeoutError as SATimeoutError
 from starlette.applications import Starlette
 
+from onyx.server.metrics.per_tenant import per_tenant_request_callback
 from onyx.server.metrics.postgres_connection_pool import pool_timeout_handler
 from onyx.server.metrics.slow_requests import slow_request_callback
 
@@ -60,5 +61,6 @@ def setup_prometheus_metrics(app: Starlette) -> None:
     )
 
     instrumentator.add(slow_request_callback)
+    instrumentator.add(per_tenant_request_callback)
 
     instrumentator.instrument(app, latency_lowr_buckets=_LATENCY_BUCKETS).expose(app)
