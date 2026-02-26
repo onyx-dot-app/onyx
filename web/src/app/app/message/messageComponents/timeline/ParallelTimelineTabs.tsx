@@ -66,15 +66,11 @@ export function ParallelTimelineTabs({
   );
 
   // Determine if the active step needs full-width content (no right padding)
-  const noPaddingRight = useMemo(
-    () =>
-      activeStep
-        ? isReasoningPackets(activeStep.packets) ||
-          isDeepResearchPlanPackets(activeStep.packets) ||
-          isMemoryToolPackets(activeStep.packets)
-        : false,
-    [activeStep?.packets]
-  );
+  const noPaddingRight = activeStep
+    ? isReasoningPackets(activeStep.packets) ||
+      isDeepResearchPlanPackets(activeStep.packets) ||
+      isMemoryToolPackets(activeStep.packets)
+    : false;
 
   // Memoized loading states for each step
   const loadingStates = useMemo(
