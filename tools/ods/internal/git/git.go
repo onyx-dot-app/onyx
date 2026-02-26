@@ -304,27 +304,40 @@ func CleanCherryPickState() {
 	}
 }
 
-// SkipUvSync sets the SKIP environment variable so that pre-commit's
-// post-checkout hook skips the uv-sync hook. This prevents uv-sync from
-// rebuilding the ods binary from the target branch's source during
-// branch switches initiated by ods.
-func SkipUvSync() {
-	const hookID = "uv-sync"
-	skip := os.Getenv("SKIP")
-	if skip == "" {
-		if err := os.Setenv("SKIP", hookID); err != nil {
-			log.Warnf("Failed to set SKIP env var: %v", err)
-		}
-		log.Debugf("Set SKIP=%s to prevent binary overwrite during branch switches", hookID)
+// DisablePostCheckoutHook temporarily renames the post-checkout hook so that
+// git branch switches don't trigger uv-sync (which would rebuild the ods
+// binary from the target branch's source). Call EnablePostCheckoutHook to
+// restore it.
+func DisablePostCheckoutHook() {
+	gitDir, err := GetGitDir()
+	if err != nil {
 		return
 	}
-	for _, s := range strings.Split(skip, ",") {
-		if strings.TrimSpace(s) == hookID {
-			return
+	hook := filepath.Join(gitDir, "hooks", "post-checkout")
+	disabled := hook + ".ods-disabled"
+	if err := os.Rename(hook, disabled); err != nil {
+		if !os.IsNotExist(err) {
+			log.Warnf("Failed to disable post-checkout hook: %v", err)
 		}
+	} else {
+		log.Debugf("Disabled post-checkout hook")
 	}
-	if err := os.Setenv("SKIP", skip+","+hookID); err != nil {
-		log.Warnf("Failed to set SKIP env var: %v", err)
+}
+
+// EnablePostCheckoutHook restores the post-checkout hook after a
+// DisablePostCheckoutHook call.
+func EnablePostCheckoutHook() {
+	gitDir, err := GetGitDir()
+	if err != nil {
+		return
 	}
-	log.Debugf("Appended %s to SKIP env var", hookID)
+	hook := filepath.Join(gitDir, "hooks", "post-checkout")
+	disabled := hook + ".ods-disabled"
+	if err := os.Rename(disabled, hook); err != nil {
+		if !os.IsNotExist(err) {
+			log.Warnf("Failed to re-enable post-checkout hook: %v", err)
+		}
+	} else {
+		log.Debugf("Re-enabled post-checkout hook")
+	}
 }

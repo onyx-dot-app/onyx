@@ -88,7 +88,8 @@ Example usage:
 }
 
 func runCherryPick(cmd *cobra.Command, args []string, opts *CherryPickOptions) {
-	git.SkipUvSync()
+	git.DisablePostCheckoutHook()
+	defer git.EnablePostCheckoutHook()
 	git.CheckGitHubCLI()
 
 	commitSHAs := args
@@ -286,7 +287,8 @@ func finishCherryPick(state *git.CherryPickState, stashResult *git.StashResult) 
 // It finishes any in-progress git cherry-pick, then falls into the normal
 // cherryPickToRelease path which handles skip-applied-commits, push, and PR creation.
 func runCherryPickContinue() {
-	git.SkipUvSync()
+	git.DisablePostCheckoutHook()
+	defer git.EnablePostCheckoutHook()
 	git.CheckGitHubCLI()
 
 	state, err := git.LoadCherryPickState()
