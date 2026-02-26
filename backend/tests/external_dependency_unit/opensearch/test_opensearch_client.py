@@ -249,12 +249,12 @@ class TestOpenSearchClient:
         test_client.create_index(mappings=mappings, settings=settings)
 
         # Under test.
-        # Applying the same mappings again should succeed (idempotent).
+        # Applying the same mappings again should succeed.
         test_client.put_mapping(mappings)
 
         # Postcondition.
         # Index should still be valid.
-        assert test_client.validate_index(expected_mappings=mappings) is True
+        assert test_client.validate_index(expected_mappings=mappings)
 
     def test_put_mapping_adds_new_field(
         self, test_client: OpenSearchIndexClient
@@ -309,7 +309,7 @@ class TestOpenSearchClient:
 
         # Postcondition.
         # Validate the new schema includes the new field.
-        assert test_client.validate_index(expected_mappings=updated_mappings) is True
+        assert test_client.validate_index(expected_mappings=updated_mappings)
 
     def test_put_mapping_fails_on_type_change(
         self, test_client: OpenSearchIndexClient
@@ -326,7 +326,7 @@ class TestOpenSearchClient:
         settings = DocumentSchema.get_index_settings()
         test_client.create_index(mappings=initial_mappings, settings=settings)
 
-        # Under test.
+        # Under test and postcondition.
         # Try to change test_field type from keyword to text.
         conflicting_mappings = {
             "properties": {
@@ -334,8 +334,6 @@ class TestOpenSearchClient:
                 "test_field": {"type": "text"},  # Changed from keyword to text
             },
         }
-
-        # Postcondition.
         # Should raise because field type cannot be changed.
         with pytest.raises(Exception, match="mapper|illegal_argument_exception"):
             test_client.put_mapping(conflicting_mappings)
@@ -351,7 +349,6 @@ class TestOpenSearchClient:
         )
 
         # Under test and postcondition.
-        # Should raise because index doesn't exist.
         with pytest.raises(Exception, match="index_not_found_exception|404"):
             test_client.put_mapping(mappings)
 

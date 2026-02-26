@@ -574,18 +574,13 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 settings=index_settings,
             )
         else:
-            # Index exists - ensure schema is up to date by applying mappings.
-            # This is idempotent: existing fields with same type = no-op, new fields = added.
-            # Will raise an exception if someone changed a field type (requires reindex).
+            # Ensure schema is up to date by applying the current mappings.
             try:
-                self._os_client.put_mapping(expected_mappings)
-                logger.info(
-                    f"Successfully ensured schema is up to date for index {self._index_name}"
-                )
+                self._client.put_mapping(expected_mappings)
             except Exception as e:
                 logger.error(
-                    f"Failed to update mappings for index {self._index_name}. "
-                    f"This likely means a field type was changed which requires reindexing. Error: {e}"
+                    f"Failed to update mappings for index {self._index_name}. This likely means a "
+                    f"field type was changed which requires reindexing. Error: {e}"
                 )
                 raise
 

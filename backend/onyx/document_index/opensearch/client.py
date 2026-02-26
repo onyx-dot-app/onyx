@@ -329,17 +329,17 @@ class OpenSearchIndexClient(OpenSearchClient):
     def put_mapping(self, mappings: dict[str, Any]) -> None:
         """Updates the index mapping in an idempotent manner.
 
-        This operation is idempotent:
-        - Existing fields with the same definition: No-op (succeeds silently)
-        - New fields: Added to the index
-        - Existing fields with different types: Raises exception (requires reindex)
+        - Existing fields with the same definition: No-op (succeeds silently).
+        - New fields: Added to the index.
+        - Existing fields with different types: Raises exception (requires
+          reindex).
 
         See the OpenSearch documentation for more information:
         https://docs.opensearch.org/latest/api-reference/index-apis/put-mapping/
 
         Args:
             mappings: The complete mapping definition to apply. This will be
-                merged with existing mappings.
+                merged with existing mappings in the index.
 
         Raises:
             Exception: There was an error updating the mappings, such as
@@ -353,7 +353,7 @@ class OpenSearchIndexClient(OpenSearchClient):
         )
         if not response.get("acknowledged", False):
             raise RuntimeError(
-                f"OpenSearch did not acknowledge the mapping update for index {self._index_name}."
+                f"Failed to put the mapping update for index {self._index_name}."
             )
         logger.debug(f"Successfully put mappings for index {self._index_name}.")
 
