@@ -1,5 +1,6 @@
 import Text from "@/refresh-components/texts/Text";
 import { SvgX } from "@opal/icons";
+import { Button } from "@opal/components";
 import type { IconProps } from "@opal/types";
 
 export interface ChipProps {
@@ -35,16 +36,15 @@ export default function Chip({
         </Text>
       )}
       {onRemove && (
-        <button
-          type="button"
+        <Button
           onClick={(e) => {
             e.stopPropagation();
             onRemove();
           }}
-          className="flex items-center justify-center shrink-0 rounded-full hover:bg-background-tint-04 transition-colors"
-        >
-          <SvgX size={12} className="text-text-03" />
-        </button>
+          prominence="tertiary"
+          icon={SvgX}
+          size="xs"
+        />
       )}
     </div>
   );
