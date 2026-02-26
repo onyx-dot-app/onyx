@@ -57,6 +57,7 @@ import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { Section } from "@/layouts/general-layouts";
 import Spacer from "@/refresh-components/Spacer";
+import MicrophoneButton from "@/sections/input/MicrophoneButton";
 
 const LINE_HEIGHT = 24;
 const MIN_INPUT_HEIGHT = 44;
@@ -794,6 +795,18 @@ const AppInputBar = React.memo(
                     disabled={disabled}
                   />
                 </div>
+
+                {/* Microphone button for voice input */}
+                <MicrophoneButton
+                  onTranscription={(text) => setMessage(text)}
+                  disabled={disabled || chatState === "streaming"}
+                  autoSend={user?.preferences?.voice_auto_send ?? false}
+                  onAutoSend={() => {
+                    if (message) {
+                      onSubmit(message);
+                    }
+                  }}
+                />
 
                 {/* Submit button */}
                 <Button

@@ -29,6 +29,7 @@ import FeedbackModal, {
   FeedbackModalProps,
 } from "@/sections/modals/FeedbackModal";
 import { Button } from "@opal/components";
+import TTSButton from "./TTSButton";
 
 // Wrapper component for SourceTag in toolbar to handle memoization
 const SourcesTagWrapper = React.memo(function SourcesTagWrapper({
@@ -267,6 +268,9 @@ export default function MessageToolbar({
                   : "Bad Response"
               }
               data-testid="AgentMessage/dislike-button"
+            />
+            <TTSButton
+              text={removeThinkingTokens(getTextContent(rawPackets)) as string}
             />
 
             {onRegenerate &&
