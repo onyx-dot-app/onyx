@@ -257,6 +257,7 @@ class TestSyncTaskWritesPersonaIds:
         mock_doc_index.update_single.assert_called_once()
         call_kwargs = mock_doc_index.update_single.call_args.kwargs
         user_fields: VespaDocumentUserFields = call_kwargs["user_fields"]
+        assert user_fields.personas is not None
         assert persona.id in user_fields.personas
         assert call_kwargs["doc_id"] == str(uf.id)
 
@@ -327,6 +328,8 @@ class TestSyncTaskWritesPersonaIds:
 
         call_kwargs = mock_doc_index.update_single.call_args.kwargs
         user_fields: VespaDocumentUserFields = call_kwargs["user_fields"]
+        assert user_fields.personas is not None
+        assert user_fields.user_projects is not None
         assert persona.id in user_fields.personas
         assert project.id in user_fields.user_projects
 
@@ -370,6 +373,7 @@ class TestSyncTaskWritesPersonaIds:
 
         call_kwargs = mock_doc_index.update_single.call_args.kwargs
         user_fields: VespaDocumentUserFields = call_kwargs["user_fields"]
+        assert user_fields.personas is not None
         assert persona.id not in user_fields.personas
 
 
@@ -445,6 +449,7 @@ class TestUpsertPersonaMarksSyncFlag:
         uf_old.needs_persona_sync = False
         db_session.commit()
 
+        assert persona.num_chunks is not None
         # Now update the persona to swap files
         upsert_persona(
             user=user,
@@ -502,6 +507,7 @@ class TestUpsertPersonaMarksSyncFlag:
         uf.needs_persona_sync = False
         db_session.commit()
 
+        assert persona.num_chunks is not None
         upsert_persona(
             user=user,
             name=persona.name,

@@ -110,6 +110,7 @@ def test_persona_with_files_chat_no_error(
     assert len(file_descriptors) == 1
 
     user_file_id = file_descriptors[0]["user_file_id"]
+    assert user_file_id is not None
 
     # Wait for file processing
     _poll_file_statuses([user_file_id], admin_user, timeout=120)
@@ -189,7 +190,7 @@ def test_persona_files_override_project_files(
     )
     assert not err1
     persona_user_file_id = persona_fds[0]["user_file_id"]
-
+    assert persona_user_file_id is not None
     # Create a project and upload project files
     project = ProjectManager.create(
         name="Precedence Test Project",

@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import Document
-from onyx.connectors.models import Section
+from onyx.connectors.models import TextSection
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.enums import UserFileStatus
 from onyx.db.models import Persona
@@ -101,7 +101,7 @@ def _make_index_chunk(user_file: UserFile) -> IndexChunk:
         id=str(user_file.id),
         source=DocumentSource.USER_FILE,
         semantic_identifier=user_file.name,
-        sections=[Section(text="test chunk content", link=None)],
+        sections=[TextSection(text="test chunk content", link=None)],
         metadata={},
     )
     return IndexChunk(
@@ -110,6 +110,7 @@ def _make_index_chunk(user_file: UserFile) -> IndexChunk:
         blurb="test chunk",
         content="test chunk content",
         source_links={0: ""},
+        image_file_id=None,
         section_continuation=False,
         title_prefix="",
         metadata_suffix_semantic="",

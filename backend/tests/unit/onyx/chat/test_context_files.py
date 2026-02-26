@@ -14,6 +14,7 @@ from uuid import uuid4
 from onyx.chat.process_message import _extract_context_files
 from onyx.chat.process_message import _resolve_context_user_files
 from onyx.configs.constants import DEFAULT_PERSONA_ID
+from onyx.db.models import UserFile
 from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import InMemoryChatFile
 
@@ -27,13 +28,13 @@ def _make_user_file(
     token_count: int = 100,
     name: str = "file.txt",
     file_id: str | None = None,
-) -> MagicMock:
-    uf = MagicMock()
-    uf.id = UUID(file_id) if file_id else uuid4()
-    uf.file_id = str(uf.id)
-    uf.name = name
-    uf.token_count = token_count
-    return uf
+) -> UserFile:
+    return UserFile(
+        id=UUID(file_id) if file_id else uuid4(),
+        file_id=file_id,
+        name=name,
+        token_count=token_count,
+    )
 
 
 def _make_persona(
