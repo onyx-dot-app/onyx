@@ -45,15 +45,25 @@ def _env_true(env_var: str, default: bool = False) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
-def _split_csv_env(env_var: str) -> list[str]:
-    return [
-        part.strip() for part in os.environ.get(env_var, "").split(",") if part.strip()
-    ]
+def _parse_models_env(env_var: str) -> list[str]:
+    raw_value = os.environ.get(env_var, "").strip()
+    if not raw_value:
+        return []
+
+    try:
+        parsed_json = json.loads(raw_value)
+    except json.JSONDecodeError:
+        parsed_json = None
+
+    if isinstance(parsed_json, list):
+        return [str(model).strip() for model in parsed_json if str(model).strip()]
+
+    return [part.strip() for part in raw_value.split(",") if part.strip()]
 
 
 def _load_provider_config() -> NightlyProviderConfig:
     provider = os.environ.get(_ENV_PROVIDER, "").strip().lower()
-    model_names = _split_csv_env(_ENV_MODELS)
+    model_names = _parse_models_env(_ENV_MODELS)
     api_key = os.environ.get(_ENV_API_KEY) or None
     api_base = os.environ.get(_ENV_API_BASE) or None
     strict = _env_true(_ENV_STRICT, default=False)

@@ -3,33 +3,26 @@ name: Reusable Nightly LLM Provider Chat Tests
 on:
   workflow_call:
     inputs:
-      provider:
-        description: "Provider slug passed to NIGHTLY_LLM_PROVIDER (e.g. openai, anthropic)"
-        required: true
+      openai_models:
+        description: "Comma-separated models for openai"
+        required: false
+        default: ""
         type: string
-      models:
-        description: "Comma-separated model list passed to NIGHTLY_LLM_MODELS"
-        required: true
+      anthropic_models:
+        description: "Comma-separated models for anthropic"
+        required: false
+        default: ""
         type: string
       strict:
-        description: "Pass-through value for NIGHTLY_LLM_STRICT"
+        description: "Default NIGHTLY_LLM_STRICT passed to tests"
         required: false
         default: true
         type: boolean
-      api_base:
-        description: "Optional NIGHTLY_LLM_API_BASE override"
-        required: false
-        default: ""
-        type: string
-      custom_config_json:
-        description: "Optional NIGHTLY_LLM_CUSTOM_CONFIG_JSON override"
-        required: false
-        default: ""
-        type: string
     secrets:
-      provider_api_key:
-        description: "Provider API key passed to NIGHTLY_LLM_API_KEY"
-        required: true
+      openai_api_key:
+        required: false
+      anthropic_api_key:
+        required: false
       DOCKER_USERNAME:
         required: true
       DOCKER_TOKEN:
@@ -38,29 +31,72 @@ on:
 permissions:
   contents: read
 
-env:
-  NIGHTLY_LLM_PROVIDER: ${{ inputs.provider }}
-  NIGHTLY_LLM_MODELS: ${{ inputs.models }}
-  NIGHTLY_LLM_API_KEY: ${{ secrets.provider_api_key }}
-  NIGHTLY_LLM_API_BASE: ${{ inputs.api_base }}
-  NIGHTLY_LLM_CUSTOM_CONFIG_JSON: ${{ inputs.custom_config_json }}
-  NIGHTLY_LLM_STRICT: ${{ inputs.strict && 'true' || 'false' }}
-
 jobs:
-  validate-inputs:
-    # NOTE: Keep this cheap and fail before image builds if required inputs are missing.
+  build-provider-model-matrix:
     runs-on: ubuntu-slim
     timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.construct-matrix.outputs.matrix }}
     steps:
-      - name: Validate required nightly provider inputs
+      - name: Construct provider/model matrix
+        id: construct-matrix
+        env:
+          OPENAI_MODELS: ${{ inputs.openai_models }}
+          ANTHROPIC_MODELS: ${{ inputs.anthropic_models }}
+          STRICT_VALUE: ${{ inputs.strict && 'true' || 'false' }}
         run: |
-          if [ -z "${NIGHTLY_LLM_MODELS}" ]; then
-            echo "Input 'models' must be non-empty for provider '${NIGHTLY_LLM_PROVIDER}'."
-            exit 1
-          fi
+          node <<'NODE'
+          const fs = require("fs");
+
+          const strict = (process.env.STRICT_VALUE ?? "false") === "true";
+          const providerModels = [
+            {
+              provider: "openai",
+              models: process.env.OPENAI_MODELS ?? "",
+              apiKeySecret: "openai_api_key",
+            },
+            {
+              provider: "anthropic",
+              models: process.env.ANTHROPIC_MODELS ?? "",
+              apiKeySecret: "anthropic_api_key",
+            },
+          ];
+
+          const matrixInclude = [];
+          for (const { provider, models, apiKeySecret } of providerModels) {
+            const parsedModels = models
+              .split(",")
+              .map((model) => model.trim())
+              .filter(Boolean);
+
+            for (const model of parsedModels) {
+              matrixInclude.push({
+                matrix_id: matrixInclude.length,
+                provider,
+                model,
+                api_key_secret: apiKeySecret,
+                strict,
+              });
+            }
+          }
+
+          if (matrixInclude.length === 0) {
+            matrixInclude.push({
+              matrix_id: 0,
+              provider: "",
+              model: "",
+              api_key_secret: "",
+              strict,
+            });
+          }
+
+          fs.appendFileSync(
+            process.env.GITHUB_OUTPUT,
+            `matrix=${JSON.stringify({ include: matrixInclude })}\n`
+          );
+          NODE
 
   build-backend-image:
-    needs: [validate-inputs]
     runs-on:
       [
         runs-on,
@@ -90,7 +126,6 @@ jobs:
           docker-no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' && 'true' || 'false' }}
 
   build-model-server-image:
-    needs: [validate-inputs]
     runs-on:
       [
         runs-on,
@@ -119,7 +154,6 @@ jobs:
           docker-token: ${{ secrets.DOCKER_TOKEN }}
 
   build-integration-image:
-    needs: [validate-inputs]
     runs-on:
       [
         runs-on,
@@ -149,11 +183,19 @@ jobs:
 
   provider-chat-test:
     needs:
-      [build-backend-image, build-model-server-image, build-integration-image]
+      [
+        build-provider-model-matrix,
+        build-backend-image,
+        build-model-server-image,
+        build-integration-image,
+      ]
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.build-provider-model-matrix.outputs.matrix) }}
     runs-on:
       - runs-on
       - runner=4cpu-linux-arm64
-      - "run-id=${{ github.run_id }}-nightly-${{ inputs.provider }}-provider-chat-test"
+      - "run-id=${{ github.run_id }}-nightly-${{ matrix.provider }}-${{ matrix.matrix_id }}-provider-chat-test"
       - extras=ecr-cache
     timeout-minutes: 45
     steps:
@@ -167,12 +209,10 @@ jobs:
       - name: Run nightly provider chat test
         uses: ./.github/actions/run-nightly-provider-chat-test
         with:
-          provider: ${{ env.NIGHTLY_LLM_PROVIDER }}
-          models: ${{ env.NIGHTLY_LLM_MODELS }}
-          provider-api-key: ${{ secrets.provider_api_key }}
-          strict: ${{ env.NIGHTLY_LLM_STRICT }}
-          api-base: ${{ env.NIGHTLY_LLM_API_BASE }}
-          custom-config-json: ${{ env.NIGHTLY_LLM_CUSTOM_CONFIG_JSON }}
+          provider: ${{ matrix.provider }}
+          models: ${{ matrix.model }}
+          provider-api-key: ${{ matrix.api_key_secret && secrets[matrix.api_key_secret] || '' }}
+          strict: ${{ matrix.strict && 'true' || 'false' }}
           runs-on-ecr-cache: ${{ env.RUNS_ON_ECR_CACHE }}
           run-id: ${{ github.run_id }}
           docker-username: ${{ secrets.DOCKER_USERNAME }}
@@ -194,7 +234,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
-          name: docker-all-logs-nightly-${{ inputs.provider }}-llm-provider
+          name: docker-all-logs-nightly-${{ matrix.provider }}-${{ matrix.matrix_id }}-llm-provider
           path: |
             ${{ github.workspace }}/api_server.log
             ${{ github.workspace }}/docker-compose.log

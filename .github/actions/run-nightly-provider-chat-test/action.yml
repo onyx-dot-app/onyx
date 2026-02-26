@@ -9,7 +9,8 @@ inputs:
     required: true
   provider-api-key:
     description: "API key for NIGHTLY_LLM_API_KEY"
-    required: true
+    required: false
+    default: ""
   strict:
     description: "String true/false for NIGHTLY_LLM_STRICT"
     required: true
@@ -91,11 +92,6 @@ runs:
         max_attempts: 2
         retry_wait_seconds: 10
         command: |
-          if [ -z "${MODELS}" ]; then
-            echo "Input 'models' must be non-empty for provider '${NIGHTLY_LLM_PROVIDER}'."
-            exit 1
-          fi
-
           docker run --rm --network onyx_default \
             --name test-runner \
             -e POSTGRES_HOST=relational_db \
