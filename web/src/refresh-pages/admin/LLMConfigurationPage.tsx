@@ -426,7 +426,12 @@ export default function LLMConfigurationPage() {
           <div className="grid grid-cols-2 gap-2">
             {wellKnownLLMProviders?.map((provider) => {
               const formFn = PROVIDER_MODAL_MAP[provider.name];
-              if (!formFn) return null;
+              if (!formFn) {
+                toast.error(
+                  `No modal mapping for provider "${provider.name}".`
+                );
+                return null;
+              }
               return (
                 <NewProviderCard
                   key={provider.name}
