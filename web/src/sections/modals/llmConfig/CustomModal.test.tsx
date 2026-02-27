@@ -412,7 +412,7 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       }),
     } as Response);
 
-    // Mock POST /api/admin/llm/provider/5/default
+    // Mock POST /api/admin/llm/default
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => ({}),
@@ -431,12 +431,14 @@ describe("Custom LLM Provider Configuration Workflow", () => {
     const submitButton = screen.getByRole("button", { name: /enable/i });
     await user.click(submitButton);
 
-    // Verify set as default API was called
+    // Verify set as default API was called with correct endpoint and body
     await waitFor(() => {
       expect(fetchSpy).toHaveBeenCalledWith(
-        "/api/admin/llm/provider/5/default",
+        "/api/admin/llm/default",
         expect.objectContaining({
           method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: expect.stringContaining('"provider_id":5'),
         })
       );
     });
