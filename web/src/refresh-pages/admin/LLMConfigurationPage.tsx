@@ -10,6 +10,7 @@ import {
 import { ThreeDotsLoader } from "@/components/Loading";
 import { Content, ContentAction } from "@opal/layouts";
 import { Button } from "@opal/components";
+import { Hoverable } from "@opal/core";
 import { SvgCpu, SvgArrowExchange, SvgSettings, SvgTrash } from "@opal/icons";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
@@ -163,30 +164,7 @@ function ExistingProviderCard({
         </ConfirmationModalLayout>
       )}
 
-      {/*
-        # TODO (@raunakab)
-        Abstract into the hover stylings into a proper, core `Hoverable` component inside of Opal later.
-        The API should look something like:
-
-        ```tsx
-        <Hoverable.Root group="MyGroup">
-          <Card>
-            <ContentAction
-              // ...
-              rightChildren={
-                <Hoverable.Item group="MyGroup" variant="opacity-on-hover">
-                  <Button
-                    icon={SvgTrash}
-                    // ...
-                  />
-                </Hoverable.Item>
-              }
-            />
-          </Card>
-        </Hoverable.Group>
-        ```
-        */}
-      <div className="group/ExistingProviderCard">
+      <Hoverable.Root group="ExistingProviderCard">
         <Card padding={0.5}>
           <ContentAction
             icon={getProviderIcon(provider.provider)}
@@ -197,14 +175,17 @@ function ExistingProviderCard({
             tag={isDefault ? { title: "Default", color: "blue" } : undefined}
             rightChildren={
               <Section flexDirection="row" gap={0} alignItems="start">
-                <div className="opacity-0 group-hover/ExistingProviderCard:opacity-100 transition-all duration-200">
+                <Hoverable.Item
+                  group="ExistingProviderCard"
+                  variant="opacity-on-hover"
+                >
                   <Button
                     icon={SvgTrash}
                     prominence="tertiary"
                     aria-label="Delete provider"
                     onClick={() => deleteModal.toggle(true)}
                   />
-                </div>
+                </Hoverable.Item>
                 <Button
                   icon={SvgSettings}
                   prominence="tertiary"
@@ -216,7 +197,7 @@ function ExistingProviderCard({
           />
           {getModalForExistingProvider(provider, isOpen, setIsOpen)}
         </Card>
-      </div>
+      </Hoverable.Root>
     </>
   );
 }
