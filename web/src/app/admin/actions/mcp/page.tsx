@@ -10,7 +10,7 @@ export default function Main() {
       <SettingsLayouts.Header
         icon={SvgMcp}
         title="MCP Actions"
-        description="Connect MCP (Model Context Protocol) servers to add custom actions and tools for your assistants."
+        description="Connect MCP (Model Context Protocol) servers to add custom actions and tools for your agents."
         separator
       />
       <SettingsLayouts.Body>

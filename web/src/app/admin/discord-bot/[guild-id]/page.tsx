@@ -299,11 +299,11 @@ export default function Page({ params }: Props) {
       });
       refreshGuild();
       toast.success(
-        personaId ? "Default assistant updated" : "Default assistant cleared"
+        personaId ? "Default agent updated" : "Default agent cleared"
       );
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "Failed to update assistant"
+        err instanceof Error ? err.message : "Failed to update agent"
       );
     } finally {
       setIsUpdating(false);
@@ -355,7 +355,7 @@ export default function Page({ params }: Props) {
                 <InputSelect.Trigger placeholder="Select agent" />
                 <InputSelect.Content>
                   <InputSelect.Item value="default">
-                    Default Assistant
+                    Default Agent
                   </InputSelect.Item>
                   {personas.map((persona) => (
                     <InputSelect.Item

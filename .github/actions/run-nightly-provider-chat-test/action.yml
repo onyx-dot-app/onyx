@@ -18,6 +18,14 @@ inputs:
     description: "Optional NIGHTLY_LLM_API_BASE"
     required: false
     default: ""
+  api-version:
+    description: "Optional NIGHTLY_LLM_API_VERSION"
+    required: false
+    default: ""
+  deployment-name:
+    description: "Optional NIGHTLY_LLM_DEPLOYMENT_NAME"
+    required: false
+    default: ""
   custom-config-json:
     description: "Optional NIGHTLY_LLM_CUSTOM_CONFIG_JSON"
     required: false
@@ -84,6 +92,8 @@ runs:
         NIGHTLY_LLM_PROVIDER: ${{ inputs.provider }}
         NIGHTLY_LLM_API_KEY: ${{ inputs.provider-api-key }}
         NIGHTLY_LLM_API_BASE: ${{ inputs.api-base }}
+        NIGHTLY_LLM_API_VERSION: ${{ inputs.api-version }}
+        NIGHTLY_LLM_DEPLOYMENT_NAME: ${{ inputs.deployment-name }}
         NIGHTLY_LLM_CUSTOM_CONFIG_JSON: ${{ inputs.custom-config-json }}
         NIGHTLY_LLM_STRICT: ${{ inputs.strict }}
         RUNS_ON_ECR_CACHE: ${{ inputs.runs-on-ecr-cache }}
@@ -112,6 +122,8 @@ runs:
             -e NIGHTLY_LLM_MODELS="${MODELS}" \
             -e NIGHTLY_LLM_API_KEY="${NIGHTLY_LLM_API_KEY}" \
             -e NIGHTLY_LLM_API_BASE="${NIGHTLY_LLM_API_BASE}" \
+            -e NIGHTLY_LLM_API_VERSION="${NIGHTLY_LLM_API_VERSION}" \
+            -e NIGHTLY_LLM_DEPLOYMENT_NAME="${NIGHTLY_LLM_DEPLOYMENT_NAME}" \
             -e NIGHTLY_LLM_CUSTOM_CONFIG_JSON="${NIGHTLY_LLM_CUSTOM_CONFIG_JSON}" \
             -e NIGHTLY_LLM_STRICT="${NIGHTLY_LLM_STRICT}" \
             ${RUNS_ON_ECR_CACHE}:nightly-llm-it-${RUN_ID} \
