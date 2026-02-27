@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 	"text/tabwriter"
 
@@ -11,6 +12,8 @@ import (
 
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/kube"
 )
+
+var safeIdentifier = regexp.MustCompile(`^[a-zA-Z0-9_\-]+$`)
 
 // NewWhoisCommand creates the whois command for looking up users/tenants.
 func NewWhoisCommand() *cobra.Command {
@@ -106,7 +109,7 @@ func runWhois(query string, ctx string) {
 }
 
 func findByEmail(c *kube.Cluster, pod, fragment string) {
-	fragment = strings.NewReplacer("'", "", `"`, "").Replace(fragment)
+	fragment = strings.NewReplacer("'", "", `"`, "", `;`, "", `\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(fragment)
 
 	sql := fmt.Sprintf(
 		`SELECT email, tenant_id, active FROM public.user_tenant_mapping WHERE email LIKE '%%%s%%' ORDER BY email;`,
@@ -131,7 +134,9 @@ func findByEmail(c *kube.Cluster, pod, fragment string) {
 }
 
 func findAdminsByTenant(c *kube.Cluster, pod, tenantID string) {
-	tenantID = strings.NewReplacer("'", "", `"`, "").Replace(tenantID)
+	if !safeIdentifier.MatchString(tenantID) {
+		log.Fatalf("Invalid tenant ID: %q (must be alphanumeric, hyphens, underscores only)", tenantID)
+	}
 
 	sql := fmt.Sprintf(
 		`SELECT email FROM "%s"."user" WHERE role = 'ADMIN' AND is_active = true AND email NOT LIKE 'api_key__%%' ORDER BY email;`,
