@@ -253,10 +253,9 @@ def create_update_persona(
     try:
         # Featured persona validation
         if create_persona_request.featured:
-            if not create_persona_request.is_public:
-                raise ValueError("Cannot make a featured persona non public")
 
             # Curators can edit featured personas, but not make them
+            # TODO this will be reworked soon with RBAC permissions feature
             if user.role == UserRole.CURATOR or user.role == UserRole.GLOBAL_CURATOR:
                 pass
             elif user.role != UserRole.ADMIN:
@@ -1141,9 +1140,6 @@ def update_persona_featured(
     persona = fetch_persona_by_id_for_user(
         db_session=db_session, persona_id=persona_id, user=user, get_editable=True
     )
-
-    if not persona.is_public:
-        persona.is_public = True
 
     persona.featured = featured
     db_session.commit()
