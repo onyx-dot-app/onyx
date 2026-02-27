@@ -1352,6 +1352,9 @@ fi
 echo "Writing AGENTS.md"
 printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
 
+# Populate knowledge sources by scanning the files directory
+python3 /usr/local/bin/generate_agents_md.py {session_path}/AGENTS.md {session_path}/files || true
+
 # Write opencode config
 echo "Writing opencode.json"
 printf '%s' '{opencode_json_escaped}' > {session_path}/opencode.json
@@ -1779,6 +1782,9 @@ ln -sf {symlink_target} {session_path}/files
 # Write agent instructions
 echo "Writing AGENTS.md"
 printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
+
+# Populate knowledge sources by scanning the files directory
+python3 /usr/local/bin/generate_agents_md.py {session_path}/AGENTS.md {session_path}/files || true
 
 # Write opencode config
 echo "Writing opencode.json"

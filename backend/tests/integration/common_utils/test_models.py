@@ -42,6 +42,18 @@ class DATestPAT(BaseModel):
     last_used_at: str | None = None
 
 
+class DATestScimToken(BaseModel):
+    """SCIM bearer token model for testing."""
+
+    id: int
+    name: str
+    raw_token: str | None = None  # Only present on initial creation
+    token_display: str
+    is_active: bool
+    created_at: str
+    last_used_at: str | None = None
+
+
 class DATestAPIKey(BaseModel):
     api_key_id: int
     api_key_display: str

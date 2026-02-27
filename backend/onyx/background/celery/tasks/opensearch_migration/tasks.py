@@ -48,6 +48,7 @@ from onyx.document_index.opensearch.opensearch_document_index import (
     OpenSearchDocumentIndex,
 )
 from onyx.document_index.vespa.vespa_document_index import VespaDocumentIndex
+from onyx.indexing.models import IndexingSetting
 from onyx.redis.redis_pool import get_redis_client
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
@@ -149,8 +150,12 @@ def migrate_chunks_from_vespa_to_opensearch_task(
             try_insert_opensearch_tenant_migration_record_with_commit(db_session)
             search_settings = get_current_search_settings(db_session)
             tenant_state = TenantState(tenant_id=tenant_id, multitenant=MULTI_TENANT)
+            indexing_setting = IndexingSetting.from_db_model(search_settings)
             opensearch_document_index = OpenSearchDocumentIndex(
-                index_name=search_settings.index_name, tenant_state=tenant_state
+                tenant_state=tenant_state,
+                index_name=search_settings.index_name,
+                embedding_dim=indexing_setting.final_embedding_dim,
+                embedding_precision=indexing_setting.embedding_precision,
             )
             vespa_document_index = VespaDocumentIndex(
                 index_name=search_settings.index_name,

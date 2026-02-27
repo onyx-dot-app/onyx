@@ -170,6 +170,30 @@ ods pull
 ods pull --tag edge
 ```
 
+### `web` - Run Frontend Scripts
+
+Run npm scripts from `web/package.json` without manually changing directories.
+
+```shell
+ods web <script> [args...]
+```
+
+Script names are available via shell completion (for supported shells via
+`ods completion`), and are read from `web/package.json`.
+
+**Examples:**
+
+```shell
+# Start the Next.js dev server
+ods web dev
+
+# Run web lint task
+ods web lint
+
+# Forward extra args to the script
+ods web test --watch
+```
+
 ### `db` - Database Administration
 
 Manage PostgreSQL database dumps, restores, and migrations.

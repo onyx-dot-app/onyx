@@ -36,6 +36,7 @@ from onyx.configs.app_configs import AUTH_BACKEND
 from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import AuthBackend
 from onyx.configs.app_configs import DEV_MODE
+from onyx.configs.app_configs import EMAIL_CONFIGURED
 from onyx.configs.app_configs import ENABLE_EMAIL_INVITES
 from onyx.configs.app_configs import NUM_FREE_TRIAL_USER_INVITES
 from onyx.configs.app_configs import REDIS_AUTH_KEY_PREFIX
@@ -78,8 +79,10 @@ from onyx.server.documents.models import PaginatedReturn
 from onyx.server.features.projects.models import UserFileSnapshot
 from onyx.server.manage.models import AllUsersResponse
 from onyx.server.manage.models import AutoScrollRequest
+from onyx.server.manage.models import BulkInviteResponse
 from onyx.server.manage.models import ChatBackgroundRequest
 from onyx.server.manage.models import DefaultAppModeRequest
+from onyx.server.manage.models import EmailInviteStatus
 from onyx.server.manage.models import MemoryItem
 from onyx.server.manage.models import PersonalizationUpdateRequest
 from onyx.server.manage.models import TenantInfo
@@ -368,7 +371,7 @@ def bulk_invite_users(
     emails: list[str] = Body(..., embed=True),
     current_user: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
-) -> int:
+) -> BulkInviteResponse:
     """emails are string validated. If any email fails validation, no emails are
     invited and an exception is raised."""
     tenant_id = get_current_tenant_id()
@@ -427,34 +430,41 @@ def bulk_invite_users(
     number_of_invited_users = write_invited_users(all_emails)
 
     # send out email invitations only to new users (not already invited or existing)
-    if ENABLE_EMAIL_INVITES:
+    if not ENABLE_EMAIL_INVITES:
+        email_invite_status = EmailInviteStatus.DISABLED
+    elif not EMAIL_CONFIGURED:
+        email_invite_status = EmailInviteStatus.NOT_CONFIGURED
+    else:
         try:
             for email in emails_needing_seats:
                 send_user_email_invite(email, current_user, AUTH_TYPE)
+            email_invite_status = EmailInviteStatus.SENT
         except Exception as e:
             logger.error(f"Error sending email invite to invited users: {e}")
+            email_invite_status = EmailInviteStatus.SEND_FAILED
 
-    if not MULTI_TENANT or DEV_MODE:
-        return number_of_invited_users
+    if MULTI_TENANT and not DEV_MODE:
+        # for billing purposes, write to the control plane about the number of new users
+        try:
+            logger.info("Registering tenant users")
+            fetch_ee_implementation_or_noop(
+                "onyx.server.tenants.billing", "register_tenant_users", None
+            )(tenant_id, get_live_users_count(db_session))
+        except Exception as e:
+            logger.error(f"Failed to register tenant users: {str(e)}")
+            logger.info(
+                "Reverting changes: removing users from tenant and resetting invited users"
+            )
+            write_invited_users(initial_invited_users)  # Reset to original state
+            fetch_ee_implementation_or_noop(
+                "onyx.server.tenants.user_mapping", "remove_users_from_tenant", None
+            )(new_invited_emails, tenant_id)
+            raise e
 
-    # for billing purposes, write to the control plane about the number of new users
-    try:
-        logger.info("Registering tenant users")
-        fetch_ee_implementation_or_noop(
-            "onyx.server.tenants.billing", "register_tenant_users", None
-        )(tenant_id, get_live_users_count(db_session))
-
-        return number_of_invited_users
-    except Exception as e:
-        logger.error(f"Failed to register tenant users: {str(e)}")
-        logger.info(
-            "Reverting changes: removing users from tenant and resetting invited users"
-        )
-        write_invited_users(initial_invited_users)  # Reset to original state
-        fetch_ee_implementation_or_noop(
-            "onyx.server.tenants.user_mapping", "remove_users_from_tenant", None
-        )(new_invited_emails, tenant_id)
-        raise e
+    return BulkInviteResponse(
+        invited_count=number_of_invited_users,
+        email_invite_status=email_invite_status,
+    )
 
 
 @router.patch("/manage/admin/remove-invited-user", tags=PUBLIC_API_TAGS)

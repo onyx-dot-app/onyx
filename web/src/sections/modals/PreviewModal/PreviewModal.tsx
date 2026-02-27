@@ -7,7 +7,7 @@ import Text from "@/refresh-components/texts/Text";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { cn } from "@/lib/utils";
 import { Section } from "@/layouts/general-layouts";
-import { getCodeLanguage } from "@/lib/languages";
+import { getCodeLanguage, getDataLanguage } from "@/lib/languages";
 import { fetchChatFile } from "@/lib/chat/svc";
 import { PreviewContext } from "@/sections/modals/PreviewModal/interfaces";
 import { resolveVariant } from "@/sections/modals/PreviewModal/variants";
@@ -47,6 +47,7 @@ export default function PreviewModal({
   const language = useMemo(
     () =>
       getCodeLanguage(presentingDocument.semantic_identifier || "") ||
+      getDataLanguage(presentingDocument.semantic_identifier || "") ||
       "plaintext",
     [presentingDocument.semantic_identifier]
   );

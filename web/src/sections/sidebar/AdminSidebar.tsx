@@ -50,6 +50,7 @@ import {
   SvgPaintBrush,
   SvgDiscordMono,
   SvgWallet,
+  SvgTerminal,
 } from "@opal/icons";
 import SvgMcp from "@opal/icons/mcp";
 import UserAvatarPopover from "@/sections/sidebar/UserAvatarPopover";
@@ -91,7 +92,7 @@ const custom_assistants_items = (
 ) => {
   const items = [
     {
-      name: "Assistants",
+      name: "Agents",
       icon: SvgOnyxOctagon,
       link: "/admin/assistants",
     },
@@ -165,7 +166,7 @@ const collections = (
         ]
       : []),
     {
-      name: "Custom Assistants",
+      name: "Custom Agents",
       items: custom_assistants_items(isCurator, enableEnterprise),
     },
     ...(isCurator && enableEnterprise
@@ -206,6 +207,11 @@ const collections = (
                 name: "Image Generation",
                 icon: SvgImage,
                 link: "/admin/configuration/image-generation",
+              },
+              {
+                name: "Code Interpreter",
+                icon: SvgTerminal,
+                link: "/admin/configuration/code-interpreter",
               },
               ...(!enableCloud && vectorDbEnabled
                 ? [

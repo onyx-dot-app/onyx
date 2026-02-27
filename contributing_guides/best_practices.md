@@ -163,3 +163,16 @@ Add clear comments:
 - Any TODOs you add in the code must be accompanied by either the name/username
   of the owner of that TODO, or an issue number for an issue referencing that
   piece of work.
+- Avoid module-level logic that runs on import, which leads to import-time side
+  effects. Essentially every piece of meaningful logic should exist within some
+  function that has to be explicitly invoked. Acceptable exceptions to this may
+  include loading environment variables or setting up loggers.
+  - If you find yourself needing something like this, you may want that logic to
+    exist in a file dedicated for manual execution (contains `if __name__ ==
+    "__main__":`) which should not be imported by anything else.
+- Related to the above, do not conflate Python scripts you intend to run from
+  the command line (contains `if __name__ == "__main__":`) with modules you
+  intend to import from elsewhere. If for some unlikely reason they have to be
+  the same file, any logic specific to executing the file (including imports)
+  should be contained in the `if __name__ == "__main__":` block.
+  - Generally these executable files exist in `backend/scripts/`.

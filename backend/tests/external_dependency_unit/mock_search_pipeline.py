@@ -144,7 +144,8 @@ def use_mock_search_pipeline(
         auto_detect_filters: bool = False,  # noqa: ARG001
         llm: LLM | None = None,  # noqa: ARG001
         project_id: int | None = None,  # noqa: ARG001
-        # Pre-fetched data (used by SearchTool to avoid DB access in parallel)
+        persona_id: int | None = None,  # noqa: ARG001
+        # Pre-fetched data (used by SearchTool to avoid DB access in parallel calls)
         acl_filters: list[str] | None = None,  # noqa: ARG001
         embedding_model: EmbeddingModel | None = None,  # noqa: ARG001
         prefetched_federated_retrieval_infos: (  # noqa: ARG001

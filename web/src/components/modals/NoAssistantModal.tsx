@@ -12,17 +12,17 @@ export default function NoAssistantModal() {
   return (
     <Modal open>
       <Modal.Content width="sm" height="sm">
-        <Modal.Header icon={SvgUser} title="No Assistant Available" />
+        <Modal.Header icon={SvgUser} title="No Agent Available" />
         <Modal.Body>
           <Text as="p">
-            You currently have no assistant configured. To use this feature, you
+            You currently have no agent configured. To use this feature, you
             need to take action.
           </Text>
           {isAdmin ? (
             <>
               <Text as="p">
-                As an administrator, you can create a new assistant by visiting
-                the admin panel.
+                As an administrator, you can create a new agent by visiting the
+                admin panel.
               </Text>
               <Button className="w-full" href="/admin/assistants">
                 Go to Admin Panel
@@ -30,8 +30,7 @@ export default function NoAssistantModal() {
             </>
           ) : (
             <Text as="p">
-              Please contact your administrator to configure an assistant for
-              you.
+              Please contact your administrator to configure an agent for you.
             </Text>
           )}
         </Modal.Body>

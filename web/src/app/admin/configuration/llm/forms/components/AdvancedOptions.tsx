@@ -39,10 +39,10 @@ export function AdvancedOptions({
               agents={agents}
               isLoading={agentsLoading}
               error={agentsError}
-              label="Assistant Whitelist"
-              subtext="Restrict this provider to specific assistants."
+              label="Agent Whitelist"
+              subtext="Restrict this provider to specific agents."
               disabled={formikProps.values.is_public}
-              disabledMessage="This LLM Provider is public and available to all assistants."
+              disabledMessage="This LLM Provider is public and available to all agents."
             />
           </div>
         </>

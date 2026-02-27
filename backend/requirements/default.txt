@@ -809,7 +809,7 @@ pypandoc-binary==1.16.2
     # via onyx
 pyparsing==3.2.5
     # via httplib2
-pypdf==6.6.2
+pypdf==6.7.3
     # via
     #   onyx
     #   unstructured-client

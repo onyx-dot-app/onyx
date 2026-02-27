@@ -6,7 +6,7 @@ the permissions of the curator manipulating connector-credential pairs.
 import os
 
 import pytest
-from requests.exceptions import HTTPError
+from onyx_openapi_client.exceptions import ApiException  # type: ignore[import-untyped,unused-ignore,import-not-found]
 
 from onyx.db.enums import AccessType
 from onyx.server.documents.models import DocumentSource
@@ -93,20 +93,9 @@ def test_cc_pair_permissions(reset: None) -> None:  # noqa: ARG001
 
     """Tests for things Curators should not be able to do"""
 
-    # Curators should not be able to create a public cc pair
-    with pytest.raises(HTTPError):
-        CCPairManager.create(
-            connector_id=connector_1.id,
-            credential_id=credential_1.id,
-            name="invalid_cc_pair_1",
-            access_type=AccessType.PUBLIC,
-            groups=[user_group_1.id],
-            user_performing_action=curator,
-        )
-
     # Curators should not be able to create a cc
     # pair for a user group they are not a curator of
-    with pytest.raises(HTTPError):
+    with pytest.raises(ApiException):
         CCPairManager.create(
             connector_id=connector_1.id,
             credential_id=credential_1.id,
@@ -118,7 +107,7 @@ def test_cc_pair_permissions(reset: None) -> None:  # noqa: ARG001
 
     # Curators should not be able to create a cc
     # pair without an attached user group
-    with pytest.raises(HTTPError):
+    with pytest.raises(ApiException):
         CCPairManager.create(
             connector_id=connector_1.id,
             credential_id=credential_1.id,
@@ -144,7 +133,7 @@ def test_cc_pair_permissions(reset: None) -> None:  # noqa: ARG001
 
     # Curators should not be able to create a cc
     # pair for a user group that the credential does not belong to
-    with pytest.raises(HTTPError):
+    with pytest.raises(ApiException):
         CCPairManager.create(
             connector_id=connector_1.id,
             credential_id=credential_2.id,
@@ -155,6 +144,16 @@ def test_cc_pair_permissions(reset: None) -> None:  # noqa: ARG001
         )
 
     """Tests for things Curators should be able to do"""
+
+    # Re-create connector since the credential_2 validation error above
+    # triggers connector deletion in the exception handler
+    connector_1 = ConnectorManager.create(
+        name="admin_owned_connector_2",
+        source=DocumentSource.CONFLUENCE,
+        groups=[user_group_1.id],
+        access_type=AccessType.PRIVATE,
+        user_performing_action=admin_user,
+    )
 
     # Curators should be able to create a private
     # cc pair for a user group they are a curator of

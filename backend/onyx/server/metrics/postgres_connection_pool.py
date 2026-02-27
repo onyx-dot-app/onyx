@@ -32,6 +32,7 @@ from sqlalchemy.pool import QueuePool
 
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import CURRENT_ENDPOINT_CONTEXTVAR
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()
 
@@ -72,7 +73,7 @@ _checkout_timeout_total = Counter(
 _connections_held = Gauge(
     "onyx_db_connections_held_by_endpoint",
     "Number of DB connections currently held, by endpoint and engine",
-    ["handler", "engine"],
+    ["handler", "engine", "tenant_id"],
 )
 
 _hold_seconds = Histogram(
@@ -163,10 +164,14 @@ def _register_pool_events(engine: Engine, label: str) -> None:
         conn_proxy: PoolProxiedConnection,  # noqa: ARG001
     ) -> None:
         handler = CURRENT_ENDPOINT_CONTEXTVAR.get() or "unknown"
+        tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get() or "unknown"
         conn_record.info["_metrics_endpoint"] = handler
+        conn_record.info["_metrics_tenant_id"] = tenant_id
         conn_record.info["_metrics_checkout_time"] = time.monotonic()
         _checkout_total.labels(engine=label).inc()
-        _connections_held.labels(handler=handler, engine=label).inc()
+        _connections_held.labels(
+            handler=handler, engine=label, tenant_id=tenant_id
+        ).inc()
 
     @event.listens_for(engine, "checkin")
     def on_checkin(
@@ -174,9 +179,12 @@ def _register_pool_events(engine: Engine, label: str) -> None:
         conn_record: ConnectionPoolEntry,
     ) -> None:
         handler = conn_record.info.pop("_metrics_endpoint", "unknown")
+        tenant_id = conn_record.info.pop("_metrics_tenant_id", "unknown")
         start = conn_record.info.pop("_metrics_checkout_time", None)
         _checkin_total.labels(engine=label).inc()
-        _connections_held.labels(handler=handler, engine=label).dec()
+        _connections_held.labels(
+            handler=handler, engine=label, tenant_id=tenant_id
+        ).dec()
         if start is not None:
             _hold_seconds.labels(handler=handler, engine=label).observe(
                 time.monotonic() - start
@@ -199,9 +207,12 @@ def _register_pool_events(engine: Engine, label: str) -> None:
         # Defensively clean up the held-connections gauge in case checkin
         # doesn't fire after invalidation (e.g. hard pool shutdown).
         handler = conn_record.info.pop("_metrics_endpoint", None)
+        tenant_id = conn_record.info.pop("_metrics_tenant_id", "unknown")
         start = conn_record.info.pop("_metrics_checkout_time", None)
         if handler:
-            _connections_held.labels(handler=handler, engine=label).dec()
+            _connections_held.labels(
+                handler=handler, engine=label, tenant_id=tenant_id
+            ).dec()
         if start is not None:
             _hold_seconds.labels(handler=handler or "unknown", engine=label).observe(
                 time.monotonic() - start

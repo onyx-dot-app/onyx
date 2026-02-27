@@ -12,6 +12,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import Document
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import ImageSection
+from onyx.connectors.sharepoint.connector import SharepointAuthMethod
 from onyx.connectors.sharepoint.connector import SharepointConnector
 from onyx.db.enums import HierarchyNodeType
 from tests.daily.connectors.utils import load_all_from_connector
@@ -521,3 +522,46 @@ def test_sharepoint_connector_hierarchy_nodes(
                 f"Document {doc.semantic_identifier} should have "
                 "parent_hierarchy_raw_node_id set"
             )
+
+
+@pytest.fixture
+def sharepoint_cert_credentials() -> dict[str, str]:
+    return {
+        "authentication_method": SharepointAuthMethod.CERTIFICATE.value,
+        "sp_client_id": os.environ["PERM_SYNC_SHAREPOINT_CLIENT_ID"],
+        "sp_private_key": os.environ["PERM_SYNC_SHAREPOINT_PRIVATE_KEY"],
+        "sp_certificate_password": os.environ[
+            "PERM_SYNC_SHAREPOINT_CERTIFICATE_PASSWORD"
+        ],
+        "sp_directory_id": os.environ["PERM_SYNC_SHAREPOINT_DIRECTORY_ID"],
+    }
+
+
+def test_resolve_tenant_domain_from_site_urls(
+    sharepoint_cert_credentials: dict[str, str],
+) -> None:
+    """Verify that certificate auth resolves the tenant domain from site URLs
+    without calling the /organization endpoint."""
+    site_url = os.environ["SHAREPOINT_SITE"]
+    connector = SharepointConnector(sites=[site_url])
+    connector.load_credentials(sharepoint_cert_credentials)
+
+    assert connector.sp_tenant_domain is not None
+    assert len(connector.sp_tenant_domain) > 0
+    # The tenant domain should match the first label of the site URL hostname
+    from urllib.parse import urlsplit
+
+    expected = urlsplit(site_url).hostname.split(".")[0]  # type: ignore
+    assert connector.sp_tenant_domain == expected
+
+
+def test_resolve_tenant_domain_from_root_site(
+    sharepoint_cert_credentials: dict[str, str],
+) -> None:
+    """Verify that certificate auth resolves the tenant domain via the root
+    site endpoint when no site URLs are configured."""
+    connector = SharepointConnector(sites=[])
+    connector.load_credentials(sharepoint_cert_credentials)
+
+    assert connector.sp_tenant_domain is not None
+    assert len(connector.sp_tenant_domain) > 0

@@ -25,6 +25,11 @@ def test_add_users_to_group(reset: None) -> None:  # noqa: ARG001
         user_performing_action=admin_user,
     )
 
+    UserGroupManager.wait_for_sync(
+        user_performing_action=admin_user,
+        user_groups_to_check=[user_group],
+    )
+
     updated_user_group = UserGroupManager.add_users(
         user_group=user_group,
         user_ids=[user_to_add.id],

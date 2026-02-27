@@ -29,12 +29,12 @@ const ADMIN_PAGES: AdminPageSnapshot[] = [
     pageTitle: "Add Connector",
   },
   {
-    name: "Custom Assistants - Assistants",
+    name: "Custom Agents - Agents",
     path: "assistants",
-    pageTitle: "Assistants",
+    pageTitle: "Agents",
     options: {
       paragraphText:
-        "Assistants are a way to build custom search/question-answering experiences for different use cases.",
+        "Agents are a way to build custom search/question-answering experiences for different use cases.",
     },
   },
   {
@@ -52,7 +52,7 @@ const ADMIN_PAGES: AdminPageSnapshot[] = [
     },
   },
   {
-    name: "Custom Assistants - Slack Bots",
+    name: "Custom Agents - Slack Bots",
     path: "bots",
     pageTitle: "Slack Bots",
     options: {
@@ -61,7 +61,7 @@ const ADMIN_PAGES: AdminPageSnapshot[] = [
     },
   },
   {
-    name: "Custom Assistants - Standard Answers",
+    name: "Custom Agents - Standard Answers",
     path: "standard-answer",
     pageTitle: "Standard Answers",
   },
@@ -101,12 +101,12 @@ const ADMIN_PAGES: AdminPageSnapshot[] = [
     pageTitle: "Search Settings",
   },
   {
-    name: "Custom Assistants - MCP Actions",
+    name: "Custom Agents - MCP Actions",
     path: "actions/mcp",
     pageTitle: "MCP Actions",
   },
   {
-    name: "Custom Assistants - OpenAPI Actions",
+    name: "Custom Agents - OpenAPI Actions",
     path: "actions/open-api",
     pageTitle: "OpenAPI Actions",
   },

@@ -13,7 +13,7 @@ import { toast } from "@/hooks/useToast";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useSWR, { mutate } from "swr";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import BulkAdd from "@/components/admin/users/BulkAdd";
+import BulkAdd, { EmailInviteStatus } from "@/components/admin/users/BulkAdd";
 import Text from "@/refresh-components/texts/Text";
 import { InvitedUserSnapshot } from "@/lib/types";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
@@ -267,12 +267,22 @@ const SearchableTables = () => {
 function AddUserButton() {
   const [bulkAddUsersModal, setBulkAddUsersModal] = useState(false);
 
-  const onSuccess = () => {
+  const onSuccess = (emailInviteStatus: EmailInviteStatus) => {
     mutate(
       (key) => typeof key === "string" && key.startsWith("/api/manage/users")
     );
     setBulkAddUsersModal(false);
-    toast.success("Users invited!");
+    if (emailInviteStatus === "NOT_CONFIGURED") {
+      toast.warning(
+        "Users added, but no email notification was sent. There is no SMTP server set up for email sending."
+      );
+    } else if (emailInviteStatus === "SEND_FAILED") {
+      toast.warning(
+        "Users added, but email sending failed. Check your SMTP configuration and try again."
+      );
+    } else {
+      toast.success("Users invited!");
+    }
   };
 
   const onFailure = async (res: Response) => {

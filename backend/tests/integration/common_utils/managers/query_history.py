@@ -1,3 +1,4 @@
+import time
 from datetime import datetime
 from urllib.parse import urlencode
 from uuid import UUID
@@ -8,8 +9,10 @@ from requests.models import CaseInsensitiveDict
 from ee.onyx.server.query_history.models import ChatSessionMinimal
 from ee.onyx.server.query_history.models import ChatSessionSnapshot
 from onyx.configs.constants import QAFeedbackType
+from onyx.db.enums import TaskStatus
 from onyx.server.documents.models import PaginatedReturn
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import MAX_DELAY
 from tests.integration.common_utils.test_models import DATestUser
 
 
@@ -69,9 +72,42 @@ class QueryHistoryManager:
         if end_time:
             query_params["end"] = end_time.isoformat()
 
-        response = requests.get(
-            url=f"{API_SERVER_URL}/admin/query-history-csv?{urlencode(query_params, doseq=True)}",
+        start_response = requests.post(
+            url=f"{API_SERVER_URL}/admin/query-history/start-export?{urlencode(query_params, doseq=True)}",
             headers=user_performing_action.headers,
         )
-        response.raise_for_status()
-        return response.headers, response.content.decode()
+        start_response.raise_for_status()
+        request_id = start_response.json()["request_id"]
+
+        deadline = time.time() + MAX_DELAY
+        while time.time() < deadline:
+            status_response = requests.get(
+                url=f"{API_SERVER_URL}/admin/query-history/export-status",
+                params={"request_id": request_id},
+                headers=user_performing_action.headers,
+            )
+            status_response.raise_for_status()
+            status = status_response.json()["status"]
+            if status == TaskStatus.SUCCESS:
+                break
+            if status == TaskStatus.FAILURE:
+                raise RuntimeError("Query history export task failed")
+            time.sleep(2)
+        else:
+            raise TimeoutError(
+                f"Query history export not completed within {MAX_DELAY} seconds"
+            )
+
+        download_response = requests.get(
+            url=f"{API_SERVER_URL}/admin/query-history/download",
+            params={"request_id": request_id},
+            headers=user_performing_action.headers,
+        )
+        download_response.raise_for_status()
+
+        if not download_response.content:
+            raise RuntimeError(
+                "Query history CSV download returned zero-length content"
+            )
+
+        return download_response.headers, download_response.content.decode()

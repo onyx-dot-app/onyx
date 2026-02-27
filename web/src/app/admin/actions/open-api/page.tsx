@@ -10,7 +10,7 @@ export default function Main() {
       <SettingsLayouts.Header
         icon={SvgActions}
         title="OpenAPI Actions"
-        description="Connect OpenAPI servers to add custom actions and tools for your assistants."
+        description="Connect OpenAPI servers to add custom actions and tools for your agents."
         separator
       />
       <SettingsLayouts.Body>

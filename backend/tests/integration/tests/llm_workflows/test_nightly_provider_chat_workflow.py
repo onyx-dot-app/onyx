@@ -23,6 +23,8 @@ _ENV_PROVIDER = "NIGHTLY_LLM_PROVIDER"
 _ENV_MODELS = "NIGHTLY_LLM_MODELS"
 _ENV_API_KEY = "NIGHTLY_LLM_API_KEY"
 _ENV_API_BASE = "NIGHTLY_LLM_API_BASE"
+_ENV_API_VERSION = "NIGHTLY_LLM_API_VERSION"
+_ENV_DEPLOYMENT_NAME = "NIGHTLY_LLM_DEPLOYMENT_NAME"
 _ENV_CUSTOM_CONFIG_JSON = "NIGHTLY_LLM_CUSTOM_CONFIG_JSON"
 _ENV_STRICT = "NIGHTLY_LLM_STRICT"
 
@@ -34,6 +36,8 @@ class NightlyProviderConfig(BaseModel):
     model_names: list[str]
     api_key: str | None
     api_base: str | None
+    api_version: str | None
+    deployment_name: str | None
     custom_config: dict[str, str] | None
     strict: bool
 
@@ -45,17 +49,29 @@ def _env_true(env_var: str, default: bool = False) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
-def _split_csv_env(env_var: str) -> list[str]:
-    return [
-        part.strip() for part in os.environ.get(env_var, "").split(",") if part.strip()
-    ]
+def _parse_models_env(env_var: str) -> list[str]:
+    raw_value = os.environ.get(env_var, "").strip()
+    if not raw_value:
+        return []
+
+    try:
+        parsed_json = json.loads(raw_value)
+    except json.JSONDecodeError:
+        parsed_json = None
+
+    if isinstance(parsed_json, list):
+        return [str(model).strip() for model in parsed_json if str(model).strip()]
+
+    return [part.strip() for part in raw_value.split(",") if part.strip()]
 
 
 def _load_provider_config() -> NightlyProviderConfig:
     provider = os.environ.get(_ENV_PROVIDER, "").strip().lower()
-    model_names = _split_csv_env(_ENV_MODELS)
+    model_names = _parse_models_env(_ENV_MODELS)
     api_key = os.environ.get(_ENV_API_KEY) or None
     api_base = os.environ.get(_ENV_API_BASE) or None
+    api_version = os.environ.get(_ENV_API_VERSION) or None
+    deployment_name = os.environ.get(_ENV_DEPLOYMENT_NAME) or None
     strict = _env_true(_ENV_STRICT, default=False)
 
     custom_config: dict[str, str] | None = None
@@ -74,6 +90,8 @@ def _load_provider_config() -> NightlyProviderConfig:
         model_names=model_names,
         api_key=api_key,
         api_base=api_base,
+        api_version=api_version,
+        deployment_name=deployment_name,
         custom_config=custom_config,
         strict=strict,
     )
@@ -95,10 +113,15 @@ def _validate_provider_config(config: NightlyProviderConfig) -> None:
             message=f"{_ENV_MODELS} must include at least one model",
         )
 
-    if config.provider != "ollama_chat" and not config.api_key:
+    if config.provider != "ollama_chat" and not (
+        config.api_key or config.custom_config
+    ):
         _skip_or_fail(
             strict=config.strict,
-            message=(f"{_ENV_API_KEY} is required for provider '{config.provider}'"),
+            message=(
+                f"{_ENV_API_KEY} or {_ENV_CUSTOM_CONFIG_JSON} is required for "
+                f"provider '{config.provider}'"
+            ),
         )
 
     if config.provider == "ollama_chat" and not (
@@ -108,6 +131,22 @@ def _validate_provider_config(config: NightlyProviderConfig) -> None:
             strict=config.strict,
             message=(f"{_ENV_API_BASE} is required for provider '{config.provider}'"),
         )
+
+    if config.provider == "azure":
+        if not config.api_base:
+            _skip_or_fail(
+                strict=config.strict,
+                message=(
+                    f"{_ENV_API_BASE} is required for provider '{config.provider}'"
+                ),
+            )
+        if not config.api_version:
+            _skip_or_fail(
+                strict=config.strict,
+                message=(
+                    f"{_ENV_API_VERSION} is required for provider '{config.provider}'"
+                ),
+            )
 
 
 def _assert_integration_mode_enabled() -> None:
@@ -147,6 +186,8 @@ def _create_provider_payload(
     model_name: str,
     api_key: str | None,
     api_base: str | None,
+    api_version: str | None,
+    deployment_name: str | None,
     custom_config: dict[str, str] | None,
 ) -> dict:
     return {
@@ -154,6 +195,8 @@ def _create_provider_payload(
         "provider": provider,
         "api_key": api_key,
         "api_base": api_base,
+        "api_version": api_version,
+        "deployment_name": deployment_name,
         "custom_config": custom_config,
         "default_model_name": model_name,
         "is_public": True,
@@ -255,6 +298,8 @@ def _create_and_test_provider_for_model(
         model_name=model_name,
         api_key=config.api_key,
         api_base=resolved_api_base,
+        api_version=config.api_version,
+        deployment_name=config.deployment_name,
         custom_config=config.custom_config,
     )
 
@@ -313,10 +358,21 @@ def test_nightly_provider_chat_workflow(admin_user: DATestUser) -> None:
     _seed_connector_for_search_tool(admin_user)
     search_tool_id = _get_internal_search_tool_id(admin_user)
 
+    failures: list[str] = []
     for model_name in config.model_names:
-        _create_and_test_provider_for_model(
-            admin_user=admin_user,
-            config=config,
-            model_name=model_name,
-            search_tool_id=search_tool_id,
-        )
+        try:
+            _create_and_test_provider_for_model(
+                admin_user=admin_user,
+                config=config,
+                model_name=model_name,
+                search_tool_id=search_tool_id,
+            )
+        except BaseException as exc:
+            if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+                raise
+            failures.append(
+                f"provider={config.provider} model={model_name} error={type(exc).__name__}: {exc}"
+            )
+
+    if failures:
+        pytest.fail("Nightly provider chat failures:\n" + "\n".join(failures))

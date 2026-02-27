@@ -1,3 +1,11 @@
+/* Hoverable */
+export {
+  Hoverable,
+  type HoverableRootProps,
+  type HoverableItemProps,
+  type HoverableItemVariant,
+} from "@opal/core/hoverable/components";
+
 /* Interactive */
 export {
   Interactive,

@@ -59,18 +59,21 @@ type ButtonContentProps =
       icon: IconFunctionComponent;
       children: string;
       rightIcon?: IconFunctionComponent;
+      responsiveHideText?: never;
     }
   | {
       foldable?: false;
       icon?: IconFunctionComponent;
       children: string;
       rightIcon?: IconFunctionComponent;
+      responsiveHideText?: never;
     }
   | {
       foldable?: false;
       icon: IconFunctionComponent;
       children?: string;
       rightIcon?: IconFunctionComponent;
+      responsiveHideText?: boolean;
     };
 
 type ButtonProps = InteractiveBaseProps &
@@ -108,6 +111,7 @@ function Button({
   width,
   tooltip,
   tooltipSide = "top",
+  responsiveHideText = false,
   ...interactiveBaseProps
 }: ButtonProps) {
   const isLarge = size === "lg";
@@ -116,7 +120,8 @@ function Button({
     <span
       className={cn(
         "opal-button-label",
-        isLarge ? "font-main-ui-body " : "font-secondary-body"
+        isLarge ? "font-main-ui-body " : "font-secondary-body",
+        responsiveHideText && "hidden md:inline"
       )}
     >
       {children}
@@ -146,13 +151,25 @@ function Button({
             <div className="opal-button-foldable">
               <div className="opal-button-foldable-inner">
                 {labelEl}
-                {iconWrapper(RightIcon, size, !!children)}
+                {responsiveHideText ? (
+                  <span className="hidden md:inline-flex">
+                    {iconWrapper(RightIcon, size, !!children)}
+                  </span>
+                ) : (
+                  iconWrapper(RightIcon, size, !!children)
+                )}
               </div>
             </div>
           ) : (
             <>
               {labelEl}
-              {iconWrapper(RightIcon, size, !!children)}
+              {responsiveHideText ? (
+                <span className="hidden md:inline-flex">
+                  {iconWrapper(RightIcon, size, !!children)}
+                </span>
+              ) : (
+                iconWrapper(RightIcon, size, !!children)
+              )}
             </>
           )}
         </div>
@@ -160,7 +177,13 @@ function Button({
     </Interactive.Base>
   );
 
-  if (!tooltip) return button;
+  const resolvedTooltip =
+    tooltip ??
+    (foldable && interactiveBaseProps.disabled && children
+      ? children
+      : undefined);
+
+  if (!resolvedTooltip) return button;
 
   return (
     <TooltipPrimitive.Root>
@@ -171,7 +194,7 @@ function Button({
           side={tooltipSide}
           sideOffset={4}
         >
-          {tooltip}
+          {resolvedTooltip}
         </TooltipPrimitive.Content>
       </TooltipPrimitive.Portal>
     </TooltipPrimitive.Root>

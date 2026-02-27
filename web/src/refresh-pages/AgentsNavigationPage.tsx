@@ -425,7 +425,7 @@ export default function AgentsNavigationPage() {
     >
       <SettingsLayouts.Header
         icon={SvgOnyxOctagon}
-        title="Agents & Assistants"
+        title="Agents"
         description="Customize AI behavior and knowledge for you and your team's use cases."
         rightChildren={
           <Button

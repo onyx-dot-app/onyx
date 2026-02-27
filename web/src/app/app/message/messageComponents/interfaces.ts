@@ -47,6 +47,8 @@ export interface RendererResult {
 
   // Whether this renderer supports collapsible mode (collapse button shown only when true)
   supportsCollapsible?: boolean;
+  /** Whether the step should remain collapsible even in single-step timelines */
+  alwaysCollapsible?: boolean;
   /** Whether the result should be wrapped by timeline UI or rendered as-is */
   timelineLayout?: TimelineLayout;
 }

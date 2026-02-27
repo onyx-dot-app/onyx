@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
 """Generate AGENTS.md by scanning the files directory and populating the template.
 
-This script runs at container startup, AFTER the init container has synced files
-from S3. It scans the /workspace/files directory to discover what knowledge sources
-are available and generates appropriate documentation.
+This script runs during session setup, AFTER files have been synced from S3
+and the files symlink has been created. It reads an existing AGENTS.md (which
+contains the {{KNOWLEDGE_SOURCES_SECTION}} placeholder), replaces the
+placeholder by scanning the knowledge source directory, and writes it back.
 
-Environment variables:
-- AGENT_INSTRUCTIONS: The template content with placeholders to replace
+Usage:
+    python3 generate_agents_md.py <agents_md_path> <files_path>
+
+Arguments:
+    agents_md_path: Path to the AGENTS.md file to update in place
+    files_path: Path to the files directory to scan for knowledge sources
 """
 
-import os
 import sys
 from pathlib import Path
 
@@ -189,49 +193,39 @@ def build_knowledge_sources_section(files_path: Path) -> str:
 def main() -> None:
     """Main entry point for container startup script.
 
-    Is called by the container startup script to scan /workspace/files and populate
-    the knowledge sources section.
+    Reads an existing AGENTS.md, replaces the {{KNOWLEDGE_SOURCES_SECTION}}
+    placeholder by scanning the files directory, and writes it back.
+
+    Usage:
+        python3 generate_agents_md.py <agents_md_path> <files_path>
     """
-    # Read template from environment variable
-    template = os.environ.get("AGENT_INSTRUCTIONS", "")
-    if not template:
-        print("Warning: No AGENT_INSTRUCTIONS template provided", file=sys.stderr)
-        template = "# Agent Instructions\n\nNo instructions provided."
+    if len(sys.argv) != 3:
+        print(
+            f"Usage: {sys.argv[0]} <agents_md_path> <files_path>",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
-    # Scan files directory - check /workspace/files first, then /workspace/demo_data
-    files_path = Path("/workspace/files")
-    demo_data_path = Path("/workspace/demo_data")
+    agents_md_path = Path(sys.argv[1])
+    files_path = Path(sys.argv[2])
 
-    # Use demo_data if files doesn't exist or is empty
-    if not files_path.exists() or not any(files_path.iterdir()):
-        if demo_data_path.exists():
-            files_path = demo_data_path
+    if not agents_md_path.exists():
+        print(f"Error: {agents_md_path} not found", file=sys.stderr)
+        sys.exit(1)
 
-    knowledge_sources_section = build_knowledge_sources_section(files_path)
+    template = agents_md_path.read_text()
 
-    # Replace placeholders
-    content = template
-    content = content.replace(
+    # Resolve symlinks (handles both direct symlinks and dirs containing symlinks)
+    resolved_files_path = files_path.resolve()
+
+    knowledge_sources_section = build_knowledge_sources_section(resolved_files_path)
+
+    # Replace placeholder and write back
+    content = template.replace(
         "{{KNOWLEDGE_SOURCES_SECTION}}", knowledge_sources_section
     )
-
-    # Write AGENTS.md
-    output_path = Path("/workspace/AGENTS.md")
-    output_path.write_text(content)
-
-    # Log result
-    source_count = 0
-    if files_path.exists():
-        source_count = len(
-            [
-                d
-                for d in files_path.iterdir()
-                if d.is_dir() and not d.name.startswith(".")
-            ]
-        )
-    print(
-        f"Generated AGENTS.md with {source_count} knowledge sources from {files_path}"
-    )
+    agents_md_path.write_text(content)
+    print(f"Populated knowledge sources in {agents_md_path}")
 
 
 if __name__ == "__main__":

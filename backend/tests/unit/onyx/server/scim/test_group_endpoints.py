@@ -16,7 +16,6 @@ from ee.onyx.server.scim.api import patch_group
 from ee.onyx.server.scim.api import replace_group
 from ee.onyx.server.scim.models import ScimGroupMember
 from ee.onyx.server.scim.models import ScimGroupResource
-from ee.onyx.server.scim.models import ScimListResponse
 from ee.onyx.server.scim.models import ScimPatchOperation
 from ee.onyx.server.scim.models import ScimPatchOperationType
 from ee.onyx.server.scim.models import ScimPatchRequest
@@ -25,6 +24,8 @@ from ee.onyx.server.scim.providers.base import ScimProvider
 from tests.unit.onyx.server.scim.conftest import assert_scim_error
 from tests.unit.onyx.server.scim.conftest import make_db_group
 from tests.unit.onyx.server.scim.conftest import make_scim_group
+from tests.unit.onyx.server.scim.conftest import parse_scim_group
+from tests.unit.onyx.server.scim.conftest import parse_scim_list
 
 
 class TestListGroups:
@@ -48,9 +49,9 @@ class TestListGroups:
             db_session=mock_db_session,
         )
 
-        assert isinstance(result, ScimListResponse)
-        assert result.totalResults == 0
-        assert result.Resources == []
+        parsed = parse_scim_list(result)
+        assert parsed.totalResults == 0
+        assert parsed.Resources == []
 
     def test_unsupported_filter_returns_400(
         self,
@@ -95,9 +96,9 @@ class TestListGroups:
             db_session=mock_db_session,
         )
 
-        assert isinstance(result, ScimListResponse)
-        assert result.totalResults == 1
-        resource = result.Resources[0]
+        parsed = parse_scim_list(result)
+        assert parsed.totalResults == 1
+        resource = parsed.Resources[0]
         assert isinstance(resource, ScimGroupResource)
         assert resource.displayName == "Engineering"
         assert resource.externalId == "ext-g-1"
@@ -126,9 +127,9 @@ class TestGetGroup:
             db_session=mock_db_session,
         )
 
-        assert isinstance(result, ScimGroupResource)
-        assert result.displayName == "Engineering"
-        assert result.id == "5"
+        resource = parse_scim_group(result)
+        assert resource.displayName == "Engineering"
+        assert resource.id == "5"
 
     def test_non_integer_id_returns_404(
         self,
@@ -190,8 +191,8 @@ class TestCreateGroup:
             db_session=mock_db_session,
         )
 
-        assert isinstance(result, ScimGroupResource)
-        assert result.displayName == "New Group"
+        resource = parse_scim_group(result, status=201)
+        assert resource.displayName == "New Group"
         mock_dal.add_group.assert_called_once()
         mock_dal.commit.assert_called_once()
 
@@ -283,7 +284,7 @@ class TestCreateGroup:
             db_session=mock_db_session,
         )
 
-        assert isinstance(result, ScimGroupResource)
+        parse_scim_group(result, status=201)
         mock_dal.create_group_mapping.assert_called_once()
 
 
@@ -314,7 +315,7 @@ class TestReplaceGroup:
             db_session=mock_db_session,
         )
 
-        assert isinstance(result, ScimGroupResource)
+        parse_scim_group(result)
         mock_dal.update_group.assert_called_once_with(group, name="New Name")
         mock_dal.replace_group_members.assert_called_once()
         mock_dal.commit.assert_called_once()
@@ -427,7 +428,7 @@ class TestPatchGroup:
             db_session=mock_db_session,
         )
 
-        assert isinstance(result, ScimGroupResource)
+        parse_scim_group(result)
         mock_dal.update_group.assert_called_once_with(group, name="New Name")
 
     def test_not_found_returns_404(
@@ -534,7 +535,7 @@ class TestPatchGroup:
             db_session=mock_db_session,
         )
 
-        assert isinstance(result, ScimGroupResource)
+        parse_scim_group(result)
         mock_dal.validate_member_ids.assert_called_once()
         mock_dal.upsert_group_members.assert_called_once()
 
@@ -614,7 +615,7 @@ class TestPatchGroup:
             db_session=mock_db_session,
         )
 
-        assert isinstance(result, ScimGroupResource)
+        parse_scim_group(result)
         mock_dal.remove_group_members.assert_called_once()
 
 

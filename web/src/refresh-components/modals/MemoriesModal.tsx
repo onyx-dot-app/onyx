@@ -64,6 +64,7 @@ function MemoryItem({
     if (!shouldHighlight) return;
 
     wrapperRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+    textareaRef.current?.focus();
     setIsHighlighting(true);
 
     const timer = setTimeout(() => {

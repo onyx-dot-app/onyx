@@ -548,7 +548,7 @@ class in the utils over directly calling the APIs with a library like `requests`
 calling the utilities directly (e.g. do NOT create admin users with
 `admin_user = UserManager.create(name="admin_user")`, instead use the `admin_user` fixture).
 
-A great example of this type of test is `backend/tests/integration/dev_apis/test_simple_chat_api.py`.
+A great example of this type of test is `backend/tests/integration/tests/streaming_endpoints/test_chat_stream.py`.
 
 To run them:
 
@@ -616,3 +616,9 @@ This is a minimal list - feel free to include more. Do NOT write code as part of
 Keep it high level. You can reference certain files or functions though.
 
 Before writing your plan, make sure to do research. Explore the relevant sections in the codebase.
+
+## Best Practices
+
+In addition to the other content in this file, best practices for contributing
+to the codebase can be found at `contributing_guides/best_practices.md`.
+Understand its contents and follow them.

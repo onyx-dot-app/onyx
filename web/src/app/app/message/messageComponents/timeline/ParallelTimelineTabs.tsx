@@ -14,6 +14,11 @@ import {
   TimelineRendererComponent,
   TimelineRendererOutput,
 } from "./TimelineRendererComponent";
+import {
+  isReasoningPackets,
+  isDeepResearchPlanPackets,
+  isMemoryToolPackets,
+} from "./packetHelpers";
 import Tabs from "@/refresh-components/Tabs";
 import { SvgBranch, SvgFold, SvgExpand } from "@opal/icons";
 import { Button } from "@opal/components";
@@ -60,6 +65,13 @@ export function ParallelTimelineTabs({
     [turnGroup.steps, activeTab]
   );
 
+  // Determine if the active step needs full-width content (no right padding)
+  const noPaddingRight = activeStep
+    ? isReasoningPackets(activeStep.packets) ||
+      isDeepResearchPlanPackets(activeStep.packets) ||
+      isMemoryToolPackets(activeStep.packets)
+    : false;
+
   // Memoized loading states for each step
   const loadingStates = useMemo(
     () =>
@@ -82,9 +94,10 @@ export function ParallelTimelineTabs({
         isFirstStep={false}
         isSingleStep={false}
         collapsible={true}
+        noPaddingRight={noPaddingRight}
       />
     ),
-    [isLastTurnGroup]
+    [isLastTurnGroup, noPaddingRight]
   );
 
   const hasActivePackets = Boolean(activeStep && activeStep.packets.length > 0);

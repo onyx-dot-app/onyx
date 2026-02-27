@@ -16,7 +16,7 @@ import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 
 // Tool-related test selectors now imported from shared utils
 
-test.describe("Default Assistant Tests", () => {
+test.describe("Default Agent Tests", () => {
   let imageGenConfigId: string | null = null;
 
   test.beforeAll(async ({ browser }) => {
@@ -69,7 +69,7 @@ test.describe("Default Assistant Tests", () => {
   });
 
   test.describe("Greeting Message Display", () => {
-    test("should display greeting message when opening new chat with default assistant", async ({
+    test("should display greeting message when opening new chat with default agent", async ({
       page,
     }) => {
       // Look for greeting message - should be one from the predefined list
@@ -95,23 +95,21 @@ test.describe("Default Assistant Tests", () => {
       expect(GREETING_MESSAGES).toContain(greetingAfterReload?.trim());
     });
 
-    test("greeting should only appear for default assistant", async ({
-      page,
-    }) => {
-      // First verify greeting appears for default assistant
+    test("greeting should only appear for default agent", async ({ page }) => {
+      // First verify greeting appears for default agent
       const greetingElement = await page.waitForSelector(
         '[data-testid="onyx-logo"]',
         { timeout: 5000 }
       );
       expect(greetingElement).toBeTruthy();
 
-      // Create a custom assistant to test non-default behavior
+      // Create a custom agent to test non-default behavior
       await page.getByTestId("AppSidebar/more-agents").click();
       await page.getByLabel("AgentsPage/new-agent-button").click();
       await page
         .locator('input[name="name"]')
         .waitFor({ state: "visible", timeout: 10000 });
-      await page.locator('input[name="name"]').fill("Custom Test Assistant");
+      await page.locator('input[name="name"]').fill("Custom Test Agent");
       await page
         .locator('textarea[name="description"]')
         .fill("Test Description");
@@ -120,17 +118,17 @@ test.describe("Default Assistant Tests", () => {
         .fill("Test Instructions");
       await page.getByRole("button", { name: "Create" }).click();
 
-      // Wait for assistant to be created and selected
-      await verifyAssistantIsChosen(page, "Custom Test Assistant");
+      // Wait for agent to be created and selected
+      await verifyAssistantIsChosen(page, "Custom Test Agent");
 
-      // Greeting should NOT appear for custom assistant
+      // Greeting should NOT appear for custom agent
       const customGreeting = await page.$('[data-testid="onyx-logo"]');
       expect(customGreeting).toBeNull();
     });
   });
 
-  test.describe("Default Assistant Branding", () => {
-    test("should display Onyx logo for default assistant", async ({ page }) => {
+  test.describe("Default Agent Branding", () => {
+    test("should display Onyx logo for default agent", async ({ page }) => {
       // Look for Onyx logo
       const logoElement = await page.waitForSelector(
         '[data-testid="onyx-logo"]',
@@ -138,23 +136,23 @@ test.describe("Default Assistant Tests", () => {
       );
       expect(logoElement).toBeTruthy();
 
-      // Should NOT show assistant name for default assistant
+      // Should NOT show agent name for default agent
       const assistantNameElement = await page.$(
         '[data-testid="assistant-name-display"]'
       );
       expect(assistantNameElement).toBeNull();
     });
 
-    test("custom assistants should show name and icon instead of logo", async ({
+    test("custom agents should show name and icon instead of logo", async ({
       page,
     }) => {
-      // Create a custom assistant
+      // Create a custom agent
       await page.getByTestId("AppSidebar/more-agents").click();
       await page.getByLabel("AgentsPage/new-agent-button").click();
       await page
         .locator('input[name="name"]')
         .waitFor({ state: "visible", timeout: 10000 });
-      await page.locator('input[name="name"]').fill("Custom Assistant");
+      await page.locator('input[name="name"]').fill("Custom Agent");
       await page
         .locator('textarea[name="description"]')
         .fill("Test Description");
@@ -163,16 +161,16 @@ test.describe("Default Assistant Tests", () => {
         .fill("Test Instructions");
       await page.getByRole("button", { name: "Create" }).click();
 
-      // Wait for assistant to be created and selected
-      await verifyAssistantIsChosen(page, "Custom Assistant");
+      // Wait for agent to be created and selected
+      await verifyAssistantIsChosen(page, "Custom Agent");
 
-      // Should show assistant name and icon, not Onyx logo
+      // Should show agent name and icon, not Onyx logo
       const assistantNameElement = await page.waitForSelector(
         '[data-testid="assistant-name-display"]',
         { timeout: 5000 }
       );
       const nameText = await assistantNameElement.textContent();
-      expect(nameText).toContain("Custom Assistant");
+      expect(nameText).toContain("Custom Agent");
 
       // Onyx logo should NOT be shown
       const logoElement = await page.$('[data-testid="onyx-logo"]');
@@ -181,10 +179,8 @@ test.describe("Default Assistant Tests", () => {
   });
 
   test.describe("Starter Messages", () => {
-    test("default assistant should NOT have starter messages", async ({
-      page,
-    }) => {
-      // Check that starter messages container does not exist for default assistant
+    test("default agent should NOT have starter messages", async ({ page }) => {
+      // Check that starter messages container does not exist for default agent
       const starterMessagesContainer = await page.$(
         '[data-testid="starter-messages"]'
       );
@@ -195,18 +191,14 @@ test.describe("Default Assistant Tests", () => {
       expect(starterButtons.length).toBe(0);
     });
 
-    test("custom assistants should display starter messages", async ({
-      page,
-    }) => {
-      // Create a custom assistant with starter messages
+    test("custom agents should display starter messages", async ({ page }) => {
+      // Create a custom agent with starter messages
       await page.getByTestId("AppSidebar/more-agents").click();
       await page.getByLabel("AgentsPage/new-agent-button").click();
       await page
         .locator('input[name="name"]')
         .waitFor({ state: "visible", timeout: 10000 });
-      await page
-        .locator('input[name="name"]')
-        .fill("Test Assistant with Starters");
+      await page.locator('input[name="name"]').fill("Test Agent with Starters");
       await page
         .locator('textarea[name="description"]')
         .fill("Test Description");
@@ -219,9 +211,9 @@ test.describe("Default Assistant Tests", () => {
       await page.getByRole("button", { name: "Create" }).click();
 
       // Wait for assistant to be created and selected
-      await verifyAssistantIsChosen(page, "Test Assistant with Starters");
+      await verifyAssistantIsChosen(page, "Test Agent with Starters");
 
-      // Starter messages container might exist but be empty for custom assistants
+      // Starter messages container might exist but be empty for custom agents
       const starterMessagesContainer = await page.$(
         '[data-testid="starter-messages"]'
       );
@@ -230,24 +222,22 @@ test.describe("Default Assistant Tests", () => {
         const starterButtons = await page.$$(
           '[data-testid^="starter-message-"]'
         );
-        // Custom assistant without configured starter messages should have none
+        // Custom agent without configured starter messages should have none
         expect(starterButtons.length).toBe(0);
       }
     });
   });
 
-  test.describe("Assistant Selection", () => {
-    test("default assistant should be selected for new chats", async ({
-      page,
-    }) => {
-      // Verify the input placeholder indicates default assistant (Onyx)
+  test.describe("Agent Selection", () => {
+    test("default agent should be selected for new chats", async ({ page }) => {
+      // Verify the input placeholder indicates default agent (Onyx)
       await verifyDefaultAssistantIsChosen(page);
     });
 
-    test("default assistant should NOT appear in assistant selector", async ({
+    test("default agent should NOT appear in agent selector", async ({
       page,
     }) => {
-      // Open assistant selector
+      // Open agent selector
       await page.getByTestId("AppSidebar/more-agents").click();
 
       // Wait for modal or assistant list to appear
@@ -256,13 +246,13 @@ test.describe("Default Assistant Tests", () => {
         .getByLabel("AgentsPage/new-agent-button")
         .waitFor({ state: "visible", timeout: 5000 });
 
-      // Look for default assistant by name - it should NOT be there
+      // Look for default agent by name - it should NOT be there
       const assistantElements = await page.$$('[data-testid^="assistant-"]');
       const assistantTexts = await Promise.all(
         assistantElements.map((el) => el.textContent())
       );
 
-      // Check that "Assistant" (the default assistant name) is not in the list
+      // Check that the default agent is not in the list
       const hasDefaultAssistant = assistantTexts.some(
         (text) =>
           text?.includes("Assistant") &&
@@ -275,16 +265,16 @@ test.describe("Default Assistant Tests", () => {
       await page.keyboard.press("Escape");
     });
 
-    test("should be able to switch from default to custom assistant", async ({
+    test("should be able to switch from default to custom agent", async ({
       page,
     }) => {
-      // Create a custom assistant
+      // Create a custom agent
       await page.getByTestId("AppSidebar/more-agents").click();
       await page.getByLabel("AgentsPage/new-agent-button").click();
       await page
         .locator('input[name="name"]')
         .waitFor({ state: "visible", timeout: 10000 });
-      await page.locator('input[name="name"]').fill("Switch Test Assistant");
+      await page.locator('input[name="name"]').fill("Switch Test Agent");
       await page
         .locator('textarea[name="description"]')
         .fill("Test Description");
@@ -293,13 +283,13 @@ test.describe("Default Assistant Tests", () => {
         .fill("Test Instructions");
       await page.getByRole("button", { name: "Create" }).click();
 
-      // Verify switched to custom assistant
-      await verifyAssistantIsChosen(page, "Switch Test Assistant");
+      // Verify switched to custom agent
+      await verifyAssistantIsChosen(page, "Switch Test Agent");
 
       // Start new chat to go back to default
       await startNewChat(page);
 
-      // Should be back to default assistant
+      // Should be back to default agent
       await verifyDefaultAssistantIsChosen(page);
     });
   });
@@ -379,7 +369,7 @@ test.describe("Default Assistant Tests", () => {
         );
       }
 
-      // Enable the tools in default assistant config via API
+      // Enable the tools in default agent config via API
       // Get current tools to find their IDs
       const toolsListResp = await page.request.get(
         "http://localhost:3000/api/tool"
@@ -542,7 +532,7 @@ test.describe("Default Assistant Tests", () => {
   });
 });
 
-test.describe("End-to-End Default Assistant Flow", () => {
+test.describe("End-to-End Default Agent Flow", () => {
   let imageGenConfigId: string | null = null;
 
   test.beforeAll(async ({ browser }) => {
@@ -584,7 +574,7 @@ test.describe("End-to-End Default Assistant Flow", () => {
     }
   });
 
-  test("complete user journey with default assistant", async ({ page }) => {
+  test("complete user journey with default agent", async ({ page }) => {
     // Clear cookies and log in as a random user
     await page.context().clearCookies();
     await loginAsRandomUser(page);
@@ -611,7 +601,7 @@ test.describe("End-to-End Default Assistant Flow", () => {
     // Start a new chat
     await startNewChat(page);
 
-    // Verify we're back to default assistant with greeting
+    // Verify we're back to default agent with greeting
     await expect(page.locator('[data-testid="onyx-logo"]')).toBeVisible();
   });
 });

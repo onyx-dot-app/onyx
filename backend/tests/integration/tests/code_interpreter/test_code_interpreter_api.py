@@ -37,6 +37,7 @@ def test_get_code_interpreter_status_as_admin(
 
 def test_update_code_interpreter_disable_and_enable(
     admin_user: DATestUser,
+    preserve_code_interpreter_state: None,  # noqa: ARG001
 ) -> None:
     """PUT endpoint should update the enabled flag and persist across reads."""
     # Disable
