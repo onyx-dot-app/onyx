@@ -40,9 +40,13 @@ func (c *Cluster) kubectlArgs() []string {
 	return []string{"--context", c.Name, "--namespace", c.Namespace}
 }
 
-// FindPod returns the name of the first pod matching the given substring.
+// FindPod returns the name of the first Running/Ready pod matching the given substring.
 func (c *Cluster) FindPod(substring string) (string, error) {
-	args := append(c.kubectlArgs(), "get", "po", "--no-headers", "-o", "custom-columns=NAME:.metadata.name")
+	args := append(c.kubectlArgs(), "get", "po",
+		"--field-selector", "status.phase=Running",
+		"--no-headers",
+		"-o", "custom-columns=NAME:.metadata.name,READY:.status.conditions[?(@.type=='Ready')].status",
+	)
 	cmd := exec.Command("kubectl", args...)
 	out, err := cmd.Output()
 	if err != nil {
@@ -53,14 +57,18 @@ func (c *Cluster) FindPod(substring string) (string, error) {
 	}
 
 	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		name := strings.TrimSpace(line)
-		if strings.Contains(name, substring) {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		name, ready := fields[0], fields[1]
+		if strings.Contains(name, substring) && ready == "True" {
 			log.Debugf("Found pod: %s", name)
 			return name, nil
 		}
 	}
 
-	return "", fmt.Errorf("no pod found matching %q", substring)
+	return "", fmt.Errorf("no ready pod found matching %q", substring)
 }
 
 // ExecOnPod runs a command on a pod and returns its stdout.
