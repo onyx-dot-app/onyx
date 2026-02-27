@@ -120,6 +120,12 @@ function SettingsPopover({
             }`}
           </LineItem>,
           <a
+            key="help-faq"
+            href="https://docs.onyx.app"
+            className="block"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
             href="https://docs.onyx.app"
             className="block"
             target="_blank"
