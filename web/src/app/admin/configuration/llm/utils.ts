@@ -107,7 +107,8 @@ export const getProviderIcon = (
 };
 
 export const isAnthropic = (provider: string, modelName?: string) =>
-  provider === "anthropic" || !!modelName?.toLowerCase().includes("claude");
+  provider === LLMProviderName.ANTHROPIC ||
+  !!modelName?.toLowerCase().includes("claude");
 
 /**
  * Fetches Bedrock models directly without any form state dependencies.

@@ -15,6 +15,7 @@ import { SvgSettings } from "@opal/icons";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { LLM_PROVIDERS_ADMIN_URL } from "@/lib/llmConfig/constants";
+import { setDefaultLlmModel } from "@/lib/llmConfig/svc";
 
 export interface ProviderFormContext {
   onClose: () => void;
@@ -84,20 +85,22 @@ export function ProviderFormEntrypointWrapper({
   async function handleSetAsDefault(): Promise<void> {
     if (!existingLlmProvider) return;
 
-    const response = await fetch(
-      `${LLM_PROVIDERS_ADMIN_URL}/${existingLlmProvider.id}/default`,
-      {
-        method: "POST",
-      }
+    const firstVisibleModel = existingLlmProvider.model_configurations.find(
+      (m) => m.is_visible
     );
-    if (!response.ok) {
-      const errorMsg = (await response.json()).detail;
-      toast.error(`Failed to set provider as default: ${errorMsg}`);
+    if (!firstVisibleModel) {
+      toast.error("No visible models available for this provider.");
       return;
     }
 
-    await mutate(LLM_PROVIDERS_ADMIN_URL);
-    toast.success("Provider set as default successfully!");
+    try {
+      await setDefaultLlmModel(existingLlmProvider.id, firstVisibleModel.name);
+      await mutate(LLM_PROVIDERS_ADMIN_URL);
+      toast.success("Provider set as default successfully!");
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Unknown error";
+      toast.error(`Failed to set provider as default: ${message}`);
+    }
   }
 
   const context: ProviderFormContext = {
@@ -110,26 +113,29 @@ export function ProviderFormEntrypointWrapper({
     wellKnownLLMProvider,
   };
 
-  // Controlled mode: render nothing when closed, render only modal when open
-  if (isControlled) {
-    if (!open) return null;
+  const defaultTitle = `${existingLlmProvider ? "Configure" : "Setup"} ${
+    existingLlmProvider?.name ? `"${existingLlmProvider.name}"` : providerName
+  }`;
 
+  function renderModal(isVisible: boolean, title?: string) {
+    if (!isVisible) return null;
     return (
       <Modal open onOpenChange={onClose}>
         <Modal.Content>
           <Modal.Header
             icon={SvgSettings}
-            title={`${existingLlmProvider ? "Configure" : "Setup"} ${
-              existingLlmProvider?.name
-                ? `"${existingLlmProvider.name}"`
-                : providerName
-            }`}
+            title={title ?? defaultTitle}
             onClose={onClose}
           />
           <Modal.Body>{children(context)}</Modal.Body>
         </Modal.Content>
       </Modal>
     );
+  }
+
+  // Controlled mode: render nothing when closed, render only modal when open
+  if (isControlled) {
+    return renderModal(!!open);
   }
 
   // Button mode: simple button that opens a modal
@@ -139,19 +145,7 @@ export function ProviderFormEntrypointWrapper({
         <Button action onClick={() => setFormIsVisible(true)}>
           {buttonText ?? `Add ${providerName}`}
         </Button>
-
-        {formIsVisible && (
-          <Modal open onOpenChange={onClose}>
-            <Modal.Content>
-              <Modal.Header
-                icon={SvgSettings}
-                title={`Setup ${providerName}`}
-                onClose={onClose}
-              />
-              <Modal.Body>{children(context)}</Modal.Body>
-            </Modal.Content>
-          </Modal>
-        )}
+        {renderModal(formIsVisible, `Setup ${providerName}`)}
       </>
     );
   }
@@ -215,22 +209,7 @@ export function ProviderFormEntrypointWrapper({
         )}
       </div>
 
-      {formIsVisible && (
-        <Modal open onOpenChange={onClose}>
-          <Modal.Content>
-            <Modal.Header
-              icon={SvgSettings}
-              title={`${existingLlmProvider ? "Configure" : "Setup"} ${
-                existingLlmProvider?.name
-                  ? `"${existingLlmProvider.name}"`
-                  : providerName
-              }`}
-              onClose={onClose}
-            />
-            <Modal.Body>{children(context)}</Modal.Body>
-          </Modal.Content>
-        </Modal>
-      )}
+      {renderModal(formIsVisible)}
     </div>
   );
 }

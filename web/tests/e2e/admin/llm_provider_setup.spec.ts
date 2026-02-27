@@ -242,7 +242,13 @@ test.describe("LLM Provider Setup @exclusive", () => {
       const targetGroup = page
         .locator('[role="group"]')
         .filter({ hasText: secondProviderName });
+      const defaultResponsePromise = page.waitForResponse(
+        (response) =>
+          response.url().includes("/api/admin/llm/default") &&
+          response.request().method() === "POST"
+      );
       await targetGroup.locator('[role="option"]').click();
+      await defaultResponsePromise;
 
       // Verify the default switched to the second provider
       await expect

@@ -12,47 +12,48 @@ import {
   SvgGemini,
   SvgLitellm,
 } from "@opal/icons";
+import { LLMProviderName } from "@/interfaces/llm";
 
 const PROVIDER_ICONS: Record<string, IconFunctionComponent> = {
-  openai: SvgOpenai,
-  anthropic: SvgClaude,
-  vertex_ai: SvgGemini,
-  bedrock: SvgAws,
-  azure: SvgAzure,
+  [LLMProviderName.OPENAI]: SvgOpenai,
+  [LLMProviderName.ANTHROPIC]: SvgClaude,
+  [LLMProviderName.VERTEX_AI]: SvgGemini,
+  [LLMProviderName.BEDROCK]: SvgAws,
+  [LLMProviderName.AZURE]: SvgAzure,
   litellm: SvgLitellm,
-  ollama_chat: SvgOllama,
-  openrouter: SvgOpenrouter,
+  [LLMProviderName.OLLAMA_CHAT]: SvgOllama,
+  [LLMProviderName.OPENROUTER]: SvgOpenrouter,
 
   // fallback
-  custom: SvgServer,
+  [LLMProviderName.CUSTOM]: SvgServer,
 };
 
 const PROVIDER_PRODUCT_NAMES: Record<string, string> = {
-  openai: "GPT",
-  anthropic: "Claude",
-  vertex_ai: "Gemini",
-  bedrock: "Amazon Bedrock",
-  azure: "Azure OpenAI",
+  [LLMProviderName.OPENAI]: "GPT",
+  [LLMProviderName.ANTHROPIC]: "Claude",
+  [LLMProviderName.VERTEX_AI]: "Gemini",
+  [LLMProviderName.BEDROCK]: "Amazon Bedrock",
+  [LLMProviderName.AZURE]: "Azure OpenAI",
   litellm: "LiteLLM",
-  ollama_chat: "Ollama",
-  openrouter: "OpenRouter",
+  [LLMProviderName.OLLAMA_CHAT]: "Ollama",
+  [LLMProviderName.OPENROUTER]: "OpenRouter",
 
   // fallback
-  custom: "Custom Models",
+  [LLMProviderName.CUSTOM]: "Custom Models",
 };
 
 const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
-  openai: "OpenAI",
-  anthropic: "Anthropic",
-  vertex_ai: "Google Cloud Vertex AI",
-  bedrock: "AWS",
-  azure: "Microsoft Azure",
+  [LLMProviderName.OPENAI]: "OpenAI",
+  [LLMProviderName.ANTHROPIC]: "Anthropic",
+  [LLMProviderName.VERTEX_AI]: "Google Cloud Vertex AI",
+  [LLMProviderName.BEDROCK]: "AWS",
+  [LLMProviderName.AZURE]: "Microsoft Azure",
   litellm: "LiteLLM",
-  ollama_chat: "Ollama",
-  openrouter: "OpenRouter",
+  [LLMProviderName.OLLAMA_CHAT]: "Ollama",
+  [LLMProviderName.OPENROUTER]: "OpenRouter",
 
   // fallback
-  custom: "Other providers or self-hosted",
+  [LLMProviderName.CUSTOM]: "Other providers or self-hosted",
 };
 
 export function getProviderProductName(providerName: string): string {
