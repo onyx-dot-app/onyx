@@ -109,17 +109,21 @@ def can_user_access_llm_provider(
         is_admin: If True, bypass user group restrictions but still respect persona restrictions
 
     Access logic:
-    1. If is_public=True → everyone has access (public override)
-    2. If is_public=False:
-       - Both groups AND personas set → must satisfy BOTH (AND logic, admins bypass group check)
-       - Only groups set → must be in one of the groups (OR across groups, admins bypass)
-       - Only personas set → must use one of the personas (OR across personas, applies to admins)
-       - Neither set → NOBODY has access unless admin (locked, admin-only)
-    """
-    # Public override - everyone has access
-    if provider.is_public:
-        return True
+    - is_public controls USER access (group bypass): when True, all users can access
+      regardless of group membership. When False, user must be in a whitelisted group
+      (or be admin).
+    - Persona restrictions are ALWAYS enforced when set, regardless of is_public.
+      This allows admins to make a provider available to all users while still
+      restricting which personas (assistants) can use it.
 
+    Decision matrix:
+    1. is_public=True, no personas set → everyone has access
+    2. is_public=True, personas set → all users, but only whitelisted personas
+    3. is_public=False, groups+personas set → must satisfy BOTH (admins bypass groups)
+    4. is_public=False, only groups set → must be in group (admins bypass)
+    5. is_public=False, only personas set → must use whitelisted persona
+    6. is_public=False, neither set → admin-only (locked)
+    """
     # Extract IDs once to avoid multiple iterations
     provider_group_ids = (
         {group.id for group in provider.groups} if provider.groups else set()
@@ -128,25 +132,30 @@ def can_user_access_llm_provider(
         {p.id for p in provider.personas} if provider.personas else set()
     )
 
-    has_groups = bool(provider_group_ids)
     has_personas = bool(provider_persona_ids)
 
-    # Both groups AND personas set → AND logic (must satisfy both)
-    if has_groups and has_personas:
-        # Admins bypass group check but still must satisfy persona restrictions
-        user_in_group = is_admin or bool(user_group_ids & provider_group_ids)
+    # Persona restrictions are always enforced when set, regardless of is_public
+    if has_personas:
         persona_allowed = persona.id in provider_persona_ids if persona else False
-        return user_in_group and persona_allowed
+        if not persona_allowed:
+            return False
 
-    # Only groups set → user must be in one of the groups (admins bypass)
+    # Public providers bypass user/group checks
+    if provider.is_public:
+        return True
+
+    has_groups = bool(provider_group_ids)
+
+    # Groups set → user must be in one of the groups (admins bypass)
     if has_groups:
         return is_admin or bool(user_group_ids & provider_group_ids)
 
-    # Only personas set → persona must be in allowed list (applies to admins too)
+    # Only personas set (no groups) — persona check already passed above,
+    # so the user is allowed via persona whitelist alone
     if has_personas:
-        return persona.id in provider_persona_ids if persona else False
+        return True
 
-    # Neither groups nor personas set, and not public → admins can access
+    # Neither groups nor personas set, and not public → admin-only (locked)
     return is_admin
 
 
