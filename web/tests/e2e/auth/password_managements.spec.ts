@@ -46,7 +46,7 @@ test.skip("User changes password and logs in with new password", async ({
 
   // Verify successful login
   await expect(page).toHaveURL("http://localhost:3000/app");
-  await expect(page.getByText("Explore Assistants")).toBeVisible();
+  await expect(page.getByText("Explore Agents")).toBeVisible();
 });
 
 test.use({ storageState: "admin2_auth.json" });
@@ -115,5 +115,5 @@ test.skip("Admin resets own password and logs in with new password", async ({
 
   // Verify successful login
   await expect(page).toHaveURL("http://localhost:3000/app");
-  await expect(page.getByText("Explore Assistants")).toBeVisible();
+  await expect(page.getByText("Explore Agents")).toBeVisible();
 });
