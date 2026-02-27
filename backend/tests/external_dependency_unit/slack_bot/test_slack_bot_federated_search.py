@@ -434,7 +434,6 @@ class TestSlackBotFederatedSearch:
                 name=f"test-llm-provider-{uuid4().hex[:8]}",
                 provider=LlmProviderNames.OPENAI,
                 api_key=api_key,
-                default_model_name="gpt-4o",
                 is_public=True,
                 model_configurations=[
                     ModelConfigurationUpsertRequest(

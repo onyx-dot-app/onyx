@@ -30,7 +30,6 @@ def _get_provider_by_id(admin_user: DATestUser, provider_id: str) -> dict | None
 def assert_response_is_equivalent(
     admin_user: DATestUser,
     response: Response,
-    default_model_name: str,
     model_configurations: list[ModelConfigurationUpsertRequest],
     api_key: str | None = None,
 ) -> None:
@@ -40,7 +39,6 @@ def assert_response_is_equivalent(
     provider_data = _get_provider_by_id(admin_user, created_provider["id"])
     assert provider_data is not None
 
-    assert provider_data["default_model_name"] == default_model_name
     assert provider_data["personas"] == []
 
     def fill_max_input_tokens_and_supports_image_input(
@@ -109,11 +107,10 @@ def assert_response_is_equivalent(
 
 # Test creating an LLM Provider with some various model-configurations.
 @pytest.mark.parametrize(
-    "default_model_name, model_configurations, expected",
+    "model_configurations, expected",
     [
         # Test the case in which a basic model-configuration is passed.
         (
-            "gpt-4",
             [
                 ModelConfigurationUpsertRequest(
                     name="gpt-4", is_visible=True, max_input_tokens=4096
@@ -127,7 +124,6 @@ def assert_response_is_equivalent(
         ),
         # Test the case in which multiple model-configuration are passed.
         (
-            "gpt-4",
             [
                 ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True),
                 ModelConfigurationUpsertRequest(name="gpt-4o", is_visible=True),
@@ -139,40 +135,13 @@ def assert_response_is_equivalent(
         ),
         # Test the case in which duplicate model-configuration are passed.
         (
-            "gpt-4",
             [ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True)] * 4,
             [ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True)],
-        ),
-        # Test the case in which no model-configurations are passed.
-        # In this case, a model-configuration for "gpt-4" should be inferred
-        # (`ModelConfiguration(name="gpt-4", is_visible=True, max_input_tokens=None)`).
-        (
-            "gpt-4",
-            [],
-            [ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True)],
-        ),
-        # Test the case in which the default-model-name is not contained inside of the model-configurations list.
-        # Once again, in this case, a model-configuration for "gpt-4" should be inferred
-        # (`ModelConfiguration(name="gpt-4", is_visible=True, max_input_tokens=None)`).
-        (
-            "gpt-4",
-            [
-                ModelConfigurationUpsertRequest(
-                    name="gpt-4o", is_visible=True, max_input_tokens=4096
-                )
-            ],
-            [
-                ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True),
-                ModelConfigurationUpsertRequest(
-                    name="gpt-4o", is_visible=True, max_input_tokens=4096
-                ),
-            ],
         ),
     ],
 )
 def test_create_llm_provider(
     reset: None,  # noqa: ARG001
-    default_model_name: str,
     model_configurations: list[ModelConfigurationUpsertRequest],
     expected: list[ModelConfigurationUpsertRequest],
 ) -> None:
@@ -185,7 +154,6 @@ def test_create_llm_provider(
             "name": str(uuid.uuid4()),
             "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000000",
-            "default_model_name": default_model_name,
             "model_configurations": [
                 model_configuration.model_dump()
                 for model_configuration in model_configurations
@@ -198,7 +166,6 @@ def test_create_llm_provider(
     assert_response_is_equivalent(
         admin_user,
         response,
-        default_model_name,
         expected,
         "sk-0****0000",
     )
@@ -284,7 +251,6 @@ def test_update_model_configurations(
             "name": name,
             "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000000",
-            "default_model_name": default_model_name,
             "model_configurations": [
                 model_configuration.dict()
                 for model_configuration in model_configurations
@@ -298,7 +264,6 @@ def test_update_model_configurations(
     assert_response_is_equivalent(
         admin_user,
         response,
-        default_model_name,
         initial_expected,
     )
 
@@ -320,7 +285,6 @@ def test_update_model_configurations(
             "name": name,
             "provider": created_provider["provider"],
             "api_key": "sk-000000000000000000000000000000000000000000000001",
-            "default_model_name": updated_default_model_name,
             "model_configurations": [
                 model_configuration.dict()
                 for model_configuration in updated_model_configurations
@@ -332,7 +296,6 @@ def test_update_model_configurations(
     assert_response_is_equivalent(
         admin_user,
         response,
-        updated_default_model_name,
         updated_expected,
         "sk-0****0000",
     )
@@ -355,7 +318,6 @@ def test_update_model_configurations(
             "name": name,
             "provider": created_provider["provider"],
             "api_key": "sk-000000000000000000000000000000000000000000000001",
-            "default_model_name": updated_default_model_name,
             "model_configurations": [
                 model_configuration.dict()
                 for model_configuration in updated_model_configurations
@@ -368,35 +330,27 @@ def test_update_model_configurations(
     assert_response_is_equivalent(
         admin_user,
         response,
-        updated_default_model_name,
         updated_expected,
         "sk-0****0001",
     )
 
 
 @pytest.mark.parametrize(
-    "default_model_name, model_configurations",
+    "model_configurations",
     [
-        (
-            "gpt-4",
-            [
-                ModelConfigurationUpsertRequest(
-                    name="gpt-4", is_visible=True, max_input_tokens=4096
-                )
-            ],
-        ),
-        (
-            "gpt-4",
-            [
-                ModelConfigurationUpsertRequest(name="gpt-4o", is_visible=True),
-                ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True),
-            ],
-        ),
+        [
+            ModelConfigurationUpsertRequest(
+                name="gpt-4", is_visible=True, max_input_tokens=4096
+            )
+        ],
+        [
+            ModelConfigurationUpsertRequest(name="gpt-4o", is_visible=True),
+            ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True),
+        ],
     ],
 )
 def test_delete_llm_provider(
     reset: None,  # noqa: ARG001
-    default_model_name: str,
     model_configurations: list[ModelConfigurationUpsertRequest],
 ) -> None:
     admin_user = UserManager.create(name="admin_user")
@@ -409,7 +363,6 @@ def test_delete_llm_provider(
             "name": "test-provider-delete",
             "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000000",
-            "default_model_name": default_model_name,
             "model_configurations": [
                 model_configuration.dict()
                 for model_configuration in model_configurations
@@ -480,7 +433,6 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:  # noqa: ARG00
             "name": "test-visibility-provider",
             "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000000",
-            "default_model_name": "gpt-4o",
             "model_configurations": [config.dict() for config in model_configs],
             "is_public": True,
             "groups": [],
@@ -529,7 +481,6 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:  # noqa: ARG00
             "name": "test-visibility-provider",
             "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000000",
-            "default_model_name": "gpt-4o",
             "model_configurations": [
                 config.dict() for config in edit_configs_all_visible
             ],
@@ -577,7 +528,6 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:  # noqa: ARG00
             "name": "test-visibility-provider",
             "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000000",
-            "default_model_name": "gpt-4o",
             "model_configurations": [
                 config.dict() for config in edit_configs_one_visible
             ],
@@ -589,6 +539,73 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:  # noqa: ARG00
     assert edit_response_2.status_code == 200
 
     # Verify only 1 model is visible
+    provider_data = _get_provider_by_id(admin_user, created_provider["id"])
+    assert provider_data is not None
+    visible_models = [
+        model for model in provider_data["model_configurations"] if model["is_visible"]
+    ]
+    assert len(visible_models) == 1
+    assert visible_models[0]["name"] == "gpt-4o"
+
+    # Make none visible
+    edit_configs_none_visible = [
+        ModelConfigurationUpsertRequest(
+            name="gpt-4o",
+            is_visible=False,
+            max_input_tokens=None,
+            supports_image_input=None,
+        ),
+        ModelConfigurationUpsertRequest(
+            name="gpt-4o-mini",
+            is_visible=False,
+            max_input_tokens=None,
+            supports_image_input=None,
+        ),
+        ModelConfigurationUpsertRequest(
+            name="gpt-4-turbo",
+            is_visible=False,
+            max_input_tokens=None,
+            supports_image_input=None,
+        ),
+    ]
+    edit_response_3 = requests.put(
+        f"{API_SERVER_URL}/admin/llm/provider?is_creation=false",
+        headers=admin_user.headers,
+        json={
+            "id": created_provider["id"],
+            "name": "test-visibility-provider",
+            "provider": LlmProviderNames.OPENAI,
+            "api_key": "sk-000000000000000000000000000000000000000000000000",
+            "model_configurations": [
+                config.dict() for config in edit_configs_none_visible
+            ],
+            "is_public": True,
+            "groups": [],
+            "personas": [],
+        },
+    )
+    assert edit_response_3.status_code == 200
+
+    # Verify no models are visible
+    provider_data = _get_provider_by_id(admin_user, created_provider["id"])
+    assert provider_data is not None
+    visible_models = [
+        model for model in provider_data["model_configurations"] if model["is_visible"]
+    ]
+    assert len(visible_models) == 0
+
+    # Make gpt-4o the default
+    edit_response_4 = requests.post(
+        f"{API_SERVER_URL}/admin/llm/default",
+        headers=admin_user.headers,
+        json={
+            "provider_id": created_provider["id"],
+            "model_name": "gpt-4o",
+        },
+    )
+    assert edit_response_4.status_code == 200
+
+    # Verify gpt-4o is the default
     provider_data = _get_provider_by_id(admin_user, created_provider["id"])
     assert provider_data is not None
     visible_models = [
@@ -720,13 +737,9 @@ def _validate_provider_data(
     provider_data: dict,
     expected_name: str,
     expected_provider: str,
-    expected_default_model: str,
-    expected_is_default: bool | None,
     expected_model_names: list[str],
     expected_visible: dict[str, bool] | None = None,
     expected_is_public: bool | None = None,
-    expected_is_default_vision: bool | None = None,
-    expected_default_vision_model: str | None = None,
     expected_image_support: dict[str, bool] | None = None,
 ) -> None:
     """
@@ -736,13 +749,9 @@ def _validate_provider_data(
         provider_data: Provider dict from the API response
         expected_name: Expected provider name
         expected_provider: Expected provider type (e.g., 'openai')
-        expected_default_model: Expected default model name
-        expected_is_default: Expected is_default_provider value
         expected_model_names: List of expected model names in configurations
         expected_visible: Optional dict mapping model name to expected visibility
         expected_is_public: Optional expected is_public value (admin endpoint only)
-        expected_is_default_vision: Optional expected is_default_vision_provider value
-        expected_default_vision_model: Optional expected default_vision_model value
         expected_image_support: Optional dict mapping model name to expected supports_image_input
     """
     assert (
@@ -751,38 +760,12 @@ def _validate_provider_data(
     assert (
         provider_data["provider"] == expected_provider
     ), f"Provider type mismatch. Expected: {expected_provider}, Actual: {provider_data['provider']}"
-    assert provider_data["default_model_name"] == expected_default_model, (
-        f"Default model mismatch. Expected: {expected_default_model}, "
-        f"Actual: {provider_data['default_model_name']}"
-    )
-    assert provider_data["is_default_provider"] == expected_is_default, (
-        f"is_default_provider mismatch. Expected: {expected_is_default}, "
-        f"Actual: {provider_data['is_default_provider']}"
-    )
 
     # Validate is_public if provided (only available in admin endpoint response)
     if expected_is_public is not None and "is_public" in provider_data:
         assert provider_data["is_public"] == expected_is_public, (
             f"is_public mismatch. Expected: {expected_is_public}, "
             f"Actual: {provider_data['is_public']}"
-        )
-
-    # Validate vision-related fields if provided
-    if expected_is_default_vision is not None:
-        assert (
-            provider_data.get("is_default_vision_provider")
-            == expected_is_default_vision
-        ), (
-            f"is_default_vision_provider mismatch. Expected: {expected_is_default_vision}, "
-            f"Actual: {provider_data.get('is_default_vision_provider')}"
-        )
-
-    if expected_default_vision_model is not None:
-        assert (
-            provider_data.get("default_vision_model") == expected_default_vision_model
-        ), (
-            f"default_vision_model mismatch. Expected: {expected_default_vision_model}, "
-            f"Actual: {provider_data.get('default_vision_model')}"
         )
 
     # Validate model configurations
@@ -817,7 +800,6 @@ def test_default_model_persistence_and_update(reset: None) -> None:  # noqa: ARG
     assert basic_user.role == UserRole.BASIC or basic_user.role != UserRole.ADMIN
 
     provider_name = f"test-default-model-{uuid.uuid4()}"
-    initial_default_model = "gpt-4"
     updated_default_model = "gpt-4o"
 
     # Model configurations including all models we'll use
@@ -844,7 +826,6 @@ def test_default_model_persistence_and_update(reset: None) -> None:  # noqa: ARG
             "name": provider_name,
             "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000000",
-            "default_model_name": initial_default_model,
             "model_configurations": [config.model_dump() for config in model_configs],
             "is_public": True,
             "groups": [],
@@ -873,8 +854,6 @@ def test_default_model_persistence_and_update(reset: None) -> None:  # noqa: ARG
         admin_provider_data,
         expected_name=provider_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model=initial_default_model,
-        expected_is_default=False,
         expected_model_names=expected_model_names,
         expected_visible=expected_visible,
         expected_is_public=True,
@@ -893,8 +872,6 @@ def test_default_model_persistence_and_update(reset: None) -> None:  # noqa: ARG
         admin_basic_provider_data,
         expected_name=provider_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model=initial_default_model,
-        expected_is_default=False,
         expected_model_names=expected_model_names,
         expected_visible=expected_visible,
     )
@@ -912,8 +889,6 @@ def test_default_model_persistence_and_update(reset: None) -> None:  # noqa: ARG
         basic_user_provider_data,
         expected_name=provider_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model=initial_default_model,
-        expected_is_default=False,
         expected_model_names=expected_model_names,
         expected_visible=expected_visible,
     )
@@ -926,7 +901,6 @@ def test_default_model_persistence_and_update(reset: None) -> None:  # noqa: ARG
             "name": provider_name,
             "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000000",
-            "default_model_name": updated_default_model,
             "model_configurations": [config.model_dump() for config in model_configs],
             "is_public": True,
             "groups": [],
@@ -962,8 +936,6 @@ def test_default_model_persistence_and_update(reset: None) -> None:  # noqa: ARG
         admin_provider_data,
         expected_name=provider_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model=updated_default_model,
-        expected_is_default=True,
         expected_model_names=expected_model_names,
         expected_visible=expected_visible,
         expected_is_public=True,
@@ -986,8 +958,6 @@ def test_default_model_persistence_and_update(reset: None) -> None:  # noqa: ARG
         admin_basic_provider_data,
         expected_name=provider_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model=updated_default_model,
-        expected_is_default=True,
         expected_model_names=expected_model_names,
         expected_visible=expected_visible,
     )
@@ -1009,8 +979,6 @@ def test_default_model_persistence_and_update(reset: None) -> None:  # noqa: ARG
         basic_user_provider_data,
         expected_name=provider_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model=updated_default_model,
-        expected_is_default=True,
         expected_model_names=expected_model_names,
         expected_visible=expected_visible,
     )
@@ -1140,8 +1108,6 @@ def test_multiple_providers_default_switching(reset: None) -> None:  # noqa: ARG
             "name": provider_1_name,
             "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000001",
-            "is_default_provider": True,
-            "default_model_name": shared_model_name,
             "model_configurations": [c.model_dump() for c in provider_1_configs],
             "is_public": True,
             "groups": [],
@@ -1161,7 +1127,6 @@ def test_multiple_providers_default_switching(reset: None) -> None:  # noqa: ARG
             "name": provider_2_name,
             "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000002",
-            "default_model_name": provider_2_unique_model,
             "model_configurations": [c.model_dump() for c in provider_2_configs],
             "is_public": True,
             "groups": [],
@@ -1189,8 +1154,6 @@ def test_multiple_providers_default_switching(reset: None) -> None:  # noqa: ARG
         admin_provider_data,
         expected_name=provider_1_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model=shared_model_name,
-        expected_is_default=True,
         expected_model_names=provider_1_model_names,
         expected_visible=provider_1_visible,
         expected_is_public=True,
@@ -1203,8 +1166,6 @@ def test_multiple_providers_default_switching(reset: None) -> None:  # noqa: ARG
         admin_provider_2,
         expected_name=provider_2_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model=provider_2_unique_model,
-        expected_is_default=False,
         expected_model_names=provider_2_model_names,
         expected_visible=provider_2_visible,
         expected_is_public=True,
@@ -1224,8 +1185,6 @@ def test_multiple_providers_default_switching(reset: None) -> None:  # noqa: ARG
         basic_provider_data,
         expected_name=provider_1_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model=shared_model_name,
-        expected_is_default=True,
         expected_model_names=provider_1_model_names,
         expected_visible=provider_1_visible,
     )
@@ -1244,8 +1203,6 @@ def test_multiple_providers_default_switching(reset: None) -> None:  # noqa: ARG
         admin_basic_provider_data,
         expected_name=provider_1_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model=shared_model_name,
-        expected_is_default=True,
         expected_model_names=provider_1_model_names,
         expected_visible=provider_1_visible,
     )
@@ -1259,8 +1216,6 @@ def test_multiple_providers_default_switching(reset: None) -> None:  # noqa: ARG
             "name": provider_2_name,
             "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000002",
-            "is_default_provider": True,
-            "default_model_name": provider_2_unique_model,
             "model_configurations": [c.model_dump() for c in provider_2_configs],
             "is_public": True,
             "groups": [],
@@ -1287,8 +1242,6 @@ def test_multiple_providers_default_switching(reset: None) -> None:  # noqa: ARG
         admin_provider_data,
         expected_name=provider_2_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model=provider_2_unique_model,
-        expected_is_default=True,
         expected_model_names=provider_2_model_names,
         expected_visible=provider_2_visible,
         expected_is_public=True,
@@ -1301,8 +1254,6 @@ def test_multiple_providers_default_switching(reset: None) -> None:  # noqa: ARG
         admin_provider_1,
         expected_name=provider_1_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model=shared_model_name,
-        expected_is_default=False,
         expected_model_names=provider_1_model_names,
         expected_visible=provider_1_visible,
         expected_is_public=True,
@@ -1322,8 +1273,6 @@ def test_multiple_providers_default_switching(reset: None) -> None:  # noqa: ARG
         basic_provider_data,
         expected_name=provider_2_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model=provider_2_unique_model,
-        expected_is_default=True,
         expected_model_names=provider_2_model_names,
         expected_visible=provider_2_visible,
     )
@@ -1342,8 +1291,6 @@ def test_multiple_providers_default_switching(reset: None) -> None:  # noqa: ARG
         admin_basic_provider_data,
         expected_name=provider_2_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model=provider_2_unique_model,
-        expected_is_default=True,
         expected_model_names=provider_2_model_names,
         expected_visible=provider_2_visible,
     )
@@ -1357,8 +1304,6 @@ def test_multiple_providers_default_switching(reset: None) -> None:  # noqa: ARG
             "name": provider_2_name,
             "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000002",
-            "is_default_provider": True,
-            "default_model_name": shared_model_name,  # Same name as provider 1's model
             "model_configurations": [c.model_dump() for c in provider_2_configs],
             "is_public": True,
             "groups": [],
@@ -1386,8 +1331,6 @@ def test_multiple_providers_default_switching(reset: None) -> None:  # noqa: ARG
         admin_provider_data,
         expected_name=provider_2_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model=shared_model_name,
-        expected_is_default=True,
         expected_model_names=provider_2_model_names,
         expected_visible=provider_2_visible,
         expected_is_public=True,
@@ -1407,8 +1350,6 @@ def test_multiple_providers_default_switching(reset: None) -> None:  # noqa: ARG
         basic_provider_data,
         expected_name=provider_2_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model=shared_model_name,
-        expected_is_default=True,
         expected_model_names=provider_2_model_names,
         expected_visible=provider_2_visible,
     )
@@ -1427,8 +1368,6 @@ def test_multiple_providers_default_switching(reset: None) -> None:  # noqa: ARG
         admin_basic_provider_data,
         expected_name=provider_2_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model=shared_model_name,
-        expected_is_default=True,
         expected_model_names=provider_2_model_names,
         expected_visible=provider_2_visible,
     )
@@ -1440,8 +1379,6 @@ def test_multiple_providers_default_switching(reset: None) -> None:  # noqa: ARG
         admin_provider_1,
         expected_name=provider_1_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model=shared_model_name,
-        expected_is_default=False,
         expected_model_names=provider_1_model_names,
         expected_visible=provider_1_visible,
         expected_is_public=True,
@@ -1453,8 +1390,6 @@ def test_multiple_providers_default_switching(reset: None) -> None:  # noqa: ARG
         basic_provider_1,
         expected_name=provider_1_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model=shared_model_name,
-        expected_is_default=False,
         expected_model_names=provider_1_model_names,
         expected_visible=provider_1_visible,
     )
@@ -1541,7 +1476,6 @@ def test_default_provider_and_vision_provider_selection(
             "name": provider_1_name,
             "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000001",
-            "default_model_name": provider_1_non_vision_model,
             "model_configurations": [c.model_dump() for c in provider_1_configs],
             "is_public": True,
             "groups": [],
@@ -1559,7 +1493,6 @@ def test_default_provider_and_vision_provider_selection(
             "name": provider_2_name,
             "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000002",
-            "default_model_name": provider_2_vision_model_1,
             "model_configurations": [c.model_dump() for c in provider_2_configs],
             "is_public": True,
             "groups": [],
@@ -1599,12 +1532,9 @@ def test_default_provider_and_vision_provider_selection(
         admin_default,
         expected_name=provider_1_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model=provider_1_non_vision_model,
-        expected_is_default=True,
         expected_model_names=provider_1_model_names,
         expected_visible=provider_1_visible,
         expected_is_public=True,
-        expected_is_default_vision=None,  # Provider 1 is NOT the vision default
     )
 
     # Find and validate the default vision provider (provider 2)
@@ -1614,13 +1544,9 @@ def test_default_provider_and_vision_provider_selection(
         admin_vision_default,
         expected_name=provider_2_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model=provider_2_vision_model_1,
-        expected_is_default=False,  # Provider 2 is NOT the general default
         expected_model_names=provider_2_model_names,
         expected_visible=provider_2_visible,
         expected_is_public=True,
-        expected_is_default_vision=True,
-        expected_default_vision_model=provider_2_vision_model_1,
     )
 
     # Step 6: Verify via basic endpoint (basic_user)
@@ -1644,11 +1570,8 @@ def test_default_provider_and_vision_provider_selection(
         basic_default,
         expected_name=provider_1_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model=provider_1_non_vision_model,
-        expected_is_default=True,
         expected_model_names=provider_1_model_names,
         expected_visible=provider_1_visible,
-        expected_is_default_vision=None,
     )
 
     # Find and validate the default vision provider (provider 2)
@@ -1658,12 +1581,8 @@ def test_default_provider_and_vision_provider_selection(
         basic_vision_default,
         expected_name=provider_2_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model=provider_2_vision_model_1,
-        expected_is_default=False,
         expected_model_names=provider_2_model_names,
         expected_visible=provider_2_visible,
-        expected_is_default_vision=True,
-        expected_default_vision_model=provider_2_vision_model_1,
     )
 
     # Step 7: Verify via basic endpoint (admin_user sees same as basic_user)
@@ -1686,11 +1605,8 @@ def test_default_provider_and_vision_provider_selection(
         admin_basic_default,
         expected_name=provider_1_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model=provider_1_non_vision_model,
-        expected_is_default=True,
         expected_model_names=provider_1_model_names,
         expected_visible=provider_1_visible,
-        expected_is_default_vision=None,
     )
 
     admin_basic_vision_default = _get_provider_by_name(providers, provider_2_name)
@@ -1699,12 +1615,8 @@ def test_default_provider_and_vision_provider_selection(
         admin_basic_vision_default,
         expected_name=provider_2_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model=provider_2_vision_model_1,
-        expected_is_default=False,
         expected_model_names=provider_2_model_names,
         expected_visible=provider_2_visible,
-        expected_is_default_vision=True,
-        expected_default_vision_model=provider_2_vision_model_1,
     )
 
     # Verify that the providers are distinct (different providers for regular vs vision)
@@ -1756,7 +1668,6 @@ def test_default_provider_is_not_default_vision_provider(
             "name": provider_name,
             "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000000",
-            "default_model_name": "gpt-4",
             "model_configurations": [c.model_dump() for c in model_configs],
             "is_public": True,
             "groups": [],
@@ -1780,35 +1691,14 @@ def test_default_provider_is_not_default_vision_provider(
     admin_provider_data = _get_provider_by_name(providers, provider_name)
     assert admin_provider_data is not None
 
-    # Verify it IS the default provider
-    assert (
-        admin_provider_data["is_default_provider"] is True
-    ), "Provider should be the default provider"
-
-    # Verify it is NOT the default vision provider
-    assert admin_provider_data.get("is_default_vision_provider") is not True, (
-        f"Provider should NOT be the default vision provider, "
-        f"but got is_default_vision_provider={admin_provider_data.get('is_default_vision_provider')}"
-    )
-
-    # Verify default_vision_model is not set
-    assert admin_provider_data.get("default_vision_model") is None, (
-        f"Provider should not have a default_vision_model set, "
-        f"but got default_vision_model={admin_provider_data.get('default_vision_model')}"
-    )
-
     # Full validation of provider data
     _validate_provider_data(
         admin_provider_data,
         expected_name=provider_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model="gpt-4",
-        expected_is_default=True,
         expected_model_names=expected_model_names,
         expected_visible=expected_visible,
         expected_is_public=True,
-        expected_is_default_vision=None,  # NOT a vision default
-        expected_default_vision_model=None,  # No vision model set
     )
 
     # Also verify via basic endpoint
@@ -1822,31 +1712,13 @@ def test_default_provider_is_not_default_vision_provider(
     basic_provider_data = _get_provider_by_name(providers, provider_name)
     assert basic_provider_data is not None
 
-    assert (
-        basic_provider_data["is_default_provider"] is True
-    ), "Provider should be the default provider (basic endpoint)"
-    assert (
-        basic_provider_data.get("is_default_vision_provider") is not True
-    ), "Provider should NOT be the default vision provider (basic endpoint)"
-
     _validate_provider_data(
         basic_provider_data,
         expected_name=provider_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model="gpt-4",
-        expected_is_default=True,
         expected_model_names=expected_model_names,
         expected_visible=expected_visible,
-        expected_is_default_vision=None,
-        expected_default_vision_model=None,
     )
-
-    # Verify there is no default vision provider at all
-    admin_providers = _get_all_providers_admin(admin_user)
-    vision_default = _find_default_vision_provider(admin_providers)
-    assert (
-        vision_default is None
-    ), "There should be no default vision provider since we only set a regular default"
 
 
 def _get_all_image_gen_configs(admin_user: DATestUser) -> list[dict]:
@@ -1956,7 +1828,6 @@ def test_all_three_provider_types_no_mixup(reset: None) -> None:  # noqa: ARG001
             "name": regular_provider_name,
             "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000001",
-            "default_model_name": "gpt-4",
             "model_configurations": [c.model_dump() for c in regular_model_configs],
             "is_public": True,
             "groups": [],
@@ -2034,8 +1905,6 @@ def test_all_three_provider_types_no_mixup(reset: None) -> None:  # noqa: ARG001
         expected_provider=LlmProviderNames.OPENAI,
         expected_model_names=[c.name for c in regular_model_configs],
         expected_visible={c.name: True for c in regular_model_configs},
-        expected_default_model="gpt-4",
-        expected_is_default=True,
     )
     admin_vision_provider_data = _get_provider_by_name(providers, vision_provider_name)
     assert admin_vision_provider_data is not None
@@ -2045,10 +1914,6 @@ def test_all_three_provider_types_no_mixup(reset: None) -> None:  # noqa: ARG001
         expected_provider=LlmProviderNames.OPENAI,
         expected_model_names=[c.name for c in vision_model_configs],
         expected_visible={c.name: True for c in vision_model_configs},
-        expected_default_model="gpt-4-vision-preview",
-        expected_is_default=False,
-        expected_default_vision_model="gpt-4-vision-preview",
-        expected_is_default_vision=True,
     )
 
     # Verify the image gen config is the default image generation config
@@ -2095,8 +1960,6 @@ def test_all_three_provider_types_no_mixup(reset: None) -> None:  # noqa: ARG001
         expected_provider=LlmProviderNames.OPENAI,
         expected_model_names=[c.name for c in regular_model_configs],
         expected_visible={c.name: True for c in regular_model_configs},
-        expected_is_default=True,
-        expected_default_model="gpt-4",
     )
     basic_vision_provider_data = _get_provider_by_name(providers, vision_provider_name)
     assert basic_vision_provider_data is not None
@@ -2106,10 +1969,6 @@ def test_all_three_provider_types_no_mixup(reset: None) -> None:  # noqa: ARG001
         expected_provider=LlmProviderNames.OPENAI,
         expected_model_names=[c.name for c in vision_model_configs],
         expected_visible={c.name: True for c in vision_model_configs},
-        expected_is_default=False,
-        expected_default_model="gpt-4-vision-preview",
-        expected_default_vision_model="gpt-4-vision-preview",
-        expected_is_default_vision=True,
     )
 
     # Step 7: Verify the counts are as expected

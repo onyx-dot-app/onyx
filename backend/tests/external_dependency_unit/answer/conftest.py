@@ -28,7 +28,6 @@ def ensure_default_llm_provider(db_session: Session) -> None:
             provider=LlmProviderNames.OPENAI,
             api_key=os.environ.get("OPENAI_API_KEY", "test"),
             is_public=True,
-            default_model_name="gpt-4o-mini",
             model_configurations=[
                 ModelConfigurationUpsertRequest(
                     name="gpt-4o-mini",
