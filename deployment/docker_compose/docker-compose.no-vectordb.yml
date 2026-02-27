@@ -16,12 +16,15 @@
 # This overlay:
 #   - Moves Vespa (index), both model servers, and code-interpreter to profiles
 #     so they do not start by default
-#   - Makes the depends_on references to those services optional
-#   - Sets DISABLE_VECTOR_DB=true on backend services
+#   - Moves the background worker to the "background" profile (the API server
+#     handles all background work via FastAPI BackgroundTasks)
+#   - Makes the depends_on references to removed services optional
+#   - Sets DISABLE_VECTOR_DB=true on the api_server
 #
 # To selectively bring services back:
 #   --profile vectordb          Vespa + indexing model server
 #   --profile inference         Inference model server
+#   --profile background        Background worker (Celery)
 #   --profile code-interpreter  Code interpreter
 # =============================================================================
 
@@ -43,20 +46,10 @@ services:
       - DISABLE_VECTOR_DB=true
       - FILE_STORE_BACKEND=postgres
 
+  # Move the background worker to a profile so it does not start by default.
+  # The API server handles all background work in NO_VECTOR_DB mode.
   background:
-    depends_on:
-      index:
-        condition: service_started
-        required: false
-      indexing_model_server:
-        condition: service_started
-        required: false
-      inference_model_server:
-        condition: service_started
-        required: false
-    environment:
-      - DISABLE_VECTOR_DB=true
-      - FILE_STORE_BACKEND=postgres
+    profiles: ["background"]
 
   # Move Vespa and indexing model server to a profile so they do not start.
   index:
