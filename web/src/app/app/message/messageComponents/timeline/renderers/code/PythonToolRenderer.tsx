@@ -181,6 +181,7 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
         status,
         content,
         supportsCollapsible: true,
+        alwaysCollapsible: true,
       },
     ]);
   }
@@ -191,6 +192,7 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
       icon: SvgTerminal,
       status,
       supportsCollapsible: true,
+      alwaysCollapsible: true,
       content: (
         <FadingEdgeContainer
           direction="bottom"
