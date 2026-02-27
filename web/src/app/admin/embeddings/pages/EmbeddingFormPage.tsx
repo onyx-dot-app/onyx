@@ -6,6 +6,7 @@ import EmbeddingModelSelection from "../EmbeddingModelSelectionForm";
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
+import { Button as OpalButton } from "@opal/components";
 import { WarningCircle, Warning, CaretDownIcon } from "@phosphor-icons/react";
 import {
   CloudEmbeddingModel,
@@ -247,6 +248,7 @@ export default function EmbeddingForm() {
       return needsReIndex ? (
         <div className="flex mx-auto gap-x-1 ml-auto items-center">
           <div className="flex items-center h-fit">
+            {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
             <Button
               onClick={() => {
                 if (switchoverType == SwitchoverType.INSTANT) {
@@ -268,6 +270,7 @@ export default function EmbeddingForm() {
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
+                {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
                 <Button
                   disabled={!isOverallFormValid}
                   action
@@ -373,7 +376,7 @@ export default function EmbeddingForm() {
         </div>
       ) : (
         <div className="flex mx-auto gap-x-1 ml-auto items-center">
-          <Button
+          <OpalButton
             onClick={() => {
               updateSearch();
               navigateToEmbeddingPage("search settings");
@@ -381,7 +384,7 @@ export default function EmbeddingForm() {
             disabled={!isOverallFormValid}
           >
             Update Search
-          </Button>
+          </OpalButton>
           {!isOverallFormValid &&
             Object.keys(combinedFormErrors).length > 0 && (
               <div className="relative group">
@@ -510,7 +513,8 @@ export default function EmbeddingForm() {
               />
             </CardSection>
             <div className="mt-4 flex w-full justify-end">
-              <Button
+              <OpalButton
+                variant="action"
                 onClick={() => {
                   if (
                     selectedProvider.model_name.includes("e5") &&
@@ -525,10 +529,9 @@ export default function EmbeddingForm() {
                   }
                 }}
                 rightIcon={SvgArrowRight}
-                action
               >
                 Continue
-              </Button>
+              </OpalButton>
             </div>
           </>
         )}
@@ -560,10 +563,10 @@ export default function EmbeddingForm() {
                 </div>
               </Modal.Body>
               <Modal.Footer>
-                <Button secondary onClick={() => setShowPoorModel(false)}>
+                <OpalButton prominence="secondary" onClick={() => setShowPoorModel(false)}>
                   Cancel update
-                </Button>
-                <Button
+                </OpalButton>
+                <OpalButton
                   onClick={() => {
                     setShowPoorModel(false);
                     // Skip reranking step (step 1), go directly to advanced settings (step 2)
@@ -572,7 +575,7 @@ export default function EmbeddingForm() {
                   }}
                 >
                   {`Continue with ${selectedProvider.model_name}`}
-                </Button>
+                </OpalButton>
               </Modal.Footer>
             </Modal.Content>
           </Modal>
@@ -618,26 +621,26 @@ export default function EmbeddingForm() {
             </CardSection>
 
             <div className={`mt-4 w-full grid grid-cols-3`}>
-              <Button
-                leftIcon={SvgArrowLeft}
+              <OpalButton
+                prominence="secondary"
+                icon={SvgArrowLeft}
                 onClick={() => prevFormStep()}
-                secondary
               >
                 Previous
-              </Button>
+              </OpalButton>
 
               <ReIndexingButton needsReIndex={needsReIndex} />
 
               <div className="flex w-full justify-end">
-                <Button
+                <OpalButton
+                  prominence="secondary"
                   onClick={() => {
                     nextFormStep();
                   }}
                   rightIcon={SvgArrowRight}
-                  secondary
                 >
                   Advanced
-                </Button>
+                </OpalButton>
               </div>
             </div>
           </>
@@ -663,17 +666,17 @@ export default function EmbeddingForm() {
             </CardSection>
 
             <div className={`mt-4 grid  grid-cols-3 w-full `}>
-              <Button
+              <OpalButton
+                prominence="secondary"
                 onClick={() => {
                   // Skip reranking step (step 1), go back to embedding model (step 0)
                   prevFormStep();
                   prevFormStep();
                 }}
-                leftIcon={SvgArrowLeft}
-                secondary
+                icon={SvgArrowLeft}
               >
                 Previous
-              </Button>
+              </OpalButton>
 
               <ReIndexingButton needsReIndex={needsReIndex} />
             </div>

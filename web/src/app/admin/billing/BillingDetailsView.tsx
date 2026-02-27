@@ -6,6 +6,7 @@ import { Section, LineItemLayout } from "@/layouts/general-layouts";
 import * as InputLayouts from "@/layouts/input-layouts";
 import Card from "@/refresh-components/cards/Card";
 import Button from "@/refresh-components/buttons/Button";
+import { Button as OpalButton } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import Message from "@/refresh-components/messages/Message";
 import InfoBlock from "@/refresh-components/messages/InfoBlock";
@@ -243,25 +244,23 @@ function SubscriptionCard({
               to make changes.
             </Text>
           ) : disabled ? (
-            <Button
-              main
-              secondary
+            <OpalButton
+              prominence="secondary"
               onClick={handleReconnect}
               rightIcon={SvgArrowRight}
               disabled={isReconnecting}
             >
               {isReconnecting ? "Connecting..." : "Connect to Stripe"}
-            </Button>
+            </OpalButton>
           ) : (
-            <Button
-              main
-              primary
+            <OpalButton
               onClick={handleManagePlan}
               rightIcon={SvgExternalLink}
             >
               Manage Plan
-            </Button>
+            </OpalButton>
           )}
+          {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
           <Button tertiary onClick={onViewPlans} className="billing-text-link">
             <Text secondaryBody text03>
               View Plan Details
@@ -376,9 +375,9 @@ function SeatsCard({
             title="Update Seats"
             description="Add or remove seats to reflect your team size."
           />
-          <Button main secondary onClick={handleCancel} disabled={isSubmitting}>
+          <OpalButton prominence="secondary" onClick={handleCancel} disabled={isSubmitting}>
             Cancel
-          </Button>
+          </OpalButton>
         </Section>
 
         <div className="billing-content-area">
@@ -460,16 +459,14 @@ function SeatsCard({
               No changes to your billing.
             </Text>
           )}
-          <Button
-            main
-            primary
+          <OpalButton
             onClick={handleConfirm}
             disabled={
               isSubmitting || newSeatCount === totalSeats || isBelowMinimum
             }
           >
             {isSubmitting ? "Saving..." : "Confirm Change"}
-          </Button>
+          </OpalButton>
         </Section>
       </Card>
     );
@@ -499,19 +496,18 @@ function SeatsCard({
           height="auto"
           width="auto"
         >
-          <Button main tertiary href="/admin/users" leftIcon={SvgExternalLink}>
+          <OpalButton prominence="tertiary" href="/admin/users" icon={SvgExternalLink}>
             View Users
-          </Button>
+          </OpalButton>
           {!hideUpdateSeats && (
-            <Button
-              main
-              secondary
+            <OpalButton
+              prominence="secondary"
               onClick={handleStartEdit}
-              leftIcon={SvgPlus}
+              icon={SvgPlus}
               disabled={isLoadingUsers || disabled || !billing}
             >
               Update Seats
-            </Button>
+            </OpalButton>
           )}
         </Section>
       </Section>
@@ -563,14 +559,13 @@ function PaymentSection({ billing }: { billing: BillingInformation }) {
                 title="Visa ending in 1234"
                 description="Payment method"
               />
-              <Button
-                main
-                tertiary
+              <OpalButton
+                prominence="tertiary"
                 onClick={handleOpenPortal}
                 rightIcon={SvgExternalLink}
               >
                 Update
-              </Button>
+              </OpalButton>
             </Section>
           </Card>
           {lastPaymentDate && (
@@ -586,14 +581,13 @@ function PaymentSection({ billing }: { billing: BillingInformation }) {
                   title={lastPaymentDate}
                   description="Last payment"
                 />
-                <Button
-                  main
-                  tertiary
+                <OpalButton
+                  prominence="tertiary"
                   onClick={handleOpenPortal}
                   rightIcon={SvgExternalLink}
                 >
                   View Invoice
-                </Button>
+                </OpalButton>
               </Section>
             </Card>
           )}

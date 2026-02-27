@@ -1,6 +1,6 @@
 "use client";
 
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { useState } from "react";
 import { toast } from "@/hooks/useToast";
 import { triggerIndexing } from "@/app/admin/connector/[ccPairId]/lib";

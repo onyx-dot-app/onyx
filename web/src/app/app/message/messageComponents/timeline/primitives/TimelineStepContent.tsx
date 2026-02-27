@@ -2,7 +2,6 @@ import React, { FunctionComponent } from "react";
 import { cn } from "@/lib/utils";
 import { SvgFold, SvgExpand } from "@opal/icons";
 import { IconProps } from "@opal/types";
-import Button from "@/refresh-components/buttons/Button";
 import { Button as OpalButton } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 
@@ -50,16 +49,16 @@ export function TimelineStepContent({
           <div className="h-full w-[var(--timeline-step-header-right-section-width)] flex items-center justify-end">
             {showCollapseControls &&
               (buttonTitle ? (
-                <Button
+                <OpalButton
+                  prominence="tertiary"
                   size="md"
-                  tertiary
                   onClick={onToggle}
                   rightIcon={
                     isExpanded ? SvgFold : CollapsedIconComponent || SvgExpand
                   }
                 >
                   {buttonTitle}
-                </Button>
+                </OpalButton>
               ) : (
                 <OpalButton
                   prominence="tertiary"

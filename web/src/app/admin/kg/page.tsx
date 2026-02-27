@@ -10,7 +10,7 @@ import {
 } from "@/components/Field";
 import { BrainIcon } from "@/components/icons/icons";
 import Modal from "@/refresh-components/Modal";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import SwitchField from "@/refresh-components/form/SwitchField";
 import { Form, Formik, FormikState, useFormikContext } from "formik";
 import { useState } from "react";
@@ -272,7 +272,7 @@ function Main() {
             entities you want to model afterwards.
           </Text>
           <Button
-            leftIcon={SvgSettings}
+            icon={SvgSettings}
             onClick={() => setConfigureModalShown(true)}
           >
             Configure Knowledge Graph

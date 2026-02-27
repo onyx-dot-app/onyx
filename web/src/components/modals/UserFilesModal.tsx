@@ -9,7 +9,6 @@ import type { IconProps } from "@opal/types";
 import { getFileExtension, isImageExtension } from "@/lib/utils";
 import { UserFileStatus } from "@/app/app/projects/projectsService";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
-import Button from "@/refresh-components/buttons/Button";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import AttachmentButton from "@/refresh-components/buttons/AttachmentButton";
 import Modal from "@/refresh-components/Modal";
@@ -287,9 +286,9 @@ export default function UserFilesModal({
             )}
 
             {/* Right side: Done button */}
-            <Button secondary onClick={() => toggle(false)}>
+            <OpalButton prominence="secondary" onClick={() => toggle(false)}>
               Done
-            </Button>
+            </OpalButton>
           </Modal.Footer>
         </Modal.Content>
       </Modal>

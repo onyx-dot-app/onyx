@@ -10,7 +10,7 @@ import {
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import Modal from "@/refresh-components/Modal";
 import Text from "@/refresh-components/texts/Text";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { SvgSettings } from "@opal/icons";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -97,7 +97,7 @@ export function ProviderFormEntrypointWrapper({
   if (buttonMode && !existingLlmProvider) {
     return (
       <>
-        <Button action onClick={() => setFormIsVisible(true)}>
+        <Button variant="action" onClick={() => setFormIsVisible(true)}>
           {buttonText ?? `Add ${providerName}`}
         </Button>
 
@@ -158,8 +158,8 @@ export function ProviderFormEntrypointWrapper({
 
             <div className="ml-auto my-auto">
               <Button
-                action={!existingLlmProvider}
-                secondary={!!existingLlmProvider}
+                variant="action"
+                prominence="secondary"
                 onClick={() => setFormIsVisible(true)}
               >
                 Edit
@@ -174,7 +174,7 @@ export function ProviderFormEntrypointWrapper({
               </Text>
             </div>
             <div className="ml-auto my-auto">
-              <Button action onClick={() => setFormIsVisible(true)}>
+              <Button variant="action" onClick={() => setFormIsVisible(true)}>
                 Set up
               </Button>
             </div>

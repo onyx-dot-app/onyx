@@ -5,7 +5,6 @@ import type { IconProps } from "@opal/types";
 import { cn, noProp } from "@/lib/utils";
 import { Disabled } from "@/refresh-components/Disabled";
 import Text from "@/refresh-components/texts/Text";
-import Button from "@/refresh-components/buttons/Button";
 import { Button as OpalButton } from "@opal/components";
 import SelectButton from "@/refresh-components/buttons/SelectButton";
 import {
@@ -125,15 +124,15 @@ export default function Select({
         <div className="flex items-center justify-end gap-1">
           {/* Disconnected: Show Connect button */}
           {isDisconnected && (
-            <Button
-              action={false}
-              tertiary
+            <OpalButton
+              variant="action"
+              prominence="tertiary"
               disabled={disabled || !onConnect}
               onClick={noProp(onConnect)}
               rightIcon={SvgArrowExchange}
             >
               {connectLabel}
-            </Button>
+            </OpalButton>
           )}
 
           {/* Connected: Show select icon + settings icon */}

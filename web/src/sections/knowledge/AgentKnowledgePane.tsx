@@ -12,7 +12,6 @@ import * as GeneralLayouts from "@/layouts/general-layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
 import * as InputLayouts from "@/layouts/input-layouts";
 import { Card } from "@/refresh-components/cards";
-import Button from "@/refresh-components/buttons/Button";
 import { Button as OpalButton } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import LineItem from "@/refresh-components/buttons/LineItem";
@@ -485,13 +484,13 @@ function RecentFilesTableContent({
         searchPlaceholder="Search files..."
         ariaLabelPrefix="user-file-row"
         headerActions={
-          <Button
-            internal
-            leftIcon={SvgPlusCircle}
+          <OpalButton
+            prominence="internal"
+            icon={SvgPlusCircle}
             onClick={() => fileInputRef.current?.click()}
           >
             Add File
-          </Button>
+          </OpalButton>
         }
         emptyMessage="No files available. Upload files to get started."
       />
@@ -812,14 +811,14 @@ const KnowledgeMainContent = memo(function KnowledgeMainContent({
         {totalSelected} knowledge source{totalSelected !== 1 ? "s" : ""}{" "}
         selected
       </Text>
-      <Button
-        internal
-        leftIcon={SvgArrowUpRight}
+      <OpalButton
+        prominence="internal"
+        icon={SvgArrowUpRight}
         onClick={onViewEdit}
         aria-label="knowledge-view-edit"
       >
         View / Edit
-      </Button>
+      </OpalButton>
     </GeneralLayouts.Section>
   );
 });

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
@@ -46,7 +46,7 @@ export default function AddInstructionModal() {
           />
         </Modal.Body>
         <Modal.Footer>
-          <Button secondary onClick={() => modal.toggle(false)}>
+          <Button prominence="secondary" onClick={() => modal.toggle(false)}>
             Cancel
           </Button>
           <Button onClick={handleSubmit}>Save Instructions</Button>

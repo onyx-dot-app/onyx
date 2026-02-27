@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Modal from "@/refresh-components/Modal";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { Input } from "@/components/ui/input";
 import Label from "@/refresh-components/form/Label";
 import Text from "@/refresh-components/texts/Text";
@@ -250,7 +250,7 @@ export default function MCPApiKeyModal({
             )}
 
             <div className="flex justify-end space-x-2 pt-4">
-              <Button secondary onClick={handleClose} disabled={isSubmitting}>
+              <Button prominence="secondary" onClick={handleClose} disabled={isSubmitting}>
                 Cancel
               </Button>
               <Button

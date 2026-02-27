@@ -99,6 +99,7 @@ export function CustomEmbeddingModelForm({
               subtext="Prefix for passage embeddings"
             />
 
+            {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
             <Button
               type="submit"
               disabled={isSubmitting}

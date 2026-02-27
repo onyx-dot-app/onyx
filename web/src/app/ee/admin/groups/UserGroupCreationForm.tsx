@@ -123,6 +123,7 @@ export default function UserGroupCreationForm({
                   />
                 </div>
                 <div className="flex">
+                  {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
                   <Button
                     type="submit"
                     disabled={isSubmitting}

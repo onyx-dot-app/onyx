@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import Modal from "@/refresh-components/Modal";
-import Button from "@/refresh-components/buttons/Button";
 import Text from "@/refresh-components/texts/Text";
 import * as InputLayouts from "@/layouts/input-layouts";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
@@ -375,32 +374,31 @@ function FormContent({
                   onDisconnectTool(existingTool);
                 }}
               />
-              <Button
-                secondary
+              <OpalButton
+                prominence="secondary"
                 type="button"
                 onClick={handleEditAuthenticationClick}
                 disabled={!onEditAuthentication}
               >
                 Edit Configs
-              </Button>
+              </OpalButton>
             </Section>
           </Section>
         )}
       </Modal.Body>
 
       <Modal.Footer>
-        <Button
-          main
-          secondary
+        <OpalButton
+          prominence="secondary"
           type="button"
           onClick={handleClose}
           disabled={isSubmitting}
         >
           Cancel
-        </Button>
-        <Button main primary type="submit" disabled={isSubmitting || !dirty}>
+        </OpalButton>
+        <OpalButton type="submit" disabled={isSubmitting || !dirty}>
           {primaryButtonLabel}
-        </Button>
+        </OpalButton>
       </Modal.Footer>
     </Form>
   );

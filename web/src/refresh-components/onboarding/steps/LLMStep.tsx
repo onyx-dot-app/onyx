@@ -1,6 +1,6 @@
 import { memo, useState, useCallback } from "react";
 import Text from "@/refresh-components/texts/Text";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import Separator from "@/refresh-components/Separator";
 import LLMProviderCard from "../components/LLMProviderCard";
 import { OnboardingActions, OnboardingState, OnboardingStep } from "../types";
@@ -138,7 +138,7 @@ const LLMStepInner = ({
             </div>
             <div className="p-0.5">
               <Button
-                tertiary
+                prominence="tertiary"
                 rightIcon={SvgExternalLink}
                 disabled={disabled}
                 href="admin/configuration/llm"

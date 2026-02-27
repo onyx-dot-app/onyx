@@ -6,7 +6,6 @@ import { useDroppable } from "@dnd-kit/core";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
-import Button from "@/refresh-components/buttons/Button";
 import ChatButton from "@/sections/sidebar/ChatButton";
 import { useAppRouter } from "@/hooks/appNavigation";
 import { cn, noProp } from "@/lib/utils";
@@ -117,15 +116,15 @@ const ProjectFolderButton = memo(({ project }: ProjectFolderButtonProps) => {
           icon={SvgTrash}
           onClose={() => setDeleteConfirmationModalOpen(false)}
           submit={
-            <Button
-              danger
+            <OpalButton
+              variant="danger"
               onClick={() => {
                 setDeleteConfirmationModalOpen(false);
                 deleteProject(project.id);
               }}
             >
               Delete
-            </Button>
+            </OpalButton>
           }
         >
           Are you sure you want to delete this project? This action cannot be
@@ -157,6 +156,7 @@ const ProjectFolderButton = memo(({ project }: ProjectFolderButtonProps) => {
               <>
                 <Popover.Trigger asChild onClick={noProp()}>
                   <div>
+                    {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
                     <IconButton
                       icon={SvgMoreHorizontal}
                       className={cn(

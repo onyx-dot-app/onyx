@@ -1,5 +1,6 @@
 import { useState } from "react";
 import Button from "@/refresh-components/buttons/Button";
+import { Button as OpalButton } from "@opal/components";
 import { ValidSources, AccessType } from "@/lib/types";
 import { FaAccusoft } from "react-icons/fa";
 import { submitCredential } from "@/components/admin/connectors/CredentialForm";
@@ -35,13 +36,13 @@ const CreateButton = ({
   isAdmin: boolean;
   groups: number[];
 }) => (
-  <Button
+  <OpalButton
     onClick={onClick}
     disabled={isSubmitting || (!isAdmin && groups.length === 0)}
-    leftIcon={SvgPlusCircle}
+    icon={SvgPlusCircle}
   >
     Create
-  </Button>
+  </OpalButton>
 );
 
 type formType = IsPublicGroupSelectorFormType & {
@@ -257,6 +258,7 @@ export default function CreateCredential({
               )}
             </CardSection>
             {swapConnector && (
+              // TODO(opal-migration): migrate to opal Button once className/iconClassName is removed
               <Button
                 className="bg-rose-500 hover:bg-rose-400"
                 onClick={() =>

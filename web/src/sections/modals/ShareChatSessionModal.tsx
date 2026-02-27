@@ -9,6 +9,7 @@ import { copyAll } from "@/app/app/message/copyingUtils";
 import { Section } from "@/layouts/general-layouts";
 import Modal from "@/refresh-components/Modal";
 import Button from "@/refresh-components/buttons/Button";
+import { Button as OpalButton } from "@opal/components";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import Text from "@/refresh-components/texts/Text";
@@ -235,10 +236,11 @@ export default function ShareChatSessionModal({
         </Modal.Body>
         <Modal.Footer>
           {!isShared && (
-            <Button secondary onClick={onClose} aria-label="share-modal-cancel">
+            <OpalButton prominence="secondary" onClick={onClose} aria-label="share-modal-cancel">
               Cancel
-            </Button>
+            </OpalButton>
           )}
+          {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
           <Button
             onClick={handleSubmit}
             disabled={isLoading}

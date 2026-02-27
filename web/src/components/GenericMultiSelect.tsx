@@ -140,6 +140,7 @@ export function GenericMultiSelect<
       {selectedItems.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {selectedItems.map((item) => (
+            // TODO(opal-migration): migrate to opal Button once className/iconClassName is removed
             <Button
               key={item.id}
               secondary

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
 import Text from "@/refresh-components/texts/Text";
 import { SvgAlertCircle } from "@opal/icons";
@@ -23,7 +23,7 @@ export default function MoveCustomAgentChatModal({
       title="Move Custom Agent Chat"
       onClose={onCancel}
       submit={
-        <Button primary onClick={() => onConfirm(doNotShowAgain)}>
+        <Button onClick={() => onConfirm(doNotShowAgain)}>
           Confirm Move
         </Button>
       }

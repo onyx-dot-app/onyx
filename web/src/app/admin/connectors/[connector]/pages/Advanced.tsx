@@ -1,7 +1,7 @@
 import React from "react";
 import NumberInput from "./ConnectorInput/NumberInput";
 import { TextFormField } from "@/components/Field";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { SvgTrash } from "@opal/icons";
 export default function AdvancedFormPage() {
   return (
@@ -35,7 +35,7 @@ export default function AdvancedFormPage() {
         name="indexingStart"
       />
       <div className="mt-4 flex w-full mx-auto max-w-2xl justify-start">
-        <Button leftIcon={SvgTrash} danger type="submit">
+        <Button variant="danger" icon={SvgTrash} type="submit">
           Reset
         </Button>
       </div>

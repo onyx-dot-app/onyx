@@ -1,5 +1,5 @@
 import React from "react";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import type { IconProps } from "@opal/types";
 import Modal from "@/refresh-components/Modal";
 import { SvgLoader } from "@opal/icons";
@@ -76,14 +76,14 @@ export default function ProviderModal({
 
         {onSubmit && (
           <Modal.Footer>
-            <Button type="button" secondary onClick={() => onOpenChange(false)}>
+            <Button prominence="secondary" type="button" onClick={() => onOpenChange(false)}>
               {cancelLabel}
             </Button>
             <Button
               type="button"
               onClick={onSubmit}
               disabled={submitDisabled || isSubmitting}
-              leftIcon={isSubmitting ? SpinningLoader : undefined}
+              icon={isSubmitting ? SpinningLoader : undefined}
             >
               {submitLabel}
             </Button>

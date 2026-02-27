@@ -8,7 +8,7 @@ import Link from "next/link";
 import Text from "@/components/ui/text";
 import { useConnectorIndexingStatusWithPagination } from "@/lib/hooks";
 import { useToastFromQuery } from "@/hooks/useToast";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { useState, useRef, useMemo, RefObject } from "react";
 import { FilterOptions } from "./FilterComponent";
 import { ValidSources } from "@/lib/types";

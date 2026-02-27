@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useRef } from "react";
-import Button from "@/refresh-components/buttons/Button";
 import { Button as OpalButton } from "@opal/components";
 import {
   Table,
@@ -175,34 +174,33 @@ export default function InlineFileManagement({
         </Text>
         <div className="flex gap-2">
           {!isEditing ? (
-            <Button
+            <OpalButton
+              prominence="secondary"
               onClick={() => setIsEditing(true)}
-              secondary
-              leftIcon={SvgEdit}
+              icon={SvgEdit}
             >
               Edit
-            </Button>
+            </OpalButton>
           ) : (
             <>
-              <Button
+              <OpalButton
+                prominence="secondary"
                 onClick={handleCancel}
-                secondary
-                leftIcon={SvgX}
+                icon={SvgX}
                 disabled={isSaving}
               >
                 Cancel
-              </Button>
-              <Button
+              </OpalButton>
+              <OpalButton
                 onClick={handleSaveClick}
-                primary
-                leftIcon={SvgCheck}
+                icon={SvgCheck}
                 disabled={
                   isSaving ||
                   (selectedFilesToRemove.size === 0 && filesToAdd.length === 0)
                 }
               >
                 {isSaving ? "Saving..." : "Save Changes"}
-              </Button>
+              </OpalButton>
             </>
           )}
         </div>
@@ -334,14 +332,14 @@ export default function InlineFileManagement({
             className="hidden"
             id={`file-upload-${connectorId}`}
           />
-          <Button
+          <OpalButton
+            prominence="secondary"
             onClick={() => fileInputRef.current?.click()}
-            secondary
-            leftIcon={SvgPlusCircle}
+            icon={SvgPlusCircle}
             disabled={isSaving}
           >
             Add Files
-          </Button>
+          </OpalButton>
         </div>
       )}
 
@@ -397,16 +395,16 @@ export default function InlineFileManagement({
           </Modal.Body>
 
           <Modal.Footer>
-            <Button
+            <OpalButton
+              prominence="secondary"
               onClick={() => setShowSaveConfirm(false)}
-              secondary
               disabled={isSaving}
             >
               Cancel
-            </Button>
-            <Button onClick={handleConfirmSave} disabled={isSaving}>
+            </OpalButton>
+            <OpalButton onClick={handleConfirmSave} disabled={isSaving}>
               {isSaving ? "Saving..." : "Confirm & Save"}
-            </Button>
+            </OpalButton>
           </Modal.Footer>
         </Modal.Content>
       </Modal>

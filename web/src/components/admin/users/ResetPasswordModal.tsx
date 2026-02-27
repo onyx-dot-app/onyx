@@ -1,6 +1,6 @@
 import { useState } from "react";
 import Modal from "@/refresh-components/Modal";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { User } from "@/lib/types";
 import { toast } from "@/hooks/useToast";
 import Text from "@/refresh-components/texts/Text";
@@ -77,7 +77,7 @@ export default function ResetPasswordModal({
             <Button
               onClick={handleResetPassword}
               disabled={isLoading}
-              leftIcon={SvgRefreshCw}
+              icon={SvgRefreshCw}
             >
               {isLoading ? (
                 <Text as="p">

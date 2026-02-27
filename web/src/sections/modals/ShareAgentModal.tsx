@@ -2,7 +2,6 @@
 
 import { useCallback, useMemo, useState } from "react";
 import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
-import Button from "@/refresh-components/buttons/Button";
 import {
   SvgLink,
   SvgOrganization,
@@ -343,20 +342,20 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
         <BasicModalFooter
           left={
             agentId ? (
-              <Button secondary leftIcon={SvgLink} onClick={handleCopyLink}>
+              <OpalButton prominence="secondary" icon={SvgLink} onClick={handleCopyLink}>
                 Copy Link
-              </Button>
+              </OpalButton>
             ) : undefined
           }
           cancel={
-            <Button secondary onClick={handleClose}>
+            <OpalButton prominence="secondary" onClick={handleClose}>
               Done
-            </Button>
+            </OpalButton>
           }
           submit={
-            <Button onClick={() => handleSubmit()} disabled={!dirty}>
+            <OpalButton onClick={() => handleSubmit()} disabled={!dirty}>
               Share
-            </Button>
+            </OpalButton>
           }
         />
       </Modal.Footer>

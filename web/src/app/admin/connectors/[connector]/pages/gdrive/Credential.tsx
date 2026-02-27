@@ -14,7 +14,7 @@ import Cookies from "js-cookie";
 import { TextFormField, SectionHeader } from "@/components/Field";
 import { Form, Formik } from "formik";
 import { User } from "@/lib/types";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import {
   Credential,
   GoogleDriveCredentialJson,
@@ -318,7 +318,7 @@ export const DriveJsonUploadSection = ({
           {isAdmin && !existingAuthCredential && (
             <div className="mt-2">
               <Button
-                danger
+                variant="danger"
                 onClick={async () => {
                   const endpoint =
                     localServiceAccountData?.service_account_email
@@ -471,7 +471,7 @@ export const DriveAuthSection = ({
             </div>
           </div>
           <Button
-            danger
+            variant="danger"
             onClick={async () => {
               handleRevokeAccess(
                 connectorAssociated,

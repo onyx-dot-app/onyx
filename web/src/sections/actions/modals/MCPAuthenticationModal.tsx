@@ -8,7 +8,7 @@ import { FormField } from "@/refresh-components/form/FormField";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import Text from "@/refresh-components/texts/Text";
 import { Formik, Form } from "formik";
@@ -633,16 +633,13 @@ export default function MCPAuthenticationModal({
 
                 <Modal.Footer>
                   <Button
-                    main
-                    tertiary
+                    prominence="tertiary"
                     type="button"
                     onClick={() => toggle(false)}
                   >
                     Cancel
                   </Button>
                   <Button
-                    main
-                    primary
                     type="submit"
                     disabled={!isValid || isSubmitting}
                     data-testid="mcp-auth-connect-button"

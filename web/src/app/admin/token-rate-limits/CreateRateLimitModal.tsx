@@ -1,7 +1,7 @@
 "use client";
 
 import * as Yup from "yup";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { useEffect, useState } from "react";
 import Modal from "@/refresh-components/Modal";
 import { Form, Formik } from "formik";

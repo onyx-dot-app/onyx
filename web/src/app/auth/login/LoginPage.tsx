@@ -7,7 +7,7 @@ import EmailPasswordForm from "./EmailPasswordForm";
 import { AuthType, NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";
 import { useSendAuthRequiredMessage } from "@/lib/extension/utils";
 import Text from "@/refresh-components/texts/Text";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import Message from "@/refresh-components/messages/Message";
 
 interface LoginPageProps {

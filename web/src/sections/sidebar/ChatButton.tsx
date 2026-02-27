@@ -6,7 +6,6 @@ import useChatSessions from "@/hooks/useChatSessions";
 import { deleteChatSession, renameChatSession } from "@/app/app/services/lib";
 import { ChatSession } from "@/app/app/interfaces";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
-import Button from "@/refresh-components/buttons/Button";
 import { cn, noProp } from "@/lib/utils";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import { useAppRouter } from "@/hooks/appNavigation";
@@ -397,6 +396,7 @@ const ChatButton = memo(
       <>
         <Popover.Trigger asChild onClick={noProp()}>
           <div>
+            {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
             <IconButton
               icon={SvgMoreHorizontal}
               className={cn(
@@ -455,15 +455,15 @@ const ChatButton = memo(
             icon={SvgTrash}
             onClose={() => setDeleteConfirmationModalOpen(false)}
             submit={
-              <Button
-                danger
+              <OpalButton
+                variant="danger"
                 onClick={() => {
                   setDeleteConfirmationModalOpen(false);
                   handleChatDelete();
                 }}
               >
                 Delete
-              </Button>
+              </OpalButton>
             }
           >
             Are you sure you want to delete this chat? This action cannot be
