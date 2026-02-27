@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Button from "@/refresh-components/buttons/Button";
+import { Button as OpalButton } from "@opal/components";
 import {
   ConfigurableSources,
   CredentialFieldSpec,
@@ -780,9 +781,9 @@ export function FederatedConnectorForm({
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <div>
-                  <Button secondary leftIcon={SvgSettings}>
+                  <OpalButton prominence="secondary" icon={SvgSettings}>
                     Manage
-                  </Button>
+                  </OpalButton>
                 </div>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
@@ -839,6 +840,7 @@ export function FederatedConnectorForm({
                 </div>
               )}
 
+              {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
               <Button
                 type="button"
                 secondary
@@ -848,6 +850,7 @@ export function FederatedConnectorForm({
               >
                 {isValidating ? "Validating..." : "Validate"}
               </Button>
+              {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
               <Button
                 type="submit"
                 disabled={isSubmitting || !formState.schema}

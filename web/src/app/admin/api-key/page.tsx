@@ -27,7 +27,7 @@ import {
   DISCORD_SERVICE_API_KEY_NAME,
 } from "@/app/admin/api-key/types";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import Text from "@/refresh-components/texts/Text";
 import { SvgEdit, SvgKey, SvgRefreshCw } from "@opal/icons";
@@ -161,9 +161,9 @@ function Main() {
                 <TableRow key={apiKey.api_key_id}>
                   <TableCell>
                     <Button
-                      internal
+                      prominence="internal"
                       onClick={() => handleEdit(apiKey)}
-                      leftIcon={SvgEdit}
+                      icon={SvgEdit}
                     >
                       {apiKey.api_key_name || <i>null</i>}
                     </Button>
@@ -176,8 +176,8 @@ function Main() {
                   </TableCell>
                   <TableCell>
                     <Button
-                      internal
-                      leftIcon={SvgRefreshCw}
+                      prominence="internal"
+                      icon={SvgRefreshCw}
                       onClick={async () => {
                         setKeyIsGenerating(true);
                         const response = await regenerateApiKey(apiKey);

@@ -11,8 +11,13 @@ import {
   TextArrayField,
   TextFormField,
 } from "@/components/Field";
+<<<<<<< HEAD
 import Button from "@/refresh-components/buttons/Button";
 import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
+=======
+import { Button } from "@opal/components";
+import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
+>>>>>>> 99f4dcc5d (chore(fe): opal button migration)
 import DocumentSetCard from "@/sections/cards/DocumentSetCard";
 import CollapsibleSection from "@/app/admin/agents/CollapsibleSection";
 import { StandardAnswerCategoryResponse } from "@/components/standardAnswers/getStandardAnswerCategoriesIfEE";
@@ -598,7 +603,7 @@ export function SlackChannelConfigFormFields({
           </TooltipProvider>
         )}
         <Button type="submit">{isUpdate ? "Update" : "Create"}</Button>
-        <Button secondary onClick={() => router.back()}>
+        <Button prominence="secondary" onClick={() => router.back()}>
           Cancel
         </Button>
       </div>

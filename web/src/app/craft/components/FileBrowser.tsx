@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 import Text from "@/refresh-components/texts/Text";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import {
   Collapsible,
   CollapsibleContent,
@@ -180,9 +180,9 @@ function FileNode({ entry, sessionId, depth, onPreview }: FileNodeProps) {
       <div className="flex flex-row gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
         {canPreview && (
           <Button
-            action
-            tertiary
-            leftIcon={SvgEye}
+            variant="action"
+            prominence="tertiary"
+            icon={SvgEye}
             onClick={(e) => {
               e.stopPropagation();
               onPreview(entry);
@@ -196,7 +196,7 @@ function FileNode({ entry, sessionId, depth, onPreview }: FileNodeProps) {
           download={entry.name}
           onClick={(e) => e.stopPropagation()}
         >
-          <Button action tertiary leftIcon={SvgDownloadCloud}>
+          <Button variant="action" prominence="tertiary" icon={SvgDownloadCloud}>
             Download
           </Button>
         </a>

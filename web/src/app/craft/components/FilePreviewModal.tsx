@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Modal from "@/refresh-components/Modal";
 import Text from "@/refresh-components/texts/Text";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { SvgFileText, SvgDownloadCloud, SvgImage } from "@opal/icons";
 import { getArtifactUrl, FileSystemEntry } from "@/lib/build/client";
@@ -89,11 +89,11 @@ export default function FilePreviewModal({
         </Modal.Body>
         <Modal.Footer>
           <a href={downloadUrl} download={entry.name}>
-            <Button action secondary leftIcon={SvgDownloadCloud}>
+            <Button variant="action" prominence="secondary" icon={SvgDownloadCloud}>
               Download
             </Button>
           </a>
-          <Button action primary onClick={onClose}>
+          <Button variant="action" onClick={onClose}>
             Close
           </Button>
         </Modal.Footer>

@@ -7,7 +7,7 @@ import { useProjectsContext } from "@/providers/ProjectsContext";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
 import type { ProjectFile } from "../../projects/projectsService";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 
 import AddInstructionModal from "@/components/modals/AddInstructionModal";
 import UserFilesModal from "@/components/modals/UserFilesModal";
@@ -150,6 +150,7 @@ export default function ProjectContextPanel({
                 <Text as="p" headingH2 className="font-heading-h2">
                   {projectName}
                 </Text>
+                {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
                 <IconButton
                   icon={SvgEdit}
                   internal
@@ -181,9 +182,9 @@ export default function ProjectContextPanel({
             )}
           </div>
           <Button
-            leftIcon={SvgAddLines}
+            prominence="tertiary"
+            icon={SvgAddLines}
             onClick={() => addInstructionModal.toggle(true)}
-            tertiary
           >
             Set Instructions
           </Button>

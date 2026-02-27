@@ -62,7 +62,7 @@ import { DropdownMenuItemWithTooltip } from "@/components/ui/dropdown-menu-with-
 import { timeAgo } from "@/lib/time";
 import { useStatusChange } from "./useStatusChange";
 import { useReIndexModal } from "./ReIndexModal";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { SvgSettings } from "@opal/icons";
 import { UserRole } from "@/lib/types";
 import { useUser } from "@/providers/UserProvider";
@@ -456,7 +456,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
           {ccPair.is_editable_for_current_user && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button leftIcon={SvgSettings} secondary>
+                <Button prominence="secondary" icon={SvgSettings}>
                   Manage
                 </Button>
               </DropdownMenuTrigger>

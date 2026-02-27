@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Formik, Form, FormikHelpers } from "formik";
 import * as Yup from "yup";
 import Modal from "@/refresh-components/Modal";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
@@ -663,12 +663,10 @@ export default function OpenAPIAuthenticationModal({
               </Modal.Body>
 
               <Modal.Footer>
-                <Button main tertiary type="button" onClick={handleSkip}>
+                <Button prominence="tertiary" type="button" onClick={handleSkip}>
                   Cancel
                 </Button>
                 <Button
-                  main
-                  primary
                   type="submit"
                   disabled={
                     !isValid || isSubmitting || shouldDisableForm || !dirty

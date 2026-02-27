@@ -15,6 +15,7 @@ import {
 import Text from "@/components/ui/text";
 import Title from "@/components/ui/title";
 import Button from "@/refresh-components/buttons/Button";
+import { Button as OpalButton } from "@opal/components";
 import useSWR from "swr";
 import React, { useState } from "react";
 import { UsageReport } from "./types";
@@ -102,6 +103,7 @@ function GenerateReportInput({
       <div className="grid gap-2 mb-3">
         <Popover>
           <Popover.Trigger asChild>
+            {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
             <Button
               secondary
               className={cn(
@@ -142,6 +144,7 @@ function GenerateReportInput({
               disabled={(date) => date > new Date()}
             />
             <div className="border-t p-3">
+              {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
               <Button
                 tertiary
                 className="w-full justify-start"
@@ -155,6 +158,7 @@ function GenerateReportInput({
               >
                 Last 7 days
               </Button>
+              {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
               <Button
                 tertiary
                 className="w-full justify-start"
@@ -168,6 +172,7 @@ function GenerateReportInput({
               >
                 Last 30 days
               </Button>
+              {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
               <Button
                 tertiary
                 className="w-full justify-start"
@@ -181,6 +186,7 @@ function GenerateReportInput({
               >
                 Last year
               </Button>
+              {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
               <Button
                 tertiary
                 className="w-full justify-start"
@@ -198,14 +204,14 @@ function GenerateReportInput({
           </Popover.Content>
         </Popover>
       </div>
-      <Button
+      <OpalButton
         color={"blue"}
-        leftIcon={FiDownloadCloud}
+        icon={FiDownloadCloud}
         disabled={isLoading || isWaitingForReport}
         onClick={() => requestReport()}
       >
         {isWaitingForReport ? "Generating..." : "Generate Report"}
-      </Button>
+      </OpalButton>
       <p className="mt-1 text-xs">
         {isWaitingForReport
           ? "A report is currently being generated. Please wait..."

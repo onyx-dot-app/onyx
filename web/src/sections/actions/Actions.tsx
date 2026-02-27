@@ -2,7 +2,6 @@
 import { ActionStatus } from "@/lib/tools/interfaces";
 import React from "react";
 import { Button as OpalButton } from "@opal/components";
-import Button from "@/refresh-components/buttons/Button";
 import {
   SvgArrowExchange,
   SvgChevronDown,
@@ -82,8 +81,8 @@ const Actions = React.memo(
             )}
           </div>
           {showViewToolsButton && (
-            <Button
-              tertiary
+            <OpalButton
+              prominence="tertiary"
               onClick={onToggleTools}
               rightIcon={SvgChevronDown}
               aria-label={`View tools for ${serverName}`}
@@ -91,7 +90,7 @@ const Actions = React.memo(
               {status === ActionStatus.FETCHING
                 ? "Fetching tools..."
                 : `View ${toolCount ?? 0} tool${toolCount !== 1 ? "s" : ""}`}
-            </Button>
+            </OpalButton>
           )}
         </div>
       );
@@ -102,14 +101,14 @@ const Actions = React.memo(
       return (
         <div className="flex flex-col gap-1 items-end shrink-0">
           {onAuthenticate && (
-            <Button
-              tertiary
+            <OpalButton
+              prominence="tertiary"
               onClick={onAuthenticate}
               rightIcon={SvgArrowExchange}
               aria-label={`Authenticate and connect to ${serverName}`}
             >
               Authenticate
-            </Button>
+            </OpalButton>
           )}
           <div
             className={cn(
@@ -147,14 +146,14 @@ const Actions = React.memo(
       <div className="flex flex-col gap-1 items-end shrink-0">
         <div className="flex gap-1 items-end">
           {onReconnect && (
-            <Button
-              secondary
+            <OpalButton
+              prominence="secondary"
               onClick={onReconnect}
               rightIcon={SvgPlug}
               aria-label={`Reconnect to ${serverName}`}
             >
               Reconnect
-            </Button>
+            </OpalButton>
           )}
           {onManage && (
             <OpalButton
@@ -167,15 +166,15 @@ const Actions = React.memo(
           )}
         </div>
         {showViewToolsButton && (
-          <Button
-            tertiary
+          <OpalButton
+            prominence="tertiary"
             onClick={onToggleTools}
             rightIcon={SvgChevronDown}
             aria-label={`View tools for ${serverName}`}
             disabled
           >
             {`View ${toolCount ?? 0} tool${toolCount !== 1 ? "s" : ""}`}
-          </Button>
+          </OpalButton>
         )}
       </div>
     );

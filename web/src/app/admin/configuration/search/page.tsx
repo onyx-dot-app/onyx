@@ -5,7 +5,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import Text from "@/components/ui/text";
 import Title from "@/components/ui/title";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import useSWR from "swr";
 import { ModelPreview } from "@/components/embedding/ModelSelector";
 import {
@@ -130,7 +130,7 @@ function Main() {
           </CardSection>
 
           <div className="mt-4">
-            <Button action href="/admin/embeddings">
+            <Button variant="action" href="/admin/embeddings">
               Update Search Settings
             </Button>
           </div>

@@ -21,7 +21,6 @@ import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
-import Button from "@/refresh-components/buttons/Button";
 import Switch from "@/refresh-components/inputs/Switch";
 import { useUser } from "@/providers/UserProvider";
 import { useTheme } from "next-themes";
@@ -108,14 +107,14 @@ function PATModal({
       onClose={onClose}
       submit={
         !!createdToken?.token ? (
-          <Button onClick={onClose}>Done</Button>
+          <OpalButton onClick={onClose}>Done</OpalButton>
         ) : (
-          <Button
+          <OpalButton
             onClick={onCreate}
             disabled={isCreating || !newTokenName.trim()}
           >
             {isCreating ? "Creating Token..." : "Create Token"}
-          </Button>
+          </OpalButton>
         )
       }
       hideCancel={!!createdToken}
@@ -237,15 +236,15 @@ function GeneralSettings() {
           title="Delete All Chats"
           onClose={() => setShowDeleteConfirmation(false)}
           submit={
-            <Button
-              danger
+            <OpalButton
+              variant="danger"
               onClick={() => {
                 void handleDeleteAllChats();
               }}
               disabled={isDeleting}
             >
               {isDeleting ? "Deleting..." : "Delete"}
-            </Button>
+            </OpalButton>
           }
         >
           <Section gap={0.5} alignItems="start">
@@ -443,15 +442,15 @@ function GeneralSettings() {
               description="Permanently delete all your chat sessions."
               center
             >
-              <Button
-                danger
-                secondary
+              <OpalButton
+                variant="danger"
+                prominence="secondary"
                 onClick={() => setShowDeleteConfirmation(true)}
-                leftIcon={SvgTrash}
+                icon={SvgTrash}
                 transient={showDeleteConfirmation}
               >
                 Delete All Chats
-              </Button>
+              </OpalButton>
             </InputLayouts.Horizontal>
           </Card>
         </Section>
@@ -1123,9 +1122,9 @@ function AccountsAccessSettings() {
           title="Revoke Access Token"
           onClose={() => setTokenToDelete(null)}
           submit={
-            <Button danger onClick={() => deletePAT(tokenToDelete.id)}>
+            <OpalButton variant="danger" onClick={() => deletePAT(tokenToDelete.id)}>
               Revoke
-            </Button>
+            </OpalButton>
           }
         >
           <Section gap={0.5} alignItems="start">
@@ -1168,7 +1167,7 @@ function AccountsAccessSettings() {
                 icon={SvgLock}
                 title="Change Password"
                 submit={
-                  <Button
+                  <OpalButton
                     disabled={isSubmitting || !dirty || !isValid}
                     onClick={async () => {
                       setSubmitting(true);
@@ -1180,7 +1179,7 @@ function AccountsAccessSettings() {
                     }}
                   >
                     {isSubmitting ? "Updating..." : "Update"}
-                  </Button>
+                  </OpalButton>
                 }
                 onClose={() => {
                   setShowPasswordModal(false);
@@ -1264,14 +1263,14 @@ function AccountsAccessSettings() {
                 description="Update your account password."
                 center
               >
-                <Button
-                  secondary
-                  leftIcon={SvgLock}
+                <OpalButton
+                  prominence="secondary"
+                  icon={SvgLock}
                   onClick={() => setShowPasswordModal(true)}
                   transient={showPasswordModal}
                 >
                   Change Password
-                </Button>
+                </OpalButton>
               </InputLayouts.Horizontal>
             )}
           </Card>
@@ -1377,9 +1376,9 @@ function AccountsAccessSettings() {
                   <Text text03 secondaryBody>
                     Access tokens require an active paid subscription.
                   </Text>
-                  <Button secondary href="/admin/billing">
+                  <OpalButton prominence="secondary" href="/admin/billing">
                     Upgrade Plan
-                  </Button>
+                  </OpalButton>
                 </Section>
               </Card>
             )}
@@ -1455,13 +1454,13 @@ function FederatedConnectorCard({
           title={`Disconnect ${sourceMetadata.displayName}`}
           onClose={() => setShowDisconnectConfirmation(false)}
           submit={
-            <Button
-              danger
+            <OpalButton
+              variant="danger"
               onClick={() => void handleDisconnect()}
               disabled={isDisconnecting}
             >
               {isDisconnecting ? "Disconnecting..." : "Disconnect"}
-            </Button>
+            </OpalButton>
           }
         >
           <Section gap={0.5} alignItems="start">
@@ -1498,14 +1497,14 @@ function FederatedConnectorCard({
                 disabled={isDisconnecting}
               />
             ) : connector.authorize_url ? (
-              <Button
+              <OpalButton
+                prominence="internal"
                 href={connector.authorize_url}
                 target="_blank"
-                internal
                 rightIcon={SvgArrowExchange}
               >
                 Connect
-              </Button>
+              </OpalButton>
             ) : undefined
           }
         />

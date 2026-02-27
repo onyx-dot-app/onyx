@@ -9,7 +9,6 @@ import React, {
 } from "react";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
-import Button from "@/refresh-components/buttons/Button";
 import { Button as OpalButton } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
@@ -81,9 +80,9 @@ function HierarchyBreadcrumb({
     >
       {/* Root source link */}
       {path.length > 0 ? (
-        <Button tertiary onClick={onNavigateToRoot}>
+        <OpalButton prominence="tertiary" onClick={onNavigateToRoot}>
           {sourceMetadata.displayName}
-        </Button>
+        </OpalButton>
       ) : (
         <Text text03>{sourceMetadata.displayName}</Text>
       )}
@@ -111,12 +110,12 @@ function HierarchyBreadcrumb({
             {isLast ? (
               <Text text03>{node.title}</Text>
             ) : (
-              <Button
-                tertiary
+              <OpalButton
+                prominence="tertiary"
                 onClick={() => onNavigateToNode(node, actualIndex)}
               >
                 {node.title}
-              </Button>
+              </OpalButton>
             )}
           </React.Fragment>
         );
@@ -698,9 +697,9 @@ export default function SourceHierarchyBrowser({
       {viewSelectedOnly ? (
         <>
           <Spacer rem={0.5} />
-          <Button action tertiary onClick={handleToggleViewSelected}>
+          <OpalButton variant="action" prominence="tertiary" onClick={handleToggleViewSelected}>
             Selected items
-          </Button>
+          </OpalButton>
         </>
       ) : (
         (path.length > 0 || allNodes.length > 0) && (

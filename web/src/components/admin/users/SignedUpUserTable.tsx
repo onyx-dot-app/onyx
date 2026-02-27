@@ -295,6 +295,7 @@ export default function SignedUpUserTable({
               </>
             )}
             {user.password_configured && (
+              // TODO(opal-migration): migrate to opal Button once className/iconClassName is removed
               <Button
                 className={buttonClassName}
                 onClick={() => handleResetPassword(user)}

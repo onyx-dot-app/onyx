@@ -5,7 +5,12 @@ import { useRouter } from "next/navigation";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import Button from "@/refresh-components/buttons/Button";
+<<<<<<< HEAD
 import { FullPersona } from "@/app/admin/agents/interfaces";
+=======
+import { Button as OpalButton } from "@opal/components";
+import { FullPersona } from "@/app/admin/assistants/interfaces";
+>>>>>>> 99f4dcc5d (chore(fe): opal button migration)
 import { buildImgUrl } from "@/app/app/components/files/images/utils";
 import { Formik, Form, FieldArray } from "formik";
 import * as Yup from "yup";
@@ -217,6 +222,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
               iconName={values.icon_name ?? undefined}
               name={values.name}
             />
+            {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
             <Button
               className="absolute bottom-0 left-1/2 -translate-x-1/2 h-[1.75rem] mb-2 invisible group-hover/InputAvatar:visible"
               secondary
@@ -349,13 +355,13 @@ function MCPServerCard({
             onChange={(e) => setQuery(e.target.value)}
           />
           {enabledTools.length > 0 && (
-            <Button
-              internal
+            <OpalButton
+              prominence="internal"
               rightIcon={isFolded ? SvgExpand : SvgFold}
               onClick={() => setIsFolded((prev) => !prev)}
             >
               {isFolded ? "Expand" : "Fold"}
-            </Button>
+            </OpalButton>
           )}
         </GeneralLayouts.Section>
       </ActionsLayouts.Header>
@@ -1164,9 +1170,9 @@ export default function AgentEditorPage({
                       icon={SvgTrash}
                       title="Delete Agent"
                       submit={
-                        <Button danger onClick={handleDeleteAgent}>
+                        <OpalButton variant="danger" onClick={handleDeleteAgent}>
                           Delete Agent
-                        </Button>
+                        </OpalButton>
                       }
                       onClose={() => deleteAgentModal.toggle(false)}
                     >
@@ -1188,14 +1194,14 @@ export default function AgentEditorPage({
                       title={existingAgent ? "Edit Agent" : "Create Agent"}
                       rightChildren={
                         <div className="flex gap-2">
-                          <Button
+                          <OpalButton
+                            prominence="secondary"
                             type="button"
-                            secondary
                             onClick={() => router.back()}
                           >
                             Cancel
-                          </Button>
-                          <Button
+                          </OpalButton>
+                          <OpalButton
                             type="submit"
                             disabled={
                               isSubmitting ||
@@ -1205,7 +1211,7 @@ export default function AgentEditorPage({
                             }
                           >
                             {existingAgent ? "Save" : "Create"}
-                          </Button>
+                          </OpalButton>
                         </div>
                       }
                       backButton
@@ -1458,13 +1464,13 @@ export default function AgentEditorPage({
                                 description="with other users, groups, or everyone in your organization."
                                 center
                               >
-                                <Button
-                                  secondary
-                                  leftIcon={isShared ? SvgUsers : SvgLock}
+                                <OpalButton
+                                  prominence="secondary"
+                                  icon={isShared ? SvgUsers : SvgLock}
                                   onClick={() => shareAgentModal.toggle(true)}
                                 >
                                   Share
-                                </Button>
+                                </OpalButton>
                               </InputLayouts.Horizontal>
                               {canUpdateFeaturedStatus && (
                                 <>
@@ -1553,13 +1559,13 @@ export default function AgentEditorPage({
                               description="Anyone using this agent will no longer be able to access it."
                               center
                             >
-                              <Button
-                                secondary
-                                danger
+                              <OpalButton
+                                variant="danger"
+                                prominence="secondary"
                                 onClick={() => deleteAgentModal.toggle(true)}
                               >
                                 Delete Agent
-                              </Button>
+                              </OpalButton>
                             </InputLayouts.Horizontal>
                           </Card>
                         </>

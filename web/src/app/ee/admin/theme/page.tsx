@@ -2,7 +2,7 @@
 
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import {
   AppearanceThemeSettings,
   AppearanceThemeSettingsRef,

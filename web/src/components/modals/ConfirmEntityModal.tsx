@@ -1,5 +1,5 @@
 import Modal from "@/refresh-components/layouts/ConfirmationModalLayout";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { SvgAlertCircle } from "@opal/icons";
 import type { IconProps } from "@opal/types";
@@ -54,7 +54,7 @@ export function ConfirmEntityModal({
       title={`${buttonText} ${entityType}`}
       onClose={onClose}
       submit={
-        <Button onClick={onSubmit} danger={danger}>
+        <Button variant="danger" onClick={onSubmit}>
           {buttonText}
         </Button>
       }

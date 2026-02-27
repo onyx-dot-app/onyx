@@ -5,8 +5,7 @@ import { useState } from "react";
 import { ValidSources } from "@/lib/types";
 import { Section } from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
-import IconButton from "@/refresh-components/buttons/IconButton";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import Separator from "@/refresh-components/Separator";
 import { SvgChevronUp, SvgChevronDown, SvgEdit } from "@opal/icons";
 import Truncated from "@/refresh-components/texts/Truncated";
@@ -119,16 +118,16 @@ function ConfigItem({ label, value, onEdit }: ConfigItemProps) {
 
         {isExpandable && (
           <Button
-            tertiary
+            prominence="tertiary"
             size="md"
-            leftIcon={isExpanded ? SvgChevronUp : SvgChevronDown}
+            icon={isExpanded ? SvgChevronUp : SvgChevronDown}
             onClick={() => setIsExpanded(!isExpanded)}
           >
             {isExpanded ? "Show less" : `Show all (${value.length} items)`}
           </Button>
         )}
         {onEdit && (
-          <IconButton icon={SvgEdit} tertiary onClick={onEdit} tooltip="Edit" />
+          <Button prominence="tertiary" icon={SvgEdit} onClick={onEdit} tooltip="Edit"/>
         )}
       </Section>
     </Section>

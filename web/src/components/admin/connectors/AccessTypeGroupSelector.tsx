@@ -2,7 +2,7 @@ import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidE
 import React, { useState, useEffect } from "react";
 import { FieldArray, ArrayHelpers, ErrorMessage, useField } from "formik";
 import Text from "@/refresh-components/texts/Text";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import Separator from "@/refresh-components/Separator";
 import { UserGroup, UserRole } from "@/lib/types";
 import { useUserGroups } from "@/lib/hooks";
@@ -136,10 +136,9 @@ export function AccessTypeGroupSelector({
                       let isSelected = ind !== -1;
                       return (
                         <Button
+                          variant="action"
                           key={userGroup.id}
-                          primary
-                          action={isSelected}
-                          leftIcon={SvgUsers}
+                          icon={SvgUsers}
                           onClick={() => {
                             if (isSelected) {
                               arrayHelpers.remove(ind);

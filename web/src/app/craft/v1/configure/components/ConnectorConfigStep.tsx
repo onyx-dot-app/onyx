@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Formik, Form, useFormikContext } from "formik";
 import { Section } from "@/layouts/general-layouts";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { toast } from "@/hooks/useToast";
 import { ValidSources } from "@/lib/types";
 import { Credential } from "@/lib/connectors/credentials";
@@ -95,11 +95,10 @@ function ConnectorConfigForm({
             />
           ))}
         <Section flexDirection="row" justifyContent="between" height="fit">
-          <Button secondary onClick={onBack} disabled={isSubmitting}>
+          <Button prominence="secondary" onClick={onBack} disabled={isSubmitting}>
             Back
           </Button>
           <Button
-            primary
             type="button"
             onClick={handleSubmit}
             disabled={isSubmitting}

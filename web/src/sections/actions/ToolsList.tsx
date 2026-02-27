@@ -8,7 +8,6 @@ import FadingEdgeContainer from "@/refresh-components/FadingEdgeContainer";
 import ToolItemSkeleton from "@/sections/actions/skeleton/ToolItemSkeleton";
 import EnabledCount from "@/refresh-components/EnabledCount";
 import { SvgEye, SvgXCircle } from "@opal/icons";
-import Button from "@/refresh-components/buttons/Button";
 
 export interface ToolsListProps {
   // Loading state
@@ -123,9 +122,9 @@ const ToolsList: React.FC<ToolsListProps> = ({
                 />
               )}
               {onUpdateToolsStatus && enabledCount === 0 && (
-                <Button tertiary onClick={() => onUpdateToolsStatus(true)}>
+                <OpalButton prominence="tertiary" onClick={() => onUpdateToolsStatus(true)}>
                   Enable all
-                </Button>
+                </OpalButton>
               )}
             </div>
           </div>

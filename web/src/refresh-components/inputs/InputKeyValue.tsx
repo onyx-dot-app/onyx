@@ -79,7 +79,6 @@ import React, {
 import { cn } from "@/lib/utils";
 import InputTypeIn from "./InputTypeIn";
 import { Button as OpalButton } from "@opal/components";
-import Button from "@/refresh-components/buttons/Button";
 import Text from "@/refresh-components/texts/Text";
 import { FieldContext } from "../form/FieldContext";
 import { FieldMessage } from "../messages/FieldMessage";
@@ -488,16 +487,16 @@ const KeyValueInput = ({
       )}
 
       <div>
-        <Button
+        <OpalButton
+          prominence="secondary"
           onClick={handleAdd}
-          secondary
           disabled={disabled}
-          leftIcon={SvgPlusCircle}
+          icon={SvgPlusCircle}
           aria-label={`Add ${keyTitle} and ${valueTitle} pair`}
           type="button"
         >
           {addButtonLabel}
-        </Button>
+        </OpalButton>
       </div>
     </div>
   );

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import Button from "@/refresh-components/buttons/Button";
 import {
   Table,
   TableBody,
@@ -315,7 +314,7 @@ export default function TextViewModal({
                     <Text as="p" text03 mainUiBody>
                       This file format is not supported for preview.
                     </Text>
-                    <Button onClick={handleDownload}>Download File</Button>
+                    <OpalButton onClick={handleDownload}>Download File</OpalButton>
                   </div>
                 )}
               </div>
@@ -325,7 +324,7 @@ export default function TextViewModal({
 
         <Modal.Footer>
           <BasicModalFooter
-            submit={<Button onClick={handleDownload}>Download File</Button>}
+            submit={<OpalButton onClick={handleDownload}>Download File</OpalButton>}
           />
         </Modal.Footer>
       </Modal.Content>

@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { Section } from "@/layouts/general-layouts";
 import Button from "@/refresh-components/buttons/Button";
+import { Button as OpalButton } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { SvgArrowUpCircle, SvgWallet } from "@opal/icons";
 import type { IconProps } from "@opal/types";
@@ -66,13 +67,14 @@ function FooterLinks({
           <Text secondaryBody text03>
             Have a license key?
           </Text>
-          <Button action tertiary onClick={onActivateLicense}>
+          <OpalButton variant="action" prominence="tertiary" onClick={onActivateLicense}>
             <Text secondaryBody text05 className="underline">
               {licenseText}
             </Text>
-          </Button>
+          </OpalButton>
         </>
       )}
+      {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
       <Button
         action
         tertiary

@@ -281,6 +281,7 @@ export function CustomModal({
                                   </div>
                                 </div>
                                 <div className="my-auto">
+                                  {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
                                   <IconButton
                                     icon={SvgX}
                                     className="my-auto"

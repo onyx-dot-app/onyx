@@ -3,7 +3,7 @@
 import { useMemo, useCallback } from "react";
 import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { useAppRouter } from "@/hooks/appNavigation";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { usePinnedAgents, useAgent } from "@/hooks/useAgents";
@@ -146,6 +146,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
               rightChildren={
                 <>
                   {isOwnedByUser && isPaidEnterpriseFeaturesEnabled && (
+                    // TODO(opal-migration): migrate to opal Button once className/iconClassName is removed
                     <IconButton
                       icon={SvgBarChart}
                       tertiary
@@ -157,6 +158,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
                     />
                   )}
                   {isOwnedByUser && (
+                    // TODO(opal-migration): migrate to opal Button once className/iconClassName is removed
                     <IconButton
                       icon={SvgEdit}
                       tertiary
@@ -168,6 +170,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
                     />
                   )}
                   {isOwnedByUser && (
+                    // TODO(opal-migration): migrate to opal Button once className/iconClassName is removed
                     <IconButton
                       icon={SvgShare}
                       tertiary
@@ -176,6 +179,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
                       className="hidden group-hover/AgentCard:flex"
                     />
                   )}
+                  {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
                   <IconButton
                     icon={pinned ? SvgPinned : SvgPin}
                     tertiary
@@ -219,7 +223,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
             {/* Right side - Start Chat button */}
             <div className="p-0.5">
               <Button
-                tertiary
+                prominence="tertiary"
                 rightIcon={SvgBubbleText}
                 onClick={noProp(handleStartChat)}
               >

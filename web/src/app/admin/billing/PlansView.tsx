@@ -21,6 +21,7 @@ import "@/app/admin/billing/billing.css";
 import type { IconProps } from "@opal/types";
 import Card from "@/refresh-components/cards/Card";
 import Button from "@/refresh-components/buttons/Button";
+import { Button as OpalButton } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { Section } from "@/layouts/general-layouts";
 
@@ -146,26 +147,27 @@ function PlanCard({
         {/* Button */}
         <div className="plan-card-button">
           {isCurrentPlan ? (
+            // TODO(opal-migration): migrate to opal Button once className/iconClassName is removed
             <Button tertiary transient className="pointer-events-none">
               <Text mainUiAction text03>
                 Your Current Plan
               </Text>
             </Button>
           ) : href ? (
-            <Button
-              main
-              secondary
+            <OpalButton
+              prominence="secondary"
               href={href}
               target="_blank"
               rel="noopener noreferrer"
             >
               {buttonLabel}
-            </Button>
+            </OpalButton>
           ) : onClick ? (
-            <Button main primary onClick={onClick} leftIcon={ButtonIcon}>
+            <OpalButton onClick={onClick} icon={ButtonIcon}>
               {buttonLabel}
-            </Button>
+            </OpalButton>
           ) : (
+            // TODO(opal-migration): migrate to opal Button once className/iconClassName is removed
             <Button tertiary transient className="pointer-events-none">
               <Text mainUiAction text03>
                 Included in your plan

@@ -7,7 +7,6 @@ import Modal from "@/refresh-components/Modal";
 import * as InputLayouts from "@/layouts/input-layouts";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
-import Button from "@/refresh-components/buttons/Button";
 import { createMCPServer, updateMCPServer } from "@/lib/tools/mcpService";
 import {
   MCPServerCreateRequest,
@@ -221,8 +220,8 @@ export default function AddMCPServerModal({
                           tooltip="Disconnect Server"
                           onClick={handleDisconnectClick}
                         />
-                        <Button
-                          secondary
+                        <OpalButton
+                          prominence="secondary"
                           type="button"
                           onClick={() => {
                             // Close this modal and open the auth modal for this server
@@ -231,23 +230,22 @@ export default function AddMCPServerModal({
                           }}
                         >
                           Edit Configs
-                        </Button>
+                        </OpalButton>
                       </Section>
                     </Section>
                   )}
               </Modal.Body>
 
               <Modal.Footer>
-                <Button
-                  secondary
+                <OpalButton
+                  prominence="secondary"
                   type="button"
                   onClick={() => handleModalClose(false)}
                   disabled={isSubmitting}
                 >
                   Cancel
-                </Button>
-                <Button
-                  primary
+                </OpalButton>
+                <OpalButton
                   type="submit"
                   disabled={isSubmitting || !isValid || !dirty}
                 >
@@ -258,7 +256,7 @@ export default function AddMCPServerModal({
                     : isEditMode
                       ? "Save Changes"
                       : "Add Server"}
-                </Button>
+                </OpalButton>
               </Modal.Footer>
             </Form>
           )}
