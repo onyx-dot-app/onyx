@@ -54,7 +54,8 @@ function LogoSection({ folded, onFoldClick }: LogoSectionProps) {
           </div>
         </>
       ) : folded ? (
-        <div className="w-full justify-center">{closeButton(false)}</div>
+      ) : folded ? (
+        <div className="flex w-full justify-center">{closeButton(false)}</div>
       ) : (
         <>
           <div className="p-1"> {logo()}</div>
