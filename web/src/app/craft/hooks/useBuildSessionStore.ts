@@ -2068,6 +2068,15 @@ export const useIsRunning = () =>
     return session?.status === "running" || session?.status === "creating";
   });
 
+/** True only when the LLM is actively streaming a response. */
+export const useIsStreaming = () =>
+  useBuildSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    if (!currentSessionId) return false;
+    const session = sessions.get(currentSessionId);
+    return session?.status === "running";
+  });
+
 export const useMessages = () =>
   useBuildSessionStore((state) => {
     const { currentSessionId, sessions } = state;

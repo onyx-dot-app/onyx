@@ -53,9 +53,11 @@ export interface InputBarProps {
     files: BuildFile[],
     demoDataEnabled: boolean
   ) => void;
-  /** Callback to stop the current generation. If provided and isRunning is true, shows a stop button. */
+  /** Callback to stop the current generation. If provided and isStreaming is true, shows a stop button. */
   onStop?: () => void;
   isRunning: boolean;
+  /** True only when the LLM is actively streaming. Controls whether the stop button is shown. */
+  isStreaming?: boolean;
   disabled?: boolean;
   placeholder?: string;
   /** When true, shows spinner on send button with "Initializing sandbox..." tooltip */
@@ -158,6 +160,7 @@ const InputBar = memo(
         onSubmit,
         onStop,
         isRunning,
+        isStreaming = false,
         disabled = false,
         placeholder = "Describe your task...",
         sandboxInitializing = false,
@@ -410,7 +413,7 @@ const InputBar = memo(
               {/* Bottom right controls */}
               <div className="flex flex-row items-center gap-1">
                 {/* Submit button - shows Stop when running, Send otherwise */}
-                {isRunning && onStop ? (
+                {isStreaming && onStop ? (
                   <IconButton
                     icon={SvgStop}
                     onClick={() => onStop()}
