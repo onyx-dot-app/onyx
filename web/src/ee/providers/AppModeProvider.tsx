@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { AppModeContext, AppMode } from "@/providers/AppModeProvider";
 import { useUser } from "@/providers/UserProvider";
@@ -27,12 +27,18 @@ export function AppModeProvider({ children }: AppModeProviderProps) {
   const { isSearchModeAvailable } = settings;
 
   const persistedMode = user?.preferences?.default_app_mode;
-  const initialMode: AppMode =
-    isPaidEnterpriseFeaturesEnabled && isSearchModeAvailable && persistedMode
-      ? (persistedMode.toLowerCase() as AppMode)
-      : "chat";
+  const [appMode, setAppModeState] = useState<AppMode>("chat");
 
-  const [appMode, setAppModeState] = useState<AppMode>(initialMode);
+  useEffect(() => {
+    if (!isPaidEnterpriseFeaturesEnabled || !isSearchModeAvailable) {
+      setAppModeState("chat");
+      return;
+    }
+
+    if (persistedMode) {
+      setAppModeState(persistedMode.toLowerCase() as AppMode);
+    }
+  }, [isPaidEnterpriseFeaturesEnabled, isSearchModeAvailable, persistedMode]);
 
   const setAppMode = useCallback(
     (mode: AppMode) => {

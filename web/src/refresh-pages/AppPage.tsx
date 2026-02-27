@@ -483,13 +483,14 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     (user?.preferences?.default_app_mode?.toLowerCase() as "chat" | "search") ??
     "chat";
 
+  const isNewSession = appFocus.isNewSession();
+
   // 1. Reset the app-mode back to the user's default when navigating back to the "New Sessions" tab.
   // 2. If we're navigating away from the "New Session" tab after performing a search, we reset the app-input-bar.
   useEffect(() => {
-    if (appFocus.isNewSession()) setAppMode(defaultAppMode);
-    if (!appFocus.isNewSession() && classification === "search")
-      resetInputBar();
-  }, [appFocus.isNewSession()]);
+    if (isNewSession) setAppMode(defaultAppMode);
+    if (!isNewSession && classification === "search") resetInputBar();
+  }, [isNewSession, defaultAppMode, classification, resetInputBar, setAppMode]);
 
   const handleSearchDocumentClick = useCallback(
     (doc: MinimalOnyxDocument) => setPresentingDocument(doc),
