@@ -5,6 +5,7 @@ import { OllamaModal } from "./OllamaModal";
 import { AzureModal } from "./AzureModal";
 import { VertexAIModal } from "./VertexAIModal";
 import { OpenRouterModal } from "./OpenRouterModal";
+import { AvianModal } from "./AvianModal";
 import { CustomModal } from "./CustomModal";
 import { BedrockModal } from "./BedrockModal";
 
@@ -44,6 +45,8 @@ export function getModalForExistingProvider(
       return <BedrockModal {...props} />;
     case LLMProviderName.OPENROUTER:
       return <OpenRouterModal {...props} />;
+    case LLMProviderName.AVIAN:
+      return <AvianModal {...props} />;
     default:
       return <CustomModal {...props} />;
   }

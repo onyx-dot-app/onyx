@@ -292,9 +292,12 @@ class LitellmLLM(LLM):
         optional_kwargs: dict[str, Any] = {}
 
         # Model name
+        is_avian = self._model_provider == LlmProviderNames.AVIAN
         model_provider = (
             f"{self.config.model_provider}/responses"
             if is_openai_model  # Uses litellm's completions -> responses bridge
+            # Avian is OpenAI-compatible; route through LiteLLM's openai provider
+            else "openai" if is_avian
             else self.config.model_provider
         )
         model = (

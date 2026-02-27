@@ -18,6 +18,7 @@ export { default as SvgArrowUpDot } from "@opal/icons/arrow-up-dot";
 export { default as SvgArrowUpRight } from "@opal/icons/arrow-up-right";
 export { default as SvgArrowWallRight } from "@opal/icons/arrow-wall-right";
 export { default as SvgAudioEqSmall } from "@opal/icons/audio-eq-small";
+export { default as SvgAvian } from "@opal/icons/avian";
 export { default as SvgAws } from "@opal/icons/aws";
 export { default as SvgAzure } from "@opal/icons/azure";
 export { default as SvgBarChart } from "@opal/icons/bar-chart";
