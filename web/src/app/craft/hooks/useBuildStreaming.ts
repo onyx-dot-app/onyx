@@ -450,10 +450,16 @@ export function useBuildStreaming() {
 
   /**
    * Abort the current streaming operation.
-   * This both:
-   * 1. Aborts the HTTP request (via AbortController)
-   * 2. Sends a cancel notification to the ACP agent (via backend API)
-   * 3. Updates session status to "cancelled" to update UI state
+   *
+   * Sends a cancel notification to the ACP agent so it stops gracefully.
+   * The stream stays open so we receive the final `prompt_response` event,
+   * which triggers the normal message-saving path (both backend DB persist
+   * and frontend state consolidation).
+   *
+   * Previous approach (kept for reference): we used to also abort the HTTP
+   * request via `abortSession()`, but that killed the connection before the
+   * backend could save the partial message to the DB, causing the assistant
+   * message to disappear when the user sent a follow-up.
    */
   const abortStream = useCallback(
     async (sessionId?: string) => {
@@ -464,20 +470,28 @@ export function useBuildStreaming() {
         return;
       }
 
-      // First, send cancel to the backend to stop the agent
-      // This sends session/cancel notification per ACP protocol
+      // Send cancel to the backend to stop the agent.
+      // This sends session/cancel notification per ACP protocol.
+      // The stream stays open so the agent can finish up and send
+      // a prompt_response, allowing normal save logic to run.
       try {
         await cancelMessage(targetSessionId);
       } catch (err) {
         console.error("[Streaming] Failed to cancel agent operation:", err);
+        // If cancel fails, fall back to hard abort so the UI doesn't hang
+        updateSessionData(targetSessionId, { status: "cancelled" });
+        abortSession(targetSessionId);
       }
 
-      // Update status first so the UI transitions atomically (stop button
-      // disappears and cancellation message appears before the stream closes)
-      updateSessionData(targetSessionId, { status: "cancelled" });
-
-      // Abort the HTTP request to stop receiving events
-      abortSession(targetSessionId);
+      // NOTE: We intentionally do NOT call abortSession() here.
+      // The stream continues until the agent sends prompt_response,
+      // at which point the normal prompt_response handler (above)
+      // saves the message and transitions status to "active".
+      //
+      // Previous hard-abort approach (kept in case graceful cancel
+      // doesn't work reliably):
+      // updateSessionData(targetSessionId, { status: "cancelled" });
+      // abortSession(targetSessionId);
     },
     [abortSession, updateSessionData]
   );
