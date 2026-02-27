@@ -35,7 +35,7 @@ import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useFilter from "@/hooks/useFilter";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
-import { Button as OpalButton } from "@opal/components";
+import { Button } from "@opal/components";
 import useFederatedOAuthStatus from "@/hooks/useFederatedOAuthStatus";
 import useCCPairs from "@/hooks/useCCPairs";
 import { ValidSources } from "@/lib/types";
@@ -107,14 +107,14 @@ function PATModal({
       onClose={onClose}
       submit={
         !!createdToken?.token ? (
-          <OpalButton onClick={onClose}>Done</OpalButton>
+          <Button onClick={onClose}>Done</Button>
         ) : (
-          <OpalButton
+          <Button
             onClick={onCreate}
             disabled={isCreating || !newTokenName.trim()}
           >
             {isCreating ? "Creating Token..." : "Create Token"}
-          </OpalButton>
+          </Button>
         )
       }
       hideCancel={!!createdToken}
@@ -236,7 +236,7 @@ function GeneralSettings() {
           title="Delete All Chats"
           onClose={() => setShowDeleteConfirmation(false)}
           submit={
-            <OpalButton
+            <Button
               variant="danger"
               onClick={() => {
                 void handleDeleteAllChats();
@@ -244,7 +244,7 @@ function GeneralSettings() {
               disabled={isDeleting}
             >
               {isDeleting ? "Deleting..." : "Delete"}
-            </OpalButton>
+            </Button>
           }
         >
           <Section gap={0.5} alignItems="start">
@@ -442,7 +442,7 @@ function GeneralSettings() {
               description="Permanently delete all your chat sessions."
               center
             >
-              <OpalButton
+              <Button
                 variant="danger"
                 prominence="secondary"
                 onClick={() => setShowDeleteConfirmation(true)}
@@ -450,7 +450,7 @@ function GeneralSettings() {
                 transient={showDeleteConfirmation}
               >
                 Delete All Chats
-              </OpalButton>
+              </Button>
             </InputLayouts.Horizontal>
           </Card>
         </Section>
@@ -697,7 +697,7 @@ function PromptShortcuts() {
                   }
                 />
                 <Section>
-                  <OpalButton
+                  <Button
                     icon={SvgMinusCircle}
                     onClick={() => void handleRemoveShortcut(index)}
                     prominence="tertiary"
@@ -1122,9 +1122,9 @@ function AccountsAccessSettings() {
           title="Revoke Access Token"
           onClose={() => setTokenToDelete(null)}
           submit={
-            <OpalButton variant="danger" onClick={() => deletePAT(tokenToDelete.id)}>
+            <Button variant="danger" onClick={() => deletePAT(tokenToDelete.id)}>
               Revoke
-            </OpalButton>
+            </Button>
           }
         >
           <Section gap={0.5} alignItems="start">
@@ -1167,7 +1167,7 @@ function AccountsAccessSettings() {
                 icon={SvgLock}
                 title="Change Password"
                 submit={
-                  <OpalButton
+                  <Button
                     disabled={isSubmitting || !dirty || !isValid}
                     onClick={async () => {
                       setSubmitting(true);
@@ -1179,7 +1179,7 @@ function AccountsAccessSettings() {
                     }}
                   >
                     {isSubmitting ? "Updating..." : "Update"}
-                  </OpalButton>
+                  </Button>
                 }
                 onClose={() => {
                   setShowPasswordModal(false);
@@ -1263,14 +1263,14 @@ function AccountsAccessSettings() {
                 description="Update your account password."
                 center
               >
-                <OpalButton
+                <Button
                   prominence="secondary"
                   icon={SvgLock}
                   onClick={() => setShowPasswordModal(true)}
                   transient={showPasswordModal}
                 >
                   Change Password
-                </OpalButton>
+                </Button>
               </InputLayouts.Horizontal>
             )}
           </Card>
@@ -1354,7 +1354,7 @@ function AccountsAccessSettings() {
                               description={pat.token_display}
                               middleText={middleText}
                               rightChildren={
-                                <OpalButton
+                                <Button
                                   icon={SvgTrash}
                                   onClick={() => setTokenToDelete(pat)}
                                   prominence="tertiary"
@@ -1376,9 +1376,9 @@ function AccountsAccessSettings() {
                   <Text text03 secondaryBody>
                     Access tokens require an active paid subscription.
                   </Text>
-                  <OpalButton prominence="secondary" href="/admin/billing">
+                  <Button prominence="secondary" href="/admin/billing">
                     Upgrade Plan
-                  </OpalButton>
+                  </Button>
                 </Section>
               </Card>
             )}
@@ -1454,13 +1454,13 @@ function FederatedConnectorCard({
           title={`Disconnect ${sourceMetadata.displayName}`}
           onClose={() => setShowDisconnectConfirmation(false)}
           submit={
-            <OpalButton
+            <Button
               variant="danger"
               onClick={() => void handleDisconnect()}
               disabled={isDisconnecting}
             >
               {isDisconnecting ? "Disconnecting..." : "Disconnect"}
-            </OpalButton>
+            </Button>
           }
         >
           <Section gap={0.5} alignItems="start">
@@ -1489,7 +1489,7 @@ function FederatedConnectorCard({
           paddingVariant="sm"
           rightChildren={
             connector.has_oauth_token ? (
-              <OpalButton
+              <Button
                 icon={SvgUnplug}
                 prominence="tertiary"
                 size="sm"
@@ -1497,14 +1497,14 @@ function FederatedConnectorCard({
                 disabled={isDisconnecting}
               />
             ) : connector.authorize_url ? (
-              <OpalButton
+              <Button
                 prominence="internal"
                 href={connector.authorize_url}
                 target="_blank"
                 rightIcon={SvgArrowExchange}
               >
                 Connect
-              </OpalButton>
+              </Button>
             ) : undefined
           }
         />

@@ -20,7 +20,7 @@ import { UNNAMED_CHAT } from "@/lib/constants";
 import ShareChatSessionModal from "@/sections/modals/ShareChatSessionModal";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import { Button as OpalButton } from "@opal/components";
+import { Button } from "@opal/components";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { DRAG_TYPES, LOCAL_STORAGE_KEYS } from "@/sections/sidebar/constants";
 import {
@@ -74,7 +74,7 @@ export function PopoverSearchInput({
 
   return (
     <div className="flex flex-row items-center">
-      <OpalButton
+      <Button
         icon={SvgChevronLeft}
         onClick={handleClickBackButton}
         prominence="tertiary"
@@ -455,7 +455,7 @@ const ChatButton = memo(
             icon={SvgTrash}
             onClose={() => setDeleteConfirmationModalOpen(false)}
             submit={
-              <OpalButton
+              <Button
                 variant="danger"
                 onClick={() => {
                   setDeleteConfirmationModalOpen(false);
@@ -463,7 +463,7 @@ const ChatButton = memo(
                 }}
               >
                 Delete
-              </OpalButton>
+              </Button>
             }
           >
             Are you sure you want to delete this chat? This action cannot be
