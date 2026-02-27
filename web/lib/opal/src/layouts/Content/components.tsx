@@ -151,11 +151,7 @@ function Content(props: ContentProps) {
       `Content: no layout matched for sizePreset="${sizePreset}" variant="${variant}"`
     );
 
-  // When width is "auto" (default), render without a wrapper to avoid
-  // an extra DOM node. For "full", wrap with the width class.
-  if (widthVariant === "auto") return layout;
-
-  return <div className={cn(widthClass)}>{layout}</div>;
+  return <div className={widthClass}>{layout}</div>;
 }
 
 // ---------------------------------------------------------------------------
