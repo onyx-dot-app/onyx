@@ -10,7 +10,7 @@ type SortDirection = "none" | "ascending" | "descending";
  * A table header cell with optional sort controls and a resize handle indicator.
  * Renders as a `<th>` element with Figma-matched typography and spacing.
  */
-interface TableHeadProps {
+interface TableHeadCustomProps {
   /** Header label content. */
   children: React.ReactNode;
   /** Current sort state. When omitted, no sort button is shown. */
@@ -26,9 +26,13 @@ interface TableHeadProps {
   alignment?: "left" | "center" | "right";
   /** Cell density. `"small"` uses tighter padding for denser layouts. */
   size?: "regular" | "small";
-  /** Additional classes on the outer `<th>` element. */
-  className?: string;
 }
+
+type TableHeadProps = TableHeadCustomProps &
+  Omit<
+    React.ThHTMLAttributes<HTMLTableCellElement>,
+    keyof TableHeadCustomProps
+  >;
 
 /**
  * Table header cell primitive. Displays a column label with optional sort
@@ -55,11 +59,13 @@ export default function TableHead({
   alignment = "left",
   size = "regular",
   className,
+  ...thProps
 }: TableHeadProps) {
   const isSmall = size === "small";
   const resolvedIcon = iconFn;
   return (
     <th
+      {...thProps}
       className={cn(
         "group relative",
         alignmentThClass[alignment],
