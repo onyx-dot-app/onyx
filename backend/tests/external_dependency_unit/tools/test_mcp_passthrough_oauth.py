@@ -46,8 +46,6 @@ def _create_test_persona_with_mcp_tool(
     persona = Persona(
         name=f"Test MCP Persona {uuid4().hex[:8]}",
         description="Test persona with MCP tools",
-        chunks_above=0,
-        chunks_below=0,
         system_prompt="You are a helpful assistant",
         task_prompt="Answer the user's question",
         tools=tools,

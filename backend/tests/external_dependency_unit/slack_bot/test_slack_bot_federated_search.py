@@ -54,8 +54,6 @@ def _create_test_persona_with_slack_config(db_session: Session) -> Persona | Non
     persona = Persona(
         name=f"test_slack_persona_{unique_id}",
         description="Test persona for Slack federated search",
-        chunks_above=0,
-        chunks_below=0,
         system_prompt="You are a helpful assistant.",
         task_prompt="Answer the user's question based on the provided context.",
     )
@@ -814,8 +812,6 @@ def test_slack_channel_config_eager_loads_persona(db_session: Session) -> None:
     persona = Persona(
         name=f"test_eager_load_persona_{unique_id}",
         description="Test persona for eager loading test",
-        chunks_above=0,
-        chunks_below=0,
         system_prompt="You are a helpful assistant.",
         task_prompt="Answer the user's question.",
     )

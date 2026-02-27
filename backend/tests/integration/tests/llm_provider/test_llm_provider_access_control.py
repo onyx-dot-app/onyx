@@ -77,8 +77,6 @@ def _create_persona(
     persona = Persona(
         name=name,
         description=f"{name} description",
-        chunks_above=2,
-        chunks_below=2,
         llm_model_provider_override=provider_name,
         llm_model_version_override="gpt-4o-mini",
         system_prompt="System prompt",

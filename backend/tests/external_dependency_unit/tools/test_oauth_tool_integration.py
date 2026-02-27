@@ -56,8 +56,6 @@ def _create_test_persona(db_session: Session, user: User, tools: list[Tool]) -> 
     persona = Persona(
         name=f"Test Persona {uuid4().hex[:8]}",
         description="Test persona",
-        chunks_above=0,
-        chunks_below=0,
         system_prompt="You are a helpful assistant",
         task_prompt="Answer the user's question",
         tools=tools,
