@@ -126,11 +126,6 @@ function SettingsPopover({
             target="_blank"
             rel="noopener noreferrer"
           >
-            href="https://docs.onyx.app"
-            className="block"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
             <LineItem key="help-faq" icon={SvgExternalLink}>
               Help & FAQ
             </LineItem>
