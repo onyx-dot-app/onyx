@@ -241,8 +241,7 @@ _VECTOR_DB_BEAT_TASK_NAMES: set[str] = {
     "check-for-index-attempt-cleanup",
     "check-for-doc-permissions-sync",
     "check-for-external-group-sync",
-    "check-for-documents-for-opensearch-migration",
-    "migrate-documents-from-vespa-to-opensearch",
+    "migrate-chunks-from-vespa-to-opensearch",
 }
 
 if DISABLE_VECTOR_DB:
