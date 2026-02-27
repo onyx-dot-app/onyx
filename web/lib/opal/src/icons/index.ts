@@ -77,6 +77,7 @@ export { default as SvgFolderPartialOpen } from "@opal/icons/folder-partial-open
 export { default as SvgFolderPlus } from "@opal/icons/folder-plus";
 export { default as SvgGemini } from "@opal/icons/gemini";
 export { default as SvgGlobe } from "@opal/icons/globe";
+export { default as SvgHandle } from "@opal/icons/handle";
 export { default as SvgHardDrive } from "@opal/icons/hard-drive";
 export { default as SvgHashSmall } from "@opal/icons/hash-small";
 export { default as SvgHash } from "@opal/icons/hash";
@@ -143,6 +144,7 @@ export { default as SvgSlack } from "@opal/icons/slack";
 export { default as SvgSlash } from "@opal/icons/slash";
 export { default as SvgSliders } from "@opal/icons/sliders";
 export { default as SvgSlidersSmall } from "@opal/icons/sliders-small";
+export { default as SvgSort } from "@opal/icons/sort";
 export { default as SvgSparkle } from "@opal/icons/sparkle";
 export { default as SvgStar } from "@opal/icons/star";
 export { default as SvgStep1 } from "@opal/icons/step1";
