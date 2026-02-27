@@ -82,7 +82,7 @@ def test_setup_attaches_instrumentator_to_app() -> None:
             inprogress_labels=True,
             excluded_handlers=["/health", "/metrics", "/openapi.json"],
         )
-        assert mock_instance.add.call_count == 2
+        assert mock_instance.add.call_count == 3
         mock_instance.instrument.assert_called_once_with(
             app,
             latency_lowr_buckets=(
