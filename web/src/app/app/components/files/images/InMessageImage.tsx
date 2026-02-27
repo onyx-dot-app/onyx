@@ -42,6 +42,25 @@ export function InMessageImage({
   const { container: shapeContainerClasses, image: shapeImageClasses } =
     SHAPE_CLASSES[normalizedShape];
 
+  const handleDownload = async (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent opening the full image modal
+
+    try {
+      const response = await fetch(buildImgUrl(fileId));
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileName || `image-${fileId}.png`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error("Failed to download image:", error);
+    }
+  };
+
   return (
     <>
       <FullImageModal
@@ -75,11 +94,12 @@ export function InMessageImage({
           className={cn(
             "absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 z-10"
           )}
-          onClick={(e) => e.stopPropagation()}
         >
-          <a href={buildImgUrl(fileId)} download={fileName || true}>
-            <Button icon={SvgDownload} tooltip="Download" />
-          </a>
+          <Button
+            icon={SvgDownload}
+            tooltip="Download"
+            onClick={handleDownload}
+          />
         </div>
       </div>
     </>
