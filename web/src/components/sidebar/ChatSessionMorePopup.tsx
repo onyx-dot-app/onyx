@@ -15,7 +15,7 @@ import MoveCustomAgentChatModal from "@/components/modals/MoveCustomAgentChatMod
 // PopoverMenu already imported above
 import { cn, noProp } from "@/lib/utils";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { SvgFolder, SvgFolderIn, SvgShare, SvgTrash } from "@opal/icons";
@@ -246,7 +246,7 @@ export function ChatSessionMorePopup({
           icon={SvgTrash}
           onClose={() => setIsDeleteModalOpen(false)}
           submit={
-            <Button danger onClick={handleConfirmDelete}>
+            <Button variant="danger" onClick={handleConfirmDelete}>
               Delete
             </Button>
           }

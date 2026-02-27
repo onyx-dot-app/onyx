@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/table";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import Button from "@/refresh-components/buttons/Button";
+import { Button as OpalButton } from "@opal/components";
 import { DeleteButton } from "@/components/DeleteButton";
 import { Bubble } from "@/components/Bubble";
 import { BookmarkIcon, RobotIcon } from "@/components/icons/icons";
@@ -277,7 +278,7 @@ export const GroupDisplay = ({
         tooltip="Cannot update group while sync is occurring"
         disabled={userGroup.is_up_to_date}
       >
-        <Button
+        <OpalButton
           disabled={!userGroup.is_up_to_date}
           onClick={() => {
             if (userGroup.is_up_to_date) {
@@ -286,7 +287,7 @@ export const GroupDisplay = ({
           }}
         >
           Add Users
-        </Button>
+        </OpalButton>
       </SimpleTooltip>
       {addMemberFormVisible && (
         <AddMemberForm
@@ -377,7 +378,7 @@ export const GroupDisplay = ({
         tooltip="Cannot update group while sync is occurring"
         disabled={userGroup.is_up_to_date}
       >
-        <Button
+        <OpalButton
           disabled={!userGroup.is_up_to_date}
           onClick={() => {
             if (userGroup.is_up_to_date) {
@@ -386,7 +387,7 @@ export const GroupDisplay = ({
           }}
         >
           Add Connectors
-        </Button>
+        </OpalButton>
       </SimpleTooltip>
 
       {addConnectorFormVisible && (
@@ -467,6 +468,7 @@ export const GroupDisplay = ({
       />
 
       {isAdmin && (
+        // TODO(opal-migration): migrate to opal Button once className/iconClassName is removed
         <Button
           className="mt-3"
           onClick={() => setAddRateLimitFormVisible(true)}

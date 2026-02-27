@@ -60,6 +60,7 @@ const AddUserFormRenderer = ({
     {touched.emails && errors.emails && (
       <div className="text-error text-sm">{errors.emails}</div>
     )}
+    {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
     <Button type="submit" disabled={isSubmitting} className="self-end">
       Add
     </Button>

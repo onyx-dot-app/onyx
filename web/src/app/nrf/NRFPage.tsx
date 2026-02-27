@@ -7,7 +7,7 @@ import { toast } from "@/hooks/useToast";
 import { AuthType } from "@/lib/constants";
 import Button from "@/refresh-components/buttons/Button";
 import AppInputBar, { AppInputBarHandle } from "@/sections/input/AppInputBar";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button as OpalButton } from "@opal/components";
 import Modal from "@/refresh-components/Modal";
 import { useFilters, useLlmManager } from "@/lib/hooks";
 import Dropzone from "react-dropzone";
@@ -418,10 +418,10 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       {/* Settings button */}
       {!isSidePanel && (
         <div className="absolute top-0 right-0 p-4 z-10">
-          <IconButton
+          <OpalButton
+            prominence="secondary"
             icon={SvgMenu}
             onClick={toggleSettings}
-            secondary
             tooltip="Open settings"
           />
         </div>
@@ -566,12 +566,12 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                 onClose={() => setShowTurnOffModal(false)}
               />
               <Modal.Footer>
-                <Button secondary onClick={() => setShowTurnOffModal(false)}>
+                <OpalButton prominence="secondary" onClick={() => setShowTurnOffModal(false)}>
                   Cancel
-                </Button>
-                <Button danger onClick={confirmTurnOff}>
+                </OpalButton>
+                <OpalButton variant="danger" onClick={confirmTurnOff}>
                   Turn off
-                </Button>
+                </OpalButton>
               </Modal.Footer>
             </Modal.Content>
           </Modal>
@@ -591,6 +591,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                 />
               ) : (
                 <div className="flex flex-col items-center">
+                  {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
                   <Button
                     className="w-full"
                     secondary
@@ -612,6 +613,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       )}
 
       {user && !llmManager.isLoadingProviders && !llmManager.hasAnyProvider && (
+        // TODO(opal-migration): migrate to opal Button once className/iconClassName is removed
         <Button
           className="w-full"
           secondary

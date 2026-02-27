@@ -2,7 +2,7 @@
 import { AdminPageTitle } from "@/components/admin/Title";
 import { SourceCategory, SourceMetadata } from "@/lib/search/interfaces";
 import { listSourceMetadata } from "@/lib/sources";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import {
   useCallback,
   useContext,
@@ -253,7 +253,7 @@ export default function Page() {
         icon={SvgUploadCloud}
         title="Add Connector"
         farRightElement={
-          <Button href="/admin/indexing/status" primary>
+          <Button href="/admin/indexing/status">
             See Connectors
           </Button>
         }

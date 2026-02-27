@@ -10,7 +10,6 @@ import useSWR from "swr";
 import { errorHandlingFetcher, FetchError } from "@/lib/fetcher";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { Callout } from "@/components/ui/callout";
-import Button from "@/refresh-components/buttons/Button";
 import { Button as OpalButton } from "@opal/components";
 import { cn } from "@/lib/utils";
 import {
@@ -88,9 +87,9 @@ function HoverIconButton({
 }: HoverIconButtonProps) {
   return (
     <div onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
-      <Button {...buttonProps} rightIcon={isHovered ? SvgX : SvgCheckSquare}>
+      <OpalButton {...buttonProps} rightIcon={isHovered ? SvgX : SvgCheckSquare}>
         {children}
-      </Button>
+      </OpalButton>
     </div>
   );
 }
@@ -1007,9 +1006,9 @@ export default function Page() {
                             {buttonState.label}
                           </HoverIconButton>
                         ) : (
-                          <Button
-                            action={false}
-                            tertiary
+                          <OpalButton
+                            variant="action"
+                            prominence="tertiary"
                             disabled={
                               buttonState.disabled || !buttonState.onClick
                             }
@@ -1026,7 +1025,7 @@ export default function Page() {
                             }
                           >
                             {buttonState.label}
-                          </Button>
+                          </OpalButton>
                         )}
                       </div>
                     </div>
@@ -1199,9 +1198,9 @@ export default function Page() {
                           {buttonState.label}
                         </HoverIconButton>
                       ) : (
-                        <Button
-                          action={false}
-                          tertiary
+                        <OpalButton
+                          variant="action"
+                          prominence="tertiary"
                           disabled={
                             buttonState.disabled || !buttonState.onClick
                           }
@@ -1218,7 +1217,7 @@ export default function Page() {
                           }
                         >
                           {buttonState.label}
-                        </Button>
+                        </OpalButton>
                       )}
                     </div>
                   </div>

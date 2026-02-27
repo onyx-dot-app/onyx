@@ -4,7 +4,7 @@ import { TextFormField } from "@/components/Field";
 import { Form, Formik } from "formik";
 import * as Yup from "yup";
 import { createSlackBot, updateSlackBot } from "./new/lib";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import Separator from "@/refresh-components/Separator";
 import { useEffect } from "react";
 import { DOCS_ADMINS_PATH } from "@/lib/constants";

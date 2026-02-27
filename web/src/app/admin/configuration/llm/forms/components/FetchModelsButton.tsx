@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import { ModelConfiguration } from "../../interfaces";

@@ -11,7 +11,7 @@ import Text from "@/refresh-components/texts/Text";
 import Card from "@/refresh-components/cards/Card";
 import { Callout } from "@/components/ui/callout";
 import Message from "@/refresh-components/messages/Message";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { SvgServer } from "@opal/icons";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import {
@@ -101,13 +101,13 @@ function GuildDetailContent({
                 width="fit"
                 gap={0.5}
               >
-                <Button onClick={handleEnableAll} disabled={disabled} secondary>
+                <Button prominence="secondary" onClick={handleEnableAll} disabled={disabled}>
                   Enable All
                 </Button>
                 <Button
+                  prominence="secondary"
                   onClick={handleDisableAll}
                   disabled={disabled}
-                  secondary
                 >
                   Disable All
                 </Button>

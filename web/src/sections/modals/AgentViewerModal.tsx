@@ -28,7 +28,7 @@ import { MCPServer, ToolSnapshot } from "@/lib/tools/interfaces";
 import EmptyMessage from "@/refresh-components/EmptyMessage";
 import { Horizontal, Title } from "@/layouts/input-layouts";
 import Switch from "@/refresh-components/inputs/Switch";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import AppInputBar from "@/sections/input/AppInputBar";
 import { useFilters, useLlmManager } from "@/lib/hooks";
@@ -67,7 +67,7 @@ function ViewerMCPServerCard({ server, tools }: ViewerMCPServerCardProps) {
             variant="secondary"
             rightChildren={
               <Button
-                internal
+                prominence="internal"
                 rightIcon={folded ? SvgExpand : SvgFold}
                 onClick={() => setFolded((prev) => !prev)}
               >

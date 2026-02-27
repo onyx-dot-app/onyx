@@ -16,9 +16,8 @@ import {
 } from "./lib";
 import { FiEdit2 } from "react-icons/fi";
 import { useUser } from "@/providers/UserProvider";
-import { Button as OpalButton } from "@opal/components";
+import { Button } from "@opal/components";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
-import Button from "@/refresh-components/buttons/Button";
 import { SvgAlertCircle, SvgTrash } from "@opal/icons";
 import type { Route } from "next";
 
@@ -300,7 +299,7 @@ export function PersonasTable({
               <div key="edit" className="flex">
                 <div className="mr-auto my-auto">
                   {!persona.builtin_persona && isEditable ? (
-                    <OpalButton
+                    <Button
                       icon={SvgTrash}
                       prominence="tertiary"
                       onClick={() => openDeleteModal(persona)}

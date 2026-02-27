@@ -12,7 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { Card } from "@/components/ui/card";
 import Text from "@/components/ui/text";
 import { Spinner } from "@/components/Spinner";
@@ -96,9 +96,9 @@ function Main() {
                     <TableCell className="font-medium">{category}</TableCell>
                     <TableCell>
                       <Button
+                        prominence="secondary"
                         onClick={() => handleDownload(category)}
-                        secondary
-                        leftIcon={SvgDownloadCloud}
+                        icon={SvgDownloadCloud}
                       >
                         Download Logs
                       </Button>

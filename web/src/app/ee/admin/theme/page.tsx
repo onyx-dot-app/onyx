@@ -2,7 +2,7 @@
 
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { SvgPaintBrush } from "@opal/icons";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import {
   AppearanceThemeSettings,
   AppearanceThemeSettingsRef,

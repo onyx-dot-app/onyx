@@ -1,8 +1,7 @@
 "use client";
 import { ActionStatus } from "@/lib/tools/interfaces";
 import React from "react";
-import { Button as OpalButton } from "@opal/components";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import {
   SvgArrowExchange,
   SvgChevronDown,
@@ -62,7 +61,7 @@ const Actions = React.memo(
                     : "opacity-0 translate-x-2 pointer-events-none"
                 )}
               >
-                <OpalButton
+                <Button
                   icon={SvgUnplug}
                   tooltip="Disconnect Server"
                   prominence="tertiary"
@@ -72,7 +71,7 @@ const Actions = React.memo(
               </div>
             )}
             {onManage && (
-              <OpalButton
+              <Button
                 icon={SvgSettings}
                 tooltip="Manage Server"
                 prominence="tertiary"
@@ -83,7 +82,7 @@ const Actions = React.memo(
           </div>
           {showViewToolsButton && (
             <Button
-              tertiary
+              prominence="tertiary"
               onClick={onToggleTools}
               rightIcon={SvgChevronDown}
               aria-label={`View tools for ${serverName}`}
@@ -103,7 +102,7 @@ const Actions = React.memo(
         <div className="flex flex-col gap-1 items-end shrink-0">
           {onAuthenticate && (
             <Button
-              tertiary
+              prominence="tertiary"
               onClick={onAuthenticate}
               rightIcon={SvgArrowExchange}
               aria-label={`Authenticate and connect to ${serverName}`}
@@ -120,7 +119,7 @@ const Actions = React.memo(
             )}
           >
             {onDelete && (
-              <OpalButton
+              <Button
                 icon={SvgTrash}
                 tooltip="Delete Server"
                 prominence="tertiary"
@@ -129,7 +128,7 @@ const Actions = React.memo(
               />
             )}
             {onManage && (
-              <OpalButton
+              <Button
                 icon={SvgSettings}
                 tooltip="Manage Server"
                 prominence="tertiary"
@@ -148,7 +147,7 @@ const Actions = React.memo(
         <div className="flex gap-1 items-end">
           {onReconnect && (
             <Button
-              secondary
+              prominence="secondary"
               onClick={onReconnect}
               rightIcon={SvgPlug}
               aria-label={`Reconnect to ${serverName}`}
@@ -157,7 +156,7 @@ const Actions = React.memo(
             </Button>
           )}
           {onManage && (
-            <OpalButton
+            <Button
               icon={SvgSettings}
               tooltip="Manage Server"
               prominence="tertiary"
@@ -168,7 +167,7 @@ const Actions = React.memo(
         </div>
         {showViewToolsButton && (
           <Button
-            tertiary
+            prominence="tertiary"
             onClick={onToggleTools}
             rightIcon={SvgChevronDown}
             aria-label={`View tools for ${serverName}`}

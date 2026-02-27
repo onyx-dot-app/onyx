@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { Section } from "@/layouts/general-layouts";
 import * as InputLayouts from "@/layouts/input-layouts";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import Card from "@/refresh-components/cards/Card";
 import Separator from "@/refresh-components/Separator";
@@ -176,7 +176,7 @@ export default function CheckoutView({ onAdjustPlan }: CheckoutViewProps) {
             Business
           </Text>
         </Section>
-        <Button secondary onClick={onAdjustPlan}>
+        <Button prominence="secondary" onClick={onAdjustPlan}>
           Adjust Plan
         </Button>
       </Section>
@@ -262,7 +262,7 @@ export default function CheckoutView({ onAdjustPlan }: CheckoutViewProps) {
           // Empty div to maintain space-between alignment
           <div></div>
         )}
-        <Button main primary onClick={handleSubmit} disabled={isSubmitting}>
+        <Button onClick={handleSubmit} disabled={isSubmitting}>
           {isSubmitting ? "Loading..." : "Continue to Payment"}
         </Button>
       </Section>

@@ -40,6 +40,7 @@ export default function ConnectorWrapper({
               <HeaderTitle>
                 <p>&lsquo;{connector}&rsquo; is not a valid Connector Type!</p>
               </HeaderTitle>
+              {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
               <Button
                 onClick={() => window.open("/admin/indexing/status", "_self")}
                 className="mr-auto"

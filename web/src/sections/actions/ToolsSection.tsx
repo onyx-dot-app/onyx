@@ -2,7 +2,7 @@
 
 import React from "react";
 import { cn } from "@/lib/utils";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { SvgFold } from "@opal/icons";
 interface ToolsSectionProps {
@@ -42,7 +42,7 @@ const ToolsSection: React.FC<ToolsSectionProps> = ({
         <div className="flex gap-1 items-center p-1">
           {/* Fold Button */}
           {onFold && (
-            <Button tertiary onClick={onFold} rightIcon={SvgFold}>
+            <Button prominence="tertiary" onClick={onFold} rightIcon={SvgFold}>
               Fold
             </Button>
           )}

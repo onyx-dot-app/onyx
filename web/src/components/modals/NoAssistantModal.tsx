@@ -24,6 +24,7 @@ export default function NoAssistantModal() {
                 As an administrator, you can create a new agent by visiting the
                 admin panel.
               </Text>
+              {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
               <Button className="w-full" href="/admin/assistants">
                 Go to Admin Panel
               </Button>

@@ -33,7 +33,7 @@ import {
   SvgCheckCircle,
 } from "@opal/icons";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import TypewriterText from "@/app/craft/components/TypewriterText";
 import {
@@ -178,6 +178,7 @@ function BuildSessionButton({
     <>
       <Popover.Trigger asChild onClick={noProp()}>
         <div>
+          {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
           <IconButton
             icon={SvgMoreHorizontal}
             className={cn(
@@ -271,19 +272,19 @@ function BuildSessionButton({
           twoTone={!isDeleting && !deleteSuccess && !deleteError}
           submit={
             deleteSuccess ? (
-              <Button action disabled leftIcon={SvgCheckCircle}>
+              <Button variant="action" disabled icon={SvgCheckCircle}>
                 Done
               </Button>
             ) : deleteError ? (
-              <Button danger onClick={closeModal}>
+              <Button variant="danger" onClick={closeModal}>
                 Close
               </Button>
             ) : (
               <Button
-                danger
+                variant="danger"
                 onClick={handleConfirmDelete}
                 disabled={isDeleting}
-                leftIcon={isDeleting ? SimpleLoader : undefined}
+                icon={isDeleting ? SimpleLoader : undefined}
               >
                 {isDeleting ? "Deleting..." : "Delete"}
               </Button>

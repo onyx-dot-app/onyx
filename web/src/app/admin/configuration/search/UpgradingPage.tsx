@@ -10,6 +10,7 @@ import {
 import Text from "@/components/ui/text";
 import Title from "@/components/ui/title";
 import Button from "@/refresh-components/buttons/Button";
+import { Button as OpalButton } from "@opal/components";
 import { useMemo, useState } from "react";
 import useSWR, { mutate } from "swr";
 import { ReindexingProgressTable } from "../../../../components/embedding/ReindexingProgressTable";
@@ -140,10 +141,10 @@ export default function UpgradingPage({
               </div>
             </Modal.Body>
             <Modal.Footer>
-              <Button onClick={onCancel}>Confirm</Button>
-              <Button onClick={() => setIsCancelling(false)} secondary>
+              <OpalButton onClick={onCancel}>Confirm</OpalButton>
+              <OpalButton prominence="secondary" onClick={() => setIsCancelling(false)}>
                 Cancel
-              </Button>
+              </OpalButton>
             </Modal.Footer>
           </Modal.Content>
         </Modal>
@@ -158,6 +159,7 @@ export default function UpgradingPage({
               {futureEmbeddingModel.model_name}
             </div>
 
+            {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
             <Button
               danger
               className="mt-4"

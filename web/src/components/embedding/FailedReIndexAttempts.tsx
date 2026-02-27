@@ -3,7 +3,7 @@ import { PageSelector } from "@/components/PageSelector";
 import { IndexAttemptStatus } from "@/components/Status";
 import { deleteCCPair } from "@/lib/documentDeletion";
 import { FailedConnectorIndexingStatus } from "@/lib/types";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 import {
   Table,
@@ -129,7 +129,7 @@ export function FailedReIndexAttempts({
                     </TableCell>
                     <TableCell>
                       <Button
-                        danger
+                        variant="danger"
                         onClick={async () => {
                           if (shouldConfirmConnectorDeletion) {
                             setPendingConnectorDeletion({
@@ -159,7 +159,7 @@ export function FailedReIndexAttempts({
                             );
                           }
                         }}
-                        leftIcon={SvgTrash}
+                        icon={SvgTrash}
                         disabled={!reindexingProgress.is_deletable}
                       >
                         Delete

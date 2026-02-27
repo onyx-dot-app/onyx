@@ -19,7 +19,7 @@ import { InvitedUserSnapshot } from "@/lib/types";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import PendingUsersTable from "@/components/admin/users/PendingUsersTable";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { Spinner } from "@/components/Spinner";
 import { SvgDownloadCloud, SvgUser, SvgUserPlus } from "@opal/icons";
@@ -147,7 +147,7 @@ const UsersTables = ({
             <div className="flex justify-between items-center gap-1">
               <CardTitle>Current Users</CardTitle>
               <Button
-                leftIcon={SvgDownloadCloud}
+                icon={SvgDownloadCloud}
                 disabled={isDownloadingUsers}
                 onClick={() => downloadAllUsers()}
               >

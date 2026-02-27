@@ -31,6 +31,7 @@ const DeactivateUserButton = ({
     }
   );
   return (
+    // TODO(opal-migration): migrate to opal Button once className/iconClassName is removed
     <Button
       className={className}
       onClick={() => trigger({ user_email: user.email })}

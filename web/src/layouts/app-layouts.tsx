@@ -23,7 +23,6 @@
 import { cn, ensureHrefProtocol, noProp } from "@/lib/utils";
 import type { Components } from "react-markdown";
 import Text from "@/refresh-components/texts/Text";
-import RefreshButton from "@/refresh-components/buttons/Button";
 import { useCallback, useMemo, useState, useEffect } from "react";
 import { useAppBackground } from "@/providers/AppBackgroundProvider";
 import { useTheme } from "next-themes";
@@ -280,9 +279,9 @@ function Header() {
           icon={SvgTrash}
           onClose={() => setDeleteModalOpen(false)}
           submit={
-            <RefreshButton danger onClick={handleDeleteChat}>
+            <Button variant="danger" onClick={handleDeleteChat}>
               Delete
-            </RefreshButton>
+            </Button>
           }
         >
           Are you sure you want to delete this chat? This action cannot be
@@ -307,10 +306,10 @@ function Header() {
         */}
         <div className="flex-1 flex flex-row items-center gap-2 h-[3.3rem]">
           {isMobile && (
-            <IconButton
+            <Button
+              prominence="internal"
               icon={SvgSidebar}
               onClick={() => setFolded(false)}
-              internal
             />
           )}
           {isPaidEnterpriseFeaturesEnabled &&
@@ -395,6 +394,7 @@ function Header() {
               </Button>
               <SimplePopover
                 trigger={
+                  /* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */
                   <IconButton
                     icon={SvgMoreHorizontal}
                     className="ml-2"

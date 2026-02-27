@@ -12,8 +12,7 @@ import * as GeneralLayouts from "@/layouts/general-layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
 import * as InputLayouts from "@/layouts/input-layouts";
 import { Card } from "@/refresh-components/cards";
-import Button from "@/refresh-components/buttons/Button";
-import { Button as OpalButton } from "@opal/components";
+import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import Separator from "@/refresh-components/Separator";
@@ -486,8 +485,8 @@ function RecentFilesTableContent({
         ariaLabelPrefix="user-file-row"
         headerActions={
           <Button
-            internal
-            leftIcon={SvgPlusCircle}
+            prominence="internal"
+            icon={SvgPlusCircle}
             onClick={() => fileInputRef.current?.click()}
           >
             Add File
@@ -783,7 +782,7 @@ const KnowledgeMainContent = memo(function KnowledgeMainContent({
         <Text text03 secondaryBody>
           Add documents or connected sources to use for this agent.
         </Text>
-        <OpalButton
+        <Button
           icon={SvgPlusCircle}
           onClick={onAddKnowledge}
           prominence="tertiary"
@@ -813,8 +812,8 @@ const KnowledgeMainContent = memo(function KnowledgeMainContent({
         selected
       </Text>
       <Button
-        internal
-        leftIcon={SvgArrowUpRight}
+        prominence="internal"
+        icon={SvgArrowUpRight}
         onClick={onViewEdit}
         aria-label="knowledge-view-edit"
       >

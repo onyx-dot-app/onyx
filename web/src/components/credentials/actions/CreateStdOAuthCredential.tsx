@@ -1,6 +1,6 @@
 import * as Yup from "yup";
 
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { ValidSources } from "@/lib/types";
 import { TextFormField } from "@/components/Field";
 import { Form, Formik, FormikHelpers } from "formik";

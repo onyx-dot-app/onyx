@@ -11,7 +11,7 @@ import CenteredPageSelector from "./CenteredPageSelector";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { InvitedUserSnapshot } from "@/lib/types";
 import { TableHeader } from "@/components/ui/table";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { FetchError } from "@/lib/fetcher";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
@@ -107,9 +107,9 @@ const PendingUsersTable = ({ users, mutate, error, isLoading, q }: Props) => {
                 <TableCell>
                   <div className="flex justify-end">
                     <Button
-                      secondary
+                      prominence="secondary"
                       onClick={() => setUserToApprove(user.email.toLowerCase())}
-                      leftIcon={SvgCheck}
+                      icon={SvgCheck}
                     >
                       Accept Join Request
                     </Button>

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import CardSection from "@/components/admin/CardSection";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { DocumentIcon2 } from "@/components/icons/icons";
 import useSWR from "swr";
@@ -127,7 +127,7 @@ function Main() {
             <div className="flex flex-col gap-2 desktop:flex-row desktop:items-center desktop:gap-2">
               {isApiKeySet ? (
                 <>
-                  <Button onClick={handleDelete} danger>
+                  <Button variant="danger" onClick={handleDelete}>
                     Delete API Key
                   </Button>
                   <Text as="p" mainContentBody text04 className="desktop:mt-0">
@@ -135,7 +135,7 @@ function Main() {
                   </Text>
                 </>
               ) : (
-                <Button onClick={handleSave} action>
+                <Button variant="action" onClick={handleSave}>
                   Save API Key
                 </Button>
               )}

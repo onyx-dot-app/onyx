@@ -203,20 +203,20 @@ export default function ModifyCredential({
               </Text>
             </Modal.Body>
             <Modal.Footer>
-              <Button
+              <OpalButton
                 onClick={async () => {
                   onDeleteCredential(confirmDeletionCredential);
                   setConfirmDeletionCredential(null);
                 }}
               >
                 Confirm
-              </Button>
-              <Button
-                secondary
+              </OpalButton>
+              <OpalButton
+                prominence="secondary"
                 onClick={() => setConfirmDeletionCredential(null)}
               >
                 Cancel
-              </Button>
+              </OpalButton>
             </Modal.Footer>
           </Modal.Content>
         </Modal>
@@ -255,6 +255,7 @@ export default function ModifyCredential({
         {!showIfEmpty && (
           <div className="flex mt-8 justify-between">
             {onCreateNew ? (
+              // TODO(opal-migration): migrate to opal Button once className/iconClassName is removed
               <Button
                 onClick={() => {
                   onCreateNew();
@@ -272,6 +273,7 @@ export default function ModifyCredential({
               <div />
             )}
 
+            {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
             <Button
               disabled={selectedCredential == null}
               onClick={() => {

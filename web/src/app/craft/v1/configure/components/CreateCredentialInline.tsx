@@ -5,7 +5,7 @@ import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { Section } from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { TextFormField } from "@/components/Field";
 import { ValidSources } from "@/lib/types";
 import {
@@ -40,7 +40,7 @@ export default function CreateCredentialInline({
           No credential configuration available for {sourceMetadata.displayName}
           .
         </Text>
-        <Button action secondary onClick={onCancel}>
+        <Button variant="action" prominence="secondary" onClick={onCancel}>
           Cancel
         </Button>
       </Section>
@@ -150,16 +150,15 @@ export default function CreateCredentialInline({
               height="fit"
             >
               <Button
-                action
-                secondary
+                variant="action"
+                prominence="secondary"
                 onClick={onCancel}
                 disabled={isSubmitting}
               >
                 Cancel
               </Button>
               <Button
-                action
-                primary
+                variant="action"
                 type="submit"
                 disabled={!isValid || !dirty || isSubmitting}
               >

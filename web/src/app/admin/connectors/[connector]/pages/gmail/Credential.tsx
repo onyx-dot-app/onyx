@@ -1,4 +1,4 @@
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { toast } from "@/hooks/useToast";
 import React, { useState, useEffect } from "react";
 import { useSWRConfig } from "swr";
@@ -317,7 +317,7 @@ export const GmailJsonUploadSection = ({
           {isAdmin && !existingAuthCredential && (
             <div className="mt-2">
               <Button
-                danger
+                variant="danger"
                 onClick={async () => {
                   const endpoint =
                     localServiceAccountData?.service_account_email
@@ -473,7 +473,7 @@ export const GmailAuthSection = ({
           </div>
           <Section flexDirection="row" justifyContent="between" height="fit">
             <Button
-              danger
+              variant="danger"
               onClick={async () => {
                 handleRevokeAccess(
                   connectorExists,
@@ -486,7 +486,6 @@ export const GmailAuthSection = ({
             </Button>
             {buildMode && onCredentialCreated && (
               <Button
-                primary
                 onClick={() => onCredentialCreated(existingCredential)}
               >
                 Continue

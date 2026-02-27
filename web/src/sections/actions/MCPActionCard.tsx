@@ -23,7 +23,7 @@ import { KeyedMutator } from "swr";
 import type { IconProps } from "@opal/types";
 import { SvgRefreshCw, SvgServer, SvgTrash } from "@opal/icons";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { timeAgo } from "@/lib/time";
 import { cn } from "@/lib/utils";
@@ -247,6 +247,7 @@ export default function MCPActionCard({
 
     return (
       <div className="flex items-center gap-2">
+        {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
         <IconButton
           icon={SvgRefreshCw}
           internal
@@ -333,7 +334,7 @@ export default function MCPActionCard({
           onClose={() => deleteModal.toggle(false)}
           submit={
             <Button
-              danger
+              variant="danger"
               onClick={async () => {
                 if (!onDelete) return;
                 try {

@@ -12,7 +12,6 @@ import { SvgMoreHorizontal, SvgPlug, SvgSettings, SvgTrash } from "@opal/icons";
 import { Button } from "@opal/components";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
-import IconButton from "@/refresh-components/buttons/IconButton";
 
 export type ConnectorStatus =
   | "not_connected"
@@ -131,7 +130,7 @@ export default function ConnectorCard({
   // Always-connected connectors show a settings icon
   // Regular connectors show popover menu when connected, plug icon when not
   const rightContent = isDeleting ? null : isAlwaysConnected ? (
-    <IconButton icon={SvgSettings} internal />
+    <Button prominence="internal" icon={SvgSettings}/>
   ) : isConnected ? (
     <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
       <Popover.Trigger asChild>

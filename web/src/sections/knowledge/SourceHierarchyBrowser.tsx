@@ -9,8 +9,7 @@ import React, {
 } from "react";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
-import Button from "@/refresh-components/buttons/Button";
-import { Button as OpalButton } from "@opal/components";
+import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
 import Separator from "@/refresh-components/Separator";
@@ -81,7 +80,7 @@ function HierarchyBreadcrumb({
     >
       {/* Root source link */}
       {path.length > 0 ? (
-        <Button tertiary onClick={onNavigateToRoot}>
+        <Button prominence="tertiary" onClick={onNavigateToRoot}>
           {sourceMetadata.displayName}
         </Button>
       ) : (
@@ -112,7 +111,7 @@ function HierarchyBreadcrumb({
               <Text text03>{node.title}</Text>
             ) : (
               <Button
-                tertiary
+                prominence="tertiary"
                 onClick={() => onNavigateToNode(node, actualIndex)}
               >
                 {node.title}
@@ -698,7 +697,7 @@ export default function SourceHierarchyBrowser({
       {viewSelectedOnly ? (
         <>
           <Spacer rem={0.5} />
-          <Button action tertiary onClick={handleToggleViewSelected}>
+          <Button variant="action" prominence="tertiary" onClick={handleToggleViewSelected}>
             Selected items
           </Button>
         </>
@@ -868,7 +867,7 @@ export default function SourceHierarchyBrowser({
                     >
                       <Truncated>{item.data.title}</Truncated>
                       {isFolder && (
-                        <OpalButton
+                        <Button
                           icon={SvgChevronRight}
                           prominence="tertiary"
                           size="sm"
@@ -922,14 +921,14 @@ export default function SourceHierarchyBrowser({
               {currentSourceSelectedCount}{" "}
               {currentSourceSelectedCount === 1 ? "item" : "items"} selected
             </Text>
-            <OpalButton
+            <Button
               icon={SvgEye}
               variant={viewSelectedOnly ? "action" : undefined}
               prominence="tertiary"
               size={viewSelectedOnly ? undefined : "sm"}
               onClick={handleToggleViewSelected}
             />
-            <OpalButton
+            <Button
               icon={SvgXCircle}
               prominence="tertiary"
               size="sm"

@@ -3,12 +3,11 @@
 import React from "react";
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
-import { Button as OpalButton } from "@opal/components";
+import { Button } from "@opal/components";
 import FadingEdgeContainer from "@/refresh-components/FadingEdgeContainer";
 import ToolItemSkeleton from "@/sections/actions/skeleton/ToolItemSkeleton";
 import EnabledCount from "@/refresh-components/EnabledCount";
 import { SvgEye, SvgXCircle } from "@opal/icons";
-import Button from "@/refresh-components/buttons/Button";
 
 export interface ToolsListProps {
   // Loading state
@@ -96,7 +95,7 @@ const ToolsList: React.FC<ToolsListProps> = ({
                 />
               )}
               {onToggleShowOnlyEnabled && enabledCount > 0 && (
-                <OpalButton
+                <Button
                   icon={SvgEye}
                   prominence="tertiary"
                   size="sm"
@@ -113,7 +112,7 @@ const ToolsList: React.FC<ToolsListProps> = ({
                 />
               )}
               {onUpdateToolsStatus && enabledCount > 0 && (
-                <OpalButton
+                <Button
                   icon={SvgXCircle}
                   prominence="tertiary"
                   size="sm"
@@ -123,7 +122,7 @@ const ToolsList: React.FC<ToolsListProps> = ({
                 />
               )}
               {onUpdateToolsStatus && enabledCount === 0 && (
-                <Button tertiary onClick={() => onUpdateToolsStatus(true)}>
+                <Button prominence="tertiary" onClick={() => onUpdateToolsStatus(true)}>
                   Enable all
                 </Button>
               )}

@@ -239,6 +239,7 @@ export default function EmailPasswordForm({
                 )}
               />
 
+              {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
               <Button
                 type="submit"
                 className="w-full mt-1"

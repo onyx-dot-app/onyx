@@ -111,6 +111,7 @@ export default function KickoffCSVExport({
 
   return (
     <div className="flex flex-1 flex-col w-full justify-center">
+      {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
       <Button
         className="ml-auto"
         onClick={startExport}

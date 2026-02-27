@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { toast } from "@/hooks/useToast";
 import { SvgArrowRight, SvgUsers, SvgX } from "@opal/icons";
 import { logout } from "@/lib/user";
@@ -137,10 +137,10 @@ export default function NewTenantModal({
             cancel={
               isInvite ? (
                 <Button
+                  prominence="secondary"
                   onClick={handleRejectInvite}
-                  secondary
                   disabled={isLoading}
-                  leftIcon={SvgX}
+                  icon={SvgX}
                 >
                   Decline
                 </Button>

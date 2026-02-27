@@ -93,6 +93,7 @@ export default function ImpersonatePage() {
                 placeholder="Enter API Key"
               />
 
+              {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
               <Button type="submit" className="w-full" disabled={isSubmitting}>
                 Impersonate User
               </Button>

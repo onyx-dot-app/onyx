@@ -90,6 +90,7 @@ const SourceTagDetailsCardInner = ({
       {showNavigation && (
         <div className="flex items-center justify-between p-2 bg-background-tint-01 border-b border-border-01">
           <div className="flex items-center gap-1">
+            {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
             <IconButton
               main
               internal
@@ -98,6 +99,7 @@ const SourceTagDetailsCardInner = ({
               disabled={isFirst}
               className="!p-0.5"
             />
+            {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
             <IconButton
               main
               internal

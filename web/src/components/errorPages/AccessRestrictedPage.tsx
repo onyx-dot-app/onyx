@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import ErrorPageLayout from "@/components/errorPages/ErrorPageLayout";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import InlineExternalLink from "@/refresh-components/InlineExternalLink";
 import { logout } from "@/lib/user";
 import { loadStripe } from "@stripe/stripe-js";
@@ -98,7 +98,7 @@ export default function AccessRestricted() {
               {isLoading ? "Loading..." : "Resubscribe"}
             </Button>
             <Button
-              secondary
+              prominence="secondary"
               onClick={async () => {
                 await logout();
                 window.location.reload();

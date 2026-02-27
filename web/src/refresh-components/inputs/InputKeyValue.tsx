@@ -78,8 +78,7 @@ import React, {
 } from "react";
 import { cn } from "@/lib/utils";
 import InputTypeIn from "./InputTypeIn";
-import { Button as OpalButton } from "@opal/components";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { FieldContext } from "../form/FieldContext";
 import { FieldMessage } from "../messages/FieldMessage";
@@ -178,7 +177,7 @@ const KeyValueInputItem = ({
         </div>
       </div>
       <div className="flex items-start pt-[2px]">
-        <OpalButton
+        <Button
           prominence="tertiary"
           size="sm"
           icon={SvgMinusCircle}
@@ -489,10 +488,10 @@ const KeyValueInput = ({
 
       <div>
         <Button
+          prominence="secondary"
           onClick={handleAdd}
-          secondary
           disabled={disabled}
-          leftIcon={SvgPlusCircle}
+          icon={SvgPlusCircle}
           aria-label={`Add ${keyTitle} and ${valueTitle} pair`}
           type="button"
         >

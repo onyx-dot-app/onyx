@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import Modal from "@/refresh-components/Modal";
-import Button from "@/refresh-components/buttons/Button";
 import Text from "@/refresh-components/texts/Text";
 import * as InputLayouts from "@/layouts/input-layouts";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
@@ -10,7 +9,7 @@ import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import Separator from "@/refresh-components/Separator";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
-import { Button as OpalButton } from "@opal/components";
+import { Button } from "@opal/components";
 import { MethodSpec, ToolSnapshot } from "@/lib/tools/interfaces";
 import {
   validateToolDefinition,
@@ -270,7 +269,7 @@ function FormContent({
                   getCopyText={() => values.definition}
                   tooltip="Copy definition"
                 />
-                <OpalButton
+                <Button
                   prominence="tertiary"
                   size="sm"
                   icon={SvgBracketCurly}
@@ -363,7 +362,7 @@ function FormContent({
               alignItems="center"
               width="fit"
             >
-              <OpalButton
+              <Button
                 icon={SvgUnplug}
                 prominence="tertiary"
                 type="button"
@@ -376,7 +375,7 @@ function FormContent({
                 }}
               />
               <Button
-                secondary
+                prominence="secondary"
                 type="button"
                 onClick={handleEditAuthenticationClick}
                 disabled={!onEditAuthentication}
@@ -390,15 +389,14 @@ function FormContent({
 
       <Modal.Footer>
         <Button
-          main
-          secondary
+          prominence="secondary"
           type="button"
           onClick={handleClose}
           disabled={isSubmitting}
         >
           Cancel
         </Button>
-        <Button main primary type="submit" disabled={isSubmitting || !dirty}>
+        <Button type="submit" disabled={isSubmitting || !dirty}>
           {primaryButtonLabel}
         </Button>
       </Modal.Footer>

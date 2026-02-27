@@ -2,7 +2,6 @@
 
 import { useCallback, useMemo, useState } from "react";
 import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
-import Button from "@/refresh-components/buttons/Button";
 import {
   SvgLink,
   SvgOrganization,
@@ -28,7 +27,7 @@ import { useModal } from "@/refresh-components/contexts/ModalContext";
 import { useUser } from "@/providers/UserProvider";
 import { Formik, useFormikContext } from "formik";
 import { useAgent } from "@/hooks/useAgents";
-import { Button as OpalButton } from "@opal/components";
+import { Button } from "@opal/components";
 import { useLabels } from "@/lib/hooks";
 import { PersonaLabel } from "@/app/admin/assistants/interfaces";
 
@@ -250,7 +249,7 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
                             ) : (
                               // For all other cases (including for "self-unsharing"),
                               // we render an `IconButton SvgX` to remove a person from the list.
-                              <OpalButton
+                              <Button
                                 prominence="tertiary"
                                 size="sm"
                                 icon={SvgX}
@@ -270,7 +269,7 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
                         key={`group-${group.id}`}
                         icon={SvgUsers}
                         rightChildren={
-                          <OpalButton
+                          <Button
                             prominence="tertiary"
                             size="sm"
                             icon={SvgX}
@@ -343,13 +342,13 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
         <BasicModalFooter
           left={
             agentId ? (
-              <Button secondary leftIcon={SvgLink} onClick={handleCopyLink}>
+              <Button prominence="secondary" icon={SvgLink} onClick={handleCopyLink}>
                 Copy Link
               </Button>
             ) : undefined
           }
           cancel={
-            <Button secondary onClick={handleClose}>
+            <Button prominence="secondary" onClick={handleClose}>
               Done
             </Button>
           }

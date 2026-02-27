@@ -2,7 +2,7 @@
 
 import React from "react";
 import { cn } from "@/lib/utils";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import Text from "@/refresh-components/texts/Text";
 import { SvgPlusCircle } from "@opal/icons";
@@ -57,7 +57,7 @@ const Actionbar: React.FC<ActionbarProps> = ({
       )}
 
       <div className="flex gap-2 items-center justify-end">
-        <Button main primary leftIcon={SvgPlusCircle} onClick={onAddAction}>
+        <Button icon={SvgPlusCircle} onClick={onAddAction}>
           {buttonText}
         </Button>
       </div>

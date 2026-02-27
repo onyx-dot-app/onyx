@@ -1,7 +1,6 @@
 import React, { useRef, useState, useEffect } from "react";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import Button from "@/refresh-components/buttons/Button";
 import { updateUserPersonalization } from "@/lib/userSettings";
 import { useUser } from "@/providers/UserProvider";
 import IconButton from "@/refresh-components/buttons/IconButton";
@@ -104,9 +103,9 @@ export default function NonAdminStep() {
               }}
               className="w-[26%] min-w-40"
             />
-            <Button disabled={name === ""} onClick={handleSave}>
+            <OpalButton disabled={name === ""} onClick={handleSave}>
               Save
-            </Button>
+            </OpalButton>
           </div>
         </div>
       ) : (
@@ -136,6 +135,7 @@ export default function NonAdminStep() {
             </Text>
           </div>
           <div className="p-1 flex items-center gap-1">
+            {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
             <IconButton
               internal
               icon={SvgEdit}
