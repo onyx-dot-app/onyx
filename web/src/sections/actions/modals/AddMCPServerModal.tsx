@@ -15,7 +15,7 @@ import {
 } from "@/lib/tools/interfaces";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import Separator from "@/refresh-components/Separator";
-import { Button as OpalButton } from "@opal/components";
+import { Button } from "@opal/components";
 import { toast } from "@/hooks/useToast";
 import { ModalCreationInterface } from "@/refresh-components/contexts/ModalContext";
 import { SvgCheckCircle, SvgServer, SvgUnplug } from "@opal/icons";
@@ -213,14 +213,14 @@ export default function AddMCPServerModal({
                         alignItems="center"
                         width="fit"
                       >
-                        <OpalButton
+                        <Button
                           icon={SvgUnplug}
                           prominence="tertiary"
                           type="button"
                           tooltip="Disconnect Server"
                           onClick={handleDisconnectClick}
                         />
-                        <OpalButton
+                        <Button
                           prominence="secondary"
                           type="button"
                           onClick={() => {
@@ -230,22 +230,22 @@ export default function AddMCPServerModal({
                           }}
                         >
                           Edit Configs
-                        </OpalButton>
+                        </Button>
                       </Section>
                     </Section>
                   )}
               </Modal.Body>
 
               <Modal.Footer>
-                <OpalButton
+                <Button
                   prominence="secondary"
                   type="button"
                   onClick={() => handleModalClose(false)}
                   disabled={isSubmitting}
                 >
                   Cancel
-                </OpalButton>
-                <OpalButton
+                </Button>
+                <Button
                   type="submit"
                   disabled={isSubmitting || !isValid || !dirty}
                 >
@@ -256,7 +256,7 @@ export default function AddMCPServerModal({
                     : isEditMode
                       ? "Save Changes"
                       : "Add Server"}
-                </OpalButton>
+                </Button>
               </Modal.Footer>
             </Form>
           )}

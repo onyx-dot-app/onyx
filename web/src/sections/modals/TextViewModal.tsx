@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/table";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
-import { Button as OpalButton } from "@opal/components";
+import { Button } from "@opal/components";
 import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
 import Text from "@/refresh-components/texts/Text";
 import {
@@ -213,20 +213,20 @@ export default function TextViewModal({
           onClose={onClose}
         >
           <Section flexDirection="row" justifyContent="start" gap={0.25}>
-            <OpalButton
+            <Button
               prominence="tertiary"
               onClick={handleZoomOut}
               icon={SvgZoomOut}
               tooltip="Zoom Out"
             />
             <Text mainUiBody>{zoom}%</Text>
-            <OpalButton
+            <Button
               prominence="tertiary"
               onClick={handleZoomIn}
               icon={SvgZoomIn}
               tooltip="Zoom In"
             />
-            <OpalButton
+            <Button
               prominence="tertiary"
               onClick={handleDownload}
               icon={SvgDownloadCloud}
@@ -314,7 +314,7 @@ export default function TextViewModal({
                     <Text as="p" text03 mainUiBody>
                       This file format is not supported for preview.
                     </Text>
-                    <OpalButton onClick={handleDownload}>Download File</OpalButton>
+                    <Button onClick={handleDownload}>Download File</Button>
                   </div>
                 )}
               </div>
@@ -324,7 +324,7 @@ export default function TextViewModal({
 
         <Modal.Footer>
           <BasicModalFooter
-            submit={<OpalButton onClick={handleDownload}>Download File</OpalButton>}
+            submit={<Button onClick={handleDownload}>Download File</Button>}
           />
         </Modal.Footer>
       </Modal.Content>

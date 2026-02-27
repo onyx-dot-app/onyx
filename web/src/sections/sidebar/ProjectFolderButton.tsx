@@ -12,7 +12,7 @@ import { cn, noProp } from "@/lib/utils";
 import { DRAG_TYPES } from "./constants";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import { Button as OpalButton } from "@opal/components";
+import { Button } from "@opal/components";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
 import type { IconProps } from "@opal/types";
 import useAppFocus from "@/hooks/useAppFocus";
@@ -116,7 +116,7 @@ const ProjectFolderButton = memo(({ project }: ProjectFolderButtonProps) => {
           icon={SvgTrash}
           onClose={() => setDeleteConfirmationModalOpen(false)}
           submit={
-            <OpalButton
+            <Button
               variant="danger"
               onClick={() => {
                 setDeleteConfirmationModalOpen(false);
@@ -124,7 +124,7 @@ const ProjectFolderButton = memo(({ project }: ProjectFolderButtonProps) => {
               }}
             >
               Delete
-            </OpalButton>
+            </Button>
           }
         >
           Are you sure you want to delete this project? This action cannot be
@@ -137,7 +137,7 @@ const ProjectFolderButton = memo(({ project }: ProjectFolderButtonProps) => {
         <Popover.Anchor>
           <SidebarTab
             leftIcon={() => (
-              <OpalButton
+              <Button
                 onMouseEnter={() => handleIconHover(true)}
                 onMouseLeave={() => handleIconHover(false)}
                 icon={getFolderIcon()}

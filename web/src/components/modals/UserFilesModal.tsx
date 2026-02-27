@@ -24,7 +24,7 @@ import {
 } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import useFilter from "@/hooks/useFilter";
-import { Button as OpalButton } from "@opal/components";
+import { Button } from "@opal/components";
 import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
 
 function getIcon(
@@ -268,14 +268,14 @@ export default function UserFilesModal({
                   {selectedCount} {selectedCount === 1 ? "file" : "files"}{" "}
                   selected
                 </Text>
-                <OpalButton
+                <Button
                   icon={SvgEye}
                   prominence="tertiary"
                   size="sm"
                   onClick={() => setShowOnlySelected(!showOnlySelected)}
                   transient={showOnlySelected}
                 />
-                <OpalButton
+                <Button
                   icon={SvgXCircle}
                   prominence="tertiary"
                   size="sm"
@@ -286,9 +286,9 @@ export default function UserFilesModal({
             )}
 
             {/* Right side: Done button */}
-            <OpalButton prominence="secondary" onClick={() => toggle(false)}>
+            <Button prominence="secondary" onClick={() => toggle(false)}>
               Done
-            </OpalButton>
+            </Button>
           </Modal.Footer>
         </Modal.Content>
       </Modal>

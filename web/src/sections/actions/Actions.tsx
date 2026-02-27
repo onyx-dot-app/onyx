@@ -1,7 +1,7 @@
 "use client";
 import { ActionStatus } from "@/lib/tools/interfaces";
 import React from "react";
-import { Button as OpalButton } from "@opal/components";
+import { Button } from "@opal/components";
 import {
   SvgArrowExchange,
   SvgChevronDown,
@@ -61,7 +61,7 @@ const Actions = React.memo(
                     : "opacity-0 translate-x-2 pointer-events-none"
                 )}
               >
-                <OpalButton
+                <Button
                   icon={SvgUnplug}
                   tooltip="Disconnect Server"
                   prominence="tertiary"
@@ -71,7 +71,7 @@ const Actions = React.memo(
               </div>
             )}
             {onManage && (
-              <OpalButton
+              <Button
                 icon={SvgSettings}
                 tooltip="Manage Server"
                 prominence="tertiary"
@@ -81,7 +81,7 @@ const Actions = React.memo(
             )}
           </div>
           {showViewToolsButton && (
-            <OpalButton
+            <Button
               prominence="tertiary"
               onClick={onToggleTools}
               rightIcon={SvgChevronDown}
@@ -90,7 +90,7 @@ const Actions = React.memo(
               {status === ActionStatus.FETCHING
                 ? "Fetching tools..."
                 : `View ${toolCount ?? 0} tool${toolCount !== 1 ? "s" : ""}`}
-            </OpalButton>
+            </Button>
           )}
         </div>
       );
@@ -101,14 +101,14 @@ const Actions = React.memo(
       return (
         <div className="flex flex-col gap-1 items-end shrink-0">
           {onAuthenticate && (
-            <OpalButton
+            <Button
               prominence="tertiary"
               onClick={onAuthenticate}
               rightIcon={SvgArrowExchange}
               aria-label={`Authenticate and connect to ${serverName}`}
             >
               Authenticate
-            </OpalButton>
+            </Button>
           )}
           <div
             className={cn(
@@ -119,7 +119,7 @@ const Actions = React.memo(
             )}
           >
             {onDelete && (
-              <OpalButton
+              <Button
                 icon={SvgTrash}
                 tooltip="Delete Server"
                 prominence="tertiary"
@@ -128,7 +128,7 @@ const Actions = React.memo(
               />
             )}
             {onManage && (
-              <OpalButton
+              <Button
                 icon={SvgSettings}
                 tooltip="Manage Server"
                 prominence="tertiary"
@@ -146,17 +146,17 @@ const Actions = React.memo(
       <div className="flex flex-col gap-1 items-end shrink-0">
         <div className="flex gap-1 items-end">
           {onReconnect && (
-            <OpalButton
+            <Button
               prominence="secondary"
               onClick={onReconnect}
               rightIcon={SvgPlug}
               aria-label={`Reconnect to ${serverName}`}
             >
               Reconnect
-            </OpalButton>
+            </Button>
           )}
           {onManage && (
-            <OpalButton
+            <Button
               icon={SvgSettings}
               tooltip="Manage Server"
               prominence="tertiary"
@@ -166,7 +166,7 @@ const Actions = React.memo(
           )}
         </div>
         {showViewToolsButton && (
-          <OpalButton
+          <Button
             prominence="tertiary"
             onClick={onToggleTools}
             rightIcon={SvgChevronDown}
@@ -174,7 +174,7 @@ const Actions = React.memo(
             disabled
           >
             {`View ${toolCount ?? 0} tool${toolCount !== 1 ? "s" : ""}`}
-          </OpalButton>
+          </Button>
         )}
       </div>
     );

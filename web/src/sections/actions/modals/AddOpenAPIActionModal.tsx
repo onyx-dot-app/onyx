@@ -9,7 +9,7 @@ import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import Separator from "@/refresh-components/Separator";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
-import { Button as OpalButton } from "@opal/components";
+import { Button } from "@opal/components";
 import { MethodSpec, ToolSnapshot } from "@/lib/tools/interfaces";
 import {
   validateToolDefinition,
@@ -269,7 +269,7 @@ function FormContent({
                   getCopyText={() => values.definition}
                   tooltip="Copy definition"
                 />
-                <OpalButton
+                <Button
                   prominence="tertiary"
                   size="sm"
                   icon={SvgBracketCurly}
@@ -362,7 +362,7 @@ function FormContent({
               alignItems="center"
               width="fit"
             >
-              <OpalButton
+              <Button
                 icon={SvgUnplug}
                 prominence="tertiary"
                 type="button"
@@ -374,31 +374,31 @@ function FormContent({
                   onDisconnectTool(existingTool);
                 }}
               />
-              <OpalButton
+              <Button
                 prominence="secondary"
                 type="button"
                 onClick={handleEditAuthenticationClick}
                 disabled={!onEditAuthentication}
               >
                 Edit Configs
-              </OpalButton>
+              </Button>
             </Section>
           </Section>
         )}
       </Modal.Body>
 
       <Modal.Footer>
-        <OpalButton
+        <Button
           prominence="secondary"
           type="button"
           onClick={handleClose}
           disabled={isSubmitting}
         >
           Cancel
-        </OpalButton>
-        <OpalButton type="submit" disabled={isSubmitting || !dirty}>
+        </Button>
+        <Button type="submit" disabled={isSubmitting || !dirty}>
           {primaryButtonLabel}
-        </OpalButton>
+        </Button>
       </Modal.Footer>
     </Form>
   );
