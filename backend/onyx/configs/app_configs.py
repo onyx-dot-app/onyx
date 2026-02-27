@@ -6,6 +6,7 @@ from datetime import timezone
 from typing import cast
 
 from onyx.auth.schemas import AuthBackend
+from onyx.cache.interface import CacheBackendType
 from onyx.configs.constants import AuthType
 from onyx.configs.constants import QueryHistoryType
 from onyx.file_processing.enums import HtmlBasedConnectorTransformLinksStrategy
@@ -53,6 +54,12 @@ DISABLE_USER_KNOWLEDGE = os.environ.get("DISABLE_USER_KNOWLEDGE", "").lower() ==
 # Disables vector DB (Vespa/OpenSearch) entirely. When True, connectors and RAG search
 # are disabled but core chat, tools, user file uploads, and Projects still work.
 DISABLE_VECTOR_DB = os.environ.get("DISABLE_VECTOR_DB", "").lower() == "true"
+
+# Which backend to use for caching, locks, and ephemeral state.
+# "redis" (default) or "postgres" (only valid when DISABLE_VECTOR_DB=true).
+CACHE_BACKEND = CacheBackendType(
+    os.environ.get("CACHE_BACKEND", CacheBackendType.REDIS)
+)
 
 # Maximum token count for a single uploaded file. Files exceeding this are rejected.
 # Defaults to 100k tokens (or 10M when vector DB is disabled).
