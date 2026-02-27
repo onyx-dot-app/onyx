@@ -146,7 +146,7 @@ export function AssistantStats({ assistantId }: { assistantId: number }) {
   return (
     <Card className="w-full">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <p className="text-base font-normal text-2xl">Assistant Analytics</p>
+        <p className="text-base font-normal text-2xl">Agent Analytics</p>
         <AdminDateRangeSelector
           value={dateRange}
           onValueChange={setDateRange}

@@ -170,7 +170,7 @@ export function PersonasTable({
       {deleteModalOpen && personaToDelete && (
         <ConfirmationModalLayout
           icon={SvgAlertCircle}
-          title="Delete Assistant"
+          title="Delete Agent"
           onClose={closeDeleteModal}
           submit={<Button onClick={handleDeletePersona}>Delete</Button>}
         >
@@ -183,15 +183,15 @@ export function PersonasTable({
           const isDefault = personaToToggleDefault.is_default_persona;
 
           const title = isDefault
-            ? "Remove Featured Assistant"
-            : "Set Featured Assistant";
+            ? "Remove Featured Agent"
+            : "Set Featured Agent";
           const buttonText = isDefault ? "Remove Feature" : "Set as Featured";
           const text = isDefault
             ? `Are you sure you want to remove the featured status of ${personaToToggleDefault.name}?`
             : `Are you sure you want to set the featured status of ${personaToToggleDefault.name}?`;
           const additionalText = isDefault
-            ? `Removing "${personaToToggleDefault.name}" as a featured assistant will not affect its visibility or accessibility.`
-            : `Setting "${personaToToggleDefault.name}" as a featured assistant will make it public and visible to all users. This action cannot be undone.`;
+            ? `Removing "${personaToToggleDefault.name}" as a featured agent will not affect its visibility or accessibility.`
+            : `Setting "${personaToToggleDefault.name}" as a featured agent will make it public and visible to all users. This action cannot be undone.`;
 
           return (
             <ConfirmationModalLayout
@@ -217,7 +217,7 @@ export function PersonasTable({
           "Name",
           "Description",
           "Type",
-          "Featured Assistant",
+          "Featured Agent",
           "Is Visible",
           "Delete",
         ]}
