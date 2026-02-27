@@ -2,6 +2,7 @@ import json
 from uuid import UUID
 
 from fastapi import APIRouter
+from fastapi import BackgroundTasks
 from fastapi import Depends
 from fastapi import File
 from fastapi import Form
@@ -12,13 +13,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_user
-from onyx.background.celery.tasks.user_file_processing.tasks import (
-    enqueue_user_file_project_sync_task,
-)
-from onyx.background.celery.tasks.user_file_processing.tasks import (
-    get_user_file_project_sync_queue_depth,
-)
-from onyx.background.celery.versioned_apps.client import app as client_app
+from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
@@ -34,7 +29,6 @@ from onyx.db.models import UserProject
 from onyx.db.persona import get_personas_by_ids
 from onyx.db.projects import get_project_token_count
 from onyx.db.projects import upload_files_to_user_files_with_indexing
-from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.projects.models import CategorizedFilesSnapshot
 from onyx.server.features.projects.models import ChatSessionRequest
 from onyx.server.features.projects.models import TokenCountResponse
@@ -55,7 +49,27 @@ class UserFileDeleteResult(BaseModel):
     assistant_names: list[str] = []
 
 
-def _trigger_user_file_project_sync(user_file_id: UUID, tenant_id: str) -> None:
+def _trigger_user_file_project_sync(
+    user_file_id: UUID,
+    tenant_id: str,
+    background_tasks: BackgroundTasks | None = None,
+) -> None:
+    if DISABLE_VECTOR_DB and background_tasks is not None:
+        from onyx.background.task_utils import drain_project_sync_loop
+
+        background_tasks.add_task(drain_project_sync_loop, tenant_id)
+        logger.info(f"Queued in-process project sync for user_file_id={user_file_id}")
+        return
+
+    from onyx.background.celery.tasks.user_file_processing.tasks import (
+        enqueue_user_file_project_sync_task,
+    )
+    from onyx.background.celery.tasks.user_file_processing.tasks import (
+        get_user_file_project_sync_queue_depth,
+    )
+    from onyx.background.celery.versioned_apps.client import app as client_app
+    from onyx.redis.redis_pool import get_redis_client
+
     queue_depth = get_user_file_project_sync_queue_depth(client_app)
     if queue_depth > USER_FILE_PROJECT_SYNC_MAX_QUEUE_DEPTH:
         logger.warning(
@@ -111,6 +125,7 @@ def create_project(
 
 @router.post("/file/upload", tags=PUBLIC_API_TAGS)
 def upload_user_files(
+    bg_tasks: BackgroundTasks,
     files: list[UploadFile] = File(...),
     project_id: int | None = Form(None),
     temp_id_map: str | None = Form(None),  # JSON string mapping hashed key -> temp_id
@@ -137,12 +152,12 @@ def upload_user_files(
             user=user,
             temp_id_map=parsed_temp_id_map,
             db_session=db_session,
+            background_tasks=bg_tasks if DISABLE_VECTOR_DB else None,
         )
 
         return CategorizedFilesSnapshot.from_result(categorized_files_result)
 
     except Exception as e:
-        # Log error with type, message, and stack for easier debugging
         logger.exception(f"Error uploading files - {type(e).__name__}: {str(e)}")
         raise HTTPException(
             status_code=500,
@@ -192,6 +207,7 @@ def get_files_in_project(
 def unlink_user_file_from_project(
     project_id: int,
     file_id: UUID,
+    bg_tasks: BackgroundTasks,
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> Response:
@@ -208,7 +224,6 @@ def unlink_user_file_from_project(
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    user_id = user.id
     user_file = (
         db_session.query(UserFile)
         .filter(UserFile.id == file_id, UserFile.user_id == user_id)
@@ -224,7 +239,7 @@ def unlink_user_file_from_project(
         db_session.commit()
 
     tenant_id = get_current_tenant_id()
-    _trigger_user_file_project_sync(user_file.id, tenant_id)
+    _trigger_user_file_project_sync(user_file.id, tenant_id, bg_tasks)
 
     return Response(status_code=204)
 
@@ -237,6 +252,7 @@ def unlink_user_file_from_project(
 def link_user_file_to_project(
     project_id: int,
     file_id: UUID,
+    bg_tasks: BackgroundTasks,
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> UserFileSnapshot:
@@ -268,7 +284,7 @@ def link_user_file_to_project(
         db_session.commit()
 
     tenant_id = get_current_tenant_id()
-    _trigger_user_file_project_sync(user_file.id, tenant_id)
+    _trigger_user_file_project_sync(user_file.id, tenant_id, bg_tasks)
 
     return UserFileSnapshot.from_model(user_file)
 
@@ -424,6 +440,7 @@ def delete_project(
 @router.delete("/file/{file_id}", tags=PUBLIC_API_TAGS)
 def delete_user_file(
     file_id: UUID,
+    bg_tasks: BackgroundTasks,
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> UserFileDeleteResult:
@@ -456,15 +473,25 @@ def delete_user_file(
     db_session.commit()
 
     tenant_id = get_current_tenant_id()
-    task = client_app.send_task(
-        OnyxCeleryTask.DELETE_SINGLE_USER_FILE,
-        kwargs={"user_file_id": str(user_file.id), "tenant_id": tenant_id},
-        queue=OnyxCeleryQueues.USER_FILE_DELETE,
-        priority=OnyxCeleryPriority.HIGH,
-    )
-    logger.info(
-        f"Triggered delete for user_file_id={user_file.id} with task_id={task.id}"
-    )
+    if DISABLE_VECTOR_DB:
+        from onyx.background.task_utils import drain_delete_loop
+
+        bg_tasks.add_task(drain_delete_loop, tenant_id)
+        logger.info(f"Queued in-process delete for user_file_id={user_file.id}")
+    else:
+        from onyx.background.celery.versioned_apps.client import app as client_app
+
+        task = client_app.send_task(
+            OnyxCeleryTask.DELETE_SINGLE_USER_FILE,
+            kwargs={"user_file_id": str(user_file.id), "tenant_id": tenant_id},
+            queue=OnyxCeleryQueues.USER_FILE_DELETE,
+            priority=OnyxCeleryPriority.HIGH,
+        )
+        logger.info(
+            f"Triggered delete for user_file_id={user_file.id} "
+            f"with task_id={task.id}"
+        )
+
     return UserFileDeleteResult(
         has_associations=False, project_names=[], assistant_names=[]
     )
