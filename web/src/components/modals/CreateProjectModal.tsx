@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import Button from "@/refresh-components/buttons/Button";
 import { useProjectsContext } from "@/providers/ProjectsContext";
-import { useKeyPress } from "@/hooks/useKeyPress";
 import * as InputLayouts from "@/layouts/input-layouts";
 import { useAppRouter } from "@/hooks/appNavigation";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
@@ -41,8 +40,6 @@ export default function CreateProjectModal({
       toast.error(`Failed to create the project ${name}`);
     }
   }
-
-  useKeyPress(handleSubmit, "Enter");
 
   return (
     <>
