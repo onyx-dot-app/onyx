@@ -28,7 +28,9 @@ postgresql:
 # -- Master toggle for vector database support. When false:
 #   - Sets DISABLE_VECTOR_DB=true on all backend pods
 #   - Skips the indexing model server deployment (embeddings not needed)
-#   - Skips docprocessing and docfetching celery workers
+#   - Skips ALL celery worker deployments (beat, primary, light, heavy,
+#     monitoring, user-file-processing, docprocessing, docfetching) — the
+#     API server handles background work via FastAPI BackgroundTasks
 #   - You should also set vespa.enabled=false and opensearch.enabled=false
 #     to prevent those subcharts from deploying
 vectorDB:
