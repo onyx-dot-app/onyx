@@ -17,7 +17,7 @@ branch_labels = None
 depends_on = None
 
 
-PYTHON_TOOL_IN_CODE_ID = "PythonTool"
+PYTHON_TOOL_NAME = "python"
 
 
 def upgrade() -> None:
@@ -25,8 +25,8 @@ def upgrade() -> None:
 
     # Look up the PythonTool id
     result = conn.execute(
-        sa.text("SELECT id FROM tool WHERE in_code_tool_id = :in_code_tool_id"),
-        {"in_code_tool_id": PYTHON_TOOL_IN_CODE_ID},
+        sa.text("SELECT id FROM tool WHERE name = :name"),
+        {"name": PYTHON_TOOL_NAME},
     ).fetchone()
 
     if not result:
@@ -51,8 +51,8 @@ def downgrade() -> None:
     conn = op.get_bind()
 
     result = conn.execute(
-        sa.text("SELECT id FROM tool WHERE in_code_tool_id = :in_code_tool_id"),
-        {"in_code_tool_id": PYTHON_TOOL_IN_CODE_ID},
+        sa.text("SELECT id FROM tool WHERE name = :name"),
+        {"name": PYTHON_TOOL_NAME},
     ).fetchone()
 
     if not result:
