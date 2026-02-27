@@ -216,7 +216,8 @@ class GongConnector(LoadConnector, PollConnector):
             # There's a likely race condition in the API where a transcript will have a
             # call id but the call to v2/calls/extensive will not return all of the id's
             # retry with exponential backoff has been observed to mitigate this
-            # in ~2 minutes
+            # in ~2 minutes. After max attempts, proceed with whatever we have —
+            # the per-call loop below will skip missing IDs gracefully.
             current_attempt = 0
             while True:
                 current_attempt += 1
@@ -235,11 +236,14 @@ class GongConnector(LoadConnector, PollConnector):
                     f"missing_call_ids={missing_call_ids}"
                 )
                 if current_attempt >= self.MAX_CALL_DETAILS_ATTEMPTS:
-                    raise RuntimeError(
-                        f"Attempt count exceeded for _get_call_details_by_ids: "
-                        f"missing_call_ids={missing_call_ids} "
-                        f"max_attempts={self.MAX_CALL_DETAILS_ATTEMPTS}"
+                    logger.error(
+                        f"Giving up on missing call id's after "
+                        f"{self.MAX_CALL_DETAILS_ATTEMPTS} attempts: "
+                        f"missing_call_ids={missing_call_ids} — "
+                        f"proceeding with {len(call_details_map)} of "
+                        f"{len(transcript_call_ids)} calls"
                     )
+                    break
 
                 wait_seconds = self.CALL_DETAILS_DELAY * pow(2, current_attempt - 1)
                 logger.warning(
