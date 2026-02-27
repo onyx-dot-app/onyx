@@ -467,6 +467,7 @@ class TestDefaultProviderEndpoint:
             # Step 5: Update provider 1's default model
             upsert_llm_provider(
                 LLMProviderUpsertRequest(
+                    id=provider_1.id,
                     name=provider_1_name,
                     provider=LlmProviderNames.OPENAI,
                     api_key=provider_1_api_key,

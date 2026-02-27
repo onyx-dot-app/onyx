@@ -56,6 +56,7 @@ class LLMProviderDescriptor(BaseModel):
     """A descriptor for an LLM provider that can be safely viewed by
     non-admin users. Used when giving a list of available LLMs."""
 
+    id: int
     name: str
     provider: str
     provider_display_name: str  # Human-friendly name like "Claude (Anthropic)"
@@ -73,6 +74,7 @@ class LLMProviderDescriptor(BaseModel):
         provider = llm_provider_model.provider
 
         return cls(
+            id=llm_provider_model.id,
             name=llm_provider_model.name,
             provider=provider,
             provider_display_name=get_provider_display_name(provider),
@@ -99,6 +101,7 @@ class LLMProvider(BaseModel):
 class LLMProviderUpsertRequest(LLMProvider):
     # should only be used for a "custom" provider
     # for default providers, the built-in model names are used
+    id: int | None = None
     api_key_changed: bool = False
     custom_config_changed: bool = False
     model_configurations: list["ModelConfigurationUpsertRequest"] = []

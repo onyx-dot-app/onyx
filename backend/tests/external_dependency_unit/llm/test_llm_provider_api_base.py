@@ -90,10 +90,11 @@ class TestLLMProviderChanges:
         the API key should be blocked.
         """
         try:
-            _create_test_provider(db_session, provider_name)
+            provider = _create_test_provider(db_session, provider_name)
 
             with patch("onyx.server.manage.llm.api.MULTI_TENANT", True):
                 update_request = LLMProviderUpsertRequest(
+                    id=provider.id,
                     name=provider_name,
                     provider=LlmProviderNames.OPENAI,
                     api_base="https://attacker.example.com",
@@ -123,10 +124,11 @@ class TestLLMProviderChanges:
         Changing api_base IS allowed when the API key is also being changed.
         """
         try:
-            _create_test_provider(db_session, provider_name)
+            provider = _create_test_provider(db_session, provider_name)
 
             with patch("onyx.server.manage.llm.api.MULTI_TENANT", True):
                 update_request = LLMProviderUpsertRequest(
+                    id=provider.id,
                     name=provider_name,
                     provider=LlmProviderNames.OPENAI,
                     api_key="sk-new-key-00000000000000000000000000000000000",
@@ -156,10 +158,13 @@ class TestLLMProviderChanges:
         original_api_base = "https://original.example.com/v1"
 
         try:
-            _create_test_provider(db_session, provider_name, api_base=original_api_base)
+            provider = _create_test_provider(
+                db_session, provider_name, api_base=original_api_base
+            )
 
             with patch("onyx.server.manage.llm.api.MULTI_TENANT", True):
                 update_request = LLMProviderUpsertRequest(
+                    id=provider.id,
                     name=provider_name,
                     provider=LlmProviderNames.OPENAI,
                     api_base=original_api_base,
@@ -186,10 +191,11 @@ class TestLLMProviderChanges:
         changes. This allows model-only updates when provider has no custom base URL.
         """
         try:
-            _create_test_provider(db_session, provider_name, api_base=None)
+            view = _create_test_provider(db_session, provider_name, api_base=None)
 
             with patch("onyx.server.manage.llm.api.MULTI_TENANT", True):
                 update_request = LLMProviderUpsertRequest(
+                    id=view.id,
                     name=provider_name,
                     provider=LlmProviderNames.OPENAI,
                     api_base="",
@@ -218,10 +224,13 @@ class TestLLMProviderChanges:
         original_api_base = "https://original.example.com/v1"
 
         try:
-            _create_test_provider(db_session, provider_name, api_base=original_api_base)
+            provider = _create_test_provider(
+                db_session, provider_name, api_base=original_api_base
+            )
 
             with patch("onyx.server.manage.llm.api.MULTI_TENANT", True):
                 update_request = LLMProviderUpsertRequest(
+                    id=provider.id,
                     name=provider_name,
                     provider=LlmProviderNames.OPENAI,
                     api_base=None,
@@ -253,10 +262,11 @@ class TestLLMProviderChanges:
         users have full control over their deployment.
         """
         try:
-            _create_test_provider(db_session, provider_name)
+            provider = _create_test_provider(db_session, provider_name)
 
             with patch("onyx.server.manage.llm.api.MULTI_TENANT", False):
                 update_request = LLMProviderUpsertRequest(
+                    id=provider.id,
                     name=provider_name,
                     provider=LlmProviderNames.OPENAI,
                     api_base="https://custom.example.com/v1",
@@ -314,7 +324,7 @@ class TestLLMProviderChanges:
         redirect LLM API requests).
         """
         try:
-            _create_test_provider(
+            provider = _create_test_provider(
                 db_session,
                 provider_name,
                 custom_config={"SOME_CONFIG": "original_value"},
@@ -322,6 +332,7 @@ class TestLLMProviderChanges:
 
             with patch("onyx.server.manage.llm.api.MULTI_TENANT", True):
                 update_request = LLMProviderUpsertRequest(
+                    id=provider.id,
                     name=provider_name,
                     provider=LlmProviderNames.OPENAI,
                     custom_config={"OPENAI_API_BASE": "https://attacker.example.com"},
@@ -353,10 +364,11 @@ class TestLLMProviderChanges:
         without changing the API key.
         """
         try:
-            _create_test_provider(db_session, provider_name)
+            provider = _create_test_provider(db_session, provider_name)
 
             with patch("onyx.server.manage.llm.api.MULTI_TENANT", True):
                 update_request = LLMProviderUpsertRequest(
+                    id=provider.id,
                     name=provider_name,
                     provider=LlmProviderNames.OPENAI,
                     custom_config={"OPENAI_API_BASE": "https://attacker.example.com"},
@@ -389,7 +401,7 @@ class TestLLMProviderChanges:
         new_config = {"AWS_REGION_NAME": "us-west-2"}
 
         try:
-            _create_test_provider(
+            provider = _create_test_provider(
                 db_session,
                 provider_name,
                 custom_config={"AWS_REGION_NAME": "us-east-1"},
@@ -397,6 +409,7 @@ class TestLLMProviderChanges:
 
             with patch("onyx.server.manage.llm.api.MULTI_TENANT", True):
                 update_request = LLMProviderUpsertRequest(
+                    id=provider.id,
                     name=provider_name,
                     provider=LlmProviderNames.OPENAI,
                     api_key="sk-new-key-00000000000000000000000000000000000",
@@ -427,12 +440,13 @@ class TestLLMProviderChanges:
         original_config = {"AWS_REGION_NAME": "us-east-1"}
 
         try:
-            _create_test_provider(
+            provider = _create_test_provider(
                 db_session, provider_name, custom_config=original_config
             )
 
             with patch("onyx.server.manage.llm.api.MULTI_TENANT", True):
                 update_request = LLMProviderUpsertRequest(
+                    id=provider.id,
                     name=provider_name,
                     provider=LlmProviderNames.OPENAI,
                     custom_config=original_config,
@@ -462,7 +476,7 @@ class TestLLMProviderChanges:
         new_config = {"AWS_REGION_NAME": "eu-west-1"}
 
         try:
-            _create_test_provider(
+            provider = _create_test_provider(
                 db_session,
                 provider_name,
                 custom_config={"AWS_REGION_NAME": "us-east-1"},
@@ -470,6 +484,7 @@ class TestLLMProviderChanges:
 
             with patch("onyx.server.manage.llm.api.MULTI_TENANT", False):
                 update_request = LLMProviderUpsertRequest(
+                    id=provider.id,
                     name=provider_name,
                     provider=LlmProviderNames.OPENAI,
                     custom_config=new_config,
@@ -561,6 +576,7 @@ def test_upload_with_custom_config_then_change(
 
             put_llm_provider(
                 llm_provider_upsert_request=LLMProviderUpsertRequest(
+                    id=provider.id,
                     name=name,
                     provider=provider_name,
                     model_configurations=[
@@ -616,7 +632,7 @@ def test_preserves_masked_sensitive_custom_config_on_provider_update(
     }
 
     try:
-        put_llm_provider(
+        view = put_llm_provider(
             llm_provider_upsert_request=LLMProviderUpsertRequest(
                 name=name,
                 provider=provider,
@@ -638,6 +654,7 @@ def test_preserves_masked_sensitive_custom_config_on_provider_update(
         with patch("onyx.server.manage.llm.api.MULTI_TENANT", False):
             put_llm_provider(
                 llm_provider_upsert_request=LLMProviderUpsertRequest(
+                    id=view.id,
                     name=name,
                     provider=provider,
                     custom_config={

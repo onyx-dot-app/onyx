@@ -20,6 +20,7 @@ from ee.onyx.server.enterprise_settings.store import (
 from ee.onyx.server.enterprise_settings.store import upload_logo
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.llm import fetch_existing_llm_provider
 from onyx.db.llm import update_default_provider
 from onyx.db.llm import upsert_llm_provider
 from onyx.db.models import Tool
@@ -121,6 +122,10 @@ def _seed_llms(
         return
 
     logger.notice("Seeding LLMs")
+    for request in llm_upsert_requests:
+        existing = fetch_existing_llm_provider(name=request.name, db_session=db_session)
+        if existing:
+            request.id = existing.id
     seeded_providers = [
         upsert_llm_provider(llm_upsert_request, db_session)
         for llm_upsert_request in llm_upsert_requests
