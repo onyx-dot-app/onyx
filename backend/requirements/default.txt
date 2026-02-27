@@ -325,7 +325,7 @@ google-auth-httplib2==0.1.0
     #   onyx
 google-auth-oauthlib==1.0.0
     # via onyx
-google-cloud-aiplatform==1.121.0
+google-cloud-aiplatform==1.133.0
     # via onyx
 google-cloud-bigquery==3.38.0
     # via google-cloud-aiplatform
