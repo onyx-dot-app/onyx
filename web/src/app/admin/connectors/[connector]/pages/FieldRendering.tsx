@@ -12,6 +12,7 @@ import Tabs from "@/refresh-components/Tabs";
 import { useFormikContext } from "formik";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import * as InputLayouts from "@/layouts/input-layouts";
+import { Content } from "@opal/layouts";
 import CheckboxField from "@/refresh-components/form/LabeledCheckboxField";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import Text from "@/refresh-components/texts/Text";
@@ -46,9 +47,11 @@ const TabsField: FC<TabsFieldProps> = ({
   return (
     <GeneralLayouts.Section gap={0.5} alignItems="start">
       {tabField.label && (
-        <InputLayouts.Title
+        <Content
           title={resolvedLabel ?? ""}
           description={resolvedDescription}
+          sizePreset="main-content"
+          variant="section"
         />
       )}
 

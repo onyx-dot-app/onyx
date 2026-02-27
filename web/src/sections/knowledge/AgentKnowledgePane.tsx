@@ -1138,9 +1138,11 @@ export default function AgentKnowledgePane({
 
   return (
     <GeneralLayouts.Section gap={0.5} alignItems="stretch" height="auto">
-      <InputLayouts.Title
+      <Content
         title="Knowledge"
         description="Add specific connectors and documents for this agent to use to inform its responses."
+        sizePreset="main-content"
+        variant="section"
       />
 
       <Card>

@@ -123,9 +123,10 @@ function ActionsHeader({
               icon={Icon}
               title={title}
               description={description}
-              sizePreset="main-content"
+              sizePreset="section"
               variant="section"
               rightChildren={rightChildren}
+              paddingVariant="fit"
             />
           </Label>
         </div>
@@ -246,6 +247,7 @@ function ActionsTool({
           sizePreset="main-ui"
           variant="section"
           rightChildren={rightChildren}
+          paddingVariant="fit"
         />
       </Label>
     </Card>

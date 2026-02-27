@@ -400,7 +400,11 @@ function ChatPreferencesForm() {
 
           {/* Features */}
           <Section gap={0.75}>
-            <InputLayouts.Title title="Features" />
+            <Content
+              title="Features"
+              sizePreset="main-content"
+              variant="section"
+            />
             <Card>
               <SimpleTooltip
                 tooltip={
@@ -460,7 +464,11 @@ function ChatPreferencesForm() {
               <Section gap={1.5}>
                 {/* Connectors */}
                 <Section gap={0.75}>
-                  <InputLayouts.Title title="Connectors" />
+                  <Content
+                    title="Connectors"
+                    sizePreset="main-content"
+                    variant="section"
+                  />
 
                   <Section
                     flexDirection="row"
