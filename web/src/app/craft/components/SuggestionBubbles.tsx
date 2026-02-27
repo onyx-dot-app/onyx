@@ -24,7 +24,7 @@ function getThemeStyles(theme: string): string {
 }
 
 /**
- * Displays follow-up suggestion bubbles after the first assistant message.
+ * Displays follow-up suggestion bubbles after the first agent message.
  * Styled like user chat messages - stacked vertically and right-aligned.
  * Each bubble is clickable and populates the input bar with the suggestion text.
  */

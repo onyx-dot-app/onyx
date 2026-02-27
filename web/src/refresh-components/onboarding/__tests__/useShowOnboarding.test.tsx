@@ -45,7 +45,7 @@ function renderUseShowOnboarding(
   } = {}
 ) {
   const defaultParams = {
-    liveAssistant: undefined,
+    liveAgent: undefined,
     isLoadingProviders: false,
     hasAnyProvider: false,
     isLoadingChatSessions: false,
@@ -121,7 +121,7 @@ describe("useShowOnboarding", () => {
 
     // Re-render with same userId but provider data now available
     rerender({
-      liveAssistant: undefined,
+      liveAgent: undefined,
       isLoadingProviders: false,
       hasAnyProvider: true,
       isLoadingChatSessions: false,
@@ -146,7 +146,7 @@ describe("useShowOnboarding", () => {
 
     // Re-render with same userId but provider data now available
     rerender({
-      liveAssistant: undefined,
+      liveAgent: undefined,
       isLoadingProviders: false,
       hasAnyProvider: true,
       isLoadingChatSessions: false,
@@ -168,7 +168,7 @@ describe("useShowOnboarding", () => {
 
     // Change to a new userId with providers available
     rerender({
-      liveAssistant: undefined,
+      liveAgent: undefined,
       isLoadingProviders: false,
       hasAnyProvider: true,
       isLoadingChatSessions: false,

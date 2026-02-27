@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import Button from "@/refresh-components/buttons/Button";
-import { FullPersona } from "@/app/admin/assistants/interfaces";
+import { FullPersona } from "@/app/admin/agents/interfaces";
 import { buildImgUrl } from "@/app/app/components/files/images/utils";
 import { Formik, Form, FieldArray } from "formik";
 import * as Yup from "yup";
@@ -70,7 +70,7 @@ import {
   createPersona,
   updatePersona,
   PersonaUpsertParameters,
-} from "@/app/admin/assistants/lib";
+} from "@/app/admin/agents/lib";
 import useMcpServersForAgentEditor from "@/hooks/useMcpServersForAgentEditor";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
@@ -585,9 +585,9 @@ export default function AgentEditorPage({
     replace_base_system_prompt:
       existingAgent?.replace_base_system_prompt ?? false,
     reminders: existingAgent?.task_prompt ?? "",
-    // For new assistants, default to false for optional tools to avoid
+    // For new agents, default to false for optional tools to avoid
     // "Tool not available" errors when the tool isn't configured.
-    // For existing assistants, preserve the current tool configuration.
+    // For existing agents, preserve the current tool configuration.
     image_generation:
       !!imageGenTool &&
       (existingAgent?.tools?.some(

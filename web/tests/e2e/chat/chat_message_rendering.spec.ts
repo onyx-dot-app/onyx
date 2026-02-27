@@ -116,18 +116,18 @@ let turnCounter = 0;
 function buildMockStream(content: string): string {
   turnCounter += 1;
   const userMessageId = turnCounter * 100 + 1;
-  const assistantMessageId = turnCounter * 100 + 2;
+  const agentMessageId = turnCounter * 100 + 2;
 
   const packets = [
     {
       user_message_id: userMessageId,
-      reserved_assistant_message_id: assistantMessageId,
+      reserved_assistant_message_id: agentMessageId,
     },
     {
       placement: { turn_index: 0, tab_index: 0 },
       obj: {
         type: "message_start",
-        id: `mock-${assistantMessageId}`,
+        id: `mock-${agentMessageId}`,
         content,
         final_documents: null,
       },
@@ -137,7 +137,7 @@ function buildMockStream(content: string): string {
       obj: { type: "stop", stop_reason: "finished" },
     },
     {
-      message_id: assistantMessageId,
+      message_id: agentMessageId,
       citations: {},
       files: [],
     },
@@ -149,7 +149,7 @@ function buildMockStream(content: string): string {
 function buildMockSearchStream(options: SearchMockOptions): string {
   turnCounter += 1;
   const userMessageId = turnCounter * 100 + 1;
-  const assistantMessageId = turnCounter * 100 + 2;
+  const agentMessageId = turnCounter * 100 + 2;
 
   const fullDocs = options.documents.map((doc) => ({
     ...doc,
@@ -167,7 +167,7 @@ function buildMockSearchStream(options: SearchMockOptions): string {
   const packets: Record<string, unknown>[] = [
     {
       user_message_id: userMessageId,
-      reserved_assistant_message_id: assistantMessageId,
+      reserved_assistant_message_id: agentMessageId,
     },
     {
       placement: { turn_index: 0, tab_index: 0 },
@@ -194,7 +194,7 @@ function buildMockSearchStream(options: SearchMockOptions): string {
       placement: { turn_index: 1, tab_index: 0 },
       obj: {
         type: "message_start",
-        id: `mock-${assistantMessageId}`,
+        id: `mock-${agentMessageId}`,
         content: options.content,
         final_documents: fullDocs,
       },
@@ -212,7 +212,7 @@ function buildMockSearchStream(options: SearchMockOptions): string {
       obj: { type: "stop", stop_reason: "finished" },
     },
     {
-      message_id: assistantMessageId,
+      message_id: agentMessageId,
       citations: options.citations,
       files: [],
     },

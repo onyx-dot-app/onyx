@@ -16,7 +16,7 @@ import {
 } from "../lib";
 import CardSection from "@/components/admin/CardSection";
 import { useRouter } from "next/navigation";
-import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
+import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
 import { StandardAnswerCategoryResponse } from "@/components/standardAnswers/getStandardAnswerCategoriesIfEE";
 import { SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
 import { SlackChannelConfigFormFields } from "./SlackChannelConfigFormFields";
@@ -46,7 +46,7 @@ export const SlackChannelConfigCreationForm = ({
       )
     : false;
 
-  const [searchEnabledAssistants, nonSearchAssistants] = useMemo(() => {
+  const [searchEnabledAgents, nonSearchAgents] = useMemo(() => {
     return personas.reduce(
       (acc, persona) => {
         if (
@@ -115,7 +115,7 @@ export const SlackChannelConfigCreationForm = ({
           knowledge_source: existingSlackBotUsesPersona
             ? existingPersonaHasSearchTool
               ? "assistant"
-              : "non_search_assistant"
+              : "non_search_agent"
             : existingSlackChannelConfig?.persona
               ? "document_sets"
               : "all_public",
@@ -165,7 +165,7 @@ export const SlackChannelConfigCreationForm = ({
               "all_public",
               "document_sets",
               "assistant",
-              "non_search_assistant",
+              "non_search_agent",
             ])
             .required(),
           disabled: Yup.boolean().optional().default(false),
@@ -180,14 +180,14 @@ export const SlackChannelConfigCreationForm = ({
             respond_member_group_list: values.respond_member_group_list,
             usePersona:
               values.knowledge_source === "assistant" ||
-              values.knowledge_source === "non_search_assistant",
+              values.knowledge_source === "non_search_agent",
             document_sets:
               values.knowledge_source === "document_sets"
                 ? values.document_sets
                 : [],
             persona_id:
               values.knowledge_source === "assistant" ||
-              values.knowledge_source === "non_search_assistant"
+              values.knowledge_source === "non_search_agent"
                 ? values.persona_id
                 : null,
             standard_answer_categories: values.standard_answer_categories.map(
@@ -234,8 +234,8 @@ export const SlackChannelConfigCreationForm = ({
                 isUpdate={isUpdate}
                 isDefault={isDefault}
                 documentSets={documentSets}
-                searchEnabledAssistants={searchEnabledAssistants}
-                nonSearchAssistants={nonSearchAssistants}
+                searchEnabledAgents={searchEnabledAgents}
+                nonSearchAgents={nonSearchAgents}
                 standardAnswerCategoryResponse={standardAnswerCategoryResponse}
                 slack_bot_id={slack_bot_id}
                 formikProps={formikProps}

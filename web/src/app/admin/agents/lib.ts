@@ -2,7 +2,7 @@ import {
   MinimalPersonaSnapshot,
   Persona,
   StarterMessage,
-} from "@/app/admin/assistants/interfaces";
+} from "@/app/admin/agents/interfaces";
 
 interface PersonaUpsertRequest {
   name: string;

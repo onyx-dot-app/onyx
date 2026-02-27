@@ -38,7 +38,7 @@ interface UseChatSessionControllerProps {
   firstMessage?: string;
 
   // UI state setters
-  setSelectedAssistantFromId: (assistantId: number | null) => void;
+  setSelectedAgentFromId: (agentId: number | null) => void;
   setSelectedDocuments: (documents: OnyxDocument[]) => void;
   setCurrentMessageFiles: (
     files: ProjectFile[] | ((prev: ProjectFile[]) => ProjectFile[])
@@ -66,7 +66,7 @@ export default function useChatSessionController({
   searchParams,
   filterManager,
   firstMessage,
-  setSelectedAssistantFromId,
+  setSelectedAgentFromId,
   setSelectedDocuments,
   setCurrentMessageFiles,
   chatSessionIdRef,
@@ -155,8 +155,8 @@ export default function useChatSessionController({
         // Clear the current session in the store to show intro messages
         setCurrentSession(null);
 
-        // Reset the selected assistant back to default
-        setSelectedAssistantFromId(null);
+        // Reset the selected agent back to default
+        setSelectedAgentFromId(null);
         updateCurrentChatSessionSharedStatus(ChatSessionSharedStatus.Private);
 
         // If we're supposed to submit on initial load, then do that here
@@ -184,7 +184,7 @@ export default function useChatSessionController({
 
       const session = await response.json();
       const chatSession = session as BackendChatSession;
-      setSelectedAssistantFromId(chatSession.persona_id);
+      setSelectedAgentFromId(chatSession.persona_id);
 
       // Ensure the current session is set to the actual session ID from the response
       setCurrentSession(chatSession.chat_session_id);

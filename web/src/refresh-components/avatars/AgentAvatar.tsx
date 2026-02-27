@@ -1,12 +1,12 @@
 "use client";
 
-import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
+import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
 import { buildImgUrl } from "@/app/app/components/files/images/utils";
 import { OnyxIcon } from "@/components/icons/icons";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import {
   DEFAULT_AGENT_AVATAR_SIZE_PX,
-  DEFAULT_ASSISTANT_ID,
+  DEFAULT_AGENT_ID,
 } from "@/lib/constants";
 import CustomAgentAvatar from "@/refresh-components/avatars/CustomAgentAvatar";
 import Image from "next/image";
@@ -23,7 +23,7 @@ export default function AgentAvatar({
 }: AgentAvatarProps) {
   const settings = useSettingsContext();
 
-  if (agent.id === DEFAULT_ASSISTANT_ID) {
+  if (agent.id === DEFAULT_AGENT_ID) {
     return settings.enterpriseSettings?.use_custom_logo ? (
       <div
         className="aspect-square rounded-full overflow-hidden relative"

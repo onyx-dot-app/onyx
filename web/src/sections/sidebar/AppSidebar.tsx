@@ -4,7 +4,7 @@ import { useCallback, memo, useMemo, useState, useEffect, useRef } from "react";
 import useSWR from "swr";
 import { useRouter } from "next/navigation";
 import { useSettingsContext } from "@/providers/SettingsProvider";
-import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
+import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
 import Text from "@/refresh-components/texts/Text";
 import ChatButton from "@/sections/sidebar/ChatButton";
 import AgentButton from "@/sections/sidebar/AgentButton";
@@ -378,10 +378,10 @@ const MemoizedAppSidebarInner = memo(
               LOCAL_STORAGE_KEYS.HIDE_MOVE_CUSTOM_AGENT_MODAL
             ) === "true";
 
-          const isChatUsingDefaultAssistant =
+          const isChatUsingDefaultAgent =
             chatSession.persona_id === DEFAULT_PERSONA_ID;
 
-          if (!isChatUsingDefaultAssistant && !hideModal) {
+          if (!isChatUsingDefaultAgent && !hideModal) {
             setPendingMoveChatSession(chatSession);
             setPendingMoveProjectId(targetProject.id);
             setShowMoveCustomAgentModal(true);
@@ -435,7 +435,7 @@ const MemoizedAppSidebarInner = memo(
     const newSessionButton = useMemo(() => {
       const href =
         combinedSettings?.settings?.disable_default_assistant && currentAgent
-          ? `/app?assistantId=${currentAgent.id}`
+          ? `/app?agentId=${currentAgent.id}`
           : "/app";
       return (
         <div data-testid="AppSidebar/new-session">
@@ -532,7 +532,7 @@ const MemoizedAppSidebarInner = memo(
       combinedSettings?.settings?.vector_db_enabled !== false;
     const adminDefaultHref = vectorDbEnabled
       ? "/admin/indexing/status"
-      : "/admin/assistants";
+      : "/admin/agents";
 
     const settingsButton = useMemo(
       () => (

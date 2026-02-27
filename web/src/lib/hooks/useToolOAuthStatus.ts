@@ -9,7 +9,7 @@ export interface ToolAuthStatus {
   isTokenExpired: boolean;
 }
 
-export function useToolOAuthStatus(assistantId?: number) {
+export function useToolOAuthStatus(agentId?: number) {
   const [oauthTokenStatuses, setOauthTokenStatuses] = useState<
     OAuthTokenStatus[]
   >([]);
@@ -32,7 +32,7 @@ export function useToolOAuthStatus(assistantId?: number) {
 
   useEffect(() => {
     fetchOAuthStatus();
-  }, [assistantId, fetchOAuthStatus]);
+  }, [agentId, fetchOAuthStatus]);
 
   /**
    * Get OAuth status for a specific tool

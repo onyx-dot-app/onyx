@@ -12,7 +12,7 @@ import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import SwitchList, {
   SwitchListItem,
 } from "@/refresh-components/popovers/ActionsPopover/SwitchList";
-import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
+import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
 import {
   MCPAuthenticationType,
   MCPAuthenticationPerformer,
@@ -132,14 +132,14 @@ type SecondaryViewState =
   | { type: "mcp"; serverId: number };
 
 export interface ActionsPopoverProps {
-  selectedAssistant: MinimalPersonaSnapshot;
+  selectedAgent: MinimalPersonaSnapshot;
   filterManager: FilterManager;
   availableSources?: ValidSources[];
   disabled?: boolean;
 }
 
 export default function ActionsPopover({
-  selectedAssistant,
+  selectedAgent,
   filterManager,
   availableSources = [],
   disabled = false,
@@ -156,7 +156,7 @@ export default function ActionsPopover({
 
   // Use the OAuth hook
   const { getToolAuthStatus, authenticateTool } = useToolOAuthStatus(
-    selectedAssistant.id
+    selectedAgent.id
   );
 
   const {
@@ -175,10 +175,10 @@ export default function ActionsPopover({
   // Store previously enabled sources when search tool is disabled
   const previouslyEnabledSourcesRef = useRef<SourceMetadata[]>([]);
 
-  const isDefaultAgent = selectedAssistant.id === 0;
+  const isDefaultAgent = selectedAgent.id === 0;
 
   // Check if the search tool is explicitly enabled on this persona (admin enabled "Use Knowledge")
-  const hasSearchTool = selectedAssistant.tools.some(
+  const hasSearchTool = selectedAgent.tools.some(
     (tool) => tool.in_code_tool_id === SEARCH_TOOL_ID
   );
 
@@ -192,7 +192,7 @@ export default function ActionsPopover({
     const sourceSet = new Set<string>();
 
     // Add sources from document sets
-    selectedAssistant.document_sets.forEach((docSet) => {
+    selectedAgent.document_sets.forEach((docSet) => {
       // Check cc_pair_summaries (regular connectors)
       docSet.cc_pair_summaries?.forEach((ccPair) => {
         // Normalize by removing federated_ prefix
@@ -209,7 +209,7 @@ export default function ActionsPopover({
     });
 
     // Add sources from hierarchy nodes and attached documents (via knowledge_sources)
-    selectedAssistant.knowledge_sources?.forEach((source) => {
+    selectedAgent.knowledge_sources?.forEach((source) => {
       // Normalize by removing federated_ prefix
       const normalized = source.replace("federated_", "");
       sourceSet.add(normalized);
@@ -223,8 +223,8 @@ export default function ActionsPopover({
     return sourceSet;
   }, [
     isDefaultAgent,
-    selectedAssistant.document_sets,
-    selectedAssistant.knowledge_sources,
+    selectedAgent.document_sets,
+    selectedAgent.knowledge_sources,
     hasSearchTool,
   ]);
 
@@ -234,11 +234,11 @@ export default function ActionsPopover({
   const hasNoKnowledgeSources =
     !isDefaultAgent &&
     !hasSearchTool &&
-    selectedAssistant.document_sets.length === 0 &&
-    (selectedAssistant.hierarchy_node_count ?? 0) === 0 &&
-    (selectedAssistant.attached_document_count ?? 0) === 0;
+    selectedAgent.document_sets.length === 0 &&
+    (selectedAgent.hierarchy_node_count ?? 0) === 0 &&
+    (selectedAgent.attached_document_count ?? 0) === 0;
 
-  // Store MCP server auth/loading state (tools are part of selectedAssistant.tools)
+  // Store MCP server auth/loading state (tools are part of selectedAgent.tools)
   const [mcpServerData, setMcpServerData] = useState<{
     [serverId: number]: {
       isAuthenticated: boolean;
@@ -263,15 +263,15 @@ export default function ActionsPopover({
     isAuthenticated: false,
   });
 
-  // Get the assistant preference for this assistant
-  const { assistantPreferences, setSpecificAssistantPreferences } =
+  // Get the agent preference for this assistant
+  const { agentPreferences, setSpecificAgentPreferences } =
     useAgentPreferences();
   const { forcedToolIds, setForcedToolIds } = useForcedTools();
 
   // Reset state when assistant changes
   useEffect(() => {
     setForcedToolIds([]);
-  }, [selectedAssistant.id, setForcedToolIds]);
+  }, [selectedAgent.id, setForcedToolIds]);
 
   const { isAdmin, isCurator } = useUser();
 
@@ -283,11 +283,11 @@ export default function ActionsPopover({
   // Check if there are any connectors available
   const hasNoConnectors = ccPairs.length === 0;
 
-  const assistantPreference = assistantPreferences?.[selectedAssistant.id];
-  const disabledToolIds = assistantPreference?.disabled_tool_ids || [];
-  const toggleToolForCurrentAssistant = (toolId: number) => {
+  const agentPreference = agentPreferences?.[selectedAgent.id];
+  const disabledToolIds = agentPreference?.disabled_tool_ids || [];
+  const toggleToolForCurrentAgent = (toolId: number) => {
     const disabled = disabledToolIds.includes(toolId);
-    setSpecificAssistantPreferences(selectedAssistant.id, {
+    setSpecificAgentPreferences(selectedAgent.id, {
       disabled_tool_ids: disabled
         ? disabledToolIds.filter((id) => id !== toolId)
         : [...disabledToolIds, toolId],
@@ -312,10 +312,10 @@ export default function ActionsPopover({
   // Get internal search tool reference for auto-pin logic
   const internalSearchTool = useMemo(
     () =>
-      selectedAssistant.tools.find(
+      selectedAgent.tools.find(
         (tool) => tool.in_code_tool_id === SEARCH_TOOL_ID && !tool.mcp_server_id
       ),
-    [selectedAssistant.tools]
+    [selectedAgent.tools]
   );
 
   // Handle explicit force toggle from ActionLineItem
@@ -422,7 +422,7 @@ export default function ActionsPopover({
   // Filter out MCP tools from the main list (they have mcp_server_id)
   // Also filter out internal search tool for basic users when there are no connectors
   // Also filter out tools that are not chat-selectable (e.g., OpenURL)
-  const displayTools = selectedAssistant.tools.filter((tool) => {
+  const displayTools = selectedAgent.tools.filter((tool) => {
     // Filter out MCP tools
     if (tool.mcp_server_id) return false;
 
@@ -465,16 +465,16 @@ export default function ActionsPopover({
     displayTools.find((tool) => tool.in_code_tool_id === SEARCH_TOOL_ID)?.id ??
     null;
 
-  // Fetch MCP servers for the assistant on mount
+  // Fetch MCP servers for the agent on mount
   useEffect(() => {
-    if (selectedAssistant == null || selectedAssistant.id == null) return;
+    if (selectedAgent == null || selectedAgent.id == null) return;
 
     const abortController = new AbortController();
 
     const fetchMCPServers = async () => {
       try {
         const response = await fetch(
-          `/api/mcp/servers/persona/${selectedAssistant.id}`,
+          `/api/mcp/servers/persona/${selectedAgent.id}`,
           {
             signal: abortController.signal,
           }
@@ -508,9 +508,9 @@ export default function ActionsPopover({
     return () => {
       abortController.abort();
     };
-  }, [selectedAssistant?.id]);
+  }, [selectedAgent?.id]);
 
-  // No separate MCP tool loading; tools already exist in selectedAssistant.tools
+  // No separate MCP tool loading; tools already exist in selectedAgent.tools
 
   // Handle MCP authentication
   const handleMCPAuthenticate = async (
@@ -675,7 +675,7 @@ export default function ActionsPopover({
     : undefined;
   const selectedMcpTools =
     selectedMcpServerId !== null
-      ? selectedAssistant.tools.filter(
+      ? selectedAgent.tools.filter(
           (t) => t.mcp_server_id === Number(selectedMcpServerId)
         )
       : [];
@@ -700,7 +700,7 @@ export default function ActionsPopover({
     label: tool.display_name || tool.name,
     description: tool.description,
     isEnabled: !disabledToolIds.includes(tool.id),
-    onToggle: () => toggleToolForCurrentAssistant(tool.id),
+    onToggle: () => toggleToolForCurrentAgent(tool.id),
   }));
 
   const mcpAllDisabled = selectedMcpTools.every((tool) =>
@@ -711,7 +711,7 @@ export default function ActionsPopover({
     if (!selectedMcpServer) return;
     const serverToolIds = selectedMcpTools.map((tool) => tool.id);
     const merged = Array.from(new Set([...disabledToolIds, ...serverToolIds]));
-    setSpecificAssistantPreferences(selectedAssistant.id, {
+    setSpecificAgentPreferences(selectedAgent.id, {
       disabled_tool_ids: merged,
     });
     setForcedToolIds(forcedToolIds.filter((id) => !serverToolIds.includes(id)));
@@ -720,7 +720,7 @@ export default function ActionsPopover({
   const enableAllToolsForSelectedServer = () => {
     if (!selectedMcpServer) return;
     const serverToolIdSet = new Set(selectedMcpTools.map((tool) => tool.id));
-    setSpecificAssistantPreferences(selectedAssistant.id, {
+    setSpecificAgentPreferences(selectedAgent.id, {
       disabled_tool_ids: disabledToolIds.filter(
         (id) => !serverToolIdSet.has(id)
       ),
@@ -768,17 +768,17 @@ export default function ActionsPopover({
     const hasEnabledSources = numSourcesEnabled > 0;
     if (hasEnabledSources && searchToolDisabled) {
       // Sources are enabled but search tool is disabled - enable it
-      toggleToolForCurrentAssistant(searchToolId);
+      toggleToolForCurrentAgent(searchToolId);
     } else if (!hasEnabledSources && !searchToolDisabled) {
       // No sources enabled but search tool is enabled - disable it
-      toggleToolForCurrentAssistant(searchToolId);
+      toggleToolForCurrentAgent(searchToolId);
     }
   }, [
     searchToolId,
     numSourcesEnabled,
     searchToolDisabled,
     sourcesInitialized,
-    toggleToolForCurrentAssistant,
+    toggleToolForCurrentAgent,
   ]);
 
   // Set search tool to a specific enabled/disabled state (only toggles if needed)
@@ -786,9 +786,9 @@ export default function ActionsPopover({
     if (searchToolId === null) return;
 
     if (enabled && searchToolDisabled) {
-      toggleToolForCurrentAssistant(searchToolId);
+      toggleToolForCurrentAgent(searchToolId);
     } else if (!enabled && !searchToolDisabled) {
-      toggleToolForCurrentAssistant(searchToolId);
+      toggleToolForCurrentAgent(searchToolId);
     }
   };
 
@@ -812,7 +812,7 @@ export default function ActionsPopover({
 
   const handleToggleTool = (toolId: number) => {
     const wasDisabled = disabledToolIds.includes(toolId);
-    toggleToolForCurrentAssistant(toolId);
+    toggleToolForCurrentAgent(toolId);
 
     if (toolId === searchToolId) {
       if (wasDisabled) {
@@ -932,7 +932,7 @@ export default function ActionsPopover({
           };
 
           // Tools for this server come from assistant.tools
-          const serverTools = selectedAssistant.tools.filter(
+          const serverTools = selectedAgent.tools.filter(
             (t) => t.mcp_server_id === Number(server.id)
           );
           const enabledTools = serverTools.filter(

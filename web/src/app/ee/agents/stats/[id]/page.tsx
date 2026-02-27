@@ -3,7 +3,7 @@ import { unstable_noStore as noStore } from "next/cache";
 import { redirect } from "next/navigation";
 import type { Route } from "next";
 import { requireAuth } from "@/lib/auth/requireAuth";
-import { AssistantStats } from "./AssistantStats";
+import { AgentStats } from "./AgentStats";
 import BackButton from "@/refresh-components/buttons/BackButton";
 
 export default async function GalleryPage(props: {
@@ -29,7 +29,7 @@ export default async function GalleryPage(props: {
         <div className="px-32">
           <InstantSSRAutoRefresh />
           <div className="max-w-4xl mx-auto !border-none !bg-transparent !ring-none">
-            <AssistantStats assistantId={parseInt(params.id)} />
+            <AgentStats agentId={parseInt(params.id)} />
           </div>
         </div>
       </div>

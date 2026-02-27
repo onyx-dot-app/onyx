@@ -66,7 +66,7 @@ for (const theme of THEMES) {
 
     // ── Content assertions ────────────────────────────────────────────
 
-    test("displays greeting from default assistant", async ({ page }) => {
+    test("displays greeting from default agent", async ({ page }) => {
       const greetingContainer = page.getByTestId("onyx-logo");
       await greetingContainer.waitFor({ state: "visible", timeout: 10000 });
 

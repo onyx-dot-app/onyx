@@ -12,22 +12,21 @@ import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { AreaChartDisplay } from "@/components/ui/areaChart";
 
-type AssistantDailyUsageEntry = {
+type AgentDailyUsageEntry = {
   date: string;
   total_messages: number;
   total_unique_users: number;
 };
 
-type AssistantStatsResponse = {
-  daily_stats: AssistantDailyUsageEntry[];
+type AgentStatsResponse = {
+  daily_stats: AgentDailyUsageEntry[];
   total_messages: number;
   total_unique_users: number;
 };
 
-export function AssistantStats({ assistantId }: { assistantId: number }) {
-  const [assistantStats, setAssistantStats] =
-    useState<AssistantStatsResponse | null>(null);
-  const { agents: assistants } = useAgents();
+export function AgentStats({ agentId }: { agentId: number }) {
+  const [agentStats, setAgentStats] = useState<AgentStatsResponse | null>(null);
+  const { agents } = useAgents();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dateRange, setDateRange] = useState<DateRange>({
@@ -35,9 +34,9 @@ export function AssistantStats({ assistantId }: { assistantId: number }) {
     to: new Date(),
   });
 
-  const assistant = useMemo(() => {
-    return assistants.find((a) => a.id === assistantId);
-  }, [assistants, assistantId]);
+  const agent = useMemo(() => {
+    return agents.find((a) => a.id === agentId);
+  }, [agents, agentId]);
 
   useEffect(() => {
     async function fetchStats() {
@@ -46,7 +45,7 @@ export function AssistantStats({ assistantId }: { assistantId: number }) {
         setError(null);
 
         const res = await fetch(
-          `/api/analytics/assistant/${assistantId}/stats?start=${
+          `/api/analytics/assistant/${agentId}/stats?start=${
             dateRange?.from?.toISOString() || ""
           }&end=${dateRange?.to?.toISOString() || ""}`
         );
@@ -55,11 +54,11 @@ export function AssistantStats({ assistantId }: { assistantId: number }) {
           if (res.status === 403) {
             throw new Error("You don't have permission to view these stats.");
           }
-          throw new Error("Failed to fetch assistant stats");
+          throw new Error("Failed to fetch agent stats");
         }
 
-        const data = (await res.json()) as AssistantStatsResponse;
-        setAssistantStats(data);
+        const data = (await res.json()) as AgentStatsResponse;
+        setAgentStats(data);
       } catch (err) {
         setError(
           err instanceof Error ? err.message : "An unknown error occurred"
@@ -70,10 +69,10 @@ export function AssistantStats({ assistantId }: { assistantId: number }) {
     }
 
     fetchStats();
-  }, [assistantId, dateRange]);
+  }, [agentId, dateRange]);
 
   const chartData = useMemo(() => {
-    if (!assistantStats?.daily_stats?.length || !dateRange) {
+    if (!agentStats?.daily_stats?.length || !dateRange) {
       return null;
     }
 
@@ -81,7 +80,7 @@ export function AssistantStats({ assistantId }: { assistantId: number }) {
       dateRange.from ||
       new Date(
         Math.min(
-          ...assistantStats.daily_stats.map((entry) =>
+          ...agentStats.daily_stats.map((entry) =>
             new Date(entry.date).getTime()
           )
         )
@@ -91,7 +90,7 @@ export function AssistantStats({ assistantId }: { assistantId: number }) {
     const dateRangeList = getDatesList(initialDate);
 
     const statsMap = new Map(
-      assistantStats.daily_stats.map((entry) => [entry.date, entry])
+      agentStats.daily_stats.map((entry) => [entry.date, entry])
     );
 
     return dateRangeList
@@ -104,13 +103,13 @@ export function AssistantStats({ assistantId }: { assistantId: number }) {
           "Unique Users": dayData?.total_unique_users || 0,
         };
       });
-  }, [assistantStats, dateRange]);
+  }, [agentStats, dateRange]);
 
-  const totalMessages = assistantStats?.total_messages ?? 0;
-  const totalUniqueUsers = assistantStats?.total_unique_users ?? 0;
+  const totalMessages = agentStats?.total_messages ?? 0;
+  const totalUniqueUsers = agentStats?.total_unique_users ?? 0;
 
   let content;
-  if (isLoading || !assistant) {
+  if (isLoading || !agent) {
     content = (
       <div className="h-80 flex flex-col">
         <ThreeDotsLoader />
@@ -122,11 +121,11 @@ export function AssistantStats({ assistantId }: { assistantId: number }) {
         <p className="m-auto">{error}</p>
       </div>
     );
-  } else if (!assistantStats?.daily_stats?.length) {
+  } else if (!agentStats?.daily_stats?.length) {
     content = (
       <div className="h-80 text-text-500 flex flex-col">
         <p className="m-auto">
-          No data found for this assistant in the selected date range
+          No data found for this agent in the selected date range
         </p>
       </div>
     );
@@ -157,12 +156,10 @@ export function AssistantStats({ assistantId }: { assistantId: number }) {
           <Card>
             <CardContent className="pt-6">
               <div className="flex items-center space-x-4">
-                {assistant && <AgentAvatar agent={assistant} />}
+                {agent && <AgentAvatar agent={agent} />}
                 <div>
-                  <h3 className="text-lg font-normal">{assistant?.name}</h3>
-                  <p className="text-sm text-text-500">
-                    {assistant?.description}
-                  </p>
+                  <h3 className="text-lg font-normal">{agent?.name}</h3>
+                  <p className="text-sm text-text-500">{agent?.description}</p>
                 </div>
               </div>
             </CardContent>

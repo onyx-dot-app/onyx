@@ -1,15 +1,15 @@
 import { Page } from "@playwright/test";
 import { expect } from "@playwright/test";
-import { verifyAssistantIsChosen } from "./chatActions";
+import { verifyAgentIsChosen } from "./chatActions";
 
-export type AssistantParams = {
+export type AgentParams = {
   name: string;
   description?: string;
   instructions?: string; // system_prompt
 };
 
 // Create an assistant via the UI from the app page and wait until it is active
-export async function createAssistant(page: Page, params: AssistantParams) {
+export async function createAgent(page: Page, params: AgentParams) {
   const { name, description = "", instructions = "Test Instructions" } = params;
 
   // Navigate to creation flow
@@ -33,18 +33,18 @@ export async function createAssistant(page: Page, params: AssistantParams) {
   await page.getByRole("button", { name: "Create" }).click();
 
   // Verify it is selected in chat (placeholder contains assistant name)
-  await verifyAssistantIsChosen(page, name);
+  await verifyAgentIsChosen(page, name);
 }
 
 // Pin an assistant by its visible name in the sidebar list.
 // If already pinned, this will leave it pinned (no-op).
-export async function pinAssistantByName(
+export async function pinAgentByName(
   page: Page,
-  assistantName: string
+  agentName: string
 ): Promise<void> {
   const row = page
     .locator('[data-testid^="assistant-["]')
-    .filter({ hasText: assistantName })
+    .filter({ hasText: agentName })
     .first();
 
   await row.waitFor({ state: "visible", timeout: 10000 });
@@ -70,7 +70,7 @@ export async function pinAssistantByName(
 }
 
 /**
- * Ensures the Image Generation tool is enabled in the default assistant configuration.
+ * Ensures the Image Generation tool is enabled in the default agent configuration.
  * If it's not enabled, it will toggle it on.
  *
  * Navigates to the Chat Preferences page and toggles the Image Generation switch

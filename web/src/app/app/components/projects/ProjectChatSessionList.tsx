@@ -21,7 +21,7 @@ export default function ProjectChatSessionList() {
     refreshCurrentProjectDetails,
     isLoadingProjectDetails,
   } = useProjectsContext();
-  const { agents: assistants } = useAgents();
+  const { agents } = useAgents();
   const [isRenamingChat, setIsRenamingChat] = React.useState<string | null>(
     null
   );
@@ -78,13 +78,13 @@ export default function ProjectChatSessionList() {
                         currentProjectDetails?.persona_id_to_is_default || {};
                       const isDefault = personaIdToDefault[chat.persona_id];
                       if (isDefault === false) {
-                        const assistant = assistants.find(
+                        const agent = agents.find(
                           (a) => a.id === chat.persona_id
                         );
-                        if (assistant) {
+                        if (agent) {
                           return (
                             <div className="h-full pt-1">
-                              <AgentAvatar agent={assistant} size={18} />
+                              <AgentAvatar agent={agent} size={18} />
                             </div>
                           );
                         }
