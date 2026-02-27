@@ -153,9 +153,9 @@ def chunks() -> Generator[list[DocMetadataAwareIndexChunk], None, None]:
         external_user_group_ids=[],
         is_public=True,
     )
-    document_sets = set()
-    user_project = list()
-    personas = list()
+    document_sets: set[str] = set()
+    user_project: list[int] = list()
+    personas: list[int] = list()
     boost = 0
     blurb = ""
     content = ""
@@ -163,14 +163,14 @@ def chunks() -> Generator[list[DocMetadataAwareIndexChunk], None, None]:
     doc_summary = ""
     chunk_context = ""
     title_embedding = None
-    embeddings = ChunkEmbedding(full_embedding=[0] * 128)
+    embeddings = ChunkEmbedding(full_embedding=[0] * 128, mini_chunk_embeddings=[])
     source_document = Document(
         id=doc_id, semantic_identifier="", source=DocumentSource.FILE
     )
     metadata_suffix_keyword = ""
     image_file_id = None
     source_links = None
-    ancestor_hierarchy_node_ids = []
+    ancestor_hierarchy_node_ids: list[int] = []
     for i in range(chunk_count):
         result.append(
             DocMetadataAwareIndexChunk(
@@ -252,11 +252,11 @@ class TestDocumentIndexOld:
             )
             assert len(inference_chunks) == chunk_count
             # Sort by chunk id to easily test if we have all chunks.
-            for i, chunk in enumerate(
+            for i, inference_chunk in enumerate(
                 sorted(inference_chunks, key=lambda x: x.chunk_id)
             ):
-                assert chunk.chunk_id == i
-                assert chunk.document_id == doc_id
+                assert inference_chunk.chunk_id == i
+                assert inference_chunk.document_id == doc_id
 
             # Under test.
             # Explicitly set empty fields here.
@@ -277,11 +277,11 @@ class TestDocumentIndexOld:
             )
             assert len(inference_chunks) == chunk_count
             # Sort by chunk id to easily test if we have all chunks.
-            for i, chunk in enumerate(
+            for i, inference_chunk in enumerate(
                 sorted(inference_chunks, key=lambda x: x.chunk_id)
             ):
-                assert chunk.chunk_id == i
-                assert chunk.document_id == doc_id
+                assert inference_chunk.chunk_id == i
+                assert inference_chunk.document_id == doc_id
             # Now, we should expect to not get any chunks if we specify the user
             # project and personas filters.
             inference_chunks = document_index.id_based_retrieval(
