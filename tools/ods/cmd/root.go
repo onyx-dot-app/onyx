@@ -51,6 +51,7 @@ func NewRootCommand() *cobra.Command {
 	cmd.AddCommand(NewRunCICommand())
 	cmd.AddCommand(NewScreenshotDiffCommand())
 	cmd.AddCommand(NewWebCommand())
+	cmd.AddCommand(NewWhoisCommand())
 
 	return cmd
 }
