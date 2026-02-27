@@ -26,6 +26,13 @@ class CacheLock(abc.ABC):
     def owned(self) -> bool:
         raise NotImplementedError
 
+    def __enter__(self) -> "CacheLock":
+        self.acquire()
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        self.release()
+
 
 class CacheBackend(abc.ABC):
     """Thin abstraction over a key-value cache with TTL, locks, and blocking lists.

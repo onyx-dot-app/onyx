@@ -12,9 +12,15 @@ def _build_redis_backend(tenant_id: str) -> CacheBackend:
     return RedisCacheBackend(redis_pool.get_client(tenant_id))
 
 
+def _build_postgres_backend(tenant_id: str) -> CacheBackend:
+    from onyx.cache.postgres_backend import PostgresCacheBackend
+
+    return PostgresCacheBackend(tenant_id)
+
+
 _BACKEND_BUILDERS: dict[CacheBackendType, Callable[[str], CacheBackend]] = {
     CacheBackendType.REDIS: _build_redis_backend,
-    # CacheBackendType.POSTGRES will be added in a follow-up PR.
+    CacheBackendType.POSTGRES: _build_postgres_backend,
 }
 
 
