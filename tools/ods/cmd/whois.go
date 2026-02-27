@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"regexp"
 	"strings"
 	"text/tabwriter"
 
@@ -13,9 +12,7 @@ import (
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/kube"
 )
 
-var tenantIDPattern = regexp.MustCompile(`^tenant_.+$`)
-
-// NewWhoisCommand creates the find command for looking up users/tenants.
+// NewWhoisCommand creates the whois command for looking up users/tenants.
 func NewWhoisCommand() *cobra.Command {
 	var ctx string
 
@@ -55,7 +52,7 @@ Use -c to select which context (default: data_plane).`,
 	return cmd
 }
 
-func parseKubeCtx(name string) (cluster, region, namespace string) {
+func clusterFromEnv(name string) *kube.Cluster {
 	envKey := "KUBE_CTX_" + strings.ToUpper(name)
 	val := os.Getenv(envKey)
 	if val == "" {
@@ -67,37 +64,49 @@ func parseKubeCtx(name string) (cluster, region, namespace string) {
 		log.Fatalf("%s must be a space-separated tuple of 3 values (cluster region namespace), got: %q", envKey, val)
 	}
 
-	return parts[0], parts[1], parts[2]
+	return &kube.Cluster{Name: parts[0], Region: parts[1], Namespace: parts[2]}
+}
+
+// queryPod runs a SQL query via pginto on the given pod and returns cleaned output lines.
+func queryPod(c *kube.Cluster, pod, sql string) []string {
+	raw, err := c.ExecOnPod(pod, "pginto", "-A", "-t", "-F", "\t", "-c", sql)
+	if err != nil {
+		log.Fatalf("Query failed: %v", err)
+	}
+
+	var lines []string
+	for _, line := range strings.Split(strings.TrimSpace(raw), "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" && !strings.HasPrefix(line, "Connecting to ") {
+			lines = append(lines, line)
+		}
+	}
+	return lines
 }
 
 func runWhois(query string, ctx string) {
-	cluster, region, namespace := parseKubeCtx(ctx)
+	c := clusterFromEnv(ctx)
 
-	// 1. Switch to cluster context
-	log.Infof("Switching to %s context...", ctx)
-	if err := kube.UseCluster(cluster, region, namespace); err != nil {
-		log.Fatalf("Failed to switch context: %v", err)
+	if err := c.EnsureContext(); err != nil {
+		log.Fatalf("Failed to ensure cluster context: %v", err)
 	}
 
-	// 2. Find api-server pod
 	log.Info("Finding api-server pod...")
-	pod, err := kube.FindPod("api-server")
+	pod, err := c.FindPod("api-server")
 	if err != nil {
 		log.Fatalf("Failed to find api-server pod: %v", err)
 	}
 	log.Debugf("Using pod: %s", pod)
 
-	// 3. Detect mode and run query
-	if tenantIDPattern.MatchString(query) {
-		findAdminsByTenant(pod, query)
+	if strings.HasPrefix(query, "tenant_") {
+		findAdminsByTenant(c, pod, query)
 	} else {
-		findByEmail(pod, query)
+		findByEmail(c, pod, query)
 	}
 }
 
-func findByEmail(pod, fragment string) {
-	// Sanitize: strip any single quotes to prevent injection
-	fragment = strings.ReplaceAll(fragment, "'", "")
+func findByEmail(c *kube.Cluster, pod, fragment string) {
+	fragment = strings.NewReplacer("'", "", `"`, "").Replace(fragment)
 
 	sql := fmt.Sprintf(
 		`SELECT email, tenant_id, active FROM public.user_tenant_mapping WHERE email LIKE '%%%s%%' ORDER BY email;`,
@@ -105,59 +114,41 @@ func findByEmail(pod, fragment string) {
 	)
 
 	log.Infof("Searching for emails matching '%%%s%%'...", fragment)
-	raw, err := kube.ExecOnPod(pod, "pginto", "-A", "-t", "-F", "\t", "-c", sql)
-	if err != nil {
-		log.Fatalf("Query failed: %v", err)
-	}
-
-	output := strings.TrimSpace(raw)
-	if output == "" {
+	lines := queryPod(c, pod, sql)
+	if len(lines) == 0 {
 		fmt.Println("No results found.")
 		return
 	}
 
-	// Pretty print as table
+	fmt.Println()
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	_, _ = fmt.Fprintln(w, "EMAIL\tTENANT ID\tACTIVE")
 	_, _ = fmt.Fprintln(w, "-----\t---------\t------")
-	for _, line := range strings.Split(output, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
+	for _, line := range lines {
 		_, _ = fmt.Fprintln(w, line)
 	}
 	_ = w.Flush()
 }
 
-func findAdminsByTenant(pod, tenantID string) {
-	// Sanitize
-	tenantID = strings.ReplaceAll(tenantID, "'", "")
-	tenantID = strings.ReplaceAll(tenantID, `"`, "")
+func findAdminsByTenant(c *kube.Cluster, pod, tenantID string) {
+	tenantID = strings.NewReplacer("'", "", `"`, "").Replace(tenantID)
 
 	sql := fmt.Sprintf(
-		`SELECT email FROM "%s"."user" WHERE role = 'ADMIN' AND is_active = true ORDER BY email;`,
+		`SELECT email FROM "%s"."user" WHERE role = 'ADMIN' AND is_active = true AND email NOT LIKE 'api_key__%%' ORDER BY email;`,
 		tenantID,
 	)
 
 	log.Infof("Fetching admin emails for %s...", tenantID)
-	raw, err := kube.ExecOnPod(pod, "pginto", "-A", "-t", "-F", "\t", "-c", sql)
-	if err != nil {
-		log.Fatalf("Query failed: %v", err)
-	}
-
-	output := strings.TrimSpace(raw)
-	if output == "" {
+	lines := queryPod(c, pod, sql)
+	if len(lines) == 0 {
 		fmt.Println("No admin users found for this tenant.")
 		return
 	}
 
+	fmt.Println()
 	fmt.Println("EMAIL")
 	fmt.Println("-----")
-	for _, line := range strings.Split(output, "\n") {
-		line = strings.TrimSpace(line)
-		if line != "" {
-			fmt.Println(line)
-		}
+	for _, line := range lines {
+		fmt.Println(line)
 	}
 }
