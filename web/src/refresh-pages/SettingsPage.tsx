@@ -3,11 +3,8 @@
 import { useRef, useCallback, useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import * as InputLayouts from "@/layouts/input-layouts";
-import {
-  LineItemLayout,
-  Section,
-  AttachmentItemLayout,
-} from "@/layouts/general-layouts";
+import { Section, AttachmentItemLayout } from "@/layouts/general-layouts";
+import { Content, ContentAction } from "@opal/layouts";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import {
@@ -263,7 +260,12 @@ function GeneralSettings() {
 
       <Section gap={2}>
         <Section gap={0.75}>
-          <InputLayouts.Title title="Profile" />
+          <Content
+            title="Profile"
+            sizePreset="main-content"
+            variant="section"
+            widthVariant="full"
+          />
           <Card>
             <InputLayouts.Horizontal
               title="Full Name"
@@ -319,7 +321,12 @@ function GeneralSettings() {
         </Section>
 
         <Section gap={0.75}>
-          <InputLayouts.Title title="Appearance" />
+          <Content
+            title="Appearance"
+            sizePreset="main-content"
+            variant="section"
+            widthVariant="full"
+          />
           <Card>
             <InputLayouts.Horizontal
               title="Color Mode"
@@ -424,7 +431,12 @@ function GeneralSettings() {
         <Separator noPadding />
 
         <Section gap={0.75}>
-          <InputLayouts.Title title="Danger Zone" />
+          <Content
+            title="Danger Zone"
+            sizePreset="main-content"
+            variant="section"
+            widthVariant="full"
+          />
           <Card>
             <InputLayouts.Horizontal
               title="Delete All Chats"
@@ -769,7 +781,12 @@ function ChatPreferencesSettings() {
   return (
     <Section gap={2}>
       <Section gap={0.75}>
-        <InputLayouts.Title title="Chats" />
+        <Content
+          title="Chats"
+          sizePreset="main-content"
+          variant="section"
+          widthVariant="full"
+        />
         <Card>
           <InputLayouts.Horizontal
             title="Default Model"
@@ -849,7 +866,12 @@ function ChatPreferencesSettings() {
             limit={500}
           />
         </InputLayouts.Vertical>
-        <InputLayouts.Title title="Memory" />
+        <Content
+          title="Memory"
+          sizePreset="main-content"
+          variant="section"
+          widthVariant="full"
+        />
         <Card>
           <InputLayouts.Horizontal
             title="Reference Stored Memories"
@@ -890,7 +912,12 @@ function ChatPreferencesSettings() {
       </Section>
 
       <Section gap={0.75}>
-        <InputLayouts.Title title="Prompt Shortcuts" />
+        <Content
+          title="Prompt Shortcuts"
+          sizePreset="main-content"
+          variant="section"
+          widthVariant="full"
+        />
         <Card>
           <InputLayouts.Horizontal
             title="Use Prompt Shortcuts"
@@ -1215,7 +1242,12 @@ function AccountsAccessSettings() {
 
       <Section gap={2}>
         <Section gap={0.75}>
-          <InputLayouts.Title title="Accounts" />
+          <Content
+            title="Accounts"
+            sizePreset="main-content"
+            variant="section"
+            widthVariant="full"
+          />
           <Card>
             <InputLayouts.Horizontal
               title="Email"
@@ -1247,7 +1279,12 @@ function AccountsAccessSettings() {
 
         {showTokensSection && (
           <Section gap={0.75}>
-            <InputLayouts.Title title="Access Tokens" />
+            <Content
+              title="Access Tokens"
+              sizePreset="main-content"
+              variant="section"
+              widthVariant="full"
+            />
             {canCreateTokens ? (
               <Card padding={0.25}>
                 <Section gap={0}>
@@ -1363,10 +1400,12 @@ function IndexedConnectorCard({ source, isActive }: IndexedConnectorCardProps) {
 
   return (
     <Card>
-      <LineItemLayout
+      <Content
         icon={sourceMetadata.icon}
         title={sourceMetadata.displayName}
         description={isActive ? "Connected" : "Paused"}
+        sizePreset="main-content"
+        variant="section"
       />
     </Card>
   );
@@ -1440,12 +1479,15 @@ function FederatedConnectorCard({
       )}
 
       <Card padding={0.5}>
-        <LineItemLayout
+        <ContentAction
           icon={sourceMetadata.icon}
           title={sourceMetadata.displayName}
           description={
             connector.has_oauth_token ? "Connected" : "Not connected"
           }
+          sizePreset="main-content"
+          variant="section"
+          paddingVariant="sm"
           rightChildren={
             connector.has_oauth_token ? (
               <OpalButton
@@ -1466,7 +1508,6 @@ function FederatedConnectorCard({
               </Button>
             ) : undefined
           }
-          reducedPadding
         />
       </Card>
     </>
@@ -1515,7 +1556,12 @@ function ConnectorsSettings() {
   return (
     <Section gap={2}>
       <Section gap={0.75} justifyContent="start">
-        <InputLayouts.Title title="Connectors" />
+        <Content
+          title="Connectors"
+          sizePreset="main-content"
+          variant="section"
+          widthVariant="full"
+        />
         {hasConnectors ? (
           <>
             {/* Indexed Connectors */}

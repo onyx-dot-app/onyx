@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Card from "@/refresh-components/cards/Card";
 import Text from "@/refresh-components/texts/Text";
-import { LineItemLayout } from "@/layouts/general-layouts";
+import { Content } from "@opal/layouts";
 import Separator from "@/refresh-components/Separator";
 import { ValidSources } from "@/lib/types";
 import { getSourceMetadata } from "@/lib/sources";
@@ -99,14 +99,15 @@ export default function ComingSoonConnectors() {
           const card = (
             <div key={type} className="opacity-60">
               <Card variant="secondary">
-                <LineItemLayout
+                <Content
                   icon={
                     type === ValidSources.Imap
                       ? OutlookIcon
                       : sourceMetadata.icon
                   }
                   title={displayName}
-                  center
+                  sizePreset="main-ui"
+                  variant="body"
                 />
               </Card>
             </div>
@@ -118,7 +119,12 @@ export default function ComingSoonConnectors() {
               card,
               <div key="onedrive" className="opacity-60">
                 <Card variant="secondary">
-                  <LineItemLayout icon={OneDriveIcon} title="OneDrive" center />
+                  <Content
+                    icon={OneDriveIcon}
+                    title="OneDrive"
+                    sizePreset="main-ui"
+                    variant="body"
+                  />
                 </Card>
               </div>,
             ];
@@ -130,7 +136,12 @@ export default function ComingSoonConnectors() {
               card,
               <div key="box" className="opacity-60">
                 <Card variant="secondary">
-                  <LineItemLayout icon={BoxIcon} title="Box" center />
+                  <Content
+                    icon={BoxIcon}
+                    title="Box"
+                    sizePreset="main-ui"
+                    variant="body"
+                  />
                 </Card>
               </div>,
             ];
@@ -141,13 +152,23 @@ export default function ComingSoonConnectors() {
         {/* Enterprise/ERP */}
         <div className="opacity-60">
           <Card variant="secondary">
-            <LineItemLayout icon={ServiceNowIcon} title="ServiceNow" center />
+            <Content
+              icon={ServiceNowIcon}
+              title="ServiceNow"
+              sizePreset="main-ui"
+              variant="body"
+            />
           </Card>
         </div>
         {/* Project Management */}
         <div className="opacity-60">
           <Card variant="secondary">
-            <LineItemLayout icon={TrelloIcon} title="Trello" center />
+            <Content
+              icon={TrelloIcon}
+              title="Trello"
+              sizePreset="main-ui"
+              variant="body"
+            />
           </Card>
         </div>
       </div>

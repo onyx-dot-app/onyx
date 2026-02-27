@@ -6,7 +6,8 @@ import type { Route } from "next";
 import { FullPersona } from "@/app/admin/assistants/interfaces";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import Modal from "@/refresh-components/Modal";
-import { Section, LineItemLayout } from "@/layouts/general-layouts";
+import { Section } from "@/layouts/general-layouts";
+import { Content, ContentAction } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import Separator from "@/refresh-components/Separator";
@@ -26,7 +27,7 @@ import useMcpServersForAgentEditor from "@/hooks/useMcpServersForAgentEditor";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 import { MCPServer, ToolSnapshot } from "@/lib/tools/interfaces";
 import EmptyMessage from "@/refresh-components/EmptyMessage";
-import { Horizontal, Title } from "@/layouts/input-layouts";
+import { Horizontal } from "@/layouts/input-layouts";
 import Switch from "@/refresh-components/inputs/Switch";
 import Button from "@/refresh-components/buttons/Button";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
@@ -36,10 +37,7 @@ import { formatMmDdYyyy } from "@/lib/dateUtils";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import { FileCard } from "@/sections/cards/FileCard";
 import DocumentSetCard from "@/sections/cards/DocumentSetCard";
-import {
-  getLLMProviderOverrideForPersona,
-  getDisplayName,
-} from "@/lib/llm/utils";
+import { getDisplayName } from "@/lib/llm/utils";
 import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
 import { Interactive } from "@opal/core";
 
@@ -60,11 +58,12 @@ function ViewerMCPServerCard({ server, tools }: ViewerMCPServerCardProps) {
     <ExpandableCard.Root isFolded={folded} onFoldedChange={setFolded}>
       <ExpandableCard.Header>
         <div className="p-2">
-          <LineItemLayout
+          <ContentAction
             icon={serverIcon}
             title={server.name}
             description={server.description}
-            variant="secondary"
+            sizePreset="main-ui"
+            variant="section"
             rightChildren={
               <Button
                 internal
@@ -74,7 +73,6 @@ function ViewerMCPServerCard({ server, tools }: ViewerMCPServerCardProps) {
                 {folded ? "Expand" : "Fold"}
               </Button>
             }
-            center
           />
         </div>
       </ExpandableCard.Header>
@@ -82,10 +80,11 @@ function ViewerMCPServerCard({ server, tools }: ViewerMCPServerCardProps) {
         <ActionsLayouts.Content>
           {tools.map((tool) => (
             <Section key={tool.id} padding={0.25}>
-              <LineItemLayout
+              <Content
                 title={tool.display_name}
                 description={tool.description}
-                variant="secondary"
+                sizePreset="main-ui"
+                variant="section"
               />
             </Section>
           ))}
@@ -104,12 +103,12 @@ function ViewerOpenApiToolCard({ tool }: { tool: ToolSnapshot }) {
     <ExpandableCard.Root>
       <ExpandableCard.Header>
         <div className="p-2">
-          <LineItemLayout
+          <Content
             icon={SvgActions}
             title={tool.display_name}
             description={tool.description}
-            variant="secondary"
-            center
+            sizePreset="main-ui"
+            variant="section"
           />
         </div>
       </ExpandableCard.Header>
@@ -258,25 +257,27 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
           {/* Metadata */}
           <Section flexDirection="row" justifyContent="start">
             {!agent.is_default_persona && (
-              <LineItemLayout
+              <Content
                 icon={SvgStar}
                 title="Featured"
-                variant="tertiary"
-                width="fit"
+                sizePreset="main-ui"
+                variant="body"
               />
             )}
-            <LineItemLayout
+            <Content
               icon={SvgUser}
               title={agent.owner?.email ?? "Onyx"}
-              variant="tertiary-muted"
-              width="fit"
+              sizePreset="main-ui"
+              variant="body"
+              prominence="muted"
             />
             {agent.is_public && (
-              <LineItemLayout
+              <Content
                 icon={SvgOrganization}
                 title="Public to your organization"
-                variant="tertiary-muted"
-                width="fit"
+                sizePreset="main-ui"
+                variant="body"
+                prominence="muted"
               />
             )}
           </Section>
@@ -287,7 +288,11 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
           {/* Knowledge */}
           <Separator noPadding />
           <Section gap={0.5} alignItems="start">
-            <Title title="Knowledge" />
+            <Content
+              title="Knowledge"
+              sizePreset="main-content"
+              variant="section"
+            />
             {hasKnowledge ? (
               <Section
                 gap={0.5}
@@ -340,10 +345,11 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
             <SimpleCollapsible.Content>
               <Section gap={0.5} alignItems="start">
                 {agent.system_prompt && (
-                  <LineItemLayout
+                  <Content
                     title="Instructions"
                     description={agent.system_prompt}
-                    variant="secondary"
+                    sizePreset="main-ui"
+                    variant="section"
                   />
                 )}
                 {defaultModel && (
@@ -351,7 +357,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
                     title="Default Model"
                     description="This model will be used by Onyx by default in your chats."
                     nonInteractive
-                    variant="secondary"
+                    sizePreset="main-ui"
                   >
                     <Text>{defaultModel}</Text>
                   </Horizontal>
@@ -361,7 +367,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
                     title="Knowledge Cutoff Date"
                     description="Documents with a last-updated date prior to this will be ignored."
                     nonInteractive
-                    variant="secondary"
+                    sizePreset="main-ui"
                   >
                     <Text mainUiMono>
                       {formatMmDdYyyy(agent.search_start_date)}
@@ -372,7 +378,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
                   title="Overwrite System Prompts"
                   description='Remove the base system prompt which includes useful instructions (e.g. "You can use Markdown tables"). This may affect response quality.'
                   nonInteractive
-                  variant="secondary"
+                  sizePreset="main-ui"
                 >
                   <Switch disabled checked={agent.replace_base_system_prompt} />
                 </Horizontal>
@@ -384,7 +390,12 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
           {agent.task_prompt && (
             <>
               <Separator noPadding />
-              <Title title="Prompt Reminders" description={agent.task_prompt} />
+              <Content
+                title="Prompt Reminders"
+                description={agent.task_prompt}
+                sizePreset="main-content"
+                variant="section"
+              />
             </>
           )}
 
@@ -392,7 +403,11 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
           {agent.starter_messages && agent.starter_messages.length > 0 && (
             <>
               <Separator noPadding />
-              <Title title="Conversation Starters" />
+              <Content
+                title="Conversation Starters"
+                sizePreset="main-content"
+                variant="section"
+              />
               <div className="grid grid-cols-2 gap-1 w-full">
                 {agent.starter_messages.map((starter, index) => (
                   <Interactive.Base
@@ -401,10 +416,13 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
                     prominence="tertiary"
                   >
                     <Interactive.Container>
-                      <LineItemLayout
+                      <Content
                         icon={SvgBubbleText}
                         title={starter.message}
-                        variant="tertiary-muted"
+                        sizePreset="main-ui"
+                        variant="body"
+                        prominence="muted"
+                        widthVariant="full"
                       />
                     </Interactive.Container>
                   </Interactive.Base>
