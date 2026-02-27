@@ -17,7 +17,7 @@ interface UseDeepResearchToggleProps {
  * The toggle is preserved when transitioning from no chat session to a new session.
  *
  * @param chatSessionId - The current chat session ID
- * @param agentId - The current assistant ID
+ * @param agentId - The current agent ID
  * @returns An object containing the toggle state and toggle function
  */
 export default function useDeepResearchToggle({

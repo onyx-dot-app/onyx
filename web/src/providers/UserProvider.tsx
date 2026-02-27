@@ -300,15 +300,9 @@ export function UserProvider({
       };
     });
 
-    let updatedPinnedAgentsIds = currentPinnedAgentIDs;
-
-    if (isPinned) {
-      updatedPinnedAgentsIds.push(agentId);
-    } else {
-      updatedPinnedAgentsIds = updatedPinnedAgentsIds.filter(
-        (id) => id !== agentId
-      );
-    }
+    let updatedPinnedAgentsIds = isPinned
+      ? [...currentPinnedAgentIDs, agentId]
+      : currentPinnedAgentIDs.filter((id) => id !== agentId);
     try {
       const response = await fetch(`/api/user/pinned-assistants`, {
         method: "PATCH",
