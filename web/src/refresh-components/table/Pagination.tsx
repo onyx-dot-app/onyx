@@ -235,7 +235,7 @@ function CountPaginationInner({
   className,
 }: CountPaginationProps) {
   const isSmall = size === "sm";
-  const rangeStart = (currentPage - 1) * pageSize + 1;
+  const rangeStart = totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1;
   const rangeEnd = Math.min(currentPage * pageSize, totalItems);
   const currentItems = `${rangeStart}~${rangeEnd}`;
 
