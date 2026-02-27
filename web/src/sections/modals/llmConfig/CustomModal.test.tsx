@@ -439,6 +439,7 @@ describe("Custom LLM Provider Configuration Workflow", () => {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: expect.stringContaining('"provider_id":5'),
+          body: expect.stringContaining('"model_name"'),
         })
       );
     });
