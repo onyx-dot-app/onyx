@@ -57,6 +57,12 @@ def _run_auto_llm_update() -> None:
         sync_llm_models_from_github(db_session)
 
 
+def _run_cache_cleanup() -> None:
+    from onyx.cache.postgres_backend import cleanup_expired_cache_entries
+
+    cleanup_expired_cache_entries()
+
+
 def _run_scheduled_eval() -> None:
     from onyx.configs.app_configs import BRAINTRUST_API_KEY
     from onyx.configs.app_configs import SCHEDULED_EVAL_DATASET_NAMES
@@ -98,12 +104,26 @@ def _run_scheduled_eval() -> None:
             )
 
 
+_CACHE_CLEANUP_INTERVAL_SECONDS = 300
+
+
 def _build_periodic_tasks() -> list[_PeriodicTaskDef]:
+    from onyx.cache.interface import CacheBackendType
     from onyx.configs.app_configs import AUTO_LLM_CONFIG_URL
     from onyx.configs.app_configs import AUTO_LLM_UPDATE_INTERVAL_SECONDS
+    from onyx.configs.app_configs import CACHE_BACKEND
     from onyx.configs.app_configs import SCHEDULED_EVAL_DATASET_NAMES
 
     tasks: list[_PeriodicTaskDef] = []
+    if CACHE_BACKEND == CacheBackendType.POSTGRES:
+        tasks.append(
+            _PeriodicTaskDef(
+                name="cache-cleanup",
+                interval_seconds=_CACHE_CLEANUP_INTERVAL_SECONDS,
+                lock_id=PERIODIC_TASK_LOCK_BASE + 2,
+                run_fn=_run_cache_cleanup,
+            )
+        )
     if AUTO_LLM_CONFIG_URL:
         tasks.append(
             _PeriodicTaskDef(
