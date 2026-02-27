@@ -1,4 +1,5 @@
-import { VisionProvider } from "@/interfaces/llm";
+import { LLMProviderResponse, VisionProvider } from "@/interfaces/llm";
+import { LLM_ADMIN_URL } from "@/lib/llmConfig/constants";
 
 export async function fetchVisionProviders(): Promise<VisionProvider[]> {
   const response = await fetch("/api/admin/llm/vision-providers", {
@@ -11,24 +12,24 @@ export async function fetchVisionProviders(): Promise<VisionProvider[]> {
       `Failed to fetch vision providers: ${await response.text()}`
     );
   }
-  return response.json();
+  const data = (await response.json()) as LLMProviderResponse<VisionProvider>;
+  return data.providers;
 }
 
 export async function setDefaultVisionProvider(
   providerId: number,
   visionModel: string
 ): Promise<void> {
-  const response = await fetch(
-    `/api/admin/llm/provider/${providerId}/default-vision?vision_model=${encodeURIComponent(
-      visionModel
-    )}`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-    }
-  );
+  const response = await fetch(`${LLM_ADMIN_URL}/default-vision`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      provider_id: providerId,
+      model_name: visionModel,
+    }),
+  });
 
   if (!response.ok) {
     const errorMsg = await response.text();
