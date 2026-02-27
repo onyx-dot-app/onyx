@@ -1,11 +1,7 @@
 import "@opal/components/buttons/Button/styles.css";
 import "@opal/components/tooltip.css";
-import {
-  Interactive,
-  type InteractiveBaseProps,
-  type InteractiveContainerWidthVariant,
-} from "@opal/core";
-import type { SizeVariant } from "@opal/shared";
+import { Interactive, type InteractiveBaseProps } from "@opal/core";
+import type { SizeVariant, WidthVariant } from "@opal/shared";
 import type { TooltipSide } from "@opal/components";
 import type { IconFunctionComponent } from "@opal/types";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
@@ -91,7 +87,7 @@ type ButtonProps = InteractiveBaseProps &
     tooltip?: string;
 
     /** Width preset. `"auto"` shrink-wraps, `"full"` stretches to parent width. */
-    width?: InteractiveContainerWidthVariant;
+    width?: WidthVariant;
 
     /** Which side the tooltip appears on. */
     tooltipSide?: TooltipSide;

@@ -50,4 +50,31 @@ const sizeVariants = {
 /** Named size preset key. */
 type SizeVariant = keyof typeof sizeVariants;
 
-export { sizeVariants, type SizeVariant };
+// ---------------------------------------------------------------------------
+// Width Variants
+//
+// A named scale of width presets that map to Tailwind width utility classes.
+//
+// Consumers:
+//   - Interactive.Container  (widthVariant)
+//   - Button                 (width)
+//   - Content                (widthVariant)
+// ---------------------------------------------------------------------------
+
+/**
+ * Width-variant scale.
+ *
+ * | Key    | Tailwind class |
+ * |--------|----------------|
+ * | `auto` | `w-auto`       |
+ * | `full` | `w-full`       |
+ */
+const widthVariants = {
+  auto: "w-auto",
+  full: "w-full",
+} as const;
+
+/** Named width preset key. */
+type WidthVariant = keyof typeof widthVariants;
+
+export { sizeVariants, type SizeVariant, widthVariants, type WidthVariant };
