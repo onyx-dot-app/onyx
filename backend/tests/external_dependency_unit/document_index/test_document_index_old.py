@@ -165,7 +165,11 @@ def chunks() -> Generator[list[DocMetadataAwareIndexChunk], None, None]:
     title_embedding = None
     embeddings = ChunkEmbedding(full_embedding=[0] * 128, mini_chunk_embeddings=[])
     source_document = Document(
-        id=doc_id, semantic_identifier="", source=DocumentSource.FILE
+        id=doc_id,
+        semantic_identifier="",
+        source=DocumentSource.FILE,
+        sections=[],
+        metadata={},
     )
     metadata_suffix_keyword = ""
     image_file_id = None
