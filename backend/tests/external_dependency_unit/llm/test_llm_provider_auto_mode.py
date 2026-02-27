@@ -320,10 +320,11 @@ class TestAutoModeSyncFeature:
             )
 
             # Verify initial state: all models are visible
-            provider = fetch_existing_llm_provider(
+            existing_provider = fetch_existing_llm_provider(
                 name=provider_name, db_session=db_session
             )
-            assert provider is not None
+            assert existing_provider is not None
+            provider = existing_provider
             assert provider.is_auto_mode is False
 
             for mc in provider.model_configurations:
@@ -354,15 +355,15 @@ class TestAutoModeSyncFeature:
             # Step 3: Verify model visibility after auto mode transition
             # Expire session cache to force fresh fetch after sync_auto_mode_models committed
             db_session.expire_all()
-            provider = fetch_llm_provider_view(
+            provider_view = fetch_llm_provider_view(
                 provider_name=provider_name, db_session=db_session
             )
-            assert provider is not None
-            assert provider.is_auto_mode is True
+            assert provider_view is not None
+            assert provider_view.is_auto_mode is True
 
             # Build a map of model name -> visibility
             model_visibility = {
-                mc.name: mc.is_visible for mc in provider.model_configurations
+                mc.name: mc.is_visible for mc in provider_view.model_configurations
             }
 
             # Models in auto mode config should be visible
