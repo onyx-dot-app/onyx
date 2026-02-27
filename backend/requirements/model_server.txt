@@ -108,7 +108,7 @@ durationpy==0.10
     # via kubernetes
 einops==0.8.1
     # via onyx
-fastapi==0.128.0
+fastapi==0.133.1
     # via
     #   onyx
     #   sentry-sdk
@@ -525,6 +525,7 @@ typing-extensions==4.15.0
     #   typing-inspection
 typing-inspection==0.4.2
     # via
+    #   fastapi
     #   mcp
     #   pydantic
     #   pydantic-settings

@@ -13,6 +13,7 @@ interface LogoSectionProps {
 function LogoSection({ folded, onFoldClick }: LogoSectionProps) {
   const settings = useSettingsContext();
   const applicationName = settings.enterpriseSettings?.application_name;
+  const logoDisplayStyle = settings.enterpriseSettings?.logo_display_style;
 
   const logo = useCallback(
     (className?: string) => <Logo folded={folded} className={className} />,
@@ -43,7 +44,7 @@ function LogoSection({ folded, onFoldClick }: LogoSectionProps) {
     >
       {folded === undefined ? (
         <div className="p-1">{logo()}</div>
-      ) : folded ? (
+      ) : folded && logoDisplayStyle !== "name_only" ? (
         <>
           <div className="group-hover/SidebarWrapper:hidden pt-1.5">
             {logo()}
@@ -52,6 +53,8 @@ function LogoSection({ folded, onFoldClick }: LogoSectionProps) {
             {closeButton(false)}
           </div>
         </>
+      ) : folded ? (
+        <div className="flex w-full justify-center">{closeButton(false)}</div>
       ) : (
         <>
           <div className="p-1"> {logo()}</div>

@@ -6,7 +6,8 @@ import { Button } from "@opal/components";
 import Tag from "@/refresh-components/buttons/Tag";
 import Text from "@/refresh-components/texts/Text";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
-import { Section, LineItemLayout } from "@/layouts/general-layouts";
+import { Section } from "@/layouts/general-layouts";
+import { ContentAction } from "@opal/layouts";
 import { formatDurationSeconds } from "@/lib/time";
 import { noProp } from "@/lib/utils";
 import MemoriesModal from "@/refresh-components/modals/MemoriesModal";
@@ -61,10 +62,12 @@ function MemoryTagWithTooltip({
                   {memoryText}
                 </Text>
               </div>
-              <LineItemLayout
-                variant="mini"
+              <ContentAction
                 icon={SvgAddLines}
                 title={operationLabel}
+                sizePreset="secondary"
+                variant="body"
+                prominence="muted"
                 rightChildren={
                   <Button
                     prominence="tertiary"

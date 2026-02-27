@@ -3,7 +3,12 @@ import React from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { cn } from "@opal/utils";
 import type { WithoutStyles } from "@opal/types";
-import { sizeVariants, type SizeVariant } from "@opal/shared";
+import {
+  sizeVariants,
+  type SizeVariant,
+  widthVariants,
+  type WidthVariant,
+} from "@opal/shared";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -38,18 +43,6 @@ type InteractiveBaseVariantProps =
       prominence?: InteractiveBaseProminenceTypes;
       selected?: never;
     };
-
-/**
- * Width presets for `Interactive.Container`.
- *
- * - `"auto"` — Shrink-wraps to content width (default)
- * - `"full"` — Stretches to fill the parent's width (`w-full`)
- */
-type InteractiveContainerWidthVariant = "auto" | "full";
-const interactiveContainerWidthVariants = {
-  auto: "w-auto",
-  full: "w-full",
-} as const;
 
 /**
  * Border-radius presets for `Interactive.Container`.
@@ -345,7 +338,7 @@ interface InteractiveContainerProps
    *
    * @default "auto"
    */
-  widthVariant?: InteractiveContainerWidthVariant;
+  widthVariant?: WidthVariant;
 }
 
 /**
@@ -413,7 +406,7 @@ function InteractiveContainer({
       height,
       minWidth,
       padding,
-      interactiveContainerWidthVariants[widthVariant],
+      widthVariants[widthVariant],
       slotClassName
     ),
     "data-border": border ? ("true" as const) : undefined,
@@ -490,6 +483,5 @@ export {
   type InteractiveBaseVariantProps,
   type InteractiveBaseSelectVariantProps,
   type InteractiveContainerProps,
-  type InteractiveContainerWidthVariant,
   type InteractiveContainerRoundingVariant,
 };

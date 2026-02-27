@@ -31,7 +31,8 @@ import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import ShareAgentModal from "@/sections/modals/ShareAgentModal";
 import AgentViewerModal from "@/sections/modals/AgentViewerModal";
 import { toast } from "@/hooks/useToast";
-import { LineItemLayout, CardItemLayout } from "@/layouts/general-layouts";
+import { CardItemLayout } from "@/layouts/general-layouts";
+import { Content } from "@opal/layouts";
 import { Interactive } from "@opal/core";
 import { Card } from "@/refresh-components/cards";
 
@@ -193,12 +194,14 @@ export default function AgentCard({ agent }: AgentCardProps) {
           <div className="bg-background-tint-01 p-1 flex flex-row items-end justify-between w-full">
             {/* Left side - creator and actions */}
             <div className="flex flex-col gap-1 py-1 px-2">
-              <LineItemLayout
+              <Content
                 icon={SvgUser}
                 title={agent.owner?.email || "Onyx"}
-                variant="mini"
+                sizePreset="secondary"
+                variant="body"
+                prominence="muted"
               />
-              <LineItemLayout
+              <Content
                 icon={SvgActions}
                 title={
                   agent.tools.length > 0
@@ -207,7 +210,9 @@ export default function AgentCard({ agent }: AgentCardProps) {
                       }`
                     : "No Actions"
                 }
-                variant="mini"
+                sizePreset="secondary"
+                variant="body"
+                prominence="muted"
               />
             </div>
 

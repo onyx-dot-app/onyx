@@ -89,6 +89,7 @@ import AgentKnowledgePane from "@/sections/knowledge/AgentKnowledgePane";
 import { ValidSources } from "@/lib/types";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import { useUser } from "@/providers/UserProvider";
+import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 
 interface AgentIconEditorProps {
   existingAgent?: FullPersona | null;
@@ -313,7 +314,11 @@ function MCPServerCard({
         description={server.description}
         icon={getActionIcon(server.server_url, server.name)}
         rightChildren={
-          <GeneralLayouts.Section flexDirection="row" gap={0.5}>
+          <GeneralLayouts.Section
+            flexDirection="row"
+            gap={0.5}
+            alignItems="start"
+          >
             <EnabledCount
               enabledCount={enabledCount}
               totalCount={enabledTools.length}
@@ -352,18 +357,9 @@ function MCPServerCard({
       </ActionsLayouts.Header>
       {isLoading ? (
         <ActionsLayouts.Content>
-          {Array.from({ length: 3 }).map((_, index) => (
-            <Card key={index} padding={0.75}>
-              <GeneralLayouts.LineItemLayout
-                // We provide dummy values here.
-                // The `loading` prop will always render a pulsing box instead, so the dummy-values will actually NOT be rendered at all.
-                title="..."
-                description="..."
-                rightChildren={<></>}
-                loading
-              />
-            </Card>
-          ))}
+          <GeneralLayouts.Section padding={1}>
+            <SimpleLoader />
+          </GeneralLayouts.Section>
         </ActionsLayouts.Content>
       ) : (
         enabledTools.length > 0 &&
@@ -1168,7 +1164,6 @@ export default function AgentEditorPage({
                           <InputLayouts.Vertical
                             name="agent_avatar"
                             title="Agent Avatar"
-                            center
                           >
                             <AgentIconEditor existingAgent={existingAgent} />
                           </InputLayouts.Vertical>

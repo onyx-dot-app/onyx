@@ -9,7 +9,8 @@ import type { SharingScope } from "@/app/craft/types/streamingTypes";
 import { cn } from "@/lib/utils";
 import Popover from "@/refresh-components/Popover";
 import Truncated from "@/refresh-components/texts/Truncated";
-import { Section, LineItemLayout } from "@/layouts/general-layouts";
+import { Section } from "@/layouts/general-layouts";
+import { ContentAction } from "@opal/layouts";
 
 interface ShareButtonProps {
   sessionId: string;
@@ -133,11 +134,12 @@ export default function ShareButton({
                       : "hover:bg-background-tint-02"
                   )}
                 >
-                  <LineItemLayout
+                  <ContentAction
                     title={opt.label}
                     description={opt.description}
-                    variant="tertiary"
-                    reducedPadding
+                    sizePreset="main-ui"
+                    variant="section"
+                    paddingVariant="sm"
                   />
                 </div>
               ))}

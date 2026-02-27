@@ -125,7 +125,7 @@ executing==2.2.1
     # via stack-data
 faker==40.1.2
     # via onyx
-fastapi==0.128.0
+fastapi==0.133.1
     # via
     #   onyx
     #   onyx-devtools
@@ -619,6 +619,7 @@ typing-extensions==4.15.0
     #   typing-inspection
 typing-inspection==0.4.2
     # via
+    #   fastapi
     #   mcp
     #   pydantic
     #   pydantic-settings
