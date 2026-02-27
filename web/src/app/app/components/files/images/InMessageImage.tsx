@@ -24,6 +24,7 @@ const SHAPE_CLASSES: Record<ImageShape, { container: string; image: string }> =
     },
   };
 
+// Used to stop image flashing as images are loaded and response continues
 const loadedImages = new Set<string>();
 
 interface InMessageImageProps {
