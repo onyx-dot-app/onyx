@@ -109,6 +109,12 @@ def apply_license_status_to_settings(settings: Settings) -> Settings:
             if metadata.status == _BLOCKING_STATUS:
                 settings.application_status = metadata.status
                 settings.ee_features_enabled = False
+            elif metadata.used_seats > metadata.seats:
+                # License is valid but seat limit exceeded
+                settings.application_status = ApplicationStatus.SEAT_LIMIT_EXCEEDED
+                settings.seat_count = metadata.seats
+                settings.used_seats = metadata.used_seats
+                settings.ee_features_enabled = True
             else:
                 # Has a valid license (GRACE_PERIOD/PAYMENT_REMINDER still allow EE features)
                 settings.ee_features_enabled = True
