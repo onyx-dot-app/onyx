@@ -91,7 +91,7 @@ const custom_assistants_items = (
 ) => {
   const items = [
     {
-      name: "Assistants",
+      name: "Agents",
       icon: SvgOnyxOctagon,
       link: "/admin/assistants",
     },
@@ -165,7 +165,7 @@ const collections = (
         ]
       : []),
     {
-      name: "Custom Assistants",
+      name: "Custom Agents",
       items: custom_assistants_items(isCurator, enableEnterprise),
     },
     ...(isCurator && enableEnterprise
