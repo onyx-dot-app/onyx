@@ -218,12 +218,24 @@ def upsert_llm_provider(
         existing_llm_provider = fetch_existing_llm_provider_by_id(
             id=llm_provider_upsert_request.id, db_session=db_session
         )
-    if not existing_llm_provider:
+        if not existing_llm_provider:
+            raise ValueError(
+                f"LLM provider with id {llm_provider_upsert_request.id} not found"
+            )
+
+        if existing_llm_provider.name != llm_provider_upsert_request.name:
+            raise ValueError(
+                f"LLM provider with id {llm_provider_upsert_request.id} name change not allowed"
+            )
+    else:
         existing_llm_provider = fetch_existing_llm_provider(
             name=llm_provider_upsert_request.name, db_session=db_session
         )
-
-    if not existing_llm_provider:
+        if existing_llm_provider:
+            raise ValueError(
+                f"LLM provider with name '{llm_provider_upsert_request.name}'"
+                " already exists"
+            )
         existing_llm_provider = LLMProviderModel(name=llm_provider_upsert_request.name)
         db_session.add(existing_llm_provider)
 
