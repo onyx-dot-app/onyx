@@ -386,6 +386,92 @@ def test_delete_llm_provider(
     assert provider_data is None
 
 
+def test_duplicate_provider_name_rejected(reset: None) -> None:  # noqa: ARG001
+    """Creating a provider with a name that already exists should return 400."""
+    admin_user = UserManager.create(name="admin_user")
+    provider_name = f"unique-provider-{uuid.uuid4()}"
+
+    base_payload = {
+        "name": provider_name,
+        "provider": LlmProviderNames.OPENAI,
+        "api_key": "sk-000000000000000000000000000000000000000000000000",
+        "model_configurations": [
+            ModelConfigurationUpsertRequest(
+                name="gpt-4o-mini", is_visible=True
+            ).model_dump()
+        ],
+        "is_public": True,
+        "groups": [],
+    }
+
+    # First creation succeeds
+    response = requests.put(
+        f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
+        headers=admin_user.headers,
+        json=base_payload,
+    )
+    assert response.status_code == 200
+
+    # Second creation with the same name is rejected
+    response = requests.put(
+        f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
+        headers=admin_user.headers,
+        json=base_payload,
+    )
+    assert response.status_code == 400
+    assert "already exists" in response.json()["detail"]
+
+
+def test_rename_provider_rejected(reset: None) -> None:  # noqa: ARG001
+    """Renaming a provider is not currently supported and should return 400."""
+    admin_user = UserManager.create(name="admin_user")
+
+    create_payload = {
+        "name": f"original-name-{uuid.uuid4()}",
+        "provider": LlmProviderNames.OPENAI,
+        "api_key": "sk-000000000000000000000000000000000000000000000000",
+        "model_configurations": [
+            ModelConfigurationUpsertRequest(
+                name="gpt-4o-mini", is_visible=True
+            ).model_dump()
+        ],
+        "is_public": True,
+        "groups": [],
+    }
+
+    response = requests.put(
+        f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
+        headers=admin_user.headers,
+        json=create_payload,
+    )
+    assert response.status_code == 200
+    provider_id = response.json()["id"]
+
+    # Attempt to rename — should be rejected
+    new_name = f"renamed-provider-{uuid.uuid4()}"
+    update_payload = {**create_payload, "id": provider_id, "name": new_name}
+    response = requests.put(
+        f"{API_SERVER_URL}/admin/llm/provider?is_creation=false",
+        headers=admin_user.headers,
+        json=update_payload,
+    )
+    assert response.status_code == 400
+    assert "not currently supported" in response.json()["detail"]
+
+    # Verify no duplicate was created — only the original provider should exist
+    provider = _get_provider_by_id(admin_user, provider_id)
+    assert provider is not None
+    assert provider["name"] == create_payload["name"]
+
+    all_response = requests.get(
+        f"{API_SERVER_URL}/admin/llm/provider",
+        headers=admin_user.headers,
+    )
+    assert all_response.status_code == 200
+    all_names = [p["name"] for p in all_response.json()["providers"]]
+    assert new_name not in all_names
+
+
 def test_model_visibility_preserved_on_edit(reset: None) -> None:  # noqa: ARG001
     """
     Test that model visibility flags are correctly preserved when editing an LLM provider.
@@ -478,6 +564,7 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:  # noqa: ARG00
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=false",
         headers=admin_user.headers,
         json={
+            "id": created_provider["id"],
             "name": "test-visibility-provider",
             "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000000",
@@ -525,6 +612,7 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:  # noqa: ARG00
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=false",
         headers=admin_user.headers,
         json={
+            "id": created_provider["id"],
             "name": "test-visibility-provider",
             "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000000",
@@ -898,6 +986,7 @@ def test_default_model_persistence_and_update(reset: None) -> None:  # noqa: ARG
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=false",
         headers=admin_user.headers,
         json={
+            "id": create_response.json()["id"],
             "name": provider_name,
             "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000000",
@@ -1032,11 +1121,6 @@ def _set_default_vision_provider(
         headers=admin_user.headers,
     )
     assert response.status_code == 200
-
-
-def _find_default_vision_provider(providers: list[dict]) -> dict | None:
-    """Find the default vision provider from a list of providers."""
-    return next((p for p in providers if p.get("is_default_vision_provider")), None)
 
 
 def test_multiple_providers_default_switching(reset: None) -> None:  # noqa: ARG001
@@ -1213,6 +1297,7 @@ def test_multiple_providers_default_switching(reset: None) -> None:  # noqa: ARG
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=false",
         headers=admin_user.headers,
         json={
+            "id": provider_2["id"],
             "name": provider_2_name,
             "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000002",
@@ -1301,6 +1386,7 @@ def test_multiple_providers_default_switching(reset: None) -> None:  # noqa: ARG
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=false",
         headers=admin_user.headers,
         json={
+            "id": provider_2["id"],
             "name": provider_2_name,
             "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000002",

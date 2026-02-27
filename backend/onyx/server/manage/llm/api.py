@@ -353,18 +353,44 @@ def put_llm_provider(
     # validate request (e.g. if we're intending to create but the name already exists we should throw an error)
     # NOTE: may involve duplicate fetching to Postgres, but we're assuming SQLAlchemy is smart enough to cache
     # the result
-    existing_provider = fetch_existing_llm_provider(
+    existing_provider = None
+    if llm_provider_upsert_request.id:
+        existing_provider = fetch_existing_llm_provider_by_id(
+            id=llm_provider_upsert_request.id, db_session=db_session
+        )
+
+    # Check name constraints
+    # TODO: Once port from name to id is complete, unique name will no longer be required
+    if existing_provider and llm_provider_upsert_request.name != existing_provider.name:
+        raise HTTPException(
+            status_code=400,
+            detail="Renaming providers is not currently supported",
+        )
+
+    found_provider = fetch_existing_llm_provider(
         name=llm_provider_upsert_request.name, db_session=db_session
     )
+    if found_provider is not None and found_provider is not existing_provider:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Provider with name={llm_provider_upsert_request.name} already exists",
+        )
+
     if existing_provider and is_creation:
         raise HTTPException(
             status_code=400,
-            detail=f"LLM Provider with name {llm_provider_upsert_request.name} already exists",
+            detail=(
+                f"LLM Provider with name {llm_provider_upsert_request.name} and "
+                f"id={llm_provider_upsert_request.id} already exists"
+            ),
         )
     elif not existing_provider and not is_creation:
         raise HTTPException(
             status_code=400,
-            detail=f"LLM Provider with name {llm_provider_upsert_request.name} does not exist",
+            detail=(
+                f"LLM Provider with name {llm_provider_upsert_request.name} and "
+                f"id={llm_provider_upsert_request.id} does not exist"
+            ),
         )
 
     # SSRF Protection: Validate api_base and custom_config match stored values
@@ -431,8 +457,8 @@ def put_llm_provider(
             config = fetch_llm_recommendations_from_github()
             if config and llm_provider_upsert_request.provider in config.providers:
                 # Refetch the provider to get the updated model
-                updated_provider = fetch_existing_llm_provider(
-                    name=llm_provider_upsert_request.name, db_session=db_session
+                updated_provider = fetch_existing_llm_provider_by_id(
+                    id=result.id, db_session=db_session
                 )
                 if updated_provider:
                     sync_auto_mode_models(
