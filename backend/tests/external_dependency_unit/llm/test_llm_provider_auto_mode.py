@@ -305,7 +305,7 @@ class TestAutoModeSyncFeature:
 
         try:
             # Step 1: Upload provider WITHOUT auto mode, with initial models
-            provider = put_llm_provider(
+            put_llm_provider(
                 llm_provider_upsert_request=LLMProviderUpsertRequest(
                     name=provider_name,
                     provider=LlmProviderNames.OPENAI,
