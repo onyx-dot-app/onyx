@@ -1,7 +1,7 @@
 """Tests for LLM model fetch endpoints.
 
 These tests verify the full request/response flow for fetching models
-from dynamic providers (Ollama, OpenRouter), including the
+from dynamic providers (Ollama, OpenRouter, Litellm), including the
 sync-to-DB behavior when provider_name is specified.
 """
 
@@ -9,7 +9,10 @@ from unittest.mock import MagicMock
 from unittest.mock import patch
 
 import pytest
+from fastapi import HTTPException
 
+from onyx.server.manage.llm.models import LitellmFinalModelResponse
+from onyx.server.manage.llm.models import LitellmModelsRequest
 from onyx.server.manage.llm.models import OllamaFinalModelResponse
 from onyx.server.manage.llm.models import OllamaModelsRequest
 from onyx.server.manage.llm.models import OpenRouterFinalModelResponse
@@ -317,3 +320,254 @@ class TestGetOpenRouterAvailableModels:
             # No DB operations should happen
             mock_session.execute.assert_not_called()
             mock_session.commit.assert_not_called()
+
+
+class TestGetLitellmAvailableModels:
+    """Tests for the Litellm proxy model fetch endpoint."""
+
+    @pytest.fixture
+    def mock_litellm_response(self) -> dict:
+        """Mock response from Litellm /v1/models endpoint."""
+        return {
+            "data": [
+                {
+                    "id": "gpt-4o",
+                    "object": "model",
+                    "created": 1700000000,
+                    "owned_by": "openai",
+                },
+                {
+                    "id": "claude-3-5-sonnet",
+                    "object": "model",
+                    "created": 1700000001,
+                    "owned_by": "anthropic",
+                },
+                {
+                    "id": "gemini-pro",
+                    "object": "model",
+                    "created": 1700000002,
+                    "owned_by": "google",
+                },
+            ]
+        }
+
+    def test_returns_model_list(self, mock_litellm_response: dict) -> None:
+        """Test that endpoint returns properly formatted model list."""
+        from onyx.server.manage.llm.api import get_litellm_available_models
+
+        mock_session = MagicMock()
+
+        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+            mock_response = MagicMock()
+            mock_response.json.return_value = mock_litellm_response
+            mock_response.raise_for_status = MagicMock()
+            mock_get.return_value = mock_response
+
+            request = LitellmModelsRequest(
+                api_base="http://localhost:4000",
+                api_key="test-key",
+            )
+            results = get_litellm_available_models(request, MagicMock(), mock_session)
+
+            assert len(results) == 3
+            assert all(isinstance(r, LitellmFinalModelResponse) for r in results)
+
+    def test_model_fields_parsed_correctly(self, mock_litellm_response: dict) -> None:
+        """Test that provider_name and model_name are correctly extracted."""
+        from onyx.server.manage.llm.api import get_litellm_available_models
+
+        mock_session = MagicMock()
+
+        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+            mock_response = MagicMock()
+            mock_response.json.return_value = mock_litellm_response
+            mock_response.raise_for_status = MagicMock()
+            mock_get.return_value = mock_response
+
+            request = LitellmModelsRequest(
+                api_base="http://localhost:4000",
+                api_key="test-key",
+            )
+            results = get_litellm_available_models(request, MagicMock(), mock_session)
+
+            gpt = next(r for r in results if r.model_name == "gpt-4o")
+            assert gpt.provider_name == "openai"
+
+            claude = next(r for r in results if r.model_name == "claude-3-5-sonnet")
+            assert claude.provider_name == "anthropic"
+
+    def test_results_sorted_by_model_name(self, mock_litellm_response: dict) -> None:
+        """Test that results are alphabetically sorted by model_name."""
+        from onyx.server.manage.llm.api import get_litellm_available_models
+
+        mock_session = MagicMock()
+
+        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+            mock_response = MagicMock()
+            mock_response.json.return_value = mock_litellm_response
+            mock_response.raise_for_status = MagicMock()
+            mock_get.return_value = mock_response
+
+            request = LitellmModelsRequest(
+                api_base="http://localhost:4000",
+                api_key="test-key",
+            )
+            results = get_litellm_available_models(request, MagicMock(), mock_session)
+
+            model_names = [r.model_name for r in results]
+            assert model_names == sorted(model_names, key=str.lower)
+
+    def test_empty_data_raises_http_exception(self) -> None:
+        """Test that empty model list raises HTTPException."""
+        from onyx.server.manage.llm.api import get_litellm_available_models
+
+        mock_session = MagicMock()
+
+        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+            mock_response = MagicMock()
+            mock_response.json.return_value = {"data": []}
+            mock_response.raise_for_status = MagicMock()
+            mock_get.return_value = mock_response
+
+            request = LitellmModelsRequest(
+                api_base="http://localhost:4000",
+                api_key="test-key",
+            )
+            with pytest.raises(HTTPException) as exc_info:
+                get_litellm_available_models(request, MagicMock(), mock_session)
+
+            assert exc_info.value.status_code == 400
+            assert "No models found" in str(exc_info.value.detail)
+
+    def test_missing_data_key_raises_http_exception(self) -> None:
+        """Test that response without 'data' key raises HTTPException."""
+        from onyx.server.manage.llm.api import get_litellm_available_models
+
+        mock_session = MagicMock()
+
+        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+            mock_response = MagicMock()
+            mock_response.json.return_value = {}
+            mock_response.raise_for_status = MagicMock()
+            mock_get.return_value = mock_response
+
+            request = LitellmModelsRequest(
+                api_base="http://localhost:4000",
+                api_key="test-key",
+            )
+            with pytest.raises(HTTPException) as exc_info:
+                get_litellm_available_models(request, MagicMock(), mock_session)
+
+            assert exc_info.value.status_code == 400
+
+    def test_skips_unparseable_entries(self) -> None:
+        """Test that malformed model entries are skipped without failing."""
+        from onyx.server.manage.llm.api import get_litellm_available_models
+
+        mock_session = MagicMock()
+        response_with_bad_entry = {
+            "data": [
+                {
+                    "id": "gpt-4o",
+                    "object": "model",
+                    "created": 1700000000,
+                    "owned_by": "openai",
+                },
+                # Missing required fields
+                {"bad_field": "bad_value"},
+            ]
+        }
+
+        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+            mock_response = MagicMock()
+            mock_response.json.return_value = response_with_bad_entry
+            mock_response.raise_for_status = MagicMock()
+            mock_get.return_value = mock_response
+
+            request = LitellmModelsRequest(
+                api_base="http://localhost:4000",
+                api_key="test-key",
+            )
+            results = get_litellm_available_models(request, MagicMock(), mock_session)
+
+            assert len(results) == 1
+            assert results[0].model_name == "gpt-4o"
+
+    def test_all_entries_unparseable_raises_http_exception(self) -> None:
+        """Test that HTTPException is raised when all entries fail to parse."""
+        from onyx.server.manage.llm.api import get_litellm_available_models
+
+        mock_session = MagicMock()
+        response_all_bad = {
+            "data": [
+                {"bad_field": "bad_value"},
+                {"another_bad": 123},
+            ]
+        }
+
+        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+            mock_response = MagicMock()
+            mock_response.json.return_value = response_all_bad
+            mock_response.raise_for_status = MagicMock()
+            mock_get.return_value = mock_response
+
+            request = LitellmModelsRequest(
+                api_base="http://localhost:4000",
+                api_key="test-key",
+            )
+            with pytest.raises(HTTPException) as exc_info:
+                get_litellm_available_models(request, MagicMock(), mock_session)
+
+            assert exc_info.value.status_code == 400
+            assert "No compatible models" in str(exc_info.value.detail)
+
+    def test_api_base_trailing_slash_handled(self) -> None:
+        """Test that trailing slashes in api_base are handled correctly."""
+        from onyx.server.manage.llm.api import get_litellm_available_models
+
+        mock_session = MagicMock()
+        mock_litellm_response = {
+            "data": [
+                {
+                    "id": "gpt-4o",
+                    "object": "model",
+                    "created": 1700000000,
+                    "owned_by": "openai",
+                },
+            ]
+        }
+
+        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+            mock_response = MagicMock()
+            mock_response.json.return_value = mock_litellm_response
+            mock_response.raise_for_status = MagicMock()
+            mock_get.return_value = mock_response
+
+            request = LitellmModelsRequest(
+                api_base="http://localhost:4000/",
+                api_key="test-key",
+            )
+            get_litellm_available_models(request, MagicMock(), mock_session)
+
+            # Should call /v1/models without double slashes
+            call_args = mock_get.call_args
+            assert call_args[0][0] == "http://localhost:4000/v1/models"
+
+    def test_connection_failure_raises_http_exception(self) -> None:
+        """Test that connection failures are wrapped in HTTPException."""
+        from onyx.server.manage.llm.api import get_litellm_available_models
+
+        mock_session = MagicMock()
+
+        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+            mock_get.side_effect = Exception("Connection refused")
+
+            request = LitellmModelsRequest(
+                api_base="http://localhost:4000",
+                api_key="test-key",
+            )
+            with pytest.raises(HTTPException) as exc_info:
+                get_litellm_available_models(request, MagicMock(), mock_session)
+
+            assert exc_info.value.status_code == 400
+            assert "Failed to fetch Litellm models" in str(exc_info.value.detail)
