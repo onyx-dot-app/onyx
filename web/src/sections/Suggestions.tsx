@@ -28,7 +28,7 @@ export default function Suggestions({ onSubmit }: SuggestionsProps) {
   };
 
   return (
-    <div className="max-w-[var(--app-page-main-content-width)] flex flex-col w-full p-1 gap-1">
+    <div className="max-w-[var(--app-page-main-content-width)] flex flex-col w-full p-1">
       {currentAgent.starter_messages.map(({ message }, index) => (
         <Interactive.Base
           key={index}
@@ -39,13 +39,14 @@ export default function Suggestions({ onSubmit }: SuggestionsProps) {
           <Interactive.Container
             widthVariant="full"
             roundingVariant="compact"
-            heightVariant="md"
+            heightVariant="lg"
           >
             <Content
               title={message}
               sizePreset="main-ui"
               variant="body"
               widthVariant="full"
+              prominence="muted"
             />
           </Interactive.Container>
         </Interactive.Base>
