@@ -61,7 +61,6 @@ from onyx.server.manage.llm.models import LLMProviderDescriptor
 from onyx.server.manage.llm.models import LLMProviderResponse
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import LLMProviderView
-from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from onyx.server.manage.llm.models import OllamaFinalModelResponse
 from onyx.server.manage.llm.models import OllamaModelDetails
 from onyx.server.manage.llm.models import OllamaModelsRequest
@@ -402,22 +401,6 @@ def put_llm_provider(
                 seen.add(persona_id)
                 deduplicated_personas.append(persona_id)
         llm_provider_upsert_request.personas = deduplicated_personas
-
-    default_model_found = False
-
-    for model_configuration in llm_provider_upsert_request.model_configurations:
-        if model_configuration.name == llm_provider_upsert_request.default_model_name:
-            model_configuration.is_visible = True
-            default_model_found = True
-
-    # TODO: Remove this logic on api change
-    # Believed to be a dead pathway but we want to be safe for now
-    if not default_model_found:
-        llm_provider_upsert_request.model_configurations.append(
-            ModelConfigurationUpsertRequest(
-                name=llm_provider_upsert_request.default_model_name, is_visible=True
-            )
-        )
 
     # the llm api key is sanitized when returned to clients, so the only time we
     # should get a real key is when it is explicitly changed

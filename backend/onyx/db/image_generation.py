@@ -202,7 +202,6 @@ def create_default_image_gen_config_from_api_key(
             api_key=api_key,
             api_base=None,
             api_version=None,
-            default_model_name=model_name,
             deployment_name=None,
             is_public=True,
         )

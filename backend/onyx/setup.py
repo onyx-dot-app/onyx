@@ -261,7 +261,6 @@ def setup_postgres(db_session: Session) -> None:
             api_base=None,
             api_version=None,
             custom_config=None,
-            default_model_name=llm_model,
             is_public=True,
             groups=[],
             model_configurations=[

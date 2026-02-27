@@ -325,7 +325,6 @@ def configure_default_api_keys(db_session: Session) -> None:
             name="OpenAI",
             provider=OPENAI_PROVIDER_NAME,
             api_key=OPENAI_DEFAULT_API_KEY,
-            default_model_name=default_model_name,
             model_configurations=_build_model_configuration_upsert_requests(
                 OPENAI_PROVIDER_NAME, recommendations
             ),
@@ -361,7 +360,6 @@ def configure_default_api_keys(db_session: Session) -> None:
             name="Anthropic",
             provider=ANTHROPIC_PROVIDER_NAME,
             api_key=ANTHROPIC_DEFAULT_API_KEY,
-            default_model_name=default_model_name,
             model_configurations=_build_model_configuration_upsert_requests(
                 ANTHROPIC_PROVIDER_NAME, recommendations
             ),
@@ -393,7 +391,6 @@ def configure_default_api_keys(db_session: Session) -> None:
             name="Google Vertex AI",
             provider=VERTEXAI_PROVIDER_NAME,
             custom_config=custom_config,
-            default_model_name=default_model_name,
             model_configurations=_build_model_configuration_upsert_requests(
                 VERTEXAI_PROVIDER_NAME, recommendations
             ),
@@ -432,7 +429,6 @@ def configure_default_api_keys(db_session: Session) -> None:
             name="OpenRouter",
             provider=OPENROUTER_PROVIDER_NAME,
             api_key=OPENROUTER_DEFAULT_API_KEY,
-            default_model_name=default_model_name,
             model_configurations=model_configurations,
             api_key_changed=True,
             is_auto_mode=True,
