@@ -666,57 +666,6 @@ def _validate_default_model(
     assert default["model_name"] == model_name
 
 
-def _get_provider_by_name(providers: list[dict], provider_name: str) -> dict | None:
-    return next((p for p in providers if p["name"] == provider_name), None)
-
-
-def _get_providers_admin(
-    admin_user: DATestUser,
-) -> dict | None:
-    response = requests.get(
-        f"{API_SERVER_URL}/admin/llm/provider",
-        headers=admin_user.headers,
-    )
-    assert response.status_code == 200
-    resp_json = response.json()
-
-    return resp_json
-
-
-def _unpack_data(data: dict) -> tuple[list[dict], dict | None, dict | None]:
-    providers = data["providers"]
-    text_default = data.get("default_text")
-    vision_default = data.get("default_vision")
-
-    return providers, text_default, vision_default
-
-
-def _get_providers_basic(
-    user: DATestUser,
-) -> dict | None:
-    response = requests.get(
-        f"{API_SERVER_URL}/llm/provider",
-        headers=user.headers,
-    )
-    assert response.status_code == 200
-    resp_json = response.json()
-
-    return resp_json
-
-
-def _validate_default_model(
-    default: dict | None,
-    provider_id: int | None = None,
-    model_name: str | None = None,
-) -> None:
-    if default is None:
-        assert provider_id is None and model_name is None
-        return
-
-    assert default["provider_id"] == provider_id
-    assert default["model_name"] == model_name
-
-
 def _get_provider_by_name_admin(
     admin_user: DATestUser, provider_name: str
 ) -> dict | None:
