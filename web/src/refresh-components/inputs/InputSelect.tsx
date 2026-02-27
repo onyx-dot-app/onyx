@@ -153,7 +153,11 @@ function InputSelectRoot({
   );
 
   return (
-    <div className={cn("w-full min-w-[160px] relative")}>
+    <div
+      className={cn(
+        "w-full min-w-[var(--block-width-form-input-min)] relative"
+      )}
+    >
       <InputSelectContext.Provider value={contextValue}>
         <SelectPrimitive.Root
           {...(isControlled ? { value: currentValue } : { defaultValue })}
