@@ -22,7 +22,7 @@ test.describe("Default App Mode", () => {
       await page.goto("/app");
       await page.waitForLoadState("networkidle");
 
-      const appModeButton = page.getByLabel("Toggle between Search and Chat");
+      const appModeButton = page.getByLabel("Change app mode");
       await appModeButton.waitFor({ state: "visible", timeout: 10000 });
       await expect(appModeButton).toHaveText(/Search/);
     } finally {

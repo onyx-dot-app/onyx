@@ -320,7 +320,7 @@ function Header() {
               <Popover open={modePopoverOpen} onOpenChange={setModePopoverOpen}>
                 <Popover.Trigger asChild>
                   <OpenButton
-                    aria-label="Toggle between Search and Chat"
+                    aria-label="Change app mode"
                     icon={
                       effectiveMode === "search" ? SvgSearchMenu : SvgBubbleText
                     }
