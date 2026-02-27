@@ -36,10 +36,6 @@ interface FooterSelectionModeProps {
   onClear?: () => void;
   /** Number of items displayed per page. */
   pageSize: number;
-  /** First item number in the current page (e.g. `1`). */
-  rangeStart: number;
-  /** Last item number in the current page (e.g. `25`). */
-  rangeEnd: number;
   /** Total number of items across all pages. */
   totalItems: number;
   /** The 1-based current page number. */

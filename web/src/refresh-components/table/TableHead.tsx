@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import { Button } from "@opal/components";
-import { SvgHandle } from "@opal/icons";
+import { SvgChevronDown, SvgChevronUp, SvgHandle, SvgSort } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
 
 type SortDirection = "none" | "ascending" | "descending";
@@ -38,6 +38,17 @@ type TableHeadProps = TableHeadCustomProps &
  * Table header cell primitive. Displays a column label with optional sort
  * functionality and a resize handle indicator.
  */
+function defaultSortIcon(sorted: SortDirection): IconFunctionComponent {
+  switch (sorted) {
+    case "ascending":
+      return SvgChevronUp;
+    case "descending":
+      return SvgChevronDown;
+    default:
+      return SvgSort;
+  }
+}
+
 const alignmentThClass = {
   left: "text-left",
   center: "text-center",
@@ -54,7 +65,7 @@ export default function TableHead({
   children,
   sorted,
   onSort,
-  icon: iconFn,
+  icon: iconFn = defaultSortIcon,
   resizable,
   alignment = "left",
   size = "regular",
@@ -62,7 +73,6 @@ export default function TableHead({
   ...thProps
 }: TableHeadProps) {
   const isSmall = size === "small";
-  const resolvedIcon = iconFn;
   return (
     <th
       {...thProps}
@@ -93,9 +103,9 @@ export default function TableHead({
             "opacity-0 group-hover:opacity-100 transition-opacity"
           )}
         >
-          {onSort && resolvedIcon && (
+          {onSort && (
             <Button
-              icon={resolvedIcon(sorted ?? "none")}
+              icon={iconFn(sorted ?? "none")}
               onClick={onSort}
               tooltip="Sort"
               tooltipSide="top"
