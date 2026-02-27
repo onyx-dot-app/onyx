@@ -98,6 +98,7 @@ def get_chat_sessions_by_user(
     db_session: Session,
     include_onyxbot_flows: bool = False,
     limit: int = 50,
+    offset: int = 0,
     project_id: int | None = None,
     only_non_project_chats: bool = False,
     include_failed_chats: bool = False,
@@ -111,6 +112,9 @@ def get_chat_sessions_by_user(
 
     if deleted is not None:
         stmt = stmt.where(ChatSession.deleted == deleted)
+
+    if offset:
+        stmt = stmt.offset(offset)
 
     if limit:
         stmt = stmt.limit(limit)

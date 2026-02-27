@@ -152,10 +152,13 @@ def get_user_chat_sessions(
     project_id: int | None = None,
     only_non_project_chats: bool = True,
     include_failed_chats: bool = False,
+    page_size: int = 50,
+    offset: int = 0,
 ) -> ChatSessionsResponse:
     user_id = user.id
 
     try:
+        # Fetch one extra to determine if there are more results
         chat_sessions = get_chat_sessions_by_user(
             user_id=user_id,
             deleted=False,
@@ -163,10 +166,15 @@ def get_user_chat_sessions(
             project_id=project_id,
             only_non_project_chats=only_non_project_chats,
             include_failed_chats=include_failed_chats,
+            limit=page_size + 1,
+            offset=offset,
         )
 
     except ValueError:
         raise ValueError("Chat session does not exist or has been deleted")
+
+    has_more = len(chat_sessions) > page_size
+    chat_sessions = chat_sessions[:page_size]
 
     return ChatSessionsResponse(
         sessions=[
@@ -181,7 +189,8 @@ def get_user_chat_sessions(
                 current_temperature_override=chat.temperature_override,
             )
             for chat in chat_sessions
-        ]
+        ],
+        has_more=has_more,
     )
 
 
