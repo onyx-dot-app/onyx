@@ -429,16 +429,17 @@ def cleanup_tenant(
             print(f"{'=' * 80}\n")
 
             if force:
-                print(f"Skipping cleanup for tenant {tenant_id} in force mode")
-                return False
-
-            # Always ask for confirmation if not gated
-            response = input(
-                "Are you ABSOLUTELY SURE you want to proceed? Type 'yes' to confirm: "
-            )
-            if response.lower() != "yes":
-                print("Cleanup aborted - tenant is not GATED_ACCESS")
-                return False
+                print(
+                    f"[FORCE MODE] Proceeding with cleanup for non-GATED_ACCESS tenant {tenant_id}"
+                )
+            else:
+                # Always ask for confirmation if not gated
+                response = input(
+                    "Are you ABSOLUTELY SURE you want to proceed? Type 'yes' to confirm: "
+                )
+                if response.lower() != "yes":
+                    print("Cleanup aborted - tenant is not GATED_ACCESS")
+                    return False
         elif tenant_status == "GATED_ACCESS":
             print("✓ Tenant status is GATED_ACCESS - safe to proceed with cleanup")
         elif tenant_status is None:
