@@ -305,7 +305,7 @@ class TestAutoModeSyncFeature:
 
         try:
             # Step 1: Upload provider WITHOUT auto mode, with initial models
-            provider = put_llm_provider(
+            put_llm_provider(
                 llm_provider_upsert_request=LLMProviderUpsertRequest(
                     name=provider_name,
                     provider=LlmProviderNames.OPENAI,
@@ -320,14 +320,13 @@ class TestAutoModeSyncFeature:
             )
 
             # Verify initial state: all models are visible
-            existing_provider = fetch_existing_llm_provider(
+            initial_provider = fetch_existing_llm_provider(
                 name=provider_name, db_session=db_session
             )
-            assert existing_provider is not None
-            provider = existing_provider
-            assert provider.is_auto_mode is False
+            assert initial_provider is not None
+            assert initial_provider.is_auto_mode is False
 
-            for mc in provider.model_configurations:
+            for mc in initial_provider.model_configurations:
                 assert (
                     mc.is_visible is True
                 ), f"Initial model '{mc.name}' should be visible"
@@ -339,7 +338,7 @@ class TestAutoModeSyncFeature:
             ):
                 put_llm_provider(
                     llm_provider_upsert_request=LLMProviderUpsertRequest(
-                        id=provider.id,
+                        id=initial_provider.id,
                         name=provider_name,
                         provider=LlmProviderNames.OPENAI,
                         api_key=None,  # Not changing API key
