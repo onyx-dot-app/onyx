@@ -1,4 +1,4 @@
-import { ModelConfiguration } from "@/app/admin/configuration/llm/interfaces";
+import { ModelConfiguration } from "@/interfaces/llm";
 import { parseAzureTargetUri } from "@/lib/azureTargetUri";
 
 export const buildInitialValues = () => ({
@@ -93,7 +93,7 @@ export const testApiKeyHelper = async (
       ...(formValues?.custom_config ?? {}),
       ...(customConfigOverride ?? {}),
     },
-    default_model_name: modelName ?? formValues?.default_model_name ?? "",
+    model: modelName ?? formValues?.default_model_name ?? "",
     model_configurations: [
       ...(formValues.model_configurations || []).map(
         (model: ModelConfiguration) => ({

@@ -7,11 +7,11 @@ import {
   OnboardingState,
   OnboardingStep,
 } from "./types";
-import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
+import { WellKnownLLMProviderDescriptor } from "@/interfaces/llm";
 import { updateUserPersonalization } from "@/lib/userSettings";
 import { useUser } from "@/providers/UserProvider";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
-import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
+import { useLLMProviders } from "@/hooks/useLLMProviders";
 import { useProviderStatus } from "@/components/chat/ProviderContext";
 
 export function useOnboardingState(liveAssistant?: MinimalPersonaSnapshot): {

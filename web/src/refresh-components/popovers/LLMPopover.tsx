@@ -3,12 +3,12 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
-import { structureValue } from "@/lib/llm/utils";
+import { structureValue } from "@/lib/llmConfig/utils";
 import {
   getProviderIcon,
   AGGREGATOR_PROVIDERS,
 } from "@/app/admin/configuration/llm/utils";
-import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
+import { LLMProviderDescriptor } from "@/interfaces/llm";
 import { Slider } from "@/components/ui/slider";
 import { useUser } from "@/providers/UserProvider";
 import LineItem from "@/refresh-components/buttons/LineItem";

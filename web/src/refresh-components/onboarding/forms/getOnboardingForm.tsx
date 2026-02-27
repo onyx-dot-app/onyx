@@ -2,7 +2,7 @@ import React from "react";
 import {
   WellKnownLLMProviderDescriptor,
   LLMProviderName,
-} from "@/app/admin/configuration/llm/interfaces";
+} from "@/interfaces/llm";
 import { OnboardingActions, OnboardingState } from "../types";
 import { OpenAIOnboardingForm } from "./OpenAIOnboardingForm";
 import { AnthropicOnboardingForm } from "./AnthropicOnboardingForm";

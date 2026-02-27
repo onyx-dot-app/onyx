@@ -25,7 +25,7 @@ import { ModelOption } from "@/components/embedding/ModelSelector";
 import {
   EMBEDDING_MODELS_ADMIN_URL,
   EMBEDDING_PROVIDERS_ADMIN_URL,
-} from "@/app/admin/configuration/llm/constants";
+} from "@/lib/llmConfig/constants";
 import { AdvancedSearchConfiguration } from "@/app/admin/embeddings/interfaces";
 import Button from "@/refresh-components/buttons/Button";
 

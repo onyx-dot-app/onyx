@@ -8,7 +8,7 @@ import {
   LLMProviderFormProps,
   LLMProviderView,
   ModelConfiguration,
-} from "../interfaces";
+} from "@/interfaces/llm";
 import * as Yup from "yup";
 import {
   ProviderFormEntrypointWrapper,
@@ -27,7 +27,7 @@ import {
 } from "./formUtils";
 import { AdvancedOptions } from "./components/AdvancedOptions";
 import { DisplayModels } from "./components/DisplayModels";
-import { fetchBedrockModels } from "../utils";
+import { fetchBedrockModels } from "@/app/admin/configuration/llm/utils";
 import Separator from "@/refresh-components/Separator";
 import Text from "@/refresh-components/texts/Text";
 import Tabs from "@/refresh-components/Tabs";
@@ -65,7 +65,7 @@ const FIELD_AWS_ACCESS_KEY_ID = "custom_config.AWS_ACCESS_KEY_ID";
 const FIELD_AWS_SECRET_ACCESS_KEY = "custom_config.AWS_SECRET_ACCESS_KEY";
 const FIELD_AWS_BEARER_TOKEN_BEDROCK = "custom_config.AWS_BEARER_TOKEN_BEDROCK";
 
-interface BedrockFormValues extends BaseLLMFormValues {
+interface BedrockModalValues extends BaseLLMFormValues {
   custom_config: {
     AWS_REGION_NAME: string;
     BEDROCK_AUTH_METHOD?: string;
@@ -75,8 +75,8 @@ interface BedrockFormValues extends BaseLLMFormValues {
   };
 }
 
-interface BedrockFormInternalsProps {
-  formikProps: FormikProps<BedrockFormValues>;
+interface BedrockModalInternalsProps {
+  formikProps: FormikProps<BedrockModalValues>;
   existingLlmProvider: LLMProviderView | undefined;
   fetchedModels: ModelConfiguration[];
   setFetchedModels: (models: ModelConfiguration[]) => void;
@@ -87,7 +87,7 @@ interface BedrockFormInternalsProps {
   onClose: () => void;
 }
 
-function BedrockFormInternals({
+function BedrockModalInternals({
   formikProps,
   existingLlmProvider,
   fetchedModels,
@@ -97,7 +97,7 @@ function BedrockFormInternals({
   testError,
   mutate,
   onClose,
-}: BedrockFormInternalsProps) {
+}: BedrockModalInternalsProps) {
   const authMethod = formikProps.values.custom_config?.BEDROCK_AUTH_METHOD;
 
   // Clean up unused auth fields when tab changes
@@ -258,9 +258,11 @@ function BedrockFormInternals({
   );
 }
 
-export function BedrockForm({
+export function BedrockModal({
   existingLlmProvider,
   shouldMarkAsDefault,
+  open,
+  onOpenChange,
 }: LLMProviderFormProps) {
   const [fetchedModels, setFetchedModels] = useState<ModelConfiguration[]>([]);
 
@@ -268,6 +270,8 @@ export function BedrockForm({
     <ProviderFormEntrypointWrapper
       providerName={BEDROCK_DISPLAY_NAME}
       existingLlmProvider={existingLlmProvider}
+      open={open}
+      onOpenChange={onOpenChange}
     >
       {({
         onClose,
@@ -282,7 +286,7 @@ export function BedrockForm({
           existingLlmProvider,
           wellKnownLLMProvider
         );
-        const initialValues: BedrockFormValues = {
+        const initialValues: BedrockModalValues = {
           ...buildDefaultInitialValues(
             existingLlmProvider,
             modelConfigurations
@@ -352,7 +356,7 @@ export function BedrockForm({
             }}
           >
             {(formikProps) => (
-              <BedrockFormInternals
+              <BedrockModalInternals
                 formikProps={formikProps}
                 existingLlmProvider={existingLlmProvider}
                 fetchedModels={fetchedModels}
