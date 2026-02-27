@@ -37,10 +37,7 @@ import { formatMmDdYyyy } from "@/lib/dateUtils";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import { FileCard } from "@/sections/cards/FileCard";
 import DocumentSetCard from "@/sections/cards/DocumentSetCard";
-import {
-  getLLMProviderOverrideForPersona,
-  getDisplayName,
-} from "@/lib/llm/utils";
+import { getDisplayName } from "@/lib/llm/utils";
 import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
 import { Interactive } from "@opal/core";
 
