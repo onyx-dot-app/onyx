@@ -87,7 +87,7 @@ function BodyLayout({
 
   return (
     <div
-      className="opal-content-body dbg-red"
+      className="opal-content-body"
       data-orientation={orientation}
       style={{ gap: config.gap }}
     >
