@@ -476,8 +476,8 @@ export function useBuildStreaming() {
         return;
       }
 
-      const MAX_CANCEL_RETRIES = 3;
-      const CANCEL_RETRY_INTERVAL_MS = 2000;
+      const MAX_CANCEL_RETRIES = 5;
+      const CANCEL_RETRY_INTERVAL_MS = 1000;
 
       const sendCancel = async () => {
         try {
