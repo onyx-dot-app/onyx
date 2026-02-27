@@ -712,7 +712,6 @@ def test_preserves_masked_sensitive_custom_config_on_test_request(
             llm_provider_upsert_request=LLMProviderUpsertRequest(
                 name=name,
                 provider=provider_name,
-                default_model_name=default_model_name,
                 custom_config=original_custom_config,
                 model_configurations=[
                     ModelConfigurationUpsertRequest(
