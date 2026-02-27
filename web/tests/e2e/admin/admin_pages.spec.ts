@@ -78,7 +78,7 @@ const ADMIN_PAGES: AdminPageSnapshot[] = [
   {
     name: "Configuration - LLM",
     path: "configuration/llm",
-    pageTitle: "LLM Setup",
+    pageTitle: "LLM Models",
   },
   {
     name: "Connectors - Existing Connectors",

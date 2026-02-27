@@ -201,12 +201,14 @@ function ExistingProviderCard({
                   <Button
                     icon={SvgTrash}
                     prominence="tertiary"
+                    aria-label="Delete provider"
                     onClick={() => deleteModal.toggle(true)}
                   />
                 </div>
                 <Button
                   icon={SvgSettings}
                   prominence="tertiary"
+                  aria-label="Edit provider"
                   onClick={() => setIsOpen(true)}
                 />
               </Section>

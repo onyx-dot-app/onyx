@@ -98,7 +98,10 @@ type LlmProviderBasics = {
 async function listUserLlmProviders(page: Page): Promise<LlmProviderBasics[]> {
   const response = await page.request.get("/api/llm/provider");
   expect(response.ok()).toBeTruthy();
-  return (await response.json()) as LlmProviderBasics[];
+  const data = (await response.json()) as {
+    providers: LlmProviderBasics[];
+  };
+  return data.providers;
 }
 
 async function waitForModelOnProvider(
