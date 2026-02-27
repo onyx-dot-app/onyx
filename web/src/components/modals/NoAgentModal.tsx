@@ -6,7 +6,7 @@ import Text from "@/refresh-components/texts/Text";
 import { useUser } from "@/providers/UserProvider";
 import { SvgUser } from "@opal/icons";
 
-export default function NoAssistantModal() {
+export default function NoAgentModal() {
   const { isAdmin } = useUser();
 
   return (
@@ -24,7 +24,7 @@ export default function NoAssistantModal() {
                 As an administrator, you can create a new agent by visiting the
                 admin panel.
               </Text>
-              <Button className="w-full" href="/admin/assistants">
+              <Button className="w-full" href="/admin/agents">
                 Go to Admin Panel
               </Button>
             </>

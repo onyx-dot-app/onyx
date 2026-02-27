@@ -1,6 +1,6 @@
 "use client";
 
-import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
+import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
 import { useCallback, useMemo, useState } from "react";
 import { ChatSession } from "@/app/app/interfaces";
 import { useAgents, usePinnedAgents } from "@/hooks/useAgents";
@@ -10,38 +10,34 @@ import { useSettingsContext } from "@/providers/SettingsProvider";
 
 export default function useAgentController({
   selectedChatSession,
-  onAssistantSelect,
+  onAgentSelect,
 }: {
   selectedChatSession: ChatSession | null | undefined;
-  onAssistantSelect?: () => void;
+  onAgentSelect?: () => void;
 }) {
   const searchParams = useSearchParams();
-  const { agents: availableAssistants } = useAgents();
-  const { pinnedAgents: pinnedAssistants } = usePinnedAgents();
+  const { agents: availableAgents } = useAgents();
+  const { pinnedAgents: pinnedAgents } = usePinnedAgents();
   const combinedSettings = useSettingsContext();
 
-  const defaultAssistantIdRaw = searchParams?.get(
-    SEARCH_PARAM_NAMES.PERSONA_ID
-  );
-  const defaultAssistantId = defaultAssistantIdRaw
-    ? parseInt(defaultAssistantIdRaw)
+  const defaultAgentIdRaw = searchParams?.get(SEARCH_PARAM_NAMES.PERSONA_ID);
+  const defaultAgentId = defaultAgentIdRaw
+    ? parseInt(defaultAgentIdRaw)
     : undefined;
 
-  const existingChatSessionAssistantId = selectedChatSession?.persona_id;
-  const [selectedAssistant, setSelectedAssistant] = useState<
+  const existingChatSessionAgentId = selectedChatSession?.persona_id;
+  const [selectedAgent, setSelectedAssistant] = useState<
     MinimalPersonaSnapshot | undefined
   >(
     // NOTE: look through available assistants here, so that even if the user
-    // has hidden this assistant it still shows the correct assistant when
+    // has hidden this agent it still shows the correct assistant when
     // going back to an old chat session
-    existingChatSessionAssistantId !== undefined
-      ? availableAssistants.find(
-          (assistant) => assistant.id === existingChatSessionAssistantId
+    existingChatSessionAgentId !== undefined
+      ? availableAgents.find(
+          (assistant) => assistant.id === existingChatSessionAgentId
         )
-      : defaultAssistantId !== undefined
-        ? availableAssistants.find(
-            (assistant) => assistant.id === defaultAssistantId
-          )
+      : defaultAgentId !== undefined
+        ? availableAgents.find((assistant) => assistant.id === defaultAgentId)
         : undefined
   );
 
@@ -52,8 +48,8 @@ export default function useAgentController({
   // 4. First pinned assistants (ordered list of pinned assistants)
   // 5. Available assistants (ordered list of available assistants)
   // Relevant test: `live_assistant.spec.ts`
-  const liveAssistant: MinimalPersonaSnapshot | undefined = useMemo(() => {
-    if (selectedAssistant) return selectedAssistant;
+  const liveAgent: MinimalPersonaSnapshot | undefined = useMemo(() => {
+    if (selectedAgent) return selectedAgent;
 
     const disableDefaultAssistant =
       combinedSettings?.settings?.disable_default_assistant ?? false;
@@ -61,58 +57,51 @@ export default function useAgentController({
     if (disableDefaultAssistant) {
       // Skip unified assistant (ID 0), go straight to pinned/available
       // Filter out ID 0 from both pinned and available assistants
-      const nonDefaultPinned = pinnedAssistants.filter((a) => a.id !== 0);
-      const nonDefaultAvailable = availableAssistants.filter((a) => a.id !== 0);
+      const nonDefaultPinned = pinnedAgents.filter((a) => a.id !== 0);
+      const nonDefaultAvailable = availableAgents.filter((a) => a.id !== 0);
 
       return (
-        nonDefaultPinned[0] || nonDefaultAvailable[0] || availableAssistants[0] // Last resort fallback
+        nonDefaultPinned[0] || nonDefaultAvailable[0] || availableAgents[0] // Last resort fallback
       );
     }
 
     // Try to use the unified assistant (ID 0) as default
-    const unifiedAssistant = availableAssistants.find((a) => a.id === 0);
-    if (unifiedAssistant) return unifiedAssistant;
+    const unifiedAgent = availableAgents.find((a) => a.id === 0);
+    if (unifiedAgent) return unifiedAgent;
 
     // Fall back to pinned or available assistants
-    return pinnedAssistants[0] || availableAssistants[0];
-  }, [
-    selectedAssistant,
-    pinnedAssistants,
-    availableAssistants,
-    combinedSettings,
-  ]);
+    return pinnedAgents[0] || availableAgents[0];
+  }, [selectedAgent, pinnedAgents, availableAgents, combinedSettings]);
 
-  const setSelectedAssistantFromId = useCallback(
-    (assistantId: number | null | undefined) => {
+  const setSelectedAgentFromId = useCallback(
+    (agentId: number | null | undefined) => {
       // NOTE: also intentionally look through available assistants here, so that
-      // even if the user has hidden an assistant they can still go back to it
+      // even if the user has hidden an agent they can still go back to it
       // for old chats
       let newAssistant =
-        assistantId !== null
-          ? availableAssistants.find(
-              (assistant) => assistant.id === assistantId
-            )
+        agentId !== null
+          ? availableAgents.find((assistant) => assistant.id === agentId)
           : undefined;
 
-      // if no assistant was passed in / found, use the default assistant
-      if (!newAssistant && defaultAssistantId !== undefined) {
-        newAssistant = availableAssistants.find(
-          (assistant) => assistant.id === defaultAssistantId
+      // if no assistant was passed in / found, use the default agent
+      if (!newAssistant && defaultAgentId !== undefined) {
+        newAssistant = availableAgents.find(
+          (assistant) => assistant.id === defaultAgentId
         );
       }
 
       setSelectedAssistant(newAssistant);
-      onAssistantSelect?.();
+      onAgentSelect?.();
     },
-    [availableAssistants, defaultAssistantId, onAssistantSelect]
+    [availableAgents, defaultAgentId, onAgentSelect]
   );
 
   return {
     // main assistant selection
-    selectedAssistant,
-    setSelectedAssistantFromId,
+    selectedAgent,
+    setSelectedAgentFromId,
 
     // final computed assistant
-    liveAssistant,
+    liveAgent,
   };
 }

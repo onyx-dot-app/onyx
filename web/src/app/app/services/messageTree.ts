@@ -320,7 +320,7 @@ export function getHumanAndAIMessageFromMessageNumber(
     if (!message) return { humanMessage: null, aiMessage: null };
 
     if (message.type === "user") {
-      // Find its latest child that is an assistant
+      // Find its latest child that is an agent
       const potentialAiMessage =
         message.latestChildNodeId !== null &&
         message.latestChildNodeId !== undefined
@@ -437,7 +437,7 @@ export const buildImmediateMessages = (
   messageToResend?: Message
 ): {
   initialUserNode: Message;
-  initialAssistantNode: Message;
+  initialAgentNode: Message;
 } => {
   // Always create a NEW message with a new nodeId for proper branching.
   // When editing (messageToResend exists), this creates a sibling to the original
@@ -448,17 +448,17 @@ export const buildImmediateMessages = (
     message: userInput,
     files,
   });
-  const initialAssistantNode = buildEmptyMessage({
+  const initialAgentNode = buildEmptyMessage({
     messageType: "assistant",
     parentNodeId: initialUserNode.nodeId,
     nodeIdOffset: 1,
   });
 
-  initialUserNode.childrenNodeIds = [initialAssistantNode.nodeId];
-  initialUserNode.latestChildNodeId = initialAssistantNode.nodeId;
+  initialUserNode.childrenNodeIds = [initialAgentNode.nodeId];
+  initialUserNode.latestChildNodeId = initialAgentNode.nodeId;
 
   return {
     initialUserNode,
-    initialAssistantNode,
+    initialAgentNode,
   };
 };

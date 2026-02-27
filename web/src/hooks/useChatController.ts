@@ -17,7 +17,7 @@ import {
   buildImmediateMessages,
   buildEmptyMessage,
 } from "@/app/app/services/messageTree";
-import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
+import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
 import { OnyxDocument } from "@/lib/search/interfaces";
@@ -102,13 +102,13 @@ interface RegenerationRequest {
 interface UseChatControllerProps {
   filterManager: FilterManager;
   llmManager: LlmManager;
-  liveAssistant: MinimalPersonaSnapshot | undefined;
-  availableAssistants: MinimalPersonaSnapshot[];
+  liveAgent: MinimalPersonaSnapshot | undefined;
+  availableAgents: MinimalPersonaSnapshot[];
   existingChatSessionId: string | null;
   selectedDocuments: OnyxDocument[];
   searchParams: ReadonlyURLSearchParams;
   resetInputBar: () => void;
-  setSelectedAssistantFromId: (assistantId: number | null) => void;
+  setSelectedAgentFromId: (agentId: number | null) => void;
 }
 
 async function stopChatSession(chatSessionId: string): Promise<void> {
@@ -127,12 +127,12 @@ async function stopChatSession(chatSessionId: string): Promise<void> {
 export default function useChatController({
   filterManager,
   llmManager,
-  availableAssistants,
-  liveAssistant,
+  availableAgents,
+  liveAgent,
   existingChatSessionId,
   selectedDocuments,
   resetInputBar,
-  setSelectedAssistantFromId,
+  setSelectedAgentFromId,
 }: UseChatControllerProps) {
   const pathname = usePathname();
   const router = useRouter();
@@ -140,7 +140,7 @@ export default function useChatController({
   const params = useAppParams();
   const { refreshChatSessions, addPendingChatSession } = useChatSessions();
   const { pinnedAgents, togglePinnedAgent } = usePinnedAgents();
-  const { assistantPreferences } = useAgentPreferences();
+  const { agentPreferences } = useAgentPreferences();
   const { forcedToolIds } = useForcedTools();
   const { fetchProjects, setCurrentMessageFiles, beginUpload } =
     useProjectsContext();
@@ -462,12 +462,12 @@ export default function useChatController({
       }
 
       // Auto-pin the agent to sidebar when sending a message if not already pinned
-      if (liveAssistant) {
+      if (liveAgent) {
         const isAlreadyPinned = pinnedAgents.some(
-          (agent) => agent.id === liveAssistant.id
+          (agent) => agent.id === liveAgent.id
         );
         if (!isAlreadyPinned) {
-          togglePinnedAgent(liveAssistant, true).catch((err) => {
+          togglePinnedAgent(liveAgent, true).catch((err) => {
             console.error("Failed to auto-pin agent:", err);
           });
         }
@@ -481,14 +481,14 @@ export default function useChatController({
 
       const searchParamBasedChatSessionName =
         searchParams?.get(SEARCH_PARAM_NAMES.TITLE) || null;
-      // Auto-name only once, after the first assistant response, and only when the chat isn't
+      // Auto-name only once, after the first agent response, and only when the chat isn't
       // already explicitly named (e.g. `?title=...`).
       const hadAnyUserMessagesBeforeSubmit = currentHistory.some(
         (m) => m.type === "user"
       );
       if (isNewSession) {
         currChatSessionId = await createChatSession(
-          liveAssistant?.id || 0,
+          liveAgent?.id || 0,
           searchParamBasedChatSessionName,
           projectId ? parseInt(projectId) : null
         );
@@ -497,7 +497,7 @@ export default function useChatController({
         // This ensures "New Chat" appears immediately, even before any messages are saved
         addPendingChatSession({
           chatSessionId: currChatSessionId,
-          personaId: liveAssistant?.id || 0,
+          personaId: liveAgent?.id || 0,
           projectId: projectId ? parseInt(projectId) : null,
         });
       } else {
@@ -601,12 +601,12 @@ export default function useChatController({
       // Add user message immediately to the message tree so that the chat
       // immediately reflects the user message
       let initialUserNode: Message;
-      let initialAssistantNode: Message;
+      let initialAgentNode: Message;
 
       if (regenerationRequest) {
-        // For regeneration: keep the existing user message, only create new assistant
+        // For regeneration: keep the existing user message, only create new agent
         initialUserNode = regenerationRequest.parentMessage;
-        initialAssistantNode = buildEmptyMessage({
+        initialAgentNode = buildEmptyMessage({
           messageType: "assistant",
           parentNodeId: initialUserNode.nodeId,
           nodeIdOffset: 1,
@@ -623,13 +623,13 @@ export default function useChatController({
           messageToResend
         );
         initialUserNode = result.initialUserNode;
-        initialAssistantNode = result.initialAssistantNode;
+        initialAgentNode = result.initialAgentNode;
       }
 
       // make messages appear + clear input bar
       const messagesToUpsert = regenerationRequest
-        ? [initialAssistantNode] // Only upsert the new assistant for regeneration
-        : [initialUserNode, initialAssistantNode]; // Upsert both for normal/edit flow
+        ? [initialAgentNode] // Only upsert the new agent for regeneration
+        : [initialUserNode, initialAgentNode]; // Upsert both for normal/edit flow
       currentMessageTreeLocal = upsertToCompleteMessageTree({
         messages: messagesToUpsert,
         completeMessageTreeOverride: currentMessageTreeLocal,
@@ -661,18 +661,18 @@ export default function useChatController({
       let packetsVersion = 0;
 
       let newUserMessageId: number | null = null;
-      let newAssistantMessageId: number | null = null;
+      let newAgentMessageId: number | null = null;
 
       try {
         const lastSuccessfulMessageId = getLastSuccessfulMessageId(
           currentMessageTreeLocal
         );
-        const disabledToolIds = liveAssistant
-          ? assistantPreferences?.[liveAssistant?.id]?.disabled_tool_ids
+        const disabledToolIds = liveAgent
+          ? agentPreferences?.[liveAgent?.id]?.disabled_tool_ids
           : undefined;
 
         // Find the search tool's numeric ID for forceSearch
-        const searchToolNumericId = liveAssistant?.tools.find(
+        const searchToolNumericId = liveAgent?.tools.find(
           (tool) => tool.in_code_tool_id === SEARCH_TOOL_ID
         )?.id;
 
@@ -721,8 +721,8 @@ export default function useChatController({
           temperature: llmManager.temperature || undefined,
           deepResearch,
           enabledToolIds:
-            disabledToolIds && liveAssistant
-              ? liveAssistant.tools
+            disabledToolIds && liveAgent
+              ? liveAgent.tools
                   .filter((tool) => !disabledToolIds?.includes(tool.id))
                   .map((tool) => tool.id)
               : undefined,
@@ -767,7 +767,7 @@ export default function useChatController({
               if (isExtension && posthog) {
                 posthog.capture("extension_chat_query", {
                   extension_context: extensionContext,
-                  assistant_id: liveAssistant?.id,
+                  assistant_id: liveAgent?.id,
                   has_files: effectiveFileDescriptors.length > 0,
                   deep_research: deepResearch,
                 });
@@ -777,7 +777,7 @@ export default function useChatController({
             if (
               (packet as MessageResponseIDInfo).reserved_assistant_message_id
             ) {
-              newAssistantMessageId = (packet as MessageResponseIDInfo)
+              newAgentMessageId = (packet as MessageResponseIDInfo)
                 .reserved_assistant_message_id;
             }
 
@@ -848,7 +848,7 @@ export default function useChatController({
                   documents = messageStart.final_documents;
                   updateSelectedNodeForDocDisplay(
                     frozenSessionId,
-                    initialAssistantNode.nodeId
+                    initialAgentNode.nodeId
                   );
                 }
               }
@@ -869,8 +869,8 @@ export default function useChatController({
                   files: files,
                 },
                 {
-                  ...initialAssistantNode,
-                  messageId: newAssistantMessageId ?? undefined,
+                  ...initialAgentNode,
+                  messageId: newAgentMessageId ?? undefined,
                   message: error || answer,
                   type: error ? "error" : "assistant",
                   retrievalType,
@@ -918,7 +918,7 @@ export default function useChatController({
               packetCount: 0,
             },
             {
-              nodeId: initialAssistantNode.nodeId,
+              nodeId: initialAgentNode.nodeId,
               message: errorMsg,
               type: "error",
               files: aiMessageImages || [],
@@ -955,20 +955,20 @@ export default function useChatController({
       llmManager.currentLlm,
       llmManager.temperature,
       // Others that affect logic
-      liveAssistant,
-      availableAssistants,
+      liveAgent,
+      availableAgents,
       existingChatSessionId,
       selectedDocuments,
       searchParams,
       resetInputBar,
-      setSelectedAssistantFromId,
+      setSelectedAgentFromId,
       updateSelectedNodeForDocDisplay,
       currentMessageTree,
       currentChatState,
       // Ensure latest forced tools are used when submitting
       forcedToolIds,
       // Keep tool preference-derived values fresh
-      assistantPreferences,
+      agentPreferences,
       fetchProjects,
       // For auto-pinning agents
       pinnedAgents,
@@ -980,7 +980,7 @@ export default function useChatController({
     async (acceptedFiles: File[]) => {
       const [_, llmModel] = getFinalLLM(
         llmManager.llmProviders || [],
-        liveAssistant || null,
+        liveAgent || null,
         llmManager.currentLlm
       );
       const llmAcceptsImages = modelSupportsImageInput(
@@ -1006,7 +1006,7 @@ export default function useChatController({
       setCurrentMessageFiles((prev) => [...prev, ...uploadedMessageFiles]);
       updateChatStateAction(getCurrentSessionId(), "input");
     },
-    [liveAssistant, llmManager, forcedToolIds]
+    [liveAgent, llmManager, forcedToolIds]
   );
 
   useEffect(() => {
@@ -1025,13 +1025,9 @@ export default function useChatController({
   useEffect(() => {
     if (currentMessageHistory.length === 0 && existingChatSessionId === null) {
       // Select from available assistants so shared assistants appear.
-      setSelectedAssistantFromId(null);
+      setSelectedAgentFromId(null);
     }
-  }, [
-    existingChatSessionId,
-    availableAssistants,
-    currentMessageHistory.length,
-  ]);
+  }, [existingChatSessionId, availableAgents, currentMessageHistory.length]);
 
   useEffect(() => {
     const handleSlackChatRedirect = async () => {
@@ -1073,11 +1069,11 @@ export default function useChatController({
 
   // fetch # of allowed document tokens for the selected Persona
   useEffect(() => {
-    if (!liveAssistant?.id) return; // avoid calling with undefined persona id
+    if (!liveAgent?.id) return; // avoid calling with undefined persona id
 
     async function fetchMaxTokens() {
       const response = await fetch(
-        `/api/chat/max-selected-document-tokens?persona_id=${liveAssistant?.id}`
+        `/api/chat/max-selected-document-tokens?persona_id=${liveAgent?.id}`
       );
       if (response.ok) {
         const maxTokens = (await response.json()).max_tokens as number;
@@ -1085,7 +1081,7 @@ export default function useChatController({
       }
     }
     fetchMaxTokens();
-  }, [liveAssistant]);
+  }, [liveAgent]);
 
   // check if there's an image file in the message history so that we know
   // which LLMs are available to use

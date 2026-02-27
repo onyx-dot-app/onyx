@@ -50,7 +50,7 @@ import {
 } from "@/components/icons/icons";
 import { ValidSources } from "./types";
 import { SourceCategory, SourceMetadata } from "./search/interfaces";
-import { Persona } from "@/app/admin/assistants/interfaces";
+import { Persona } from "@/app/admin/agents/interfaces";
 import React from "react";
 import { DOCS_ADMINS_PATH } from "./constants";
 import { SvgFileText, SvgGlobe } from "@opal/icons";

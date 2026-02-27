@@ -84,7 +84,7 @@ async function fetchMcpToolIdByName(
   return matchedTool!.id;
 }
 
-test.describe("Default Assistant MCP Integration", () => {
+test.describe("Default Agent MCP Integration", () => {
   test.describe.configure({ mode: "serial" });
 
   let serverProcess: McpServerProcess | null = null;
@@ -170,7 +170,7 @@ test.describe("Default Assistant MCP Integration", () => {
     }
   });
 
-  test("Admin configures API key MCP server and adds tools to default assistant", async ({
+  test("Admin configures API key MCP server and adds tools to default agent", async ({
     page,
   }) => {
     await page.context().clearCookies();
@@ -319,7 +319,7 @@ test.describe("Default Assistant MCP Integration", () => {
     );
   });
 
-  test("Admin adds MCP tools to default assistant via chat preferences page", async ({
+  test("Admin adds MCP tools to default agent via chat preferences page", async ({
     page,
   }) => {
     test.skip(!serverId, "MCP server must be created first");
@@ -369,10 +369,10 @@ test.describe("Default Assistant MCP Integration", () => {
         timeout: 10000,
       });
     }
-    console.log(`[test] MCP tools successfully added to default assistant`);
+    console.log(`[test] MCP tools successfully added to default agent`);
   });
 
-  test("Basic user can see and toggle MCP tools in default assistant", async ({
+  test("Basic user can see and toggle MCP tools in default agent", async ({
     page,
   }) => {
     test.skip(!serverId, "MCP server must be configured first");
@@ -382,7 +382,7 @@ test.describe("Default Assistant MCP Integration", () => {
     await apiLogin(page, basicUserEmail, basicUserPassword);
     console.log(`[test] Logged in as basic user: ${basicUserEmail}`);
 
-    // Navigate to chat (which uses default assistant for new users)
+    // Navigate to chat (which uses default agent for new users)
     await page.goto("/app");
     await page.waitForURL("**/app**");
     await ensureOnboardingComplete(page);
@@ -499,8 +499,8 @@ test.describe("Default Assistant MCP Integration", () => {
     await page.getByLabel("AgentsPage/new-agent-button").click();
     await page.waitForURL("**/app/agents/create");
 
-    const assistantName = `MCP Assistant ${Date.now()}`;
-    await page.locator('input[name="name"]').fill(assistantName);
+    const agentName = `MCP Assistant ${Date.now()}`;
+    await page.locator('input[name="name"]').fill(agentName);
     await page
       .locator('textarea[name="description"]')
       .fill("Assistant with MCP actions attached.");
@@ -529,14 +529,14 @@ test.describe("Default Assistant MCP Integration", () => {
 
     await page.getByRole("button", { name: "Create" }).click();
 
-    await page.waitForURL(/.*\/app\?assistantId=\d+.*/);
-    const assistantIdMatch = page.url().match(/assistantId=(\d+)/);
-    expect(assistantIdMatch).toBeTruthy();
-    const assistantId = assistantIdMatch ? assistantIdMatch[1] : null;
-    expect(assistantId).not.toBeNull();
+    await page.waitForURL(/.*\/app\?agentId=\d+.*/);
+    const agentIdMatch = page.url().match(/agentId=(\d+)/);
+    expect(agentIdMatch).toBeTruthy();
+    const agentId = agentIdMatch ? agentIdMatch[1] : null;
+    expect(agentId).not.toBeNull();
 
     const client = new OnyxApiClient(page.request);
-    const assistant = await client.getAssistant(Number(assistantId));
+    const assistant = await client.getAssistant(Number(agentId));
     const hasMcpTool = assistant.tools.some(
       (tool) => tool.mcp_server_id === serverId
     );
@@ -629,7 +629,7 @@ test.describe("Default Assistant MCP Integration", () => {
     expect(disabledCounts.debug).toBe(0);
   });
 
-  test("Admin can modify MCP tools in default assistant", async ({ page }) => {
+  test("Admin can modify MCP tools in default agent", async ({ page }) => {
     test.skip(!serverId, "MCP server must be configured first");
 
     await page.context().clearCookies();
@@ -779,7 +779,7 @@ test.describe("Default Assistant MCP Integration", () => {
     await modalAfter.getByRole("button", { name: "Cancel" }).click();
   });
 
-  test("MCP tools appear in basic user's chat actions after being added to default assistant", async ({
+  test("MCP tools appear in basic user's chat actions after being added to default agent", async ({
     page,
   }) => {
     test.skip(!serverId, "MCP server must be configured first");
@@ -822,7 +822,7 @@ test.describe("Default Assistant MCP Integration", () => {
     expect(toolCount).toBeGreaterThan(0);
 
     console.log(
-      `[test] Basic user can see ${toolCount} MCP tools from default assistant`
+      `[test] Basic user can see ${toolCount} MCP tools from default agent`
     );
   });
 });

@@ -621,7 +621,7 @@ test.describe("Chat Preferences Admin Page", () => {
       );
       const configData = await configResp.json();
       console.log(
-        `[toggle-all] Default assistant config: ${JSON.stringify(configData)}`
+        `[toggle-all] Default agent config: ${JSON.stringify(configData)}`
       );
     } catch (e) {
       console.warn(`[toggle-all] Failed to fetch config: ${e}`);

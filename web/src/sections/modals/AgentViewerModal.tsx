@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
-import { FullPersona } from "@/app/admin/assistants/interfaces";
+import { FullPersona } from "@/app/admin/agents/interfaces";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import Modal from "@/refresh-components/Modal";
 import { Section } from "@/layouts/general-layouts";
@@ -136,7 +136,7 @@ function AgentChatInput({ agent, onSubmit }: AgentChatInputProps) {
       llmManager={llmManager}
       chatState="input"
       filterManager={filterManager}
-      selectedAssistant={agent}
+      selectedAgent={agent}
       selectedDocuments={EMPTY_DOCS}
       removeDocs={() => {}}
       stopGenerating={() => {}}

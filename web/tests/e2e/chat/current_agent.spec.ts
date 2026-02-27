@@ -1,10 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { dragElementAbove, dragElementBelow } from "@tests/e2e/utils/dragUtils";
 import { loginAsRandomUser } from "@tests/e2e/utils/auth";
-import {
-  createAssistant,
-  pinAssistantByName,
-} from "@tests/e2e/utils/assistantUtils";
+import { createAgent, pinAgentByName } from "@tests/e2e/utils/agentUtils";
 
 // TODO (chris): figure out why this test is flakey
 test.skip("Assistant Drag and Drop", async ({ page }) => {
@@ -19,32 +16,32 @@ test.skip("Assistant Drag and Drop", async ({ page }) => {
   const nameA = `E2E Assistant A ${ts}`;
   const nameB = `E2E Assistant B ${ts}`;
   const nameC = `E2E Assistant C ${ts}`;
-  await createAssistant(page, {
+  await createAgent(page, {
     name: nameA,
     description: "E2E-created assistant A",
     instructions: "Assistant A instructions",
   });
-  await pinAssistantByName(page, nameA);
+  await pinAgentByName(page, nameA);
   await expect(
     page.locator('[data-testid^="assistant-["]').filter({ hasText: nameA })
   ).toBeVisible();
 
-  await createAssistant(page, {
+  await createAgent(page, {
     name: nameB,
     description: "E2E-created assistant B",
     instructions: "Assistant B instructions",
   });
-  await pinAssistantByName(page, nameB);
+  await pinAgentByName(page, nameB);
   await expect(
     page.locator('[data-testid^="assistant-["]').filter({ hasText: nameB })
   ).toBeVisible();
 
-  await createAssistant(page, {
+  await createAgent(page, {
     name: nameC,
     description: "E2E-created assistant C",
     instructions: "Assistant C instructions",
   });
-  await pinAssistantByName(page, nameC);
+  await pinAgentByName(page, nameC);
   await expect(
     page.locator('[data-testid^="assistant-["]').filter({ hasText: nameC })
   ).toBeVisible();

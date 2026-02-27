@@ -4,7 +4,7 @@ import { ReadonlyURLSearchParams } from "next/navigation";
 export const SEARCH_PARAM_NAMES = {
   CHAT_ID: "chatId",
   SEARCH_ID: "searchId",
-  PERSONA_ID: "assistantId",
+  PERSONA_ID: "agentId",
   PROJECT_ID: "projectId",
   ALL_MY_DOCUMENTS: "allMyDocuments",
   // overrides

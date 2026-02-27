@@ -4,8 +4,8 @@ import { loginAsRandomUser, loginAs } from "@tests/e2e/utils/auth";
 import {
   sendMessage,
   startNewChat,
-  verifyAssistantIsChosen,
-  verifyDefaultAssistantIsChosen,
+  verifyAgentIsChosen,
+  verifyDefaultAgentIsChosen,
 } from "@tests/e2e/utils/chatActions";
 import {
   TOOL_IDS,
@@ -119,7 +119,7 @@ test.describe("Default Agent Tests", () => {
       await page.getByRole("button", { name: "Create" }).click();
 
       // Wait for agent to be created and selected
-      await verifyAssistantIsChosen(page, "Custom Test Agent");
+      await verifyAgentIsChosen(page, "Custom Test Agent");
 
       // Greeting should NOT appear for custom agent
       const customGreeting = await page.$('[data-testid="onyx-logo"]');
@@ -137,10 +137,10 @@ test.describe("Default Agent Tests", () => {
       expect(logoElement).toBeTruthy();
 
       // Should NOT show agent name for default agent
-      const assistantNameElement = await page.$(
-        '[data-testid="assistant-name-display"]'
+      const agentNameElement = await page.$(
+        '[data-testid="agent-name-display"]'
       );
-      expect(assistantNameElement).toBeNull();
+      expect(agentNameElement).toBeNull();
     });
 
     test("custom agents should show name and icon instead of logo", async ({
@@ -162,14 +162,14 @@ test.describe("Default Agent Tests", () => {
       await page.getByRole("button", { name: "Create" }).click();
 
       // Wait for agent to be created and selected
-      await verifyAssistantIsChosen(page, "Custom Agent");
+      await verifyAgentIsChosen(page, "Custom Agent");
 
       // Should show agent name and icon, not Onyx logo
-      const assistantNameElement = await page.waitForSelector(
-        '[data-testid="assistant-name-display"]',
+      const agentNameElement = await page.waitForSelector(
+        '[data-testid="agent-name-display"]',
         { timeout: 5000 }
       );
-      const nameText = await assistantNameElement.textContent();
+      const nameText = await agentNameElement.textContent();
       expect(nameText).toContain("Custom Agent");
 
       // Onyx logo should NOT be shown
@@ -211,7 +211,7 @@ test.describe("Default Agent Tests", () => {
       await page.getByRole("button", { name: "Create" }).click();
 
       // Wait for assistant to be created and selected
-      await verifyAssistantIsChosen(page, "Test Agent with Starters");
+      await verifyAgentIsChosen(page, "Test Agent with Starters");
 
       // Starter messages container might exist but be empty for custom agents
       const starterMessagesContainer = await page.$(
@@ -231,7 +231,7 @@ test.describe("Default Agent Tests", () => {
   test.describe("Agent Selection", () => {
     test("default agent should be selected for new chats", async ({ page }) => {
       // Verify the input placeholder indicates default agent (Onyx)
-      await verifyDefaultAssistantIsChosen(page);
+      await verifyDefaultAgentIsChosen(page);
     });
 
     test("default agent should NOT appear in agent selector", async ({
@@ -247,7 +247,7 @@ test.describe("Default Agent Tests", () => {
         .waitFor({ state: "visible", timeout: 5000 });
 
       // Look for default agent by name - it should NOT be there
-      const assistantElements = await page.$$('[data-testid^="assistant-"]');
+      const assistantElements = await page.$$('[data-testid^="agent-"]');
       const assistantTexts = await Promise.all(
         assistantElements.map((el) => el.textContent())
       );
@@ -284,13 +284,13 @@ test.describe("Default Agent Tests", () => {
       await page.getByRole("button", { name: "Create" }).click();
 
       // Verify switched to custom agent
-      await verifyAssistantIsChosen(page, "Switch Test Agent");
+      await verifyAgentIsChosen(page, "Switch Test Agent");
 
       // Start new chat to go back to default
       await startNewChat(page);
 
       // Should be back to default agent
-      await verifyDefaultAssistantIsChosen(page);
+      await verifyDefaultAgentIsChosen(page);
     });
   });
 

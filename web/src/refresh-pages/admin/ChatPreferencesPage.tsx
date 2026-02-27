@@ -55,7 +55,7 @@ import useFilter from "@/hooks/useFilter";
 import { MCPServer } from "@/lib/tools/interfaces";
 import type { IconProps } from "@opal/types";
 
-interface DefaultAssistantConfiguration {
+interface DefaultAgentConfiguration {
   tool_ids: number[];
   system_prompt: string | null;
   default_system_prompt: string;
@@ -223,14 +223,14 @@ function ChatPreferencesForm() {
       })),
   }));
 
-  // Default assistant configuration (system prompt)
-  const { data: defaultAssistantConfig, mutate: mutateDefaultAssistant } =
-    useSWR<DefaultAssistantConfiguration>(
+  // Default agent configuration (system prompt)
+  const { data: defaultAgentConfig, mutate: mutateDefaultAgent } =
+    useSWR<DefaultAgentConfiguration>(
       "/api/admin/default-assistant/configuration",
       errorHandlingFetcher
     );
 
-  const enabledToolIds = defaultAssistantConfig?.tool_ids ?? [];
+  const enabledToolIds = defaultAgentConfig?.tool_ids ?? [];
 
   const isToolEnabled = useCallback(
     (toolDbId: number) => enabledToolIds.includes(toolDbId),
@@ -240,11 +240,11 @@ function ChatPreferencesForm() {
   const saveToolIds = useCallback(
     async (newToolIds: number[]) => {
       // Optimistic update so subsequent toggles read fresh state
-      const optimisticData = defaultAssistantConfig
-        ? { ...defaultAssistantConfig, tool_ids: newToolIds }
+      const optimisticData = defaultAgentConfig
+        ? { ...defaultAgentConfig, tool_ids: newToolIds }
         : undefined;
       try {
-        await mutateDefaultAssistant(
+        await mutateDefaultAgent(
           async () => {
             const response = await fetch("/api/admin/default-assistant", {
               method: "PATCH",
@@ -264,7 +264,7 @@ function ChatPreferencesForm() {
         toast.error("Failed to update tools");
       }
     },
-    [defaultAssistantConfig, mutateDefaultAssistant]
+    [defaultAgentConfig, mutateDefaultAgent]
   );
 
   const toggleTool = useCallback(
@@ -385,8 +385,8 @@ function ChatPreferencesForm() {
               icon={SvgAddLines}
               onClick={() => {
                 setSystemPromptValue(
-                  defaultAssistantConfig?.system_prompt ??
-                    defaultAssistantConfig?.default_system_prompt ??
+                  defaultAgentConfig?.system_prompt ??
+                    defaultAgentConfig?.default_system_prompt ??
                     ""
                 );
                 setSystemPromptModalOpen(true);
@@ -784,7 +784,7 @@ function ChatPreferencesForm() {
                     const errorMsg = (await response.json()).detail;
                     throw new Error(errorMsg);
                   }
-                  await mutateDefaultAssistant();
+                  await mutateDefaultAgent();
                   setSystemPromptModalOpen(false);
                   toast.success("System prompt updated");
                 } catch {
