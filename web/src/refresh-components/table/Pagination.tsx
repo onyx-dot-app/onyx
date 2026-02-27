@@ -19,6 +19,8 @@ interface SimplePaginationProps {
   onPageChange: (page: number) => void;
   /** When `true`, displays the word "pages" after the page indicator. */
   showUnits?: boolean;
+  /** When `false`, hides the page indicator between the prev/next arrows. Defaults to `true`. */
+  showPageIndicator?: boolean;
   /** Controls button and text sizing. Defaults to `"lg"`. */
   size?: PaginationSize;
   className?: string;
@@ -41,8 +43,8 @@ interface CountPaginationProps {
   totalPages: number;
   /** Called when the user navigates to a different page. */
   onPageChange: (page: number) => void;
-  /** When `true` (default), shows the prev/next arrows with a page indicator. */
-  showPage?: boolean;
+  /** When `false`, hides the page number between the prev/next arrows (arrows still visible). Defaults to `true`. */
+  showPageIndicator?: boolean;
   /** When `true`, renders a "Go to" button. Requires `onGoTo`. */
   showGoTo?: boolean;
   /** Callback invoked when the "Go to" button is clicked. */
@@ -66,6 +68,8 @@ interface ListPaginationProps {
   totalPages: number;
   /** Called when the user navigates to a different page. */
   onPageChange: (page: number) => void;
+  /** When `false`, hides the page buttons between the prev/next arrows. Defaults to `true`. */
+  showPageIndicator?: boolean;
   /** Controls button and text sizing. Defaults to `"lg"`. Only `"lg"` and `"md"` are supported. */
   size?: Exclude<PaginationSize, "sm">;
   className?: string;
@@ -182,6 +186,7 @@ function SimplePaginationInner({
   totalPages,
   onPageChange,
   showUnits,
+  showPageIndicator = true,
   size = "lg",
   className,
 }: SimplePaginationProps) {
@@ -195,17 +200,21 @@ function SimplePaginationInner({
         onPageChange={onPageChange}
         size={size}
       >
-        <Text {...sizedTextProps(isSmall, "mono")} text03>
-          {currentPage}
-          <Text as="span" {...sizedTextProps(isSmall, "muted")} text03>
-            /
-          </Text>
-          {totalPages}
-        </Text>
-        {showUnits && (
-          <Text {...sizedTextProps(isSmall, "muted")} text03>
-            pages
-          </Text>
+        {showPageIndicator && (
+          <>
+            <Text {...sizedTextProps(isSmall, "mono")} text03>
+              {currentPage}
+              <Text as="span" {...sizedTextProps(isSmall, "muted")} text03>
+                /
+              </Text>
+              {totalPages}
+            </Text>
+            {showUnits && (
+              <Text {...sizedTextProps(isSmall, "muted")} text03>
+                pages
+              </Text>
+            )}
+          </>
         )}
       </NavButtons>
     </div>
@@ -218,7 +227,7 @@ function CountPaginationInner({
   currentPage,
   totalPages,
   onPageChange,
-  showPage = true,
+  showPageIndicator = true,
   showGoTo,
   onGoTo,
   showUnits,
@@ -247,18 +256,18 @@ function CountPaginationInner({
         </Text>
       )}
 
-      {showPage && (
-        <NavButtons
-          currentPage={currentPage}
-          totalPages={totalPages}
-          onPageChange={onPageChange}
-          size={size}
-        >
+      <NavButtons
+        currentPage={currentPage}
+        totalPages={totalPages}
+        onPageChange={onPageChange}
+        size={size}
+      >
+        {showPageIndicator && (
           <Text {...sizedTextProps(isSmall, "mono")} text03>
             {currentPage}
           </Text>
-        </NavButtons>
-      )}
+        )}
+      </NavButtons>
 
       {showGoTo && onGoTo && (
         <Button onClick={onGoTo} size={size} prominence="tertiary">
@@ -273,6 +282,7 @@ function ListPaginationInner({
   currentPage,
   totalPages,
   onPageChange,
+  showPageIndicator = true,
   size = "lg",
   className,
 }: ListPaginationProps) {
@@ -286,63 +296,65 @@ function ListPaginationInner({
         onPageChange={onPageChange}
         size={size}
       >
-        <div className="flex items-center">
-          {pageNumbers.map((page) => {
-            if (typeof page === "string") {
-              return (
-                <Text
-                  key={page}
-                  mainUiMuted={size === "lg"}
-                  secondaryBody={size === "md"}
-                  text03
-                >
-                  ...
-                </Text>
-              );
-            }
-
-            const pageNum = page as number;
-            const isActive = pageNum === currentPage;
-
-            return (
-              <Button
-                key={pageNum}
-                onClick={() => onPageChange(pageNum)}
-                size={size}
-                prominence="tertiary"
-                transient={isActive}
-                icon={({ className: iconClassName }) => (
-                  <div
-                    className={cn(
-                      iconClassName,
-                      "flex flex-col justify-center"
-                    )}
+        {showPageIndicator && (
+          <div className="flex items-center">
+            {pageNumbers.map((page) => {
+              if (typeof page === "string") {
+                return (
+                  <Text
+                    key={page}
+                    mainUiMuted={size === "lg"}
+                    secondaryBody={size === "md"}
+                    text03
                   >
-                    {size === "lg" ? (
-                      <Text
-                        mainUiBody={isActive}
-                        mainUiMuted={!isActive}
-                        text04={isActive}
-                        text02={!isActive}
-                      >
-                        {pageNum}
-                      </Text>
-                    ) : (
-                      <Text
-                        secondaryAction={isActive}
-                        secondaryBody={!isActive}
-                        text04={isActive}
-                        text02={!isActive}
-                      >
-                        {pageNum}
-                      </Text>
-                    )}
-                  </div>
-                )}
-              />
-            );
-          })}
-        </div>
+                    ...
+                  </Text>
+                );
+              }
+
+              const pageNum = page as number;
+              const isActive = pageNum === currentPage;
+
+              return (
+                <Button
+                  key={pageNum}
+                  onClick={() => onPageChange(pageNum)}
+                  size={size}
+                  prominence="tertiary"
+                  transient={isActive}
+                  icon={({ className: iconClassName }) => (
+                    <div
+                      className={cn(
+                        iconClassName,
+                        "flex flex-col justify-center"
+                      )}
+                    >
+                      {size === "lg" ? (
+                        <Text
+                          mainUiBody={isActive}
+                          mainUiMuted={!isActive}
+                          text04={isActive}
+                          text02={!isActive}
+                        >
+                          {pageNum}
+                        </Text>
+                      ) : (
+                        <Text
+                          secondaryAction={isActive}
+                          secondaryBody={!isActive}
+                          text04={isActive}
+                          text02={!isActive}
+                        >
+                          {pageNum}
+                        </Text>
+                      )}
+                    </div>
+                  )}
+                />
+              );
+            })}
+          </div>
+        )}
       </NavButtons>
     </div>
   );
