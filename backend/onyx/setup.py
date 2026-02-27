@@ -251,12 +251,13 @@ def setup_postgres(db_session: Session) -> None:
         logger.notice("Setting up default OpenAI LLM for dev.")
 
         llm_model = GEN_AI_MODEL_VERSION or "gpt-4o-mini"
+        provider_name = "DevEnvPresetOpenAI"
         existing = fetch_existing_llm_provider(
-            name="DevEnvPresetOpenAI", db_session=db_session
+            name=provider_name, db_session=db_session
         )
         model_req = LLMProviderUpsertRequest(
             id=existing.id if existing else None,
-            name="DevEnvPresetOpenAI",
+            name=provider_name,
             provider=LlmProviderNames.OPENAI,
             api_key=GEN_AI_API_KEY,
             api_base=None,

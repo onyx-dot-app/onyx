@@ -683,15 +683,7 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:  # noqa: ARG00
     assert len(visible_models) == 0
 
     # Make gpt-4o the default
-    edit_response_4 = requests.post(
-        f"{API_SERVER_URL}/admin/llm/default",
-        headers=admin_user.headers,
-        json={
-            "provider_id": created_provider["id"],
-            "model_name": "gpt-4o",
-        },
-    )
-    assert edit_response_4.status_code == 200
+    _set_default_provider(admin_user, created_provider["id"], "gpt-4o")
 
     # Verify gpt-4o is the default
     provider_data = _get_provider_by_id(admin_user, created_provider["id"])
