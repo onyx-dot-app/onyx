@@ -198,7 +198,7 @@ const Header = React.forwardRef<HTMLDivElement, SimpleCollapsibleHeaderProps>(
           className="flex flex-row items-center justify-between gap-4 cursor-pointer select-none"
           {...props}
         >
-          <div ref={boundingRef}>
+          <div ref={boundingRef} className="w-full">
             <Content
               title={title}
               description={description}

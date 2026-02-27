@@ -30,6 +30,7 @@
 
 import { SvgEmpty } from "@opal/icons";
 import Card from "@/refresh-components/cards/Card";
+import Text from "@/refresh-components/texts/Text";
 import { Content } from "@opal/layouts";
 import { IconProps } from "@opal/types";
 
@@ -49,10 +50,15 @@ export default function EmptyMessage({
       <Content
         icon={Icon}
         title={title}
-        description={description}
         sizePreset="main-ui"
-        variant="section"
+        variant="body"
+        prominence="muted"
       />
+      {description && (
+        <Text secondaryBody text03>
+          {description}
+        </Text>
+      )}
     </Card>
   );
 }
