@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FiDownload } from "react-icons/fi";
+import { SvgDownload } from "@opal/icons";
 import { ImageShape } from "@/app/app/services/streamingModels";
 import { FullImageModal } from "@/app/app/components/files/images/FullImageModal";
 import { buildImgUrl } from "@/app/app/components/files/images/utils";
@@ -26,11 +26,13 @@ const SHAPE_CLASSES: Record<ImageShape, { container: string; image: string }> =
 
 interface InMessageImageProps {
   fileId: string;
+  fileName?: string;
   shape?: ImageShape;
 }
 
 export function InMessageImage({
   fileId,
+  fileName,
   shape = DEFAULT_SHAPE,
 }: InMessageImageProps) {
   const [fullImageShowing, setFullImageShowing] = useState(false);
@@ -39,25 +41,6 @@ export function InMessageImage({
   const normalizedShape = SHAPE_CLASSES[shape] ? shape : DEFAULT_SHAPE;
   const { container: shapeContainerClasses, image: shapeImageClasses } =
     SHAPE_CLASSES[normalizedShape];
-
-  const handleDownload = async (e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent opening the full image modal
-
-    try {
-      const response = await fetch(buildImgUrl(fileId));
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `image-${fileId}.png`; // You can adjust the filename/extension as needed
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-    } catch (error) {
-      console.error("Failed to download image:", error);
-    }
-  };
 
   return (
     <>
@@ -92,12 +75,11 @@ export function InMessageImage({
           className={cn(
             "absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 z-10"
           )}
+          onClick={(e) => e.stopPropagation()}
         >
-          <Button
-            icon={FiDownload}
-            tooltip="Download"
-            onClick={handleDownload}
-          />
+          <a href={buildImgUrl(fileId)} download={fileName || true}>
+            <Button icon={SvgDownload} tooltip="Download" />
+          </a>
         </div>
       </div>
     </>
