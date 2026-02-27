@@ -32,6 +32,8 @@ class GongConnector(LoadConnector, PollConnector):
     BASE_URL = "https://api.gong.io"
     MAX_CALL_DETAILS_ATTEMPTS = 6
     CALL_DETAILS_DELAY = 30  # in seconds
+    # Gong API limit is 3 calls/sec — stay safely under it
+    MIN_REQUEST_INTERVAL = 0.5  # seconds between requests
 
     def __init__(
         self,
@@ -45,9 +47,13 @@ class GongConnector(LoadConnector, PollConnector):
         self.continue_on_fail = continue_on_fail
         self.auth_token_basic: str | None = None
         self.hide_user_info = hide_user_info
+        self._last_request_time: float = 0.0
 
+        # urllib3 Retry already respects the Retry-After header by default
+        # (respect_retry_after_header=True), so on 429 it will sleep for the
+        # duration Gong specifies before retrying.
         retry_strategy = Retry(
-            total=5,
+            total=10,
             backoff_factor=2,
             status_forcelist=[429, 500, 502, 503, 504],
         )
@@ -61,8 +67,24 @@ class GongConnector(LoadConnector, PollConnector):
         url = f"{GongConnector.BASE_URL}{endpoint}"
         return url
 
+    def _throttled_request(
+        self, method: str, url: str, **kwargs: Any
+    ) -> requests.Response:
+        """Rate-limited request wrapper. Enforces MIN_REQUEST_INTERVAL between
+        calls to stay under Gong's 3 calls/sec limit and avoid triggering 429s."""
+        now = time.monotonic()
+        elapsed = now - self._last_request_time
+        if elapsed < self.MIN_REQUEST_INTERVAL:
+            time.sleep(self.MIN_REQUEST_INTERVAL - elapsed)
+
+        response = self._session.request(method, url, **kwargs)
+        self._last_request_time = time.monotonic()
+        return response
+
     def _get_workspace_id_map(self) -> dict[str, str]:
-        response = self._session.get(GongConnector.make_url("/v2/workspaces"))
+        response = self._throttled_request(
+            "GET", GongConnector.make_url("/v2/workspaces")
+        )
         response.raise_for_status()
 
         workspaces_details = response.json().get("workspaces")
@@ -106,8 +128,8 @@ class GongConnector(LoadConnector, PollConnector):
                     del body["filter"]["workspaceId"]
 
             while True:
-                response = self._session.post(
-                    GongConnector.make_url("/v2/calls/transcript"), json=body
+                response = self._throttled_request(
+                    "POST", GongConnector.make_url("/v2/calls/transcript"), json=body
                 )
                 # If no calls in the range, just break out
                 if response.status_code == 404:
@@ -142,8 +164,8 @@ class GongConnector(LoadConnector, PollConnector):
             "contentSelector": {"exposedFields": {"parties": True}},
         }
 
-        response = self._session.post(
-            GongConnector.make_url("/v2/calls/extensive"), json=body
+        response = self._throttled_request(
+            "POST", GongConnector.make_url("/v2/calls/extensive"), json=body
         )
         response.raise_for_status()
 
@@ -194,7 +216,8 @@ class GongConnector(LoadConnector, PollConnector):
             # There's a likely race condition in the API where a transcript will have a
             # call id but the call to v2/calls/extensive will not return all of the id's
             # retry with exponential backoff has been observed to mitigate this
-            # in ~2 minutes
+            # in ~2 minutes. After max attempts, proceed with whatever we have —
+            # the per-call loop below will skip missing IDs gracefully.
             current_attempt = 0
             while True:
                 current_attempt += 1
@@ -213,11 +236,14 @@ class GongConnector(LoadConnector, PollConnector):
                     f"missing_call_ids={missing_call_ids}"
                 )
                 if current_attempt >= self.MAX_CALL_DETAILS_ATTEMPTS:
-                    raise RuntimeError(
-                        f"Attempt count exceeded for _get_call_details_by_ids: "
-                        f"missing_call_ids={missing_call_ids} "
-                        f"max_attempts={self.MAX_CALL_DETAILS_ATTEMPTS}"
+                    logger.error(
+                        f"Giving up on missing call id's after "
+                        f"{self.MAX_CALL_DETAILS_ATTEMPTS} attempts: "
+                        f"missing_call_ids={missing_call_ids} — "
+                        f"proceeding with {len(call_details_map)} of "
+                        f"{len(transcript_call_ids)} calls"
                     )
+                    break
 
                 wait_seconds = self.CALL_DETAILS_DELAY * pow(2, current_attempt - 1)
                 logger.warning(
