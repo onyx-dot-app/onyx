@@ -114,11 +114,13 @@ const PROVIDER_MODAL_MAP: Record<
 interface ExistingProviderCardProps {
   provider: LLMProviderView;
   isDefault: boolean;
+  isLastProvider: boolean;
 }
 
 function ExistingProviderCard({
   provider,
   isDefault,
+  isLastProvider,
 }: ExistingProviderCardProps) {
   const { mutate } = useSWRConfig();
   const [isOpen, setIsOpen] = useState(false);
@@ -141,7 +143,7 @@ function ExistingProviderCard({
       {deleteModal.isOpen && (
         <ConfirmationModalLayout
           icon={SvgTrash}
-          title="Delete LLM Provider"
+          title={`Delete ${provider.name}`}
           onClose={() => deleteModal.toggle(false)}
           submit={
             <Button variant="danger" onClick={handleDelete}>
@@ -149,15 +151,15 @@ function ExistingProviderCard({
             </Button>
           }
         >
-          <Section alignItems="start">
-            <Text as="p" text03>
-              This will permanently delete <b>{provider.name}</b> and all of its
-              model configurations.
+          <Section alignItems="start" gap={0.5}>
+            <Text text03>
+              All LLM models from provider <b>{provider.name}</b> will be
+              removed and unavailable for future chats. Chat history will be
+              preserved.
             </Text>
-            {isDefault && (
-              <Text as="p" text03>
-                This is currently your <b>default provider</b>. Deleting it will
-                require you to set a new default.
+            {isLastProvider && (
+              <Text text03>
+                Connect another provider to continue using chats.
               </Text>
             )}
           </Section>
@@ -410,6 +412,7 @@ export default function LLMConfigurationPage() {
                     key={provider.id}
                     provider={provider}
                     isDefault={defaultText?.provider_id === provider.id}
+                    isLastProvider={sortedProviders.length === 1}
                   />
                 ))}
               </div>
