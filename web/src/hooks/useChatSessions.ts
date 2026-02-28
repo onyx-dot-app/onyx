@@ -38,18 +38,25 @@ interface UseChatSessionsOutput {
   error: any;
   refreshChatSessions: KeyedMutator<ChatSessionsResponse>;
   addPendingChatSession: (params: PendingChatSessionParams) => void;
+  removeSession: (sessionId: string) => void;
+  clearAdditionalSessions: () => void;
   hasMore: boolean;
   isLoadingMore: boolean;
   loadMore: () => void;
 }
 
-// Module-level store for pending chat sessions
-// This persists across SWR revalidations and component re-renders
-// Pending sessions are shown in the sidebar until the server returns them
+// ---------------------------------------------------------------------------
+// Shared module-level stores
+// ---------------------------------------------------------------------------
+// These persist across SWR revalidations and are shared across all hook
+// instances so that any component can trigger mutations (add/remove/clear)
+// and every component sees the result immediately.
+
+// Store for pending chat sessions (optimistic new sessions not yet returned
+// by the server).
 const pendingSessionsStore = {
   sessions: new Map<string, ChatSession>(),
   listeners: new Set<() => void>(),
-  // Cached snapshot to avoid creating new array references on every call
   cachedSnapshot: [] as ChatSession[],
 
   add(session: ChatSession) {
@@ -87,6 +94,59 @@ const pendingSessionsStore = {
   },
 };
 
+// Store for additional sessions loaded via infinite scroll (pages 2+).
+// Also tracks `hasMore` so the pagination state is shared.
+const additionalSessionsStore = {
+  sessions: [] as ChatSession[],
+  hasMore: false,
+  listeners: new Set<() => void>(),
+  cachedSnapshot: [] as ChatSession[],
+
+  append(newSessions: ChatSession[]) {
+    this.sessions = [...this.sessions, ...newSessions];
+    this.cachedSnapshot = this.sessions;
+    this.notify();
+  },
+
+  remove(sessionId: string) {
+    const len = this.sessions.length;
+    this.sessions = this.sessions.filter((s) => s.id !== sessionId);
+    if (this.sessions.length !== len) {
+      this.cachedSnapshot = this.sessions;
+      this.notify();
+    }
+  },
+
+  clear() {
+    if (this.sessions.length > 0 || this.hasMore) {
+      this.sessions = [];
+      this.hasMore = false;
+      this.cachedSnapshot = [];
+      this.notify();
+    }
+  },
+
+  setHasMore(value: boolean) {
+    if (this.hasMore !== value) {
+      this.hasMore = value;
+      this.notify();
+    }
+  },
+
+  subscribe(listener: () => void) {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  },
+
+  notify() {
+    this.listeners.forEach((listener) => listener());
+  },
+
+  getSnapshot(): ChatSession[] {
+    return this.cachedSnapshot;
+  },
+};
+
 // Stable empty array for SSR - must be defined outside component to avoid infinite loop
 const EMPTY_SESSIONS: ChatSession[] = [];
 
@@ -94,6 +154,14 @@ function usePendingSessions(): ChatSession[] {
   return useSyncExternalStore(
     (callback) => pendingSessionsStore.subscribe(callback),
     () => pendingSessionsStore.getSnapshot(),
+    () => EMPTY_SESSIONS
+  );
+}
+
+function useAdditionalSessions(): ChatSession[] {
+  return useSyncExternalStore(
+    (callback) => additionalSessionsStore.subscribe(callback),
+    () => additionalSessionsStore.getSnapshot(),
     () => EMPTY_SESSIONS
   );
 }
@@ -136,33 +204,34 @@ export default function useChatSessions(): UseChatSessionsOutput {
 
   const appFocus = useAppFocus();
   const pendingSessions = usePendingSessions();
+  const additionalSessions = useAdditionalSessions();
   const fetchedSessions = data?.sessions ?? [];
 
-  // State for additional pages loaded via infinite scroll.
-  const [additionalSessions, setAdditionalSessions] = useState<ChatSession[]>(
-    []
-  );
-  const [hasMore, setHasMore] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
 
   // Sync hasMore from the initial SWR response when no additional pages loaded yet
   useEffect(() => {
     if (data && additionalSessions.length === 0) {
-      setHasMore(data.has_more);
+      additionalSessionsStore.setHasMore(data.has_more);
     }
   }, [data, additionalSessions.length]);
 
-  const loadMore = useCallback(async () => {
-    if (isLoadingMore || !hasMore) return;
+  const hasMore = additionalSessionsStore.hasMore;
 
-    const currentOffset = fetchedSessions.length + additionalSessions.length;
+  const loadMore = useCallback(async () => {
+    if (isLoadingMore || !additionalSessionsStore.hasMore) return;
+
+    const allSessions = [...fetchedSessions, ...additionalSessions];
+    const lastSession = allSessions[allSessions.length - 1];
+    if (!lastSession) return;
+
     setIsLoadingMore(true);
     const loadStart = Date.now();
 
     try {
       const params = new URLSearchParams({
         page_size: PAGE_SIZE.toString(),
-        offset: currentOffset.toString(),
+        before: lastSession.time_updated,
       });
       const response: ChatSessionsResponse = await errorHandlingFetcher(
         `/api/chat/get-user-chat-sessions?${params.toString()}`
@@ -176,19 +245,14 @@ export default function useChatSessions(): UseChatSessionsOutput {
         );
       }
 
-      setAdditionalSessions((prev) => [...prev, ...response.sessions]);
-      setHasMore(response.has_more);
+      additionalSessionsStore.append(response.sessions);
+      additionalSessionsStore.setHasMore(response.has_more);
     } catch (err) {
       console.error("Failed to load more chat sessions:", err);
     } finally {
       setIsLoadingMore(false);
     }
-  }, [
-    fetchedSessions.length,
-    additionalSessions.length,
-    isLoadingMore,
-    hasMore,
-  ]);
+  }, [fetchedSessions, additionalSessions, isLoadingMore]);
 
   // Clean up pending sessions that now appear in fetched data
   // (they now have messages and the server returns them)
@@ -268,6 +332,29 @@ export default function useChatSessions(): UseChatSessionsOutput {
     []
   );
 
+  const removeSession = useCallback(
+    (sessionId: string) => {
+      pendingSessionsStore.remove(sessionId);
+      additionalSessionsStore.remove(sessionId);
+      // Optimistically remove from SWR first-page cache
+      mutate(
+        (current) =>
+          current
+            ? {
+                ...current,
+                sessions: current.sessions.filter((s) => s.id !== sessionId),
+              }
+            : current,
+        { revalidate: false }
+      );
+    },
+    [mutate]
+  );
+
+  const clearAdditionalSessions = useCallback(() => {
+    additionalSessionsStore.clear();
+  }, []);
+
   return {
     chatSessions,
     currentChatSessionId,
@@ -277,6 +364,8 @@ export default function useChatSessions(): UseChatSessionsOutput {
     error,
     refreshChatSessions: mutate,
     addPendingChatSession,
+    removeSession,
+    clearAdditionalSessions,
     hasMore,
     isLoadingMore,
     loadMore,

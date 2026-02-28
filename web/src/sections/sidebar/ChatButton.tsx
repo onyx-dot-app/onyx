@@ -122,7 +122,7 @@ const ChatButton = memo(
     const [showShareModal, setShowShareModal] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
     const [popoverItems, setPopoverItems] = useState<React.ReactNode[]>([]);
-    const { refreshChatSessions } = useChatSessions();
+    const { refreshChatSessions, removeSession } = useChatSessions();
     const {
       refreshCurrentProjectDetails,
       projects,
@@ -302,6 +302,7 @@ const ChatButton = memo(
     async function handleChatDelete() {
       try {
         await deleteChatSession(chatSession.id);
+        removeSession(chatSession.id);
 
         if (project) {
           await fetchProjects();

@@ -186,7 +186,7 @@ function GeneralSettings() {
     updateUserChatBackground,
   } = useUser();
   const { theme, setTheme, systemTheme } = useTheme();
-  const { refreshChatSessions } = useChatSessions();
+  const { refreshChatSessions, clearAdditionalSessions } = useChatSessions();
   const router = useRouter();
   const pathname = usePathname();
   const [isDeleting, setIsDeleting] = useState(false);
@@ -217,6 +217,7 @@ function GeneralSettings() {
       const response = await deleteAllChatSessions();
       if (response.ok) {
         toast.success("All your chat sessions have been deleted.");
+        clearAdditionalSessions();
         await refreshChatSessions();
         setShowDeleteConfirmation(false);
       } else {
@@ -227,7 +228,7 @@ function GeneralSettings() {
     } finally {
       setIsDeleting(false);
     }
-  }, [pathname, router, refreshChatSessions]);
+  }, [pathname, router, refreshChatSessions, clearAdditionalSessions]);
 
   return (
     <>
