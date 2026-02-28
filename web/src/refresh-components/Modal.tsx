@@ -3,9 +3,9 @@
 import React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { cn } from "@/lib/utils";
-import type { IconFunctionComponent } from "@opal/types";
+import type { IconProps } from "@opal/types";
+import Text from "@/refresh-components/texts/Text";
 import { Button } from "@opal/components";
-import { Content } from "@opal/layouts";
 import { SvgX } from "@opal/icons";
 import { WithoutStyles } from "@/types";
 import { Section, SectionProps } from "@/layouts/general-layouts";
@@ -407,7 +407,7 @@ ModalContent.displayName = DialogPrimitive.Content.displayName;
  * ```
  */
 interface ModalHeaderProps extends WithoutStyles<SectionProps> {
-  icon?: IconFunctionComponent;
+  icon?: React.FunctionComponent<IconProps>;
   title: string;
   description?: string;
   onClose?: () => void;
@@ -440,32 +440,52 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
 
     return (
       <Section ref={ref} padding={1} alignItems="start" height="fit" {...props}>
-        <DialogPrimitive.Title className="sr-only">
-          {title}
-        </DialogPrimitive.Title>
-        {description && (
-          <DialogPrimitive.Description className="sr-only">
-            {description}
-          </DialogPrimitive.Description>
-        )}
+        <Section gap={0.5}>
+          {Icon && (
+            <Section
+              gap={0}
+              padding={0}
+              flexDirection="row"
+              justifyContent="between"
+            >
+              {/*
+                The `h-[1.5rem]` and `w-[1.5rem]` were added as backups here.
+                However, prop-resolution technically resolves to choosing classNames over size props, so technically the `size={24}` is the backup.
+                We specify both to be safe.
 
-        <Section
-          flexDirection="row"
-          justifyContent="between"
-          alignItems="start"
-          gap={0}
-          padding={0}
-        >
-          <Content
-            icon={Icon}
-            title={title}
-            description={description}
-            sizePreset="section"
-            variant="heading"
-          />
-          {closeButton}
+                # Note
+                1.5rem === 24px
+              */}
+              <Icon
+                className="stroke-text-04 h-[1.5rem] w-[1.5rem]"
+                size={24}
+              />
+              {closeButton}
+            </Section>
+          )}
+
+          <Section
+            alignItems="start"
+            gap={0}
+            padding={0}
+            flexDirection="row"
+            justifyContent="between"
+          >
+            <Section alignItems="start" padding={0} gap={0}>
+              <DialogPrimitive.Title asChild>
+                <Text headingH3>{title}</Text>
+              </DialogPrimitive.Title>
+              {description && (
+                <DialogPrimitive.Description asChild>
+                  <Text secondaryBody text03>
+                    {description}
+                  </Text>
+                </DialogPrimitive.Description>
+              )}
+            </Section>
+            {!Icon && closeButton}
+          </Section>
         </Section>
-
         {children}
       </Section>
     );
