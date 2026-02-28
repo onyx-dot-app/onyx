@@ -161,13 +161,16 @@ export default function useChatSessions(): UseChatSessionsOutput {
     return `/api/chat/get-user-chat-sessions?${params.toString()}`;
   };
 
-  const { data, error, size, setSize, mutate, isValidating } =
-    useSWRInfinite<ChatSessionsResponse>(getKey, errorHandlingFetcher, {
+  const { data, error, setSize, mutate } = useSWRInfinite<ChatSessionsResponse>(
+    getKey,
+    errorHandlingFetcher,
+    {
       revalidateOnFocus: false,
       revalidateFirstPage: true,
       revalidateAll: false,
       dedupingInterval: 30000,
-    });
+    }
+  );
 
   const appFocus = useAppFocus();
   const pendingSessions = usePendingSessions();
