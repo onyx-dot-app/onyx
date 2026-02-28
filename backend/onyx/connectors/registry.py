@@ -212,6 +212,10 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.testrail.connector",
         class_name="TestRailConnector",
     ),
+    DocumentSource.CHATWOOT: ConnectorMapping(
+        module_path="onyx.connectors.chatwoot.connector",
+        class_name="ChatwootConnector",
+    ),
     # just for integration tests
     DocumentSource.MOCK_CONNECTOR: ConnectorMapping(
         module_path="onyx.connectors.mock_connector.connector",
