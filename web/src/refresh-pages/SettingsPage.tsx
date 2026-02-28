@@ -217,7 +217,7 @@ function GeneralSettings() {
       const response = await deleteAllChatSessions();
       if (response.ok) {
         toast.success("All your chat sessions have been deleted.");
-        await refreshChatSessions({ resetPagination: true });
+        await refreshChatSessions();
         setShowDeleteConfirmation(false);
       } else {
         throw new Error("Failed to delete all chat sessions");

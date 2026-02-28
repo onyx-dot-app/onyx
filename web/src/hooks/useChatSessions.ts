@@ -29,10 +29,6 @@ export interface PendingChatSessionParams {
   projectId?: number | null;
 }
 
-interface RefreshOptions {
-  resetPagination?: boolean;
-}
-
 interface UseChatSessionsOutput {
   chatSessions: ChatSession[];
   currentChatSessionId: string | null;
@@ -40,9 +36,7 @@ interface UseChatSessionsOutput {
   agentForCurrentChatSession: MinimalPersonaSnapshot | null;
   isLoading: boolean;
   error: any;
-  refreshChatSessions: (
-    options?: RefreshOptions
-  ) => Promise<ChatSessionsResponse[] | undefined>;
+  refreshChatSessions: () => Promise<ChatSessionsResponse[] | undefined>;
   addPendingChatSession: (params: PendingChatSessionParams) => void;
   removeSession: (sessionId: string) => void;
   hasMore: boolean;
@@ -282,16 +276,7 @@ export default function useChatSessions(): UseChatSessionsOutput {
     [mutate]
   );
 
-  const refreshChatSessions = useCallback(
-    (options?: RefreshOptions) => {
-      if (options?.resetPagination) {
-        // Reset to page 1 only, then revalidate
-        setSize(1);
-      }
-      return mutate();
-    },
-    [mutate, setSize]
-  );
+  const refreshChatSessions = useCallback(() => mutate(), [mutate]);
 
   return {
     chatSessions,
