@@ -11,9 +11,10 @@ from contextvars import Token
 from uuid import UUID
 
 from pydantic import BaseModel
-from redis.client import Redis
 from sqlalchemy.orm import Session
 
+from onyx.cache.factory import get_cache_backend
+from onyx.cache.interface import CacheBackend
 from onyx.chat.chat_processing_checker import set_processing_status
 from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.chat_state import run_chat_loop_with_state_containers
@@ -79,7 +80,6 @@ from onyx.llm.request_context import reset_llm_mock_response
 from onyx.llm.request_context import set_llm_mock_response
 from onyx.llm.utils import litellm_exception_to_error_msg
 from onyx.onyxbot.slack.models import SlackContext
-from onyx.redis.redis_pool import get_redis_client
 from onyx.server.query_and_chat.models import AUTO_PLACE_AFTER_LATEST_MESSAGE
 from onyx.server.query_and_chat.models import MessageResponseIDInfo
 from onyx.server.query_and_chat.models import SendMessageRequest
@@ -448,7 +448,7 @@ def handle_stream_message_objects(
 
     llm: LLM | None = None
     chat_session: ChatSession | None = None
-    redis_client: Redis | None = None
+    cache: CacheBackend | None = None
 
     user_id = user.id
     if user.is_anonymous:
@@ -809,19 +809,19 @@ def handle_stream_message_objects(
             )
             simple_chat_history.insert(0, summary_simple)
 
-        redis_client = get_redis_client()
+        cache = get_cache_backend()
 
         reset_cancel_status(
             chat_session.id,
-            redis_client,
+            cache,
         )
 
         def check_is_connected() -> bool:
-            return check_stop_signal(chat_session.id, redis_client)
+            return check_stop_signal(chat_session.id, cache)
 
         set_processing_status(
             chat_session_id=chat_session.id,
-            redis_client=redis_client,
+            cache=cache,
             value=True,
         )
 
@@ -968,10 +968,10 @@ def handle_stream_message_objects(
             reset_llm_mock_response(mock_response_token)
 
         try:
-            if redis_client is not None and chat_session is not None:
+            if cache is not None and chat_session is not None:
                 set_processing_status(
                     chat_session_id=chat_session.id,
-                    redis_client=redis_client,
+                    cache=cache,
                     value=False,
                 )
         except Exception:

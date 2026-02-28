@@ -13,13 +13,13 @@ from fastapi import Request
 from fastapi import Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from redis.client import Redis
 from sqlalchemy.orm import Session
 
 from onyx.auth.api_key import get_hashed_api_key_from_request
 from onyx.auth.pat import get_hashed_pat_from_request
 from onyx.auth.users import current_chat_accessible_user
 from onyx.auth.users import current_user
+from onyx.cache.factory import get_cache_backend
 from onyx.chat.chat_processing_checker import is_chat_session_processing
 from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.chat_utils import convert_chat_history_basic
@@ -67,7 +67,6 @@ from onyx.llm.constants import LlmProviderNames
 from onyx.llm.factory import get_default_llm
 from onyx.llm.factory import get_llm_for_persona
 from onyx.llm.factory import get_llm_token_counter
-from onyx.redis.redis_pool import get_redis_client
 from onyx.secondary_llm_flows.chat_session_naming import generate_chat_session_name
 from onyx.server.api_key_usage import check_api_key_usage
 from onyx.server.query_and_chat.models import ChatFeedbackRequest
@@ -314,7 +313,7 @@ def get_chat_session(
     ]
 
     try:
-        is_processing = is_chat_session_processing(session_id, get_redis_client())
+        is_processing = is_chat_session_processing(session_id, get_cache_backend())
         # Edit the last message to indicate loading (Overriding default message value)
         if is_processing and chat_message_details:
             last_msg = chat_message_details[-1]
@@ -911,11 +910,10 @@ async def search_chats(
 def stop_chat_session(
     chat_session_id: UUID,
     user: User = Depends(current_user),  # noqa: ARG001
-    redis_client: Redis = Depends(get_redis_client),
 ) -> dict[str, str]:
     """
-    Stop a chat session by setting a stop signal in Redis.
+    Stop a chat session by setting a stop signal.
     This endpoint is called by the frontend when the user clicks the stop button.
     """
-    set_fence(chat_session_id, redis_client, True)
+    set_fence(chat_session_id, get_cache_backend(), True)
     return {"message": "Chat session stopped"}
