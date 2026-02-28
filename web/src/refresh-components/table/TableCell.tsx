@@ -1,20 +1,22 @@
-import { Content, type ContentProps } from "@opal/layouts/Content/components";
+import { cn } from "@/lib/utils";
+import type { WithoutStyles } from "@/types";
 
-type TableCellProps =
-  | (ContentProps & React.TdHTMLAttributes<HTMLTableCellElement>)
-  | (React.TdHTMLAttributes<HTMLTableCellElement> & {
-      children: React.ReactNode;
-    });
+interface TableCellProps
+  extends WithoutStyles<React.TdHTMLAttributes<HTMLTableCellElement>> {
+  children: React.ReactNode;
+  size?: "regular" | "small";
+}
 
-export default function TableCell(props: TableCellProps) {
-  if ("children" in props && props.children !== undefined) {
-    return <td {...props} />;
-  }
-
+export default function TableCell({
+  size = "regular",
+  ...props
+}: TableCellProps) {
+  const isSmall = size === "small";
   return (
-    <td {...(props as React.TdHTMLAttributes<HTMLTableCellElement>)}>
-      <Content {...(props as ContentProps)} />
-    </td>
+    <td
+      className={cn(isSmall ? "h-6 px-1 my-1.5" : "h-10 px-1.5 py-1")}
+      {...props}
+    />
   );
 }
 
