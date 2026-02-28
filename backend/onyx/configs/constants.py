@@ -201,6 +201,8 @@ class DocumentSource(str, Enum):
     OUTLINE = "outline"
     CONFLUENCE = "confluence"
     JIRA = "jira"
+    # CAMBIO: Agregamos el nuevo origen aquí
+    JIRA_SERVICE_MANAGEMENT = "jira_service_management"
     SLAB = "slab"
     PRODUCTBOARD = "productboard"
     FILE = "file"
@@ -656,12 +658,13 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.OUTLINE: "outline data",
     DocumentSource.CONFLUENCE: "confluence data (pages, spaces, etc.)",
     DocumentSource.JIRA: "jira data (issues, tickets, projects, etc.)",
+    # CAMBIO: Agregamos la descripción para el nuevo origen
+    DocumentSource.JIRA_SERVICE_MANAGEMENT: "jira service management data (requests, tickets, projects, etc.)",
     DocumentSource.SLAB: "slab data",
     DocumentSource.PRODUCTBOARD: "productboard data (boards, etc.)",
     DocumentSource.FILE: "files",
     DocumentSource.CODA: "coda - team workspace with docs, tables, and pages",
-    DocumentSource.NOTION: "notion data - a workspace that combines note-taking, \
-project management, and collaboration tools into a single, customizable platform",
+    DocumentSource.NOTION: "notion data - a workspace that combines note-taking, project management, and collaboration tools into a single, customizable platform",
     DocumentSource.ZULIP: "zulip data",
     DocumentSource.LINEAR: "linear data - project management tool, including tickets etc.",
     DocumentSource.HUBSPOT: "hubspot data - CRM and marketing automation data",
