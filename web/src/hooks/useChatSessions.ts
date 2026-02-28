@@ -16,7 +16,7 @@ import { useAgents } from "./useAgents";
 import { DEFAULT_ASSISTANT_ID } from "@/lib/constants";
 
 const PAGE_SIZE = 50;
-const MIN_LOADING_DURATION_MS = 300;
+const MIN_LOADING_DURATION_MS = 500;
 
 interface ChatSessionsResponse {
   sessions: ChatSession[];
