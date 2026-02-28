@@ -8,10 +8,10 @@ import httpx
 from sqlalchemy.orm import Session
 
 from onyx import __version__
+from onyx.cache.factory import get_shared_cache_backend
 from onyx.configs.app_configs import INSTANCE_TYPE
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.release_notes import create_release_notifications_for_versions
-from onyx.redis.redis_pool import get_shared_redis_client
 from onyx.server.features.release_notes.constants import AUTO_REFRESH_THRESHOLD_SECONDS
 from onyx.server.features.release_notes.constants import FETCH_TIMEOUT
 from onyx.server.features.release_notes.constants import GITHUB_CHANGELOG_RAW_URL
@@ -113,60 +113,46 @@ def parse_mdx_to_release_note_entries(mdx_content: str) -> list[ReleaseNoteEntry
 
 
 def get_cached_etag() -> str | None:
-    """Get the cached GitHub ETag from Redis."""
-    redis_client = get_shared_redis_client()
+    cache = get_shared_cache_backend()
     try:
-        etag = redis_client.get(REDIS_KEY_ETAG)
+        etag = cache.get(REDIS_KEY_ETAG)
         if etag:
-            return etag.decode("utf-8") if isinstance(etag, bytes) else str(etag)
+            return etag.decode("utf-8")
         return None
     except Exception as e:
-        logger.error(f"Failed to get cached etag from Redis: {e}")
+        logger.error(f"Failed to get cached etag: {e}")
         return None
 
 
 def get_last_fetch_time() -> datetime | None:
-    """Get the last fetch timestamp from Redis."""
-    redis_client = get_shared_redis_client()
+    cache = get_shared_cache_backend()
     try:
-        fetched_at_str = redis_client.get(REDIS_KEY_FETCHED_AT)
-        if not fetched_at_str:
+        raw = cache.get(REDIS_KEY_FETCHED_AT)
+        if not raw:
             return None
 
-        decoded = (
-            fetched_at_str.decode("utf-8")
-            if isinstance(fetched_at_str, bytes)
-            else str(fetched_at_str)
-        )
-
-        last_fetch = datetime.fromisoformat(decoded)
-
-        # Defensively ensure timezone awareness
-        # fromisoformat() returns naive datetime if input lacks timezone
+        last_fetch = datetime.fromisoformat(raw.decode("utf-8"))
         if last_fetch.tzinfo is None:
-            # Assume UTC for naive datetimes
             last_fetch = last_fetch.replace(tzinfo=timezone.utc)
         else:
-            # Convert to UTC if timezone-aware
             last_fetch = last_fetch.astimezone(timezone.utc)
 
         return last_fetch
     except Exception as e:
-        logger.error(f"Failed to get last fetch time from Redis: {e}")
+        logger.error(f"Failed to get last fetch time from cache: {e}")
         return None
 
 
 def save_fetch_metadata(etag: str | None) -> None:
-    """Save ETag and fetch timestamp to Redis."""
-    redis_client = get_shared_redis_client()
+    cache = get_shared_cache_backend()
     now = datetime.now(timezone.utc)
 
     try:
-        redis_client.set(REDIS_KEY_FETCHED_AT, now.isoformat(), ex=REDIS_CACHE_TTL)
+        cache.set(REDIS_KEY_FETCHED_AT, now.isoformat(), ex=REDIS_CACHE_TTL)
         if etag:
-            redis_client.set(REDIS_KEY_ETAG, etag, ex=REDIS_CACHE_TTL)
+            cache.set(REDIS_KEY_ETAG, etag, ex=REDIS_CACHE_TTL)
     except Exception as e:
-        logger.error(f"Failed to save fetch metadata to Redis: {e}")
+        logger.error(f"Failed to save fetch metadata to cache: {e}")
 
 
 def is_cache_stale() -> bool:
@@ -196,11 +182,10 @@ def ensure_release_notes_fresh_and_notify(db_session: Session) -> None:
     if not is_cache_stale():
         return
 
-    # Acquire lock to prevent concurrent fetches
-    redis_client = get_shared_redis_client()
-    lock = redis_client.lock(
+    cache = get_shared_cache_backend()
+    lock = cache.lock(
         OnyxRedisLocks.RELEASE_NOTES_FETCH_LOCK,
-        timeout=90,  # 90 second timeout for the lock
+        timeout=90,
     )
 
     # Non-blocking acquire - if we can't get the lock, another request is handling it
