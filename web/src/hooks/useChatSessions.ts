@@ -29,6 +29,10 @@ export interface PendingChatSessionParams {
   projectId?: number | null;
 }
 
+interface RefreshOptions {
+  resetPagination?: boolean;
+}
+
 interface UseChatSessionsOutput {
   chatSessions: ChatSession[];
   currentChatSessionId: string | null;
@@ -36,10 +40,11 @@ interface UseChatSessionsOutput {
   agentForCurrentChatSession: MinimalPersonaSnapshot | null;
   isLoading: boolean;
   error: any;
-  refreshChatSessions: KeyedMutator<ChatSessionsResponse>;
+  refreshChatSessions: (
+    options?: RefreshOptions
+  ) => Promise<ChatSessionsResponse | undefined>;
   addPendingChatSession: (params: PendingChatSessionParams) => void;
   removeSession: (sessionId: string) => void;
-  clearAdditionalSessions: () => void;
   hasMore: boolean;
   isLoadingMore: boolean;
   loadMore: () => void;
@@ -351,9 +356,15 @@ export default function useChatSessions(): UseChatSessionsOutput {
     [mutate]
   );
 
-  const clearAdditionalSessions = useCallback(() => {
-    additionalSessionsStore.clear();
-  }, []);
+  const refreshChatSessions = useCallback(
+    (options?: RefreshOptions) => {
+      if (options?.resetPagination) {
+        additionalSessionsStore.clear();
+      }
+      return mutate();
+    },
+    [mutate]
+  );
 
   return {
     chatSessions,
@@ -362,10 +373,9 @@ export default function useChatSessions(): UseChatSessionsOutput {
     agentForCurrentChatSession,
     isLoading: !error && !data,
     error,
-    refreshChatSessions: mutate,
+    refreshChatSessions,
     addPendingChatSession,
     removeSession,
-    clearAdditionalSessions,
     hasMore,
     isLoadingMore,
     loadMore,
