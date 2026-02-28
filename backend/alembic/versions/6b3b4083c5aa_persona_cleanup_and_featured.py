@@ -1,7 +1,7 @@
 """persona cleanup and featured
 
 Revision ID: 6b3b4083c5aa
-Revises: c0c937d5c9e5
+Revises: 57122d037335
 Create Date: 2026-02-26 12:00:00.000000
 
 """
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "6b3b4083c5aa"
-down_revision = "c0c937d5c9e5"
+down_revision = "57122d037335"
 branch_labels = None
 depends_on = None
 
