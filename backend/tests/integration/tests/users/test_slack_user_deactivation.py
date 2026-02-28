@@ -27,7 +27,7 @@ from tests.integration.common_utils.test_models import DATestUser
 _LICENSE_REDIS_KEY = "public:license:metadata"
 
 
-def _seed_license(r: redis.Redis, seats: int) -> None:  # type: ignore
+def _seed_license(r: redis.Redis, seats: int) -> None:
     now = datetime.utcnow()
     metadata = LicenseMetadata(
         tenant_id="public",
@@ -43,11 +43,11 @@ def _seed_license(r: redis.Redis, seats: int) -> None:  # type: ignore
     r.set(_LICENSE_REDIS_KEY, metadata.model_dump_json(), ex=300)
 
 
-def _clear_license(r: redis.Redis) -> None:  # type: ignore
+def _clear_license(r: redis.Redis) -> None:
     r.delete(_LICENSE_REDIS_KEY)
 
 
-def _redis() -> redis.Redis:  # type: ignore
+def _redis() -> redis.Redis:
     return redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB_NUMBER)
 
 
