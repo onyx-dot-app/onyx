@@ -414,34 +414,31 @@ def _process_user_file_with_indexing(
         raise RuntimeError(f"Indexing pipeline failed for user file {user_file_id}")
 
 
-@shared_task(
-    name=OnyxCeleryTask.PROCESS_SINGLE_USER_FILE,
-    bind=True,
-    ignore_result=True,
-)
-def process_single_user_file(
-    self: Task, *, user_file_id: str, tenant_id: str  # noqa: ARG001
+def _process_user_file_impl(
+    *, user_file_id: str, tenant_id: str, redis_locking: bool
 ) -> None:
-    task_logger.info(f"process_single_user_file - Starting id={user_file_id}")
+    """Core implementation for processing a single user file.
+
+    When redis_locking=True, acquires a per-file Redis lock and clears the
+    queued-key guard (Celery path).  When redis_locking=False, skips all Redis
+    operations (BackgroundTask path).
+    """
+    task_logger.info(f"_process_user_file_impl - Starting id={user_file_id}")
     start = time.monotonic()
 
-    redis_client = get_redis_client(tenant_id=tenant_id)
-
-    # Clear the "queued" guard set by the beat generator so that the next beat
-    # cycle can re-enqueue this file if it is still in PROCESSING state after
-    # this task completes or fails.
-    redis_client.delete(_user_file_queued_key(user_file_id))
-
-    file_lock: RedisLock = redis_client.lock(
-        _user_file_lock_key(user_file_id),
-        timeout=CELERY_USER_FILE_PROCESSING_LOCK_TIMEOUT,
-    )
-
-    if not file_lock.acquire(blocking=False):
-        task_logger.info(
-            f"process_single_user_file - Lock held, skipping user_file_id={user_file_id}"
+    file_lock: RedisLock | None = None
+    if redis_locking:
+        redis_client = get_redis_client(tenant_id=tenant_id)
+        redis_client.delete(_user_file_queued_key(user_file_id))
+        file_lock = redis_client.lock(
+            _user_file_lock_key(user_file_id),
+            timeout=CELERY_USER_FILE_PROCESSING_LOCK_TIMEOUT,
         )
-        return None
+        if file_lock is not None and not file_lock.acquire(blocking=False):
+            task_logger.info(
+                f"_process_user_file_impl - Lock held, skipping user_file_id={user_file_id}"
+            )
+            return
 
     documents: list[Document] = []
     try:
@@ -449,15 +446,15 @@ def process_single_user_file(
             uf = db_session.get(UserFile, _as_uuid(user_file_id))
             if not uf:
                 task_logger.warning(
-                    f"process_single_user_file - UserFile not found id={user_file_id}"
+                    f"_process_user_file_impl - UserFile not found id={user_file_id}"
                 )
-                return None
+                return
 
             if uf.status != UserFileStatus.PROCESSING:
                 task_logger.info(
-                    f"process_single_user_file - Skipping id={user_file_id} status={uf.status}"
+                    f"_process_user_file_impl - Skipping id={user_file_id} status={uf.status}"
                 )
-                return None
+                return
 
             connector = LocalFileConnector(
                 file_locations=[uf.file_id],
@@ -471,7 +468,6 @@ def process_single_user_file(
                         [doc for doc in batch if not isinstance(doc, HierarchyNode)]
                     )
 
-                # update the document id to userfile id in the documents
                 for document in documents:
                     document.id = str(user_file_id)
                     document.source = DocumentSource.USER_FILE
@@ -493,9 +489,8 @@ def process_single_user_file(
 
             except Exception as e:
                 task_logger.exception(
-                    f"process_single_user_file - Error processing file id={user_file_id} - {e.__class__.__name__}"
+                    f"_process_user_file_impl - Error processing file id={user_file_id} - {e.__class__.__name__}"
                 )
-                # don't update the status if the user file is being deleted
                 current_user_file = db_session.get(UserFile, _as_uuid(user_file_id))
                 if (
                     current_user_file
@@ -504,31 +499,40 @@ def process_single_user_file(
                     uf.status = UserFileStatus.FAILED
                     db_session.add(uf)
                     db_session.commit()
-                return None
+                return
 
         elapsed = time.monotonic() - start
         task_logger.info(
-            f"process_single_user_file - Finished id={user_file_id} docs={len(documents)} elapsed={elapsed:.2f}s"
+            f"_process_user_file_impl - Finished id={user_file_id} docs={len(documents)} elapsed={elapsed:.2f}s"
         )
-        return None
     except Exception as e:
-        # Attempt to mark the file as failed
         with get_session_with_current_tenant() as db_session:
             uf = db_session.get(UserFile, _as_uuid(user_file_id))
             if uf:
-                # don't update the status if the user file is being deleted
                 if uf.status != UserFileStatus.DELETING:
                     uf.status = UserFileStatus.FAILED
                 db_session.add(uf)
                 db_session.commit()
 
         task_logger.exception(
-            f"process_single_user_file - Error processing file id={user_file_id} - {e.__class__.__name__}"
+            f"_process_user_file_impl - Error processing file id={user_file_id} - {e.__class__.__name__}"
         )
-        return None
     finally:
-        if file_lock.owned():
+        if file_lock is not None and file_lock.owned():
             file_lock.release()
+
+
+@shared_task(
+    name=OnyxCeleryTask.PROCESS_SINGLE_USER_FILE,
+    bind=True,
+    ignore_result=True,
+)
+def process_single_user_file(
+    self: Task, *, user_file_id: str, tenant_id: str  # noqa: ARG001
+) -> None:
+    _process_user_file_impl(
+        user_file_id=user_file_id, tenant_id=tenant_id, redis_locking=True
+    )
 
 
 @shared_task(
@@ -581,36 +585,38 @@ def check_for_user_file_delete(self: Task, *, tenant_id: str) -> None:
     return None
 
 
-@shared_task(
-    name=OnyxCeleryTask.DELETE_SINGLE_USER_FILE,
-    bind=True,
-    ignore_result=True,
-)
-def process_single_user_file_delete(
-    self: Task, *, user_file_id: str, tenant_id: str  # noqa: ARG001
+def _delete_user_file_impl(
+    *, user_file_id: str, tenant_id: str, redis_locking: bool
 ) -> None:
-    """Process a single user file delete."""
-    task_logger.info(f"process_single_user_file_delete - Starting id={user_file_id}")
-    redis_client = get_redis_client(tenant_id=tenant_id)
-    file_lock: RedisLock = redis_client.lock(
-        _user_file_delete_lock_key(user_file_id),
-        timeout=CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
-    )
-    if not file_lock.acquire(blocking=False):
-        task_logger.info(
-            f"process_single_user_file_delete - Lock held, skipping user_file_id={user_file_id}"
+    """Core implementation for deleting a single user file.
+
+    When redis_locking=True, acquires a per-file Redis lock (Celery path).
+    When redis_locking=False, skips Redis operations (BackgroundTask path).
+    """
+    task_logger.info(f"_delete_user_file_impl - Starting id={user_file_id}")
+
+    file_lock: RedisLock | None = None
+    if redis_locking:
+        redis_client = get_redis_client(tenant_id=tenant_id)
+        file_lock = redis_client.lock(
+            _user_file_delete_lock_key(user_file_id),
+            timeout=CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
         )
-        return None
+        if file_lock is not None and not file_lock.acquire(blocking=False):
+            task_logger.info(
+                f"_delete_user_file_impl - Lock held, skipping user_file_id={user_file_id}"
+            )
+            return
+
     try:
         with get_session_with_current_tenant() as db_session:
             user_file = db_session.get(UserFile, _as_uuid(user_file_id))
             if not user_file:
                 task_logger.info(
-                    f"process_single_user_file_delete - User file not found id={user_file_id}"
+                    f"_delete_user_file_impl - User file not found id={user_file_id}"
                 )
-                return None
+                return
 
-            # 1) Delete vector DB chunks (skip when disabled)
             if not DISABLE_VECTOR_DB:
                 if MANAGED_VESPA:
                     httpx_init_vespa_pool(
@@ -648,7 +654,6 @@ def process_single_user_file_delete(
                         chunk_count=chunk_count,
                     )
 
-            # 2) Delete the user-uploaded file content from filestore (blob + metadata)
             file_store = get_default_file_store()
             try:
                 file_store.delete_file(user_file.file_id)
@@ -656,26 +661,33 @@ def process_single_user_file_delete(
                     user_file_id_to_plaintext_file_name(user_file.id)
                 )
             except Exception as e:
-                # This block executed only if the file is not found in the filestore
                 task_logger.exception(
-                    f"process_single_user_file_delete - Error deleting file id={user_file.id} - {e.__class__.__name__}"
+                    f"_delete_user_file_impl - Error deleting file id={user_file.id} - {e.__class__.__name__}"
                 )
 
-            # 3) Finally, delete the UserFile row
             db_session.delete(user_file)
             db_session.commit()
-            task_logger.info(
-                f"process_single_user_file_delete - Completed id={user_file_id}"
-            )
+            task_logger.info(f"_delete_user_file_impl - Completed id={user_file_id}")
     except Exception as e:
         task_logger.exception(
-            f"process_single_user_file_delete - Error processing file id={user_file_id} - {e.__class__.__name__}"
+            f"_delete_user_file_impl - Error processing file id={user_file_id} - {e.__class__.__name__}"
         )
-        return None
     finally:
-        if file_lock.owned():
+        if file_lock is not None and file_lock.owned():
             file_lock.release()
-    return None
+
+
+@shared_task(
+    name=OnyxCeleryTask.DELETE_SINGLE_USER_FILE,
+    bind=True,
+    ignore_result=True,
+)
+def process_single_user_file_delete(
+    self: Task, *, user_file_id: str, tenant_id: str  # noqa: ARG001
+) -> None:
+    _delete_user_file_impl(
+        user_file_id=user_file_id, tenant_id=tenant_id, redis_locking=True
+    )
 
 
 @shared_task(
@@ -747,32 +759,30 @@ def check_for_user_file_project_sync(self: Task, *, tenant_id: str) -> None:
     return None
 
 
-@shared_task(
-    name=OnyxCeleryTask.PROCESS_SINGLE_USER_FILE_PROJECT_SYNC,
-    bind=True,
-    ignore_result=True,
-)
-def process_single_user_file_project_sync(
-    self: Task, *, user_file_id: str, tenant_id: str  # noqa: ARG001
+def _project_sync_user_file_impl(
+    *, user_file_id: str, tenant_id: str, redis_locking: bool
 ) -> None:
-    """Process a single user file project sync."""
-    task_logger.info(
-        f"process_single_user_file_project_sync - Starting id={user_file_id}"
-    )
+    """Core implementation for syncing a user file's project/persona metadata.
 
-    redis_client = get_redis_client(tenant_id=tenant_id)
-    redis_client.delete(_user_file_project_sync_queued_key(user_file_id))
+    When redis_locking=True, acquires a per-file Redis lock and clears the
+    queued-key guard (Celery path).  When redis_locking=False, skips Redis
+    operations (BackgroundTask path).
+    """
+    task_logger.info(f"_project_sync_user_file_impl - Starting id={user_file_id}")
 
-    file_lock: RedisLock = redis_client.lock(
-        user_file_project_sync_lock_key(user_file_id),
-        timeout=CELERY_USER_FILE_PROJECT_SYNC_LOCK_TIMEOUT,
-    )
-
-    if not file_lock.acquire(blocking=False):
-        task_logger.info(
-            f"process_single_user_file_project_sync - Lock held, skipping user_file_id={user_file_id}"
+    file_lock: RedisLock | None = None
+    if redis_locking:
+        redis_client = get_redis_client(tenant_id=tenant_id)
+        redis_client.delete(_user_file_project_sync_queued_key(user_file_id))
+        file_lock = redis_client.lock(
+            user_file_project_sync_lock_key(user_file_id),
+            timeout=CELERY_USER_FILE_PROJECT_SYNC_LOCK_TIMEOUT,
         )
-        return None
+        if file_lock is not None and not file_lock.acquire(blocking=False):
+            task_logger.info(
+                f"_project_sync_user_file_impl - Lock held, skipping user_file_id={user_file_id}"
+            )
+            return
 
     try:
         with get_session_with_current_tenant() as db_session:
@@ -783,11 +793,10 @@ def process_single_user_file_project_sync(
             ).scalar_one_or_none()
             if not user_file:
                 task_logger.info(
-                    f"process_single_user_file_project_sync - User file not found id={user_file_id}"
+                    f"_project_sync_user_file_impl - User file not found id={user_file_id}"
                 )
-                return None
+                return
 
-            # Sync project metadata to vector DB (skip when disabled)
             if not DISABLE_VECTOR_DB:
                 if MANAGED_VESPA:
                     httpx_init_vespa_pool(
@@ -822,7 +831,7 @@ def process_single_user_file_project_sync(
                     )
 
             task_logger.info(
-                f"process_single_user_file_project_sync - User file id={user_file_id}"
+                f"_project_sync_user_file_impl - User file id={user_file_id}"
             )
 
             user_file.needs_project_sync = False
@@ -835,11 +844,21 @@ def process_single_user_file_project_sync(
 
     except Exception as e:
         task_logger.exception(
-            f"process_single_user_file_project_sync - Error syncing project for file id={user_file_id} - {e.__class__.__name__}"
+            f"_project_sync_user_file_impl - Error syncing project for file id={user_file_id} - {e.__class__.__name__}"
         )
-        return None
     finally:
-        if file_lock.owned():
+        if file_lock is not None and file_lock.owned():
             file_lock.release()
 
-    return None
+
+@shared_task(
+    name=OnyxCeleryTask.PROCESS_SINGLE_USER_FILE_PROJECT_SYNC,
+    bind=True,
+    ignore_result=True,
+)
+def process_single_user_file_project_sync(
+    self: Task, *, user_file_id: str, tenant_id: str  # noqa: ARG001
+) -> None:
+    _project_sync_user_file_impl(
+        user_file_id=user_file_id, tenant_id=tenant_id, redis_locking=True
+    )
