@@ -290,8 +290,10 @@ def send_email_with_smtplib(
         msg.attach(html_part)
 
     with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as s:
-        s.starttls()
-        s.login(SMTP_USER, SMTP_PASS)
+        if SMTP_PORT != 25:
+            s.starttls()
+        if SMTP_USER and SMTP_PASS:
+            s.login(SMTP_USER, SMTP_PASS)
         s.send_message(msg)
 
 
