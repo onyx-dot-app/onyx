@@ -214,6 +214,7 @@ export default function useChatSessions(): UseChatSessionsOutput {
   }, [isLoadingMore, hasMore, setSize]);
 
   // Clean up pending sessions that now appear in fetched data
+  // (they now have messages and the server returns them)
   useEffect(() => {
     const fetchedIds = new Set(allFetchedSessions.map((s) => s.id));
     pendingSessions.forEach((pending) => {
@@ -223,13 +224,17 @@ export default function useChatSessions(): UseChatSessionsOutput {
     });
   }, [allFetchedSessions, pendingSessions]);
 
-  // Merge fetched sessions + pending sessions.
-  // Dedup: pending sessions that already appear in fetched data are excluded.
+  // Merge fetched sessions with pending sessions.
+  // This ensures pending sessions persist across SWR revalidations.
   const chatSessions = useMemo(() => {
     const fetchedIds = new Set(allFetchedSessions.map((s) => s.id));
+
+    // Get pending sessions that are not yet in fetched data
     const remainingPending = pendingSessions.filter(
       (pending) => !fetchedIds.has(pending.id)
     );
+
+    // Pending sessions go first (most recent), then fetched sessions
     return [...remainingPending, ...allFetchedSessions];
   }, [allFetchedSessions, pendingSessions]);
 
@@ -242,15 +247,20 @@ export default function useChatSessions(): UseChatSessionsOutput {
   const agentForCurrentChatSession =
     useFindAgentForCurrentChatSession(currentChatSession);
 
+  // Add a pending chat session that will persist across SWR revalidations.
+  // The session will be automatically removed once it appears in the server response.
   const addPendingChatSession = useCallback(
     ({ chatSessionId, personaId, projectId }: PendingChatSessionParams) => {
+      // Don't add sessions that belong to a project
       if (projectId != null) return;
+
+      // Don't add if already in pending store (duplicates are also filtered during merge)
       if (pendingSessionsStore.has(chatSessionId)) return;
 
       const now = new Date().toISOString();
       pendingSessionsStore.add({
         id: chatSessionId,
-        name: "",
+        name: "", // Empty name will display as "New Chat" via UNNAMED_CHAT constant
         persona_id: personaId,
         time_created: now,
         time_updated: now,
