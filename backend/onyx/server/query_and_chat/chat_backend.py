@@ -152,10 +152,17 @@ def get_user_chat_sessions(
     project_id: int | None = None,
     only_non_project_chats: bool = True,
     include_failed_chats: bool = False,
-    page_size: int = 50,
-    offset: int = 0,
+    page_size: int = Query(default=50, ge=1, le=100),
+    before: str | None = Query(default=None),
 ) -> ChatSessionsResponse:
     user_id = user.id
+
+    try:
+        before_dt = (
+            datetime.datetime.fromisoformat(before) if before is not None else None
+        )
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Invalid 'before' timestamp format")
 
     try:
         # Fetch one extra to determine if there are more results
@@ -167,7 +174,7 @@ def get_user_chat_sessions(
             only_non_project_chats=only_non_project_chats,
             include_failed_chats=include_failed_chats,
             limit=page_size + 1,
-            offset=offset,
+            before=before_dt,
         )
 
     except ValueError:
