@@ -434,7 +434,7 @@ def _process_user_file_impl(
             _user_file_lock_key(user_file_id),
             timeout=CELERY_USER_FILE_PROCESSING_LOCK_TIMEOUT,
         )
-        if not file_lock.acquire(blocking=False):
+        if file_lock is not None and not file_lock.acquire(blocking=False):
             task_logger.info(
                 f"_process_user_file_impl - Lock held, skipping user_file_id={user_file_id}"
             )
@@ -602,7 +602,7 @@ def _delete_user_file_impl(
             _user_file_delete_lock_key(user_file_id),
             timeout=CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
         )
-        if not file_lock.acquire(blocking=False):
+        if file_lock is not None and not file_lock.acquire(blocking=False):
             task_logger.info(
                 f"_delete_user_file_impl - Lock held, skipping user_file_id={user_file_id}"
             )
@@ -778,7 +778,7 @@ def _project_sync_user_file_impl(
             user_file_project_sync_lock_key(user_file_id),
             timeout=CELERY_USER_FILE_PROJECT_SYNC_LOCK_TIMEOUT,
         )
-        if not file_lock.acquire(blocking=False):
+        if file_lock is not None and not file_lock.acquire(blocking=False):
             task_logger.info(
                 f"_project_sync_user_file_impl - Lock held, skipping user_file_id={user_file_id}"
             )
