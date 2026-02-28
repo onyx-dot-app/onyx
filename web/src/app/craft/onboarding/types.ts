@@ -1,4 +1,8 @@
 import { WorkArea, Level } from "./constants";
+import type {
+  LLMProviderDescriptor,
+  LLMProviderResponse,
+} from "@/interfaces/llm";
 
 export interface BuildUserInfo {
   firstName: string;
@@ -33,9 +37,7 @@ export interface OnboardingModalController {
   close: () => void;
 
   // Data needed for modal
-  llmProviders:
-    | import("@/app/admin/configuration/llm/interfaces").LLMProviderDescriptor[]
-    | undefined;
+  llmProviders: LLMProviderDescriptor[] | undefined;
   initialValues: {
     firstName: string;
     lastName: string;
@@ -54,7 +56,6 @@ export interface OnboardingModalController {
   completeUserInfo: (info: BuildUserInfo) => Promise<void>;
   completeLlmSetup: () => Promise<void>;
   refetchLlmProviders: () => Promise<
-    | import("@/app/admin/configuration/llm/interfaces").LLMProviderDescriptor[]
-    | undefined
+    LLMProviderResponse<LLMProviderDescriptor> | undefined
   >;
 }

@@ -4,10 +4,12 @@ from uuid import uuid4
 import requests
 
 from onyx.llm.constants import LlmProviderNames
+from onyx.server.manage.llm.models import DefaultModel
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.test_models import DATestLLMProvider
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -32,7 +34,6 @@ class LLMProviderManager:
         llm_provider = LLMProviderUpsertRequest(
             name=name or f"test-provider-{uuid4()}",
             provider=provider or LlmProviderNames.OPENAI,
-            default_model_name=default_model_name or "gpt-4o-mini",
             api_key=api_key or os.environ["OPENAI_API_KEY"],
             api_base=api_base,
             api_version=api_version,
@@ -65,7 +66,7 @@ class LLMProviderManager:
             name=response_data["name"],
             provider=response_data["provider"],
             api_key=response_data["api_key"],
-            default_model_name=response_data["default_model_name"],
+            default_model_name=default_model_name or "gpt-4o-mini",
             is_public=response_data["is_public"],
             is_auto_mode=response_data.get("is_auto_mode", False),
             groups=response_data["groups"],
@@ -75,9 +76,19 @@ class LLMProviderManager:
         )
 
         if set_as_default:
+            if default_model_name is None:
+                default_model_name = "gpt-4o-mini"
             set_default_response = requests.post(
-                f"{API_SERVER_URL}/admin/llm/provider/{llm_response.json()['id']}/default",
-                headers=user_performing_action.headers,
+                f"{API_SERVER_URL}/admin/llm/default",
+                json={
+                    "provider_id": response_data["id"],
+                    "model_name": default_model_name,
+                },
+                headers=(
+                    user_performing_action.headers
+                    if user_performing_action
+                    else GENERAL_HEADERS
+                ),
             )
             set_default_response.raise_for_status()
 
@@ -104,7 +115,7 @@ class LLMProviderManager:
             headers=user_performing_action.headers,
         )
         response.raise_for_status()
-        return [LLMProviderView(**ug) for ug in response.json()]
+        return [LLMProviderView(**p) for p in response.json()["providers"]]
 
     @staticmethod
     def verify(
@@ -113,7 +124,11 @@ class LLMProviderManager:
         verify_deleted: bool = False,
     ) -> None:
         all_llm_providers = LLMProviderManager.get_all(user_performing_action)
+        default_model = LLMProviderManager.get_default_model(user_performing_action)
         for fetched_llm_provider in all_llm_providers:
+            model_names = [
+                model.name for model in fetched_llm_provider.model_configurations
+            ]
             if llm_provider.id == fetched_llm_provider.id:
                 if verify_deleted:
                     raise ValueError(
@@ -126,11 +141,30 @@ class LLMProviderManager:
                 if (
                     fetched_llm_groups == llm_provider_groups
                     and llm_provider.provider == fetched_llm_provider.provider
-                    and llm_provider.default_model_name
-                    == fetched_llm_provider.default_model_name
+                    and (
+                        default_model is None or default_model.model_name in model_names
+                    )
                     and llm_provider.is_public == fetched_llm_provider.is_public
                     and set(fetched_llm_provider.personas) == set(llm_provider.personas)
                 ):
                     return
         if not verify_deleted:
             raise ValueError(f"LLM Provider {llm_provider.id} not found")
+
+    @staticmethod
+    def get_default_model(
+        user_performing_action: DATestUser | None = None,
+    ) -> DefaultModel | None:
+        response = requests.get(
+            f"{API_SERVER_URL}/admin/llm/provider",
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
+        )
+        response.raise_for_status()
+        default_text = response.json().get("default_text")
+        if default_text is None:
+            return None
+        return DefaultModel(**default_text)

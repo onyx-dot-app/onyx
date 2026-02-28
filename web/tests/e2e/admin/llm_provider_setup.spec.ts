@@ -13,23 +13,42 @@ const PROVIDER_API_KEY =
 type AdminLLMProvider = {
   id: number;
   name: string;
-  is_default_provider: boolean | null;
   is_auto_mode: boolean;
 };
+
+type DefaultModelInfo = {
+  provider_id: number;
+  model_name: string;
+} | null;
 
 function uniqueName(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-async function listAdminLLMProviders(page: Page): Promise<AdminLLMProvider[]> {
+async function getAdminLLMProviderResponse(page: Page) {
   const response = await page.request.get(`${BASE_URL}/api/admin/llm/provider`);
   expect(response.ok()).toBeTruthy();
-  return (await response.json()) as AdminLLMProvider[];
+  return (await response.json()) as {
+    providers: AdminLLMProvider[];
+    default_text: DefaultModelInfo;
+    default_vision: DefaultModelInfo;
+  };
+}
+
+async function listAdminLLMProviders(page: Page): Promise<AdminLLMProvider[]> {
+  const data = await getAdminLLMProviderResponse(page);
+  return data.providers;
+}
+
+async function getDefaultTextModel(page: Page): Promise<DefaultModelInfo> {
+  const data = await getAdminLLMProviderResponse(page);
+  return data.default_text ?? null;
 }
 
 async function createPublicProvider(
   page: Page,
-  providerName: string
+  providerName: string,
+  modelName: string = "gpt-4o"
 ): Promise<number> {
   const response = await page.request.put(
     `${BASE_URL}/api/admin/llm/provider?is_creation=true`,
@@ -38,10 +57,10 @@ async function createPublicProvider(
         name: providerName,
         provider: "openai",
         api_key: PROVIDER_API_KEY,
-        default_model_name: "gpt-4o",
         is_public: true,
         groups: [],
         personas: [],
+        model_configurations: [{ name: modelName, is_visible: true }],
       },
     }
   );
@@ -62,21 +81,18 @@ async function findProviderCard(
   page: Page,
   providerName: string
 ): Promise<Locator> {
-  return page
-    .locator("div.rounded-16")
-    .filter({ hasText: providerName })
-    .first();
+  return page.locator("div.card").filter({ hasText: providerName }).first();
 }
 
 async function openOpenAiSetupModal(page: Page): Promise<Locator> {
   const openAiCard = page
-    .locator("div.rounded-16")
+    .locator("div.card")
     .filter({ hasText: "OpenAI" })
-    .filter({ has: page.getByRole("button", { name: "Set up" }) })
+    .filter({ has: page.getByRole("button", { name: "Connect" }) })
     .first();
 
   await expect(openAiCard).toBeVisible({ timeout: 10000 });
-  await openAiCard.getByRole("button", { name: "Set up" }).click();
+  await openAiCard.getByRole("button", { name: "Connect" }).click();
 
   const modal = page.getByRole("dialog", { name: /setup openai/i });
   await expect(modal).toBeVisible({ timeout: 10000 });
@@ -89,7 +105,7 @@ async function openProviderEditModal(
 ): Promise<Locator> {
   const providerCard = await findProviderCard(page, providerName);
   await expect(providerCard).toBeVisible({ timeout: 10000 });
-  await providerCard.getByRole("button", { name: "Edit" }).click();
+  await providerCard.getByRole("button", { name: "Edit provider" }).click();
 
   const modal = page.getByRole("dialog", { name: /configure/i });
   await expect(modal).toBeVisible({ timeout: 10000 });
@@ -105,7 +121,7 @@ test.describe("LLM Provider Setup @exclusive", () => {
     await loginAs(page, "admin");
     await page.goto(LLM_SETUP_URL);
     await page.waitForLoadState("networkidle");
-    await expect(page.getByLabel("admin-page-title")).toHaveText(/^LLM Setup/);
+    await expect(page.getByLabel("admin-page-title")).toHaveText(/^LLM Models/);
   });
 
   test.afterEach(async ({ page }) => {
@@ -190,65 +206,66 @@ test.describe("LLM Provider Setup @exclusive", () => {
     );
   });
 
-  test("admin can switch the default provider from the enabled provider list", async ({
+  test("admin can switch the default model via the default model dropdown", async ({
     page,
   }) => {
     const apiClient = new OnyxApiClient(page.request);
-    const initialDefaultProvider = (await listAdminLLMProviders(page)).find(
-      (provider) => provider.is_default_provider
-    );
+    const initialDefault = await getDefaultTextModel(page);
+
     const firstProviderName = uniqueName("PW Baseline Provider");
     const secondProviderName = uniqueName("PW Target Provider");
+    const firstModelName = "gpt-4o";
+    const secondModelName = "gpt-4o-mini";
 
-    const firstProviderId = await createPublicProvider(page, firstProviderName);
+    const firstProviderId = await createPublicProvider(
+      page,
+      firstProviderName,
+      firstModelName
+    );
     const secondProviderId = await createPublicProvider(
       page,
-      secondProviderName
+      secondProviderName,
+      secondModelName
     );
     providersToCleanup.push(firstProviderId, secondProviderId);
 
     try {
-      await apiClient.setProviderAsDefault(firstProviderId);
+      await apiClient.setProviderAsDefault(firstProviderId, firstModelName);
 
       await page.reload();
       await page.waitForLoadState("networkidle");
 
-      const secondProviderCard = await findProviderCard(
-        page,
-        secondProviderName
+      // Open the Default Model dropdown and select the model from the
+      // second provider's group (scoped to avoid picking a same-named model
+      // from another provider).
+      await page.getByRole("combobox").click();
+      const targetGroup = page
+        .locator('[role="group"]')
+        .filter({ hasText: secondProviderName });
+      const defaultResponsePromise = page.waitForResponse(
+        (response) =>
+          response.url().includes("/api/admin/llm/default") &&
+          response.request().method() === "POST"
       );
-      await expect(secondProviderCard).toBeVisible({ timeout: 10000 });
-      await secondProviderCard.getByText("Set as default").click();
+      await targetGroup.locator('[role="option"]').click();
+      await defaultResponsePromise;
 
-      await expect(secondProviderCard.getByText("Default")).toBeVisible({
-        timeout: 10000,
-      });
-
+      // Verify the default switched to the second provider
       await expect
-        .poll(
-          async () =>
-            (await getProviderByName(page, secondProviderName))
-              ?.is_default_provider
-        )
-        .toBeTruthy();
-
-      await expect
-        .poll(
-          async () =>
-            (await getProviderByName(page, firstProviderName))
-              ?.is_default_provider
-        )
-        .toBeFalsy();
+        .poll(async () => {
+          const defaultText = await getDefaultTextModel(page);
+          return defaultText?.provider_id;
+        })
+        .toBe(secondProviderId);
     } finally {
-      if (initialDefaultProvider) {
+      if (initialDefault) {
         try {
-          await apiClient.setProviderAsDefault(initialDefaultProvider.id);
-        } catch (error) {
-          console.warn(
-            `Failed to restore initial default provider ${
-              initialDefaultProvider.id
-            }: ${String(error)}`
+          await apiClient.setProviderAsDefault(
+            initialDefault.provider_id,
+            initialDefault.model_name
           );
+        } catch (error) {
+          console.warn(`Failed to restore initial default: ${String(error)}`);
         }
       }
     }

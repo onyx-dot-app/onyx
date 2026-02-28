@@ -2,8 +2,9 @@ import { LoadingAnimation } from "@/components/Loading";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
 import { SvgTrash } from "@opal/icons";
-import { LLMProviderView } from "../../interfaces";
-import { LLM_PROVIDERS_ADMIN_URL } from "../../constants";
+import { LLMProviderView } from "@/interfaces/llm";
+import { LLM_PROVIDERS_ADMIN_URL } from "@/lib/llmConfig/constants";
+import { deleteLlmProvider } from "@/lib/llmConfig/svc";
 
 interface FormActionButtonsProps {
   isTesting: boolean;
@@ -25,41 +26,14 @@ export function FormActionButtons({
   const handleDelete = async () => {
     if (!existingLlmProvider) return;
 
-    const response = await fetch(
-      `${LLM_PROVIDERS_ADMIN_URL}/${existingLlmProvider.id}`,
-      {
-        method: "DELETE",
-      }
-    );
-
-    if (!response.ok) {
-      const errorMsg = (await response.json()).detail;
-      alert(`Failed to delete provider: ${errorMsg}`);
-      return;
+    try {
+      await deleteLlmProvider(existingLlmProvider.id);
+      mutate(LLM_PROVIDERS_ADMIN_URL);
+      onClose();
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Unknown error";
+      alert(`Failed to delete provider: ${message}`);
     }
-
-    // If the deleted provider was the default, set the first remaining provider as default
-    if (existingLlmProvider.is_default_provider) {
-      const remainingProvidersResponse = await fetch(LLM_PROVIDERS_ADMIN_URL);
-      if (remainingProvidersResponse.ok) {
-        const remainingProviders = await remainingProvidersResponse.json();
-
-        if (remainingProviders.length > 0) {
-          const setDefaultResponse = await fetch(
-            `${LLM_PROVIDERS_ADMIN_URL}/${remainingProviders[0].id}/default`,
-            {
-              method: "POST",
-            }
-          );
-          if (!setDefaultResponse.ok) {
-            console.error("Failed to set new default provider");
-          }
-        }
-      }
-    }
-
-    mutate(LLM_PROVIDERS_ADMIN_URL);
-    onClose();
   };
 
   return (

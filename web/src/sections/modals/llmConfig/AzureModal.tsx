@@ -1,6 +1,6 @@
 import { Form, Formik } from "formik";
 import { TextFormField } from "@/components/Field";
-import { LLMProviderFormProps, LLMProviderView } from "../interfaces";
+import { LLMProviderFormProps, LLMProviderView } from "@/interfaces/llm";
 import * as Yup from "yup";
 import {
   ProviderFormEntrypointWrapper,
@@ -28,7 +28,7 @@ import Separator from "@/refresh-components/Separator";
 export const AZURE_PROVIDER_NAME = "azure";
 const AZURE_DISPLAY_NAME = "Microsoft Azure Cloud";
 
-interface AzureFormValues extends BaseLLMFormValues {
+interface AzureModalValues extends BaseLLMFormValues {
   api_key: string;
   target_uri: string;
   api_base?: string;
@@ -47,15 +47,19 @@ const buildTargetUri = (existingLlmProvider?: LLMProviderView): string => {
   return `${existingLlmProvider.api_base}/openai/deployments/${deploymentName}/chat/completions?api-version=${existingLlmProvider.api_version}`;
 };
 
-export function AzureForm({
+export function AzureModal({
   existingLlmProvider,
   shouldMarkAsDefault,
+  open,
+  onOpenChange,
 }: LLMProviderFormProps) {
   return (
     <ProviderFormEntrypointWrapper
       providerName={AZURE_DISPLAY_NAME}
       providerEndpoint={AZURE_PROVIDER_NAME}
       existingLlmProvider={existingLlmProvider}
+      open={open}
+      onOpenChange={onOpenChange}
     >
       {({
         onClose,
@@ -70,7 +74,7 @@ export function AzureForm({
           existingLlmProvider,
           wellKnownLLMProvider
         );
-        const initialValues: AzureFormValues = {
+        const initialValues: AzureModalValues = {
           ...buildDefaultInitialValues(
             existingLlmProvider,
             modelConfigurations
@@ -97,7 +101,7 @@ export function AzureForm({
             validateOnMount={true}
             onSubmit={async (values, { setSubmitting }) => {
               // Parse target_uri to extract api_base, api_version, and deployment_name
-              let processedValues: AzureFormValues = { ...values };
+              let processedValues: AzureModalValues = { ...values };
 
               if (values.target_uri) {
                 try {

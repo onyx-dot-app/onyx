@@ -6,7 +6,7 @@ import { toast } from "@/hooks/useToast";
 import {
   LLMProviderView,
   WellKnownLLMProviderDescriptor,
-} from "../../interfaces";
+} from "@/interfaces/llm";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import Modal from "@/refresh-components/Modal";
 import Text from "@/refresh-components/texts/Text";
@@ -14,7 +14,8 @@ import Button from "@/refresh-components/buttons/Button";
 import { SvgSettings } from "@opal/icons";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { LLM_PROVIDERS_ADMIN_URL } from "../../constants";
+import { LLM_PROVIDERS_ADMIN_URL } from "@/lib/llmConfig/constants";
+import { setDefaultLlmModel } from "@/lib/llmConfig/svc";
 
 export interface ProviderFormContext {
   onClose: () => void;
@@ -35,6 +36,10 @@ interface ProviderFormEntrypointWrapperProps {
   buttonMode?: boolean;
   /** Custom button text for buttonMode (defaults to "Add {providerName}") */
   buttonText?: string;
+  /** Controlled open state — when defined, the wrapper renders only a modal (no card/button UI) */
+  open?: boolean;
+  /** Callback when controlled modal requests close */
+  onOpenChange?: (open: boolean) => void;
 }
 
 export function ProviderFormEntrypointWrapper({
@@ -44,8 +49,11 @@ export function ProviderFormEntrypointWrapper({
   existingLlmProvider,
   buttonMode,
   buttonText,
+  open,
+  onOpenChange,
 }: ProviderFormEntrypointWrapperProps) {
   const [formIsVisible, setFormIsVisible] = useState(false);
+  const isControlled = open !== undefined;
 
   // Shared hooks
   const { mutate } = useSWRConfig();
@@ -54,33 +62,45 @@ export function ProviderFormEntrypointWrapper({
   const [isTesting, setIsTesting] = useState(false);
   const [testError, setTestError] = useState<string>("");
 
+  // Suppress SWR when controlled + closed to avoid unnecessary API calls
+  const swrKey =
+    providerEndpoint && !(isControlled && !open)
+      ? `/api/admin/llm/built-in/options/${providerEndpoint}`
+      : null;
+
   // Fetch model configurations for this provider
   const { data: wellKnownLLMProvider } = useSWR<WellKnownLLMProviderDescriptor>(
-    providerEndpoint
-      ? `/api/admin/llm/built-in/options/${providerEndpoint}`
-      : null,
+    swrKey,
     errorHandlingFetcher
   );
 
-  const onClose = () => setFormIsVisible(false);
+  const onClose = () => {
+    if (isControlled) {
+      onOpenChange?.(false);
+    } else {
+      setFormIsVisible(false);
+    }
+  };
 
   async function handleSetAsDefault(): Promise<void> {
     if (!existingLlmProvider) return;
 
-    const response = await fetch(
-      `${LLM_PROVIDERS_ADMIN_URL}/${existingLlmProvider.id}/default`,
-      {
-        method: "POST",
-      }
+    const firstVisibleModel = existingLlmProvider.model_configurations.find(
+      (m) => m.is_visible
     );
-    if (!response.ok) {
-      const errorMsg = (await response.json()).detail;
-      toast.error(`Failed to set provider as default: ${errorMsg}`);
+    if (!firstVisibleModel) {
+      toast.error("No visible models available for this provider.");
       return;
     }
 
-    await mutate(LLM_PROVIDERS_ADMIN_URL);
-    toast.success("Provider set as default successfully!");
+    try {
+      await setDefaultLlmModel(existingLlmProvider.id, firstVisibleModel.name);
+      await mutate(LLM_PROVIDERS_ADMIN_URL);
+      toast.success("Provider set as default successfully!");
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Unknown error";
+      toast.error(`Failed to set provider as default: ${message}`);
+    }
   }
 
   const context: ProviderFormContext = {
@@ -93,6 +113,31 @@ export function ProviderFormEntrypointWrapper({
     wellKnownLLMProvider,
   };
 
+  const defaultTitle = `${existingLlmProvider ? "Configure" : "Setup"} ${
+    existingLlmProvider?.name ? `"${existingLlmProvider.name}"` : providerName
+  }`;
+
+  function renderModal(isVisible: boolean, title?: string) {
+    if (!isVisible) return null;
+    return (
+      <Modal open onOpenChange={onClose}>
+        <Modal.Content>
+          <Modal.Header
+            icon={SvgSettings}
+            title={title ?? defaultTitle}
+            onClose={onClose}
+          />
+          <Modal.Body>{children(context)}</Modal.Body>
+        </Modal.Content>
+      </Modal>
+    );
+  }
+
+  // Controlled mode: render nothing when closed, render only modal when open
+  if (isControlled) {
+    return renderModal(!!open);
+  }
+
   // Button mode: simple button that opens a modal
   if (buttonMode && !existingLlmProvider) {
     return (
@@ -100,19 +145,7 @@ export function ProviderFormEntrypointWrapper({
         <Button action onClick={() => setFormIsVisible(true)}>
           {buttonText ?? `Add ${providerName}`}
         </Button>
-
-        {formIsVisible && (
-          <Modal open onOpenChange={onClose}>
-            <Modal.Content>
-              <Modal.Header
-                icon={SvgSettings}
-                title={`Setup ${providerName}`}
-                onClose={onClose}
-              />
-              <Modal.Body>{children(context)}</Modal.Body>
-            </Modal.Content>
-          </Modal>
-        )}
+        {renderModal(formIsVisible, `Setup ${providerName}`)}
       </>
     );
   }
@@ -135,24 +168,18 @@ export function ProviderFormEntrypointWrapper({
               <Text as="p" secondaryBody text03 className="italic">
                 ({providerName})
               </Text>
-              {!existingLlmProvider.is_default_provider && (
-                <Text
-                  as="p"
-                  className={cn("text-action-link-05", "cursor-pointer")}
-                  onClick={handleSetAsDefault}
-                >
-                  Set as default
-                </Text>
-              )}
+              <Text
+                as="p"
+                className={cn("text-action-link-05", "cursor-pointer")}
+                onClick={handleSetAsDefault}
+              >
+                Set as default
+              </Text>
             </div>
 
             {existingLlmProvider && (
               <div className="my-auto ml-3">
-                {existingLlmProvider.is_default_provider ? (
-                  <Badge variant="agent">Default</Badge>
-                ) : (
-                  <Badge variant="success">Enabled</Badge>
-                )}
+                <Badge variant="success">Enabled</Badge>
               </div>
             )}
 
@@ -182,22 +209,7 @@ export function ProviderFormEntrypointWrapper({
         )}
       </div>
 
-      {formIsVisible && (
-        <Modal open onOpenChange={onClose}>
-          <Modal.Content>
-            <Modal.Header
-              icon={SvgSettings}
-              title={`${existingLlmProvider ? "Configure" : "Setup"} ${
-                existingLlmProvider?.name
-                  ? `"${existingLlmProvider.name}"`
-                  : providerName
-              }`}
-              onClose={onClose}
-            />
-            <Modal.Body>{children(context)}</Modal.Body>
-          </Modal.Content>
-        </Modal>
-      )}
+      {renderModal(formIsVisible)}
     </div>
   );
 }

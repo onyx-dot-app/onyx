@@ -49,7 +49,6 @@ def _create_test_provider(
             api_key_changed=True,
             api_base=api_base,
             custom_config=custom_config,
-            default_model_name="gpt-4o-mini",
             model_configurations=[
                 ModelConfigurationUpsertRequest(name="gpt-4o-mini", is_visible=True)
             ],
@@ -91,14 +90,14 @@ class TestLLMProviderChanges:
         the API key should be blocked.
         """
         try:
-            _create_test_provider(db_session, provider_name)
+            provider = _create_test_provider(db_session, provider_name)
 
             with patch("onyx.server.manage.llm.api.MULTI_TENANT", True):
                 update_request = LLMProviderUpsertRequest(
+                    id=provider.id,
                     name=provider_name,
                     provider=LlmProviderNames.OPENAI,
                     api_base="https://attacker.example.com",
-                    default_model_name="gpt-4o-mini",
                 )
 
                 with pytest.raises(HTTPException) as exc_info:
@@ -125,16 +124,16 @@ class TestLLMProviderChanges:
         Changing api_base IS allowed when the API key is also being changed.
         """
         try:
-            _create_test_provider(db_session, provider_name)
+            provider = _create_test_provider(db_session, provider_name)
 
             with patch("onyx.server.manage.llm.api.MULTI_TENANT", True):
                 update_request = LLMProviderUpsertRequest(
+                    id=provider.id,
                     name=provider_name,
                     provider=LlmProviderNames.OPENAI,
                     api_key="sk-new-key-00000000000000000000000000000000000",
                     api_key_changed=True,
                     api_base="https://custom-endpoint.example.com/v1",
-                    default_model_name="gpt-4o-mini",
                 )
 
                 result = put_llm_provider(
@@ -159,14 +158,16 @@ class TestLLMProviderChanges:
         original_api_base = "https://original.example.com/v1"
 
         try:
-            _create_test_provider(db_session, provider_name, api_base=original_api_base)
+            provider = _create_test_provider(
+                db_session, provider_name, api_base=original_api_base
+            )
 
             with patch("onyx.server.manage.llm.api.MULTI_TENANT", True):
                 update_request = LLMProviderUpsertRequest(
+                    id=provider.id,
                     name=provider_name,
                     provider=LlmProviderNames.OPENAI,
                     api_base=original_api_base,
-                    default_model_name="gpt-4o-mini",
                 )
 
                 result = put_llm_provider(
@@ -190,14 +191,14 @@ class TestLLMProviderChanges:
         changes. This allows model-only updates when provider has no custom base URL.
         """
         try:
-            _create_test_provider(db_session, provider_name, api_base=None)
+            view = _create_test_provider(db_session, provider_name, api_base=None)
 
             with patch("onyx.server.manage.llm.api.MULTI_TENANT", True):
                 update_request = LLMProviderUpsertRequest(
+                    id=view.id,
                     name=provider_name,
                     provider=LlmProviderNames.OPENAI,
                     api_base="",
-                    default_model_name="gpt-4o-mini",
                 )
 
                 result = put_llm_provider(
@@ -223,14 +224,16 @@ class TestLLMProviderChanges:
         original_api_base = "https://original.example.com/v1"
 
         try:
-            _create_test_provider(db_session, provider_name, api_base=original_api_base)
+            provider = _create_test_provider(
+                db_session, provider_name, api_base=original_api_base
+            )
 
             with patch("onyx.server.manage.llm.api.MULTI_TENANT", True):
                 update_request = LLMProviderUpsertRequest(
+                    id=provider.id,
                     name=provider_name,
                     provider=LlmProviderNames.OPENAI,
                     api_base=None,
-                    default_model_name="gpt-4o-mini",
                 )
 
                 with pytest.raises(HTTPException) as exc_info:
@@ -259,14 +262,14 @@ class TestLLMProviderChanges:
         users have full control over their deployment.
         """
         try:
-            _create_test_provider(db_session, provider_name)
+            provider = _create_test_provider(db_session, provider_name)
 
             with patch("onyx.server.manage.llm.api.MULTI_TENANT", False):
                 update_request = LLMProviderUpsertRequest(
+                    id=provider.id,
                     name=provider_name,
                     provider=LlmProviderNames.OPENAI,
                     api_base="https://custom.example.com/v1",
-                    default_model_name="gpt-4o-mini",
                 )
 
                 result = put_llm_provider(
@@ -297,7 +300,6 @@ class TestLLMProviderChanges:
                     api_key="sk-new-key-00000000000000000000000000000000000",
                     api_key_changed=True,
                     api_base="https://custom.example.com/v1",
-                    default_model_name="gpt-4o-mini",
                 )
 
                 result = put_llm_provider(
@@ -322,7 +324,7 @@ class TestLLMProviderChanges:
         redirect LLM API requests).
         """
         try:
-            _create_test_provider(
+            provider = _create_test_provider(
                 db_session,
                 provider_name,
                 custom_config={"SOME_CONFIG": "original_value"},
@@ -330,11 +332,11 @@ class TestLLMProviderChanges:
 
             with patch("onyx.server.manage.llm.api.MULTI_TENANT", True):
                 update_request = LLMProviderUpsertRequest(
+                    id=provider.id,
                     name=provider_name,
                     provider=LlmProviderNames.OPENAI,
                     custom_config={"OPENAI_API_BASE": "https://attacker.example.com"},
                     custom_config_changed=True,
-                    default_model_name="gpt-4o-mini",
                 )
 
                 with pytest.raises(HTTPException) as exc_info:
@@ -362,15 +364,15 @@ class TestLLMProviderChanges:
         without changing the API key.
         """
         try:
-            _create_test_provider(db_session, provider_name)
+            provider = _create_test_provider(db_session, provider_name)
 
             with patch("onyx.server.manage.llm.api.MULTI_TENANT", True):
                 update_request = LLMProviderUpsertRequest(
+                    id=provider.id,
                     name=provider_name,
                     provider=LlmProviderNames.OPENAI,
                     custom_config={"OPENAI_API_BASE": "https://attacker.example.com"},
                     custom_config_changed=True,
-                    default_model_name="gpt-4o-mini",
                 )
 
                 with pytest.raises(HTTPException) as exc_info:
@@ -399,7 +401,7 @@ class TestLLMProviderChanges:
         new_config = {"AWS_REGION_NAME": "us-west-2"}
 
         try:
-            _create_test_provider(
+            provider = _create_test_provider(
                 db_session,
                 provider_name,
                 custom_config={"AWS_REGION_NAME": "us-east-1"},
@@ -407,13 +409,13 @@ class TestLLMProviderChanges:
 
             with patch("onyx.server.manage.llm.api.MULTI_TENANT", True):
                 update_request = LLMProviderUpsertRequest(
+                    id=provider.id,
                     name=provider_name,
                     provider=LlmProviderNames.OPENAI,
                     api_key="sk-new-key-00000000000000000000000000000000000",
                     api_key_changed=True,
                     custom_config_changed=True,
                     custom_config=new_config,
-                    default_model_name="gpt-4o-mini",
                 )
 
                 result = put_llm_provider(
@@ -438,17 +440,17 @@ class TestLLMProviderChanges:
         original_config = {"AWS_REGION_NAME": "us-east-1"}
 
         try:
-            _create_test_provider(
+            provider = _create_test_provider(
                 db_session, provider_name, custom_config=original_config
             )
 
             with patch("onyx.server.manage.llm.api.MULTI_TENANT", True):
                 update_request = LLMProviderUpsertRequest(
+                    id=provider.id,
                     name=provider_name,
                     provider=LlmProviderNames.OPENAI,
                     custom_config=original_config,
                     custom_config_changed=True,
-                    default_model_name="gpt-4o-mini",
                 )
 
                 result = put_llm_provider(
@@ -474,7 +476,7 @@ class TestLLMProviderChanges:
         new_config = {"AWS_REGION_NAME": "eu-west-1"}
 
         try:
-            _create_test_provider(
+            provider = _create_test_provider(
                 db_session,
                 provider_name,
                 custom_config={"AWS_REGION_NAME": "us-east-1"},
@@ -482,10 +484,10 @@ class TestLLMProviderChanges:
 
             with patch("onyx.server.manage.llm.api.MULTI_TENANT", False):
                 update_request = LLMProviderUpsertRequest(
+                    id=provider.id,
                     name=provider_name,
                     provider=LlmProviderNames.OPENAI,
                     custom_config=new_config,
-                    default_model_name="gpt-4o-mini",
                     custom_config_changed=True,
                 )
 
@@ -530,14 +532,8 @@ def test_upload_with_custom_config_then_change(
         with patch("onyx.server.manage.llm.api.test_llm", side_effect=capture_test_llm):
             run_llm_config_test(
                 LLMTestRequest(
-                    name=name,
                     provider=provider_name,
-                    default_model_name=default_model_name,
-                    model_configurations=[
-                        ModelConfigurationUpsertRequest(
-                            name=default_model_name, is_visible=True
-                        )
-                    ],
+                    model=default_model_name,
                     api_key_changed=False,
                     custom_config_changed=True,
                     custom_config=custom_config,
@@ -546,11 +542,10 @@ def test_upload_with_custom_config_then_change(
                 db_session=db_session,
             )
 
-            put_llm_provider(
+            provider = put_llm_provider(
                 llm_provider_upsert_request=LLMProviderUpsertRequest(
                     name=name,
                     provider=provider_name,
-                    default_model_name=default_model_name,
                     custom_config=custom_config,
                     model_configurations=[
                         ModelConfigurationUpsertRequest(
@@ -569,14 +564,9 @@ def test_upload_with_custom_config_then_change(
             # Turn auto mode off
             run_llm_config_test(
                 LLMTestRequest(
-                    name=name,
+                    id=provider.id,
                     provider=provider_name,
-                    default_model_name=default_model_name,
-                    model_configurations=[
-                        ModelConfigurationUpsertRequest(
-                            name=default_model_name, is_visible=True
-                        )
-                    ],
+                    model=default_model_name,
                     api_key_changed=False,
                     custom_config_changed=False,
                 ),
@@ -586,9 +576,9 @@ def test_upload_with_custom_config_then_change(
 
             put_llm_provider(
                 llm_provider_upsert_request=LLMProviderUpsertRequest(
+                    id=provider.id,
                     name=name,
                     provider=provider_name,
-                    default_model_name=default_model_name,
                     model_configurations=[
                         ModelConfigurationUpsertRequest(
                             name=default_model_name, is_visible=True
@@ -616,13 +606,13 @@ def test_upload_with_custom_config_then_change(
                 )
 
             # Check inside the database and check that custom_config is the same as the original
-            provider = fetch_existing_llm_provider(name=name, db_session=db_session)
-            if not provider:
+            db_provider = fetch_existing_llm_provider(name=name, db_session=db_session)
+            if not db_provider:
                 assert False, "Provider not found in the database"
 
-            assert provider.custom_config == custom_config, (
+            assert db_provider.custom_config == custom_config, (
                 f"Expected custom_config {custom_config}, "
-                f"but got {provider.custom_config}"
+                f"but got {db_provider.custom_config}"
             )
     finally:
         db_session.rollback()
@@ -642,11 +632,10 @@ def test_preserves_masked_sensitive_custom_config_on_provider_update(
     }
 
     try:
-        put_llm_provider(
+        view = put_llm_provider(
             llm_provider_upsert_request=LLMProviderUpsertRequest(
                 name=name,
                 provider=provider,
-                default_model_name=default_model_name,
                 custom_config=original_custom_config,
                 model_configurations=[
                     ModelConfigurationUpsertRequest(
@@ -665,9 +654,9 @@ def test_preserves_masked_sensitive_custom_config_on_provider_update(
         with patch("onyx.server.manage.llm.api.MULTI_TENANT", False):
             put_llm_provider(
                 llm_provider_upsert_request=LLMProviderUpsertRequest(
+                    id=view.id,
                     name=name,
                     provider=provider,
-                    default_model_name=default_model_name,
                     custom_config={
                         "vertex_credentials": _mask_string(
                             original_custom_config["vertex_credentials"]
@@ -706,7 +695,7 @@ def test_preserves_masked_sensitive_custom_config_on_test_request(
 ) -> None:
     """LLM test should restore masked sensitive custom config values before invocation."""
     name = f"test-provider-vertex-test-{uuid4().hex[:8]}"
-    provider = LlmProviderNames.VERTEX_AI.value
+    provider_name = LlmProviderNames.VERTEX_AI.value
     default_model_name = "gemini-2.5-pro"
     original_custom_config = {
         "vertex_credentials": '{"type":"service_account","private_key":"REAL_PRIVATE_KEY"}',
@@ -719,11 +708,10 @@ def test_preserves_masked_sensitive_custom_config_on_test_request(
         return ""
 
     try:
-        put_llm_provider(
+        provider = put_llm_provider(
             llm_provider_upsert_request=LLMProviderUpsertRequest(
                 name=name,
-                provider=provider,
-                default_model_name=default_model_name,
+                provider=provider_name,
                 custom_config=original_custom_config,
                 model_configurations=[
                     ModelConfigurationUpsertRequest(
@@ -742,14 +730,9 @@ def test_preserves_masked_sensitive_custom_config_on_test_request(
         with patch("onyx.server.manage.llm.api.test_llm", side_effect=capture_test_llm):
             run_llm_config_test(
                 LLMTestRequest(
-                    name=name,
-                    provider=provider,
-                    default_model_name=default_model_name,
-                    model_configurations=[
-                        ModelConfigurationUpsertRequest(
-                            name=default_model_name, is_visible=True
-                        )
-                    ],
+                    id=provider.id,
+                    provider=provider_name,
+                    model=default_model_name,
                     api_key_changed=False,
                     custom_config_changed=True,
                     custom_config={

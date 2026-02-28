@@ -1,6 +1,6 @@
 import { Form, Formik } from "formik";
 import { TextFormField, FileUploadFormField } from "@/components/Field";
-import { LLMProviderFormProps } from "../interfaces";
+import { LLMProviderFormProps } from "@/interfaces/llm";
 import * as Yup from "yup";
 import {
   ProviderFormEntrypointWrapper,
@@ -25,22 +25,26 @@ const VERTEXAI_DISPLAY_NAME = "Google Cloud Vertex AI";
 const VERTEXAI_DEFAULT_MODEL = "gemini-2.5-pro";
 const VERTEXAI_DEFAULT_LOCATION = "global";
 
-interface VertexAIFormValues extends BaseLLMFormValues {
+interface VertexAIModalValues extends BaseLLMFormValues {
   custom_config: {
     vertex_credentials: string;
     vertex_location: string;
   };
 }
 
-export function VertexAIForm({
+export function VertexAIModal({
   existingLlmProvider,
   shouldMarkAsDefault,
+  open,
+  onOpenChange,
 }: LLMProviderFormProps) {
   return (
     <ProviderFormEntrypointWrapper
       providerName={VERTEXAI_DISPLAY_NAME}
       providerEndpoint={VERTEXAI_PROVIDER_NAME}
       existingLlmProvider={existingLlmProvider}
+      open={open}
+      onOpenChange={onOpenChange}
     >
       {({
         onClose,
@@ -55,13 +59,12 @@ export function VertexAIForm({
           existingLlmProvider,
           wellKnownLLMProvider
         );
-        const initialValues: VertexAIFormValues = {
+        const initialValues: VertexAIModalValues = {
           ...buildDefaultInitialValues(
             existingLlmProvider,
             modelConfigurations
           ),
           default_model_name:
-            existingLlmProvider?.default_model_name ??
             wellKnownLLMProvider?.recommended_default_model?.name ??
             VERTEXAI_DEFAULT_MODEL,
           // Default to auto mode for new Vertex AI providers

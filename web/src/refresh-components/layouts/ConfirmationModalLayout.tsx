@@ -3,7 +3,7 @@
 import React from "react";
 import type { IconProps } from "@opal/types";
 import Text from "@/refresh-components/texts/Text";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import Modal from "@/refresh-components/Modal";
 import { useModalClose } from "../contexts/ModalContext";
 
@@ -53,7 +53,7 @@ export default function ConfirmationModalLayout({
         </Modal.Body>
         <Modal.Footer>
           {!hideCancel && (
-            <Button secondary onClick={onClose} type="button">
+            <Button prominence="secondary" onClick={onClose}>
               Cancel
             </Button>
           )}

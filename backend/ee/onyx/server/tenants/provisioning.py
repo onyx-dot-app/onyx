@@ -33,6 +33,7 @@ from onyx.configs.constants import MilestoneRecordType
 from onyx.db.engine.sql_engine import get_session_with_shared_schema
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.image_generation import create_default_image_gen_config_from_api_key
+from onyx.db.llm import fetch_existing_llm_provider
 from onyx.db.llm import update_default_provider
 from onyx.db.llm import upsert_cloud_embedding_provider
 from onyx.db.llm import upsert_llm_provider
@@ -302,12 +303,17 @@ def configure_default_api_keys(db_session: Session) -> None:
 
     has_set_default_provider = False
 
-    def _upsert(request: LLMProviderUpsertRequest) -> None:
+    def _upsert(request: LLMProviderUpsertRequest, default_model: str) -> None:
         nonlocal has_set_default_provider
         try:
+            existing = fetch_existing_llm_provider(
+                name=request.name, db_session=db_session
+            )
+            if existing:
+                request.id = existing.id
             provider = upsert_llm_provider(request, db_session)
             if not has_set_default_provider:
-                update_default_provider(provider.id, db_session)
+                update_default_provider(provider.id, default_model, db_session)
                 has_set_default_provider = True
         except Exception as e:
             logger.error(f"Failed to configure {request.provider} provider: {e}")
@@ -325,14 +331,13 @@ def configure_default_api_keys(db_session: Session) -> None:
             name="OpenAI",
             provider=OPENAI_PROVIDER_NAME,
             api_key=OPENAI_DEFAULT_API_KEY,
-            default_model_name=default_model_name,
             model_configurations=_build_model_configuration_upsert_requests(
                 OPENAI_PROVIDER_NAME, recommendations
             ),
             api_key_changed=True,
             is_auto_mode=True,
         )
-        _upsert(openai_provider)
+        _upsert(openai_provider, default_model_name)
 
         # Create default image generation config using the OpenAI API key
         try:
@@ -361,14 +366,13 @@ def configure_default_api_keys(db_session: Session) -> None:
             name="Anthropic",
             provider=ANTHROPIC_PROVIDER_NAME,
             api_key=ANTHROPIC_DEFAULT_API_KEY,
-            default_model_name=default_model_name,
             model_configurations=_build_model_configuration_upsert_requests(
                 ANTHROPIC_PROVIDER_NAME, recommendations
             ),
             api_key_changed=True,
             is_auto_mode=True,
         )
-        _upsert(anthropic_provider)
+        _upsert(anthropic_provider, default_model_name)
     else:
         logger.info(
             "ANTHROPIC_DEFAULT_API_KEY not set, skipping Anthropic provider configuration"
@@ -393,14 +397,13 @@ def configure_default_api_keys(db_session: Session) -> None:
             name="Google Vertex AI",
             provider=VERTEXAI_PROVIDER_NAME,
             custom_config=custom_config,
-            default_model_name=default_model_name,
             model_configurations=_build_model_configuration_upsert_requests(
                 VERTEXAI_PROVIDER_NAME, recommendations
             ),
             api_key_changed=True,
             is_auto_mode=True,
         )
-        _upsert(vertexai_provider)
+        _upsert(vertexai_provider, default_model_name)
     else:
         logger.info(
             "VERTEXAI_DEFAULT_CREDENTIALS not set, skipping Vertex AI provider configuration"
@@ -432,12 +435,11 @@ def configure_default_api_keys(db_session: Session) -> None:
             name="OpenRouter",
             provider=OPENROUTER_PROVIDER_NAME,
             api_key=OPENROUTER_DEFAULT_API_KEY,
-            default_model_name=default_model_name,
             model_configurations=model_configurations,
             api_key_changed=True,
             is_auto_mode=True,
         )
-        _upsert(openrouter_provider)
+        _upsert(openrouter_provider, default_model_name)
     else:
         logger.info(
             "OPENROUTER_DEFAULT_API_KEY not set, skipping OpenRouter provider configuration"

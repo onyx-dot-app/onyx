@@ -7,7 +7,7 @@
  */
 import React from "react";
 import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
-import { CustomForm } from "./CustomForm";
+import { CustomModal } from "./CustomModal";
 import { toast } from "@/hooks/useToast";
 
 // Mock SWR's mutate function and useSWR
@@ -116,11 +116,10 @@ describe("Custom LLM Provider Configuration Workflow", () => {
         name: "My Custom Provider",
         provider: "openai",
         api_key: "test-key",
-        default_model_name: "gpt-4",
       }),
     } as Response);
 
-    render(<CustomForm />);
+    render(<CustomModal />);
 
     await openModalAndFillBasicFields(user, {
       name: "My Custom Provider",
@@ -177,7 +176,7 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       json: async () => ({ detail: "Invalid API key" }),
     } as Response);
 
-    render(<CustomForm />);
+    render(<CustomModal />);
 
     await openModalAndFillBasicFields(user, {
       name: "Bad Provider",
@@ -224,13 +223,13 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       api_key: "old-key",
       api_base: "",
       api_version: "",
-      default_model_name: "claude-3-opus",
       model_configurations: [
         {
           name: "claude-3-opus",
           is_visible: true,
           max_input_tokens: null,
-          supports_image_input: null,
+          supports_image_input: false,
+          supports_reasoning: false,
         },
       ],
       custom_config: {},
@@ -239,9 +238,6 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       groups: [],
       personas: [],
       deployment_name: null,
-      is_default_provider: false,
-      default_vision_model: null,
-      is_default_vision_provider: null,
     };
 
     // Mock POST /api/admin/llm/test
@@ -256,7 +252,7 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       json: async () => ({ ...existingProvider, api_key: "new-key" }),
     } as Response);
 
-    render(<CustomForm existingLlmProvider={existingProvider} />);
+    render(<CustomModal existingLlmProvider={existingProvider} />);
 
     // For existing provider, click "Edit" button to open modal
     const editButton = screen.getByRole("button", { name: /edit/i });
@@ -307,13 +303,13 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       api_key: "old-key",
       api_base: "https://example-openai-compatible.local/v1",
       api_version: "",
-      default_model_name: "gpt-oss-20b-bw-failover",
       model_configurations: [
         {
           name: "gpt-oss-20b-bw-failover",
           is_visible: true,
           max_input_tokens: null,
-          supports_image_input: null,
+          supports_image_input: false,
+          supports_reasoning: false,
         },
       ],
       custom_config: {},
@@ -322,9 +318,6 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       groups: [],
       personas: [],
       deployment_name: null,
-      is_default_provider: false,
-      default_vision_model: null,
-      is_default_vision_provider: null,
     };
 
     // Mock POST /api/admin/llm/test
@@ -343,19 +336,21 @@ describe("Custom LLM Provider Configuration Workflow", () => {
             name: "gpt-oss-20b-bw-failover",
             is_visible: true,
             max_input_tokens: null,
-            supports_image_input: null,
+            supports_image_input: false,
+            supports_reasoning: false,
           },
           {
             name: "nemotron",
             is_visible: true,
             max_input_tokens: null,
-            supports_image_input: null,
+            supports_image_input: false,
+            supports_reasoning: false,
           },
         ],
       }),
     } as Response);
 
-    render(<CustomForm existingLlmProvider={existingProvider} />);
+    render(<CustomModal existingLlmProvider={existingProvider} />);
 
     const editButton = screen.getByRole("button", { name: /edit/i });
     await user.click(editButton);
@@ -423,7 +418,7 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       json: async () => ({}),
     } as Response);
 
-    render(<CustomForm shouldMarkAsDefault={true} />);
+    render(<CustomModal shouldMarkAsDefault={true} />);
 
     await openModalAndFillBasicFields(user, {
       name: "New Default Provider",
@@ -463,7 +458,7 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       json: async () => ({ detail: "Database error" }),
     } as Response);
 
-    render(<CustomForm />);
+    render(<CustomModal />);
 
     await openModalAndFillBasicFields(user, {
       name: "Test Provider",
@@ -499,7 +494,7 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       json: async () => ({ id: 1, name: "Provider with Custom Config" }),
     } as Response);
 
-    render(<CustomForm />);
+    render(<CustomModal />);
 
     // Open modal
     const openButton = screen.getByRole("button", {

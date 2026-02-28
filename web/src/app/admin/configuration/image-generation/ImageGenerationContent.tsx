@@ -7,7 +7,7 @@ import { Select } from "@/refresh-components/cards";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { toast } from "@/hooks/useToast";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { LLMProviderView } from "@/app/admin/configuration/llm/interfaces";
+import { LLMProviderResponse, LLMProviderView } from "@/interfaces/llm";
 import {
   IMAGE_PROVIDER_GROUPS,
   ImageProvider,
@@ -23,13 +23,14 @@ import Message from "@/refresh-components/messages/Message";
 
 export default function ImageGenerationContent() {
   const {
-    data: llmProviders = [],
+    data: llmProviderResponse,
     error: llmError,
     mutate: refetchProviders,
-  } = useSWR<LLMProviderView[]>(
+  } = useSWR<LLMProviderResponse<LLMProviderView>>(
     "/api/admin/llm/provider?include_image_gen=true",
     errorHandlingFetcher
   );
+  const llmProviders = llmProviderResponse?.providers ?? [];
 
   const {
     data: configs = [],

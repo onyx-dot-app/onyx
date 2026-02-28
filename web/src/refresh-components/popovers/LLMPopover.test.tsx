@@ -1,6 +1,6 @@
 import { buildLlmOptions, groupLlmOptions } from "./LLMPopover";
 import { LLMOption } from "./interfaces";
-import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
+import { LLMProviderDescriptor } from "@/interfaces/llm";
 import { makeProvider } from "@tests/setup/llmProviderTestUtils";
 
 describe("LLMPopover helpers", () => {
@@ -15,6 +15,7 @@ describe("LLMPopover helpers", () => {
             is_visible: true,
             max_input_tokens: null,
             supports_image_input: false,
+            supports_reasoning: false,
           },
         ],
       }),
@@ -27,6 +28,7 @@ describe("LLMPopover helpers", () => {
             is_visible: true,
             max_input_tokens: null,
             supports_image_input: false,
+            supports_reasoning: false,
           },
         ],
       }),
@@ -39,6 +41,7 @@ describe("LLMPopover helpers", () => {
             is_visible: true,
             max_input_tokens: null,
             supports_image_input: false,
+            supports_reasoning: false,
           },
         ],
       }),
@@ -67,6 +70,7 @@ describe("LLMPopover helpers", () => {
             is_visible: false,
             max_input_tokens: null,
             supports_image_input: false,
+            supports_reasoning: false,
           },
         ],
       }),

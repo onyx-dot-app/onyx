@@ -5,7 +5,7 @@ import {
   LLMProviderFormProps,
   LLMProviderView,
   ModelConfiguration,
-} from "../interfaces";
+} from "@/interfaces/llm";
 import * as Yup from "yup";
 import {
   ProviderFormEntrypointWrapper,
@@ -24,20 +24,20 @@ import {
 import { AdvancedOptions } from "./components/AdvancedOptions";
 import { DisplayModels } from "./components/DisplayModels";
 import { useEffect, useState } from "react";
-import { fetchOllamaModels } from "../utils";
+import { fetchOllamaModels } from "@/app/admin/configuration/llm/utils";
 
 export const OLLAMA_PROVIDER_NAME = "ollama_chat";
 const DEFAULT_API_BASE = "http://127.0.0.1:11434";
 
-interface OllamaFormValues extends BaseLLMFormValues {
+interface OllamaModalValues extends BaseLLMFormValues {
   api_base: string;
   custom_config: {
     OLLAMA_API_KEY?: string;
   };
 }
 
-interface OllamaFormContentProps {
-  formikProps: FormikProps<OllamaFormValues>;
+interface OllamaModalContentProps {
+  formikProps: FormikProps<OllamaModalValues>;
   existingLlmProvider?: LLMProviderView;
   fetchedModels: ModelConfiguration[];
   setFetchedModels: (models: ModelConfiguration[]) => void;
@@ -48,7 +48,7 @@ interface OllamaFormContentProps {
   isFormValid: boolean;
 }
 
-function OllamaFormContent({
+function OllamaModalContent({
   formikProps,
   existingLlmProvider,
   fetchedModels,
@@ -58,7 +58,7 @@ function OllamaFormContent({
   mutate,
   onClose,
   isFormValid,
-}: OllamaFormContentProps) {
+}: OllamaModalContentProps) {
   const [isLoadingModels, setIsLoadingModels] = useState(true);
 
   useEffect(() => {
@@ -131,9 +131,11 @@ function OllamaFormContent({
   );
 }
 
-export function OllamaForm({
+export function OllamaModal({
   existingLlmProvider,
   shouldMarkAsDefault,
+  open,
+  onOpenChange,
 }: LLMProviderFormProps) {
   const [fetchedModels, setFetchedModels] = useState<ModelConfiguration[]>([]);
 
@@ -141,6 +143,8 @@ export function OllamaForm({
     <ProviderFormEntrypointWrapper
       providerName="Ollama"
       existingLlmProvider={existingLlmProvider}
+      open={open}
+      onOpenChange={onOpenChange}
     >
       {({
         onClose,
@@ -155,7 +159,7 @@ export function OllamaForm({
           existingLlmProvider,
           wellKnownLLMProvider
         );
-        const initialValues: OllamaFormValues = {
+        const initialValues: OllamaModalValues = {
           ...buildDefaultInitialValues(
             existingLlmProvider,
             modelConfigurations
@@ -212,7 +216,7 @@ export function OllamaForm({
             }}
           >
             {(formikProps) => (
-              <OllamaFormContent
+              <OllamaModalContent
                 formikProps={formikProps}
                 existingLlmProvider={existingLlmProvider}
                 fetchedModels={fetchedModels}

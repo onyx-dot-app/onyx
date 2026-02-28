@@ -434,7 +434,6 @@ class TestSlackBotFederatedSearch:
                 name=f"test-llm-provider-{uuid4().hex[:8]}",
                 provider=LlmProviderNames.OPENAI,
                 api_key=api_key,
-                default_model_name="gpt-4o",
                 is_public=True,
                 model_configurations=[
                     ModelConfigurationUpsertRequest(
@@ -448,7 +447,7 @@ class TestSlackBotFederatedSearch:
             db_session=db_session,
         )
 
-        update_default_provider(provider_view.id, db_session)
+        update_default_provider(provider_view.id, "gpt-4o", db_session)
 
     def _teardown_common_mocks(self, patches: list) -> None:
         """Stop all patches"""

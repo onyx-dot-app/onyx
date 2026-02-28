@@ -5,7 +5,7 @@ import {
   LLMProviderFormProps,
   ModelConfiguration,
   OpenRouterModelResponse,
-} from "../interfaces";
+} from "@/interfaces/llm";
 import * as Yup from "yup";
 import {
   ProviderFormEntrypointWrapper,
@@ -32,7 +32,7 @@ const OPENROUTER_DISPLAY_NAME = "OpenRouter";
 const DEFAULT_API_BASE = "https://openrouter.ai/api/v1";
 const OPENROUTER_MODELS_API_URL = "/api/admin/llm/openrouter/available-models";
 
-interface OpenRouterFormValues extends BaseLLMFormValues {
+interface OpenRouterModalValues extends BaseLLMFormValues {
   api_key: string;
   api_base: string;
 }
@@ -80,6 +80,7 @@ async function fetchOpenRouterModels(params: {
       is_visible: true,
       max_input_tokens: modelData.max_input_tokens,
       supports_image_input: modelData.supports_image_input,
+      supports_reasoning: false,
     }));
 
     return { models };
@@ -90,9 +91,11 @@ async function fetchOpenRouterModels(params: {
   }
 }
 
-export function OpenRouterForm({
+export function OpenRouterModal({
   existingLlmProvider,
   shouldMarkAsDefault,
+  open,
+  onOpenChange,
 }: LLMProviderFormProps) {
   const [fetchedModels, setFetchedModels] = useState<ModelConfiguration[]>([]);
 
@@ -101,6 +104,8 @@ export function OpenRouterForm({
       providerName={OPENROUTER_DISPLAY_NAME}
       providerEndpoint={OPENROUTER_PROVIDER_NAME}
       existingLlmProvider={existingLlmProvider}
+      open={open}
+      onOpenChange={onOpenChange}
     >
       {({
         onClose,
@@ -115,7 +120,7 @@ export function OpenRouterForm({
           existingLlmProvider,
           wellKnownLLMProvider
         );
-        const initialValues: OpenRouterFormValues = {
+        const initialValues: OpenRouterModalValues = {
           ...buildDefaultInitialValues(
             existingLlmProvider,
             modelConfigurations
