@@ -1125,7 +1125,25 @@ fn main() {
             inject_chat_link_intercept(webview);
 
             #[cfg(not(target_os = "macos"))]
-            let _ = webview.eval(MENU_KEY_HANDLER_SCRIPT);
+            {
+                let _ = webview.eval(MENU_KEY_HANDLER_SCRIPT);
+
+                let app = webview.app_handle();
+                let state = app.state::<ConfigState>();
+                let config = state.config.read().unwrap();
+                let temp_visible = *state.menu_temporarily_visible.read().unwrap();
+                let label = webview.label().to_string();
+                if !config.show_menu_bar && !temp_visible {
+                    if let Some(win) = app.get_webview_window(&label) {
+                        let _ = win.hide_menu();
+                    }
+                }
+                if config.hide_window_decorations {
+                    if let Some(win) = app.get_webview_window(&label) {
+                        let _ = win.set_decorations(false);
+                    }
+                }
+            }
 
             #[cfg(target_os = "macos")]
             let _ = webview.eval(TITLEBAR_SCRIPT);
