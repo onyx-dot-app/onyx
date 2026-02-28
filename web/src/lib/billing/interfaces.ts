@@ -18,7 +18,8 @@ export type ApplicationStatus =
   | "active"
   | "payment_reminder"
   | "gated_access"
-  | "expired";
+  | "expired"
+  | "seat_limit_exceeded";
 
 /**
  * Billing status from Stripe subscription.

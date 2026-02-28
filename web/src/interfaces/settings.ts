@@ -2,6 +2,7 @@ export enum ApplicationStatus {
   PAYMENT_REMINDER = "payment_reminder",
   GATED_ACCESS = "gated_access",
   ACTIVE = "active",
+  SEAT_LIMIT_EXCEEDED = "seat_limit_exceeded",
 }
 
 export enum QueryHistoryType {
@@ -48,6 +49,10 @@ export interface Settings {
   // Enterprise features flag - controlled by license enforcement at runtime
   // True when user has a valid license, False for community edition
   ee_features_enabled?: boolean;
+
+  // Seat usage - populated when seat limit is exceeded
+  seat_count?: number | null;
+  used_seats?: number | null;
 
   // OpenSearch migration
   opensearch_indexing_enabled?: boolean;
