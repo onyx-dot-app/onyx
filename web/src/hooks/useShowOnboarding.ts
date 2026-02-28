@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
+import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
 import { useOnboardingState } from "@/refresh-components/onboarding/useOnboardingState";
 
 function getOnboardingCompletedKey(userId: string): string {
@@ -9,7 +9,7 @@ function getOnboardingCompletedKey(userId: string): string {
 }
 
 interface UseShowOnboardingParams {
-  liveAssistant: MinimalPersonaSnapshot | undefined;
+  liveAgent: MinimalPersonaSnapshot | undefined;
   isLoadingProviders: boolean;
   hasAnyProvider: boolean | undefined;
   isLoadingChatSessions: boolean;
@@ -18,7 +18,7 @@ interface UseShowOnboardingParams {
 }
 
 export function useShowOnboarding({
-  liveAssistant,
+  liveAgent,
   isLoadingProviders,
   hasAnyProvider,
   isLoadingChatSessions,
@@ -42,7 +42,7 @@ export function useShowOnboarding({
     actions: onboardingActions,
     llmDescriptors,
     isLoading: isLoadingOnboarding,
-  } = useOnboardingState(liveAssistant);
+  } = useOnboardingState(liveAgent);
 
   // Track which user we've already evaluated onboarding for.
   // Re-check when userId changes (logout/login, account switching without full reload).

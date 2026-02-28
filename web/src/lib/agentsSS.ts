@@ -1,10 +1,10 @@
-import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
+import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
 import { fetchSS } from "./utilsSS";
 
-export type FetchAssistantsResponse = [MinimalPersonaSnapshot[], string | null];
+export type FetchAgentsResponse = [MinimalPersonaSnapshot[], string | null];
 
-// Fetch assistants server-side
-export async function fetchAssistantsSS(): Promise<FetchAssistantsResponse> {
+// Fetch agents server-side
+export async function fetchAgentsSS(): Promise<FetchAgentsResponse> {
   const response = await fetchSS("/persona");
   if (response.ok) {
     return [(await response.json()) as MinimalPersonaSnapshot[], null];

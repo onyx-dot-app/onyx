@@ -67,8 +67,8 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   const { refreshChatSessions } = useChatSessions();
   const existingChatSessionId = null; // NRF always starts new chats
 
-  // Get agents for assistant selection
-  const { agents: availableAssistants } = useAgents();
+  // Get agents for agent selection
+  const { agents: availableAgents } = useAgents();
 
   // Projects context for file handling
   const {
@@ -92,25 +92,25 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   }, [lastFailedFiles, clearLastFailedFiles]);
 
   // Assistant controller
-  const { selectedAssistant, setSelectedAssistantFromId, liveAssistant } =
+  const { selectedAgent, setSelectedAgentFromId, liveAgent } =
     useAgentController({
       selectedChatSession: undefined,
-      onAssistantSelect: () => {},
+      onAgentSelect: () => {},
     });
 
   // LLM manager for model selection.
   // - currentChatSession: undefined because NRF always starts new chats
-  // - liveAssistant: uses the selected assistant, or undefined to fall back
+  // - liveAgent: uses the selected assistant, or undefined to fall back
   //   to system-wide default LLM provider.
   //
   // If no LLM provider is configured (e.g., fresh signup), the input bar is
   // disabled and a "Set up an LLM" button is shown (see bottom of component).
-  const llmManager = useLlmManager(undefined, liveAssistant ?? undefined);
+  const llmManager = useLlmManager(undefined, liveAgent ?? undefined);
 
   // Deep research toggle
   const { deepResearchEnabled, toggleDeepResearch } = useDeepResearchToggle({
     chatSessionId: existingChatSessionId,
-    assistantId: selectedAssistant?.id,
+    agentId: selectedAgent?.id,
   });
 
   // State
@@ -169,7 +169,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   const hasMessages = messageHistory.length > 0;
 
   // Resolved assistant to use throughout the component
-  const resolvedAssistant = liveAssistant ?? undefined;
+  const resolvedAgent = liveAgent ?? undefined;
 
   // Auto-scroll preference from user settings (matches ChatPage pattern)
   const autoScrollEnabled = user?.preferences?.auto_scroll !== false;
@@ -178,13 +178,13 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   // Query controller for search/chat classification (EE feature)
   const { submit: submitQuery, classification } = useQueryController();
 
-  // Determine if retrieval (search) is enabled based on the assistant
+  // Determine if retrieval (search) is enabled based on the agent
   const retrievalEnabled = useMemo(() => {
-    if (liveAssistant) {
-      return personaIncludesRetrieval(liveAssistant);
+    if (liveAgent) {
+      return personaIncludesRetrieval(liveAgent);
     }
     return false;
-  }, [liveAssistant]);
+  }, [liveAgent]);
 
   // Check if we're in search mode
   const isSearch = classification === "search";
@@ -248,13 +248,13 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     useChatController({
       filterManager,
       llmManager,
-      availableAssistants: availableAssistants || [],
-      liveAssistant,
+      availableAgents: availableAgents || [],
+      liveAgent,
       existingChatSessionId,
       selectedDocuments: [],
       searchParams: searchParams!,
       resetInputBar,
-      setSelectedAssistantFromId,
+      setSelectedAgentFromId,
     });
 
   // Chat session controller for loading sessions
@@ -263,7 +263,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     searchParams: searchParams!,
     filterManager,
     firstMessage: undefined,
-    setSelectedAssistantFromId,
+    setSelectedAgentFromId,
     setSelectedDocuments: () => {}, // No-op: NRF doesn't support document selection
     setCurrentMessageFiles,
     chatSessionIdRef: { current: null },
@@ -437,7 +437,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
             )}
           >
             {/* Chat area with messages */}
-            {hasMessages && resolvedAssistant && (
+            {hasMessages && resolvedAgent && (
               <>
                 {/* Fake header - pushes content below absolute settings button (non-side-panel only) */}
                 {!isSidePanel && <Spacer rem={2} />}
@@ -449,7 +449,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                   hideScrollbar={isSidePanel}
                 >
                   <ChatUI
-                    liveAssistant={resolvedAssistant}
+                    liveAgent={resolvedAgent}
                     llmManager={llmManager}
                     currentMessageFiles={currentMessageFiles}
                     setPresentingDocument={setPresentingDocument}
@@ -497,7 +497,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                 chatState={currentChatState}
                 currentSessionFileTokenCount={currentSessionFileTokenCount}
                 availableContextTokens={AVAILABLE_CONTEXT_TOKENS}
-                selectedAssistant={liveAssistant ?? undefined}
+                selectedAgent={liveAgent ?? undefined}
                 handleFileUpload={handleFileUpload}
                 disabled={
                   !llmManager.isLoadingProviders && !llmManager.hasAnyProvider

@@ -10,7 +10,7 @@ import {
 } from "@/lib/types";
 import BackButton from "@/refresh-components/buttons/BackButton";
 import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
-import { FetchAssistantsResponse, fetchAssistantsSS } from "@/lib/agentsSS";
+import { FetchAgentsResponse, fetchAgentsSS } from "@/lib/agentsSS";
 import { getStandardAnswerCategoriesIfEE } from "@/components/standardAnswers/getStandardAnswerCategoriesIfEE";
 
 async function EditslackChannelConfigPage(props: {
@@ -20,18 +20,14 @@ async function EditslackChannelConfigPage(props: {
   const tasks = [
     fetchSS("/manage/admin/slack-app/channel"),
     fetchSS("/manage/document-set"),
-    fetchAssistantsSS(),
+    fetchAgentsSS(),
   ];
 
   const [
     slackChannelsResponse,
     documentSetsResponse,
-    [assistants, assistantsFetchError],
-  ] = (await Promise.all(tasks)) as [
-    Response,
-    Response,
-    FetchAssistantsResponse,
-  ];
+    [assistants, agentsFetchError],
+  ] = (await Promise.all(tasks)) as [Response, Response, FetchAgentsResponse];
 
   const eeStandardAnswerCategoryResponse =
     await getStandardAnswerCategoriesIfEE();
@@ -71,11 +67,11 @@ async function EditslackChannelConfigPage(props: {
   const response = await documentSetsResponse.json();
   const documentSets = response as DocumentSetSummary[];
 
-  if (assistantsFetchError) {
+  if (agentsFetchError) {
     return (
       <ErrorCallout
         errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch personas - ${assistantsFetchError}`}
+        errorMsg={`Failed to fetch personas - ${agentsFetchError}`}
       />
     );
   }

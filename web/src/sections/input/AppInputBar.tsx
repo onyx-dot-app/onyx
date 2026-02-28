@@ -9,7 +9,7 @@ import React, {
   useState,
 } from "react";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
+import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
 import LLMPopover from "@/refresh-components/popovers/LLMPopover";
 import { InputPrompt } from "@/app/app/interfaces";
 import { FilterManager, LlmManager, useFederatedConnectors } from "@/lib/hooks";
@@ -117,8 +117,8 @@ export interface AppInputBarProps {
   currentSessionFileTokenCount: number;
   availableContextTokens: number;
 
-  // assistants
-  selectedAssistant: MinimalPersonaSnapshot | undefined;
+  // agents
+  selectedAgent: MinimalPersonaSnapshot | undefined;
 
   toggleDocumentSidebar: () => void;
   handleFileUpload: (files: File[]) => void;
@@ -148,8 +148,8 @@ const AppInputBar = React.memo(
     chatState,
     currentSessionFileTokenCount,
     availableContextTokens,
-    // assistants
-    selectedAssistant,
+    // agents
+    selectedAgent,
 
     handleFileUpload,
     llmManager,
@@ -302,7 +302,7 @@ const AppInputBar = React.memo(
     const controlsLoading =
       ccPairsLoading ||
       federatedLoading ||
-      !selectedAssistant ||
+      !selectedAgent ||
       llmManager.isLoadingProviders;
     const [showPrompts, setShowPrompts] = useState(false);
 
@@ -396,17 +396,17 @@ const AppInputBar = React.memo(
       [currentMessageFiles]
     );
 
-    // Check if the assistant has search tools available (internal search or web search)
+    // Check if the agent has search tools available (internal search or web search)
     // AND if deep research is globally enabled in admin settings
     const showDeepResearch = useMemo(() => {
       const deepResearchGloballyEnabled =
         combinedSettings?.settings?.deep_research_enabled ?? true;
       return (
         deepResearchGloballyEnabled &&
-        hasSearchToolsAvailable(selectedAssistant?.tools || [])
+        hasSearchToolsAvailable(selectedAgent?.tools || [])
       );
     }, [
-      selectedAssistant?.tools,
+      selectedAgent?.tools,
       combinedSettings?.settings?.deep_research_enabled,
     ]);
 
@@ -708,9 +708,9 @@ const AppInputBar = React.memo(
                     controlsLoading && "invisible"
                   )}
                 >
-                  {selectedAssistant && selectedAssistant.tools.length > 0 && (
+                  {selectedAgent && selectedAgent.tools.length > 0 && (
                     <ActionsPopover
-                      selectedAssistant={selectedAssistant}
+                      selectedAgent={selectedAgent}
                       filterManager={filterManager}
                       availableSources={memoizedAvailableSources}
                       disabled={disabled}
@@ -752,10 +752,10 @@ const AppInputBar = React.memo(
                     )
                   )}
 
-                  {selectedAssistant &&
+                  {selectedAgent &&
                     forcedToolIds.length > 0 &&
                     forcedToolIds.map((toolId) => {
-                      const tool = selectedAssistant.tools.find(
+                      const tool = selectedAgent.tools.find(
                         (tool) => tool.id === toolId
                       );
                       if (!tool) {

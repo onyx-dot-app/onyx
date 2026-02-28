@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useCallback } from "react";
-import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
+import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import Button from "@/refresh-components/buttons/Button";
 import { useAppRouter } from "@/hooks/appNavigation";
@@ -12,7 +12,7 @@ import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import {
-  checkUserOwnsAssistant,
+  checkUserOwnsAgent,
   updateAgentSharedStatus,
   updateAgentFeaturedStatus,
 } from "@/lib/agents";
@@ -51,7 +51,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
   const { user, isAdmin, isCurator } = useUser();
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
   const canUpdateFeaturedStatus = isAdmin || isCurator;
-  const isOwnedByUser = checkUserOwnsAssistant(user, agent);
+  const isOwnedByUser = checkUserOwnsAgent(user, agent);
   const shareAgentModal = useCreateModal();
   const agentViewerModal = useCreateModal();
   const { agent: fullAgent, refresh: refreshAgent } = useAgent(agent.id);
@@ -150,7 +150,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
                       icon={SvgBarChart}
                       tertiary
                       onClick={noProp(() =>
-                        router.push(`/ee/assistants/stats/${agent.id}` as Route)
+                        router.push(`/ee/agents/stats/${agent.id}` as Route)
                       )}
                       tooltip="View Agent Stats"
                       className="hidden group-hover/AgentCard:flex"

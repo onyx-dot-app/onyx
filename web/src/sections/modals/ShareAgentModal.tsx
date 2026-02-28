@@ -30,7 +30,7 @@ import { Formik, useFormikContext } from "formik";
 import { useAgent } from "@/hooks/useAgents";
 import { Button as OpalButton } from "@opal/components";
 import { useLabels } from "@/lib/hooks";
-import { PersonaLabel } from "@/app/admin/assistants/interfaces";
+import { PersonaLabel } from "@/app/admin/agents/interfaces";
 
 const YOUR_ORGANIZATION_TAB = "Your Organization";
 const USERS_AND_GROUPS_TAB = "Users & Groups";
@@ -112,7 +112,7 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
 
   function handleCopyLink() {
     if (!agentId) return;
-    const url = `${window.location.origin}/chat?assistantId=${agentId}`;
+    const url = `${window.location.origin}/chat?agentId=${agentId}`;
     navigator.clipboard.writeText(url);
   }
 

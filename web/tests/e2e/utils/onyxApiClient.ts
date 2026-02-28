@@ -640,28 +640,28 @@ export class OnyxApiClient {
     return tools.find((tool) => tool.name === name) ?? null;
   }
 
-  async deleteAssistant(assistantId: number): Promise<boolean> {
+  async deleteAgent(agentId: number): Promise<boolean> {
     const response = await this.request.delete(
-      `${this.baseUrl}/persona/${assistantId}`
+      `${this.baseUrl}/persona/${agentId}`
     );
     const success = await this.handleResponseSoft(
       response,
-      `Failed to delete assistant ${assistantId}`
+      `Failed to delete assistant ${agentId}`
     );
     if (success) {
-      this.log(`Deleted assistant ${assistantId}`);
+      this.log(`Deleted assistant ${agentId}`);
     }
     return success;
   }
 
-  async getAssistant(assistantId: number): Promise<{
+  async getAssistant(agentId: number): Promise<{
     id: number;
     tools: Array<{ id: number; mcp_server_id?: number | null }>;
   }> {
-    const response = await this.get(`/persona/${assistantId}`);
+    const response = await this.get(`/persona/${agentId}`);
     return await this.handleResponse(
       response,
-      `Failed to fetch assistant ${assistantId}`
+      `Failed to fetch assistant ${agentId}`
     );
   }
 
@@ -674,7 +674,7 @@ export class OnyxApiClient {
     return data.mcp_servers;
   }
 
-  async listAssistants(options?: {
+  async listAgents(options?: {
     includeDeleted?: boolean;
     getEditable?: boolean;
   }): Promise<any[]> {
@@ -695,11 +695,11 @@ export class OnyxApiClient {
     );
   }
 
-  async findAssistantByName(
+  async findAgentByName(
     name: string,
     options?: { includeDeleted?: boolean; getEditable?: boolean }
   ): Promise<any | null> {
-    const assistants = await this.listAssistants(options);
+    const assistants = await this.listAgents(options);
     return assistants.find((assistant) => assistant.name === name) ?? null;
   }
 

@@ -36,7 +36,7 @@ export interface AgentMessageProps {
   onRegenerate?: RegenerationFactory;
   // Parent message needed to construct regeneration request
   parentMessage?: Message | null;
-  // Duration in seconds for processing this message (assistant messages only)
+  // Duration in seconds for processing this message (agent messages only)
   processingDurationSeconds?: number;
 }
 
@@ -55,7 +55,7 @@ function arePropsEqual(
     // Compare packetCount (primitive) instead of rawPackets.length
     // The array is mutated in place, so reading .length from prev and next would return same value
     prev.packetCount === next.packetCount &&
-    prev.chatState.assistant?.id === next.chatState.assistant?.id &&
+    prev.chatState.agent?.id === next.chatState.agent?.id &&
     prev.chatState.docs === next.chatState.docs &&
     prev.chatState.citations === next.chatState.citations &&
     prev.chatState.overriddenModel === next.chatState.overriddenModel &&
@@ -137,7 +137,7 @@ const AgentMessage = React.memo(function AgentMessage({
       citations: mergedCitations,
     }),
     [
-      chatState.assistant,
+      chatState.agent,
       chatState.docs,
       chatState.setPresentingDocument,
       chatState.overriddenModel,

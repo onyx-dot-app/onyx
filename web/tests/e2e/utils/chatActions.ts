@@ -1,30 +1,30 @@
 import { Page } from "@playwright/test";
 import { expect } from "@playwright/test";
 
-export async function verifyDefaultAssistantIsChosen(page: Page) {
+export async function verifyDefaultAgentIsChosen(page: Page) {
   await expect(page.getByTestId("onyx-logo")).toBeVisible({ timeout: 5000 });
 }
 
-export async function verifyAssistantIsChosen(
+export async function verifyAgentIsChosen(
   page: Page,
-  assistantName: string,
+  agentName: string,
   timeout: number = 5000
 ) {
   await expect(
-    page.getByTestId("assistant-name-display").getByText(assistantName)
+    page.getByTestId("agent-name-display").getByText(agentName)
   ).toBeVisible({ timeout });
 }
 
-export async function navigateToAssistantInHistorySidebar(
+export async function navigateToAgentInHistorySidebar(
   page: Page,
   testId: string,
-  assistantName: string
+  agentName: string
 ) {
   await page.getByTestId(`assistant-${testId}`).click();
   try {
-    await verifyAssistantIsChosen(page, assistantName);
+    await verifyAgentIsChosen(page, agentName);
   } catch (error) {
-    console.error("Error in navigateToAssistantInHistorySidebar:", error);
+    console.error("Error in navigateToAgentInHistorySidebar:", error);
     const pageText = await page.textContent("body");
     console.log("Page text:", pageText);
     throw error;

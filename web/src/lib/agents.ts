@@ -1,48 +1,45 @@
-import {
-  MinimalPersonaSnapshot,
-  Persona,
-} from "@/app/admin/assistants/interfaces";
+import { MinimalPersonaSnapshot, Persona } from "@/app/admin/agents/interfaces";
 import { User } from "./types";
 import { checkUserIsNoAuthUser } from "./user";
-import { personaComparator } from "@/app/admin/assistants/lib";
+import { personaComparator } from "@/app/admin/agents/lib";
 
 /**
  * Checks if the given user owns the specified assistant.
  *
  * @param user - The user to check ownership for, or null if no user is logged in
  * @param assistant - The assistant to check ownership of
- * @returns true if the user owns the assistant (or no auth is required), false otherwise
+ * @returns true if the user owns the agent (or no auth is required), false otherwise
  */
-export function checkUserOwnsAssistant(
+export function checkUserOwnsAgent(
   user: User | null,
-  assistant: MinimalPersonaSnapshot | Persona
+  agent: MinimalPersonaSnapshot | Persona
 ) {
-  return checkUserIdOwnsAssistant(user?.id, assistant);
+  return checkUserIdOwnsAgent(user?.id, agent);
 }
 
 /**
  * Checks if the given user ID owns the specified assistant.
  *
  * Returns true if a valid user ID is provided and any of the following conditions
- * are met (and the assistant is not built-in):
+ * are met (and the agent is not built-in):
  * - The user is a no-auth user (authentication is disabled)
- * - The user ID matches the assistant owner's ID
+ * - The user ID matches the agent owner's ID
  *
  * Returns false if userId is undefined (e.g., user is loading or unauthenticated)
  * to prevent granting ownership access prematurely.
  *
  * @param userId - The user ID to check ownership for
  * @param assistant - The assistant to check ownership of
- * @returns true if the user owns the assistant, false otherwise
+ * @returns true if the user owns the agent, false otherwise
  */
-export function checkUserIdOwnsAssistant(
+export function checkUserIdOwnsAgent(
   userId: string | undefined,
-  assistant: MinimalPersonaSnapshot | Persona
+  agent: MinimalPersonaSnapshot | Persona
 ) {
   return (
     !!userId &&
-    (checkUserIsNoAuthUser(userId) || assistant.owner?.id === userId) &&
-    !assistant.builtin_persona
+    (checkUserIsNoAuthUser(userId) || agent.owner?.id === userId) &&
+    !agent.builtin_persona
   );
 }
 
@@ -53,13 +50,14 @@ export function checkUserIdOwnsAssistant(
  * @throws Error if the API request fails
  */
 export async function pinAgents(pinnedAgentIds: number[]) {
+  // TODO: rename to agent — https://linear.app/onyx-app/issue/ENG-3766
   const response = await fetch(`/api/user/pinned-assistants`, {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      ordered_assistant_ids: pinnedAgentIds,
+      ordered_assistant_ids: pinnedAgentIds, // TODO: rename to agent — https://linear.app/onyx-app/issue/ENG-3766
     }),
   });
   if (!response.ok) {
@@ -75,13 +73,11 @@ export async function pinAgents(pinnedAgentIds: number[]) {
  * @param assistants - Array of assistants to filter
  * @returns Filtered and sorted array of visible assistants
  */
-export function filterAssistants(
+export function filterAgents(
   assistants: MinimalPersonaSnapshot[]
 ): MinimalPersonaSnapshot[] {
-  let filteredAssistants = assistants.filter(
-    (assistant) => assistant.is_visible
-  );
-  return filteredAssistants.sort(personaComparator);
+  let filteredAgents = assistants.filter((assistant) => assistant.is_visible);
+  return filteredAgents.sort(personaComparator);
 }
 
 /**
@@ -214,7 +210,7 @@ export async function updateAgentFeaturedStatus(
     const response = await fetch(`/api/admin/persona/${agentId}/default`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ is_default_persona: isFeatured }),
+      body: JSON.stringify({ is_default_persona: isFeatured }), // TODO: rename to agent — https://linear.app/onyx-app/issue/ENG-3766
     });
 
     if (response.ok) {

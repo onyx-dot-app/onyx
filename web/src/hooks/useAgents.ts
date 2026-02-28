@@ -5,7 +5,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   MinimalPersonaSnapshot,
   FullPersona,
-} from "@/app/admin/assistants/interfaces";
+} from "@/app/admin/agents/interfaces";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { pinAgents } from "@/lib/agents";
 import { useUser } from "@/providers/UserProvider";
@@ -171,7 +171,7 @@ export function usePinnedAgents() {
 
 /**
  * Hook to determine the currently active agent based on:
- * 1. URL param `assistantId`
+ * 1. URL param `agentId`
  * 2. Chat session's `persona_id`
  * 3. Falls back to null if neither is present
  */

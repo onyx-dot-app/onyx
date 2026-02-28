@@ -1,4 +1,4 @@
-import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
+import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
 import {
   DefaultModel,
   LLMProviderDescriptor,
@@ -45,11 +45,11 @@ export function getFinalLLM(
 }
 
 export function getLLMProviderOverrideForPersona(
-  liveAssistant: MinimalPersonaSnapshot,
+  liveAgent: MinimalPersonaSnapshot,
   llmProviders: LLMProviderDescriptor[]
 ): LlmDescriptor | null {
-  const overrideProvider = liveAssistant.llm_model_provider_override;
-  const overrideModel = liveAssistant.llm_model_version_override;
+  const overrideProvider = liveAgent.llm_model_provider_override;
+  const overrideModel = liveAgent.llm_model_version_override;
 
   if (!overrideModel) {
     return null;
