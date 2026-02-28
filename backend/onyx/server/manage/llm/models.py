@@ -425,3 +425,32 @@ class OpenRouterFinalModelResponse(BaseModel):
         int | None
     )  # From OpenRouter API context_length (may be missing for some models)
     supports_image_input: bool
+
+
+# LLM API dynamic models fetch
+class LLMAPIModelsRequest(BaseModel):
+    api_base: str
+    api_key: str
+    provider_name: str | None = None  # Optional: to save models to existing provider
+
+
+class LLMAPIModelDetails(BaseModel):
+    """Response model for LLM API /v1/models endpoint (OpenAI-compatible)"""
+
+    model_config = {"extra": "ignore"}
+
+    id: str
+
+    @property
+    def display_name(self) -> str:
+        """Generate display name from model ID by stripping vendor prefix."""
+        if "/" in self.id:
+            return self.id.split("/", 1)[1]
+        return self.id
+
+
+class LLMAPIFinalModelResponse(BaseModel):
+    name: str  # Model ID (e.g., "anthropic/claude-sonnet-4-5")
+    display_name: str  # Human-readable name derived from model ID
+    max_input_tokens: int | None  # Not available from /models; None
+    supports_image_input: bool

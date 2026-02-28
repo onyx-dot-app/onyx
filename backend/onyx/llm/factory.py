@@ -48,6 +48,12 @@ def _build_provider_extra_headers(
             "X-Title": "Onyx",
         }
 
+    elif provider == LlmProviderNames.LLMAPI:
+        return {
+            "HTTP-Referer": "https://onyx.app",
+            "X-Title": "Onyx",
+        }
+
     return {}
 
 

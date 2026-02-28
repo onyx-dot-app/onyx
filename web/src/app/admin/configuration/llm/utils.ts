@@ -18,12 +18,14 @@ import {
 import {
   OllamaModelResponse,
   OpenRouterModelResponse,
+  LLMAPIModelResponse,
   BedrockModelResponse,
   ModelConfiguration,
   LLMProviderName,
   BedrockFetchParams,
   OllamaFetchParams,
   OpenRouterFetchParams,
+  LLMAPIFetchParams,
 } from "./interfaces";
 import { SvgAws, SvgOpenrouter } from "@opal/icons";
 
@@ -32,6 +34,7 @@ export const AGGREGATOR_PROVIDERS = new Set([
   "bedrock",
   "bedrock_converse",
   "openrouter",
+  "llmapi",
   "ollama_chat",
   "vertex_ai",
 ]);
@@ -68,6 +71,7 @@ export const getProviderIcon = (
     bedrock: SvgAws,
     bedrock_converse: SvgAws,
     openrouter: SvgOpenrouter,
+    llmapi: CPUIcon,
     vertex_ai: GeminiIcon,
   };
 
@@ -273,6 +277,63 @@ export const fetchOpenRouterModels = async (
 };
 
 /**
+ * Fetches LLM API models directly without any form state dependencies.
+ * Uses snake_case params to match API structure.
+ */
+export const fetchLLMAPIModels = async (
+  params: LLMAPIFetchParams
+): Promise<{ models: ModelConfiguration[]; error?: string }> => {
+  const apiBase = params.api_base;
+  const apiKey = params.api_key;
+  if (!apiBase) {
+    return { models: [], error: "API Base is required" };
+  }
+  if (!apiKey) {
+    return { models: [], error: "API Key is required" };
+  }
+
+  try {
+    const response = await fetch("/api/admin/llm/llmapi/available-models", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        api_base: apiBase,
+        api_key: apiKey,
+        provider_name: params.provider_name,
+      }),
+    });
+
+    if (!response.ok) {
+      let errorMessage = "Failed to fetch models";
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.detail || errorMessage;
+      } catch {
+        // ignore JSON parsing errors
+      }
+      return { models: [], error: errorMessage };
+    }
+
+    const data: LLMAPIModelResponse[] = await response.json();
+    const models: ModelConfiguration[] = data.map((modelData) => ({
+      name: modelData.name,
+      display_name: modelData.display_name,
+      is_visible: true,
+      max_input_tokens: modelData.max_input_tokens,
+      supports_image_input: modelData.supports_image_input,
+    }));
+
+    return { models };
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+    return { models: [], error: errorMessage };
+  }
+};
+
+/**
  * Fetches models for a provider. Accepts form values directly and maps them
  * to the expected fetch params format internally.
  */
@@ -308,6 +369,12 @@ export const fetchModels = async (
         api_key: formValues.api_key,
         provider_name: formValues.name,
       });
+    case LLMProviderName.LLMAPI:
+      return fetchLLMAPIModels({
+        api_base: formValues.api_base,
+        api_key: formValues.api_key,
+        provider_name: formValues.name,
+      });
     default:
       return { models: [], error: `Unknown provider: ${providerName}` };
   }
@@ -319,6 +386,7 @@ export function canProviderFetchModels(providerName?: string) {
     case LLMProviderName.BEDROCK:
     case LLMProviderName.OLLAMA_CHAT:
     case LLMProviderName.OPENROUTER:
+    case LLMProviderName.LLMAPI:
       return true;
     default:
       return false;
