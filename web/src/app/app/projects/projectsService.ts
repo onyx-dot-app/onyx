@@ -59,7 +59,7 @@ export enum UserFileStatus {
 export type ProjectDetails = {
   project: Project;
   files?: ProjectFile[];
-  persona_id_to_is_default?: Record<number, boolean>;
+  persona_id_to_featured?: Record<number, boolean>;
 };
 
 export async function fetchProjects(): Promise<Project[]> {

@@ -9,7 +9,6 @@ from onyx.chat.models import AnswerStreamPart
 from onyx.chat.models import StreamingError
 from onyx.chat.process_message import handle_stream_message_objects
 from onyx.db.chat import create_chat_session
-from onyx.db.models import RecencyBiasSetting
 from onyx.db.models import User
 from onyx.db.persona import upsert_persona
 from onyx.server.query_and_chat.models import MessageResponseIDInfo
@@ -74,10 +73,6 @@ def test_stream_chat_message_objects_without_web_search(
         user=None,  # System persona
         name=f"Test Persona {uuid.uuid4()}",
         description="Test persona with no tools for web search test",
-        num_chunks=10.0,
-        llm_relevance_filter=True,
-        llm_filter_extraction=True,
-        recency_bias=RecencyBiasSetting.BASE_DECAY,
         llm_model_provider_override=None,
         llm_model_version_override=None,
         starter_messages=None,
