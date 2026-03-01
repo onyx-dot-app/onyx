@@ -1062,6 +1062,19 @@ letsencrypt:
   enabled: false
   email: "abc@abc.com"
 
+# -- External PostgreSQL configuration. Use this when connecting to a pre-existing
+# PostgreSQL instance (e.g., AWS RDS, GCP Cloud SQL, Azure Database for PostgreSQL).
+# When enabled, set postgresql.enabled=false to skip deploying the bundled CloudNativePG cluster.
+externalPostgresql:
+  enabled: false
+  # -- Hostname or Kubernetes service name of the external PostgreSQL instance.
+  # Required when enabled=true.
+  host: ""
+  # -- Port for the external PostgreSQL instance.
+  port: "5432"
+  # -- Name of the database to connect to.
+  database: "postgres"
+
 # -- Governs all Secrets created or used by this chart. Values set by this chart will be base64 encoded in the k8s cluster.
 auth:
   postgresql:
@@ -1069,11 +1082,15 @@ auth:
     enabled: true
     # -- Overwrite the default secret name, ignored if existingSecret is defined
     secretName: 'onyx-postgresql'
-    # -- Use a secret specified elsewhere
+    # -- Use a secret specified elsewhere.
+    # When connecting to an external PostgreSQL instance, set this to the name of a pre-existing
+    # K8s Secret that contains the database credentials. Also update secretKeys below to match
+    # the key names used in that secret (they may differ from the CloudNativePG defaults).
     existingSecret: ""
-    # -- This defines the env var to secret map, key is always upper-cased as an env var
+    # -- This defines the env var to secret map, key is always upper-cased as an env var.
+    # CloudNativePG uses `username` and `password` as key names (the defaults below).
+    # For external secrets, update these values to match your secret's actual key names.
     secretKeys:
-      # CloudNativePG requires `username` and `password` keys for the superuser secret.
       POSTGRES_USER: username
       POSTGRES_PASSWORD: password
     # -- Secrets values IF existingSecret is empty. Key here must match the value in secretKeys to be used. Values will be base64 encoded in the k8s cluster.
