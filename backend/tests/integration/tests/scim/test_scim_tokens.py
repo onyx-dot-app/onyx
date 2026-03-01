@@ -15,6 +15,7 @@ import time
 import requests
 
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.managers.scim_client import ScimClient
 from tests.integration.common_utils.managers.scim_token import ScimTokenManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
@@ -39,7 +40,7 @@ def test_scim_token_lifecycle(admin_user: DATestUser) -> None:
     assert active == token.model_copy(update={"raw_token": None})
 
     # Token works for SCIM requests
-    response = ScimTokenManager.scim_get("/Users", token.raw_token)
+    response = ScimClient.get("/Users", token.raw_token)
     assert response.status_code == 200
     body = response.json()
     assert "Resources" in body
@@ -54,7 +55,7 @@ def test_scim_token_rotation_revokes_previous(admin_user: DATestUser) -> None:
     )
     assert first.raw_token is not None
 
-    response = ScimTokenManager.scim_get("/Users", first.raw_token)
+    response = ScimClient.get("/Users", first.raw_token)
     assert response.status_code == 200
 
     # Create second token — should revoke first
@@ -69,25 +70,22 @@ def test_scim_token_rotation_revokes_previous(admin_user: DATestUser) -> None:
     assert active == second.model_copy(update={"raw_token": None})
 
     # First token rejected, second works
-    assert ScimTokenManager.scim_get("/Users", first.raw_token).status_code == 401
-    assert ScimTokenManager.scim_get("/Users", second.raw_token).status_code == 200
+    assert ScimClient.get("/Users", first.raw_token).status_code == 401
+    assert ScimClient.get("/Users", second.raw_token).status_code == 200
 
 
 def test_scim_request_without_token_rejected(
     admin_user: DATestUser,  # noqa: ARG001
 ) -> None:
     """SCIM endpoints reject requests with no Authorization header."""
-    assert ScimTokenManager.scim_get_no_auth("/Users").status_code == 401
+    assert ScimClient.get_no_auth("/Users").status_code == 401
 
 
 def test_scim_request_with_bad_token_rejected(
     admin_user: DATestUser,  # noqa: ARG001
 ) -> None:
     """SCIM endpoints reject requests with an invalid token."""
-    assert (
-        ScimTokenManager.scim_get("/Users", "onyx_scim_bogus_token_value").status_code
-        == 401
-    )
+    assert ScimClient.get("/Users", "onyx_scim_bogus_token_value").status_code == 401
 
 
 def test_non_admin_cannot_create_token(
@@ -139,7 +137,7 @@ def test_service_discovery_no_auth_required(
 ) -> None:
     """Service discovery endpoints work without any authentication."""
     for path in ["/ServiceProviderConfig", "/ResourceTypes", "/Schemas"]:
-        response = ScimTokenManager.scim_get_no_auth(path)
+        response = ScimClient.get_no_auth(path)
         assert response.status_code == 200, f"{path} returned {response.status_code}"
 
 
@@ -158,7 +156,7 @@ def test_last_used_at_updated_after_scim_request(
     assert active.last_used_at is None
 
     # Make a SCIM request, then verify last_used_at is set
-    assert ScimTokenManager.scim_get("/Users", token.raw_token).status_code == 200
+    assert ScimClient.get("/Users", token.raw_token).status_code == 200
     time.sleep(0.5)
 
     active_after = ScimTokenManager.get_active(user_performing_action=admin_user)
