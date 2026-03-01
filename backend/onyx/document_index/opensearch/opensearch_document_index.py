@@ -381,12 +381,16 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
             hidden=fields.hidden if fields else None,
             project_ids=(
                 set(user_fields.user_projects)
-                if user_fields and user_fields.user_projects
+                # NOTE: Empty user_projects is semantically different from None
+                # user_projects.
+                if user_fields and user_fields.user_projects is not None
                 else None
             ),
             persona_ids=(
                 set(user_fields.personas)
-                if user_fields and user_fields.personas
+                # NOTE: Empty personas is semantically different from None
+                # personas.
+                if user_fields and user_fields.personas is not None
                 else None
             ),
         )
