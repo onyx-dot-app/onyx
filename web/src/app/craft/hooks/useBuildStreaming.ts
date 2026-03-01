@@ -14,6 +14,7 @@ import {
   fetchSession,
   generateFollowupSuggestions,
   RateLimitError,
+  cancelMessage,
 } from "@/app/craft/services/apiServices";
 
 import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
@@ -40,9 +41,7 @@ export function useBuildStreaming() {
   const setAbortController = useBuildSessionStore(
     (state) => state.setAbortController
   );
-  const abortCurrentSession = useBuildSessionStore(
-    (state) => state.abortCurrentSession
-  );
+  const abortSession = useBuildSessionStore((state) => state.abortSession);
   const updateSessionData = useBuildSessionStore(
     (state) => state.updateSessionData
   );
@@ -449,11 +448,95 @@ export function useBuildStreaming() {
     ]
   );
 
+  /**
+   * Abort the current streaming operation.
+   *
+   * Sends a cancel notification to the ACP agent so it stops gracefully.
+   * The stream stays open so we receive the final `prompt_response` event,
+   * which triggers the normal message-saving path (both backend DB persist
+   * and frontend state consolidation).
+   *
+   * Because the cancel signal is fire-and-forget (JSON-RPC notification),
+   * the agent may not process it immediately (e.g. mid-tool-call). We retry
+   * up to MAX_CANCEL_RETRIES times with CANCEL_RETRY_INTERVAL_MS between
+   * attempts. If the agent still hasn't stopped after all retries, we fall
+   * back to a hard abort so the UI doesn't hang indefinitely.
+   *
+   * Previous approach (kept for reference): we used to also abort the HTTP
+   * request via `abortSession()`, but that killed the connection before the
+   * backend could save the partial message to the DB, causing the assistant
+   * message to disappear when the user sent a follow-up.
+   */
+  const abortStream = useCallback(
+    async (sessionId?: string) => {
+      const targetSessionId =
+        sessionId ?? useBuildSessionStore.getState().currentSessionId;
+
+      if (!targetSessionId) {
+        return;
+      }
+
+      const MAX_CANCEL_RETRIES = 5;
+      const CANCEL_RETRY_INTERVAL_MS = 1000;
+
+      const sendCancel = async () => {
+        try {
+          await cancelMessage(targetSessionId);
+          return true;
+        } catch (err) {
+          console.error("[Streaming] Failed to cancel agent operation:", err);
+          return false;
+        }
+      };
+
+      const isStillStreaming = () => {
+        const session = useBuildSessionStore
+          .getState()
+          .sessions.get(targetSessionId);
+        return session?.status === "running";
+      };
+
+      // Send initial cancel
+      const sent = await sendCancel();
+      if (!sent) {
+        // Cancel API itself failed — hard abort immediately
+        updateSessionData(targetSessionId, { status: "cancelled" });
+        abortSession(targetSessionId);
+        return;
+      }
+
+      // Retry cancel if the agent hasn't stopped yet
+      for (let attempt = 1; attempt <= MAX_CANCEL_RETRIES; attempt++) {
+        await new Promise((r) => setTimeout(r, CANCEL_RETRY_INTERVAL_MS));
+
+        if (!isStillStreaming()) {
+          // Agent processed the cancel and sent prompt_response
+          return;
+        }
+
+        console.warn(
+          `[Streaming] Agent still running after cancel attempt ${attempt}, retrying...`
+        );
+        await sendCancel();
+      }
+
+      // All retries exhausted — fall back to hard abort
+      if (isStillStreaming()) {
+        console.warn(
+          "[Streaming] Agent did not stop after retries, falling back to hard abort"
+        );
+        updateSessionData(targetSessionId, { status: "cancelled" });
+        abortSession(targetSessionId);
+      }
+    },
+    [abortSession, updateSessionData]
+  );
+
   return useMemo(
     () => ({
       streamMessage,
-      abortStream: abortCurrentSession,
+      abortStream,
     }),
-    [streamMessage, abortCurrentSession]
+    [streamMessage, abortStream]
   );
 }

@@ -8,6 +8,7 @@ import {
   useSessionId,
   useHasSession,
   useIsRunning,
+  useIsStreaming,
   useOutputPanelOpen,
   useToggleOutputPanel,
   useBuildSessionStore,
@@ -67,6 +68,7 @@ export default function BuildChatPanel({
   const sessionId = useSessionId();
   const hasSession = useHasSession();
   const isRunning = useIsRunning();
+  const isStreaming = useIsStreaming();
   const { setLeftSidebarFolded, leftSidebarFolded } = useBuildContext();
   const { isMobile } = useScreenSize();
   const toggleOutputPanel = useToggleOutputPanel();
@@ -112,13 +114,16 @@ export default function BuildChatPanel({
   const nameBuildSession = useBuildSessionStore(
     (state) => state.nameBuildSession
   );
-  const { streamMessage } = useBuildStreaming();
+  const { streamMessage, abortStream } = useBuildStreaming();
   const isPreProvisioning = useIsPreProvisioning();
   const isPreProvisioningFailed = useIsPreProvisioningFailed();
   const preProvisionedSessionId = usePreProvisionedSessionId();
 
-  // Disable input when pre-provisioning is in progress or failed (waiting for retry)
-  const sandboxNotReady = isPreProvisioning || isPreProvisioningFailed;
+  // Disable input when pre-provisioning is in progress, failed, or sandbox is restoring
+  const sandboxNotReady =
+    isPreProvisioning ||
+    isPreProvisioningFailed ||
+    session?.sandbox?.status === "restoring";
   const { currentMessageFiles, hasUploadingFiles, setActiveSession } =
     useUploadFilesContext();
   const followupSuggestions = useFollowupSuggestions();
@@ -431,6 +436,7 @@ export default function BuildChatPanel({
               messages={session?.messages ?? []}
               streamItems={session?.streamItems ?? []}
               isStreaming={isRunning}
+              userCancelled={session?.status === "cancelled"}
               autoScrollEnabled={isAtBottom}
             />
           )}
@@ -483,7 +489,10 @@ export default function BuildChatPanel({
               <InputBar
                 ref={inputBarRef}
                 onSubmit={handleSubmit}
+                onStop={abortStream}
                 isRunning={isRunning}
+                isStreaming={isStreaming}
+                sandboxInitializing={sandboxNotReady}
                 placeholder="Continue the conversation..."
               />
             </div>

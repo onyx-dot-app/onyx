@@ -1550,6 +1550,46 @@ class SessionManager:
             return "error"
         return "unknown"
 
+    def cancel_message(
+        self,
+        session_id: UUID,
+        user_id: UUID,
+    ) -> bool:
+        """Cancel the current message/prompt operation for a session.
+
+        Sends a session/cancel notification to the ACP agent to stop the
+        currently running operation. This follows the ACP protocol:
+        https://agentclientprotocol.com
+
+        Args:
+            session_id: The session UUID
+            user_id: The user ID (for ownership verification)
+
+        Returns:
+            True if cancel was sent, False if session/sandbox not found or cancel failed
+        """
+        # Verify session ownership
+        session = get_build_session(session_id, user_id, self._db_session)
+        if session is None:
+            logger.warning(f"Cancel request for non-existent session {session_id}")
+            return False
+
+        # Get the user's sandbox
+        sandbox = get_sandbox_by_user_id(self._db_session, user_id)
+        if sandbox is None:
+            logger.warning(f"Cancel request but no sandbox for user {user_id}")
+            return False
+
+        # Send cancel to the sandbox manager
+        result = self._sandbox_manager.cancel_message(sandbox.id, session_id)
+
+        if result:
+            logger.info(f"Cancelled message operation for session {session_id}")
+        else:
+            logger.debug(f"No active operation to cancel for session {session_id}")
+
+        return result
+
     # =========================================================================
     # Artifact Operations
     # =========================================================================

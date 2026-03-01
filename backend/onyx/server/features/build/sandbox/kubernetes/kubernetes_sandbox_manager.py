@@ -358,6 +358,15 @@ class KubernetesSandboxManager(SandboxManager):
         self._agent_instructions_template_path = build_dir / "AGENTS.template.md"
         self._skills_path = Path(__file__).parent / "docker" / "skills"
 
+        # Track active ephemeral ACP clients for cancellation support.
+        # Only populated during an active send_message() call — entries are
+        # added at the start of send_message() and removed in its finally block.
+        # Keyed by (sandbox_id, session_id) tuple.
+        # Lock guards dict access and client lifecycle between send_message()
+        # (streaming thread) and cancel_message() (cancel request thread).
+        self._active_acp_clients: dict[tuple[UUID, UUID], ACPExecClient] = {}
+        self._active_acp_clients_lock = threading.Lock()
+
         logger.info(
             f"KubernetesSandboxManager initialized: "
             f"namespace={self._namespace}, image={self._image}"
@@ -1405,8 +1414,8 @@ echo "Session workspace setup complete"
     ) -> None:
         """Clean up a session workspace (on session delete).
 
-        Removes the ACP session mapping and executes kubectl exec to remove
-        the session directory. The shared ACP client persists for other sessions.
+        Executes kubectl exec to remove the session directory. ACP clients are
+        ephemeral (created per message), so there's nothing to stop here.
 
         Args:
             sandbox_id: The sandbox ID
@@ -1889,6 +1898,12 @@ echo "Session config regeneration complete"
         # Create an ephemeral ACP client for this message
         acp_client = self._create_ephemeral_acp_client(sandbox_id, session_path)
 
+        # Register as the active client for this session so cancel_message()
+        # can find and cancel it from another thread.
+        client_key = (sandbox_id, session_id)
+        with self._active_acp_clients_lock:
+            self._active_acp_clients[client_key] = acp_client
+
         try:
             # Resume (or create) the ACP session from opencode's on-disk storage
             acp_session_id = acp_client.resume_or_create_session(cwd=session_path)
@@ -1972,8 +1987,9 @@ echo "Session config regeneration complete"
                 )
                 raise
         finally:
-            # Always stop the ephemeral ACP client to kill the opencode process.
-            # This ensures no stale processes linger in the sandbox container.
+            # Always deregister and stop the ephemeral ACP client.
+            with self._active_acp_clients_lock:
+                self._active_acp_clients.pop(client_key, None)
             try:
                 acp_client.stop()
             except Exception as e:
@@ -2714,3 +2730,43 @@ fi
         except ApiException as e:
             logger.warning(f"Failed to get upload stats: {e}")
             return 0, 0
+
+    def cancel_message(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+    ) -> bool:
+        """Cancel the current message/prompt operation for a session.
+
+        Sends a session/cancel notification to the ACP agent to stop the
+        currently running operation.
+
+        Args:
+            sandbox_id: The sandbox ID
+            session_id: The session ID whose operation should be cancelled
+
+        Returns:
+            True if cancel was sent, False if no active session/client found
+        """
+        client_key = (sandbox_id, session_id)
+        with self._active_acp_clients_lock:
+            exec_client = self._active_acp_clients.get(client_key)
+
+        if exec_client is None or not exec_client.is_running:
+            logger.debug(
+                f"No active ACP client for sandbox {sandbox_id}, session {session_id}"
+            )
+            return False
+
+        try:
+            exec_client.cancel()
+            logger.info(
+                f"Sent cancel notification for sandbox {sandbox_id}, session {session_id}"
+            )
+            return True
+        except Exception as e:
+            logger.warning(
+                f"Failed to cancel operation for sandbox {sandbox_id}, "
+                f"session {session_id}: {e}"
+            )
+            return False
