@@ -1124,4 +1124,23 @@ export class OnyxApiClient {
     );
     this.log(`Deleted project: ${projectId}`);
   }
+
+  /**
+   * Sets the current user's default app mode preference.
+   *
+   * @param mode - The default mode to persist ("CHAT" or "SEARCH")
+   */
+  async setDefaultAppMode(mode: "CHAT" | "SEARCH"): Promise<void> {
+    const response = await this.request.patch(
+      `${this.baseUrl}/user/default-app-mode`,
+      {
+        data: { default_app_mode: mode },
+      }
+    );
+    await this.handleResponse(
+      response,
+      `Failed to set default app mode to ${mode}`
+    );
+    this.log(`Set default app mode: ${mode}`);
+  }
 }
