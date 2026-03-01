@@ -1,0 +1,42 @@
+#onyx-selection-icon {
+  position: fixed;
+  z-index: 2147483647;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background-color: #ffffff;
+  border: 1px solid #e0e0e0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transform: scale(0.8);
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
+  pointer-events: none;
+}
+
+#onyx-selection-icon.visible {
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
+}
+
+#onyx-selection-icon:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  transform: scale(1.1);
+}
+
+#onyx-selection-icon:active {
+  transform: scale(0.95);
+}
+
+#onyx-selection-icon img {
+  width: 20px;
+  height: 20px;
+  pointer-events: none;
+}
