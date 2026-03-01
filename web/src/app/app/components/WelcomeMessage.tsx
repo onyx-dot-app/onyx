@@ -68,6 +68,7 @@ export default function WelcomeMessage({
 
   return (
     <FrostedDiv
+      exceedBounds
       data-testid="chat-intro"
       className="flex flex-col items-center justify-center gap-3 w-full max-w-[var(--app-page-main-content-width)]"
     >
