@@ -200,6 +200,12 @@ export interface OCICredentialJson {
   access_key_id: string;
   secret_access_key: string;
 }
+
+export interface S3CompatibleCredentialJson {
+  s3_compatible_access_key_id: string;
+  s3_compatible_secret_access_key: string;
+}
+
 export interface SalesforceCredentialJson {
   sf_username: string;
   sf_password: string;
@@ -438,6 +444,10 @@ export const credentialTemplates: Record<ValidSources, any> = {
     access_key_id: "",
     secret_access_key: "",
   } as OCICredentialJson,
+  s3_compatible: {
+    s3_compatible_access_key_id: "",
+    s3_compatible_secret_access_key: "",
+  } as S3CompatibleCredentialJson,
   freshdesk: {
     freshdesk_domain: "",
     freshdesk_api_key: "",
@@ -603,6 +613,10 @@ export const credentialDisplayNames: Record<string, string> = {
   // OCI
   namespace: "OCI Namespace",
   region: "OCI Region",
+
+  // S3-Compatible
+  s3_compatible_access_key_id: "Access Key ID",
+  s3_compatible_secret_access_key: "Secret Access Key",
 
   // Salesforce
   sf_username: "Salesforce Username",
