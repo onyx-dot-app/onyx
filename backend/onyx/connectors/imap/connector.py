@@ -188,7 +188,7 @@ class ImapConnector(
         for email_id in current_todos:
             email_msg = _fetch_email(mail_client=mail_client, email_id=email_id)
             if not email_msg:
-                logger.warn(f"Failed to fetch message {email_id=}; skipping")
+                logger.warning(f"Failed to fetch message {email_id=}; skipping")
                 continue
 
             email_headers = EmailHeaders.from_email_msg(email_msg=email_msg)
@@ -260,30 +260,37 @@ def _fetch_all_mailboxes_for_email_account(mail_client: imaplib.IMAP4_SSL) -> li
         elif isinstance(mailboxes_raw, str):
             mailboxes_str = mailboxes_raw
         else:
-            logger.warn(
+            # FIX 1: Updated deprecated logger.warn -> logger.warning
+            logger.warning(
                 f"Expected the mailbox data to be of type str, instead got {type(mailboxes_raw)=} {mailboxes_raw}; skipping"
             )
             continue
 
-        # The mailbox LIST response output can be found here:
-        # https://www.rfc-editor.org/rfc/rfc3501.html#section-7.2.2
+        # FIX 2: Updated Regex to handle both Quoted and Unquoted folder names
+        # The mailbox LIST response output follows RFC 3501 (Section 7.2.2)
+        # Format: (<flags>) "delimiter" <name>
         #
-        # The general format is:
-        # `(<name-attributes>) <hierarchy-delimiter> <mailbox-name>`
-        #
-        # The below regex matches on that pattern; from there, we select the 3rd match (index 2), which is the mailbox-name.
-        match = re.match(r'\([^)]*\)\s+"([^"]+)"\s+"?(.+?)"?$', mailboxes_str)
+        # 1. \([^)]*\)           -> Matches flags like (\HasNoChildren)
+        # 2. "([^"]+)"           -> Matches the delimiter (e.g. "/") in Group 1
+        # 3. (?:"([^"]+)"|(\S+)) -> The Name (Alternation):
+        #      - "([^"]+)" : Option A - Quoted Name (Group 2) -> "INBOX"
+        #      - (\S+)     : Option B - Unquoted Atom (Group 3) -> INBOX
+        # 4. \s*$                -> Handles optional trailing spaces safely
+        
+        match = re.search(r'\([^)]*\)\s+"([^"]+)"\s+(?:"([^"]+)"|(\S+))\s*$', mailboxes_str)
+        
         if not match:
-            logger.warn(
+            # FIX 1: Updated deprecated logger.warn -> logger.warning
+            logger.warning(
                 f"Invalid mailbox-data formatting structure: {mailboxes_str=}; skipping"
             )
             continue
 
-        mailbox = match.group(2)
+        # Logic: If Group 2 (Quoted) is None, take Group 3 (Unquoted)
+        mailbox = match.group(2) or match.group(3)
         mailboxes.append(mailbox)
 
     return mailboxes
-
 
 def _select_mailbox(mail_client: imaplib.IMAP4_SSL, mailbox: str) -> None:
     status, _ids = mail_client.select(mailbox=mailbox, readonly=True)
@@ -391,7 +398,7 @@ def _parse_email_body(
         try:
             raw_payload = part.get_payload(decode=True)
             if not isinstance(raw_payload, bytes):
-                logger.warn(
+                logger.warning(
                     "Payload section from email was expected to be an array of bytes, instead got "
                     f"{type(raw_payload)=}, {raw_payload=}"
                 )
@@ -403,7 +410,7 @@ def _parse_email_body(
             continue
 
     if not body:
-        logger.warn(
+        logger.warning(
             f"Email with {email_headers.id=} has an empty body; returning an empty string"
         )
         return ""
