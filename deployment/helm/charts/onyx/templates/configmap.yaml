@@ -19,7 +19,7 @@ data:
   ENABLE_OPENSEARCH_RETRIEVAL_FOR_ONYX: "false"
   {{- end }}
   {{- if .Values.redis.enabled }}
-  REDIS_HOST: {{ .Values.redis.redisStandalone.name | default .Release.Name }}-master
+  REDIS_HOST: {{ .Values.redis.redisStandalone.name | default .Release.Name }}
   {{- end }}
   MODEL_SERVER_HOST: "{{ include "onyx.fullname" . }}-inference-model-service"
   {{- if .Values.vectorDB.enabled }}
