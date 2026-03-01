@@ -411,9 +411,23 @@ interface ModalHeaderProps extends WithoutStyles<SectionProps> {
   title: string;
   description?: string;
   onClose?: () => void;
+  moreIcon1?: IconFunctionComponent;
+  moreIcon2?: IconFunctionComponent;
 }
 const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
-  ({ icon: Icon, title, description, onClose, children, ...props }, ref) => {
+  (
+    {
+      icon: Icon,
+      title,
+      description,
+      onClose,
+      moreIcon1,
+      moreIcon2,
+      children,
+      ...props
+    },
+    ref
+  ) => {
     const { closeButtonRef, setHasDescription } = useModalContext();
 
     React.useLayoutEffect(() => {
@@ -459,6 +473,8 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
                   description={description}
                   sizePreset="section"
                   variant="heading"
+                  moreIcon1={moreIcon1}
+                  moreIcon2={moreIcon2}
                 />
                 {description && (
                   <DialogPrimitive.Description className="hidden">
