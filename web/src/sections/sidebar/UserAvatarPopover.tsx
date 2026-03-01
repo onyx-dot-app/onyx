@@ -102,7 +102,11 @@ function SettingsPopover({
       <PopoverMenu>
         {[
           <div key="user-settings" data-testid="Settings/user-settings">
-            <LineItem icon={SvgUser} onClick={onUserSettingsClick}>
+            <LineItem
+              icon={SvgUser}
+              href="/app/settings"
+              onClick={onUserSettingsClick}
+            >
               User Settings
             </LineItem>
           </div>,
@@ -115,19 +119,17 @@ function SettingsPopover({
               undismissedCount > 0 ? ` (${undismissedCount})` : ""
             }`}
           </LineItem>,
-          <LineItem
+          <a
             key="help-faq"
-            icon={SvgExternalLink}
-            onClick={() =>
-              window.open(
-                "https://docs.onyx.app",
-                "_blank",
-                "noopener,noreferrer"
-              )
-            }
+            href="https://docs.onyx.app"
+            className="block"
+            target="_blank"
+            rel="noopener noreferrer"
           >
-            Help & FAQ
-          </LineItem>,
+            <LineItem key="help-faq" icon={SvgExternalLink}>
+              Help & FAQ
+            </LineItem>
+          </a>,
           null,
           showLogin && (
             <LineItem key="log-in" icon={SvgUser} onClick={handleLogin}>
@@ -233,7 +235,6 @@ export default function UserAvatarPopover({
           <SettingsPopover
             onUserSettingsClick={() => {
               setPopupState(undefined);
-              router.push("/app/settings");
             }}
             onOpenNotifications={() => setPopupState("Notifications")}
           />
