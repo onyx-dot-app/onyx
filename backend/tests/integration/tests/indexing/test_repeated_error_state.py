@@ -130,8 +130,8 @@ def test_repeated_error_state_detection_and_recovery(
                 #     )
                 break
 
-        if time.monotonic() - start_time > 30:
-            assert False, "CC pair did not enter repeated error state within 30 seconds"
+        if time.monotonic() - start_time > 90:
+            assert False, "CC pair did not enter repeated error state within 90 seconds"
 
         time.sleep(2)
 

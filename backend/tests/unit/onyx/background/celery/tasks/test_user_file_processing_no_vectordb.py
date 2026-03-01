@@ -1,11 +1,11 @@
 """Tests for no-vector-DB user file processing paths.
 
 Verifies that when DISABLE_VECTOR_DB is True:
-- _process_user_file_impl calls _process_user_file_without_vector_db (not indexing)
+- process_user_file_impl calls _process_user_file_without_vector_db (not indexing)
 - _process_user_file_without_vector_db extracts text, counts tokens, stores plaintext,
   sets status=COMPLETED and chunk_count=0
-- _delete_user_file_impl skips vector DB chunk deletion
-- _project_sync_user_file_impl skips vector DB metadata update
+- delete_user_file_impl skips vector DB chunk deletion
+- project_sync_user_file_impl skips vector DB metadata update
 """
 
 from unittest.mock import MagicMock
@@ -13,16 +13,16 @@ from unittest.mock import patch
 from uuid import uuid4
 
 from onyx.background.celery.tasks.user_file_processing.tasks import (
-    _delete_user_file_impl,
-)
-from onyx.background.celery.tasks.user_file_processing.tasks import (
-    _process_user_file_impl,
-)
-from onyx.background.celery.tasks.user_file_processing.tasks import (
     _process_user_file_without_vector_db,
 )
 from onyx.background.celery.tasks.user_file_processing.tasks import (
-    _project_sync_user_file_impl,
+    delete_user_file_impl,
+)
+from onyx.background.celery.tasks.user_file_processing.tasks import (
+    process_user_file_impl,
+)
+from onyx.background.celery.tasks.user_file_processing.tasks import (
+    project_sync_user_file_impl,
 )
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import Document
@@ -203,7 +203,7 @@ class TestProcessUserFileWithoutVectorDb:
 
 
 # ------------------------------------------------------------------
-# _process_user_file_impl — branching on DISABLE_VECTOR_DB
+# process_user_file_impl — branching on DISABLE_VECTOR_DB
 # ------------------------------------------------------------------
 
 
@@ -227,7 +227,7 @@ class TestProcessImplBranching:
         connector_mock.load_from_state.return_value = [_make_documents(["hello"])]
 
         with patch(f"{TASKS_MODULE}.LocalFileConnector", return_value=connector_mock):
-            _process_user_file_impl(
+            process_user_file_impl(
                 user_file_id=str(uf.id),
                 tenant_id="test-tenant",
                 redis_locking=False,
@@ -255,7 +255,7 @@ class TestProcessImplBranching:
         connector_mock.load_from_state.return_value = [_make_documents(["hello"])]
 
         with patch(f"{TASKS_MODULE}.LocalFileConnector", return_value=connector_mock):
-            _process_user_file_impl(
+            process_user_file_impl(
                 user_file_id=str(uf.id),
                 tenant_id="test-tenant",
                 redis_locking=False,
@@ -291,7 +291,7 @@ class TestProcessImplBranching:
                 return_value=MagicMock(return_value=[1, 2, 3]),
             ),
         ):
-            _process_user_file_impl(
+            process_user_file_impl(
                 user_file_id=str(uf.id),
                 tenant_id="test-tenant",
                 redis_locking=False,
@@ -301,7 +301,7 @@ class TestProcessImplBranching:
 
 
 # ------------------------------------------------------------------
-# _delete_user_file_impl — vector DB skip
+# delete_user_file_impl — vector DB skip
 # ------------------------------------------------------------------
 
 
@@ -325,7 +325,7 @@ class TestDeleteImplNoVectorDb:
             patch(f"{TASKS_MODULE}.get_active_search_settings") as mock_get_ss,
             patch(f"{TASKS_MODULE}.httpx_init_vespa_pool") as mock_vespa_pool,
         ):
-            _delete_user_file_impl(
+            delete_user_file_impl(
                 user_file_id=str(uf.id),
                 tenant_id="test-tenant",
                 redis_locking=False,
@@ -354,7 +354,7 @@ class TestDeleteImplNoVectorDb:
         file_store = MagicMock()
         mock_get_file_store.return_value = file_store
 
-        _delete_user_file_impl(
+        delete_user_file_impl(
             user_file_id=str(uf.id),
             tenant_id="test-tenant",
             redis_locking=False,
@@ -366,7 +366,7 @@ class TestDeleteImplNoVectorDb:
 
 
 # ------------------------------------------------------------------
-# _project_sync_user_file_impl — vector DB skip
+# project_sync_user_file_impl — vector DB skip
 # ------------------------------------------------------------------
 
 
@@ -387,7 +387,7 @@ class TestProjectSyncImplNoVectorDb:
             patch(f"{TASKS_MODULE}.get_active_search_settings") as mock_get_ss,
             patch(f"{TASKS_MODULE}.httpx_init_vespa_pool") as mock_vespa_pool,
         ):
-            _project_sync_user_file_impl(
+            project_sync_user_file_impl(
                 user_file_id=str(uf.id),
                 tenant_id="test-tenant",
                 redis_locking=False,
@@ -408,7 +408,7 @@ class TestProjectSyncImplNoVectorDb:
         session.execute.return_value.scalar_one_or_none.return_value = uf
         mock_get_session.return_value.__enter__.return_value = session
 
-        _project_sync_user_file_impl(
+        project_sync_user_file_impl(
             user_file_id=str(uf.id),
             tenant_id="test-tenant",
             redis_locking=False,
