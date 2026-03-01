@@ -27,7 +27,7 @@ jobs:
 
       - name: Add required Helm repositories
         run: |
-          helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+          helm repo add nginx-stable https://helm.nginx.com/stable
           helm repo add onyx-vespa https://onyx-dot-app.github.io/vespa-helm-charts
           helm repo add opensearch https://opensearch-project.github.io/helm-charts
           helm repo add cloudnative-pg https://cloudnative-pg.github.io/charts
