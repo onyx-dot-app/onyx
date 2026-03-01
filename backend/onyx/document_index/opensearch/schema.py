@@ -242,7 +242,8 @@ class DocumentChunk(BaseModel):
             return value
         if not isinstance(value, int):
             raise ValueError(
-                f"Bug: Expected an int for the last_updated property from OpenSearch, got {type(value)} instead."
+                f"Bug: Expected an int for the last_updated property from OpenSearch, got "
+                f"{type(value)} instead."
             )
         return datetime.fromtimestamp(value, tz=timezone.utc)
 
@@ -283,19 +284,22 @@ class DocumentChunk(BaseModel):
         elif isinstance(value, TenantState):
             if MULTI_TENANT != value.multitenant:
                 raise ValueError(
-                    f"Bug: An existing TenantState object was supplied to the DocumentChunk model but its multi-tenant mode "
-                    f"({value.multitenant}) does not match the program's current global tenancy state."
+                    f"Bug: An existing TenantState object was supplied to the DocumentChunk model "
+                    f"but its multi-tenant mode ({value.multitenant}) does not match the program's "
+                    "current global tenancy state."
                 )
             return value
         elif not isinstance(value, str):
             raise ValueError(
-                f"Bug: Expected a str for the tenant_id property from OpenSearch, got {type(value)} instead."
+                f"Bug: Expected a str for the tenant_id property from OpenSearch, got "
+                f"{type(value)} instead."
             )
         else:
             if not MULTI_TENANT:
                 raise ValueError(
-                    "Bug: Got a non-null str for the tenant_id property from OpenSearch but multi-tenant mode is not enabled. "
-                    "This is unexpected because in single-tenant mode we don't expect to see a tenant_id."
+                    "Bug: Got a non-null str for the tenant_id property from OpenSearch but "
+                    "multi-tenant mode is not enabled. This is unexpected because in single-tenant "
+                    "mode we don't expect to see a tenant_id."
                 )
             return TenantState(tenant_id=value, multitenant=MULTI_TENANT)
 
@@ -351,8 +355,10 @@ class DocumentSchema:
             "properties": {
                 TITLE_FIELD_NAME: {
                     "type": "text",
-                    # Language analyzer (e.g. english) stems at index and search time for variant matching.
-                    # Configure via OPENSEARCH_TEXT_ANALYZER. Existing indices need reindexing after a change.
+                    # Language analyzer (e.g. english) stems at index and search
+                    # time for variant matching. Configure via
+                    # OPENSEARCH_TEXT_ANALYZER. Existing indices need reindexing
+                    # after a change.
                     "analyzer": OPENSEARCH_TEXT_ANALYZER,
                     "fields": {
                         # Subfield accessed as title.keyword. Not indexed for

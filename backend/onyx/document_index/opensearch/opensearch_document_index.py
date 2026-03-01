@@ -687,7 +687,8 @@ class OpenSearchDocumentIndex(DocumentIndex):
             The number of chunks successfully deleted.
         """
         logger.debug(
-            f"[OpenSearchDocumentIndex] Deleting document {document_id} from index {self._index_name}."
+            f"[OpenSearchDocumentIndex] Deleting document {document_id} from index "
+            f"{self._index_name}."
         )
         query_body = DocumentQuery.delete_from_document_id_query(
             document_id=document_id,
@@ -723,7 +724,8 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 specified documents.
         """
         logger.debug(
-            f"[OpenSearchDocumentIndex] Updating {len(update_requests)} chunks for index {self._index_name}."
+            f"[OpenSearchDocumentIndex] Updating {len(update_requests)} chunks for index "
+            f"{self._index_name}."
         )
         for update_request in update_requests:
             properties_to_update: dict[str, Any] = dict()
@@ -779,9 +781,11 @@ class OpenSearchDocumentIndex(DocumentIndex):
                     # here.
                     # TODO(andrei): Fix the aforementioned race condition.
                     raise ChunkCountNotFoundError(
-                        f"Tried to update document {doc_id} but its chunk count is not known. Older versions of the "
-                        "application used to permit this but is not a supported state for a document when using OpenSearch. "
-                        "The document was likely just added to the indexing pipeline and the chunk count will be updated shortly."
+                        f"Tried to update document {doc_id} but its chunk count is not known. "
+                        "Older versions of the application used to permit this but is not a "
+                        "supported state for a document when using OpenSearch. The document was "
+                        "likely just added to the indexing pipeline and the chunk count will be "
+                        "updated shortly."
                     )
                 if doc_chunk_count == 0:
                     raise ValueError(
@@ -813,7 +817,8 @@ class OpenSearchDocumentIndex(DocumentIndex):
         chunk IDs vs querying for matching document chunks.
         """
         logger.debug(
-            f"[OpenSearchDocumentIndex] Retrieving {len(chunk_requests)} chunks for index {self._index_name}."
+            f"[OpenSearchDocumentIndex] Retrieving {len(chunk_requests)} chunks for index "
+            f"{self._index_name}."
         )
         results: list[InferenceChunk] = []
         for chunk_request in chunk_requests:
@@ -860,7 +865,8 @@ class OpenSearchDocumentIndex(DocumentIndex):
         num_to_retrieve: int,
     ) -> list[InferenceChunk]:
         logger.debug(
-            f"[OpenSearchDocumentIndex] Hybrid retrieving {num_to_retrieve} chunks for index {self._index_name}."
+            f"[OpenSearchDocumentIndex] Hybrid retrieving {num_to_retrieve} chunks for index "
+            f"{self._index_name}."
         )
         # TODO(andrei): This could be better, the caller should just make this
         # decision when passing in the query param. See the above comment in the
@@ -880,8 +886,10 @@ class OpenSearchDocumentIndex(DocumentIndex):
             index_filters=filters,
             include_hidden=False,
         )
-        # NOTE: Using z-score normalization here because it's better for hybrid search from a theoretical standpoint.
-        # Empirically on a small dataset of up to 10K docs, it's not very different. Likely more impactful at scale.
+        # NOTE: Using z-score normalization here because it's better for hybrid
+        # search from a theoretical standpoint. Empirically on a small dataset
+        # of up to 10K docs, it's not very different. Likely more impactful at
+        # scale.
         # https://opensearch.org/blog/introducing-the-z-score-normalization-technique-for-hybrid-search/
         search_hits: list[SearchHit[DocumentChunk]] = self._client.search(
             body=query_body,
@@ -908,7 +916,8 @@ class OpenSearchDocumentIndex(DocumentIndex):
         dirty: bool | None = None,  # noqa: ARG002
     ) -> list[InferenceChunk]:
         logger.debug(
-            f"[OpenSearchDocumentIndex] Randomly retrieving {num_to_retrieve} chunks for index {self._index_name}."
+            f"[OpenSearchDocumentIndex] Randomly retrieving {num_to_retrieve} chunks for index "
+            f"{self._index_name}."
         )
         query_body = DocumentQuery.get_random_search_query(
             tenant_state=self._tenant_state,
@@ -938,7 +947,8 @@ class OpenSearchDocumentIndex(DocumentIndex):
         complete.
         """
         logger.debug(
-            f"[OpenSearchDocumentIndex] Indexing {len(chunks)} raw chunks for index {self._index_name}."
+            f"[OpenSearchDocumentIndex] Indexing {len(chunks)} raw chunks for index "
+            f"{self._index_name}."
         )
         # Do not raise if the document already exists, just update. This is
         # because the document may already have been indexed during the
