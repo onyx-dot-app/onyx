@@ -58,11 +58,11 @@ class BookstackConnector(LoadConnector, PollConnector):
         if start:
             params["filter[updated_at:gte]"] = datetime.utcfromtimestamp(
                 start
-            ).strftime("%Y-%m-%d")
+            ).strftime("%Y-%m-%dT%H:%M:%SZ")
 
         if end:
             params["filter[updated_at:lte]"] = datetime.utcfromtimestamp(end).strftime(
-                "%Y-%m-%d"
+                "%Y-%m-%dT%H:%M:%SZ"
             )
 
         batch = bookstack_client.get(endpoint, params=params).get("data", [])
