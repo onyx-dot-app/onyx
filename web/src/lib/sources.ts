@@ -267,6 +267,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     category: SourceCategory.TicketingAndTaskManagement,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/freshdesk`,
   },
+  chatwoot: {
+    icon: ZendeskIcon,
+    displayName: "Chatwoot",
+    category: SourceCategory.Messaging,
+    docs: `${DOCS_ADMINS_PATH}/connectors/official/chatwoot`,
+  },
   asana: {
     icon: AsanaIcon,
     displayName: "Asana",

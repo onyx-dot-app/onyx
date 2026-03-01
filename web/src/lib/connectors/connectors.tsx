@@ -1602,6 +1602,39 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
     values: [],
     advanced_values: [],
   },
+  chatwoot: {
+    description: "Configure Chatwoot connector",
+    subtext: `Configure which Chatwoot content to index.`,
+    values: [
+      {
+        type: "text",
+        query: "Enter the Chatwoot Base URL:",
+        label: "Chatwoot Base URL",
+        name: "base_url",
+        optional: false,
+        description:
+          "The base URL of your Chatwoot instance (e.g. https://app.chatwoot.com)",
+      },
+      {
+        type: "number",
+        query: "Enter the Account ID:",
+        label: "Account ID",
+        name: "account_id",
+        optional: false,
+        description: "Your Chatwoot account ID.",
+      },
+      {
+        type: "number",
+        query: "Enter the Inbox ID (Optional):",
+        label: "Inbox ID",
+        name: "inbox_id",
+        optional: true,
+        description:
+          "Specify a particular inbox ID to index. Leave empty to index all.",
+      },
+    ],
+    advanced_values: [],
+  },
   fireflies: {
     description: "Configure Fireflies connector",
     values: [],
@@ -2082,6 +2115,12 @@ export interface AsanaConfig {
 }
 
 export interface FreshdeskConfig {}
+
+export interface ChatwootConfig {
+  base_url: string;
+  account_id: number;
+  inbox_id?: number;
+}
 
 export interface FirefliesConfig {}
 
