@@ -5,7 +5,7 @@ import type { SizeVariant } from "@opal/shared";
 import SvgEdit from "@opal/icons/edit";
 import type { IconFunctionComponent } from "@opal/types";
 import { cn } from "@opal/utils";
-import { useRef, useState } from "react";
+import { useState } from "react";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -109,7 +109,6 @@ function ContentXl({
 }: ContentXlProps) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(title);
-  const inputRef = useRef<HTMLInputElement>(null);
 
   const config = CONTENT_XL_PRESETS[sizePreset];
 
@@ -189,7 +188,6 @@ function ContentXl({
                 {editValue || "\u00A0"}
               </span>
               <input
-                ref={inputRef}
                 className={cn(
                   "opal-content-xl-input",
                   config.titleFont,

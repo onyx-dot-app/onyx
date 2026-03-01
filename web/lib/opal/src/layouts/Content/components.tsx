@@ -148,7 +148,8 @@ function Content(props: ContentProps) {
     }
   }
 
-  // ContentMd: main-content/main-ui/secondary with section variant
+  // ContentMd: main-content/main-ui/secondary with section/heading variant
+  // (variant defaults to "heading" when omitted on MdContentProps, so both arms are needed)
   else if (variant === "section" || variant === "heading") {
     layout = (
       <ContentMd

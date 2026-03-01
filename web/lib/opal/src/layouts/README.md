@@ -8,7 +8,7 @@ Layout primitives for composing icon + title + description rows. These component
 
 | Component | Description | Docs |
 |---|---|---|
-| [`Content`](./Content/README.md) | Icon + title + description row. Routes to an internal layout (`ContentLg`, `ContentMd`, or `ContentSm`) based on `sizePreset` and `variant`. | [Content README](./Content/README.md) |
+| [`Content`](./Content/README.md) | Icon + title + description row. Routes to an internal layout (`ContentXl`, `ContentLg`, `ContentMd`, or `ContentSm`) based on `sizePreset` and `variant`. | [Content README](./Content/README.md) |
 | [`ContentAction`](./ContentAction/README.md) | Wraps `Content` in a flex-row with an optional `rightChildren` slot for action buttons. Adds padding alignment via the shared `SizeVariant` scale. | [ContentAction README](./ContentAction/README.md) |
 
 ## Quick Start

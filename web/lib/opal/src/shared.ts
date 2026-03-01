@@ -16,7 +16,7 @@
 //   - Interactive.Container  (height + min-width + padding)
 //   - Button                 (icon sizing)
 //   - ContentAction          (padding only)
-//   - Content (ContentLg / ContentMd)  (edit-button size)
+//   - Content (ContentXl / ContentLg / ContentMd)  (edit-button size)
 // ---------------------------------------------------------------------------
 
 /**
