@@ -31,7 +31,9 @@ def _drop_status_check_constraint() -> None:
     inspector = sa.inspect(op.get_bind())
     for constraint in inspector.get_check_constraints(TABLE):
         if COLUMN in constraint.get("sqltext", ""):
-            op.drop_constraint(constraint["name"], TABLE, type_="check")
+            constraint_name = constraint["name"]
+            if constraint_name is not None:
+                op.drop_constraint(constraint_name, TABLE, type_="check")
 
 
 def upgrade() -> None:
