@@ -248,7 +248,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
         bottomSlot={<AgentChatInput agent={agent} onSubmit={handleStartChat} />}
       >
         <Modal.Header
-          icon={(props) => <AgentAvatar agent={agent} {...props} size={24} />}
+          icon={(props) => <AgentAvatar agent={agent} {...props} size={28} />}
           title={agent.name}
           onClose={() => agentViewerModal.toggle(false)}
         />
