@@ -136,7 +136,7 @@ SESSION_EXPIRE_TIME_SECONDS = int(
 # Default request timeout, mostly used by connectors
 REQUEST_TIMEOUT_SECONDS = int(os.environ.get("REQUEST_TIMEOUT_SECONDS") or 60)
 
-# set `VALID_EMAIL_DOMAINS` to a comma seperated list of domains in order to
+# set `VALID_EMAIL_DOMAINS` to a comma separated list of domains in order to
 # restrict access to Onyx to only users with emails from those domains.
 # E.g. `VALID_EMAIL_DOMAINS=example.com,example.org` will restrict Onyx
 # signups to users with either an @example.com or an @example.org email.

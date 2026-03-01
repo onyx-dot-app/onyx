@@ -83,7 +83,7 @@ def test_salesforce_connector_basic(salesforce_connector: SalesforceConnector) -
 
     # Set of received links
     received_links: set[str] = set()
-    # List of received text fields, which contain key-value pairs seperated by newlines
+    # List of received text fields, which contain key-value pairs separated by newlines
     received_text: list[str] = []
 
     # Iterate over the sections of the target test doc to extract the links and text
