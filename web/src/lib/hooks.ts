@@ -844,8 +844,10 @@ export function useLlmManager(
     }
   };
 
-  // Track if any provider exists (for onboarding checks)
-  const hasAnyProvider = (allUserProviders?.length ?? 0) > 0;
+  // Track if any provider exists for the current persona context.
+  // Uses the persona-aware list so chat input reflects actual access,
+  // falling back to the global list when no persona is selected.
+  const hasAnyProvider = (llmProviders?.length ?? 0) > 0;
 
   return {
     updateModelOverrideBasedOnChatSession,
