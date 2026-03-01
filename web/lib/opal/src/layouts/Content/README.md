@@ -8,14 +8,14 @@ A two-axis layout component for displaying icon + title + description rows. Rout
 
 ### `sizePreset` — controls sizing (icon, padding, gap, font)
 
-#### HeadingLayout presets
+#### ContentLg presets
 
 | Preset | Icon | Icon padding | Gap | Title font | Line-height |
 |---|---|---|---|---|---|
 | `headline` | 2rem (32px) | `p-0.5` (2px) | 0.25rem (4px) | `font-heading-h2` | 2.25rem (36px) |
 | `section` | 1.25rem (20px) | `p-1` (4px) | 0rem | `font-heading-h3` | 1.75rem (28px) |
 
-#### LabelLayout presets
+#### ContentMd presets
 
 | Preset | Icon | Icon padding | Icon color | Gap | Title font | Line-height |
 |---|---|---|---|---|---|---|
@@ -29,18 +29,18 @@ A two-axis layout component for displaying icon + title + description rows. Rout
 
 | variant | Description |
 |---|---|
-| `heading` | Icon on **top** (flex-col) — HeadingLayout |
-| `section` | Icon **inline** (flex-row) — HeadingLayout or LabelLayout |
-| `body` | Body text layout — BodyLayout (future) |
+| `heading` | Icon on **top** (flex-col) — ContentLg |
+| `section` | Icon **inline** (flex-row) — ContentLg or ContentMd |
+| `body` | Body text layout — ContentSm |
 
 ### Valid Combinations -> Internal Routing
 
 | sizePreset | variant | Routes to |
 |---|---|---|
-| `headline` / `section` | `heading` | **HeadingLayout** (icon on top) |
-| `headline` / `section` | `section` | **HeadingLayout** (icon inline) |
-| `main-content` / `main-ui` / `secondary` | `section` | **LabelLayout** |
-| `main-content` / `main-ui` / `secondary` | `body` | BodyLayout (future) |
+| `headline` / `section` | `heading` | **ContentLg** (icon on top) |
+| `headline` / `section` | `section` | **ContentLg** (icon inline) |
+| `main-content` / `main-ui` / `secondary` | `section` | **ContentMd** |
+| `main-content` / `main-ui` / `secondary` | `body` | **ContentSm** |
 
 Invalid combinations (e.g. `sizePreset="headline" + variant="body"`) are excluded at the type level.
 
@@ -58,11 +58,11 @@ Invalid combinations (e.g. `sizePreset="headline" + variant="body"`) are exclude
 
 ## Internal Layouts
 
-### HeadingLayout
+### ContentLg
 
 For `headline` / `section` presets. Supports `variant="heading"` (icon on top) and `variant="section"` (icon inline). Description is always `font-secondary-body text-text-03`.
 
-### LabelLayout
+### ContentMd
 
 For `main-content` / `main-ui` / `secondary` presets. Always inline. Both `icon` and `description` are optional. Description is always `font-secondary-body text-text-03`.
 
@@ -72,7 +72,7 @@ For `main-content` / `main-ui` / `secondary` presets. Always inline. Both `icon`
 import { Content } from "@opal/layouts";
 import SvgSearch from "@opal/icons/search";
 
-// HeadingLayout — headline, icon on top
+// ContentLg — headline, icon on top
 <Content
   icon={SvgSearch}
   sizePreset="headline"
@@ -81,7 +81,7 @@ import SvgSearch from "@opal/icons/search";
   description="Configure your agent's behavior"
 />
 
-// HeadingLayout — section, icon inline
+// ContentLg — section, icon inline
 <Content
   icon={SvgSearch}
   sizePreset="section"
@@ -90,7 +90,7 @@ import SvgSearch from "@opal/icons/search";
   description="Connected integrations"
 />
 
-// LabelLayout — with icon and description
+// ContentMd — with icon and description
 <Content
   icon={SvgSearch}
   sizePreset="main-ui"
@@ -98,7 +98,7 @@ import SvgSearch from "@opal/icons/search";
   description="Agent system prompt"
 />
 
-// LabelLayout — title only (no icon, no description)
+// ContentMd — title only (no icon, no description)
 <Content
   sizePreset="main-content"
   title="Featured Agent"

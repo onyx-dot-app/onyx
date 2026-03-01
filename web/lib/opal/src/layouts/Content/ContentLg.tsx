@@ -11,10 +11,10 @@ import { useRef, useState } from "react";
 // Types
 // ---------------------------------------------------------------------------
 
-type HeadingSizePreset = "headline" | "section";
-type HeadingVariant = "heading" | "section";
+type ContentLgSizePreset = "headline" | "section";
+type ContentLgVariant = "heading" | "section";
 
-interface HeadingPresetConfig {
+interface ContentLgPresetConfig {
   /** Icon width/height (CSS value). */
   iconSize: string;
   /** Tailwind padding class for the icon container. */
@@ -31,7 +31,7 @@ interface HeadingPresetConfig {
   editButtonPadding: string;
 }
 
-interface HeadingLayoutProps {
+interface ContentLgProps {
   /** Optional icon component. */
   icon?: IconFunctionComponent;
 
@@ -48,17 +48,17 @@ interface HeadingLayoutProps {
   onTitleChange?: (newTitle: string) => void;
 
   /** Size preset. Default: `"headline"`. */
-  sizePreset?: HeadingSizePreset;
+  sizePreset?: ContentLgSizePreset;
 
   /** Variant controls icon placement. `"heading"` = top, `"section"` = inline. Default: `"heading"`. */
-  variant?: HeadingVariant;
+  variant?: ContentLgVariant;
 }
 
 // ---------------------------------------------------------------------------
 // Presets
 // ---------------------------------------------------------------------------
 
-const HEADING_PRESETS: Record<HeadingSizePreset, HeadingPresetConfig> = {
+const CONTENT_LG_PRESETS: Record<ContentLgSizePreset, ContentLgPresetConfig> = {
   headline: {
     iconSize: "2rem",
     iconContainerPadding: "p-0.5",
@@ -80,10 +80,10 @@ const HEADING_PRESETS: Record<HeadingSizePreset, HeadingPresetConfig> = {
 };
 
 // ---------------------------------------------------------------------------
-// HeadingLayout
+// ContentLg
 // ---------------------------------------------------------------------------
 
-function HeadingLayout({
+function ContentLg({
   sizePreset = "headline",
   variant = "heading",
   icon: Icon,
@@ -91,12 +91,12 @@ function HeadingLayout({
   description,
   editable,
   onTitleChange,
-}: HeadingLayoutProps) {
+}: ContentLgProps) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(title);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const config = HEADING_PRESETS[sizePreset];
+  const config = CONTENT_LG_PRESETS[sizePreset];
   const iconPlacement = variant === "heading" ? "top" : "left";
 
   function startEditing() {
@@ -112,41 +112,38 @@ function HeadingLayout({
 
   return (
     <div
-      className="opal-content-heading"
+      className="opal-content-lg"
       data-icon-placement={iconPlacement}
       style={{ gap: iconPlacement === "left" ? config.gap : undefined }}
     >
       {Icon && (
         <div
           className={cn(
-            "opal-content-heading-icon-container shrink-0",
+            "opal-content-lg-icon-container shrink-0",
             config.iconContainerPadding
           )}
           style={{ minHeight: config.lineHeight }}
         >
           <Icon
-            className="opal-content-heading-icon"
+            className="opal-content-lg-icon"
             style={{ width: config.iconSize, height: config.iconSize }}
           />
         </div>
       )}
 
-      <div className="opal-content-heading-body">
-        <div className="opal-content-heading-title-row">
+      <div className="opal-content-lg-body">
+        <div className="opal-content-lg-title-row">
           {editing ? (
-            <div className="opal-content-heading-input-sizer">
+            <div className="opal-content-lg-input-sizer">
               <span
-                className={cn(
-                  "opal-content-heading-input-mirror",
-                  config.titleFont
-                )}
+                className={cn("opal-content-lg-input-mirror", config.titleFont)}
               >
                 {editValue || "\u00A0"}
               </span>
               <input
                 ref={inputRef}
                 className={cn(
-                  "opal-content-heading-input",
+                  "opal-content-lg-input",
                   config.titleFont,
                   "text-text-04"
                 )}
@@ -169,7 +166,7 @@ function HeadingLayout({
           ) : (
             <span
               className={cn(
-                "opal-content-heading-title",
+                "opal-content-lg-title",
                 config.titleFont,
                 "text-text-04",
                 editable && "cursor-pointer"
@@ -184,7 +181,7 @@ function HeadingLayout({
           {editable && !editing && (
             <div
               className={cn(
-                "opal-content-heading-edit-button",
+                "opal-content-lg-edit-button",
                 config.editButtonPadding
               )}
             >
@@ -201,7 +198,7 @@ function HeadingLayout({
         </div>
 
         {description && (
-          <div className="opal-content-heading-description font-secondary-body text-text-03">
+          <div className="opal-content-lg-description font-secondary-body text-text-03">
             {description}
           </div>
         )}
@@ -210,4 +207,4 @@ function HeadingLayout({
   );
 }
 
-export { HeadingLayout, type HeadingLayoutProps, type HeadingSizePreset };
+export { ContentLg, type ContentLgProps, type ContentLgSizePreset };

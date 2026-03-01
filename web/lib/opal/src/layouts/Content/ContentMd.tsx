@@ -15,11 +15,11 @@ import { useRef, useState } from "react";
 // Types
 // ---------------------------------------------------------------------------
 
-type LabelSizePreset = "main-content" | "main-ui" | "secondary";
+type ContentMdSizePreset = "main-content" | "main-ui" | "secondary";
 
-type LabelAuxIcon = "info-gray" | "info-blue" | "warning" | "error";
+type ContentMdAuxIcon = "info-gray" | "info-blue" | "warning" | "error";
 
-interface LabelPresetConfig {
+interface ContentMdPresetConfig {
   iconSize: string;
   iconContainerPadding: string;
   iconColorClass: string;
@@ -34,7 +34,7 @@ interface LabelPresetConfig {
   auxIconSize: string;
 }
 
-interface LabelLayoutProps {
+interface ContentMdProps {
   /** Optional icon component. */
   icon?: IconFunctionComponent;
 
@@ -54,20 +54,20 @@ interface LabelLayoutProps {
   optional?: boolean;
 
   /** Auxiliary status icon rendered beside the title. */
-  auxIcon?: LabelAuxIcon;
+  auxIcon?: ContentMdAuxIcon;
 
   /** Tag rendered beside the title. */
   tag?: TagProps;
 
   /** Size preset. Default: `"main-ui"`. */
-  sizePreset?: LabelSizePreset;
+  sizePreset?: ContentMdSizePreset;
 }
 
 // ---------------------------------------------------------------------------
 // Presets
 // ---------------------------------------------------------------------------
 
-const LABEL_PRESETS: Record<LabelSizePreset, LabelPresetConfig> = {
+const CONTENT_MD_PRESETS: Record<ContentMdSizePreset, ContentMdPresetConfig> = {
   "main-content": {
     iconSize: "1rem",
     iconContainerPadding: "p-1",
@@ -107,11 +107,11 @@ const LABEL_PRESETS: Record<LabelSizePreset, LabelPresetConfig> = {
 };
 
 // ---------------------------------------------------------------------------
-// LabelLayout
+// ContentMd
 // ---------------------------------------------------------------------------
 
 const AUX_ICON_CONFIG: Record<
-  LabelAuxIcon,
+  ContentMdAuxIcon,
   { icon: IconFunctionComponent; colorClass: string }
 > = {
   "info-gray": { icon: SvgAlertCircle, colorClass: "text-text-02" },
@@ -120,7 +120,7 @@ const AUX_ICON_CONFIG: Record<
   error: { icon: SvgXOctagon, colorClass: "text-status-error-05" },
 };
 
-function LabelLayout({
+function ContentMd({
   icon: Icon,
   title,
   description,
@@ -130,12 +130,12 @@ function LabelLayout({
   auxIcon,
   tag,
   sizePreset = "main-ui",
-}: LabelLayoutProps) {
+}: ContentMdProps) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(title);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const config = LABEL_PRESETS[sizePreset];
+  const config = CONTENT_MD_PRESETS[sizePreset];
 
   function startEditing() {
     setEditValue(title);
@@ -149,38 +149,35 @@ function LabelLayout({
   }
 
   return (
-    <div className="opal-content-label" style={{ gap: config.gap }}>
+    <div className="opal-content-md" style={{ gap: config.gap }}>
       {Icon && (
         <div
           className={cn(
-            "opal-content-label-icon-container shrink-0",
+            "opal-content-md-icon-container shrink-0",
             config.iconContainerPadding
           )}
           style={{ minHeight: config.lineHeight }}
         >
           <Icon
-            className={cn("opal-content-label-icon", config.iconColorClass)}
+            className={cn("opal-content-md-icon", config.iconColorClass)}
             style={{ width: config.iconSize, height: config.iconSize }}
           />
         </div>
       )}
 
-      <div className="opal-content-label-body">
-        <div className="opal-content-label-title-row">
+      <div className="opal-content-md-body">
+        <div className="opal-content-md-title-row">
           {editing ? (
-            <div className="opal-content-label-input-sizer">
+            <div className="opal-content-md-input-sizer">
               <span
-                className={cn(
-                  "opal-content-label-input-mirror",
-                  config.titleFont
-                )}
+                className={cn("opal-content-md-input-mirror", config.titleFont)}
               >
                 {editValue || "\u00A0"}
               </span>
               <input
                 ref={inputRef}
                 className={cn(
-                  "opal-content-label-input",
+                  "opal-content-md-input",
                   config.titleFont,
                   "text-text-04"
                 )}
@@ -203,7 +200,7 @@ function LabelLayout({
           ) : (
             <span
               className={cn(
-                "opal-content-label-title",
+                "opal-content-md-title",
                 config.titleFont,
                 "text-text-04",
                 editable && "cursor-pointer"
@@ -229,7 +226,7 @@ function LabelLayout({
               const { icon: AuxIcon, colorClass } = AUX_ICON_CONFIG[auxIcon];
               return (
                 <div
-                  className="opal-content-label-aux-icon shrink-0 p-0.5"
+                  className="opal-content-md-aux-icon shrink-0 p-0.5"
                   style={{ height: config.lineHeight }}
                 >
                   <AuxIcon
@@ -248,7 +245,7 @@ function LabelLayout({
           {editable && !editing && (
             <div
               className={cn(
-                "opal-content-label-edit-button",
+                "opal-content-md-edit-button",
                 config.editButtonPadding
               )}
             >
@@ -265,7 +262,7 @@ function LabelLayout({
         </div>
 
         {description && (
-          <div className="opal-content-label-description font-secondary-body text-text-03">
+          <div className="opal-content-md-description font-secondary-body text-text-03">
             {description}
           </div>
         )}
@@ -275,8 +272,8 @@ function LabelLayout({
 }
 
 export {
-  LabelLayout,
-  type LabelLayoutProps,
-  type LabelSizePreset,
-  type LabelAuxIcon,
+  ContentMd,
+  type ContentMdProps,
+  type ContentMdSizePreset,
+  type ContentMdAuxIcon,
 };

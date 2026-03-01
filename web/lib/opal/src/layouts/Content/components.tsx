@@ -1,17 +1,17 @@
 import "@opal/layouts/Content/styles.css";
 import {
-  BodyLayout,
-  type BodyOrientation,
-  type BodyProminence,
-} from "@opal/layouts/Content/BodyLayout";
+  ContentSm,
+  type ContentSmOrientation,
+  type ContentSmProminence,
+} from "@opal/layouts/Content/ContentSm";
 import {
-  HeadingLayout,
-  type HeadingLayoutProps,
-} from "@opal/layouts/Content/HeadingLayout";
+  ContentLg,
+  type ContentLgProps,
+} from "@opal/layouts/Content/ContentLg";
 import {
-  LabelLayout,
-  type LabelLayoutProps,
-} from "@opal/layouts/Content/LabelLayout";
+  ContentMd,
+  type ContentMdProps,
+} from "@opal/layouts/Content/ContentMd";
 import type { TagProps } from "@opal/components/Tag/components";
 import type { IconFunctionComponent } from "@opal/types";
 import { widthVariants, type WidthVariant } from "@opal/shared";
@@ -80,7 +80,7 @@ type LabelContentProps = ContentBaseProps & {
   tag?: TagProps;
 };
 
-/** BodyLayout does not support descriptions or inline editing. */
+/** ContentSm does not support descriptions or inline editing. */
 type BodyContentProps = Omit<
   ContentBaseProps,
   "description" | "editable" | "onTitleChange"
@@ -88,9 +88,9 @@ type BodyContentProps = Omit<
   sizePreset: "main-content" | "main-ui" | "secondary";
   variant: "body";
   /** Layout orientation. Default: `"inline"`. */
-  orientation?: BodyOrientation;
+  orientation?: ContentSmOrientation;
   /** Title prominence. Default: `"default"`. */
-  prominence?: BodyProminence;
+  prominence?: ContentSmProminence;
 };
 
 type ContentProps = HeadingContentProps | LabelContentProps | BodyContentProps;
@@ -111,34 +111,34 @@ function Content(props: ContentProps) {
 
   let layout: React.ReactNode = null;
 
-  // Heading layout: headline/section presets with heading/section variant
+  // ContentLg: headline/section presets with heading/section variant
   if (sizePreset === "headline" || sizePreset === "section") {
     layout = (
-      <HeadingLayout
+      <ContentLg
         sizePreset={sizePreset}
-        variant={variant as HeadingLayoutProps["variant"]}
+        variant={variant as ContentLgProps["variant"]}
         {...rest}
       />
     );
   }
 
-  // Label layout: main-content/main-ui/secondary with section variant
+  // ContentMd: main-content/main-ui/secondary with section variant
   else if (variant === "section" || variant === "heading") {
     layout = (
-      <LabelLayout
+      <ContentMd
         sizePreset={sizePreset}
-        {...(rest as Omit<LabelLayoutProps, "sizePreset">)}
+        {...(rest as Omit<ContentMdProps, "sizePreset">)}
       />
     );
   }
 
-  // Body layout: main-content/main-ui/secondary with body variant
+  // ContentSm: main-content/main-ui/secondary with body variant
   else if (variant === "body") {
     layout = (
-      <BodyLayout
+      <ContentSm
         sizePreset={sizePreset}
         {...(rest as Omit<
-          React.ComponentProps<typeof BodyLayout>,
+          React.ComponentProps<typeof ContentSm>,
           "sizePreset"
         >)}
       />

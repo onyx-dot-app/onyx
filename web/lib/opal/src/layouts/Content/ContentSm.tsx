@@ -7,11 +7,11 @@ import { cn } from "@opal/utils";
 // Types
 // ---------------------------------------------------------------------------
 
-type BodySizePreset = "main-content" | "main-ui" | "secondary";
-type BodyOrientation = "vertical" | "inline" | "reverse";
-type BodyProminence = "default" | "muted";
+type ContentSmSizePreset = "main-content" | "main-ui" | "secondary";
+type ContentSmOrientation = "vertical" | "inline" | "reverse";
+type ContentSmProminence = "default" | "muted";
 
-interface BodyPresetConfig {
+interface ContentSmPresetConfig {
   /** Icon width/height (CSS value). */
   iconSize: string;
   /** Tailwind padding class for the icon container. */
@@ -24,8 +24,8 @@ interface BodyPresetConfig {
   gap: string;
 }
 
-/** Props for {@link BodyLayout}. Does not support editing or descriptions. */
-interface BodyLayoutProps {
+/** Props for {@link ContentSm}. Does not support editing or descriptions. */
+interface ContentSmProps {
   /** Optional icon component. */
   icon?: IconFunctionComponent;
 
@@ -33,20 +33,20 @@ interface BodyLayoutProps {
   title: string;
 
   /** Size preset. Default: `"main-ui"`. */
-  sizePreset?: BodySizePreset;
+  sizePreset?: ContentSmSizePreset;
 
   /** Layout orientation. Default: `"inline"`. */
-  orientation?: BodyOrientation;
+  orientation?: ContentSmOrientation;
 
   /** Title prominence. Default: `"default"`. */
-  prominence?: BodyProminence;
+  prominence?: ContentSmProminence;
 }
 
 // ---------------------------------------------------------------------------
 // Presets
 // ---------------------------------------------------------------------------
 
-const BODY_PRESETS: Record<BodySizePreset, BodyPresetConfig> = {
+const CONTENT_SM_PRESETS: Record<ContentSmSizePreset, ContentSmPresetConfig> = {
   "main-content": {
     iconSize: "1rem",
     iconContainerPadding: "p-1",
@@ -71,36 +71,36 @@ const BODY_PRESETS: Record<BodySizePreset, BodyPresetConfig> = {
 };
 
 // ---------------------------------------------------------------------------
-// BodyLayout
+// ContentSm
 // ---------------------------------------------------------------------------
 
-function BodyLayout({
+function ContentSm({
   icon: Icon,
   title,
   sizePreset = "main-ui",
   orientation = "inline",
   prominence = "default",
-}: BodyLayoutProps) {
-  const config = BODY_PRESETS[sizePreset];
+}: ContentSmProps) {
+  const config = CONTENT_SM_PRESETS[sizePreset];
   const titleColorClass =
     prominence === "muted" ? "text-text-03" : "text-text-04";
 
   return (
     <div
-      className="opal-content-body"
+      className="opal-content-sm"
       data-orientation={orientation}
       style={{ gap: config.gap }}
     >
       {Icon && (
         <div
           className={cn(
-            "opal-content-body-icon-container shrink-0",
+            "opal-content-sm-icon-container shrink-0",
             config.iconContainerPadding
           )}
           style={{ minHeight: config.lineHeight }}
         >
           <Icon
-            className="opal-content-body-icon text-text-03"
+            className="opal-content-sm-icon text-text-03"
             style={{ width: config.iconSize, height: config.iconSize }}
           />
         </div>
@@ -108,7 +108,7 @@ function BodyLayout({
 
       <span
         className={cn(
-          "opal-content-body-title",
+          "opal-content-sm-title",
           config.titleFont,
           titleColorClass
         )}
@@ -121,9 +121,9 @@ function BodyLayout({
 }
 
 export {
-  BodyLayout,
-  type BodyLayoutProps,
-  type BodySizePreset,
-  type BodyOrientation,
-  type BodyProminence,
+  ContentSm,
+  type ContentSmProps,
+  type ContentSmSizePreset,
+  type ContentSmOrientation,
+  type ContentSmProminence,
 };
