@@ -310,23 +310,23 @@ export default function SignedUpUserTable({
   };
 
   const renderActionButtons = (user: User) => {
-    if (user.role === UserRole.SLACK_USER) {
-      return (
-        <InviteUserButton
-          user={user}
-          invited={invitedEmails.includes(user.email.toLowerCase())}
-          mutate={[refresh, invitedUsersMutate]}
-        />
-      );
-    }
     return (
-      <ActionMenu
-        user={user}
-        currentUser={currentUser}
-        refresh={refresh}
-        invitedUsersMutate={invitedUsersMutate}
-        handleResetPassword={handleResetPassword}
-      />
+      <div className="flex items-center justify-end gap-2">
+        {user.role === UserRole.SLACK_USER && (
+          <InviteUserButton
+            user={user}
+            invited={invitedEmails.includes(user.email.toLowerCase())}
+            mutate={[refresh, invitedUsersMutate]}
+          />
+        )}
+        <ActionMenu
+          user={user}
+          currentUser={currentUser}
+          refresh={refresh}
+          invitedUsersMutate={invitedUsersMutate}
+          handleResetPassword={handleResetPassword}
+        />
+      </div>
     );
   };
 

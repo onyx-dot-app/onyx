@@ -725,13 +725,21 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         if user_by_session:
                             user = user_by_session
 
-                await self.user_db.update(
-                    user,
-                    {
-                        "is_verified": is_verified_by_default,
-                        "role": UserRole.BASIC,
-                    },
-                )
+                # If the user is inactive, check seat availability before
+                # upgrading role — otherwise they'd become an inactive BASIC
+                # user who still can't log in.
+                if not user.is_active:
+                    with get_session_with_current_tenant() as sync_db:
+                        enforce_seat_limit(sync_db)
+
+                update_dict: Dict[str, Any] = {
+                    "is_verified": is_verified_by_default,
+                    "role": UserRole.BASIC,
+                }
+                if not user.is_active:
+                    update_dict["is_active"] = True
+
+                await self.user_db.update(user, update_dict)
 
             # this is needed if an organization goes from `TRACK_EXTERNAL_IDP_EXPIRY=true` to `false`
             # otherwise, the oidc expiry will always be old, and the user will never be able to login
