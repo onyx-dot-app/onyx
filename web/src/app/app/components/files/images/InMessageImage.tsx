@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { FiDownload } from "react-icons/fi";
+import { memo, useState } from "react";
+import { SvgDownload } from "@opal/icons";
 import { ImageShape } from "@/app/app/services/streamingModels";
 import { FullImageModal } from "@/app/app/components/files/images/FullImageModal";
 import { buildImgUrl } from "@/app/app/components/files/images/utils";
@@ -24,17 +24,22 @@ const SHAPE_CLASSES: Record<ImageShape, { container: string; image: string }> =
     },
   };
 
+// Used to stop image flashing as images are loaded and response continues
+const loadedImages = new Set<string>();
+
 interface InMessageImageProps {
   fileId: string;
+  fileName?: string;
   shape?: ImageShape;
 }
 
-export function InMessageImage({
+export const InMessageImage = memo(function InMessageImage({
   fileId,
+  fileName,
   shape = DEFAULT_SHAPE,
 }: InMessageImageProps) {
   const [fullImageShowing, setFullImageShowing] = useState(false);
-  const [imageLoaded, setImageLoaded] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(loadedImages.has(fileId));
 
   const normalizedShape = SHAPE_CLASSES[shape] ? shape : DEFAULT_SHAPE;
   const { container: shapeContainerClasses, image: shapeImageClasses } =
@@ -49,7 +54,7 @@ export function InMessageImage({
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `image-${fileId}.png`; // You can adjust the filename/extension as needed
+      a.download = fileName || `image-${fileId}.png`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
@@ -76,7 +81,10 @@ export function InMessageImage({
           width={1200}
           height={1200}
           alt="Chat Message Image"
-          onLoad={() => setImageLoaded(true)}
+          onLoad={() => {
+            loadedImages.add(fileId);
+            setImageLoaded(true);
+          }}
           className={cn(
             "object-contain object-left overflow-hidden rounded-lg w-full h-full transition-opacity duration-300 cursor-pointer",
             shapeImageClasses,
@@ -94,7 +102,7 @@ export function InMessageImage({
           )}
         >
           <Button
-            icon={FiDownload}
+            icon={SvgDownload}
             tooltip="Download"
             onClick={handleDownload}
           />
@@ -102,4 +110,4 @@ export function InMessageImage({
       </div>
     </>
   );
-}
+});
