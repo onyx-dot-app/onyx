@@ -195,7 +195,9 @@ async def saml_login(request: Request) -> SAMLAuthorizeResponse:
     req = await prepare_from_fastapi_request(request)
     auth = OneLogin_Saml2_Auth(req, custom_base_path=SAML_CONF_DIR)
     return_to = _sanitize_relay_state(request.query_params.get("next"))
-    callback_url = auth.login(return_to=return_to)
+    # After explicit logout, force the IdP to show a login screen
+    force_reauth = request.cookies.get("onyx_force_reauth")
+    callback_url = auth.login(return_to=return_to, force_authn=bool(force_reauth))
     return SAMLAuthorizeResponse(authorization_url=callback_url)
 
 

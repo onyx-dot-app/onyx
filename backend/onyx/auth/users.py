@@ -1718,6 +1718,14 @@ def get_oauth_router(
                 authorization_url, {"access_type": "offline", "prompt": "consent"}
             )
 
+        # After explicit logout, force the IdP to show a login screen
+        if oauth_client.name == "openid":
+            force_reauth = request.cookies.get("onyx_force_reauth")
+            if force_reauth:
+                authorization_url = add_url_params(
+                    authorization_url, {"prompt": "login"}
+                )
+
         if redirect:
             redirect_response = RedirectResponse(authorization_url, status_code=302)
             redirect_response.set_cookie(
