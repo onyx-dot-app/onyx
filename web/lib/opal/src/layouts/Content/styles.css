@@ -1,41 +1,46 @@
-/* ---------------------------------------------------------------------------
-   Content — HeadingLayout
+/* ===========================================================================
+   Content — ContentXl
 
-   Two icon placement modes (driven by variant):
-     left  (variant="section") : flex-row  — icon beside content
-     top   (variant="heading") : flex-col  — icon above content
+   Icon row on top (flex-col). Icon row contains main icon + optional
+   moreIcon1 / moreIcon2 in a flex-row.
 
    Sizing (icon size, gap, padding, font, line-height) is driven by the
    sizePreset prop via inline styles + Tailwind classes in the component.
-   --------------------------------------------------------------------------- */
+   =========================================================================== */
 
 /* ---------------------------------------------------------------------------
-   Layout — icon placement
+   Layout — flex-col (icon row above body)
    --------------------------------------------------------------------------- */
 
-.opal-content-heading {
-  @apply flex items-start;
-}
-
-.opal-content-heading[data-icon-placement="left"] {
-  @apply flex-row;
-}
-
-.opal-content-heading[data-icon-placement="top"] {
-  @apply flex-col;
+.opal-content-xl {
+  @apply flex flex-col items-start;
 }
 
 /* ---------------------------------------------------------------------------
-   Icon
+   Icon row — flex-row containing main icon + more icons
    --------------------------------------------------------------------------- */
 
-.opal-content-heading-icon-container {
+.opal-content-xl-icon-row {
+  @apply flex flex-row items-center;
+}
+
+/* ---------------------------------------------------------------------------
+   Icons
+   --------------------------------------------------------------------------- */
+
+.opal-content-xl-icon-container {
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.opal-content-heading-icon {
+.opal-content-xl-more-icon-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.opal-content-xl-icon {
   color: var(--text-04);
 }
 
@@ -43,7 +48,7 @@
    Body column
    --------------------------------------------------------------------------- */
 
-.opal-content-heading-body {
+.opal-content-xl-body {
   @apply flex flex-1 flex-col items-start;
   min-width: 0.0625rem;
 }
@@ -52,12 +57,12 @@
    Title row — title (or input) + edit button
    --------------------------------------------------------------------------- */
 
-.opal-content-heading-title-row {
+.opal-content-xl-title-row {
   @apply flex items-center w-full;
   gap: 0.25rem;
 }
 
-.opal-content-heading-title {
+.opal-content-xl-title {
   @apply text-left overflow-hidden;
   display: -webkit-box;
   -webkit-box-orient: vertical;
@@ -66,23 +71,23 @@
   min-width: 0.0625rem;
 }
 
-.opal-content-heading-input-sizer {
+.opal-content-xl-input-sizer {
   display: inline-grid;
   align-items: stretch;
 }
 
-.opal-content-heading-input-sizer > * {
+.opal-content-xl-input-sizer > * {
   grid-area: 1 / 1;
   padding: 0 0.125rem;
   min-width: 0.0625rem;
 }
 
-.opal-content-heading-input-mirror {
+.opal-content-xl-input-mirror {
   visibility: hidden;
   white-space: pre;
 }
 
-.opal-content-heading-input {
+.opal-content-xl-input {
   @apply bg-transparent outline-none border-none;
 }
 
@@ -90,11 +95,11 @@
    Edit button — visible only on hover of the outer container
    --------------------------------------------------------------------------- */
 
-.opal-content-heading-edit-button {
+.opal-content-xl-edit-button {
   @apply opacity-0 transition-opacity shrink-0;
 }
 
-.opal-content-heading:hover .opal-content-heading-edit-button {
+.opal-content-xl:hover .opal-content-xl-edit-button {
   @apply opacity-100;
 }
 
@@ -102,13 +107,112 @@
    Description
    --------------------------------------------------------------------------- */
 
-.opal-content-heading-description {
+.opal-content-xl-description {
   @apply text-left w-full;
   padding: 0 0.125rem;
 }
 
 /* ===========================================================================
-   Content — LabelLayout
+   Content — ContentLg
+
+   Always inline (flex-row) — icon beside content.
+
+   Sizing (icon size, gap, padding, font, line-height) is driven by the
+   sizePreset prop via inline styles + Tailwind classes in the component.
+   =========================================================================== */
+
+/* ---------------------------------------------------------------------------
+   Layout
+   --------------------------------------------------------------------------- */
+
+.opal-content-lg {
+  @apply flex flex-row items-start;
+}
+
+/* ---------------------------------------------------------------------------
+   Icon
+   --------------------------------------------------------------------------- */
+
+.opal-content-lg-icon-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.opal-content-lg-icon {
+  color: var(--text-04);
+}
+
+/* ---------------------------------------------------------------------------
+   Body column
+   --------------------------------------------------------------------------- */
+
+.opal-content-lg-body {
+  @apply flex flex-1 flex-col items-start;
+  min-width: 0.0625rem;
+}
+
+/* ---------------------------------------------------------------------------
+   Title row — title (or input) + edit button
+   --------------------------------------------------------------------------- */
+
+.opal-content-lg-title-row {
+  @apply flex items-center w-full;
+  gap: 0.25rem;
+}
+
+.opal-content-lg-title {
+  @apply text-left overflow-hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  padding: 0 0.125rem;
+  min-width: 0.0625rem;
+}
+
+.opal-content-lg-input-sizer {
+  display: inline-grid;
+  align-items: stretch;
+}
+
+.opal-content-lg-input-sizer > * {
+  grid-area: 1 / 1;
+  padding: 0 0.125rem;
+  min-width: 0.0625rem;
+}
+
+.opal-content-lg-input-mirror {
+  visibility: hidden;
+  white-space: pre;
+}
+
+.opal-content-lg-input {
+  @apply bg-transparent outline-none border-none;
+}
+
+/* ---------------------------------------------------------------------------
+   Edit button — visible only on hover of the outer container
+   --------------------------------------------------------------------------- */
+
+.opal-content-lg-edit-button {
+  @apply opacity-0 transition-opacity shrink-0;
+}
+
+.opal-content-lg:hover .opal-content-lg-edit-button {
+  @apply opacity-100;
+}
+
+/* ---------------------------------------------------------------------------
+   Description
+   --------------------------------------------------------------------------- */
+
+.opal-content-lg-description {
+  @apply text-left w-full;
+  padding: 0 0.125rem;
+}
+
+/* ===========================================================================
+   Content — ContentMd
 
    Always inline (flex-row). Icon color varies per sizePreset and is applied
    via Tailwind class from the component.
@@ -118,7 +222,7 @@
    Layout
    --------------------------------------------------------------------------- */
 
-.opal-content-label {
+.opal-content-md {
   @apply flex flex-row items-start;
 }
 
@@ -126,7 +230,7 @@
    Icon
    --------------------------------------------------------------------------- */
 
-.opal-content-label-icon-container {
+.opal-content-md-icon-container {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -136,7 +240,7 @@
    Body column
    --------------------------------------------------------------------------- */
 
-.opal-content-label-body {
+.opal-content-md-body {
   @apply flex flex-1 flex-col items-start;
   min-width: 0.0625rem;
 }
@@ -145,12 +249,12 @@
    Title row — title (or input) + edit button
    --------------------------------------------------------------------------- */
 
-.opal-content-label-title-row {
+.opal-content-md-title-row {
   @apply flex items-center w-full;
   gap: 0.25rem;
 }
 
-.opal-content-label-title {
+.opal-content-md-title {
   @apply text-left overflow-hidden;
   display: -webkit-box;
   -webkit-box-orient: vertical;
@@ -159,23 +263,23 @@
   min-width: 0.0625rem;
 }
 
-.opal-content-label-input-sizer {
+.opal-content-md-input-sizer {
   display: inline-grid;
   align-items: stretch;
 }
 
-.opal-content-label-input-sizer > * {
+.opal-content-md-input-sizer > * {
   grid-area: 1 / 1;
   padding: 0 0.125rem;
   min-width: 0.0625rem;
 }
 
-.opal-content-label-input-mirror {
+.opal-content-md-input-mirror {
   visibility: hidden;
   white-space: pre;
 }
 
-.opal-content-label-input {
+.opal-content-md-input {
   @apply bg-transparent outline-none border-none;
 }
 
@@ -183,7 +287,7 @@
    Aux icon
    --------------------------------------------------------------------------- */
 
-.opal-content-label-aux-icon {
+.opal-content-md-aux-icon {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -193,11 +297,11 @@
    Edit button — visible only on hover of the outer container
    --------------------------------------------------------------------------- */
 
-.opal-content-label-edit-button {
+.opal-content-md-edit-button {
   @apply opacity-0 transition-opacity shrink-0;
 }
 
-.opal-content-label:hover .opal-content-label-edit-button {
+.opal-content-md:hover .opal-content-md-edit-button {
   @apply opacity-100;
 }
 
@@ -205,13 +309,13 @@
    Description
    --------------------------------------------------------------------------- */
 
-.opal-content-label-description {
+.opal-content-md-description {
   @apply text-left w-full;
   padding: 0 0.125rem;
 }
 
 /* ===========================================================================
-   Content — BodyLayout
+   Content — ContentSm
 
    Three orientation modes (driven by orientation prop):
      inline  : flex-row         — icon left, title right
@@ -226,19 +330,19 @@
    Layout — orientation
    --------------------------------------------------------------------------- */
 
-.opal-content-body {
+.opal-content-sm {
   @apply flex items-start;
 }
 
-.opal-content-body[data-orientation="inline"] {
+.opal-content-sm[data-orientation="inline"] {
   @apply flex-row;
 }
 
-.opal-content-body[data-orientation="vertical"] {
+.opal-content-sm[data-orientation="vertical"] {
   @apply flex-col;
 }
 
-.opal-content-body[data-orientation="reverse"] {
+.opal-content-sm[data-orientation="reverse"] {
   @apply flex-row-reverse;
 }
 
@@ -246,7 +350,7 @@
    Icon
    --------------------------------------------------------------------------- */
 
-.opal-content-body-icon-container {
+.opal-content-sm-icon-container {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -256,7 +360,7 @@
    Title
    --------------------------------------------------------------------------- */
 
-.opal-content-body-title {
+.opal-content-sm-title {
   @apply text-left overflow-hidden;
   display: -webkit-box;
   -webkit-box-orient: vertical;

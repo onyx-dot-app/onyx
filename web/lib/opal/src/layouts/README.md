@@ -8,7 +8,7 @@ Layout primitives for composing icon + title + description rows. These component
 
 | Component | Description | Docs |
 |---|---|---|
-| [`Content`](./Content/README.md) | Icon + title + description row. Routes to an internal layout (`HeadingLayout`, `LabelLayout`, or `BodyLayout`) based on `sizePreset` and `variant`. | [Content README](./Content/README.md) |
+| [`Content`](./Content/README.md) | Icon + title + description row. Routes to an internal layout (`ContentLg`, `ContentMd`, or `ContentSm`) based on `sizePreset` and `variant`. | [Content README](./Content/README.md) |
 | [`ContentAction`](./ContentAction/README.md) | Wraps `Content` in a flex-row with an optional `rightChildren` slot for action buttons. Adds padding alignment via the shared `SizeVariant` scale. | [ContentAction README](./ContentAction/README.md) |
 
 ## Quick Start
@@ -88,6 +88,7 @@ These are not exported — `Content` routes to them automatically:
 
 | Layout | Used when | File |
 |---|---|---|
-| `HeadingLayout` | `sizePreset` is `headline` or `section` | `Content/HeadingLayout.tsx` |
-| `LabelLayout` | `sizePreset` is `main-content`, `main-ui`, or `secondary` with `variant="section"` | `Content/LabelLayout.tsx` |
-| `BodyLayout` | `variant="body"` | `Content/BodyLayout.tsx` |
+| `ContentXl` | `sizePreset` is `headline` or `section` with `variant="heading"` | `Content/ContentXl.tsx` |
+| `ContentLg` | `sizePreset` is `headline` or `section` with `variant="section"` | `Content/ContentLg.tsx` |
+| `ContentMd` | `sizePreset` is `main-content`, `main-ui`, or `secondary` with `variant="section"` | `Content/ContentMd.tsx` |
+| `ContentSm` | `variant="body"` | `Content/ContentSm.tsx` |
