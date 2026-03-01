@@ -408,21 +408,21 @@ ModalContent.displayName = DialogPrimitive.Content.displayName;
  */
 interface ModalHeaderProps extends WithoutStyles<SectionProps> {
   icon?: IconFunctionComponent;
+  moreIcon1?: IconFunctionComponent;
+  moreIcon2?: IconFunctionComponent;
   title: string;
   description?: string;
   onClose?: () => void;
-  moreIcon1?: IconFunctionComponent;
-  moreIcon2?: IconFunctionComponent;
 }
 const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
   (
     {
-      icon: Icon,
+      icon,
+      moreIcon1,
+      moreIcon2,
       title,
       description,
       onClose,
-      moreIcon1,
-      moreIcon2,
       children,
       ...props
     },
@@ -468,13 +468,13 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
             <DialogPrimitive.Title asChild>
               <div>
                 <Content
-                  icon={Icon}
+                  icon={icon}
+                  moreIcon1={moreIcon1}
+                  moreIcon2={moreIcon2}
                   title={title}
                   description={description}
                   sizePreset="section"
                   variant="heading"
-                  moreIcon1={moreIcon1}
-                  moreIcon2={moreIcon2}
                 />
                 {description && (
                   <DialogPrimitive.Description className="hidden">
