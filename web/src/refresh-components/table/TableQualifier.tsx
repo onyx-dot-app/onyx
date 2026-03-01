@@ -135,7 +135,7 @@ function TableQualifier({
   return (
     <div
       className={cn(
-        "group relative inline-flex shrink-0 items-center justify-center bg-red-400",
+        "group relative inline-flex shrink-0 items-center justify-center",
         containerSize,
         disabled ? "cursor-not-allowed" : "cursor-default",
         className

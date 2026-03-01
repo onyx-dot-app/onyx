@@ -96,7 +96,7 @@ export default function TableHead({
       <div
         className={cn("flex items-center gap-1", alignmentFlexClass[alignment])}
       >
-        <div className={isSmall ? "py-1" : "py-2"}>
+        <div className={isSmall ? "py-1" : "py-2 px-0.5"}>
           <Text
             mainUiAction={!isSmall}
             secondaryAction={isSmall}
