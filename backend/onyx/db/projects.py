@@ -1,7 +1,6 @@
 import datetime
 import uuid
 from typing import List
-from typing import TYPE_CHECKING
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -10,9 +9,7 @@ from pydantic import BaseModel
 from pydantic import ConfigDict
 from sqlalchemy import func
 from sqlalchemy.orm import Session
-
-if TYPE_CHECKING:
-    from starlette.background import BackgroundTasks
+from starlette.background import BackgroundTasks
 
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import FileOrigin
