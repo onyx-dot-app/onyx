@@ -201,6 +201,7 @@ class DocumentSource(str, Enum):
     OUTLINE = "outline"
     CONFLUENCE = "confluence"
     JIRA = "jira"
+    JIRA_SERVICE_MANAGEMENT = "jira_service_management"
     SLAB = "slab"
     PRODUCTBOARD = "productboard"
     FILE = "file"
@@ -609,10 +610,10 @@ class OnyxCeleryTask:
         "check_for_documents_for_opensearch_migration_task"
     )
     MIGRATE_DOCUMENTS_FROM_VESPA_TO_OPENSEARCH_TASK = (
-        "migrate_documents_from_vespa_to_opensearch_task"
+        "migrate_documents_from_VESPA_to_opensearch_task"
     )
     MIGRATE_CHUNKS_FROM_VESPA_TO_OPENSEARCH_TASK = (
-        "migrate_chunks_from_vespa_to_opensearch_task"
+        "migrate_chunks_from_VESPA_to_opensearch_task"
     )
 
 
@@ -656,6 +657,7 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.OUTLINE: "outline data",
     DocumentSource.CONFLUENCE: "confluence data (pages, spaces, etc.)",
     DocumentSource.JIRA: "jira data (issues, tickets, projects, etc.)",
+    DocumentSource.JIRA_SERVICE_MANAGEMENT: "jira service management data (requests, tickets, projects, etc.)",
     DocumentSource.SLAB: "slab data",
     DocumentSource.PRODUCTBOARD: "productboard data (boards, etc.)",
     DocumentSource.FILE: "files",
@@ -685,6 +687,7 @@ project management, and collaboration tools into a single, customizable platform
     DocumentSource.GOOGLE_CLOUD_STORAGE: "google_cloud_storage - cloud storage",
     DocumentSource.OCI_STORAGE: "oci_storage - cloud storage",
     DocumentSource.XENFORO: "xenforo - forum data",
+    DocumentSource.NOT_APPLICABLE: "not_applicable",
     DocumentSource.DISCORD: "discord - chat and collaboration",
     DocumentSource.FRESHDESK: "freshdesk - customer support data",
     DocumentSource.FIREFLIES: "fireflies - call transcripts",
@@ -693,5 +696,6 @@ project management, and collaboration tools into a single, customizable platform
     DocumentSource.HIGHSPOT: "highspot - CRM data",
     DocumentSource.DRUPAL_WIKI: "drupal wiki - knowledge base content (pages, spaces, attachments)",
     DocumentSource.IMAP: "imap - email data",
+    DocumentSource.BITBUCKET: "bitbucket data",
     DocumentSource.TESTRAIL: "testrail - test case management tool for QA processes",
 }
