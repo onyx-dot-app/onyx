@@ -3,9 +3,9 @@
 import React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { cn } from "@/lib/utils";
-import type { IconProps } from "@opal/types";
-import Text from "@/refresh-components/texts/Text";
+import type { IconFunctionComponent } from "@opal/types";
 import { Button } from "@opal/components";
+import { Content } from "@opal/layouts";
 import { SvgX } from "@opal/icons";
 import { WithoutStyles } from "@/types";
 import { Section, SectionProps } from "@/layouts/general-layouts";
@@ -407,17 +407,29 @@ ModalContent.displayName = DialogPrimitive.Content.displayName;
  * ```
  */
 interface ModalHeaderProps extends WithoutStyles<SectionProps> {
-  icon?: React.FunctionComponent<IconProps>;
+  icon?: IconFunctionComponent;
+  moreIcon1?: IconFunctionComponent;
+  moreIcon2?: IconFunctionComponent;
   title: string;
   description?: string;
   onClose?: () => void;
 }
 const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
-  ({ icon: Icon, title, description, onClose, children, ...props }, ref) => {
+  (
+    {
+      icon,
+      moreIcon1,
+      moreIcon2,
+      title,
+      description,
+      onClose,
+      children,
+      ...props
+    },
+    ref
+  ) => {
     const { closeButtonRef, setHasDescription } = useModalContext();
 
-    // useLayoutEffect ensures aria-describedby is set before paint,
-    // so screen readers announce the description when the dialog opens
     React.useLayoutEffect(() => {
       setHasDescription(!!description);
     }, [description, setHasDescription]);
@@ -440,52 +452,40 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
 
     return (
       <Section ref={ref} padding={1} alignItems="start" height="fit" {...props}>
-        <Section gap={0.5}>
-          {Icon && (
-            <Section
-              gap={0}
-              padding={0}
-              flexDirection="row"
-              justifyContent="between"
-            >
-              {/*
-                The `h-[1.5rem]` and `w-[1.5rem]` were added as backups here.
-                However, prop-resolution technically resolves to choosing classNames over size props, so technically the `size={24}` is the backup.
-                We specify both to be safe.
-
-                # Note
-                1.5rem === 24px
-              */}
-              <Icon
-                className="stroke-text-04 h-[1.5rem] w-[1.5rem]"
-                size={24}
-              />
-              {closeButton}
-            </Section>
-          )}
-
-          <Section
-            alignItems="start"
-            gap={0}
-            padding={0}
-            flexDirection="row"
-            justifyContent="between"
-          >
-            <Section alignItems="start" padding={0} gap={0}>
-              <DialogPrimitive.Title asChild>
-                <Text headingH3>{title}</Text>
-              </DialogPrimitive.Title>
-              {description && (
-                <DialogPrimitive.Description asChild>
-                  <Text secondaryBody text03>
+        <Section
+          flexDirection="row"
+          justifyContent="between"
+          alignItems="start"
+          gap={0}
+          padding={0}
+        >
+          <div className="relative w-full">
+            {/* Close button is absolutely positioned because:
+               1. Figma mocks place it overlapping the top-right of the content area
+               2. Using ContentAction with rightChildren causes the description
+                  to wrap to the second line early due to the button reserving space */}
+            <div className="absolute top-0 right-0">{closeButton}</div>
+            <DialogPrimitive.Title asChild>
+              <div>
+                <Content
+                  icon={icon}
+                  moreIcon1={moreIcon1}
+                  moreIcon2={moreIcon2}
+                  title={title}
+                  description={description}
+                  sizePreset="section"
+                  variant="heading"
+                />
+                {description && (
+                  <DialogPrimitive.Description className="hidden">
                     {description}
-                  </Text>
-                </DialogPrimitive.Description>
-              )}
-            </Section>
-            {!Icon && closeButton}
-          </Section>
+                  </DialogPrimitive.Description>
+                )}
+              </div>
+            </DialogPrimitive.Title>
+          </div>
         </Section>
+
         {children}
       </Section>
     );
