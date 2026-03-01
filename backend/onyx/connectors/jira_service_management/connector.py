@@ -1,0 +1,1063 @@
+import copy
+import json
+import os
+from collections.abc import Callable
+from collections.abc import Generator
+from collections.abc import Iterable
+from collections.abc import Iterator
+from datetime import datetime
+from datetime import timedelta
+from datetime import timezone
+from typing import Any
+
+from jira import JIRA
+from jira.exceptions import JIRAError
+from jira.resources import Issue
+from more_itertools import chunked
+from typing_extensions import override
+
+from onyx.configs.app_configs import INDEX_BATCH_SIZE
+from onyx.configs.app_configs import JIRA_CONNECTOR_LABELS_TO_SKIP
+from onyx.configs.app_configs import JIRA_CONNECTOR_MAX_TICKET_SIZE
+from onyx.configs.app_configs import JIRA_SLIM_PAGE_SIZE
+from onyx.configs.constants import DocumentSource
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
+    is_atlassian_date_error,
+)
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
+from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.exceptions import CredentialExpiredError
+from onyx.connectors.exceptions import InsufficientPermissionsError
+from onyx.connectors.exceptions import UnexpectedValidationError
+from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
+from onyx.connectors.interfaces import CheckpointOutput
+from onyx.connectors.interfaces import GenerateSlimDocumentOutput
+from onyx.connectors.interfaces import SecondsSinceUnixEpoch
+from onyx.connectors.interfaces import SlimConnectorWithPermSync
+from onyx.connectors.jira.access import get_project_permissions
+from onyx.connectors.jira.utils import best_effort_basic_expert_info
+from onyx.connectors.jira.utils import best_effort_get_field_from_issue
+from onyx.connectors.jira.utils import build_jira_client
+from onyx.connectors.jira.utils import build_jira_url
+from onyx.connectors.jira.utils import extract_text_from_adf
+from onyx.connectors.jira.utils import get_comment_strs
+from onyx.connectors.jira.utils import JIRA_CLOUD_API_VERSION
+from onyx.connectors.models import ConnectorCheckpoint
+from onyx.connectors.models import ConnectorFailure
+from onyx.connectors.models import ConnectorMissingCredentialError
+from onyx.connectors.models import Document
+from onyx.connectors.models import DocumentFailure
+from onyx.connectors.models import HierarchyNode
+from onyx.connectors.models import SlimDocument
+from onyx.connectors.models import TextSection
+from onyx.db.enums import HierarchyNodeType
+from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
+from onyx.utils.logger import setup_logger
+
+
+logger = setup_logger()
+
+ONE_HOUR = 3600
+
+_MAX_RESULTS_FETCH_IDS = 5000  # 5000
+_JIRA_FULL_PAGE_SIZE = 50
+
+# Constants for Jira field names
+_FIELD_REPORTER = "reporter"
+_FIELD_ASSIGNEE = "assignee"
+_FIELD_PRIORITY = "priority"
+_FIELD_STATUS = "status"
+_FIELD_RESOLUTION = "resolution"
+_FIELD_LABELS = "labels"
+_FIELD_KEY = "key"
+_FIELD_CREATED = "created"
+_FIELD_DUEDATE = "duedate"
+_FIELD_ISSUETYPE = "issuetype"
+_FIELD_PARENT = "parent"
+_FIELD_ASSIGNEE_EMAIL = "assignee_email"
+_FIELD_REPORTER_EMAIL = "reporter_email"
+_FIELD_PROJECT = "project"
+_FIELD_PROJECT_NAME = "project_name"
+_FIELD_UPDATED = "updated"
+_FIELD_RESOLUTION_DATE = "resolutiondate"
+_FIELD_RESOLUTION_DATE_KEY = "resolution_date"
+
+
+def _is_cloud_client(jira_client: JIRA) -> bool:
+    return jira_client._options["rest_api_version"] == JIRA_CLOUD_API_VERSION
+
+
+def _perform_jql_search(
+    jira_client: JIRA,
+    jql: str,
+    start: int,
+    max_results: int,
+    fields: str | None = None,
+    all_issue_ids: list[list[str]] | None = None,
+    checkpoint_callback: (
+        Callable[[Iterator[list[str]], str | None], None] | None
+    ) = None,
+    nextPageToken: str | None = None,
+    ids_done: bool = False,
+) -> Iterable[Issue]:
+    """
+    The caller should expect
+    a) this function returns an iterable of issues of length 0 < len(issues) <= max_results.
+       - caveat; if all_issue_ids is provided, the iterable will be the size of some sub-list.
+       - this will only not match the above bound if a recent deployment changed max_results.
+
+    IF the v3 API is used (i.e. the jira instance is a cloud instance), then the caller should expect:
+
+    b) this function will call checkpoint_callback ONCE after at least one of the following has happened:
+       - a new batch of ids has been fetched via enhanced search
+       - a batch of issues has been bulk-fetched
+    c) checkpoint_callback is called with the new all_issue_ids and the pageToken of the enhanced
+       search request. We pass in a pageToken of None once we've fetched all the issue ids.
+
+    Note: nextPageToken is valid for 7 days according to a post from a year ago, so for now
+    we won't add any handling for restarting (just re-index, since there's no easy
+    way to recover from this).
+    """
+    # it would be preferable to use one approach for both versions, but
+    # v2 doesnt have the bulk fetch api and v3 has fully deprecated the search
+    # api that v2 uses
+    if _is_cloud_client(jira_client):
+        if all_issue_ids is None:
+            raise ValueError("all_issue_ids is required for v3")
+        return _perform_jql_search_v3(
+            jira_client,
+            jql,
+            max_results,
+            all_issue_ids,
+            fields=fields,
+            checkpoint_callback=checkpoint_callback,
+            nextPageToken=nextPageToken,
+            ids_done=ids_done,
+        )
+    else:
+        return _perform_jql_search_v2(jira_client, jql, start, max_results, fields)
+
+
+def _handle_jira_search_error(e: Exception, jql: str) -> None:
+    """Handle common Jira search errors and raise appropriate exceptions.
+
+    Args:
+        e: The exception raised by the Jira API
+        jql: The JQL query that caused the error
+
+    Raises:
+        ConnectorValidationError: For HTTP 400 errors (invalid JQL or project)
+        CredentialExpiredError: For HTTP 401 errors
+        InsufficientPermissionsError: For HTTP 403 errors
+        Exception: Re-raises the original exception for other error types
+    """
+    # Extract error information from the exception
+    error_text = ""
+    status_code = None
+
+    def _format_error_text(error_payload: Any) -> str:
+        error_messages = (
+            error_payload.get("errorMessages", [])
+            if isinstance(error_payload, dict)
+            else []
+        )
+        if error_messages:
+            return (
+                "; ".join(error_messages)
+                if isinstance(error_messages, list)
+                else str(error_messages)
+            )
+        return str(error_payload)
+
+    # Try to get status code and error text from JIRAError or requests response
+    if hasattr(e, "status_code"):
+        status_code = e.status_code
+        raw_text = getattr(e, "text", "")
+        if isinstance(raw_text, str):
+            try:
+                error_text = _format_error_text(json.loads(raw_text))
+            except Exception:
+                error_text = raw_text
+        else:
+            error_text = str(raw_text)
+    elif hasattr(e, "response") and e.response is not None:
+        status_code = e.response.status_code
+        # Try JSON first, fall back to text
+        try:
+            error_json = e.response.json()
+            error_text = _format_error_text(error_json)
+        except Exception:
+            error_text = e.response.text
+
+    # Handle specific status codes
+    if status_code == 400:
+        if "does not exist for the field 'project'" in error_text:
+            raise ConnectorValidationError(
+                f"The specified Jira project does not exist or you don't have access to it. "
+                f"JQL query: {jql}. Error: {error_text}"
+            )
+        raise ConnectorValidationError(
+            f"Invalid JQL query. JQL: {jql}. Error: {error_text}"
+        )
+    elif status_code == 401:
+        raise CredentialExpiredError(
+            "Jira credentials are expired or invalid (HTTP 401)."
+        )
+    elif status_code == 403:
+        raise InsufficientPermissionsError(
+            f"Insufficient permissions to execute JQL query. JQL: {jql}"
+        )
+
+    # Re-raise for other error types
+    raise e
+
+
+def enhanced_search_ids(
+    jira_client: JIRA, jql: str, nextPageToken: str | None = None
+) -> tuple[list[str], str | None]:
+    # https://community.atlassian.com/forums/Jira-articles/
+    # Avoiding-Pitfalls-A-Guide-to-Smooth-Migration-to-Enhanced-JQL/ba-p/2985433
+    # For cloud, it's recommended that we fetch all ids first then use the bulk fetch API.
+    # The enhanced search isn't currently supported by our python library, so we have to
+    # do this janky thing where we use the session directly.
+    enhanced_search_path = jira_client._get_url("search/jql")
+    params: dict[str, str | int | None] = {
+        "jql": jql,
+        "maxResults": _MAX_RESULTS_FETCH_IDS,
+        "nextPageToken": nextPageToken,
+        "fields": "id",
+    }
+    try:
+        response = jira_client._session.get(enhanced_search_path, params=params)
+        response.raise_for_status()
+        response_json = response.json()
+    except Exception as e:
+        _handle_jira_search_error(e, jql)
+        raise  # Explicitly re-raise for type checker, should never reach here
+
+    return [str(issue["id"]) for issue in response_json["issues"]], response_json.get(
+        "nextPageToken"
+    )
+
+
+def bulk_fetch_issues(
+    jira_client: JIRA, issue_ids: list[str], fields: str | None = None
+) -> list[Issue]:
+    # TODO: move away from this jira library if they continue to not support
+    # the endpoints we need. Using private fields is not ideal, but
+    # is likely fine for now since we pin the library version
+    bulk_fetch_path = jira_client._get_url("issue/bulkfetch")
+
+    # Prepare the payload according to Jira API v3 specification
+    payload: dict[str, Any] = {"issueIdsOrKeys": issue_ids}
+
+    # Only restrict fields if specified, might want to explicitly do this in the future
+    # to avoid reading unnecessary data
+    payload["fields"] = fields.split(",") if fields else ["*all"]
+
+    try:
+        response = jira_client._session.post(bulk_fetch_path, json=payload).json()
+    except Exception as e:
+        logger.error(f"Error fetching issues: {e}")
+        raise e
+    return [
+        Issue(jira_client._options, jira_client._session, raw=issue)
+        for issue in response["issues"]
+    ]
+
+
+def _perform_jql_search_v3(
+    jira_client: JIRA,
+    jql: str,
+    max_results: int,
+    all_issue_ids: list[list[str]],
+    fields: str | None = None,
+    checkpoint_callback: (
+        Callable[[Iterator[list[str]], str | None], None] | None
+    ) = None,
+    nextPageToken: str | None = None,
+    ids_done: bool = False,
+) -> Iterable[Issue]:
+    """
+    The way this works is we get all the issue ids and bulk fetch them in batches.
+    However, for really large deployments we can't do these operations sequentially,
+    as it might take several hours to fetch all the issue ids.
+
+    So, each run of this function does at least one of:
+     - fetch a batch of issue ids
+     - bulk fetch a batch of issues
+
+    If all_issue_ids is not None, we use it to bulk fetch issues.
+    """
+
+    # with some careful synchronization these steps can be done in parallel,
+    # leaving that out for now to avoid rate limit issues
+    if not ids_done:
+        new_ids, pageToken = enhanced_search_ids(jira_client, jql, nextPageToken)
+        if checkpoint_callback is not None:
+            checkpoint_callback(chunked(new_ids, max_results), pageToken)
+
+    # bulk fetch issues from ids. Note that the above callback MAY mutate all_issue_ids,
+    # but this fetch always just takes the last id batch.
+    if all_issue_ids:
+        yield from bulk_fetch_issues(jira_client, all_issue_ids.pop(), fields)
+
+
+def _perform_jql_search_v2(
+    jira_client: JIRA,
+    jql: str,
+    start: int,
+    max_results: int,
+    fields: str | None = None,
+) -> Iterable[Issue]:
+    """
+    Unfortunately, jira server/data center will forever use the v2 APIs that are now deprecated.
+    """
+    logger.debug(
+        f"Fetching Jira issues with JQL: {jql}, "
+        f"starting at {start}, max results: {max_results}"
+    )
+    try:
+        issues = jira_client.search_issues(
+            jql_str=jql,
+            startAt=start,
+            maxResults=max_results,
+            fields=fields,
+        )
+    except JIRAError as e:
+        _handle_jira_search_error(e, jql)
+        raise  # Explicitly re-raise for type checker, should never reach here
+
+    for issue in issues:
+        if isinstance(issue, Issue):
+            yield issue
+        else:
+            raise RuntimeError(f"Found Jira object not of type Issue: {issue}")
+
+
+def process_jira_issue(
+    jira_base_url: str,
+    issue: Issue,
+    comment_email_blacklist: tuple[str, ...] = (),
+    labels_to_skip: set[str] | None = None,
+    parent_hierarchy_raw_node_id: str | None = None,
+) -> Document | None:
+    if labels_to_skip:
+        if any(label in issue.fields.labels for label in labels_to_skip):
+            logger.info(
+                f"Skipping {issue.key} because it has a label to skip. Found "
+                f"labels: {issue.fields.labels}. Labels to skip: {labels_to_skip}."
+            )
+            return None
+
+    if isinstance(issue.fields.description, str):
+        description = issue.fields.description
+    else:
+        description = extract_text_from_adf(issue.raw["fields"]["description"])
+
+    comments = get_comment_strs(
+        issue=issue,
+        comment_email_blacklist=comment_email_blacklist,
+    )
+    ticket_content = f"{description}\n" + "\n".join(
+        [f"Comment: {comment}" for comment in comments if comment]
+    )
+
+    # Check ticket size
+    if len(ticket_content.encode("utf-8")) > JIRA_CONNECTOR_MAX_TICKET_SIZE:
+        logger.info(
+            f"Skipping {issue.key} because it exceeds the maximum size of "
+            f"{JIRA_CONNECTOR_MAX_TICKET_SIZE} bytes."
+        )
+        return None
+
+    page_url = build_jira_url(jira_base_url, issue.key)
+
+    metadata_dict: dict[str, str | list[str]] = {}
+    people = set()
+
+    creator = best_effort_get_field_from_issue(issue, _FIELD_REPORTER)
+    if creator is not None and (
+        basic_expert_info := best_effort_basic_expert_info(creator)
+    ):
+        people.add(basic_expert_info)
+        metadata_dict[_FIELD_REPORTER] = basic_expert_info.get_semantic_name()
+        if email := basic_expert_info.get_email():
+            metadata_dict[_FIELD_REPORTER_EMAIL] = email
+
+    assignee = best_effort_get_field_from_issue(issue, _FIELD_ASSIGNEE)
+    if assignee is not None and (
+        basic_expert_info := best_effort_basic_expert_info(assignee)
+    ):
+        people.add(basic_expert_info)
+        metadata_dict[_FIELD_ASSIGNEE] = basic_expert_info.get_semantic_name()
+        if email := basic_expert_info.get_email():
+            metadata_dict[_FIELD_ASSIGNEE_EMAIL] = email
+
+    metadata_dict[_FIELD_KEY] = issue.key
+    if priority := best_effort_get_field_from_issue(issue, _FIELD_PRIORITY):
+        metadata_dict[_FIELD_PRIORITY] = priority.name
+    if status := best_effort_get_field_from_issue(issue, _FIELD_STATUS):
+        metadata_dict[_FIELD_STATUS] = status.name
+    if resolution := best_effort_get_field_from_issue(issue, _FIELD_RESOLUTION):
+        metadata_dict[_FIELD_RESOLUTION] = resolution.name
+    if labels := best_effort_get_field_from_issue(issue, _FIELD_LABELS):
+        metadata_dict[_FIELD_LABELS] = labels
+    if created := best_effort_get_field_from_issue(issue, _FIELD_CREATED):
+        metadata_dict[_FIELD_CREATED] = created
+    if updated := best_effort_get_field_from_issue(issue, _FIELD_UPDATED):
+        metadata_dict[_FIELD_UPDATED] = updated
+    if duedate := best_effort_get_field_from_issue(issue, _FIELD_DUEDATE):
+        metadata_dict[_FIELD_DUEDATE] = duedate
+    if issuetype := best_effort_get_field_from_issue(issue, _FIELD_ISSUETYPE):
+        metadata_dict[_FIELD_ISSUETYPE] = issuetype.name
+    if resolutiondate := best_effort_get_field_from_issue(
+        issue, _FIELD_RESOLUTION_DATE
+    ):
+        metadata_dict[_FIELD_RESOLUTION_DATE_KEY] = resolutiondate
+
+    parent = best_effort_get_field_from_issue(issue, _FIELD_PARENT)
+    if parent is not None:
+        metadata_dict[_FIELD_PARENT] = parent.key
+
+    project = best_effort_get_field_from_issue(issue, _FIELD_PROJECT)
+    if project is not None:
+        metadata_dict[_FIELD_PROJECT_NAME] = project.name
+        metadata_dict[_FIELD_PROJECT] = project.key
+    else:
+        logger.error(f"Project should exist but does not for {issue.key}")
+
+    return Document(
+        id=page_url,
+        sections=[TextSection(link=page_url, text=ticket_content)],
+        source=DocumentSource.JIRA_SERVICE_MANAGEMENT,
+        semantic_identifier=f"{issue.key}: {issue.fields.summary}",
+        title=f"{issue.key} {issue.fields.summary}",
+        doc_updated_at=time_str_to_utc(issue.fields.updated),
+        primary_owners=list(people) or None,
+        metadata=metadata_dict,
+        parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
+    )
+
+
+class JiraServiceManagementConnectorCheckpoint(ConnectorCheckpoint):
+    # used for v3 (cloud) endpoint
+    all_issue_ids: list[list[str]] = []
+    ids_done: bool = False
+    cursor: str | None = None
+    # deprecated
+    # Used for v2 endpoint (server/data center)
+    offset: int | None = None
+    # Track hierarchy nodes we've already yielded to avoid duplicates across restarts
+    seen_hierarchy_node_ids: list[str] = []
+
+
+class JiraServiceManagementConnector(
+    CheckpointedConnectorWithPermSync[JiraServiceManagementConnectorCheckpoint],
+    SlimConnectorWithPermSync,
+):
+    def __init__(
+        self,
+        jira_base_url: str,
+        project_key: str | None = None,
+        comment_email_blacklist: list[str] | None = None,
+        batch_size: int = INDEX_BATCH_SIZE,
+        # if a ticket has one of the labels specified in this list, we will just
+        # skip it. This is generally used to avoid indexing extra sensitive
+        # tickets.
+        labels_to_skip: list[str] = JIRA_CONNECTOR_LABELS_TO_SKIP,
+        # Custom JQL query to filter Jira issues
+        jql_query: str | None = None,
+        scoped_token: bool = False,
+    ) -> None:
+        self.batch_size = batch_size
+
+        # dealing with scoped tokens is a bit tricky becasue we need to hit api.atlassian.net
+        # when making jira requests but still want correct links to issues in the UI.
+        # So, the user's base url is stored here, but converted to a scoped url when passed
+        # to the jira client.
+        self.jira_base = jira_base_url.rstrip("/")  # Remove trailing slash if present
+        self.jira_project = project_key
+        self._comment_email_blacklist = comment_email_blacklist or []
+        self.labels_to_skip = set(labels_to_skip)
+        self.jql_query = jql_query
+        self.scoped_token = scoped_token
+        self._jira_client: JIRA | None = None
+        # Cache project permissions to avoid fetching them repeatedly across runs
+        self._project_permissions_cache: dict[str, Any] = {}
+
+    @property
+    def comment_email_blacklist(self) -> tuple:
+        return tuple(email.strip() for email in self._comment_email_blacklist)
+
+    @property
+    def jira_client(self) -> JIRA:
+        if self._jira_client is None:
+            raise ConnectorMissingCredentialError("Jira Service Management")
+        return self._jira_client
+
+    @property
+    def quoted_jira_project(self) -> str:
+        # Quote the project name to handle reserved words
+        if not self.jira_project:
+            return ""
+        return f'"{self.jira_project}"'
+
+    def _get_project_permissions(
+        self, project_key: str, add_prefix: bool = False
+    ) -> Any:
+        """Get project permissions with caching.
+
+        Args:
+            project_key: The Jira project key
+            add_prefix: When True, prefix group IDs with source type (for indexing path).
+                       When False (default), leave unprefixed (for permission sync path).
+
+        Returns:
+            The external access permissions for the project
+        """
+        # Use different cache keys for prefixed vs unprefixed to avoid mixing
+        cache_key = f"{project_key}:{'prefixed' if add_prefix else 'unprefixed'}"
+        if cache_key not in self._project_permissions_cache:
+            self._project_permissions_cache[cache_key] = get_project_permissions(
+                jira_client=self.jira_client,
+                jira_project=project_key,
+                add_prefix=add_prefix,
+            )
+        return self._project_permissions_cache[cache_key]
+
+    def _is_epic(self, issue: Issue) -> bool:
+        """Check if issue is an Epic."""
+        issuetype = best_effort_get_field_from_issue(issue, _FIELD_ISSUETYPE)
+        if issuetype is None:
+            return False
+        return issuetype.name.lower() == "epic"
+
+    def _is_parent_epic(self, parent: Any) -> bool:
+        """Check if a parent reference is an Epic.
+
+        The parent object from issue.fields.parent has a different structure
+        than a full Issue, so we handle it separately.
+        """
+        parent_issuetype = (
+            getattr(parent.fields, "issuetype", None)
+            if hasattr(parent, "fields")
+            else None
+        )
+        if parent_issuetype is None:
+            return False
+        return parent_issuetype.name.lower() == "epic"
+
+    def _yield_project_hierarchy_node(
+        self,
+        project_key: str,
+        project_name: str | None,
+        seen_hierarchy_node_ids: set[str],
+    ) -> Generator[HierarchyNode, None, None]:
+        """Yield a hierarchy node for a project if not already yielded."""
+        if project_key in seen_hierarchy_node_ids:
+            return
+
+        seen_hierarchy_node_ids.add(project_key)
+
+        yield HierarchyNode(
+            raw_node_id=project_key,
+            raw_parent_id=None,  # Parent is SOURCE
+            display_name=project_name or project_key,
+            link=f"{self.jira_base}/projects/{project_key}",
+            node_type=HierarchyNodeType.PROJECT,
+        )
+
+    def _yield_epic_hierarchy_node(
+        self,
+        issue: Issue,
+        project_key: str,
+        seen_hierarchy_node_ids: set[str],
+    ) -> Generator[HierarchyNode, None, None]:
+        """Yield a hierarchy node for an Epic issue."""
+        issue_key = issue.key
+        if issue_key in seen_hierarchy_node_ids:
+            return
+
+        seen_hierarchy_node_ids.add(issue_key)
+
+        yield HierarchyNode(
+            raw_node_id=issue_key,
+            raw_parent_id=project_key,
+            display_name=f"{issue_key}: {issue.fields.summary}",
+            link=build_jira_url(self.jira_base, issue_key),
+            node_type=HierarchyNodeType.FOLDER,  # don't have a separate epic node type
+        )
+
+    def _yield_parent_hierarchy_node_if_epic(
+        self,
+        parent: Any,
+        project_key: str,
+        seen_hierarchy_node_ids: set[str],
+    ) -> Generator[HierarchyNode, None, None]:
+        """Yield hierarchy node for parent issue if it's an Epic we haven't seen."""
+        parent_key = parent.key
+        if parent_key in seen_hierarchy_node_ids:
+            return
+
+        if not self._is_parent_epic(parent):
+            # Not an epic, don't create hierarchy node for it
+            return
+
+        seen_hierarchy_node_ids.add(parent_key)
+
+        # Get summary if available
+        parent_summary = (
+            getattr(parent.fields, "summary", None)
+            if hasattr(parent, "fields")
+            else None
+        )
+        display_name = (
+            f"{parent_key}: {parent_summary}" if parent_summary else parent_key
+        )
+
+        yield HierarchyNode(
+            raw_node_id=parent_key,
+            raw_parent_id=project_key,
+            display_name=display_name,
+            link=build_jira_url(self.jira_base, parent_key),
+            node_type=HierarchyNodeType.FOLDER,  # don't have a separate epic node type
+        )
+
+    def _get_parent_hierarchy_raw_node_id(self, issue: Issue, project_key: str) -> str:
+        """Determine the parent hierarchy node ID for an issue.
+
+        Returns:
+            - Epic key if issue's parent is an Epic
+            - Project key otherwise (for top-level issues or non-epic parents)
+        """
+        parent = best_effort_get_field_from_issue(issue, _FIELD_PARENT)
+        if parent is None:
+            # No parent, directly under project
+            return project_key
+
+        if self._is_parent_epic(parent):
+            return parent.key
+
+        # For non-epic parents (e.g., story with subtasks),
+        # the document belongs directly under the project in the hierarchy
+        return project_key
+
+    def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
+        self._jira_client = build_jira_client(
+            credentials=credentials,
+            jira_base=self.jira_base,
+            scoped_token=self.scoped_token,
+        )
+        return None
+
+    def _get_jql_query(
+        self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
+    ) -> str:
+        """Get the JQL query based on configuration and time range
+
+        If a custom JQL query is provided, it will be used and combined with time constraints.
+        Otherwise, the query will be constructed based on project key (if provided).
+        """
+        start_date_str = datetime.fromtimestamp(start, tz=timezone.utc).strftime(
+            "%Y-%m-%d %H:%M"
+        )
+        end_date_str = datetime.fromtimestamp(end, tz=timezone.utc).strftime(
+            "%Y-%m-%d %H:%M"
+        )
+
+        time_jql = f"updated >= '{start_date_str}' AND updated <= '{end_date_str}'"
+
+        # If custom JQL query is provided, use it and combine with time constraints
+        if self.jql_query:
+            return f"({self.jql_query}) AND {time_jql}"
+
+        # Otherwise, use project key if provided
+        if self.jira_project:
+            base_jql = f"project = {self.quoted_jira_project}"
+            return f"{base_jql} AND {time_jql}"
+
+        return time_jql
+
+    def load_from_checkpoint(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: JiraServiceManagementConnectorCheckpoint,
+    ) -> CheckpointOutput[JiraServiceManagementConnectorCheckpoint]:
+        jql = self._get_jql_query(start, end)
+        try:
+            return self._load_from_checkpoint(
+                jql, checkpoint, include_permissions=False
+            )
+        except Exception as e:
+            if is_atlassian_date_error(e):
+                jql = self._get_jql_query(start - ONE_HOUR, end)
+                return self._load_from_checkpoint(
+                    jql, checkpoint, include_permissions=False
+                )
+            raise e
+
+    def load_from_checkpoint_with_perm_sync(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: JiraServiceManagementConnectorCheckpoint,
+    ) -> CheckpointOutput[JiraServiceManagementConnectorCheckpoint]:
+        """Load documents from checkpoint with permission information included."""
+        jql = self._get_jql_query(start, end)
+        try:
+            return self._load_from_checkpoint(jql, checkpoint, include_permissions=True)
+        except Exception as e:
+            if is_atlassian_date_error(e):
+                jql = self._get_jql_query(start - ONE_HOUR, end)
+                return self._load_from_checkpoint(
+                    jql, checkpoint, include_permissions=True
+                )
+            raise e
+
+    def _load_from_checkpoint(
+        self, jql: str, checkpoint: JiraServiceManagementConnectorCheckpoint, include_permissions: bool
+    ) -> CheckpointOutput[JiraServiceManagementConnectorCheckpoint]:
+        # Get the current offset from checkpoint or start at 0
+        starting_offset = checkpoint.offset or 0
+        current_offset = starting_offset
+        new_checkpoint = copy.deepcopy(checkpoint)
+
+        # Convert checkpoint list to set for efficient lookups
+        seen_hierarchy_node_ids = set(new_checkpoint.seen_hierarchy_node_ids)
+
+        checkpoint_callback = make_checkpoint_callback(new_checkpoint)
+
+        for issue in _perform_jql_search(
+            jira_client=self.jira_client,
+            jql=jql,
+            start=current_offset,
+            max_results=_JIRA_FULL_PAGE_SIZE,
+            all_issue_ids=new_checkpoint.all_issue_ids,
+            checkpoint_callback=checkpoint_callback,
+            nextPageToken=new_checkpoint.cursor,
+            ids_done=new_checkpoint.ids_done,
+        ):
+            issue_key = issue.key
+            try:
+                # Get project info for hierarchy
+                project = best_effort_get_field_from_issue(issue, _FIELD_PROJECT)
+                project_key = project.key if project else None
+                project_name = project.name if project else None
+
+                # Yield hierarchy nodes BEFORE the document (parent-before-child)
+                if project_key:
+                    # 1. Yield project hierarchy node (if not already yielded)
+                    yield from self._yield_project_hierarchy_node(
+                        project_key, project_name, seen_hierarchy_node_ids
+                    )
+
+                    # 2. If parent is an Epic, yield hierarchy node for it
+                    parent = best_effort_get_field_from_issue(issue, _FIELD_PARENT)
+                    if parent:
+                        yield from self._yield_parent_hierarchy_node_if_epic(
+                            parent, project_key, seen_hierarchy_node_ids
+                        )
+
+                    # 3. If this issue IS an Epic, yield it as hierarchy node
+                    if self._is_epic(issue):
+                        yield from self._yield_epic_hierarchy_node(
+                            issue, project_key, seen_hierarchy_node_ids
+                        )
+
+                # Determine parent hierarchy node ID for the document
+                parent_hierarchy_raw_node_id = (
+                    self._get_parent_hierarchy_raw_node_id(issue, project_key)
+                    if project_key
+                    else None
+                )
+
+                if document := process_jira_issue(
+                    jira_base_url=self.jira_base,
+                    issue=issue,
+                    comment_email_blacklist=self.comment_email_blacklist,
+                    labels_to_skip=self.labels_to_skip,
+                    parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
+                ):
+                    # Add permission information to the document if requested
+                    if include_permissions:
+                        document.external_access = self._get_project_permissions(
+                            project_key,
+                            add_prefix=True,  # Indexing path - prefix here
+                        )
+                    yield document
+
+            except Exception as e:
+                yield ConnectorFailure(
+                    failed_document=DocumentFailure(
+                        document_id=issue_key,
+                        document_link=build_jira_url(self.jira_base, issue_key),
+                    ),
+                    failure_message=f"Failed to process Jira issue: {str(e)}",
+                    exception=e,
+                )
+
+            current_offset += 1
+
+        # Update checkpoint with seen hierarchy nodes
+        new_checkpoint.seen_hierarchy_node_ids = list(seen_hierarchy_node_ids)
+
+        # Update checkpoint
+        self.update_checkpoint_for_next_run(
+            new_checkpoint, current_offset, starting_offset, _JIRA_FULL_PAGE_SIZE
+        )
+
+        return new_checkpoint
+
+    def update_checkpoint_for_next_run(
+        self,
+        checkpoint: JiraServiceManagementConnectorCheckpoint,
+        current_offset: int,
+        starting_offset: int,
+        page_size: int,
+    ) -> None:
+        if _is_cloud_client(self.jira_client):
+            # other updates done in the checkpoint callback
+            checkpoint.has_more = (
+                len(checkpoint.all_issue_ids) > 0 or not checkpoint.ids_done
+            )
+        else:
+            checkpoint.offset = current_offset
+            # if we didn't retrieve a full batch, we're done
+            checkpoint.has_more = current_offset - starting_offset == page_size
+
+    def retrieve_all_slim_docs_perm_sync(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+        callback: IndexingHeartbeatInterface | None = None,  # noqa: ARG002
+    ) -> GenerateSlimDocumentOutput:
+        one_day = timedelta(hours=24).total_seconds()
+
+        start = start or 0
+        end = (
+            end or datetime.now().timestamp() + one_day
+        )  # we add one day to account for any potential timezone issues
+
+        jql = self._get_jql_query(start, end)
+        checkpoint = self.build_dummy_checkpoint()
+        checkpoint_callback = make_checkpoint_callback(checkpoint)
+        prev_offset = 0
+        current_offset = 0
+        slim_doc_batch: list[SlimDocument | HierarchyNode] = []
+
+        # Track seen hierarchy nodes within this sync run
+        seen_hierarchy_node_ids: set[str] = set()
+
+        while checkpoint.has_more:
+            for issue in _perform_jql_search(
+                jira_client=self.jira_client,
+                jql=jql,
+                start=current_offset,
+                max_results=JIRA_SLIM_PAGE_SIZE,
+                all_issue_ids=checkpoint.all_issue_ids,
+                checkpoint_callback=checkpoint_callback,
+                nextPageToken=checkpoint.cursor,
+                ids_done=checkpoint.ids_done,
+            ):
+                # Get project info
+                project = best_effort_get_field_from_issue(issue, _FIELD_PROJECT)
+                project_key = project.key if project else None
+                project_name = project.name if project else None
+
+                if not project_key:
+                    continue
+
+                # Yield hierarchy nodes BEFORE the slim document (parent-before-child)
+                # 1. Yield project hierarchy node (if not already yielded)
+                for node in self._yield_project_hierarchy_node(
+                    project_key, project_name, seen_hierarchy_node_ids
+                ):
+                    slim_doc_batch.append(node)
+
+                # 2. If parent is an Epic, yield hierarchy node for it
+                parent = best_effort_get_field_from_issue(issue, _FIELD_PARENT)
+                if parent:
+                    for node in self._yield_parent_hierarchy_node_if_epic(
+                        parent, project_key, seen_hierarchy_node_ids
+                    ):
+                        slim_doc_batch.append(node)
+
+                # 3. If this issue IS an Epic, yield it as hierarchy node
+                if self._is_epic(issue):
+                    for node in self._yield_epic_hierarchy_node(
+                        issue, project_key, seen_hierarchy_node_ids
+                    ):
+                        slim_doc_batch.append(node)
+
+                # Now add the slim document
+                issue_key = best_effort_get_field_from_issue(issue, _FIELD_KEY)
+                doc_id = build_jira_url(self.jira_base, issue_key)
+
+                slim_doc_batch.append(
+                    SlimDocument(
+                        id=doc_id,
+                        # Permission sync path - don't prefix, upsert_document_external_perms handles it
+                        external_access=self._get_project_permissions(
+                            project_key, add_prefix=False
+                        ),
+                    )
+                )
+                current_offset += 1
+                if len(slim_doc_batch) >= JIRA_SLIM_PAGE_SIZE:
+                    yield slim_doc_batch
+                    slim_doc_batch = []
+            self.update_checkpoint_for_next_run(
+                checkpoint, current_offset, prev_offset, JIRA_SLIM_PAGE_SIZE
+            )
+            prev_offset = current_offset
+
+        if slim_doc_batch:
+            yield slim_doc_batch
+
+    def validate_connector_settings(self) -> None:
+        if self._jira_client is None:
+            raise ConnectorMissingCredentialError("Jira")
+
+        # If a custom JQL query is set, validate it's valid
+        if self.jql_query:
+            try:
+                # Try to execute the JQL query with a small limit to validate its syntax
+                # Use next(iter(...), None) to get just the first result without
+                # forcing evaluation of all results
+                next(
+                    iter(
+                        _perform_jql_search(
+                            jira_client=self.jira_client,
+                            jql=self.jql_query,
+                            start=0,
+                            max_results=1,
+                            all_issue_ids=[],
+                        )
+                    ),
+                    None,
+                )
+            except Exception as e:
+                self._handle_jira_connector_settings_error(e)
+
+        # If a specific project is set, validate it exists
+        elif self.jira_project:
+            try:
+                self.jira_client.project(self.jira_project)
+            except Exception as e:
+                self._handle_jira_connector_settings_error(e)
+        else:
+            # If neither JQL nor project specified, validate we can access the Jira API
+            try:
+                # Try to list projects to validate access
+                self.jira_client.projects()
+            except Exception as e:
+                self._handle_jira_connector_settings_error(e)
+
+    def _handle_jira_connector_settings_error(self, e: Exception) -> None:
+        """Helper method to handle Jira API errors consistently.
+
+        Extracts error messages from the Jira API response for all status codes when possible,
+        providing more user-friendly error messages.
+
+        Args:
+            e: The exception raised by the Jira API
+
+        Raises:
+            CredentialExpiredError: If the status code is 401
+            InsufficientPermissionsError: If the status code is 403
+            ConnectorValidationError: For other HTTP errors with extracted error messages
+        """
+        status_code = getattr(e, "status_code", None)
+        logger.error(f"Jira API error during validation: {e}")
+
+        # Handle specific status codes with appropriate exceptions
+        if status_code == 401:
+            raise CredentialExpiredError(
+                "Jira credential appears to be expired or invalid (HTTP 401)."
+            )
+        elif status_code == 403:
+            raise InsufficientPermissionsError(
+                "Your Jira token does not have sufficient permissions for this configuration (HTTP 403)."
+            )
+        elif status_code == 429:
+            raise ConnectorValidationError(
+                "Validation failed due to Jira rate-limits being exceeded. Please try again later."
+            )
+
+        # Try to extract original error message from the response
+        error_message = getattr(e, "text", None)
+        if error_message is None:
+            raise UnexpectedValidationError(
+                f"Unexpected Jira error during validation: {e}"
+            )
+
+        raise ConnectorValidationError(
+            f"Validation failed due to Jira error: {error_message}"
+        )
+
+    @override
+    def validate_checkpoint_json(
+        self, checkpoint_json: str
+    ) -> JiraServiceManagementConnectorCheckpoint:
+        return JiraServiceManagementConnectorCheckpoint.model_validate_json(checkpoint_json)
+
+    @override
+    def build_dummy_checkpoint(self) -> JiraServiceManagementConnectorCheckpoint:
+        return JiraServiceManagementConnectorCheckpoint(
+            has_more=True,
+        )
+
+
+def make_checkpoint_callback(
+    checkpoint: JiraServiceManagementConnectorCheckpoint,
+) -> Callable[[Iterator[list[str]], str | None], None]:
+    def checkpoint_callback(
+        issue_ids: Iterator[list[str]], pageToken: str | None
+    ) -> None:
+        for id_batch in issue_ids:
+            checkpoint.all_issue_ids.append(id_batch)
+        checkpoint.cursor = pageToken
+        # pageToken starts out as None and is only None once we've fetched all the issue ids
+        checkpoint.ids_done = pageToken is None
+
+    return checkpoint_callback
+
+
+if __name__ == "__main__":
+    import os
+    from onyx.utils.variable_functionality import global_version
+    from tests.daily.connectors.utils import load_all_from_connector
+
+    # For connector permission testing, set EE to true.
+    global_version.set_ee()
+
+    connector = JiraServiceManagementConnector(
+        jira_base_url=os.environ["JIRA_BASE_URL"],
+        project_key=os.environ.get("JIRA_PROJECT_KEY"),
+        comment_email_blacklist=[],
+    )
+
+    connector.load_credentials(
+        {
+            "jira_user_email": os.environ["JIRA_USER_EMAIL"],
+            "jira_api_token": os.environ["JIRA_API_TOKEN"],
+        }
+    )
+
+    start = 0
+    end = datetime.now().timestamp()
+
+    for slim_doc in connector.retrieve_all_slim_docs_perm_sync(
+        start=start,
+        end=end,
+    ):
+        print(slim_doc)
+
+    for doc in load_all_from_connector(
+        connector=connector,
+        start=start,
+        end=end,
+    ).documents:
+        print(doc)
