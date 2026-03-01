@@ -1,17 +1,24 @@
+"use client";
+
 import { useState } from "react";
-import Button from "@/refresh-components/buttons/Button";
 import { ValidSources, AccessType } from "@/lib/types";
-import { FaAccusoft } from "react-icons/fa";
 import { submitCredential } from "@/components/admin/connectors/CredentialForm";
-import { TextFormField } from "@/components/Field";
 import { Form, Formik, FormikHelpers } from "formik";
 import { toast } from "@/hooks/useToast";
 import GDriveMain from "@/app/admin/connectors/[connector]/pages/gdrive/GoogleDrivePage";
 import { Connector } from "@/lib/connectors/connectors";
-import { Credential, credentialTemplates } from "@/lib/connectors/credentials";
+import {
+  Credential,
+  credentialTemplates,
+  getDisplayNameForCredentialKey,
+  CredentialTemplateWithAuth,
+} from "@/lib/connectors/credentials";
 import { GmailMain } from "@/app/admin/connectors/[connector]/pages/gmail/GmailPage";
-import { ActionType, dictionaryType } from "../types";
-import { createValidationSchema } from "../lib";
+import { ActionType, dictionaryType } from "@/components/credentials/types";
+import {
+  createValidationSchema,
+  isOptionalCredentialField,
+} from "@/components/credentials/lib";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import {
@@ -19,49 +26,23 @@ import {
   IsPublicGroupSelector,
 } from "@/components/IsPublicGroupSelector";
 import { useUser } from "@/providers/UserProvider";
-import CardSection from "@/components/admin/CardSection";
-import { CredentialFieldsRenderer } from "./CredentialFieldsRenderer";
-import { TypedFile } from "@/lib/connectors/fileTypes";
+import { isTypedFileField, TypedFile } from "@/lib/connectors/fileTypes";
+import { BooleanFormField, TypedFileUploadFormField } from "@/components/Field";
 import ConnectorDocsLink from "@/components/admin/connectors/ConnectorDocsLink";
+import Tabs from "@/refresh-components/Tabs";
+import Text from "@/refresh-components/texts/Text";
 import { SvgPlusCircle } from "@opal/icons";
-const CreateButton = ({
-  onClick,
-  isSubmitting,
-  isAdmin,
-  groups,
-}: {
-  onClick: () => void;
-  isSubmitting: boolean;
-  isAdmin: boolean;
-  groups: number[];
-}) => (
-  <Button
-    onClick={onClick}
-    disabled={isSubmitting || (!isAdmin && groups.length === 0)}
-    leftIcon={SvgPlusCircle}
-  >
-    Create
-  </Button>
-);
+import { Button } from "@opal/components";
+import * as InputLayouts from "@/layouts/input-layouts";
+import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 
 type formType = IsPublicGroupSelectorFormType & {
   name: string;
   [key: string]: any; // For additional credential fields
 };
 
-export default function CreateCredential({
-  hideSource,
-  sourceType,
-  accessType,
-  close,
-  onClose = () => null,
-  onSwitch,
-  onSwap = async () => null,
-  swapConnector,
-  refresh = () => null,
-}: {
+export interface CreateCredentialProps {
   // Source information
-  hideSource?: boolean; // hides docs link
   sourceType: ValidSources;
   accessType: AccessType;
 
@@ -84,7 +65,18 @@ export default function CreateCredential({
 
   // Mutating parent state
   refresh?: () => void;
-}) {
+}
+
+export default function CreateCredential({
+  sourceType,
+  accessType,
+  close,
+  onClose = () => null,
+  onSwitch,
+  onSwap = async () => null,
+  swapConnector,
+  refresh = () => null,
+}: CreateCredentialProps) {
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
   const [authMethod, setAuthMethod] = useState<string>();
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
@@ -208,64 +200,222 @@ export default function CreateCredential({
           formikProps.setFieldValue("authentication_method", authMethod);
         }
 
+        const templateWithAuth =
+          credentialTemplate as CredentialTemplateWithAuth<any>;
+        const hasMultipleAuthMethods =
+          templateWithAuth.authMethods &&
+          templateWithAuth.authMethods.length > 1;
+
+        const handleAuthMethodChange = (newMethod: string) => {
+          const cleaned: Record<string, any> = {
+            ...formikProps.values,
+            authentication_method: newMethod,
+          };
+          templateWithAuth.authMethods?.forEach((m) => {
+            if (m.value !== newMethod) {
+              Object.keys(m.fields).forEach((fieldKey) => {
+                delete cleaned[fieldKey];
+              });
+            }
+          });
+          formikProps.setValues(cleaned as typeof formikProps.values);
+          setAuthMethod(newMethod);
+        };
+
+        const currentAuthMethod = authMethod || initialAuthMethod;
+
         return (
-          <Form className="w-full flex items-stretch">
-            {!hideSource && <ConnectorDocsLink sourceType={sourceType} />}
-            <CardSection className="w-full items-start dark:bg-neutral-900 mt-4 flex flex-col gap-y-6">
-              <TextFormField
+          <Form className="w-full flex flex-col gap-4">
+            <ConnectorDocsLink sourceType={sourceType} />
+
+            <InputLayouts.Vertical name="name" title="Name" optional>
+              <InputTypeInField
                 name="name"
-                placeholder="(Optional) credential name.."
-                label="Name:"
+                placeholder="Name your credential"
               />
+            </InputLayouts.Vertical>
 
-              <CredentialFieldsRenderer
-                credentialTemplate={credentialTemplate}
-                authMethod={authMethod || initialAuthMethod}
-                setAuthMethod={setAuthMethod}
-              />
+            {hasMultipleAuthMethods && templateWithAuth.authMethods ? (
+              <div className="w-full space-y-4">
+                <input
+                  type="hidden"
+                  name="authentication_method"
+                  value={
+                    currentAuthMethod ||
+                    (templateWithAuth.authMethods?.[0]?.value ?? "")
+                  }
+                />
 
-              {!swapConnector && (
-                <div className="mt-4 flex w-full flex-col sm:flex-row justify-between items-end">
-                  <div className="w-full sm:w-3/4 mb-4 sm:mb-0">
-                    {isPaidEnterpriseFeaturesEnabled && (
-                      <div className="flex flex-col items-start">
-                        {isAdmin && (
-                          <AdvancedOptionsToggle
-                            showAdvancedOptions={showAdvancedOptions}
-                            setShowAdvancedOptions={setShowAdvancedOptions}
-                          />
+                <Tabs
+                  value={
+                    currentAuthMethod ||
+                    templateWithAuth.authMethods?.[0]?.value ||
+                    ""
+                  }
+                  onValueChange={handleAuthMethodChange}
+                >
+                  <Tabs.List>
+                    {templateWithAuth.authMethods.map((method) => (
+                      <Tabs.Trigger key={method.value} value={method.value}>
+                        {method.label}
+                      </Tabs.Trigger>
+                    ))}
+                  </Tabs.List>
+
+                  {templateWithAuth.authMethods.map((method) => (
+                    <Tabs.Content
+                      key={method.value}
+                      value={method.value}
+                      alignItems="stretch"
+                    >
+                      {Object.keys(method.fields).length === 0 &&
+                        method.description && (
+                          <div className="p-4 bg-background-tint-02 border border-border-02 rounded-md">
+                            <Text secondaryBody text03>
+                              {method.description}
+                            </Text>
+                          </div>
                         )}
-                        {(showAdvancedOptions || !isAdmin) && (
-                          <IsPublicGroupSelector
-                            formikProps={formikProps}
-                            objectName="credential"
-                            publicToWhom="Curators"
-                          />
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  <CreateButton
-                    onClick={() =>
-                      handleSubmit(formikProps.values, formikProps, "create")
-                    }
-                    isSubmitting={formikProps.isSubmitting}
-                    isAdmin={isAdmin}
-                    groups={formikProps.values.groups}
-                  />
+
+                      {Object.entries(method.fields).map(([key, val]) => {
+                        if (isTypedFileField(key)) {
+                          return (
+                            <TypedFileUploadFormField
+                              key={key}
+                              name={key}
+                              label={getDisplayNameForCredentialKey(key)}
+                            />
+                          );
+                        }
+
+                        if (typeof val === "boolean") {
+                          return (
+                            <BooleanFormField
+                              key={key}
+                              name={key}
+                              label={getDisplayNameForCredentialKey(key)}
+                            />
+                          );
+                        }
+
+                        const inputType =
+                          key.toLowerCase().includes("token") ||
+                          key.toLowerCase().includes("password") ||
+                          key.toLowerCase().includes("secret")
+                            ? "password"
+                            : "text";
+
+                        return (
+                          <InputLayouts.Vertical
+                            key={key}
+                            name={key}
+                            title={getDisplayNameForCredentialKey(key)}
+                            optional={isOptionalCredentialField(val)}
+                          >
+                            <InputTypeInField
+                              name={key}
+                              placeholder={val}
+                              type={inputType}
+                            />
+                          </InputLayouts.Vertical>
+                        );
+                      })}
+                    </Tabs.Content>
+                  ))}
+                </Tabs>
+              </div>
+            ) : (
+              Object.entries(credentialTemplate).map(([key, val]) => {
+                if (key === "authentication_method" || key === "authMethods") {
+                  return null;
+                }
+                if (isTypedFileField(key)) {
+                  return (
+                    <TypedFileUploadFormField
+                      key={key}
+                      name={key}
+                      label={getDisplayNameForCredentialKey(key)}
+                    />
+                  );
+                }
+
+                if (typeof val === "boolean") {
+                  return (
+                    <BooleanFormField
+                      key={key}
+                      name={key}
+                      label={getDisplayNameForCredentialKey(key)}
+                    />
+                  );
+                }
+
+                const inputType =
+                  key.toLowerCase().includes("token") ||
+                  key.toLowerCase().includes("password") ||
+                  key.toLowerCase().includes("secret")
+                    ? "password"
+                    : "text";
+
+                return (
+                  <InputLayouts.Vertical
+                    key={key}
+                    name={key}
+                    title={getDisplayNameForCredentialKey(key)}
+                    optional={isOptionalCredentialField(val)}
+                  >
+                    <InputTypeInField
+                      name={key}
+                      placeholder={val as string}
+                      type={inputType}
+                    />
+                  </InputLayouts.Vertical>
+                );
+              })
+            )}
+
+            {!swapConnector && (
+              <div className="mt-4 flex w-full flex-col sm:flex-row justify-between items-end">
+                <div className="w-full sm:w-3/4 mb-4 sm:mb-0">
+                  {isPaidEnterpriseFeaturesEnabled && (
+                    <div className="flex flex-col items-start">
+                      {isAdmin && (
+                        <AdvancedOptionsToggle
+                          showAdvancedOptions={showAdvancedOptions}
+                          setShowAdvancedOptions={setShowAdvancedOptions}
+                        />
+                      )}
+                      {(showAdvancedOptions || !isAdmin) && (
+                        <IsPublicGroupSelector
+                          formikProps={formikProps}
+                          objectName="credential"
+                          publicToWhom="Curators"
+                        />
+                      )}
+                    </div>
+                  )}
                 </div>
-              )}
-            </CardSection>
+                <Button
+                  onClick={() =>
+                    handleSubmit(formikProps.values, formikProps, "create")
+                  }
+                  disabled={
+                    formikProps.isSubmitting ||
+                    (!isAdmin && formikProps.values.groups.length === 0)
+                  }
+                  icon={SvgPlusCircle}
+                >
+                  Create
+                </Button>
+              </div>
+            )}
+
             {swapConnector && (
               <Button
-                className="bg-rose-500 hover:bg-rose-400"
                 onClick={() =>
                   handleSubmit(formikProps.values, formikProps, "createAndSwap")
                 }
                 disabled={formikProps.isSubmitting}
-                leftIcon={() => (
-                  <FaAccusoft className="fill-text-inverted-05" />
-                )}
+                icon={SvgPlusCircle}
               >
                 Create
               </Button>

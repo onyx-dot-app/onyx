@@ -1,30 +1,33 @@
-import * as Yup from "yup";
+"use client";
 
-import Button from "@/refresh-components/buttons/Button";
+import * as Yup from "yup";
 import { ValidSources } from "@/lib/types";
-import { TextFormField } from "@/components/Field";
 import { Form, Formik, FormikHelpers } from "formik";
-import CardSection from "@/components/admin/CardSection";
 import { getConnectorOauthRedirectUrl } from "@/lib/connectors/oauth";
 import { OAuthAdditionalKwargDescription } from "@/lib/connectors/credentials";
+import { Button } from "@opal/components";
+import { SvgPlusCircle } from "@opal/icons";
+import * as InputLayouts from "@/layouts/input-layouts";
+import * as GeneralLayouts from "@/layouts/general-layouts";
+import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 
 type formType = {
-  [key: string]: any; // For additional credential fields
+  [key: string]: any;
 };
 
-export function CreateStdOAuthCredential({
+export interface CreateStdOAuthCredentialProps {
+  sourceType: ValidSources;
+  additionalFields: OAuthAdditionalKwargDescription[];
+}
+
+export default function CreateStdOAuthCredential({
   sourceType,
   additionalFields,
-}: {
-  // Source information
-  sourceType: ValidSources;
-
-  additionalFields: OAuthAdditionalKwargDescription[];
-}) {
-  const handleSubmit = async (
+}: CreateStdOAuthCredentialProps) {
+  async function handleSubmit(
     values: formType,
     formikHelpers: FormikHelpers<formType>
-  ) => {
+  ) {
     const { setSubmitting, validateForm } = formikHelpers;
 
     const errors = await validateForm(values);
@@ -34,7 +37,6 @@ export function CreateStdOAuthCredential({
     }
 
     setSubmitting(true);
-    formikHelpers.setSubmitting(true);
 
     const redirectUrl = await getConnectorOauthRedirectUrl(sourceType, values);
 
@@ -43,7 +45,7 @@ export function CreateStdOAuthCredential({
     }
 
     window.location.href = redirectUrl;
-  };
+  }
 
   return (
     <Formik
@@ -57,27 +59,26 @@ export function CreateStdOAuthCredential({
           additionalFields.map((field) => [field.name, Yup.string().required()])
         ),
       })}
-      onSubmit={(values, formikHelpers) => {
-        handleSubmit(values, formikHelpers);
-      }}
+      onSubmit={handleSubmit}
     >
       {() => (
-        <Form className="w-full flex items-stretch">
-          <CardSection className="w-full !border-0 mt-4 flex flex-col gap-y-6">
+        <Form>
+          <GeneralLayouts.Section>
             {additionalFields.map((field) => (
-              <TextFormField
+              <InputLayouts.Vertical
                 key={field.name}
                 name={field.name}
-                label={field.display_name}
-                subtext={field.description}
-                type="text"
-              />
+                title={field.display_name}
+                description={field.description}
+              >
+                <InputTypeInField name={field.name} />
+              </InputLayouts.Vertical>
             ))}
 
-            <div className="flex w-full">
-              <Button type="submit">Create</Button>
-            </div>
-          </CardSection>
+            <Button type="submit" icon={SvgPlusCircle}>
+              Create
+            </Button>
+          </GeneralLayouts.Section>
         </Form>
       )}
     </Formik>
