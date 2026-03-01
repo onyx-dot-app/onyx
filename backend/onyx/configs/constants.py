@@ -241,6 +241,7 @@ class DocumentSource(str, Enum):
     IMAP = "imap"
     BITBUCKET = "bitbucket"
     TESTRAIL = "testrail"
+    DIRECTORY = "directory"
 
     # Special case just for integration tests
     MOCK_CONNECTOR = "mock_connector"
