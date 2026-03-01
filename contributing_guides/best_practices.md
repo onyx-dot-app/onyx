@@ -92,6 +92,12 @@ Add clear comments:
 - Connector code (data → Onyx documents):
   - Any in-memory structure that can grow without bound based on input must be periodically size-checked.
   - If a connector is OOMing (often shows up as “missing celery tasks”), this is a top thing to check retroactively.
+- Async and event loops:
+  - Never introduce new async/event loop Python code, and try to make existing
+    async code synchronous when possible if it makes sense.
+    - Writing async code without 100% understanding the code and having a
+      concrete reason to do so is likely to introduce bugs and not add any
+      meaningful performance gains.
 
 ---
 
