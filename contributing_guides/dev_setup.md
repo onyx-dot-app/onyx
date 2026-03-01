@@ -158,14 +158,14 @@ python ./scripts/dev_run_background_jobs.py
 To run the backend API server, navigate back to `onyx/backend` and run:
 
 ```bash
-AUTH_TYPE=disabled uvicorn onyx.main:app --reload --port 8080
+AUTH_TYPE=basic uvicorn onyx.main:app --reload --port 8080
 ```
 
 _For Windows (for compatibility with both PowerShell and Command Prompt):_
 
 ```bash
 powershell -Command "
-    $env:AUTH_TYPE='disabled'
+    $env:AUTH_TYPE='basic'
     uvicorn onyx.main:app --reload --port 8080
 "
 ```
