@@ -80,6 +80,7 @@ export { default as SvgFolderPartialOpen } from "@opal/icons/folder-partial-open
 export { default as SvgFolderPlus } from "@opal/icons/folder-plus";
 export { default as SvgGemini } from "@opal/icons/gemini";
 export { default as SvgGlobe } from "@opal/icons/globe";
+export { default as SvgGripVertical } from "@opal/icons/grip-vertical";
 export { default as SvgHandle } from "@opal/icons/handle";
 export { default as SvgHardDrive } from "@opal/icons/hard-drive";
 export { default as SvgHashSmall } from "@opal/icons/hash-small";

@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   type Table,
   type ColumnDef,
+  type RowData,
   type SortingState,
 } from "@tanstack/react-table";
 import { Button } from "@opal/components";
@@ -17,8 +18,8 @@ import Text from "@/refresh-components/texts/Text";
 // Popover UI
 // ---------------------------------------------------------------------------
 
-interface SortingPopoverProps {
-  table: Table<any>;
+interface SortingPopoverProps<TData extends RowData = RowData> {
+  table: Table<TData>;
   sorting: SortingState;
   size?: "regular" | "small";
   footerText?: string;
@@ -26,18 +27,19 @@ interface SortingPopoverProps {
   descendingLabel?: string;
 }
 
-function SortingPopover({
+function SortingPopover<TData extends RowData>({
   table,
   sorting,
   size = "regular",
   footerText,
   ascendingLabel = "Ascending",
   descendingLabel = "Descending",
-}: SortingPopoverProps) {
+}: SortingPopoverProps<TData>) {
   const [open, setOpen] = useState(false);
-  const sortableColumns = table
-    .getAllLeafColumns()
-    .filter((col) => col.getCanSort());
+  const sortableColumns = useMemo(
+    () => table.getAllLeafColumns().filter((col) => col.getCanSort()),
+    [table]
+  );
 
   const currentSort = sorting[0] ?? null;
 

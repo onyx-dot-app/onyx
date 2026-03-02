@@ -6,7 +6,6 @@ import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import Pagination from "@/refresh-components/table/Pagination";
 import { SvgEye, SvgXCircle } from "@opal/icons";
-import { Section } from "@/layouts/general-layouts";
 
 type FooterSize = "regular" | "small";
 type SelectionState = "none" | "partial" | "all";
@@ -256,13 +255,7 @@ function SummaryLeft({
   isSmall,
 }: SummaryLeftProps) {
   return (
-    <Section
-      flexDirection="row"
-      gap={0.25}
-      alignItems="center"
-      width="fit"
-      height="fit"
-    >
+    <div className="flex flex-row gap-1 items-center w-fit h-fit px-1">
       {isSmall ? (
         <Text secondaryBody text03>
           Showing{" "}
@@ -286,6 +279,6 @@ function SummaryLeft({
           </Text>
         </Text>
       )}
-    </Section>
+    </div>
   );
 }

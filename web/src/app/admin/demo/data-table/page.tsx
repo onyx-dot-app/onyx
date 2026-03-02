@@ -1,8 +1,10 @@
 "use client";
 "use no memo";
 
+import { useState } from "react";
 import { createColumnHelper, flexRender } from "@tanstack/react-table";
 import useDataTable, { toOnyxSortDirection } from "@/hooks/useDataTable";
+import useDraggableRows from "@/hooks/useDraggableRows";
 import { ColumnVisibilityPopover } from "@/refresh-components/table/ColumnVisibilityPopover";
 import { SortingPopover } from "@/refresh-components/table/SortingPopover";
 import Text from "@/refresh-components/texts/Text";
@@ -14,6 +16,7 @@ import TableRow from "@/refresh-components/table/TableRow";
 import TableHead from "@/refresh-components/table/TableHead";
 import TableCell from "@/refresh-components/table/TableCell";
 import TableQualifier from "@/refresh-components/table/TableQualifier";
+import DragOverlayRow from "@/refresh-components/table/DragOverlayRow";
 import Footer from "@/refresh-components/table/Footer";
 import { SvgCheckCircle, SvgClock, SvgAlertCircle } from "@opal/icons";
 
@@ -512,6 +515,8 @@ const smallColumns = [
 const PAGE_SIZE = 10;
 
 export default function DataTableDemoPage() {
+  const [items, setItems] = useState(DATA);
+
   const {
     table,
     currentPage,
@@ -525,10 +530,20 @@ export default function DataTableDemoPage() {
     toggleAllPageRowsSelected,
     isAllPageRowsSelected,
   } = useDataTable({
-    data: DATA,
+    data: items,
     columns,
     pageSize: PAGE_SIZE,
     initialColumnVisibility: { department: false },
+  });
+
+  const draggable = useDraggableRows({
+    data: items,
+    getRowId: (row) => row.id,
+    enabled: table.getState().sorting.length === 0,
+    onReorder: (ids, changedOrders) => {
+      setItems(ids.map((id) => items.find((r) => r.id === id)!));
+      console.log("Changed sort orders:", changedOrders);
+    },
   });
 
   const {
@@ -625,10 +640,20 @@ export default function DataTableDemoPage() {
               ))}
             </TableHeader>
 
-            <TableBody>
+            <TableBody
+              dndSortable={draggable}
+              renderDragOverlay={(activeId) => {
+                const row = table
+                  .getRowModel()
+                  .rows.find((r) => r.original.id === activeId);
+                if (!row) return null;
+                return <DragOverlayRow row={row} />;
+              }}
+            >
               {table.getRowModel().rows.map((row) => (
                 <TableRow
                   key={row.id}
+                  sortableId={row.original.id}
                   selected={row.getIsSelected()}
                   onClick={() => row.toggleSelected()}
                 >

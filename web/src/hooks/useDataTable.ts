@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import {
   useReactTable,
   getCoreRowModel,
@@ -208,18 +208,24 @@ export default function useDataTable<TData extends RowData>(
   const isPaginated = isFinite(pageSizeOption);
 
   // ---- actions ------------------------------------------------------------
-  const setPage = (page: number) => {
-    const clamped = Math.max(1, Math.min(page, totalPages));
-    setPagination((prev) => ({ ...prev, pageIndex: clamped - 1 }));
-  };
+  const setPage = useCallback(
+    (page: number) => {
+      const clamped = Math.max(1, Math.min(page, totalPages));
+      setPagination((prev) => ({ ...prev, pageIndex: clamped - 1 }));
+    },
+    [totalPages]
+  );
 
-  const clearSelection = () => {
+  const clearSelection = useCallback(() => {
     table.resetRowSelection();
-  };
+  }, [table]);
 
-  const toggleAllPageRowsSelected = (selected: boolean) => {
-    table.toggleAllPageRowsSelected(selected);
-  };
+  const toggleAllPageRowsSelected = useCallback(
+    (selected: boolean) => {
+      table.toggleAllPageRowsSelected(selected);
+    },
+    [table]
+  );
 
   return {
     table,

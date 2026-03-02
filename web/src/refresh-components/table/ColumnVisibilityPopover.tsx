@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   type Table,
   type ColumnDef,
+  type RowData,
   type VisibilityState,
 } from "@tanstack/react-table";
 import { Button } from "@opal/components";
@@ -16,21 +17,22 @@ import Divider from "@/refresh-components/Divider";
 // Popover UI
 // ---------------------------------------------------------------------------
 
-interface ColumnVisibilityPopoverProps {
-  table: Table<any>;
+interface ColumnVisibilityPopoverProps<TData extends RowData = RowData> {
+  table: Table<TData>;
   columnVisibility: VisibilityState;
   size?: "regular" | "small";
 }
 
-function ColumnVisibilityPopover({
+function ColumnVisibilityPopover<TData extends RowData>({
   table,
   columnVisibility,
   size = "regular",
-}: ColumnVisibilityPopoverProps) {
+}: ColumnVisibilityPopoverProps<TData>) {
   const [open, setOpen] = useState(false);
-  const hideableColumns = table
-    .getAllLeafColumns()
-    .filter((col) => col.getCanHide());
+  const hideableColumns = useMemo(
+    () => table.getAllLeafColumns().filter((col) => col.getCanHide()),
+    [table]
+  );
 
   return (
     <Popover open={open} onOpenChange={setOpen}>

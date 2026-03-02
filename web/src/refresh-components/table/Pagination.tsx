@@ -278,6 +278,44 @@ function CountPaginationInner({
   );
 }
 
+interface PageNumberIconProps {
+  className?: string;
+  pageNum: number;
+  isActive: boolean;
+  isLarge: boolean;
+}
+
+function PageNumberIcon({
+  className: iconClassName,
+  pageNum,
+  isActive,
+  isLarge,
+}: PageNumberIconProps) {
+  return (
+    <div className={cn(iconClassName, "flex flex-col justify-center")}>
+      {isLarge ? (
+        <Text
+          mainUiBody={isActive}
+          mainUiMuted={!isActive}
+          text04={isActive}
+          text02={!isActive}
+        >
+          {pageNum}
+        </Text>
+      ) : (
+        <Text
+          secondaryAction={isActive}
+          secondaryBody={!isActive}
+          text04={isActive}
+          text02={!isActive}
+        >
+          {pageNum}
+        </Text>
+      )}
+    </div>
+  );
+}
+
 function ListPaginationInner({
   currentPage,
   totalPages,
@@ -287,6 +325,7 @@ function ListPaginationInner({
   className,
 }: ListPaginationProps) {
   const pageNumbers = getPageNumbers(currentPage, totalPages);
+  const isLarge = size === "lg";
 
   return (
     <div className={cn("flex items-center gap-1", className)}>
@@ -303,8 +342,8 @@ function ListPaginationInner({
                 return (
                   <Text
                     key={page}
-                    mainUiMuted={size === "lg"}
-                    secondaryBody={size === "md"}
+                    mainUiMuted={isLarge}
+                    secondaryBody={!isLarge}
                     text03
                   >
                     ...
@@ -323,32 +362,12 @@ function ListPaginationInner({
                   prominence="tertiary"
                   transient={isActive}
                   icon={({ className: iconClassName }) => (
-                    <div
-                      className={cn(
-                        iconClassName,
-                        "flex flex-col justify-center"
-                      )}
-                    >
-                      {size === "lg" ? (
-                        <Text
-                          mainUiBody={isActive}
-                          mainUiMuted={!isActive}
-                          text04={isActive}
-                          text02={!isActive}
-                        >
-                          {pageNum}
-                        </Text>
-                      ) : (
-                        <Text
-                          secondaryAction={isActive}
-                          secondaryBody={!isActive}
-                          text04={isActive}
-                          text02={!isActive}
-                        >
-                          {pageNum}
-                        </Text>
-                      )}
-                    </div>
+                    <PageNumberIcon
+                      className={iconClassName}
+                      pageNum={pageNum}
+                      isActive={isActive}
+                      isLarge={isLarge}
+                    />
                   )}
                 />
               );
