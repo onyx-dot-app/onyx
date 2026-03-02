@@ -9,7 +9,7 @@ function Table({ ref, ...props }: TableProps) {
   return (
     <table
       ref={ref}
-      className="min-w-full border-collapse"
+      className="min-w-full border-separate border-spacing-0"
       style={{ tableLayout: "fixed" }}
       {...props}
     />

@@ -364,7 +364,7 @@ const columns = [
     header: "Status",
     size: 120,
     enableSorting: true,
-    enableResizing: false,
+    enableResizing: true,
     cell: (info) => {
       const status = info.getValue();
       const { icon } = STATUS_CONFIG[status];
@@ -470,7 +470,7 @@ const smallColumns = [
     header: "Status",
     size: 120,
     enableSorting: true,
-    enableResizing: false,
+    enableResizing: true,
     cell: (info) => {
       const status = info.getValue();
       const { icon } = STATUS_CONFIG[status];
@@ -567,7 +567,7 @@ export default function DataTableDemoPage() {
 
   return (
     <div className="p-6 space-y-8">
-      <div className="space-y-4">
+      <div className="flex flex-col space-y-4">
         <Text headingH2>Data Table Demo</Text>
         <Text mainContentMuted text03>
           Demonstrates Onyx table primitives wired to TanStack Table with
@@ -575,8 +575,8 @@ export default function DataTableDemoPage() {
         </Text>
       </div>
 
-      <div className="border border-border-01 rounded-lg overflow-hidden">
-        <div className="overflow-x-auto">
+      <div>
+        <div>
           <Table>
             <TableHeader>
               {table.getHeaderGroups().map((headerGroup) => (
@@ -647,12 +647,13 @@ export default function DataTableDemoPage() {
                   .getRowModel()
                   .rows.find((r) => r.original.id === activeId);
                 if (!row) return null;
-                return <DragOverlayRow row={row} />;
+                return <DragOverlayRow row={row} variant="table" />;
               }}
             >
               {table.getRowModel().rows.map((row) => (
                 <TableRow
                   key={row.id}
+                  variant="table"
                   sortableId={row.original.id}
                   selected={row.getIsSelected()}
                   onClick={() => row.toggleSelected()}

@@ -90,7 +90,7 @@ export default function TableHead({
         "group relative",
         alignmentThClass[alignment],
         isSmall ? "p-1.5" : "px-2 py-1",
-        "border-b border-transparent group-hover:border-border-03"
+        "border-b border-transparent hover:border-border-03"
       )}
     >
       <div

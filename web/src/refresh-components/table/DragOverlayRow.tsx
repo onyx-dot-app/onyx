@@ -5,16 +5,20 @@ import TableCell from "@/refresh-components/table/TableCell";
 
 interface DragOverlayRowProps<TData> {
   row: Row<TData>;
+  variant?: "table" | "list";
 }
 
-function DragOverlayRowInner<TData>({ row }: DragOverlayRowProps<TData>) {
+function DragOverlayRowInner<TData>({
+  row,
+  variant,
+}: DragOverlayRowProps<TData>) {
   return (
     <table
       className="min-w-full border-collapse"
       style={{ tableLayout: "fixed" }}
     >
       <tbody>
-        <TableRow selected={row.getIsSelected()}>
+        <TableRow variant={variant} selected={row.getIsSelected()}>
           {row.getVisibleCells().map((cell) => (
             <TableCell key={cell.id} width={cell.column.getSize()}>
               {flexRender(cell.column.columnDef.cell, cell.getContext())}

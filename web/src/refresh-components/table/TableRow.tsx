@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import type { WithoutStyles } from "@/types";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { SvgGripVertical } from "@opal/icons";
+import { SvgHandle } from "@opal/icons";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -14,6 +14,8 @@ interface TableRowProps
   extends WithoutStyles<React.HTMLAttributes<HTMLTableRowElement>> {
   ref?: React.Ref<HTMLTableRowElement>;
   selected?: boolean;
+  /** Visual variant: "table" adds a bottom border, "list" adds rounded corners. Defaults to "list". */
+  variant?: "table" | "list";
   /** When provided, makes this row sortable via @dnd-kit */
   sortableId?: string;
   /** Show drag handle overlay. Defaults to true when sortableId is set. */
@@ -30,6 +32,7 @@ function SortableTableRow({
   sortableId,
   showDragHandle = true,
   size = "regular",
+  variant = "list",
   selected,
   ref: _externalRef,
   children,
@@ -54,7 +57,21 @@ function SortableTableRow({
     <tr
       ref={setNodeRef}
       style={style}
-      className="group"
+      className={cn(
+        "group",
+        "[&>td]:bg-background-tint-00",
+        variant === "table" && "[&>td]:border-b [&>td]:border-border-01",
+        variant === "list" && [
+          "[&>td]:bg-clip-padding",
+          "[&>td]:border-y-[4px]",
+          "[&>td]:border-x-0",
+          "[&>td]:border-transparent",
+          "[&>td:first-child]:rounded-l-12",
+          showDragHandle
+            ? "[&>td:nth-last-child(2)]:rounded-r-12"
+            : "[&>td:last-child]:rounded-r-12",
+        ]
+      )}
       {...attributes}
       {...props}
     >
@@ -64,7 +81,6 @@ function SortableTableRow({
           style={{
             width: 0,
             padding: 0,
-            border: "none",
             position: "relative",
           }}
         >
@@ -73,14 +89,15 @@ function SortableTableRow({
             className={cn(
               "absolute top-1/2 -translate-y-1/2 cursor-grab",
               "opacity-0 group-hover:opacity-100 transition-opacity",
-              "flex items-center justify-center rounded",
-              "text-text-03 hover:text-text-01",
-              size === "small" ? "right-1 p-0.5" : "right-2 p-1"
+              "flex items-center justify-center rounded"
             )}
             aria-label="Drag to reorder"
             {...listeners}
           >
-            <SvgGripVertical size={size === "small" ? 12 : 16} />
+            <SvgHandle
+              size={size === "small" ? 12 : 16}
+              className="text-border-02"
+            />
           </button>
         </td>
       )}
@@ -96,6 +113,7 @@ function TableRow({
   sortableId,
   showDragHandle,
   size,
+  variant = "list",
   selected,
   ref,
   ...props
@@ -106,6 +124,7 @@ function TableRow({
         sortableId={sortableId}
         showDragHandle={showDragHandle}
         size={size}
+        variant={variant}
         selected={selected}
         ref={ref}
         {...props}
@@ -113,7 +132,24 @@ function TableRow({
     );
   }
 
-  return <tr ref={ref} {...props} />;
+  return (
+    <tr
+      ref={ref}
+      className={cn(
+        "[&>td]:bg-background-tint-00",
+        variant === "table" && "[&>td]:border-b [&>td]:border-border-01",
+        variant === "list" && [
+          "[&>td]:bg-clip-padding",
+          "[&>td]:border-y-[4px]",
+          "[&>td]:border-x-0",
+          "[&>td]:border-transparent",
+          "[&>td:first-child]:rounded-l-12",
+          "[&>td:last-child]:rounded-r-12",
+        ]
+      )}
+      {...props}
+    />
+  );
 }
 
 export default TableRow;
