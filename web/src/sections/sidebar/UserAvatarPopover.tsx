@@ -120,17 +120,15 @@ function SettingsPopover({
               undismissedCount > 0 ? ` (${undismissedCount})` : ""
             }`}
           </LineItem>,
-          <a
+          <LineItem
             key="help-faq"
+            icon={SvgExternalLink}
             href="https://docs.onyx.app"
-            className="block"
             target="_blank"
             rel="noopener noreferrer"
           >
-            <LineItem key="help-faq" icon={SvgExternalLink}>
-              Help & FAQ
-            </LineItem>
-          </a>,
+            Help & FAQ
+          </LineItem>,
           null,
           showLogin && (
             <LineItem key="log-in" icon={SvgUser} onClick={handleLogin}>

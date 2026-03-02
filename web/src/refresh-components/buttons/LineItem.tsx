@@ -72,6 +72,8 @@ export interface LineItemProps
   description?: string;
   rightChildren?: React.ReactNode;
   href?: string;
+  rel?: string;
+  target?: string;
   ref?: React.Ref<HTMLDivElement>;
   children?: React.ReactNode;
 }
@@ -141,6 +143,8 @@ export default function LineItem({
   children,
   rightChildren,
   href,
+  rel,
+  target,
   ref,
   ...props
 }: LineItemProps) {
@@ -241,5 +245,9 @@ export default function LineItem({
   );
 
   if (!href) return content;
-  return <Link href={href as Route}>{content}</Link>;
+  return (
+    <Link href={href as Route} rel={rel} target={target}>
+      {content}
+    </Link>
+  );
 }
