@@ -50,6 +50,16 @@ services:
   # The API server handles all background work in NO_VECTOR_DB mode.
   background:
     profiles: ["background"]
+    depends_on:
+      index:
+        condition: service_started
+        required: false
+      inference_model_server:
+        condition: service_started
+        required: false
+      indexing_model_server:
+        condition: service_started
+        required: false
 
   # Move Vespa and indexing model server to a profile so they do not start.
   index:
