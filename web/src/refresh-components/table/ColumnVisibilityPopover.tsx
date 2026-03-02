@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import {
   type Table,
   type ColumnDef,
@@ -9,7 +10,7 @@ import { Button } from "@opal/components";
 import { SvgColumn, SvgCheck } from "@opal/icons";
 import Popover from "@/refresh-components/Popover";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import Text from "@/refresh-components/texts/Text";
+import Divider from "@/refresh-components/Divider";
 
 // ---------------------------------------------------------------------------
 // Popover UI
@@ -26,15 +27,17 @@ function ColumnVisibilityPopover({
   columnVisibility,
   size = "regular",
 }: ColumnVisibilityPopoverProps) {
+  const [open, setOpen] = useState(false);
   const hideableColumns = table
     .getAllLeafColumns()
     .filter((col) => col.getCanHide());
 
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <Popover.Trigger asChild>
         <Button
           icon={SvgColumn}
+          transient={open}
           size={size === "small" ? "sm" : "md"}
           prominence="internal"
           tooltip="Columns"
@@ -42,11 +45,7 @@ function ColumnVisibilityPopover({
       </Popover.Trigger>
 
       <Popover.Content width="lg" align="end" side="bottom">
-        <div className="px-2 pt-1.5 pb-1">
-          <Text secondaryBody text03>
-            Shown Columns
-          </Text>
-        </div>
+        <Divider showTitle text="Shown Columns" />
         <Popover.Menu>
           {hideableColumns.map((column) => {
             const isVisible = columnVisibility[column.id] !== false;

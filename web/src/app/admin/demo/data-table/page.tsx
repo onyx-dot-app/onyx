@@ -3,7 +3,8 @@
 
 import { createColumnHelper, flexRender } from "@tanstack/react-table";
 import useDataTable, { toOnyxSortDirection } from "@/hooks/useDataTable";
-import { createColumnVisibilityColumn } from "@/refresh-components/table/ColumnVisibilityPopover";
+import { ColumnVisibilityPopover } from "@/refresh-components/table/ColumnVisibilityPopover";
+import { SortingPopover } from "@/refresh-components/table/SortingPopover";
 import Text from "@/refresh-components/texts/Text";
 import { Content } from "@opal/layouts";
 import Table from "@/refresh-components/table/Table";
@@ -13,7 +14,7 @@ import TableRow from "@/refresh-components/table/TableRow";
 import TableHead from "@/refresh-components/table/TableHead";
 import TableCell from "@/refresh-components/table/TableCell";
 import TableQualifier from "@/refresh-components/table/TableQualifier";
-import Footer from "@/refresh-components/table/footer/Footer";
+import Footer from "@/refresh-components/table/Footer";
 import { SvgCheckCircle, SvgClock, SvgAlertCircle } from "@opal/icons";
 
 // ---------------------------------------------------------------------------
@@ -374,7 +375,27 @@ const columns = [
       );
     },
   }),
-  createColumnVisibilityColumn<TeamMember>(),
+  columnHelper.display({
+    id: "__actions",
+    size: 88,
+    enableHiding: false,
+    enableSorting: false,
+    enableResizing: false,
+    header: ({ table }) => (
+      <div className="flex flex-row items-center">
+        <ColumnVisibilityPopover
+          table={table}
+          columnVisibility={table.getState().columnVisibility}
+        />
+        <SortingPopover
+          table={table}
+          sorting={table.getState().sorting}
+          footerText="Everyone in your organization will see the explore agents list in this order."
+        />
+      </div>
+    ),
+    cell: () => null,
+  }),
 ];
 
 // ---------------------------------------------------------------------------
@@ -460,7 +481,28 @@ const smallColumns = [
       );
     },
   }),
-  createColumnVisibilityColumn<TeamMember>({ size: "small" }),
+  columnHelper.display({
+    id: "__actions",
+    size: 88,
+    enableHiding: false,
+    enableSorting: false,
+    enableResizing: false,
+    header: ({ table }) => (
+      <div className="flex flex-row items-center">
+        <SortingPopover
+          table={table}
+          sorting={table.getState().sorting}
+          size="small"
+        />
+        <ColumnVisibilityPopover
+          table={table}
+          columnVisibility={table.getState().columnVisibility}
+          size="small"
+        />
+      </div>
+    ),
+    cell: () => null,
+  }),
 ];
 
 // ---------------------------------------------------------------------------
@@ -544,18 +586,14 @@ export default function DataTableDemoPage() {
                       );
                     }
 
-                    if (header.id === "__columnVisibility") {
+                    if (header.id === "__actions") {
                       return (
-                        <th
-                          key={header.id}
-                          style={{ width: header.getSize() }}
-                          className="px-1"
-                        >
+                        <TableHead key={header.id} width={header.getSize()}>
                           {flexRender(
                             header.column.columnDef.header,
                             header.getContext()
                           )}
-                        </th>
+                        </TableHead>
                       );
                     }
 
@@ -607,10 +645,6 @@ export default function DataTableDemoPage() {
                           )}
                         </TableCell>
                       );
-                    }
-
-                    if (cell.column.id === "__columnVisibility") {
-                      return <td key={cell.id} />;
                     }
 
                     return (
@@ -683,7 +717,7 @@ export default function DataTableDemoPage() {
                       );
                     }
 
-                    if (header.id === "__columnVisibility") {
+                    if (header.id === "__actions") {
                       return (
                         <th
                           key={header.id}
@@ -750,7 +784,7 @@ export default function DataTableDemoPage() {
                       );
                     }
 
-                    if (cell.column.id === "__columnVisibility") {
+                    if (cell.column.id === "__actions") {
                       return <td key={cell.id} />;
                     }
 
