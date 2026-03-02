@@ -758,23 +758,14 @@ fn toggle_menu_bar(app: AppHandle) {
     if cfg!(target_os = "macos") {
         return;
     }
+    handle_menu_bar_toggle(&app);
+
     let state = app.state::<ConfigState>();
-    let new_value = {
-        let mut config = state.config.write().unwrap();
-        config.show_menu_bar = !config.show_menu_bar;
-        let _ = save_config(&config);
-        config.show_menu_bar
-    };
-
-    *state.menu_temporarily_visible.write().unwrap() = false;
-
+    let checked = state.config.read().unwrap().show_menu_bar;
     if let Some(check) = find_check_menu_item(&app, MENU_SHOW_MENU_BAR_ID) {
-        let _ = check.set_checked(new_value);
+        let _ = check.set_checked(checked);
     }
-
-    for (_, window) in app.webview_windows() {
-        if new_value {
-            let _ = window.show_menu();
+}
         } else {
             let _ = window.hide_menu();
         }
