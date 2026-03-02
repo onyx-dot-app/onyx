@@ -2752,21 +2752,21 @@ fi
         with self._active_acp_clients_lock:
             exec_client = self._active_acp_clients.get(client_key)
 
-        if exec_client is None or not exec_client.is_running:
-            logger.debug(
-                f"No active ACP client for sandbox {sandbox_id}, session {session_id}"
-            )
-            return False
+            if exec_client is None or not exec_client.is_running:
+                logger.debug(
+                    f"No active ACP client for sandbox {sandbox_id}, session {session_id}"
+                )
+                return False
 
-        try:
-            exec_client.cancel()
-            logger.info(
-                f"Sent cancel notification for sandbox {sandbox_id}, session {session_id}"
-            )
-            return True
-        except Exception as e:
-            logger.warning(
-                f"Failed to cancel operation for sandbox {sandbox_id}, "
-                f"session {session_id}: {e}"
-            )
-            return False
+            try:
+                exec_client.cancel()
+                logger.info(
+                    f"Sent cancel notification for sandbox {sandbox_id}, session {session_id}"
+                )
+                return True
+            except Exception as e:
+                logger.warning(
+                    f"Failed to cancel operation for sandbox {sandbox_id}, "
+                    f"session {session_id}: {e}"
+                )
+                return False

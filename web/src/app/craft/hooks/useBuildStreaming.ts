@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useRef } from "react";
 
 import {
   Artifact,
@@ -32,6 +32,11 @@ import { parsePacket } from "@/app/craft/utils/parsePacket";
  * - Tool calls are interleaved with text in the exact order they arrive
  */
 export function useBuildStreaming() {
+  // Monotonically increasing counter to detect stale abort loops.
+  // Incremented each time streamMessage starts; abortStream captures the
+  // value at call time and bails out if a newer stream has started.
+  const streamEpochRef = useRef(0);
+
   const appendMessageToSession = useBuildSessionStore(
     (state) => state.appendMessageToSession
   );
@@ -118,6 +123,9 @@ export function useBuildStreaming() {
    */
   const streamMessage = useCallback(
     async (sessionId: string, content: string): Promise<void> => {
+      // Bump stream epoch so any in-flight abortStream loop detects staleness.
+      streamEpochRef.current += 1;
+
       const currentState = useBuildSessionStore.getState();
       const existingSession = currentState.sessions.get(sessionId);
 
@@ -476,8 +484,15 @@ export function useBuildStreaming() {
         return;
       }
 
+      // Capture the current stream epoch so we can detect if a new stream
+      // starts while we're retrying. If the epoch changes, the user sent a
+      // new message and we must stop retrying to avoid cancelling it.
+      const epoch = streamEpochRef.current;
+
       const MAX_CANCEL_RETRIES = 5;
       const CANCEL_RETRY_INTERVAL_MS = 1000;
+
+      const isStale = () => streamEpochRef.current !== epoch;
 
       const sendCancel = async () => {
         try {
@@ -509,6 +524,11 @@ export function useBuildStreaming() {
       for (let attempt = 1; attempt <= MAX_CANCEL_RETRIES; attempt++) {
         await new Promise((r) => setTimeout(r, CANCEL_RETRY_INTERVAL_MS));
 
+        // A new stream started — stop retrying so we don't cancel it.
+        if (isStale()) {
+          return;
+        }
+
         if (!isStillStreaming()) {
           // Agent processed the cancel and sent prompt_response
           return;
@@ -520,8 +540,15 @@ export function useBuildStreaming() {
         await sendCancel();
       }
 
-      // All retries exhausted — fall back to hard abort
-      if (isStillStreaming()) {
+      // Give the final cancel notification time to be processed before
+      // falling back to a hard abort.
+      await new Promise((r) => setTimeout(r, CANCEL_RETRY_INTERVAL_MS));
+      if (isStale() || !isStillStreaming()) {
+        return;
+      }
+
+      // All retries exhausted — fall back to hard abort (only if still our stream)
+      if (!isStale() && isStillStreaming()) {
         console.warn(
           "[Streaming] Agent did not stop after retries, falling back to hard abort"
         );
