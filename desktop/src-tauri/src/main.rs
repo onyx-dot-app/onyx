@@ -187,6 +187,14 @@ const MENU_KEY_HANDLER_SCRIPT: &str = r#"
     if (typeof fn_ === 'function') fn_(cmd);
   }
 
+  function releaseAltAndHideMenu() {
+    if (!altHeld) {
+      return;
+    }
+    altHeld = false;
+    invoke('hide_menu_bar_temporary');
+  }
+
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Alt') {
       if (!altHeld) {
@@ -206,10 +214,19 @@ const MENU_KEY_HANDLER_SCRIPT: &str = r#"
 
   document.addEventListener('keyup', (e) => {
     if (e.key === 'Alt' && altHeld) {
-      altHeld = false;
-      invoke('hide_menu_bar_temporary');
+      releaseAltAndHideMenu();
     }
   }, true);
+
+  window.addEventListener('blur', () => {
+    releaseAltAndHideMenu();
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      releaseAltAndHideMenu();
+    }
+  });
 })();
 "#;
 
@@ -764,11 +781,6 @@ fn toggle_menu_bar(app: AppHandle) {
     let checked = state.config.read().unwrap().show_menu_bar;
     if let Some(check) = find_check_menu_item(&app, MENU_SHOW_MENU_BAR_ID) {
         let _ = check.set_checked(checked);
-    }
-}
-        } else {
-            let _ = window.hide_menu();
-        }
     }
 }
 
