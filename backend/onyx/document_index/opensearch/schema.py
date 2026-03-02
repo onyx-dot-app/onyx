@@ -553,26 +553,16 @@ class DocumentSchema:
         """
         Settings for AWS-managed OpenSearch in multi-tenant cloud.
 
-        555 shards very roughly targets a storage load of ~20Gb per shard, which
+        324 shards very roughly targets a storage load of ~30Gb per shard, which
         according to AWS OpenSearch documentation is within a good target range.
 
-        We have 1 replica/copy of the data.
-
-        As documented above, the number of total primary + replica shards must
-        be divisible by the number of AZs, which is 3.
-
-        To ensure even distribution of data + replica shards across
-        the 18 data nodes of the cluster, we also chose a number of shards that
-        is divisible by 18.
-
-        However, with only 1 replica we do not guarantee that each AZ has a
-        complete copy of all data. If we see that this is an issue we can
-        increase replicas to 2, at the expense of storage of course.
+        As documented above we need 2 replicas for a total of 3 copies of the
+        data because the cluster is configured with 3-AZ awareness.
         """
         return {
             "index": {
-                "number_of_shards": 558,
-                "number_of_replicas": 1,
+                "number_of_shards": 324,
+                "number_of_replicas": 2,
                 # Required for vector search.
                 "knn": True,
                 "knn.algo_param.ef_search": EF_SEARCH,
