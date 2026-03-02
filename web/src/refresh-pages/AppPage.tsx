@@ -1,7 +1,7 @@
 "use client";
 
 import { redirect, useRouter, useSearchParams } from "next/navigation";
-import { AppHealthBanner } from "@/sections/AppHealthBanner";
+
 import {
   personaIncludesRetrieval,
   getAvailableContextTokens,
@@ -630,7 +630,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   if (noAgents && !isLoadingAgents) {
     return (
       <>
-        <AppHealthBanner />
         <NoAgentModal />
       </>
     );
@@ -654,8 +653,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   return (
     <>
-      <AppHealthBanner />
-
       <AppPopup />
 
       {retrievalEnabled && documentSidebarVisible && settings.isMobile && (

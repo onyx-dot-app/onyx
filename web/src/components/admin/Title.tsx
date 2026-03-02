@@ -1,7 +1,7 @@
 "use client";
 
 import { JSX } from "react";
-import { AppHealthBanner } from "@/sections/AppHealthBanner";
+
 import Separator from "@/refresh-components/Separator";
 import type { IconProps } from "@opal/types";
 import Text from "@/refresh-components/texts/Text";
@@ -21,9 +21,6 @@ export function AdminPageTitle({
 }: AdminPageTitleProps) {
   return (
     <div className="w-full">
-      <div className="mb-4">
-        <AppHealthBanner />
-      </div>
       <div className="w-full flex flex-row justify-between">
         <div className="flex flex-row gap-2">
           {typeof Icon === "function" ? (

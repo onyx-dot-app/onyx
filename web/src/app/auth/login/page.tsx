@@ -1,4 +1,3 @@
-import { AppHealthBanner } from "@/sections/AppHealthBanner";
 import { User } from "@/lib/types";
 import {
   getCurrentUserSS,
@@ -105,10 +104,6 @@ export default async function Page(props: PageProps) {
         authState="login"
         footerContent={ssoLoginFooterContent}
       >
-        <div className="absolute top-10x w-full">
-          <AppHealthBanner />
-        </div>
-
         <LoginPage
           authUrl={authUrl}
           authTypeMetadata={authTypeMetadata}

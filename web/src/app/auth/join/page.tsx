@@ -1,4 +1,3 @@
-import { AppHealthBanner } from "@/sections/AppHealthBanner";
 import { User } from "@/lib/types";
 import {
   getCurrentUserSS,
@@ -65,7 +64,6 @@ const Page = async (props: {
 
   return (
     <AuthFlowContainer authState="join">
-      <AppHealthBanner />
       <AuthErrorDisplay searchParams={searchParams} />
 
       <>
