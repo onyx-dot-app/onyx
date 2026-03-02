@@ -1,7 +1,6 @@
 import requests
 
 from tests.integration.common_utils.constants import API_SERVER_URL
-from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.test_models import DATestScimToken
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -50,30 +49,4 @@ class ScimTokenManager:
             is_active=data["is_active"],
             created_at=data["created_at"],
             last_used_at=data.get("last_used_at"),
-        )
-
-    @staticmethod
-    def get_scim_headers(raw_token: str) -> dict[str, str]:
-        return {
-            **GENERAL_HEADERS,
-            "Authorization": f"Bearer {raw_token}",
-        }
-
-    @staticmethod
-    def scim_get(
-        path: str,
-        raw_token: str,
-    ) -> requests.Response:
-        return requests.get(
-            f"{API_SERVER_URL}/scim/v2{path}",
-            headers=ScimTokenManager.get_scim_headers(raw_token),
-            timeout=60,
-        )
-
-    @staticmethod
-    def scim_get_no_auth(path: str) -> requests.Response:
-        return requests.get(
-            f"{API_SERVER_URL}/scim/v2{path}",
-            headers=GENERAL_HEADERS,
-            timeout=60,
         )
