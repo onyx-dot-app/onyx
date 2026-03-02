@@ -256,7 +256,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
         <Modal.Body>
           {/* Metadata */}
           <Section flexDirection="row" justifyContent="start">
-            {!agent.is_default_persona && (
+            {agent.featured && (
               <Content
                 icon={SvgStar}
                 title="Featured"

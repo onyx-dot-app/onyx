@@ -11,11 +11,7 @@ interface PersonaUpsertRequest {
   task_prompt: string;
   datetime_aware: boolean;
   document_set_ids: number[];
-  num_chunks: number | null;
   is_public: boolean;
-  recency_bias: string;
-  llm_filter_extraction: boolean;
-  llm_relevance_filter: boolean | null;
   llm_model_provider_override: string | null;
   llm_model_version_override: string | null;
   starter_messages: StarterMessage[] | null;
@@ -26,7 +22,7 @@ interface PersonaUpsertRequest {
   uploaded_image_id: string | null;
   icon_name: string | null;
   search_start_date: Date | null;
-  is_default_persona: boolean;
+  featured: boolean;
   display_priority: number | null;
   label_ids: number[] | null;
   user_file_ids: string[] | null;
@@ -45,9 +41,7 @@ export interface PersonaUpsertParameters {
   task_prompt: string;
   datetime_aware: boolean;
   document_set_ids: number[];
-  num_chunks: number | null;
   is_public: boolean;
-  llm_relevance_filter: boolean | null;
   llm_model_provider_override: string | null;
   llm_model_version_override: string | null;
   starter_messages: StarterMessage[] | null;
@@ -58,7 +52,7 @@ export interface PersonaUpsertParameters {
   search_start_date: Date | null;
   uploaded_image_id: string | null;
   icon_name: string | null;
-  is_default_persona: boolean;
+  featured: boolean;
   label_ids: number[] | null;
   user_file_ids: string[];
   // Hierarchy nodes (folders, spaces, channels) for scoped search
@@ -73,7 +67,6 @@ function buildPersonaUpsertRequest({
   system_prompt,
   task_prompt,
   document_set_ids,
-  num_chunks,
   is_public,
   groups,
   datetime_aware,
@@ -86,8 +79,7 @@ function buildPersonaUpsertRequest({
   document_ids,
   icon_name,
   uploaded_image_id,
-  is_default_persona,
-  llm_relevance_filter,
+  featured,
   llm_model_provider_override,
   llm_model_version_override,
   starter_messages,
@@ -100,7 +92,6 @@ function buildPersonaUpsertRequest({
     system_prompt,
     task_prompt,
     document_set_ids,
-    num_chunks,
     is_public,
     uploaded_image_id,
     icon_name,
@@ -110,10 +101,7 @@ function buildPersonaUpsertRequest({
     remove_image,
     search_start_date,
     datetime_aware,
-    is_default_persona: is_default_persona ?? false,
-    recency_bias: "base_decay",
-    llm_filter_extraction: false,
-    llm_relevance_filter: llm_relevance_filter ?? null,
+    featured: featured ?? false,
     llm_model_provider_override: llm_model_provider_override ?? null,
     llm_model_version_override: llm_model_version_override ?? null,
     starter_messages: starter_messages ?? null,
@@ -226,17 +214,17 @@ export function personaComparator(
   return closerToZeroNegativesFirstComparator(a.id, b.id);
 }
 
-export async function togglePersonaDefault(
+export async function togglePersonaFeatured(
   personaId: number,
-  isDefault: boolean
+  featured: boolean
 ) {
-  const response = await fetch(`/api/admin/persona/${personaId}/default`, {
+  const response = await fetch(`/api/admin/persona/${personaId}/featured`, {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      is_default_persona: !isDefault,
+      featured: !featured,
     }),
     credentials: "include",
   });

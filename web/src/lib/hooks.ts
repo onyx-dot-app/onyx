@@ -222,9 +222,12 @@ export const useConnectorStatus = (refreshInterval = 30000) => {
   };
 };
 
-export const useBasicConnectorStatus = () => {
+export const useBasicConnectorStatus = (enabled: boolean = true) => {
   const url = "/api/manage/connector-status";
-  const swrResponse = useSWR<CCPairBasicInfo[]>(url, errorHandlingFetcher);
+  const swrResponse = useSWR<CCPairBasicInfo[]>(
+    enabled ? url : null,
+    errorHandlingFetcher
+  );
   return {
     ...swrResponse,
     refreshIndexingStatus: () => mutate(url),

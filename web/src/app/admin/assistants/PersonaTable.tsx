@@ -11,7 +11,7 @@ import { DraggableTable } from "@/components/table/DraggableTable";
 import {
   deletePersona,
   personaComparator,
-  togglePersonaDefault,
+  togglePersonaFeatured,
   togglePersonaVisibility,
 } from "./lib";
 import { FiEdit2 } from "react-icons/fi";
@@ -27,8 +27,8 @@ function PersonaTypeDisplay({ persona }: { persona: Persona }) {
     return <Text as="p">Built-In</Text>;
   }
 
-  if (persona.is_default_persona) {
-    return <Text as="p">Default</Text>;
+  if (persona.featured) {
+    return <Text as="p">Featured</Text>;
   }
 
   if (persona.is_public) {
@@ -152,9 +152,9 @@ export function PersonasTable({
 
   const handleToggleDefault = async () => {
     if (personaToToggleDefault) {
-      const response = await togglePersonaDefault(
+      const response = await togglePersonaFeatured(
         personaToToggleDefault.id,
-        personaToToggleDefault.is_default_persona
+        personaToToggleDefault.featured
       );
       if (response.ok) {
         refreshPersonas();
@@ -180,7 +180,7 @@ export function PersonasTable({
       {defaultModalOpen &&
         personaToToggleDefault &&
         (() => {
-          const isDefault = personaToToggleDefault.is_default_persona;
+          const isDefault = personaToToggleDefault.featured;
 
           const title = isDefault
             ? "Remove Featured Agent"
@@ -252,7 +252,7 @@ export function PersonasTable({
               </p>,
               <PersonaTypeDisplay key={persona.id} persona={persona} />,
               <div
-                key="is_default_persona"
+                key="featured"
                 onClick={() => {
                   openDefaultModal(persona);
                 }}
@@ -261,13 +261,13 @@ export function PersonasTable({
                   `}
               >
                 <div className="my-auto flex-none w-22">
-                  {!persona.is_default_persona ? (
+                  {!persona.featured ? (
                     <div className="text-error">Not Featured</div>
                   ) : (
                     "Featured"
                   )}
                 </div>
-                <Checkbox checked={persona.is_default_persona} />
+                <Checkbox checked={persona.featured} />
               </div>,
               <div
                 key="is_visible"

@@ -10,7 +10,6 @@ from pydantic import Field
 from onyx.auth.schemas import UserRole
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import QAFeedbackType
-from onyx.context.search.enums import RecencyBiasSetting
 from onyx.context.search.models import SavedSearchDoc
 from onyx.context.search.models import SearchDoc
 from onyx.db.enums import AccessType
@@ -162,11 +161,7 @@ class DATestPersona(BaseModel):
     id: int
     name: str
     description: str
-    num_chunks: float
-    llm_relevance_filter: bool
     is_public: bool
-    llm_filter_extraction: bool
-    recency_bias: RecencyBiasSetting
     document_set_ids: list[int]
     tool_ids: list[int]
     llm_model_provider_override: str | None
@@ -174,6 +169,7 @@ class DATestPersona(BaseModel):
     users: list[str]
     groups: list[int]
     label_ids: list[int]
+    featured: bool = False
 
     # Embedded prompt fields (no longer separate prompt_ids)
     system_prompt: str | None = None

@@ -25,7 +25,7 @@ def test_cold_startup_default_assistant() -> None:
         result = db_session.execute(
             text(
                 """
-                SELECT id, name, builtin_persona, is_default_persona, deleted
+                SELECT id, name, builtin_persona, featured, deleted
                 FROM persona
                 WHERE builtin_persona = true
                 ORDER BY id
@@ -40,7 +40,7 @@ def test_cold_startup_default_assistant() -> None:
         assert default[0] == 0, "Default assistant should have ID 0"
         assert default[1] == "Assistant", "Should be named 'Assistant'"
         assert default[2] is True, "Should be builtin"
-        assert default[3] is True, "Should be default"
+        assert default[3] is True, "Should be featured"
         assert default[4] is False, "Should not be deleted"
 
         # Check tools are properly associated

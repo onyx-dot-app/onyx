@@ -4,7 +4,6 @@ import pytest
 import requests
 from sqlalchemy.orm import Session
 
-from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.llm import can_user_access_llm_provider
 from onyx.db.llm import fetch_user_group_ids
@@ -78,12 +77,6 @@ def _create_persona(
     persona = Persona(
         name=name,
         description=f"{name} description",
-        num_chunks=5,
-        chunks_above=2,
-        chunks_below=2,
-        llm_relevance_filter=True,
-        llm_filter_extraction=True,
-        recency_bias=RecencyBiasSetting.AUTO,
         llm_model_provider_override=provider_name,
         llm_model_version_override="gpt-4o-mini",
         system_prompt="System prompt",
