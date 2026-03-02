@@ -209,7 +209,9 @@ def _create_doc_from_article(
                     image_sections.append(image_section)
             except Exception as e:
                 logger.warning(
-                    f"Failed to process image for Freshdesk Solutions article {article_id}: {e}"
+                    "Failed to process image for Freshdesk Solutions article %s (%s)",
+                    article_id,
+                    type(e).__name__,
                 )
 
     if image_sections:
@@ -266,7 +268,11 @@ class FreshdeskSolutionsConnector(PollConnector, LoadConnector):
                     kwargs["timeout"] = timeout
                 response = requests.get(url, **kwargs)
             except Exception as e:
-                logger.warning(f"Error fetching {error_context}: {e}")
+                logger.warning(
+                    "Error fetching Freshdesk %s (%s)",
+                    error_context,
+                    type(e).__name__,
+                )
                 retry_count += 1
                 time.sleep(FRESHDESK_RETRY_INTERVAL)
             else:
