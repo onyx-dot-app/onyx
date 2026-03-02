@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import json
 from collections.abc import Generator
 from typing import Literal
@@ -117,9 +115,10 @@ class CodeInterpreterClient:
             response = self.session.get(url, timeout=5)
             response.raise_for_status()
             data = response.json()
+            is_healthy = data.get("status") == "ok"
             return CodeInterpreterHealthResponse(
-                connected=data.get("status") == "ok",
-                error=data.get("message") or "",
+                connected=True,
+                error="" if is_healthy else (data.get("message") or "Unknown error"),
             )
         except Exception as e:
             logger.warning(f"Exception caught when checking health, e={e}")
