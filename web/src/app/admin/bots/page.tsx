@@ -3,11 +3,10 @@
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
-import { AdminPageTitle } from "@/components/admin/Title";
-import { SourceIcon } from "@/components/SourceIcon";
 import { SlackBotTable } from "./SlackBotTable";
 import { useSlackBots } from "./[bot-id]/hooks";
-import { ValidSources } from "@/lib/types";
+import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SvgSlack } from "@opal/icons";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import { DOCS_ADMINS_PATH } from "@/lib/constants";
 
@@ -77,15 +76,13 @@ const Main = () => {
 
 const Page = () => {
   return (
-    <>
-      <AdminPageTitle
-        icon={<SourceIcon iconSize={36} sourceType={ValidSources.Slack} />}
-        title="Slack Bots"
-      />
-      <InstantSSRAutoRefresh />
-
-      <Main />
-    </>
+    <SettingsLayouts.Root>
+      <SettingsLayouts.Header icon={SvgSlack} title="Slack Bots" separator />
+      <SettingsLayouts.Body>
+        <InstantSSRAutoRefresh />
+        <Main />
+      </SettingsLayouts.Body>
+    </SettingsLayouts.Root>
   );
 };
 

@@ -1,7 +1,7 @@
 "use client";
 
-import { AdminPageTitle } from "@/components/admin/Title";
 import SimpleTabs from "@/refresh-components/SimpleTabs";
+import * as SettingsLayouts from "@/layouts/settings-layouts";
 import Text from "@/components/ui/text";
 import { useState } from "react";
 import {
@@ -208,9 +208,15 @@ function Main() {
 
 export default function Page() {
   return (
-    <>
-      <AdminPageTitle title="Token Rate Limits" icon={SvgShield} />
-      <Main />
-    </>
+    <SettingsLayouts.Root>
+      <SettingsLayouts.Header
+        title="Token Rate Limits"
+        icon={SvgShield}
+        separator
+      />
+      <SettingsLayouts.Body>
+        <Main />
+      </SettingsLayouts.Body>
+    </SettingsLayouts.Root>
   );
 }

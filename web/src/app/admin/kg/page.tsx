@@ -1,14 +1,13 @@
 "use client";
 
 import CardSection from "@/components/admin/CardSection";
-import { AdminPageTitle } from "@/components/admin/Title";
 import {
   DatePickerField,
   FieldLabel,
   TextArrayField,
   TextFormField,
 } from "@/components/Field";
-import { BrainIcon } from "@/components/icons/icons";
+import * as SettingsLayouts from "@/layouts/settings-layouts";
 import Modal from "@/refresh-components/Modal";
 import Button from "@/refresh-components/buttons/Button";
 import SwitchField from "@/refresh-components/form/SwitchField";
@@ -30,7 +29,7 @@ import { useIsKGExposed } from "@/app/admin/kg/utils";
 import KGEntityTypes from "@/app/admin/kg/KGEntityTypes";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
-import { SvgSettings } from "@opal/icons";
+import { SvgNetworkGraph, SvgSettings } from "@opal/icons";
 
 function createDomainField(
   name: string,
@@ -324,12 +323,15 @@ export default function Page() {
   }
 
   return (
-    <>
-      <AdminPageTitle
+    <SettingsLayouts.Root>
+      <SettingsLayouts.Header
+        icon={SvgNetworkGraph}
         title="Knowledge Graph"
-        icon={<BrainIcon size={32} className="my-auto" />}
+        separator
       />
-      <Main />
-    </>
+      <SettingsLayouts.Body>
+        <Main />
+      </SettingsLayouts.Body>
+    </SettingsLayouts.Root>
   );
 }

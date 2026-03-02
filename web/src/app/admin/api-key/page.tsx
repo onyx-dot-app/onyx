@@ -1,8 +1,8 @@
 "use client";
 
 import { ThreeDotsLoader } from "@/components/Loading";
-import { AdminPageTitle } from "@/components/admin/Title";
 import { errorHandlingFetcher } from "@/lib/fetcher";
+import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import useSWR, { mutate } from "swr";
 import Separator from "@/refresh-components/Separator";
@@ -233,10 +233,11 @@ function Main() {
 
 export default function Page() {
   return (
-    <>
-      <AdminPageTitle title="API Keys" icon={SvgKey} />
-
-      <Main />
-    </>
+    <SettingsLayouts.Root>
+      <SettingsLayouts.Header title="API Keys" icon={SvgKey} separator />
+      <SettingsLayouts.Body>
+        <Main />
+      </SettingsLayouts.Body>
+    </SettingsLayouts.Root>
   );
 }

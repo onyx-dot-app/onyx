@@ -1,7 +1,7 @@
-import { AdminPageTitle } from "@/components/admin/Title";
+import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { CUSTOM_ANALYTICS_ENABLED } from "@/lib/constants";
 import { Callout } from "@/components/ui/callout";
-import { FiBarChart2 } from "react-icons/fi";
+import { SvgBarChart } from "@opal/icons";
 import Text from "@/components/ui/text";
 import { CustomAnalyticsUpdateForm } from "./CustomAnalyticsUpdateForm";
 
@@ -35,13 +35,15 @@ function Main() {
 
 export default function Page() {
   return (
-    <main className="pt-4 mx-auto container">
-      <AdminPageTitle
+    <SettingsLayouts.Root>
+      <SettingsLayouts.Header
+        icon={SvgBarChart}
         title="Custom Analytics"
-        icon={<FiBarChart2 size={32} />}
+        separator
       />
-
-      <Main />
-    </main>
+      <SettingsLayouts.Body>
+        <Main />
+      </SettingsLayouts.Body>
+    </SettingsLayouts.Root>
   );
 }

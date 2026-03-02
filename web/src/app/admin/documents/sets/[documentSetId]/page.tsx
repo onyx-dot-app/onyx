@@ -5,9 +5,8 @@ import { ErrorCallout } from "@/components/ErrorCallout";
 import { refreshDocumentSets, useDocumentSets } from "../hooks";
 import { useConnectorStatus, useUserGroups } from "@/lib/hooks";
 import { ThreeDotsLoader } from "@/components/Loading";
-import { AdminPageTitle } from "@/components/admin/Title";
-import { BookmarkIcon } from "@/components/icons/icons";
-import BackButton from "@/refresh-components/buttons/BackButton";
+import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SvgBookOpen } from "@opal/icons";
 import CardSection from "@/components/admin/CardSection";
 import { DocumentSetCreationForm } from "../DocumentSetCreationForm";
 import { useRouter } from "next/navigation";
@@ -69,24 +68,27 @@ function Main({ documentSetId }: { documentSetId: number }) {
   }
 
   return (
-    <div>
-      <AdminPageTitle
-        icon={<BookmarkIcon size={32} />}
+    <SettingsLayouts.Root>
+      <SettingsLayouts.Header
+        icon={SvgBookOpen}
         title={documentSet.name}
+        separator
+        backButton
       />
-
-      <CardSection>
-        <DocumentSetCreationForm
-          ccPairs={ccPairs}
-          userGroups={userGroups}
-          onClose={() => {
-            refreshDocumentSets();
-            router.push("/admin/documents/sets");
-          }}
-          existingDocumentSet={documentSet}
-        />
-      </CardSection>
-    </div>
+      <SettingsLayouts.Body>
+        <CardSection>
+          <DocumentSetCreationForm
+            ccPairs={ccPairs}
+            userGroups={userGroups}
+            onClose={() => {
+              refreshDocumentSets();
+              router.push("/admin/documents/sets");
+            }}
+            existingDocumentSet={documentSet}
+          />
+        </CardSection>
+      </SettingsLayouts.Body>
+    </SettingsLayouts.Root>
   );
 }
 
@@ -96,11 +98,5 @@ export default function Page(props: {
   const params = use(props.params);
   const documentSetId = parseInt(params.documentSetId);
 
-  return (
-    <>
-      <BackButton />
-
-      <Main documentSetId={documentSetId} />
-    </>
-  );
+  return <Main documentSetId={documentSetId} />;
 }

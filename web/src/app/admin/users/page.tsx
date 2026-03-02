@@ -8,8 +8,8 @@ import SignedUpUserTable from "@/components/admin/users/SignedUpUserTable";
 
 import Modal from "@/refresh-components/Modal";
 import { ThreeDotsLoader } from "@/components/Loading";
-import { AdminPageTitle } from "@/components/admin/Title";
 import { toast } from "@/hooks/useToast";
+import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useSWR, { mutate } from "swr";
 import { ErrorCallout } from "@/components/ErrorCallout";
@@ -327,10 +327,12 @@ function AddUserButton() {
 
 const Page = () => {
   return (
-    <>
-      <AdminPageTitle title="Manage Users" icon={SvgUser} />
-      <SearchableTables />
-    </>
+    <SettingsLayouts.Root>
+      <SettingsLayouts.Header title="Manage Users" icon={SvgUser} separator />
+      <SettingsLayouts.Body>
+        <SearchableTables />
+      </SettingsLayouts.Body>
+    </SettingsLayouts.Root>
   );
 };
 

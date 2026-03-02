@@ -1,9 +1,8 @@
-import { AdminPageTitle } from "@/components/admin/Title";
 import { StandardAnswerCreationForm } from "@/app/ee/admin/standard-answer/StandardAnswerCreationForm";
 import { fetchSS } from "@/lib/utilsSS";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import BackButton from "@/refresh-components/buttons/BackButton";
-import { ClipboardIcon } from "@/components/icons/icons";
+import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SvgClipboard } from "@opal/icons";
 import { StandardAnswerCategory } from "@/lib/types";
 
 async function Page() {
@@ -23,17 +22,19 @@ async function Page() {
     (await standardAnswerCategoriesResponse.json()) as StandardAnswerCategory[];
 
   return (
-    <>
-      <BackButton />
-      <AdminPageTitle
+    <SettingsLayouts.Root>
+      <SettingsLayouts.Header
+        icon={SvgClipboard}
         title="New Standard Answer"
-        icon={<ClipboardIcon size={32} />}
+        backButton
+        separator
       />
-
-      <StandardAnswerCreationForm
-        standardAnswerCategories={standardAnswerCategories}
-      />
-    </>
+      <SettingsLayouts.Body>
+        <StandardAnswerCreationForm
+          standardAnswerCategories={standardAnswerCategories}
+        />
+      </SettingsLayouts.Body>
+    </SettingsLayouts.Root>
   );
 }
 

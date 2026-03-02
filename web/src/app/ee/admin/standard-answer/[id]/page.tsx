@@ -1,9 +1,8 @@
-import { AdminPageTitle } from "@/components/admin/Title";
 import { StandardAnswerCreationForm } from "@/app/ee/admin/standard-answer/StandardAnswerCreationForm";
 import { fetchSS } from "@/lib/utilsSS";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import BackButton from "@/refresh-components/buttons/BackButton";
-import { ClipboardIcon } from "@/components/icons/icons";
+import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SvgClipboard } from "@opal/icons";
 import { StandardAnswer, StandardAnswerCategory } from "@/lib/types";
 
 async function Page(props: { params: Promise<{ id: string }> }) {
@@ -68,18 +67,20 @@ async function Page(props: { params: Promise<{ id: string }> }) {
   const standardAnswerCategories =
     (await standardAnswerCategoriesResponse.json()) as StandardAnswerCategory[];
   return (
-    <>
-      <BackButton />
-      <AdminPageTitle
+    <SettingsLayouts.Root>
+      <SettingsLayouts.Header
+        icon={SvgClipboard}
         title="Edit Standard Answer"
-        icon={<ClipboardIcon size={32} />}
+        backButton
+        separator
       />
-
-      <StandardAnswerCreationForm
-        standardAnswerCategories={standardAnswerCategories}
-        existingStandardAnswer={standardAnswer}
-      />
-    </>
+      <SettingsLayouts.Body>
+        <StandardAnswerCreationForm
+          standardAnswerCategories={standardAnswerCategories}
+          existingStandardAnswer={standardAnswer}
+        />
+      </SettingsLayouts.Body>
+    </SettingsLayouts.Root>
   );
 }
 

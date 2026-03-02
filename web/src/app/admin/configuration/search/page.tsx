@@ -1,8 +1,8 @@
 "use client";
 
 import { ThreeDotsLoader } from "@/components/Loading";
-import { AdminPageTitle } from "@/components/admin/Title";
 import { errorHandlingFetcher } from "@/lib/fetcher";
+import * as SettingsLayouts from "@/layouts/settings-layouts";
 import Text from "@/components/ui/text";
 import Title from "@/components/ui/title";
 import Button from "@/refresh-components/buttons/Button";
@@ -141,9 +141,15 @@ function Main() {
 
 export default function Page() {
   return (
-    <>
-      <AdminPageTitle title="Search Settings" icon={SvgSearch} />
-      <Main />
-    </>
+    <SettingsLayouts.Root>
+      <SettingsLayouts.Header
+        title="Search Settings"
+        icon={SvgSearch}
+        separator
+      />
+      <SettingsLayouts.Body>
+        <Main />
+      </SettingsLayouts.Body>
+    </SettingsLayouts.Root>
   );
 }

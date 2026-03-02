@@ -28,6 +28,23 @@ const SETTINGS_LAYOUT_PREFIXES = [
   "/admin/discord-bot",
   "/admin/theme",
   "/admin/configuration/llm",
+  "/admin/agents",
+  "/admin/users",
+  "/admin/token-rate-limits",
+  "/admin/configuration/search",
+  "/admin/configuration/document-processing",
+  "/admin/configuration/code-interpreter",
+  "/admin/api-key",
+  "/admin/add-connector",
+  "/admin/indexing/status",
+  "/admin/documents",
+  "/admin/debug",
+  "/admin/kg",
+  "/admin/bots",
+  "/ee/admin/standard-answer",
+  "/ee/admin/groups",
+  "/ee/admin/billing",
+  "/ee/admin/performance",
 ];
 
 export function ClientLayout({

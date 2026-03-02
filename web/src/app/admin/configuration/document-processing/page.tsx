@@ -4,13 +4,12 @@ import { useState } from "react";
 import CardSection from "@/components/admin/CardSection";
 import Button from "@/refresh-components/buttons/Button";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import { DocumentIcon2 } from "@/components/icons/icons";
 import useSWR from "swr";
 import { ThreeDotsLoader } from "@/components/Loading";
-import { AdminPageTitle } from "@/components/admin/Title";
+import * as SettingsLayouts from "@/layouts/settings-layouts";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
-import { SvgLock } from "@opal/icons";
+import { SvgFileText, SvgLock } from "@opal/icons";
 
 function Main() {
   const {
@@ -149,12 +148,15 @@ function Main() {
 
 export default function Page() {
   return (
-    <>
-      <AdminPageTitle
+    <SettingsLayouts.Root>
+      <SettingsLayouts.Header
+        icon={SvgFileText}
         title="Document Processing"
-        icon={<DocumentIcon2 size={32} className="my-auto" />}
+        separator
       />
-      <Main />
-    </>
+      <SettingsLayouts.Body>
+        <Main />
+      </SettingsLayouts.Body>
+    </SettingsLayouts.Root>
   );
 }

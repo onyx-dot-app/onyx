@@ -1,14 +1,20 @@
 "use client";
 
-import { AdminPageTitle } from "@/components/admin/Title";
+import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { QueryHistoryTable } from "@/app/ee/admin/performance/query-history/QueryHistoryTable";
 import { SvgServer } from "@opal/icons";
 export default function QueryHistoryPage() {
   return (
-    <>
-      <AdminPageTitle title="Query History" icon={SvgServer} />
+    <SettingsLayouts.Root>
+      <SettingsLayouts.Header
+        icon={SvgServer}
+        title="Query History"
+        separator
+      />
 
-      <QueryHistoryTable />
-    </>
+      <SettingsLayouts.Body>
+        <QueryHistoryTable />
+      </SettingsLayouts.Body>
+    </SettingsLayouts.Root>
   );
 }

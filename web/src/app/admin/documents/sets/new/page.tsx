@@ -1,11 +1,10 @@
 "use client";
 
-import { AdminPageTitle } from "@/components/admin/Title";
-import { BookmarkIcon } from "@/components/icons/icons";
+import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SvgBookOpen } from "@opal/icons";
 import { DocumentSetCreationForm } from "../DocumentSetCreationForm";
 import { useConnectorStatus, useUserGroups } from "@/lib/hooks";
 import { ThreeDotsLoader } from "@/components/Loading";
-import BackButton from "@/refresh-components/buttons/BackButton";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { useRouter } from "next/navigation";
 import { refreshDocumentSets } from "../hooks";
@@ -58,16 +57,17 @@ function Main() {
 
 const Page = () => {
   return (
-    <>
-      <BackButton />
-
-      <AdminPageTitle
-        icon={<BookmarkIcon size={32} />}
+    <SettingsLayouts.Root>
+      <SettingsLayouts.Header
+        icon={SvgBookOpen}
         title="New Document Set"
+        separator
+        backButton
       />
-
-      <Main />
-    </>
+      <SettingsLayouts.Body>
+        <Main />
+      </SettingsLayouts.Body>
+    </SettingsLayouts.Root>
   );
 };
 

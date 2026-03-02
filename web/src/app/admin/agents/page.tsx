@@ -4,8 +4,8 @@ import { PersonasTable } from "./PersonaTable";
 import Text from "@/components/ui/text";
 import Title from "@/components/ui/title";
 import Separator from "@/refresh-components/Separator";
-import { AdminPageTitle } from "@/components/admin/Title";
 import { SubLabel } from "@/components/Field";
+import * as SettingsLayouts from "@/layouts/settings-layouts";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import { useAdminPersonas } from "@/hooks/useAdminPersonas";
 import { Persona } from "./interfaces";
@@ -127,31 +127,33 @@ export default function Page() {
   });
 
   return (
-    <>
-      <AdminPageTitle icon={SvgOnyxOctagon} title="Agents" />
+    <SettingsLayouts.Root>
+      <SettingsLayouts.Header icon={SvgOnyxOctagon} title="Agents" separator />
 
-      {isLoading && <ThreeDotsLoader />}
+      <SettingsLayouts.Body>
+        {isLoading && <ThreeDotsLoader />}
 
-      {error && (
-        <ErrorCallout
-          errorTitle="Failed to load agents"
-          errorMsg={
-            error?.info?.message ||
-            error?.info?.detail ||
-            "An unknown error occurred"
-          }
-        />
-      )}
+        {error && (
+          <ErrorCallout
+            errorTitle="Failed to load agents"
+            errorMsg={
+              error?.info?.message ||
+              error?.info?.detail ||
+              "An unknown error occurred"
+            }
+          />
+        )}
 
-      {!isLoading && !error && (
-        <MainContent
-          personas={personas}
-          totalItems={totalItems}
-          currentPage={currentPage}
-          onPageChange={setCurrentPage}
-          refreshPersonas={refresh}
-        />
-      )}
-    </>
+        {!isLoading && !error && (
+          <MainContent
+            personas={personas}
+            totalItems={totalItems}
+            currentPage={currentPage}
+            onPageChange={setCurrentPage}
+            refreshPersonas={refresh}
+          />
+        )}
+      </SettingsLayouts.Body>
+    </SettingsLayouts.Root>
   );
 }

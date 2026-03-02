@@ -1,7 +1,7 @@
 "use client";
 
-import { AdminPageTitle } from "@/components/admin/Title";
-import { ClipboardIcon, EditIcon } from "@/components/icons/icons";
+import { EditIcon } from "@/components/icons/icons";
+import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { toast } from "@/hooks/useToast";
 import { useStandardAnswers, useStandardAnswerCategories } from "./hooks";
 import { ThreeDotsLoader } from "@/components/Loading";
@@ -29,7 +29,7 @@ import { PageSelector } from "@/components/PageSelector";
 import Text from "@/components/ui/text";
 import { TableHeader } from "@/components/ui/table";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
-import { SvgTrash } from "@opal/icons";
+import { SvgClipboard, SvgTrash } from "@opal/icons";
 import { Button } from "@opal/components";
 const NUM_RESULTS_PER_PAGE = 10;
 
@@ -417,13 +417,16 @@ const Main = () => {
 
 const Page = () => {
   return (
-    <>
-      <AdminPageTitle
-        icon={<ClipboardIcon size={32} />}
+    <SettingsLayouts.Root>
+      <SettingsLayouts.Header
+        icon={SvgClipboard}
         title="Standard Answers"
+        separator
       />
-      <Main />
-    </>
+      <SettingsLayouts.Body>
+        <Main />
+      </SettingsLayouts.Body>
+    </SettingsLayouts.Root>
   );
 };
 

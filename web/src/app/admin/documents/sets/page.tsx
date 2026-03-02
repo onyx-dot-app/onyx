@@ -2,7 +2,7 @@
 
 import { ThreeDotsLoader } from "@/components/Loading";
 import { PageSelector } from "@/components/PageSelector";
-import { BookmarkIcon, InfoIcon } from "@/components/icons/icons";
+import { InfoIcon } from "@/components/icons/icons";
 import {
   Table,
   TableHead,
@@ -19,7 +19,8 @@ import { useDocumentSets } from "./hooks";
 import { ConnectorTitle } from "@/components/admin/connectors/ConnectorTitle";
 import { deleteDocumentSet } from "./lib";
 import { toast } from "@/hooks/useToast";
-import { AdminPageTitle } from "@/components/admin/Title";
+import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SvgBookOpen } from "@opal/icons";
 import {
   FiAlertTriangle,
   FiCheckCircle,
@@ -422,11 +423,16 @@ const Main = () => {
 
 const Page = () => {
   return (
-    <>
-      <AdminPageTitle icon={<BookmarkIcon size={32} />} title="Document Sets" />
-
-      <Main />
-    </>
+    <SettingsLayouts.Root>
+      <SettingsLayouts.Header
+        icon={SvgBookOpen}
+        title="Document Sets"
+        separator
+      />
+      <SettingsLayouts.Body>
+        <Main />
+      </SettingsLayouts.Body>
+    </SettingsLayouts.Root>
   );
 };
 

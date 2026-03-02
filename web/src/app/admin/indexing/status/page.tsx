@@ -1,10 +1,10 @@
 "use client";
 
-import { NotebookIcon } from "@/components/icons/icons";
 import { CCPairIndexingStatusTable } from "./CCPairIndexingStatusTable";
 import { SearchAndFilterControls } from "./SearchAndFilterControls";
-import { AdminPageTitle } from "@/components/admin/Title";
+import * as SettingsLayouts from "@/layouts/settings-layouts";
 import Link from "next/link";
+import { SvgPlug } from "@opal/icons";
 import Text from "@/components/ui/text";
 import { useConnectorIndexingStatusWithPagination } from "@/lib/hooks";
 import { useToastFromQuery } from "@/hooks/useToast";
@@ -213,16 +213,18 @@ export default function Status() {
   });
 
   return (
-    <>
-      <AdminPageTitle
-        icon={<NotebookIcon size={32} />}
+    <SettingsLayouts.Root>
+      <SettingsLayouts.Header
+        icon={SvgPlug}
         title="Existing Connectors"
-        farRightElement={
+        rightChildren={
           <Button href="/admin/add-connector">Add Connector</Button>
         }
+        separator
       />
-
-      <Main />
-    </>
+      <SettingsLayouts.Body>
+        <Main />
+      </SettingsLayouts.Body>
+    </SettingsLayouts.Root>
   );
 }

@@ -7,9 +7,8 @@ import { ThreeDotsLoader } from "@/components/Loading";
 import { useConnectorStatus } from "@/lib/hooks";
 import { useRouter } from "next/navigation";
 import useUsers from "@/hooks/useUsers";
-import BackButton from "@/refresh-components/buttons/BackButton";
-import { AdminPageTitle } from "@/components/admin/Title";
 import { SvgUsers } from "@opal/icons";
+import * as SettingsLayouts from "@/layouts/settings-layouts";
 const Page = (props: { params: Promise<{ groupId: string }> }) => {
   const params = use(props.params);
   const router = useRouter();
@@ -52,22 +51,27 @@ const Page = (props: { params: Promise<{ groupId: string }> }) => {
   }
 
   return (
-    <>
-      <BackButton />
+    <SettingsLayouts.Root>
+      <SettingsLayouts.Header
+        icon={SvgUsers}
+        title={userGroup.name || "Unknown"}
+        separator
+        backButton
+      />
 
-      <AdminPageTitle title={userGroup.name || "Unknown"} icon={SvgUsers} />
-
-      {userGroup ? (
-        <GroupDisplay
-          users={users.accepted}
-          ccPairs={ccPairs}
-          userGroup={userGroup}
-          refreshUserGroup={refreshUserGroup}
-        />
-      ) : (
-        <div>Unable to fetch User Group :(</div>
-      )}
-    </>
+      <SettingsLayouts.Body>
+        {userGroup ? (
+          <GroupDisplay
+            users={users.accepted}
+            ccPairs={ccPairs}
+            userGroup={userGroup}
+            refreshUserGroup={refreshUserGroup}
+          />
+        ) : (
+          <div>Unable to fetch User Group :(</div>
+        )}
+      </SettingsLayouts.Body>
+    </SettingsLayouts.Root>
   );
 };
 

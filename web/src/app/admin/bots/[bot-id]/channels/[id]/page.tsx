@@ -1,15 +1,10 @@
-import { AdminPageTitle } from "@/components/admin/Title";
-import { SourceIcon } from "@/components/SourceIcon";
 import { SlackChannelConfigCreationForm } from "../SlackChannelConfigCreationForm";
 import { fetchSS } from "@/lib/utilsSS";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import {
-  DocumentSetSummary,
-  SlackChannelConfig,
-  ValidSources,
-} from "@/lib/types";
-import BackButton from "@/refresh-components/buttons/BackButton";
+import { DocumentSetSummary, SlackChannelConfig } from "@/lib/types";
 import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
+import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SvgSlack } from "@opal/icons";
 import { FetchAgentsResponse, fetchAgentsSS } from "@/lib/agentsSS";
 import { getStandardAnswerCategoriesIfEE } from "@/components/standardAnswers/getStandardAnswerCategoriesIfEE";
 
@@ -77,27 +72,28 @@ async function EditslackChannelConfigPage(props: {
   }
 
   return (
-    <div className="max-w-4xl container">
+    <SettingsLayouts.Root>
       <InstantSSRAutoRefresh />
-
-      <BackButton />
-      <AdminPageTitle
-        icon={<SourceIcon sourceType={ValidSources.Slack} iconSize={32} />}
+      <SettingsLayouts.Header
+        icon={SvgSlack}
         title={
           slackChannelConfig.is_default
             ? "Edit Default Slack Config"
             : "Edit Slack Channel Config"
         }
+        separator
+        backButton
       />
-
-      <SlackChannelConfigCreationForm
-        slack_bot_id={slackChannelConfig.slack_bot_id}
-        documentSets={documentSets}
-        personas={assistants}
-        standardAnswerCategoryResponse={eeStandardAnswerCategoryResponse}
-        existingSlackChannelConfig={slackChannelConfig}
-      />
-    </div>
+      <SettingsLayouts.Body>
+        <SlackChannelConfigCreationForm
+          slack_bot_id={slackChannelConfig.slack_bot_id}
+          documentSets={documentSets}
+          personas={assistants}
+          standardAnswerCategoryResponse={eeStandardAnswerCategoryResponse}
+          existingSlackChannelConfig={slackChannelConfig}
+        />
+      </SettingsLayouts.Body>
+    </SettingsLayouts.Root>
   );
 }
 
