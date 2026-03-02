@@ -1,4 +1,10 @@
 :root {
   --app-page-main-content-width: 52.5rem;
   --block-width-form-input-min: 10rem;
+
+  --container-sm: 672px;
+  --container-sm-md: 752px;
+  --container-md: 872px;
+  --container-lg: 992px;
+  --container-full: 100%;
 }
