@@ -51,6 +51,7 @@ export { default as SvgCode } from "@opal/icons/code";
 export { default as SvgCopy } from "@opal/icons/copy";
 export { default as SvgCornerRightUpDot } from "@opal/icons/corner-right-up-dot";
 export { default as SvgCpu } from "@opal/icons/cpu";
+export { default as SvgCreditCard } from "@opal/icons/credit-card";
 export { default as SvgDashboard } from "@opal/icons/dashboard";
 export { default as SvgDevKit } from "@opal/icons/dev-kit";
 export { default as SvgDownload } from "@opal/icons/download";
