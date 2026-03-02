@@ -153,26 +153,28 @@ class ScimProvider(ABC):
         self,
         user: User,
         fields: ScimMappingFields,
-    ) -> ScimName | None:
+    ) -> ScimName:
         """Build SCIM name components for the response.
 
         Round-trips stored ``given_name``/``family_name`` when available (so
         the IdP gets back what it sent). Falls back to splitting
         ``personal_name`` for users provisioned before we stored components.
+        Always returns a ScimName — Okta's spec tests expect ``name``
+        (with ``givenName``/``familyName``) on every user resource.
         Providers may override for custom behavior.
         """
         if fields.given_name is not None or fields.family_name is not None:
             return ScimName(
-                givenName=fields.given_name,
-                familyName=fields.family_name,
-                formatted=user.personal_name,
+                givenName=fields.given_name or "",
+                familyName=fields.family_name or "",
+                formatted=user.personal_name or "",
             )
         if not user.personal_name:
-            return None
+            return ScimName(givenName="", familyName="", formatted="")
         parts = user.personal_name.split(" ", 1)
         return ScimName(
             givenName=parts[0],
-            familyName=parts[1] if len(parts) > 1 else None,
+            familyName=parts[1] if len(parts) > 1 else "",
             formatted=user.personal_name,
         )
 
