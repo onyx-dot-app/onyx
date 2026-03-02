@@ -49,6 +49,7 @@ export { default as SvgClock } from "@opal/icons/clock";
 export { default as SvgClockHandsSmall } from "@opal/icons/clock-hands-small";
 export { default as SvgCloud } from "@opal/icons/cloud";
 export { default as SvgCode } from "@opal/icons/code";
+export { default as SvgColumn } from "@opal/icons/column";
 export { default as SvgCopy } from "@opal/icons/copy";
 export { default as SvgCornerRightUpDot } from "@opal/icons/corner-right-up-dot";
 export { default as SvgCpu } from "@opal/icons/cpu";

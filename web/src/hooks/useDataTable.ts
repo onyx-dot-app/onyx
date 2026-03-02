@@ -15,6 +15,7 @@ import {
   type PaginationState,
   type ColumnResizeMode,
   type TableOptions,
+  type VisibilityState,
 } from "@tanstack/react-table";
 
 // ---------------------------------------------------------------------------
@@ -54,6 +55,7 @@ type ManagedKeys =
   | "onSortingChange"
   | "onRowSelectionChange"
   | "onColumnSizingChange"
+  | "onColumnVisibilityChange"
   | "onPaginationChange"
   | "getCoreRowModel"
   | "getSortedRowModel"
@@ -81,6 +83,8 @@ interface UseDataTableOptions<TData extends RowData> {
   columnResizeMode?: ColumnResizeMode;
   /** Initial sorting state. @default [] */
   initialSorting?: SortingState;
+  /** Initial column visibility state. @default {} */
+  initialColumnVisibility?: VisibilityState;
   /** Escape-hatch: extra options spread into `useReactTable`. Managed keys are excluded. */
   tableOptions?: Partial<Omit<TableOptions<TData>, ManagedKeys>>;
 }
@@ -146,6 +150,7 @@ export default function useDataTable<TData extends RowData>(
     enableColumnResizing = true,
     columnResizeMode = "onChange",
     initialSorting = [],
+    initialColumnVisibility = {},
     tableOptions,
   } = options;
 
@@ -153,6 +158,9 @@ export default function useDataTable<TData extends RowData>(
   const [sorting, setSorting] = useState<SortingState>(initialSorting);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({});
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(
+    initialColumnVisibility
+  );
   const [pagination, setPagination] = useState<PaginationState>({
     pageIndex: 0,
     pageSize: pageSizeOption,
@@ -162,10 +170,17 @@ export default function useDataTable<TData extends RowData>(
   const table = useReactTable({
     data,
     columns,
-    state: { sorting, rowSelection, columnSizing, pagination },
+    state: {
+      sorting,
+      rowSelection,
+      columnSizing,
+      columnVisibility,
+      pagination,
+    },
     onSortingChange: setSorting,
     onRowSelectionChange: setRowSelection,
     onColumnSizingChange: setColumnSizing,
+    onColumnVisibilityChange: setColumnVisibility,
     onPaginationChange: setPagination,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
