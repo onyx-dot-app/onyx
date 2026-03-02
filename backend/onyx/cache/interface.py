@@ -27,7 +27,8 @@ class CacheLock(abc.ABC):
         raise NotImplementedError
 
     def __enter__(self) -> "CacheLock":
-        self.acquire()
+        if not self.acquire():
+            raise RuntimeError("Failed to acquire lock")
         return self
 
     def __exit__(self, *args: object) -> None:

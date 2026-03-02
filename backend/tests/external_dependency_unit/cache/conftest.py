@@ -9,27 +9,20 @@ Run with::
 from collections.abc import Generator
 
 import pytest
-from sqlalchemy import delete
 
 from onyx.cache.interface import CacheBackend
 from onyx.cache.postgres_backend import PostgresCacheBackend
 from onyx.cache.redis_backend import RedisCacheBackend
-from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.engine.sql_engine import get_sqlalchemy_engine
 from onyx.db.engine.sql_engine import SqlEngine
-from onyx.db.models import CacheStore
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
 
 
 @pytest.fixture(scope="session", autouse=True)
 def _init_db() -> Generator[None, None, None]:
+    """Initialize DB engine. Assumes Postgres has migrations applied (e.g. via docker compose)."""
     SqlEngine.init_engine(pool_size=5, max_overflow=2)
-    CacheStore.metadata.create_all(get_sqlalchemy_engine(), checkfirst=True)
     yield
-    with get_session_with_tenant(tenant_id=TEST_TENANT_ID) as session:
-        session.execute(delete(CacheStore))
-        session.commit()
 
 
 @pytest.fixture(autouse=True)

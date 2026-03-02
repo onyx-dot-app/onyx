@@ -7,30 +7,39 @@ for distributed locking, and a polling loop for the BLPOP pattern.
 import hashlib
 import struct
 import time
+import uuid
+from contextlib import AbstractContextManager
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
 
-from sqlalchemy import Connection
 from sqlalchemy import delete
 from sqlalchemy import func
 from sqlalchemy import or_
 from sqlalchemy import select
-from sqlalchemy import text
 from sqlalchemy import update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.orm import Session
 
 from onyx.cache.interface import CacheBackend
 from onyx.cache.interface import CacheLock
 from onyx.db.models import CacheStore
 
 _LIST_KEY_PREFIX = "_q:"
+# ASCII: ':' (0x3A) < ';' (0x3B). Upper bound for range queries so [prefix+, prefix;)
+# captures all list-item keys (e.g. _q:mylist:123:uuid) without including other
+# lists whose names share a prefix (e.g. _q:mylist2:...).
+_LIST_KEY_RANGE_TERMINATOR = ";"
 _LIST_ITEM_TTL_SECONDS = 3600
+_LOCK_POLL_INTERVAL = 0.1
 _BLPOP_POLL_INTERVAL = 0.25
 
 
 def _list_item_key(key: str) -> str:
-    return f"{_LIST_KEY_PREFIX}{key}:{time.time_ns()}"
+    """Unique key for a list item. Timestamp for FIFO ordering; UUID prevents
+    collision when concurrent rpush calls occur within the same nanosecond.
+    """
+    return f"{_LIST_KEY_PREFIX}{key}:{time.time_ns()}:{uuid.uuid4().hex}"
 
 
 def _to_bytes(value: str | bytes | int | float) -> bytes:
@@ -47,18 +56,20 @@ def _to_bytes(value: str | bytes | int | float) -> bytes:
 class PostgresCacheLock(CacheLock):
     """Advisory-lock-based distributed lock.
 
-    The lock is tied to a dedicated database connection.  Releasing
-    the lock (or closing the connection) frees it.
+    Uses ``get_session_with_tenant`` for connection lifecycle.  The lock is tied
+    to the session's connection; releasing or closing the session frees it.
 
     NOTE: Unlike Redis locks, advisory locks do not auto-expire after
     ``timeout`` seconds.  They are released when ``release()`` is
-    called or when the underlying connection is closed.
+    called or when the session is closed.
     """
 
-    def __init__(self, lock_id: int, timeout: float | None) -> None:
+    def __init__(self, lock_id: int, timeout: float | None, tenant_id: str) -> None:
         self._lock_id = lock_id
         self._timeout = timeout
-        self._conn: Connection | None = None
+        self._tenant_id = tenant_id
+        self._session_cm: AbstractContextManager[Session] | None = None
+        self._session: Session | None = None
         self._acquired = False
 
     def acquire(
@@ -66,47 +77,52 @@ class PostgresCacheLock(CacheLock):
         blocking: bool = True,
         blocking_timeout: float | None = None,
     ) -> bool:
-        from onyx.db.engine.sql_engine import get_sqlalchemy_engine
+        from onyx.db.engine.sql_engine import get_session_with_tenant
 
-        self._conn = get_sqlalchemy_engine().connect()
+        self._session_cm = get_session_with_tenant(tenant_id=self._tenant_id)
+        self._session = self._session_cm.__enter__()
+        try:
+            if not blocking:
+                return self._try_lock()
 
-        if not blocking:
-            if self._try_lock():
-                return True
-            self._conn.close()
-            self._conn = None
-            return False
-
-        effective_timeout = blocking_timeout or self._timeout
-        deadline = (time.monotonic() + effective_timeout) if effective_timeout else None
-        while True:
-            if self._try_lock():
-                return True
-            if deadline is not None and time.monotonic() >= deadline:
-                self._conn.close()
-                self._conn = None
-                return False
-            time.sleep(0.1)
+            effective_timeout = blocking_timeout or self._timeout
+            deadline = (
+                (time.monotonic() + effective_timeout) if effective_timeout else None
+            )
+            while True:
+                if self._try_lock():
+                    return True
+                if deadline is not None and time.monotonic() >= deadline:
+                    return False
+                time.sleep(_LOCK_POLL_INTERVAL)
+        finally:
+            if not self._acquired:
+                self._close_session()
 
     def release(self) -> None:
-        if not self._acquired or self._conn is None:
+        if not self._acquired or self._session is None:
             return
         try:
-            self._conn.execute(
-                text("SELECT pg_advisory_unlock(:id)"), {"id": self._lock_id}
-            )
+            self._session.execute(select(func.pg_advisory_unlock(self._lock_id)))
         finally:
             self._acquired = False
-            self._conn.close()
-            self._conn = None
+            self._close_session()
 
     def owned(self) -> bool:
         return self._acquired
 
+    def _close_session(self) -> None:
+        if self._session_cm is not None:
+            try:
+                self._session_cm.__exit__(None, None, None)
+            finally:
+                self._session_cm = None
+                self._session = None
+
     def _try_lock(self) -> bool:
-        assert self._conn is not None
-        result = self._conn.execute(
-            text("SELECT pg_try_advisory_lock(:id)"), {"id": self._lock_id}
+        assert self._session is not None
+        result = self._session.execute(
+            select(func.pg_try_advisory_lock(self._lock_id))
         ).scalar()
         if result:
             self._acquired = True
@@ -223,7 +239,9 @@ class PostgresCacheBackend(CacheBackend):
     # -- distributed lock --------------------------------------------------
 
     def lock(self, name: str, timeout: float | None = None) -> CacheLock:
-        return PostgresCacheLock(self._lock_id_for(name), timeout)
+        return PostgresCacheLock(
+            self._lock_id_for(name), timeout, tenant_id=self._tenant_id
+        )
 
     # -- blocking list (MCP OAuth BLPOP pattern) ---------------------------
 
@@ -237,7 +255,7 @@ class PostgresCacheBackend(CacheBackend):
         while True:
             for key in keys:
                 lower = f"{_LIST_KEY_PREFIX}{key}:"
-                upper = f"{_LIST_KEY_PREFIX}{key};"
+                upper = f"{_LIST_KEY_PREFIX}{key}{_LIST_KEY_RANGE_TERMINATOR}"
                 stmt = (
                     select(CacheStore)
                     .where(
