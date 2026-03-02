@@ -4,8 +4,7 @@ import { useState } from "react";
 import Card from "@/refresh-components/cards/Card";
 import Popover from "@/refresh-components/Popover";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import Text from "@/refresh-components/texts/Text";
-import { Section, LineItemLayout } from "@/layouts/general-layouts";
+import { ContentAction } from "@opal/layouts";
 import { ValidSources } from "@/lib/types";
 import { getSourceMetadata } from "@/lib/sources";
 import { SvgMoreHorizontal, SvgPlug, SvgSettings, SvgTrash } from "@opal/icons";
@@ -41,15 +40,6 @@ interface ConnectorCardProps {
   onDelete: () => void;
 }
 
-const STATUS_COLORS: Record<ConnectorStatus, string> = {
-  connected: "bg-status-success-05",
-  connected_with_errors: "bg-status-warning-05",
-  indexing: "bg-status-warning-05 animate-pulse",
-  error: "bg-status-error-05",
-  deleting: "bg-status-error-05 animate-pulse",
-  not_connected: "bg-background-neutral-03",
-};
-
 function getStatusText(status: ConnectorStatus, docsIndexed: number): string {
   switch (status) {
     case "connected":
@@ -70,29 +60,6 @@ function getStatusText(status: ConnectorStatus, docsIndexed: number): string {
     default:
       return "Not connected";
   }
-}
-
-function StatusDescription({
-  status,
-  docsIndexed,
-}: {
-  status: ConnectorStatus;
-  docsIndexed: number;
-}) {
-  return (
-    <Section
-      flexDirection="row"
-      alignItems="center"
-      gap={0.375}
-      width="fit"
-      height="fit"
-    >
-      <div className={cn(STATUS_COLORS[status], "w-2 h-2 rounded-full")} />
-      <Text secondaryBody text03>
-        {getStatusText(status, docsIndexed)}
-      </Text>
-    </Section>
-  );
 }
 
 export default function ConnectorCard({
@@ -180,17 +147,8 @@ export default function ConnectorCard({
   const cardVariant =
     isAlwaysConnected || isConnected ? "primary" : "secondary";
 
-  // Use custom description if provided, otherwise show status
-  const descriptionContent = customDescription ? (
-    <Text secondaryBody text03>
-      {customDescription}
-    </Text>
-  ) : (
-    <StatusDescription
-      status={status}
-      docsIndexed={config?.docs_indexed || 0}
-    />
-  );
+  const descriptionText =
+    customDescription ?? getStatusText(status, config?.docs_indexed || 0);
 
   return (
     <div
@@ -198,12 +156,13 @@ export default function ConnectorCard({
       onClick={handleCardClick}
     >
       <Card variant={cardVariant}>
-        <LineItemLayout
+        <ContentAction
           icon={sourceMetadata.icon}
           title={sourceMetadata.displayName}
-          description={descriptionContent}
+          description={descriptionText}
+          sizePreset="main-content"
+          variant="section"
           rightChildren={rightContent}
-          center
         />
       </Card>
     </div>

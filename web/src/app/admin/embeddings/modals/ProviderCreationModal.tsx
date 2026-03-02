@@ -11,7 +11,7 @@ import {
   EmbeddingProvider,
   getFormattedProviderName,
 } from "@/components/embedding/interfaces";
-import { EMBEDDING_PROVIDERS_ADMIN_URL } from "@/app/admin/configuration/llm/constants";
+import { EMBEDDING_PROVIDERS_ADMIN_URL } from "@/lib/llmConfig/constants";
 import Modal from "@/refresh-components/Modal";
 import { SvgSettings } from "@opal/icons";
 export interface ProviderCreationModalProps {

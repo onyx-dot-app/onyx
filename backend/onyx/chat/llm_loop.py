@@ -1,6 +1,7 @@
 import json
 import time
 from collections.abc import Callable
+from typing import Any
 from typing import Literal
 
 from sqlalchemy.orm import Session
@@ -530,11 +531,13 @@ def _create_file_tool_metadata_message(
     """
     lines = [
         "You have access to the following files. Use the read_file tool to "
-        "read sections of any file:"
+        "read sections of any file. You MUST pass the file_id UUID (not the "
+        "filename) to read_file:"
     ]
     for meta in file_metadata:
         lines.append(
-            f'- {meta.file_id}: "{meta.filename}" (~{meta.approx_char_count:,} chars)'
+            f'- file_id="{meta.file_id}" filename="{meta.filename}" '
+            f"(~{meta.approx_char_count:,} chars)"
         )
 
     message_content = "\n".join(lines)
@@ -558,12 +561,16 @@ def _create_context_files_message(
     # Format as documents JSON as described in README
     documents_list = []
     for idx, file_text in enumerate(context_files.file_texts, start=1):
-        documents_list.append(
-            {
-                "document": idx,
-                "contents": file_text,
-            }
+        title = (
+            context_files.file_metadata[idx - 1].filename
+            if idx - 1 < len(context_files.file_metadata)
+            else None
         )
+        entry: dict[str, Any] = {"document": idx}
+        if title:
+            entry["title"] = title
+        entry["contents"] = file_text
+        documents_list.append(entry)
 
     documents_json = json.dumps({"documents": documents_list}, indent=2)
     message_content = f"Here are some documents provided for context, they may not all be relevant:\n{documents_json}"

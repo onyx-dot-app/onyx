@@ -10,7 +10,8 @@ import Button from "@/refresh-components/buttons/Button";
 import { Button as OpalButton } from "@opal/components";
 import { SvgProgressCircle, SvgX } from "@opal/icons";
 import { Card } from "@/refresh-components/cards";
-import { LineItemLayout, Section } from "@/layouts/general-layouts";
+import { Section } from "@/layouts/general-layouts";
+import { ContentAction } from "@opal/layouts";
 
 interface OnboardingHeaderProps {
   state: OnboardingState;
@@ -40,11 +41,15 @@ const OnboardingHeader = React.memo(
 
     return (
       <Card padding={0.5} data-label="onboarding-header">
-        <LineItemLayout
+        <ContentAction
           icon={(props) => (
             <SvgProgressCircle value={iconPercentage} {...props} />
           )}
           title={STEP_CONFIG[onboardingState.currentStep].title}
+          sizePreset="main-ui"
+          variant="body"
+          prominence="muted"
+          paddingVariant="sm"
           rightChildren={
             stepButtonText ? (
               <Section flexDirection="row">
@@ -70,9 +75,6 @@ const OnboardingHeader = React.memo(
               />
             )
           }
-          variant="tertiary-muted"
-          reducedPadding
-          center
         />
       </Card>
     );

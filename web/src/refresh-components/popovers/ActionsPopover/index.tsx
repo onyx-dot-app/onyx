@@ -29,6 +29,7 @@ import { SourceMetadata } from "@/lib/search/interfaces";
 import { SourceIcon } from "@/components/SourceIcon";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
 import useCCPairs from "@/hooks/useCCPairs";
+import { useSettingsContext } from "@/providers/SettingsProvider";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { useToolOAuthStatus } from "@/lib/hooks/useToolOAuthStatus";
 import LineItem from "@/refresh-components/buttons/LineItem";
@@ -274,9 +275,11 @@ export default function ActionsPopover({
   }, [selectedAssistant.id, setForcedToolIds]);
 
   const { isAdmin, isCurator } = useUser();
+  const settings = useSettingsContext();
+  const vectorDbEnabled = settings?.settings.vector_db_enabled !== false;
 
   const { tools: availableTools } = useAvailableTools();
-  const { ccPairs } = useCCPairs();
+  const { ccPairs } = useCCPairs(vectorDbEnabled);
   const { currentProjectId, allCurrentProjectFiles } = useProjectsContext();
   const availableToolIdSet = new Set(availableTools.map((tool) => tool.id));
 

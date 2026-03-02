@@ -103,7 +103,6 @@ from onyx.utils.encryption import encrypt_string_to_bytes
 from onyx.utils.sensitive import SensitiveValue
 from onyx.utils.headers import HeaderItemDict
 from shared_configs.enums import EmbeddingProvider
-from onyx.context.search.enums import RecencyBiasSetting
 
 # TODO: After anonymous user migration has been deployed, make user_id columns NOT NULL
 # and update Mapped[User | None] relationships to Mapped[User] where needed.
@@ -3265,19 +3264,6 @@ class Persona(Base):
     )
     name: Mapped[str] = mapped_column(String)
     description: Mapped[str] = mapped_column(String)
-    # Number of chunks to pass to the LLM for generation.
-    num_chunks: Mapped[float | None] = mapped_column(Float, nullable=True)
-    chunks_above: Mapped[int] = mapped_column(Integer)
-    chunks_below: Mapped[int] = mapped_column(Integer)
-    # Pass every chunk through LLM for evaluation, fairly expensive
-    # Can be turned off globally by admin, in which case, this setting is ignored
-    llm_relevance_filter: Mapped[bool] = mapped_column(Boolean)
-    # Enables using LLM to extract time and source type filters
-    # Can also be admin disabled globally
-    llm_filter_extraction: Mapped[bool] = mapped_column(Boolean)
-    recency_bias: Mapped[RecencyBiasSetting] = mapped_column(
-        Enum(RecencyBiasSetting, native_enum=False)
-    )
 
     # Allows the persona to specify a specific default LLM model
     # NOTE: only is applied on the actual response generation - is not used for things like
@@ -3304,11 +3290,8 @@ class Persona(Base):
     # Treated specially (cannot be user edited etc.)
     builtin_persona: Mapped[bool] = mapped_column(Boolean, default=False)
 
-    # Default personas are personas created by admins and are automatically added
-    # to all users' assistants list.
-    is_default_persona: Mapped[bool] = mapped_column(
-        Boolean, default=False, nullable=False
-    )
+    # Featured personas are highlighted in the UI
+    featured: Mapped[bool] = mapped_column(Boolean, default=False)
     # controls whether the persona is available to be selected by users
     is_visible: Mapped[bool] = mapped_column(Boolean, default=True)
     # controls the ordering of personas in the UI

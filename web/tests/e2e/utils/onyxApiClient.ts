@@ -443,7 +443,10 @@ export class OnyxApiClient {
     }>
   > {
     const response = await this.get("/admin/llm/provider");
-    return await this.handleResponse(response, "Failed to list LLM providers");
+    const data = await this.handleResponse<{
+      providers: Array<{ id: number; is_public?: boolean }>;
+    }>(response, "Failed to list LLM providers");
+    return data.providers;
   }
 
   /**
@@ -465,6 +468,7 @@ export class OnyxApiClient {
       return null;
     }
 
+    const defaultModelName = "gpt-4o";
     const response = await this.request.put(
       `${this.baseUrl}/admin/llm/provider?is_creation=true`,
       {
@@ -472,10 +476,10 @@ export class OnyxApiClient {
           name: providerName,
           provider: "openai",
           api_key: E2E_LLM_PROVIDER_API_KEY,
-          default_model_name: "gpt-4o",
           is_public: true,
           groups: [],
           personas: [],
+          model_configurations: [{ name: defaultModelName, is_visible: true }],
         },
       }
     );
@@ -486,7 +490,7 @@ export class OnyxApiClient {
     );
 
     // Set as default so get_default_llm() works (needed for tokenization, etc.)
-    await this.setProviderAsDefault(responseData.id);
+    await this.setProviderAsDefault(responseData.id, defaultModelName);
 
     this.log(
       `Created public LLM provider: ${providerName} (ID: ${responseData.id})`
@@ -495,14 +499,19 @@ export class OnyxApiClient {
   }
 
   /**
-   * Sets an LLM provider as the default for chat.
+   * Sets an LLM provider + model as the default for chat.
    *
    * @param providerId - The provider ID to set as default
+   * @param modelName - The model name to set as default
    */
-  async setProviderAsDefault(providerId: number): Promise<void> {
-    const response = await this.post(
-      `/admin/llm/provider/${providerId}/default`
-    );
+  async setProviderAsDefault(
+    providerId: number,
+    modelName: string
+  ): Promise<void> {
+    const response = await this.post("/admin/llm/default", {
+      provider_id: providerId,
+      model_name: modelName,
+    });
 
     await this.handleResponseSoft(
       response,

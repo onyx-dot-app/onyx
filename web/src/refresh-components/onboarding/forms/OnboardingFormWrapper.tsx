@@ -5,8 +5,8 @@ import ProviderModal from "@/components/modals/ProviderModal";
 import {
   ModelConfiguration,
   WellKnownLLMProviderDescriptor,
-} from "@/app/admin/configuration/llm/interfaces";
-import { LLM_PROVIDERS_ADMIN_URL } from "@/app/admin/configuration/llm/constants";
+} from "@/interfaces/llm";
+import { LLM_PROVIDERS_ADMIN_URL } from "@/lib/llmConfig/constants";
 import { OnboardingActions, OnboardingState } from "../types";
 import { APIFormFieldState } from "@/refresh-components/form/types";
 import {

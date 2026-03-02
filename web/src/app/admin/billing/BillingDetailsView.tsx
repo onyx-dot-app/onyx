@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Section, LineItemLayout } from "@/layouts/general-layouts";
+import { Section } from "@/layouts/general-layouts";
+import { Content } from "@opal/layouts";
 import * as InputLayouts from "@/layouts/input-layouts";
 import Card from "@/refresh-components/cards/Card";
 import Button from "@/refresh-components/buttons/Button";
@@ -372,9 +373,11 @@ function SeatsCard({
           padding={1}
           height="auto"
         >
-          <LineItemLayout
+          <Content
             title="Update Seats"
             description="Add or remove seats to reflect your team size."
+            sizePreset="main-content"
+            variant="section"
           />
           <Button main secondary onClick={handleCancel} disabled={isSubmitting}>
             Cancel

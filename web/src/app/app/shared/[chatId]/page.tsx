@@ -20,7 +20,7 @@ export function constructMiniFiedPersona(name: string, id: number): Persona {
     owner: null,
     starter_messages: null,
     builtin_persona: false,
-    is_default_persona: false,
+    featured: false,
     users: [],
     groups: [],
     user_file_ids: [],

@@ -1,5 +1,5 @@
 import useSWR from "swr";
-import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
+import { WellKnownLLMProviderDescriptor } from "@/interfaces/llm";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 
 export function useLLMProviderOptions() {

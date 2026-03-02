@@ -414,6 +414,24 @@ def test_mock_connector_checkpoint_recovery(
     )
     assert finished_index_attempt.status == IndexingStatus.FAILED
 
+    # Pause the connector immediately to prevent check_for_indexing from
+    # creating automatic retry attempts while we reset the mock server.
+    # Without this, the INITIAL_INDEXING status causes immediate retries
+    # that would consume (or fail against) the mock server before we can
+    # set up the recovery behavior.
+    CCPairManager.pause_cc_pair(cc_pair, user_performing_action=admin_user)
+
+    # Collect all index attempt IDs created so far (the initial one plus
+    # any automatic retries that may have started before the pause took effect).
+    all_prior_attempt_ids: list[int] = []
+    index_attempts_page = IndexAttemptManager.get_index_attempt_page(
+        cc_pair_id=cc_pair.id,
+        page=0,
+        page_size=100,
+        user_performing_action=admin_user,
+    )
+    all_prior_attempt_ids = [ia.id for ia in index_attempts_page.items]
+
     # Verify initial state: both docs should be indexed
     with get_session_with_current_tenant() as db_session:
         documents = DocumentManager.fetch_documents_for_cc_pair(
@@ -465,17 +483,14 @@ def test_mock_connector_checkpoint_recovery(
     )
     assert response.status_code == 200
 
-    # After the failure, the connector is in repeated error state and paused.
-    # Set the manual indexing trigger first (while paused), then unpause.
-    # This ensures the trigger is set before CHECK_FOR_INDEXING runs, which will
-    # prevent the connector from being re-paused when repeated error state is detected.
+    # Set the manual indexing trigger, then unpause to allow the recovery run.
     CCPairManager.run_once(
         cc_pair, from_beginning=False, user_performing_action=admin_user
     )
     CCPairManager.unpause_cc_pair(cc_pair, user_performing_action=admin_user)
     recovery_index_attempt = IndexAttemptManager.wait_for_index_attempt_start(
         cc_pair_id=cc_pair.id,
-        index_attempts_to_ignore=[initial_index_attempt.id],
+        index_attempts_to_ignore=all_prior_attempt_ids,
         user_performing_action=admin_user,
     )
     IndexAttemptManager.wait_for_index_attempt_completion(

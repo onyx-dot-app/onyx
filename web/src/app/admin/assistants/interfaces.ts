@@ -53,7 +53,7 @@ export interface MinimalPersonaSnapshot {
   is_public: boolean;
   is_visible: boolean;
   display_priority: number | null;
-  is_default_persona: boolean;
+  featured: boolean;
   builtin_persona: boolean;
 
   labels?: PersonaLabel[];
@@ -64,7 +64,6 @@ export interface Persona extends MinimalPersonaSnapshot {
   user_file_ids: string[];
   users: MinimalUserSnapshot[];
   groups: number[];
-  num_chunks?: number;
   // Hierarchy nodes (folders, spaces, channels) attached for scoped search
   hierarchy_nodes?: HierarchyNodeSnapshot[];
   // Individual documents attached for scoped search
@@ -79,8 +78,6 @@ export interface Persona extends MinimalPersonaSnapshot {
 
 export interface FullPersona extends Persona {
   search_start_date: string | null;
-  llm_relevance_filter?: boolean;
-  llm_filter_extraction?: boolean;
 }
 
 export interface PersonaLabel {

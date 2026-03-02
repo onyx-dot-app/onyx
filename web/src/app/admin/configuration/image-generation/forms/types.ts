@@ -1,6 +1,6 @@
 import { FormikProps } from "formik";
 import { ImageProvider } from "../constants";
-import { LLMProviderView } from "@/app/admin/configuration/llm/interfaces";
+import { LLMProviderView } from "@/interfaces/llm";
 import {
   ImageGenerationConfigView,
   ImageGenerationCredentials,
