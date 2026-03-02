@@ -9,8 +9,6 @@ from uuid import UUID
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Vertical
-from textual.widgets import Header, Static
 
 from onyx_cli.api_client import OnyxApiClient, OnyxApiError
 from onyx_cli.config import OnyxCliConfig, load_config, save_config
@@ -72,11 +70,6 @@ class OnyxApp(App):
     Screen {
         background: $surface;
     }
-
-    #chat-container {
-        width: 100%;
-        height: 1fr;
-    }
     """
 
     BINDINGS = [
@@ -101,9 +94,7 @@ class OnyxApp(App):
         self._parent_message_id: int | None = -1
 
     def compose(self) -> ComposeResult:
-        yield Header()
-        with Vertical(id="chat-container"):
-            yield ChatDisplay()
+        yield ChatDisplay()
         yield InputArea()
         yield StatusBar()
 
@@ -129,8 +120,9 @@ class OnyxApp(App):
             chat.show_info("Could not load assistants. Using default.")
 
         status.set_persona(self._persona_name)
-        chat.show_info(f"Connected to {self._config.server_url}")
-        chat.show_info("Type a message to start chatting. /help for commands.")
+        chat.show_info(
+            f"Connected to {self._config.server_url} \u00b7 Assistant: {self._persona_name}"
+        )
 
         # Focus the input
         self.query_one(ChatInput).focus()

@@ -1,9 +1,9 @@
-"""Chat input area with file attachment support."""
+"""Chat input area with clean prompt styling and file attachment support."""
 
 from __future__ import annotations
 
 from textual.app import ComposeResult
-from textual.containers import Horizontal
+from textual.containers import Horizontal, Vertical
 from textual.message import Message
 from textual.widgets import Input, Static
 
@@ -15,9 +15,9 @@ class AttachedFilesBadge(Static):
     AttachedFilesBadge {
         width: 100%;
         height: auto;
-        padding: 0 1;
+        padding: 0 1 0 5;
         display: none;
-        color: #A0A0A0;
+        color: #666688;
     }
 
     AttachedFilesBadge.has-files {
@@ -51,13 +51,36 @@ class AttachedFilesBadge(Static):
             self.remove_class("has-files")
 
 
+class _PromptPrefix(Static):
+    """The ❯ prompt prefix."""
+
+    DEFAULT_CSS = """
+    _PromptPrefix {
+        width: 3;
+        height: 1;
+        padding: 0 0 0 1;
+        color: #6c8ebf;
+    }
+    """
+
+    def __init__(self) -> None:
+        super().__init__("\u276f ")
+
+
 class ChatInput(Input):
     """Text input with slash command detection."""
 
     DEFAULT_CSS = """
     ChatInput {
         width: 1fr;
-        dock: bottom;
+        height: 1;
+        border: none;
+        background: transparent;
+        padding: 0;
+    }
+
+    ChatInput:focus {
+        border: none;
     }
     """
 
@@ -70,7 +93,7 @@ class ChatInput(Input):
 
     def __init__(self) -> None:
         super().__init__(
-            placeholder="Type a message... (/help for commands)",
+            placeholder="Send a message\u2026",
         )
 
     async def action_submit(self) -> None:
@@ -81,21 +104,51 @@ class ChatInput(Input):
             self.value = ""
 
 
-class InputArea(Horizontal):
-    """Input area combining file badges and text input."""
+class _InputRow(Horizontal):
+    """Row containing the prompt prefix and input field."""
+
+    DEFAULT_CSS = """
+    _InputRow {
+        width: 100%;
+        height: 1;
+    }
+    """
+
+    def compose(self) -> ComposeResult:
+        yield _PromptPrefix()
+        yield ChatInput()
+
+
+class _Separator(Static):
+    """Thin horizontal rule above the input."""
+
+    DEFAULT_CSS = """
+    _Separator {
+        width: 100%;
+        height: 1;
+        color: #333355;
+    }
+    """
+
+    def __init__(self) -> None:
+        super().__init__("\u2500" * 200)
+
+
+class InputArea(Vertical):
+    """Input area combining separator, file badges, and prompt input."""
 
     DEFAULT_CSS = """
     InputArea {
         width: 100%;
         height: auto;
         dock: bottom;
-        padding: 0 0;
     }
     """
 
     def compose(self) -> ComposeResult:
+        yield _Separator()
         yield AttachedFilesBadge()
-        yield ChatInput()
+        yield _InputRow()
 
     @property
     def chat_input(self) -> ChatInput:
