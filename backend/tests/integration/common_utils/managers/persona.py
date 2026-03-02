@@ -3,7 +3,6 @@ from uuid import uuid4
 
 import requests
 
-from onyx.context.search.enums import RecencyBiasSetting
 from onyx.server.features.persona.models import FullPersonaSnapshot
 from onyx.server.features.persona.models import PersonaUpsertRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
@@ -20,11 +19,7 @@ class PersonaManager:
         description: str | None = None,
         system_prompt: str | None = None,
         task_prompt: str | None = None,
-        num_chunks: float = 5,
-        llm_relevance_filter: bool = True,
         is_public: bool = True,
-        llm_filter_extraction: bool = True,
-        recency_bias: RecencyBiasSetting = RecencyBiasSetting.AUTO,
         datetime_aware: bool = False,
         document_set_ids: list[int] | None = None,
         tool_ids: list[int] | None = None,
@@ -35,6 +30,7 @@ class PersonaManager:
         label_ids: list[int] | None = None,
         user_file_ids: list[str] | None = None,
         display_priority: int | None = None,
+        featured: bool = False,
     ) -> DATestPersona:
         name = name or f"test-persona-{uuid4()}"
         description = description or f"Description for {name}"
@@ -47,11 +43,7 @@ class PersonaManager:
             system_prompt=system_prompt,
             task_prompt=task_prompt,
             datetime_aware=datetime_aware,
-            num_chunks=num_chunks,
-            llm_relevance_filter=llm_relevance_filter,
             is_public=is_public,
-            llm_filter_extraction=llm_filter_extraction,
-            recency_bias=recency_bias,
             document_set_ids=document_set_ids or [],
             tool_ids=tool_ids or [],
             llm_model_provider_override=llm_model_provider_override,
@@ -61,6 +53,7 @@ class PersonaManager:
             label_ids=label_ids or [],
             user_file_ids=user_file_ids or [],
             display_priority=display_priority,
+            featured=featured,
         )
 
         response = requests.post(
@@ -75,11 +68,7 @@ class PersonaManager:
             id=persona_data["id"],
             name=name,
             description=description,
-            num_chunks=num_chunks,
-            llm_relevance_filter=llm_relevance_filter,
             is_public=is_public,
-            llm_filter_extraction=llm_filter_extraction,
-            recency_bias=recency_bias,
             system_prompt=system_prompt,
             task_prompt=task_prompt,
             datetime_aware=datetime_aware,
@@ -90,6 +79,7 @@ class PersonaManager:
             users=users or [],
             groups=groups or [],
             label_ids=label_ids or [],
+            featured=featured,
         )
 
     @staticmethod
@@ -100,11 +90,7 @@ class PersonaManager:
         description: str | None = None,
         system_prompt: str | None = None,
         task_prompt: str | None = None,
-        num_chunks: float | None = None,
-        llm_relevance_filter: bool | None = None,
         is_public: bool | None = None,
-        llm_filter_extraction: bool | None = None,
-        recency_bias: RecencyBiasSetting | None = None,
         datetime_aware: bool = False,
         document_set_ids: list[int] | None = None,
         tool_ids: list[int] | None = None,
@@ -113,6 +99,7 @@ class PersonaManager:
         users: list[str] | None = None,
         groups: list[int] | None = None,
         label_ids: list[int] | None = None,
+        featured: bool | None = None,
     ) -> DATestPersona:
         system_prompt = system_prompt or f"System prompt for {persona.name}"
         task_prompt = task_prompt or f"Task prompt for {persona.name}"
@@ -123,13 +110,7 @@ class PersonaManager:
             system_prompt=system_prompt,
             task_prompt=task_prompt,
             datetime_aware=datetime_aware,
-            num_chunks=num_chunks or persona.num_chunks,
-            llm_relevance_filter=llm_relevance_filter or persona.llm_relevance_filter,
             is_public=persona.is_public if is_public is None else is_public,
-            llm_filter_extraction=(
-                llm_filter_extraction or persona.llm_filter_extraction
-            ),
-            recency_bias=recency_bias or persona.recency_bias,
             document_set_ids=document_set_ids or persona.document_set_ids,
             tool_ids=tool_ids or persona.tool_ids,
             llm_model_provider_override=(
@@ -141,6 +122,7 @@ class PersonaManager:
             users=[UUID(user) for user in (users or persona.users)],
             groups=groups or persona.groups,
             label_ids=label_ids or persona.label_ids,
+            featured=featured if featured is not None else persona.featured,
         )
 
         response = requests.patch(
@@ -155,16 +137,12 @@ class PersonaManager:
             id=updated_persona_data["id"],
             name=updated_persona_data["name"],
             description=updated_persona_data["description"],
-            num_chunks=updated_persona_data["num_chunks"],
-            llm_relevance_filter=updated_persona_data["llm_relevance_filter"],
             is_public=updated_persona_data["is_public"],
-            llm_filter_extraction=updated_persona_data["llm_filter_extraction"],
-            recency_bias=recency_bias or persona.recency_bias,
             system_prompt=system_prompt,
             task_prompt=task_prompt,
             datetime_aware=datetime_aware,
-            document_set_ids=updated_persona_data["document_sets"],
-            tool_ids=updated_persona_data["tools"],
+            document_set_ids=[ds["id"] for ds in updated_persona_data["document_sets"]],
+            tool_ids=[t["id"] for t in updated_persona_data["tools"]],
             llm_model_provider_override=updated_persona_data[
                 "llm_model_provider_override"
             ],
@@ -173,7 +151,8 @@ class PersonaManager:
             ],
             users=[user["email"] for user in updated_persona_data["users"]],
             groups=updated_persona_data["groups"],
-            label_ids=updated_persona_data["labels"],
+            label_ids=[label["id"] for label in updated_persona_data["labels"]],
+            featured=updated_persona_data["featured"],
         )
 
     @staticmethod
@@ -222,32 +201,13 @@ class PersonaManager:
                             fetched_persona.description,
                         )
                     )
-                if fetched_persona.num_chunks != persona.num_chunks:
-                    mismatches.append(
-                        ("num_chunks", persona.num_chunks, fetched_persona.num_chunks)
-                    )
-                if fetched_persona.llm_relevance_filter != persona.llm_relevance_filter:
-                    mismatches.append(
-                        (
-                            "llm_relevance_filter",
-                            persona.llm_relevance_filter,
-                            fetched_persona.llm_relevance_filter,
-                        )
-                    )
                 if fetched_persona.is_public != persona.is_public:
                     mismatches.append(
                         ("is_public", persona.is_public, fetched_persona.is_public)
                     )
-                if (
-                    fetched_persona.llm_filter_extraction
-                    != persona.llm_filter_extraction
-                ):
+                if fetched_persona.featured != persona.featured:
                     mismatches.append(
-                        (
-                            "llm_filter_extraction",
-                            persona.llm_filter_extraction,
-                            fetched_persona.llm_filter_extraction,
-                        )
+                        ("featured", persona.featured, fetched_persona.featured)
                     )
                 if (
                     fetched_persona.llm_model_provider_override

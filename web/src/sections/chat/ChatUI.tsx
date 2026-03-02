@@ -5,7 +5,7 @@ import { Message } from "@/app/app/interfaces";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
 import HumanMessage from "@/app/app/message/HumanMessage";
 import { ErrorBanner } from "@/app/app/message/Resubmit";
-import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
+import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import AgentMessage from "@/app/app/message/messageComponents/AgentMessage";
 import Spacer from "@/refresh-components/Spacer";
@@ -18,7 +18,7 @@ import {
 } from "@/app/app/stores/useChatSessionStore";
 
 export interface ChatUIProps {
-  liveAssistant: MinimalPersonaSnapshot;
+  liveAgent: MinimalPersonaSnapshot;
   llmManager: LlmManager;
   setPresentingDocument: (doc: MinimalOnyxDocument | null) => void;
   onMessageSelection: (nodeId: number) => void;
@@ -52,7 +52,7 @@ export interface ChatUIProps {
 
 const ChatUI = React.memo(
   ({
-    liveAssistant,
+    liveAgent,
     llmManager,
     setPresentingDocument,
     onMessageSelection,
@@ -165,7 +165,7 @@ const ChatUI = React.memo(
 
               const previousMessage = i !== 0 ? messages[i - 1] : null;
               const chatStateData = {
-                assistant: liveAssistant,
+                agent: liveAgent,
                 docs: message.documents ?? emptyDocs,
                 citations: message.citations,
                 setPresentingDocument,

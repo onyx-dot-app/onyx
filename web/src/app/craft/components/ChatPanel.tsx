@@ -233,18 +233,18 @@ export default function BuildChatPanel({
     inputBarRef.current?.setMessage(text);
   }, []);
 
-  // Check if assistant has finished streaming at least one message
-  // Show banner only after first assistant message completes streaming
+  // Check if agent has finished streaming at least one message
+  // Show banner only after first agent message completes streaming
   const shouldShowConnectorBanner = useMemo(() => {
     // Don't show if currently streaming
     if (isRunning) {
       return false;
     }
-    // Check if there's at least one assistant message in the session
-    const hasAssistantMessage = session?.messages?.some(
+    // Check if there's at least one agent message in the session
+    const hasAgentMessage = session?.messages?.some(
       (msg) => msg.type === "assistant"
     );
-    return hasAssistantMessage ?? false;
+    return hasAgentMessage ?? false;
   }, [isRunning, session?.messages]);
 
   const handleSubmit = useCallback(
@@ -466,7 +466,7 @@ export default function BuildChatPanel({
                   </SimpleTooltip>
                 </div>
               )}
-              {/* Follow-up suggestion bubbles - show after first assistant message */}
+              {/* Follow-up suggestion bubbles - show after first agent message */}
               {(followupSuggestions || suggestionsLoading) && (
                 <div className="mb-3">
                   <SuggestionBubbles
@@ -476,7 +476,7 @@ export default function BuildChatPanel({
                   />
                 </div>
               )}
-              {/* Connector banners - show after first assistant message finishes streaming */}
+              {/* Connector banners - show after first agent message finishes streaming */}
               {shouldShowConnectorBanner && (
                 <ConnectorBannersRow className="" />
               )}

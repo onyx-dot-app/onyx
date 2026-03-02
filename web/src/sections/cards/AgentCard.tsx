@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useCallback } from "react";
-import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
+import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import Button from "@/refresh-components/buttons/Button";
 import { useAppRouter } from "@/hooks/appNavigation";
@@ -12,7 +12,7 @@ import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import {
-  checkUserOwnsAssistant,
+  checkUserOwnsAgent,
   updateAgentSharedStatus,
   updateAgentFeaturedStatus,
 } from "@/lib/agents";
@@ -31,7 +31,8 @@ import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import ShareAgentModal from "@/sections/modals/ShareAgentModal";
 import AgentViewerModal from "@/sections/modals/AgentViewerModal";
 import { toast } from "@/hooks/useToast";
-import { LineItemLayout, CardItemLayout } from "@/layouts/general-layouts";
+import { CardItemLayout } from "@/layouts/general-layouts";
+import { Content } from "@opal/layouts";
 import { Interactive } from "@opal/core";
 import { Card } from "@/refresh-components/cards";
 
@@ -50,7 +51,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
   const { user, isAdmin, isCurator } = useUser();
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
   const canUpdateFeaturedStatus = isAdmin || isCurator;
-  const isOwnedByUser = checkUserOwnsAssistant(user, agent);
+  const isOwnedByUser = checkUserOwnsAgent(user, agent);
   const shareAgentModal = useCreateModal();
   const agentViewerModal = useCreateModal();
   const { agent: fullAgent, refresh: refreshAgent } = useAgent(agent.id);
@@ -116,7 +117,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
           userIds={fullAgent?.users?.map((u) => u.id) ?? []}
           groupIds={fullAgent?.groups ?? []}
           isPublic={fullAgent?.is_public ?? false}
-          isFeatured={fullAgent?.is_default_persona ?? false}
+          isFeatured={fullAgent?.featured ?? false}
           labelIds={fullAgent?.labels?.map((l) => l.id) ?? []}
           onShare={handleShare}
         />
@@ -149,7 +150,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
                       icon={SvgBarChart}
                       tertiary
                       onClick={noProp(() =>
-                        router.push(`/ee/assistants/stats/${agent.id}` as Route)
+                        router.push(`/ee/agents/stats/${agent.id}` as Route)
                       )}
                       tooltip="View Agent Stats"
                       className="hidden group-hover/AgentCard:flex"
@@ -193,12 +194,14 @@ export default function AgentCard({ agent }: AgentCardProps) {
           <div className="bg-background-tint-01 p-1 flex flex-row items-end justify-between w-full">
             {/* Left side - creator and actions */}
             <div className="flex flex-col gap-1 py-1 px-2">
-              <LineItemLayout
+              <Content
                 icon={SvgUser}
                 title={agent.owner?.email || "Onyx"}
-                variant="mini"
+                sizePreset="secondary"
+                variant="body"
+                prominence="muted"
               />
-              <LineItemLayout
+              <Content
                 icon={SvgActions}
                 title={
                   agent.tools.length > 0
@@ -207,7 +210,9 @@ export default function AgentCard({ agent }: AgentCardProps) {
                       }`
                     : "No Actions"
                 }
-                variant="mini"
+                sizePreset="secondary"
+                variant="body"
+                prominence="muted"
               />
             </div>
 

@@ -9,6 +9,7 @@ import React, {
   useEffect,
 } from "react";
 import * as GeneralLayouts from "@/layouts/general-layouts";
+import { Content } from "@opal/layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
 import * as InputLayouts from "@/layouts/input-layouts";
 import { Card } from "@/refresh-components/cards";
@@ -35,7 +36,7 @@ import { ProjectFile } from "@/app/app/projects/projectsService";
 import {
   AttachedDocumentSnapshot,
   HierarchyNodeSnapshot,
-} from "@/app/admin/assistants/interfaces";
+} from "@/app/admin/agents/interfaces";
 import { timeAgo } from "@/lib/time";
 import Spacer from "@/refresh-components/Spacer";
 import { Disabled } from "@/refresh-components/Disabled";
@@ -318,10 +319,11 @@ function DocumentSetsTableContent({
       header: "Name",
       sortable: true,
       render: (ds) => (
-        <GeneralLayouts.LineItemLayout
+        <Content
           icon={SvgFolder}
           title={ds.name}
-          variant="secondary"
+          sizePreset="main-ui"
+          variant="section"
         />
       ),
     },
@@ -443,10 +445,11 @@ function RecentFilesTableContent({
       header: "Name",
       sortable: true,
       render: (file) => (
-        <GeneralLayouts.LineItemLayout
+        <Content
           icon={SvgFiles}
           title={file.name}
-          variant="secondary"
+          sizePreset="main-ui"
+          variant="section"
         />
       ),
     },
@@ -889,7 +892,7 @@ export default function AgentKnowledgePane({
   }, [enableKnowledge]);
 
   // Get connected sources from CC pairs
-  const { ccPairs } = useCCPairs();
+  const { ccPairs } = useCCPairs(vectorDbEnabled);
   const connectedSources: ConnectedSource[] = useMemo(() => {
     if (!ccPairs || ccPairs.length === 0) return [];
     const sourceSet = new Set<ValidSources>();
@@ -1135,9 +1138,11 @@ export default function AgentKnowledgePane({
 
   return (
     <GeneralLayouts.Section gap={0.5} alignItems="stretch" height="auto">
-      <InputLayouts.Title
+      <Content
         title="Knowledge"
         description="Add specific connectors and documents for this agent to use to inform its responses."
+        sizePreset="main-content"
+        variant="section"
       />
 
       <Card>

@@ -7,7 +7,7 @@ import {
 } from "@/lib/chat/greetingMessages";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import Text from "@/refresh-components/texts/Text";
-import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
+import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
 import { useState, useEffect } from "react";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import FrostedDiv from "@/refresh-components/FrostedDiv";
@@ -50,7 +50,7 @@ export default function WelcomeMessage({
     content = (
       <>
         <div
-          data-testid="assistant-name-display"
+          data-testid="agent-name-display"
           className="flex flex-row items-center gap-3"
         >
           <AgentAvatar agent={agent} size={36} />

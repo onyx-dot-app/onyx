@@ -28,7 +28,6 @@ def ensure_default_llm_provider(db_session: Session) -> None:
             provider=LlmProviderNames.OPENAI,
             api_key=os.environ.get("OPENAI_API_KEY", "test"),
             is_public=True,
-            default_model_name="gpt-4o-mini",
             model_configurations=[
                 ModelConfigurationUpsertRequest(
                     name="gpt-4o-mini",
@@ -41,7 +40,7 @@ def ensure_default_llm_provider(db_session: Session) -> None:
             llm_provider_upsert_request=llm_provider_request,
             db_session=db_session,
         )
-        update_default_provider(provider.id, db_session)
+        update_default_provider(provider.id, "gpt-4o-mini", db_session)
     except Exception as exc:  # pragma: no cover - only hits on duplicate setup issues
         # Rollback to clear the pending transaction state
         db_session.rollback()

@@ -1,13 +1,14 @@
 "use client";
 
 import { ArrayHelpers, FieldArray, FormikProps, useField } from "formik";
-import { ModelConfiguration } from "./interfaces";
+import { ModelConfiguration } from "@/interfaces/llm";
 import { ManualErrorMessage, TextFormField } from "@/components/Field";
 import { useEffect, useState } from "react";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import { Button } from "@opal/components";
 import { SvgX } from "@opal/icons";
 import Text from "@/refresh-components/texts/Text";
+
 function ModelConfigurationRow({
   name,
   index,

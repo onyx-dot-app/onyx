@@ -4,7 +4,7 @@ import { fetchSS } from "@/lib/utilsSS";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { DocumentSetSummary, ValidSources } from "@/lib/types";
 import BackButton from "@/refresh-components/buttons/BackButton";
-import { fetchAssistantsSS } from "@/lib/agentsSS";
+import { fetchAgentsSS } from "@/lib/agentsSS";
 import { getStandardAnswerCategoriesIfEE } from "@/components/standardAnswers/getStandardAnswerCategoriesIfEE";
 import { redirect } from "next/navigation";
 import { SourceIcon } from "@/components/SourceIcon";
@@ -22,15 +22,12 @@ async function NewChannelConfigPage(props: {
     return null;
   }
 
-  const [
-    documentSetsResponse,
-    assistantsResponse,
-    standardAnswerCategoryResponse,
-  ] = await Promise.all([
-    fetchSS("/manage/document-set") as Promise<Response>,
-    fetchAssistantsSS(),
-    getStandardAnswerCategoriesIfEE(),
-  ]);
+  const [documentSetsResponse, agentsResponse, standardAnswerCategoryResponse] =
+    await Promise.all([
+      fetchSS("/manage/document-set") as Promise<Response>,
+      fetchAgentsSS(),
+      getStandardAnswerCategoriesIfEE(),
+    ]);
 
   if (!documentSetsResponse.ok) {
     return (
@@ -43,11 +40,11 @@ async function NewChannelConfigPage(props: {
   const documentSets =
     (await documentSetsResponse.json()) as DocumentSetSummary[];
 
-  if (assistantsResponse[1]) {
+  if (agentsResponse[1]) {
     return (
       <ErrorCallout
         errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch assistants - ${assistantsResponse[1]}`}
+        errorMsg={`Failed to fetch agents - ${agentsResponse[1]}`}
       />
     );
   }
@@ -63,7 +60,7 @@ async function NewChannelConfigPage(props: {
       <SlackChannelConfigCreationForm
         slack_bot_id={slack_bot_id}
         documentSets={documentSets}
-        personas={assistantsResponse[0]}
+        personas={agentsResponse[0]}
         standardAnswerCategoryResponse={standardAnswerCategoryResponse}
       />
     </>

@@ -48,7 +48,6 @@ import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";
 import SimplePopover from "@/refresh-components/SimplePopover";
 import { Interactive } from "@opal/core";
 import { Button, OpenButton } from "@opal/components";
-import { LineItemLayout } from "@/layouts/general-layouts";
 import { useAppSidebarContext } from "@/providers/AppSidebarProvider";
 import useScreenSize from "@/hooks/useScreenSize";
 import {
@@ -105,7 +104,8 @@ function Header() {
     refreshCurrentProjectDetails,
     currentProjectId,
   } = useProjectsContext();
-  const { currentChatSession, refreshChatSessions } = useChatSessions();
+  const { currentChatSession, refreshChatSessions, removeSession } =
+    useChatSessions();
   const router = useRouter();
   const appFocus = useAppFocus();
   const { classification } = useQueryController();
@@ -187,6 +187,7 @@ function Header() {
       if (!response.ok) {
         throw new Error("Failed to delete chat session");
       }
+      removeSession(currentChatSession.id);
       await Promise.all([refreshChatSessions(), fetchProjects()]);
       router.replace("/app");
       setDeleteModalOpen(false);
@@ -194,7 +195,13 @@ function Header() {
       console.error("Failed to delete chat:", error);
       showErrorNotification("Failed to delete chat. Please try again.");
     }
-  }, [currentChatSession, refreshChatSessions, fetchProjects, router]);
+  }, [
+    currentChatSession,
+    refreshChatSessions,
+    removeSession,
+    fetchProjects,
+    router,
+  ]);
 
   const setDeleteConfirmationModalOpen = useCallback((open: boolean) => {
     setDeleteModalOpen(open);
@@ -320,6 +327,7 @@ function Header() {
               <Popover open={modePopoverOpen} onOpenChange={setModePopoverOpen}>
                 <Popover.Trigger asChild>
                   <OpenButton
+                    aria-label="Change app mode"
                     icon={
                       effectiveMode === "search" ? SvgSearchMenu : SvgBubbleText
                     }

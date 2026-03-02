@@ -17,7 +17,7 @@ def test_bedrock_llm_configuration(client: TestClient) -> None:
     # Prepare the test request payload
     test_request: dict[str, Any] = {
         "provider": LlmProviderNames.BEDROCK,
-        "default_model_name": _DEFAULT_BEDROCK_MODEL,
+        "model": _DEFAULT_BEDROCK_MODEL,
         "api_key": None,
         "api_base": None,
         "api_version": None,
@@ -44,7 +44,7 @@ def test_bedrock_llm_configuration_invalid_key(client: TestClient) -> None:
     # Prepare the test request payload with invalid credentials
     test_request: dict[str, Any] = {
         "provider": LlmProviderNames.BEDROCK,
-        "default_model_name": _DEFAULT_BEDROCK_MODEL,
+        "model": _DEFAULT_BEDROCK_MODEL,
         "api_key": None,
         "api_base": None,
         "api_version": None,

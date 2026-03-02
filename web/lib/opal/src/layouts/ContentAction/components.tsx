@@ -58,7 +58,7 @@ function ContentAction({
 
   return (
     <div className="flex flex-row items-stretch w-full">
-      <div className={cn("flex-1 min-w-0", padding)}>
+      <div className={cn("flex-1 min-w-0 self-center", padding)}>
         <Content {...contentProps} />
       </div>
       {rightChildren && (

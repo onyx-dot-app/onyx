@@ -21,7 +21,6 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.chat.emitter import get_default_emitter
-from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.enums import MCPAuthenticationPerformer
 from onyx.db.enums import MCPAuthenticationType
 from onyx.db.enums import MCPTransport
@@ -47,12 +46,6 @@ def _create_test_persona_with_mcp_tool(
     persona = Persona(
         name=f"Test MCP Persona {uuid4().hex[:8]}",
         description="Test persona with MCP tools",
-        num_chunks=10.0,
-        chunks_above=0,
-        chunks_below=0,
-        llm_relevance_filter=False,
-        llm_filter_extraction=False,
-        recency_bias=RecencyBiasSetting.NO_DECAY,
         system_prompt="You are a helpful assistant",
         task_prompt="Answer the user's question",
         tools=tools,

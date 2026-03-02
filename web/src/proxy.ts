@@ -11,7 +11,7 @@ const FASTAPI_USERS_AUTH_COOKIE_NAME = "fastapiusersauth";
 const ANONYMOUS_USER_COOKIE_NAME = "onyx_anonymous_user";
 
 // Protected route prefixes (require authentication)
-const PROTECTED_ROUTES = ["/app", "/admin", "/assistants", "/connector"];
+const PROTECTED_ROUTES = ["/app", "/admin", "/agents", "/connector"];
 
 // Public route prefixes (no authentication required)
 const PUBLIC_ROUTES = ["/auth", "/anonymous", "/_next", "/api"];
@@ -23,7 +23,7 @@ export const config = {
     // Auth-protected routes (for middleware auth check)
     "/app/:path*",
     "/admin/:path*",
-    "/assistants/:path*",
+    "/agents/:path*",
     "/connector/:path*",
 
     // Enterprise Edition routes (for /ee rewriting)
@@ -34,7 +34,7 @@ export const config = {
     "/admin/theme/:path*",
     "/admin/performance/custom-analytics/:path*",
     "/admin/standard-answer/:path*",
-    "/assistants/stats/:path*",
+    "/agents/stats/:path*",
 
     // Cloud only
     "/admin/billing/:path*",
@@ -49,7 +49,7 @@ const EE_ROUTES = [
   "/admin/theme",
   "/admin/performance/custom-analytics",
   "/admin/standard-answer",
-  "/assistants/stats",
+  "/agents/stats",
 ];
 
 export async function proxy(request: NextRequest) {

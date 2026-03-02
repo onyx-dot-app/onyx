@@ -18,8 +18,8 @@ from ee.onyx.server.enterprise_settings.store import (
     store_settings as store_ee_settings,
 )
 from ee.onyx.server.enterprise_settings.store import upload_logo
-from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.llm import fetch_existing_llm_provider
 from onyx.db.llm import update_default_provider
 from onyx.db.llm import upsert_llm_provider
 from onyx.db.models import Tool
@@ -117,15 +117,38 @@ def _seed_custom_tools(db_session: Session, tools: List[CustomToolSeed]) -> None
 def _seed_llms(
     db_session: Session, llm_upsert_requests: list[LLMProviderUpsertRequest]
 ) -> None:
-    if llm_upsert_requests:
-        logger.notice("Seeding LLMs")
-        seeded_providers = [
-            upsert_llm_provider(llm_upsert_request, db_session)
-            for llm_upsert_request in llm_upsert_requests
-        ]
-        update_default_provider(
-            provider_id=seeded_providers[0].id, db_session=db_session
-        )
+    if not llm_upsert_requests:
+        return
+
+    logger.notice("Seeding LLMs")
+    for request in llm_upsert_requests:
+        existing = fetch_existing_llm_provider(name=request.name, db_session=db_session)
+        if existing:
+            request.id = existing.id
+    seeded_providers = [
+        upsert_llm_provider(llm_upsert_request, db_session)
+        for llm_upsert_request in llm_upsert_requests
+    ]
+
+    default_provider = next(
+        (p for p in seeded_providers if p.model_configurations), None
+    )
+    if not default_provider:
+        return
+
+    visible_configs = [
+        mc for mc in default_provider.model_configurations if mc.is_visible
+    ]
+    default_config = (
+        visible_configs[0]
+        if visible_configs
+        else default_provider.model_configurations[0]
+    )
+    update_default_provider(
+        provider_id=default_provider.id,
+        model_name=default_config.name,
+        db_session=db_session,
+    )
 
 
 def _seed_personas(db_session: Session, personas: list[PersonaUpsertRequest]) -> None:
@@ -137,12 +160,6 @@ def _seed_personas(db_session: Session, personas: list[PersonaUpsertRequest]) ->
                     user=None,  # Seeding is done as admin
                     name=persona.name,
                     description=persona.description,
-                    num_chunks=(
-                        persona.num_chunks if persona.num_chunks is not None else 0.0
-                    ),
-                    llm_relevance_filter=persona.llm_relevance_filter,
-                    llm_filter_extraction=persona.llm_filter_extraction,
-                    recency_bias=RecencyBiasSetting.AUTO,
                     document_set_ids=persona.document_set_ids,
                     llm_model_provider_override=persona.llm_model_provider_override,
                     llm_model_version_override=persona.llm_model_version_override,
@@ -154,6 +171,7 @@ def _seed_personas(db_session: Session, personas: list[PersonaUpsertRequest]) ->
                     system_prompt=persona.system_prompt,
                     task_prompt=persona.task_prompt,
                     datetime_aware=persona.datetime_aware,
+                    featured=persona.featured,
                     commit=False,
                 )
             db_session.commit()

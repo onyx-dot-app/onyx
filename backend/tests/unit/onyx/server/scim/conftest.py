@@ -19,12 +19,17 @@ from ee.onyx.server.scim.models import ScimListResponse
 from ee.onyx.server.scim.models import ScimName
 from ee.onyx.server.scim.models import ScimUserResource
 from ee.onyx.server.scim.providers.base import ScimProvider
+from ee.onyx.server.scim.providers.entra import EntraProvider
 from ee.onyx.server.scim.providers.okta import OktaProvider
 from onyx.db.models import ScimToken
 from onyx.db.models import ScimUserMapping
 from onyx.db.models import User
 from onyx.db.models import UserGroup
 from onyx.db.models import UserRole
+
+# Every supported SCIM provider must appear here so that all endpoint tests
+# run against it.  When adding a new provider, add its class to this list.
+SCIM_PROVIDERS: list[type[ScimProvider]] = [OktaProvider, EntraProvider]
 
 
 @pytest.fixture
@@ -41,10 +46,10 @@ def mock_token() -> MagicMock:
     return token
 
 
-@pytest.fixture
-def provider() -> ScimProvider:
-    """An OktaProvider instance for endpoint tests."""
-    return OktaProvider()
+@pytest.fixture(params=SCIM_PROVIDERS, ids=[p.__name__ for p in SCIM_PROVIDERS])
+def provider(request: pytest.FixtureRequest) -> ScimProvider:
+    """Parameterized provider — runs each test with every provider in SCIM_PROVIDERS."""
+    return request.param()
 
 
 @pytest.fixture

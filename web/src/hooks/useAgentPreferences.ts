@@ -2,24 +2,26 @@
 
 import useSWR from "swr";
 import {
-  UserSpecificAssistantPreference,
-  UserSpecificAssistantPreferences,
+  UserSpecificAgentPreference,
+  UserSpecificAgentPreferences,
 } from "@/lib/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { useCallback } from "react";
 
-const ASSISTANT_PREFERENCES_URL = "/api/user/assistant/preferences";
+// TODO: rename to agent — https://linear.app/onyx-app/issue/ENG-3766
+const AGENT_PREFERENCES_URL = "/api/user/assistant/preferences";
 
-const buildUpdateAssistantPreferenceUrl = (assistantId: number) =>
-  `/api/user/assistant/${assistantId}/preferences`;
+// TODO: rename to agent — https://linear.app/onyx-app/issue/ENG-3766
+const buildUpdateAgentPreferenceUrl = (agentId: number) =>
+  `/api/user/assistant/${agentId}/preferences`;
 
 /**
- * Hook for managing user-specific assistant preferences using SWR.
+ * Hook for managing user-specific agent preferences using SWR.
  * Provides automatic caching, deduplication, and revalidation.
  */
 export default function useAgentPreferences() {
-  const { data, mutate } = useSWR<UserSpecificAssistantPreferences>(
-    ASSISTANT_PREFERENCES_URL,
+  const { data, mutate } = useSWR<UserSpecificAgentPreferences>(
+    AGENT_PREFERENCES_URL,
     errorHandlingFetcher,
     {
       revalidateOnFocus: false,
@@ -27,39 +29,36 @@ export default function useAgentPreferences() {
     }
   );
 
-  const setSpecificAssistantPreferences = useCallback(
+  const setSpecificAgentPreferences = useCallback(
     async (
-      assistantId: number,
-      newAssistantPreference: UserSpecificAssistantPreference
+      agentId: number,
+      newAgentPreference: UserSpecificAgentPreference
     ) => {
       // Optimistic update
       mutate(
         {
           ...data,
-          [assistantId]: newAssistantPreference,
+          [agentId]: newAgentPreference,
         },
         false
       );
 
       try {
-        const response = await fetch(
-          buildUpdateAssistantPreferenceUrl(assistantId),
-          {
-            method: "PATCH",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(newAssistantPreference),
-          }
-        );
+        const response = await fetch(buildUpdateAgentPreferenceUrl(agentId), {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(newAgentPreference),
+        });
 
         if (!response.ok) {
           console.error(
-            `Failed to update assistant preferences: ${response.status}`
+            `Failed to update agent preferences: ${response.status}`
           );
         }
       } catch (error) {
-        console.error("Error updating assistant preferences:", error);
+        console.error("Error updating agent preferences:", error);
       }
 
       // Revalidate after update
@@ -69,7 +68,7 @@ export default function useAgentPreferences() {
   );
 
   return {
-    assistantPreferences: data ?? null,
-    setSpecificAssistantPreferences,
+    agentPreferences: data ?? null,
+    setSpecificAgentPreferences,
   };
 }

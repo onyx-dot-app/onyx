@@ -528,7 +528,7 @@ lxml==5.3.0
     #   unstructured
     #   xmlsec
     #   zeep
-lxml-html-clean==0.4.3
+lxml-html-clean==0.4.4
     # via lxml
 magika==0.6.3
     # via markitdown
@@ -809,7 +809,7 @@ pypandoc-binary==1.16.2
     # via onyx
 pyparsing==3.2.5
     # via httplib2
-pypdf==6.7.3
+pypdf==6.7.4
     # via
     #   onyx
     #   unstructured-client
@@ -1217,7 +1217,7 @@ websockets==15.0.1
     # via
     #   fastmcp
     #   google-genai
-werkzeug==3.1.5
+werkzeug==3.1.6
     # via sendgrid
 wrapt==1.17.3
     # via

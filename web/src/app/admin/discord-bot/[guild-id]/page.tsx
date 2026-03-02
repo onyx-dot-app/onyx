@@ -5,7 +5,8 @@ import { cn } from "@/lib/utils";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { toast } from "@/hooks/useToast";
-import { Section, LineItemLayout } from "@/layouts/general-layouts";
+import { Section } from "@/layouts/general-layouts";
+import { ContentAction } from "@opal/layouts";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import Text from "@/refresh-components/texts/Text";
 import Card from "@/refresh-components/cards/Card";
@@ -25,7 +26,7 @@ import {
 import { DiscordChannelsTable } from "@/app/admin/discord-bot/[guild-id]/DiscordChannelsTable";
 import { DiscordChannelConfig } from "@/app/admin/discord-bot/types";
 import { useAdminPersonas } from "@/hooks/useAdminPersonas";
-import { Persona } from "@/app/admin/assistants/interfaces";
+import { Persona } from "@/app/admin/agents/interfaces";
 
 interface Props {
   params: Promise<{ "guild-id": string }>;
@@ -89,9 +90,11 @@ function GuildDetailContent({
       )}
 
       <Card variant={disabled ? "disabled" : "primary"}>
-        <LineItemLayout
+        <ContentAction
           title="Channel Configuration"
           description="Run !sync-channels in Discord to update the channel list."
+          sizePreset="main-content"
+          variant="section"
           rightChildren={
             isRegistered && !channelsLoading && !channelsError ? (
               <Section
@@ -339,9 +342,11 @@ export default function Page({ params }: Props) {
       <SettingsLayouts.Body>
         {/* Default Persona Selector */}
         <Card variant={!guild?.enabled ? "disabled" : "primary"}>
-          <LineItemLayout
+          <ContentAction
             title="Default Agent"
             description="The agent used by the bot in all channels unless overridden."
+            sizePreset="main-content"
+            variant="section"
             rightChildren={
               <InputSelect
                 value={guild?.default_persona_id?.toString() ?? "default"}

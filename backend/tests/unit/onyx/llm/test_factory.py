@@ -44,7 +44,6 @@ def _build_provider_view(
         id=1,
         name="test-provider",
         provider=provider,
-        default_model_name="test-model",
         model_configurations=[
             ModelConfigurationView(
                 name="test-model",
@@ -62,7 +61,6 @@ def _build_provider_view(
         groups=[],
         personas=[],
         deployment_name=None,
-        default_vision_model=None,
     )
 
 
