@@ -1602,6 +1602,11 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
     values: [],
     advanced_values: [],
   },
+  freshdesk_solutions: {
+    description: "Configure Freshdesk Solutions connector",
+    values: [],
+    advanced_values: [],
+  },
   fireflies: {
     description: "Configure Fireflies connector",
     values: [],
