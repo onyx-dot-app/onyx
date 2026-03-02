@@ -603,9 +603,9 @@ def list_llm_provider_basics(
     for provider in all_providers:
         # Use centralized access control logic with persona=None since we're
         # listing providers without a specific persona context. This correctly:
-        # - Includes all public providers
+        # - Includes public providers WITHOUT persona restrictions
         # - Includes providers user can access via group membership
-        # - Excludes persona-only restricted providers (requires specific persona)
+        # - Excludes providers with persona restrictions (requires specific persona)
         # - Excludes non-public providers with no restrictions (admin-only)
         if can_user_access_llm_provider(
             provider, user_group_ids, persona=None, is_admin=is_admin
@@ -638,7 +638,7 @@ def get_valid_model_names_for_persona(
 
     Returns a list of model names (e.g., ["gpt-4o", "claude-3-5-sonnet"]) that are
     available to the user when using this persona, respecting all RBAC restrictions.
-    Public providers are always included.
+    Public providers are included unless they have persona restrictions that exclude this persona.
     """
     persona = fetch_persona_with_groups(db_session, persona_id)
     if not persona:
@@ -652,7 +652,7 @@ def get_valid_model_names_for_persona(
 
     valid_models = []
     for llm_provider_model in all_providers:
-        # Public providers always included, restricted checked via RBAC
+        # Check access with persona context — respects all RBAC restrictions
         if can_user_access_llm_provider(
             llm_provider_model, user_group_ids, persona, is_admin=is_admin
         ):
@@ -673,7 +673,7 @@ def list_llm_providers_for_persona(
     """Get LLM providers for a specific persona.
 
     Returns providers that the user can access when using this persona:
-    - All public providers (is_public=True) - ALWAYS included
+    - Public providers (respecting persona restrictions if set)
     - Restricted providers user can access via group/persona restrictions
 
     This endpoint is used for background fetching of restricted providers
@@ -702,7 +702,7 @@ def list_llm_providers_for_persona(
     llm_provider_list: list[LLMProviderDescriptor] = []
 
     for llm_provider_model in all_providers:
-        # Use simplified access check - public providers always included
+        # Check access with persona context — respects persona restrictions
         if can_user_access_llm_provider(
             llm_provider_model, user_group_ids, persona, is_admin=is_admin
         ):
