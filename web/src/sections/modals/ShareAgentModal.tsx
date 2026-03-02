@@ -253,12 +253,12 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
           }
           cancel={
             <Button secondary onClick={handleClose}>
-              Done
+              Cancel
             </Button>
           }
           submit={
             <Button onClick={() => handleSubmit()} disabled={!dirty}>
-              Share
+              Save
             </Button>
           }
         />
