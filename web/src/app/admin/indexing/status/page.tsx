@@ -4,7 +4,7 @@ import { CCPairIndexingStatusTable } from "./CCPairIndexingStatusTable";
 import { SearchAndFilterControls } from "./SearchAndFilterControls";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import Link from "next/link";
-import { SvgBookOpen, SvgPlug } from "@opal/icons";
+import { SvgBookOpen } from "@opal/icons";
 import Text from "@/components/ui/text";
 import { useConnectorIndexingStatusWithPagination } from "@/lib/hooks";
 import { useToastFromQuery } from "@/hooks/useToast";

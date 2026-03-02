@@ -1,7 +1,6 @@
-import * as SettingsLayouts from "@/layouts/settings-layouts";
-import { Explorer } from "./Explorer";
 import { fetchValidFilterInfo } from "@/lib/search/utilsSS";
-import { SvgZoomIn } from "@opal/icons";
+import DocumentExplorerPage from "./DocumentExplorerPage";
+
 export default async function Page(props: {
   searchParams: Promise<{ [key: string]: string }>;
 }) {
@@ -9,20 +8,10 @@ export default async function Page(props: {
   const { connectors, documentSets } = await fetchValidFilterInfo();
 
   return (
-    <SettingsLayouts.Root>
-      <SettingsLayouts.Header
-        icon={SvgZoomIn}
-        title="Document Explorer"
-        separator
-      />
-
-      <SettingsLayouts.Body>
-        <Explorer
-          initialSearchValue={searchParams.query}
-          connectors={connectors}
-          documentSets={documentSets}
-        />
-      </SettingsLayouts.Body>
-    </SettingsLayouts.Root>
+    <DocumentExplorerPage
+      initialSearchValue={searchParams.query}
+      connectors={connectors}
+      documentSets={documentSets}
+    />
   );
 }
