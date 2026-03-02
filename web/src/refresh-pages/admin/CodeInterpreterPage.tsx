@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { Card, type CardProps } from "@/refresh-components/cards";
 import {
+  SvgAlertCircle,
   SvgArrowExchange,
   SvgCheckCircle,
   SvgRefreshCw,
@@ -18,7 +19,9 @@ import { Disabled } from "@opal/core";
 import Text from "@/refresh-components/texts/Text";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
-import useCodeInterpreter from "@/hooks/useCodeInterpreter";
+import useCodeInterpreter, {
+  type CodeInterpreterHealthStatus,
+} from "@/hooks/useCodeInterpreter";
 import { updateCodeInterpreter } from "@/lib/admin/code-interpreter/svc";
 import { ContentAction } from "@opal/layouts";
 import { toast } from "@/hooks/useToast";
@@ -72,19 +75,38 @@ function CheckingStatus() {
   );
 }
 
+const STATUS_CONFIG: Record<
+  CodeInterpreterHealthStatus,
+  { label: string; icon: typeof SvgCheckCircle; iconColor: string }
+> = {
+  healthy: {
+    label: "Connected",
+    icon: SvgCheckCircle,
+    iconColor: "text-status-success-05",
+  },
+  unhealthy: {
+    label: "Unhealthy",
+    icon: SvgAlertCircle,
+    iconColor: "text-status-warning-05",
+  },
+  connection_lost: {
+    label: "Connection Lost",
+    icon: SvgXOctagon,
+    iconColor: "text-status-error-05",
+  },
+};
+
 interface ConnectionStatusProps {
-  healthy: boolean;
+  status: CodeInterpreterHealthStatus;
   isLoading: boolean;
 }
 
-function ConnectionStatus({ healthy, isLoading }: ConnectionStatusProps) {
+function ConnectionStatus({ status, isLoading }: ConnectionStatusProps) {
   if (isLoading) {
     return <CheckingStatus />;
   }
 
-  const label = healthy ? "Connected" : "Connection Lost";
-  const Icon = healthy ? SvgCheckCircle : SvgXOctagon;
-  const iconColor = healthy ? "text-status-success-05" : "text-status-error-05";
+  const { label, icon: Icon, iconColor } = STATUS_CONFIG[status];
 
   return (
     <Section
@@ -144,7 +166,8 @@ function ActionButtons({
 }
 
 export default function CodeInterpreterPage() {
-  const { isHealthy, isEnabled, isLoading, refetch } = useCodeInterpreter();
+  const { status, isEnabled, isLoading, refetch } = useCodeInterpreter();
+  const isHealthy = status === "healthy";
   const [showDisconnectModal, setShowDisconnectModal] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
 
@@ -187,7 +210,7 @@ export default function CodeInterpreterPage() {
                 gap={0}
                 padding={0}
               >
-                <ConnectionStatus healthy={isHealthy} isLoading={isLoading} />
+                <ConnectionStatus status={status} isLoading={isLoading} />
                 <ActionButtons
                   onDisconnect={() => setShowDisconnectModal(true)}
                   onRefresh={refetch}
