@@ -98,10 +98,12 @@ class OnyxApp(App):
         yield InputArea()
         yield StatusBar()
 
-    async def on_mount(self) -> None:
-        # Onboarding runs in the terminal before the TUI launches (in main.py).
-        # By the time we get here, config is already valid.
-        await self._initialize_chat()
+    def on_mount(self) -> None:
+        # Focus the input immediately so the user can type right away,
+        # before any async initialization that might block.
+        self.query_one(ChatInput).focus()
+        # Run API initialization in the background so it doesn't block the UI.
+        self.run_worker(self._initialize_chat(), exclusive=False)
 
     async def _initialize_chat(self) -> None:
         """Initialize the chat interface after configuration."""
@@ -123,9 +125,6 @@ class OnyxApp(App):
         chat.show_info(
             f"Connected to {self._config.server_url} \u00b7 Assistant: {self._persona_name}"
         )
-
-        # Focus the input
-        self.query_one(ChatInput).focus()
 
     # ── Message Handling ─────────────────────────────────────────────
 
