@@ -1,7 +1,7 @@
 """add cache_store table
 
 Revision ID: 2664261bfaab
-Revises: c0c937d5c9e5
+Revises: 4a1e4b1c89d2
 Create Date: 2026-02-27 00:00:00.000000
 
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "2664261bfaab"
-down_revision = "c0c937d5c9e5"
+down_revision = "4a1e4b1c89d2"
 branch_labels: None = None
 depends_on: None = None
 
