@@ -52,7 +52,7 @@ function MessageEditing({
         <textarea
           ref={textareaRef}
           className={cn(
-            "w-full h-full resize-none outline-none bg-transparent overflow-y-scroll whitespace-normal break-word"
+            "w-full h-full resize-none outline-none bg-transparent overflow-y-scroll whitespace-normal break-words"
           )}
           aria-multiline
           role="textarea"
@@ -195,7 +195,7 @@ const HumanMessage = React.memo(function HumanMessage({
             <div className="md:max-w-[37.5rem] flex basis-[100%] md:basis-auto justify-end md:order-1">
               <div
                 className={
-                  "max-w-[30rem] md:max-w-[37.5rem] whitespace-break-spaces break-word rounded-t-16 rounded-bl-16 bg-background-tint-02 py-2 px-3"
+                  "max-w-[30rem] md:max-w-[37.5rem] whitespace-break-spaces break-words rounded-t-16 rounded-bl-16 bg-background-tint-02 py-2 px-3"
                 }
                 onCopy={(e) => {
                   const selection = window.getSelection();
