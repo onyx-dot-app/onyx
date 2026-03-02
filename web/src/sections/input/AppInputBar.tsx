@@ -705,6 +705,7 @@ const AppInputBar = React.memo(
 
                 {/* Controls that load in when data is ready */}
                 <div
+                  data-testid="actions-container"
                   className={cn(
                     "flex flex-row items-center",
                     controlsLoading && "invisible"
