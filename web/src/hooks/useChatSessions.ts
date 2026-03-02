@@ -10,10 +10,10 @@ import {
 import useSWRInfinite from "swr/infinite";
 import { ChatSession, ChatSessionSharedStatus } from "@/app/app/interfaces";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
+import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
 import useAppFocus from "./useAppFocus";
 import { useAgents } from "./useAgents";
-import { DEFAULT_ASSISTANT_ID } from "@/lib/constants";
+import { DEFAULT_AGENT_ID } from "@/lib/constants";
 
 const PAGE_SIZE = 50;
 const MIN_LOADING_DURATION_MS = 500;
@@ -121,7 +121,7 @@ function useFindAgentForCurrentChatSession(
 
   // This could be a new chat-session. Therefore, `currentChatSession` is false, but there could still be some agent.
   else if (appFocus.isNewSession()) {
-    agentIdToFind = DEFAULT_ASSISTANT_ID;
+    agentIdToFind = DEFAULT_AGENT_ID;
   }
 
   // Or this could be a new chat-session with an agent.

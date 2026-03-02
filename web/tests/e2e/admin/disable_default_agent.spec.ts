@@ -1,6 +1,6 @@
 import { test, expect, Page } from "@playwright/test";
 import { loginAs } from "@tests/e2e/utils/auth";
-import { createAssistant } from "@tests/e2e/utils/assistantUtils";
+import { createAgent } from "@tests/e2e/utils/agentUtils";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 
 const MAX_SETTING_SAVE_ATTEMPTS = 5;
@@ -32,7 +32,7 @@ async function expandAdvancedOptions(page: Page): Promise<void> {
 }
 
 /**
- * Toggle the "Always Start with an Agent" setting (formerly "Disable Default Assistant")
+ * Toggle the "Always Start with an Agent" setting (formerly "Disable Default Agent")
  * on the Chat Preferences page. Uses auto-save via the SwitchField.
  *
  * The switch is a SwitchField with name="disable_default_assistant" which renders
@@ -91,7 +91,7 @@ async function setDisableDefaultAssistantSetting(
   );
 }
 
-test.describe("Disable Default Assistant Setting @exclusive", () => {
+test.describe("Disable Default Agent Setting @exclusive", () => {
   let createdAssistantId: number | null = null;
 
   test.beforeEach(async ({ page }) => {
@@ -104,11 +104,11 @@ test.describe("Disable Default Assistant Setting @exclusive", () => {
     // Clean up any assistant created during the test
     if (createdAssistantId !== null) {
       const client = new OnyxApiClient(page.request);
-      await client.deleteAssistant(createdAssistantId);
+      await client.deleteAgent(createdAssistantId);
       createdAssistantId = null;
     }
 
-    // Ensure default assistant is enabled (switch unchecked) after each test
+    // Ensure default agent is enabled (switch unchecked) after each test
     // to avoid interfering with other tests
     await setDisableDefaultAssistantSetting(page, false);
   });
@@ -129,21 +129,21 @@ test.describe("Disable Default Assistant Setting @exclusive", () => {
 
     // Navigate to app and create a new assistant to ensure there's one besides the default
     await page.goto("/app");
-    const assistantName = `Test Assistant ${Date.now()}`;
-    await createAssistant(page, {
-      name: assistantName,
+    const agentName = `Test Assistant ${Date.now()}`;
+    await createAgent(page, {
+      name: agentName,
       description: "Test assistant for new session button test",
       instructions: "You are a helpful test assistant.",
     });
 
     // Extract the assistant ID from the URL
     const currentUrl = page.url();
-    const assistantIdMatch = currentUrl.match(/assistantId=(\d+)/);
-    expect(assistantIdMatch).toBeTruthy();
+    const agentIdMatch = currentUrl.match(/agentId=(\d+)/);
+    expect(agentIdMatch).toBeTruthy();
 
     // Store for cleanup
-    if (assistantIdMatch) {
-      createdAssistantId = Number(assistantIdMatch[1]);
+    if (agentIdMatch) {
+      createdAssistantId = Number(agentIdMatch[1]);
     }
 
     // Click the "New Session" button
@@ -152,11 +152,11 @@ test.describe("Disable Default Assistant Setting @exclusive", () => {
     );
     await newSessionButton.click();
 
-    // Verify the WelcomeMessage shown is NOT from the default assistant
-    // Default assistant shows onyx-logo, custom assistants show assistant-name-display
+    // Verify the WelcomeMessage shown is NOT from the default agent
+    // Default agent shows onyx-logo, custom agents show agent-name-display
     await expect(page.locator('[data-testid="onyx-logo"]')).not.toBeVisible();
     await expect(
-      page.locator('[data-testid="assistant-name-display"]')
+      page.locator('[data-testid="agent-name-display"]')
     ).toBeVisible();
   });
 
@@ -169,12 +169,12 @@ test.describe("Disable Default Assistant Setting @exclusive", () => {
     // Navigate directly to /app
     await page.goto("/app");
 
-    // Verify that we didn't land on the default assistant (ID 0)
+    // Verify that we didn't land on the default agent (ID 0)
     // The assistant selection should be a pinned or available assistant (not ID 0)
     const currentUrl = page.url();
-    // If assistantId is in URL, it should not be 0
-    if (currentUrl.includes("assistantId=")) {
-      expect(currentUrl).not.toContain("assistantId=0");
+    // If agentId is in URL, it should not be 0
+    if (currentUrl.includes("agentId=")) {
+      expect(currentUrl).not.toContain("agentId=0");
     }
   });
 
@@ -228,7 +228,7 @@ test.describe("Disable Default Assistant Setting @exclusive", () => {
     );
   });
 
-  test("default assistant is available again when setting is disabled", async ({
+  test("default agent is available again when setting is disabled", async ({
     page,
   }) => {
     // Navigate to settings and ensure setting is disabled
@@ -237,18 +237,18 @@ test.describe("Disable Default Assistant Setting @exclusive", () => {
     // Navigate directly to /app without parameters
     await page.goto("/app");
 
-    // The default assistant (ID 0) should be available
+    // The default agent (ID 0) should be available
     // We can verify this by checking that the app loads successfully
     // and doesn't force navigation to a specific assistant
     expect(page.url()).toContain("/app");
 
-    // Verify the new session button navigates to /app without assistantId
+    // Verify the new session button navigates to /app without agentId
     const newSessionButton = page.locator(
       '[data-testid="AppSidebar/new-session"]'
     );
     await newSessionButton.click();
 
-    // Should navigate to /app without assistantId parameter
+    // Should navigate to /app without agentId parameter
     const newUrl = page.url();
     expect(newUrl).toContain("/app");
   });

@@ -129,7 +129,7 @@ test.describe("Assistant Creation and Edit Verification", () => {
         });
         const page = await context.newPage();
         const cleanupClient = new OnyxApiClient(page.request);
-        await cleanupClient.deleteAssistant(userFilesAssistantId);
+        await cleanupClient.deleteAgent(userFilesAssistantId);
         await context.close();
         console.log(
           "[test] Cleanup completed - deleted User Files Only assistant"
@@ -143,16 +143,15 @@ test.describe("Assistant Creation and Edit Verification", () => {
       await page.context().clearCookies();
       await loginAsWorkerUser(page, testInfo.workerIndex);
 
-      const assistantName = "E2E User Files Assistant";
-      const assistantDescription =
-        "Testing user file uploads without connectors";
+      const agentName = "E2E User Files Assistant";
+      const agentDescription = "Testing user file uploads without connectors";
       const assistantInstructions = "Help users with their documents.";
 
       await page.goto("/app/agents/create");
 
       // Fill in basic assistant details
-      await getNameInput(page).fill(assistantName);
-      await getDescriptionInput(page).fill(assistantDescription);
+      await getNameInput(page).fill(agentName);
+      await getDescriptionInput(page).fill(agentDescription);
       await getInstructionsTextarea(page).fill(assistantInstructions);
 
       // Enable Knowledge toggle
@@ -174,18 +173,18 @@ test.describe("Assistant Creation and Edit Verification", () => {
       await getCreateSubmitButton(page).click();
 
       // Verify redirection to chat page with the new assistant
-      await page.waitForURL(/.*\/app\?assistantId=\d+.*/);
+      await page.waitForURL(/.*\/app\?agentId=\d+.*/);
       const url = page.url();
-      const assistantIdMatch = url.match(/assistantId=(\d+)/);
-      expect(assistantIdMatch).toBeTruthy();
+      const agentIdMatch = url.match(/agentId=(\d+)/);
+      expect(agentIdMatch).toBeTruthy();
 
       // Store assistant ID for cleanup
-      if (assistantIdMatch) {
-        userFilesAssistantId = Number(assistantIdMatch[1]);
+      if (agentIdMatch) {
+        userFilesAssistantId = Number(agentIdMatch[1]);
       }
 
       console.log(
-        `[test] Successfully created assistant without connectors: ${assistantName}`
+        `[test] Successfully created assistant without connectors: ${agentName}`
       );
     });
   });
@@ -204,7 +203,7 @@ test.describe("Assistant Creation and Edit Verification", () => {
       const cleanupClient = new OnyxApiClient(page.request);
 
       if (knowledgeAssistantId !== null) {
-        await cleanupClient.deleteAssistant(knowledgeAssistantId);
+        await cleanupClient.deleteAgent(knowledgeAssistantId);
       }
       if (ccPairId && documentSetId) {
         await cleanupClient.deleteDocumentSet(documentSetId);
@@ -241,8 +240,8 @@ test.describe("Assistant Creation and Edit Verification", () => {
       await loginAsWorkerUser(page, testInfo.workerIndex);
 
       // --- Initial Values ---
-      const assistantName = "Test Assistant 1";
-      const assistantDescription = "This is a test assistant description.";
+      const agentName = "Test Assistant 1";
+      const agentDescription = "This is a test assistant description.";
       const assistantInstructions = "These are the test instructions.";
       const assistantReminder = "Initial reminder.";
       const assistantStarterMessage = "Initial starter message?";
@@ -258,8 +257,8 @@ test.describe("Assistant Creation and Edit Verification", () => {
       await page.goto("/app/agents/create");
 
       // --- Fill in Initial Assistant Details ---
-      await getNameInput(page).fill(assistantName);
-      await getDescriptionInput(page).fill(assistantDescription);
+      await getNameInput(page).fill(agentName);
+      await getDescriptionInput(page).fill(agentDescription);
       await getInstructionsTextarea(page).fill(assistantInstructions);
 
       // Reminder
@@ -287,24 +286,24 @@ test.describe("Assistant Creation and Edit Verification", () => {
       await getCreateSubmitButton(page).click();
 
       // Verify redirection to chat page with the new assistant ID
-      await page.waitForURL(/.*\/app\?assistantId=\d+.*/);
+      await page.waitForURL(/.*\/app\?agentId=\d+.*/);
       const url = page.url();
-      const assistantIdMatch = url.match(/assistantId=(\d+)/);
-      expect(assistantIdMatch).toBeTruthy();
-      const assistantId = assistantIdMatch ? assistantIdMatch[1] : null;
-      expect(assistantId).not.toBeNull();
+      const agentIdMatch = url.match(/agentId=(\d+)/);
+      expect(agentIdMatch).toBeTruthy();
+      const agentId = agentIdMatch ? agentIdMatch[1] : null;
+      expect(agentId).not.toBeNull();
       await expectScreenshot(page, { name: "welcome-page-with-assistant" });
 
       // Store assistant ID for cleanup
-      knowledgeAssistantId = Number(assistantId);
+      knowledgeAssistantId = Number(agentId);
 
       // Navigate directly to the edit page
-      await page.goto(`/app/agents/edit/${assistantId}`);
-      await page.waitForURL(`**/app/agents/edit/${assistantId}`);
+      await page.goto(`/app/agents/edit/${agentId}`);
+      await page.waitForURL(`**/app/agents/edit/${agentId}`);
 
       // Verify basic fields
-      await expect(getNameInput(page)).toHaveValue(assistantName);
-      await expect(getDescriptionInput(page)).toHaveValue(assistantDescription);
+      await expect(getNameInput(page)).toHaveValue(agentName);
+      await expect(getDescriptionInput(page)).toHaveValue(agentDescription);
       await expect(getInstructionsTextarea(page)).toHaveValue(
         assistantInstructions
       );
@@ -341,12 +340,12 @@ test.describe("Assistant Creation and Edit Verification", () => {
       await getUpdateSubmitButton(page).click();
 
       // Verify redirection back to the chat page
-      await page.waitForURL(/.*\/app\?assistantId=\d+.*/);
-      expect(page.url()).toContain(`assistantId=${assistantId}`);
+      await page.waitForURL(/.*\/app\?agentId=\d+.*/);
+      expect(page.url()).toContain(`agentId=${agentId}`);
 
       // --- Navigate to Edit Page Again and Verify Edited Values ---
-      await page.goto(`/app/agents/edit/${assistantId}`);
-      await page.waitForURL(`**/app/agents/edit/${assistantId}`);
+      await page.goto(`/app/agents/edit/${agentId}`);
+      await page.waitForURL(`**/app/agents/edit/${agentId}`);
 
       // Verify basic fields
       await expect(getNameInput(page)).toHaveValue(editedAssistantName);
@@ -381,7 +380,7 @@ test.describe("Assistant Creation and Edit Verification", () => {
       );
 
       console.log(
-        `[test] Successfully tested Knowledge-enabled assistant: ${assistantName}`
+        `[test] Successfully tested Knowledge-enabled assistant: ${agentName}`
       );
     });
   });

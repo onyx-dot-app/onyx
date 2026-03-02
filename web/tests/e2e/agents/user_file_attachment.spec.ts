@@ -39,7 +39,7 @@ const extractAssistantIdFromCreateResponse = (
   return null;
 };
 
-const createAssistantAndGetId = async (page: Page): Promise<number> => {
+const createAgentAndGetId = async (page: Page): Promise<number> => {
   const createResponsePromise = page.waitForResponse(
     (response) => {
       if (response.request().method() !== "POST" || !response.ok()) {
@@ -62,23 +62,23 @@ const createAssistantAndGetId = async (page: Page): Promise<number> => {
   await page.waitForURL(
     (url) => {
       const href = typeof url === "string" ? url : url.toString();
-      return /\/app\?assistantId=\d+/.test(href) || /\/app\?chatId=/.test(href);
+      return /\/app\?agentId=\d+/.test(href) || /\/app\?chatId=/.test(href);
     },
     { timeout: 20000 }
   );
 
-  const assistantIdFromUrl = page.url().match(/assistantId=(\d+)/);
-  if (assistantIdFromUrl?.[1]) {
-    return Number(assistantIdFromUrl[1]);
+  const agentIdFromUrl = page.url().match(/agentId=(\d+)/);
+  if (agentIdFromUrl?.[1]) {
+    return Number(agentIdFromUrl[1]);
   }
 
   const createPayload = (await createResponse
     .json()
     .catch(() => null)) as Record<string, unknown> | null;
-  const assistantIdFromResponse =
+  const agentIdFromResponse =
     extractAssistantIdFromCreateResponse(createPayload);
-  if (assistantIdFromResponse !== null) {
-    return assistantIdFromResponse;
+  if (agentIdFromResponse !== null) {
+    return agentIdFromResponse;
   }
 
   throw new Error(
@@ -245,8 +245,8 @@ test.describe("User File Attachment to Assistant", () => {
     await page.context().clearCookies();
     await loginAsRandomUser(page);
 
-    const assistantName = `User File Test ${Date.now()}`;
-    const assistantDescription = "Testing user file persistence";
+    const agentName = `User File Test ${Date.now()}`;
+    const agentDescription = "Testing user file persistence";
     const assistantInstructions = "Help users with their uploaded files.";
     const testFileName = `test-file-${Date.now()}.txt`;
     const testFileContent =
@@ -257,8 +257,8 @@ test.describe("User File Attachment to Assistant", () => {
     await page.waitForLoadState("networkidle");
 
     // Fill in basic assistant details
-    await getNameInput(page).fill(assistantName);
-    await getDescriptionInput(page).fill(assistantDescription);
+    await getNameInput(page).fill(agentName);
+    await getDescriptionInput(page).fill(agentDescription);
     await getInstructionsTextarea(page).fill(assistantInstructions);
 
     // Enable Knowledge toggle
@@ -282,15 +282,15 @@ test.describe("User File Attachment to Assistant", () => {
     await expect(fileText).toBeVisible();
 
     // Submit the assistant creation form and resolve assistant ID from URL or API response.
-    const assistantId = await createAssistantAndGetId(page);
+    const agentId = await createAgentAndGetId(page);
 
     console.log(
-      `[test] Created assistant ${assistantName} with ID ${assistantId}, now verifying file persistence...`
+      `[test] Created assistant ${agentName} with ID ${agentId}, now verifying file persistence...`
     );
 
     // Navigate to the edit page for the assistant
-    await page.goto(`/app/agents/edit/${assistantId}`);
-    await page.waitForURL(`**/app/agents/edit/${assistantId}`);
+    await page.goto(`/app/agents/edit/${agentId}`);
+    await page.waitForURL(`**/app/agents/edit/${agentId}`);
     await page.waitForLoadState("networkidle");
 
     // Verify knowledge toggle is still enabled
@@ -325,7 +325,7 @@ test.describe("User File Attachment to Assistant", () => {
     await expect(fileRowAfterEdit).toBeVisible({ timeout: 5000 });
 
     console.log(
-      `[test] Successfully verified user file ${testFileName} is persisted and selected for assistant ${assistantName}`
+      `[test] Successfully verified user file ${testFileName} is persisted and selected for assistant ${agentName}`
     );
   });
 
@@ -338,7 +338,7 @@ test.describe("User File Attachment to Assistant", () => {
     await page.context().clearCookies();
     await loginAsRandomUser(page);
 
-    const assistantName = `Multi-File Test ${Date.now()}`;
+    const agentName = `Multi-File Test ${Date.now()}`;
     const testFileName1 = `test-file-1-${Date.now()}.txt`;
     const testFileName2 = `test-file-2-${Date.now()}.txt`;
     const testFileContent = "Test content for multi-file test.";
@@ -348,7 +348,7 @@ test.describe("User File Attachment to Assistant", () => {
     await page.waitForLoadState("networkidle");
 
     // Fill in basic assistant details
-    await getNameInput(page).fill(assistantName);
+    await getNameInput(page).fill(agentName);
     await getDescriptionInput(page).fill("Testing multiple user files");
     await getInstructionsTextarea(page).fill("Help with multiple files.");
 
@@ -370,10 +370,10 @@ test.describe("User File Attachment to Assistant", () => {
     // already adds files to user_file_ids. Clicking would toggle them OFF.
 
     // Create the assistant and resolve assistant ID from URL or API response.
-    const assistantId = await createAssistantAndGetId(page);
+    const agentId = await createAgentAndGetId(page);
 
     // Go to edit page
-    await page.goto(`/app/agents/edit/${assistantId}`);
+    await page.goto(`/app/agents/edit/${agentId}`);
     await page.waitForLoadState("networkidle");
 
     // Navigate to files view
@@ -398,7 +398,7 @@ test.describe("User File Attachment to Assistant", () => {
     }
 
     console.log(
-      `[test] Successfully verified multiple user files are persisted for assistant ${assistantName}`
+      `[test] Successfully verified multiple user files are persisted for assistant ${agentName}`
     );
   });
 });

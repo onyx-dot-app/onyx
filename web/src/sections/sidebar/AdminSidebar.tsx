@@ -86,15 +86,12 @@ const document_management_items = () => [
   },
 ];
 
-const custom_assistants_items = (
-  isCurator: boolean,
-  enableEnterprise: boolean
-) => {
+const custom_agents_items = (isCurator: boolean, enableEnterprise: boolean) => {
   const items = [
     {
       name: "Agents",
       icon: SvgOnyxOctagon,
-      link: "/admin/assistants",
+      link: "/admin/agents",
     },
   ];
 
@@ -167,7 +164,7 @@ const collections = (
       : []),
     {
       name: "Custom Agents",
-      items: custom_assistants_items(isCurator, enableEnterprise),
+      items: custom_agents_items(isCurator, enableEnterprise),
     },
     ...(isCurator && enableEnterprise
       ? [

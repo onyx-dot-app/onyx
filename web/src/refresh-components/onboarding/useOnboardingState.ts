@@ -10,11 +10,11 @@ import {
 import { WellKnownLLMProviderDescriptor } from "@/interfaces/llm";
 import { updateUserPersonalization } from "@/lib/userSettings";
 import { useUser } from "@/providers/UserProvider";
-import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
+import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
 import { useLLMProviders } from "@/hooks/useLLMProviders";
 import { useProviderStatus } from "@/components/chat/ProviderContext";
 
-export function useOnboardingState(liveAssistant?: MinimalPersonaSnapshot): {
+export function useOnboardingState(liveAgent?: MinimalPersonaSnapshot): {
   state: OnboardingState;
   llmDescriptors: WellKnownLLMProviderDescriptor[];
   actions: OnboardingActions;
@@ -33,9 +33,7 @@ export function useOnboardingState(liveAssistant?: MinimalPersonaSnapshot): {
   } = useProviderStatus();
 
   // Only fetch persona-specific providers (different endpoint)
-  const { refetch: refreshPersonaProviders } = useLLMProviders(
-    liveAssistant?.id
-  );
+  const { refetch: refreshPersonaProviders } = useLLMProviders(liveAgent?.id);
 
   const userName = user?.personalization?.name;
   const llmDescriptors = providerOptions;
@@ -121,7 +119,7 @@ export function useOnboardingState(liveAssistant?: MinimalPersonaSnapshot): {
 
     if (state.currentStep === OnboardingStep.LlmSetup) {
       refreshProviderInfo();
-      if (liveAssistant) {
+      if (liveAgent) {
         refreshPersonaProviders();
       }
     }
@@ -237,6 +235,6 @@ export function useOnboardingState(liveAssistant?: MinimalPersonaSnapshot): {
       setError,
       reset,
     },
-    isLoading: isLoadingProviders || !!liveAssistant,
+    isLoading: isLoadingProviders || !!liveAgent,
   };
 }

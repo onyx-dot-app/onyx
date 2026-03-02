@@ -61,8 +61,7 @@ export function ChatSessionMorePopup({
   const [showMoveCustomAgentModal, setShowMoveCustomAgentModal] =
     useState(false);
 
-  const isChatUsingDefaultAssistant =
-    chatSession.persona_id === DEFAULT_PERSONA_ID;
+  const isChatUsingDefaultAgent = chatSession.persona_id === DEFAULT_PERSONA_ID;
 
   const [showMoveOptions, setShowMoveOptions] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -114,7 +113,7 @@ export function ChatSessionMorePopup({
         window.localStorage.getItem(LS_HIDE_MOVE_CUSTOM_AGENT_MODAL_KEY) ===
           "true";
 
-      if (!isChatUsingDefaultAssistant && !hideModal) {
+      if (!isChatUsingDefaultAgent && !hideModal) {
         setPendingMoveProjectId(targetProjectId);
         setShowMoveCustomAgentModal(true);
         return;
@@ -122,7 +121,7 @@ export function ChatSessionMorePopup({
 
       await performMove(targetProjectId);
     },
-    [isChatUsingDefaultAssistant, performMove]
+    [isChatUsingDefaultAgent, performMove]
   );
 
   const handleRemoveChatSessionFromProject = useCallback(async () => {

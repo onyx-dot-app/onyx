@@ -3,8 +3,8 @@ import { loginAsRandomUser } from "@tests/e2e/utils/auth";
 import {
   sendMessage,
   startNewChat,
-  verifyAssistantIsChosen,
-  verifyDefaultAssistantIsChosen,
+  verifyAgentIsChosen,
+  verifyDefaultAgentIsChosen,
 } from "@tests/e2e/utils/chatActions";
 
 test("Chat workflow", async ({ page }) => {
@@ -12,7 +12,7 @@ test("Chat workflow", async ({ page }) => {
   await page.context().clearCookies();
   // Use waitForSelector for robustness instead of expect().toBeVisible()
   // await page.waitForSelector(
-  //   `//div[@aria-label="Agents Modal"]//*[contains(text(), "${assistantName}") and not(contains(@class, 'invisible'))]`,
+  //   `//div[@aria-label="Agents Modal"]//*[contains(text(), "${agentName}") and not(contains(@class, 'invisible'))]`,
   //   { state: "visible", timeout: 10000 }
   // );
   await loginAsRandomUser(page);
@@ -21,14 +21,14 @@ test("Chat workflow", async ({ page }) => {
   await page.goto("/app");
   await page.waitForLoadState("networkidle");
 
-  // Test interaction with the Default assistant
+  // Test interaction with the Default agent
   await sendMessage(page, "Hi");
 
   // Start a new chat session
   await startNewChat(page);
 
   // Verify the presence of the expected text
-  await verifyDefaultAssistantIsChosen(page);
+  await verifyDefaultAgentIsChosen(page);
 
   // Test creation of a new assistant
   await page.getByTestId("AppSidebar/more-agents").click();
@@ -46,12 +46,12 @@ test("Chat workflow", async ({ page }) => {
   await page.getByRole("button", { name: "Create" }).click();
 
   // Verify the successful creation of the new assistant
-  await verifyAssistantIsChosen(page, "Test Assistant");
+  await verifyAgentIsChosen(page, "Test Assistant");
 
   // Start another new chat session
   await startNewChat(page);
   await page.waitForLoadState("networkidle");
 
-  // Verify the presence of the default assistant text
-  await verifyDefaultAssistantIsChosen(page);
+  // Verify the presence of the default agent text
+  await verifyDefaultAgentIsChosen(page);
 });

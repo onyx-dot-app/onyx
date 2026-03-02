@@ -45,7 +45,7 @@ import {
   fetchHierarchyNodes,
   fetchHierarchyNodeDocuments,
 } from "@/lib/hierarchy/svc";
-import { AttachedDocumentSnapshot } from "@/app/admin/assistants/interfaces";
+import { AttachedDocumentSnapshot } from "@/app/admin/agents/interfaces";
 import { timeAgo } from "@/lib/time";
 import Spacer from "@/refresh-components/Spacer";
 

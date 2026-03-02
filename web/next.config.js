@@ -122,6 +122,25 @@ const nextConfig = {
         destination: "/app/:path*",
         permanent: true,
       },
+      // Legacy /assistants → /agents redirects (added in PR #8869).
+      // Preserves backward compatibility for bookmarks, shared links, and
+      // hardcoded URLs that still reference the old /assistants paths.
+      // TODO: Remove these redirects in v4.0 — https://linear.app/onyx-app/issue/ENG-3771
+      {
+        source: "/admin/assistants",
+        destination: "/admin/agents",
+        permanent: true,
+      },
+      {
+        source: "/admin/assistants/:path*",
+        destination: "/admin/agents/:path*",
+        permanent: true,
+      },
+      {
+        source: "/ee/assistants/:path*",
+        destination: "/ee/agents/:path*",
+        permanent: true,
+      },
     ];
   },
 };

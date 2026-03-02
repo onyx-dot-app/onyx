@@ -24,7 +24,7 @@ import { useAgents } from "@/hooks/useAgents";
 import { AppPopup } from "@/app/app/components/AppPopup";
 import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
 import { useUser } from "@/providers/UserProvider";
-import NoAssistantModal from "@/components/modals/NoAssistantModal";
+import NoAgentModal from "@/components/modals/NoAgentModal";
 import PreviewModal from "@/sections/modals/PreviewModal";
 import Modal from "@/refresh-components/Modal";
 import { useSendMessageToParent } from "@/lib/extension/utils";
@@ -196,12 +196,12 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     }
   }
 
-  const { selectedAssistant, setSelectedAssistantFromId, liveAssistant } =
+  const { selectedAgent, setSelectedAgentFromId, liveAgent } =
     useAgentController({
       selectedChatSession: currentChatSession,
-      onAssistantSelect: () => {
-        // Only remove project context if user explicitly selected an assistant
-        // (i.e., assistantId is present). Avoid clearing project when assistantId was removed.
+      onAgentSelect: () => {
+        // Only remove project context if user explicitly selected an agent
+        // (i.e., agentId is present). Avoid clearing project when agentId was removed.
         const newSearchParams = new URLSearchParams(
           searchParams?.toString() || ""
         );
@@ -214,16 +214,13 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const { deepResearchEnabled, toggleDeepResearch } = useDeepResearchToggle({
     chatSessionId: currentChatSessionId,
-    assistantId: selectedAssistant?.id,
+    agentId: selectedAgent?.id,
   });
 
   const [presentingDocument, setPresentingDocument] =
     useState<MinimalOnyxDocument | null>(null);
 
-  const llmManager = useLlmManager(
-    currentChatSession ?? undefined,
-    liveAssistant
-  );
+  const llmManager = useLlmManager(currentChatSession ?? undefined, liveAgent);
 
   const {
     showOnboarding,
@@ -235,7 +232,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     finishOnboarding,
     hideOnboarding,
   } = useShowOnboarding({
-    liveAssistant,
+    liveAgent,
     isLoadingProviders: llmManager.isLoadingProviders,
     hasAnyProvider: llmManager.hasAnyProvider,
     isLoadingChatSessions,
@@ -243,7 +240,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     userId: user?.id,
   });
 
-  const noAssistants = liveAssistant === null || liveAssistant === undefined;
+  const noAgents = liveAgent === null || liveAgent === undefined;
 
   const availableSources: ValidSources[] = useMemo(() => {
     return ccPairs.map((ccPair) => ccPair.source);
@@ -292,7 +289,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   const filterManager = useFilters();
 
   const isDefaultAgent = useIsDefaultAgent({
-    liveAssistant,
+    liveAgent,
     existingChatSessionId: currentChatSessionId,
     selectedChatSession: currentChatSession ?? undefined,
     settings,
@@ -372,13 +369,13 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     useChatController({
       filterManager,
       llmManager,
-      availableAssistants: agents,
-      liveAssistant,
+      availableAgents: agents,
+      liveAgent,
       existingChatSessionId: currentChatSessionId,
       selectedDocuments,
       searchParams,
       resetInputBar,
-      setSelectedAssistantFromId,
+      setSelectedAgentFromId,
     });
 
   const { onMessageSelection, currentSessionFileTokenCount } =
@@ -387,7 +384,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       searchParams,
       filterManager,
       firstMessage,
-      setSelectedAssistantFromId,
+      setSelectedAgentFromId,
       setSelectedDocuments,
       setCurrentMessageFiles,
       chatSessionIdRef,
@@ -402,11 +399,11 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   useSendMessageToParent();
 
   const retrievalEnabled = useMemo(() => {
-    if (liveAssistant) {
-      return personaIncludesRetrieval(liveAssistant);
+    if (liveAgent) {
+      return personaIncludesRetrieval(liveAgent);
     }
     return false;
-  }, [liveAssistant]);
+  }, [liveAgent]);
 
   useEffect(() => {
     if (
@@ -607,7 +604,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
             (available ?? DEFAULT_CONTEXT_TOKENS) * 0.5;
           if (!cancelled) setAvailableContextTokens(capped_context_tokens);
         } else {
-          const personaId = (selectedAssistant || liveAssistant)?.id;
+          const personaId = (selectedAgent || liveAgent)?.id;
           if (personaId !== undefined && personaId !== null) {
             const maxTokens = await getMaxSelectedDocumentTokens(personaId);
             const capped_context_tokens =
@@ -625,20 +622,20 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     return () => {
       cancelled = true;
     };
-  }, [currentChatSessionId, selectedAssistant?.id, liveAssistant?.id]);
+  }, [currentChatSessionId, selectedAgent?.id, liveAgent?.id]);
 
   // handle error case where no assistants are available
   // Only show this after agents have loaded to prevent flash during initial load
-  if (noAssistants && !isLoadingAgents) {
+  if (noAgents && !isLoadingAgents) {
     return (
       <>
         <HealthCheckBanner />
-        <NoAssistantModal />
+        <NoAgentModal />
       </>
     );
   }
 
-  const hasStarterMessages = (liveAssistant?.starter_messages?.length ?? 0) > 0;
+  const hasStarterMessages = (liveAgent?.starter_messages?.length ?? 0) > 0;
 
   const isSearch = classification === "search";
   const gridStyle = {
@@ -726,9 +723,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                   {/* ChatUI */}
                   <Fade
                     show={
-                      appFocus.isChat() &&
-                      !!currentChatSessionId &&
-                      !!liveAssistant
+                      appFocus.isChat() && !!currentChatSessionId && !!liveAgent
                     }
                     className="h-full w-full flex flex-col items-center"
                   >
@@ -741,7 +736,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       onScrollButtonVisibilityChange={setShowScrollButton}
                     >
                       <ChatUI
-                        liveAssistant={liveAssistant!}
+                        liveAgent={liveAgent!}
                         llmManager={llmManager}
                         deepResearchEnabled={deepResearchEnabled}
                         currentMessageFiles={currentMessageFiles}
@@ -775,7 +770,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     className="w-full flex-1 flex flex-col items-center justify-end"
                   >
                     <WelcomeMessage
-                      agent={liveAssistant}
+                      agent={liveAgent}
                       isDefaultAgent={isDefaultAgent}
                     />
                     <Spacer rem={1.5} />
@@ -860,7 +855,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                             : projectContextTokenCount
                         }
                         availableContextTokens={availableContextTokens}
-                        selectedAssistant={selectedAssistant || liveAssistant}
+                        selectedAgent={selectedAgent || liveAgent}
                         handleFileUpload={handleMessageSpecificFileUpload}
                         setPresentingDocument={setPresentingDocument}
                         // Intentionally enabled during name-only onboarding (showOnboarding=false)
@@ -891,7 +886,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     !isDefaultAgent && (
                       <>
                         <Spacer rem={1} />
-                        <AgentDescription agent={liveAssistant} />
+                        <AgentDescription agent={liveAgent} />
                         <Spacer rem={1.5} />
                       </>
                     )}
