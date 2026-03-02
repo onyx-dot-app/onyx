@@ -2,9 +2,9 @@
   --app-page-main-content-width: 52.5rem;
   --block-width-form-input-min: 10rem;
 
-  --container-sm: 672px;
-  --container-sm-md: 752px;
-  --container-md: 872px;
-  --container-lg: 992px;
+  --container-sm: 42rem;
+  --container-sm-md: 47rem;
+  --container-md: 54.5rem;
+  --container-lg: 62rem;
   --container-full: 100%;
 }
