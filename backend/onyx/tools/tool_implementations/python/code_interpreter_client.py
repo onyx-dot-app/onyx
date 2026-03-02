@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 from collections.abc import Generator
 from typing import Literal
@@ -26,6 +28,13 @@ class WorkspaceFile(BaseModel):
     path: str
     kind: Literal["file", "directory"]
     file_id: str | None = None
+
+
+class CodeInterpreterHealthResponse(BaseModel):
+    """Structured health check result from the Code Interpreter service."""
+
+    connected: bool
+    error: str = ""
 
 
 class ExecuteResponse(BaseModel):
@@ -98,16 +107,26 @@ class CodeInterpreterClient:
             payload["files"] = files
         return payload
 
-    def health(self) -> bool:
-        """Check if the Code Interpreter service is healthy"""
+    def health(self) -> CodeInterpreterHealthResponse:
+        """Check if the Code Interpreter service is healthy.
+
+        Returns a structured response with status and optional error message.
+        """
         url = f"{self.base_url}/health"
         try:
             response = self.session.get(url, timeout=5)
             response.raise_for_status()
-            return response.json().get("status") == "ok"
+            data = response.json()
+            return CodeInterpreterHealthResponse(
+                connected=data.get("status") == "ok",
+                error=data.get("message") or "",
+            )
         except Exception as e:
             logger.warning(f"Exception caught when checking health, e={e}")
-            return False
+            return CodeInterpreterHealthResponse(
+                connected=False,
+                error=str(e),
+            )
 
     def execute(
         self,
