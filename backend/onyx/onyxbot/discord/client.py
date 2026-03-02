@@ -7,15 +7,16 @@ import discord
 from discord.ext import commands
 
 from onyx.configs.app_configs import DISCORD_BOT_INVOKE_CHAR
-from onyx.onyxbot.discord.api_client import OnyxAPIClient
+from onyx.onyxbot.api_client import OnyxAPIClient
+from onyx.onyxbot.constants import CACHE_REFRESH_INTERVAL
 from onyx.onyxbot.discord.cache import DiscordCacheManager
-from onyx.onyxbot.discord.constants import CACHE_REFRESH_INTERVAL
 from onyx.onyxbot.discord.handle_commands import handle_dm
 from onyx.onyxbot.discord.handle_commands import handle_registration_command
 from onyx.onyxbot.discord.handle_commands import handle_sync_channels_command
 from onyx.onyxbot.discord.handle_message import process_chat_message
 from onyx.onyxbot.discord.handle_message import should_respond
 from onyx.onyxbot.discord.utils import get_bot_token
+from onyx.server.query_and_chat.models import MessageOrigin
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -40,7 +41,7 @@ class OnyxDiscordClient(commands.Bot):
 
         self.ready = False
         self.cache = DiscordCacheManager()
-        self.api_client = OnyxAPIClient()
+        self.api_client = OnyxAPIClient(origin=MessageOrigin.DISCORDBOT)
         self._cache_refresh_task: asyncio.Task | None = None
 
     # -------------------------------------------------------------------------

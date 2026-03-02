@@ -3668,6 +3668,112 @@ class DiscordChannelConfig(Base):
     )
 
 
+class TeamsBotConfig(Base):
+    """Global Teams bot configuration (one per tenant).
+
+    Stores the Azure Bot Service credentials when not provided via env vars.
+    Uses a fixed ID with check constraint to enforce only one row per tenant.
+    """
+
+    __tablename__ = "teams_bot_config"
+
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, server_default=text("'SINGLETON'")
+    )
+    app_id: Mapped[str] = mapped_column(String, nullable=False)
+    app_secret: Mapped[SensitiveValue[str] | None] = mapped_column(
+        EncryptedString(), nullable=False
+    )
+    azure_tenant_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class TeamsTeamConfig(Base):
+    """Configuration for a Teams team connected to this tenant.
+
+    registration_key is a one-time key used to link a Teams team to this tenant.
+    Format: teams_<tenant_id>.<random_token>
+    team_id is NULL until the Teams admin runs @bot register with the key.
+    """
+
+    __tablename__ = "teams_team_config"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    # Teams team ID (GUID string) - NULL until registered via command in Teams
+    team_id: Mapped[str | None] = mapped_column(String, nullable=True, unique=True)
+    team_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
+
+    # One-time registration key: teams_<tenant_id>.<random_token>
+    registration_key: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+
+    registered_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    # Configuration
+    default_persona_id: Mapped[int | None] = mapped_column(
+        ForeignKey("persona.id", ondelete="SET NULL"), nullable=True
+    )
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("true"), nullable=False
+    )
+
+    # Relationships
+    default_persona: Mapped["Persona | None"] = relationship(
+        "Persona", foreign_keys=[default_persona_id]
+    )
+    channels: Mapped[list["TeamsChannelConfig"]] = relationship(
+        back_populates="team_config", cascade="all, delete-orphan"
+    )
+
+
+class TeamsChannelConfig(Base):
+    """Per-channel configuration for Teams bot behavior.
+
+    Used to whitelist specific channels and configure per-channel behavior.
+    """
+
+    __tablename__ = "teams_channel_config"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    team_config_id: Mapped[int] = mapped_column(
+        ForeignKey("teams_team_config.id", ondelete="CASCADE"), nullable=False
+    )
+
+    # Teams channel ID (string)
+    channel_id: Mapped[str] = mapped_column(String, nullable=False)
+    channel_name: Mapped[str] = mapped_column(String(), nullable=False)
+
+    # If true (default), bot only responds when @mentioned
+    # If false, bot responds to ALL messages in this channel
+    require_bot_mention: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("true"), nullable=False
+    )
+
+    # Override the team's default persona for this channel
+    persona_override_id: Mapped[int | None] = mapped_column(
+        ForeignKey("persona.id", ondelete="SET NULL"), nullable=True
+    )
+
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("false"), nullable=False
+    )
+
+    # Relationships
+    team_config: Mapped["TeamsTeamConfig"] = relationship(back_populates="channels")
+    persona_override: Mapped["Persona | None"] = relationship()
+
+    # Constraints
+    __table_args__ = (
+        UniqueConstraint(
+            "team_config_id", "channel_id", name="uq_teams_channel_team_channel"
+        ),
+    )
+
+
 class Milestone(Base):
     # This table is used to track significant events for a deployment towards finding value
     # The table is currently not used for features but it may be used in the future to inform

@@ -15,11 +15,11 @@ from onyx.db.discord_bot import get_guild_config_by_registration_key
 from onyx.db.discord_bot import sync_channel_configs
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.utils import DiscordChannelView
+from onyx.onyxbot.constants import REGISTER_COMMAND
 from onyx.onyxbot.discord.cache import DiscordCacheManager
-from onyx.onyxbot.discord.constants import REGISTER_COMMAND
 from onyx.onyxbot.discord.constants import SYNC_CHANNELS_COMMAND
-from onyx.onyxbot.discord.exceptions import RegistrationError
 from onyx.onyxbot.discord.exceptions import SyncChannelsError
+from onyx.onyxbot.exceptions import RegistrationError
 from onyx.server.manage.discord_bot.utils import parse_discord_registration_key
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR

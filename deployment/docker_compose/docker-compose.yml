@@ -161,7 +161,10 @@ services:
       - S3_AWS_SECRET_ACCESS_KEY=${S3_AWS_SECRET_ACCESS_KEY:-minioadmin}
       - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN:-}
       - DISCORD_BOT_INVOKE_CHAR=${DISCORD_BOT_INVOKE_CHAR:-!}
-      # API Server connection for Discord bot message processing
+      - TEAMS_BOT_APP_ID=${TEAMS_BOT_APP_ID:-}
+      - TEAMS_BOT_APP_SECRET=${TEAMS_BOT_APP_SECRET:-}
+      - TEAMS_BOT_AZURE_TENANT_ID=${TEAMS_BOT_AZURE_TENANT_ID:-}
+      # API Server connection for Discord/Teams bot message processing
       - API_SERVER_PROTOCOL=${API_SERVER_PROTOCOL:-http}
       - API_SERVER_HOST=${API_SERVER_HOST:-api_server}
       # Onyx Craft configuration (set up automatically on container startup)

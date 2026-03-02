@@ -18,7 +18,7 @@ class TestCacheInitialization:
     def test_cache_starts_empty(self) -> None:
         """New cache manager has empty caches."""
         cache = DiscordCacheManager()
-        assert cache._guild_tenants == {}
+        assert cache._entity_tenants == {}
         assert cache._api_keys == {}
         assert cache.is_initialized is False
 
@@ -37,14 +37,14 @@ class TestCacheInitialization:
 
         with (
             patch(
-                "onyx.onyxbot.discord.cache.get_all_tenant_ids",
+                "onyx.onyxbot.cache.get_all_tenant_ids",
                 return_value=["tenant1"],
             ),
             patch(
-                "onyx.onyxbot.discord.cache.fetch_ee_implementation_or_noop",
+                "onyx.onyxbot.cache.fetch_ee_implementation_or_noop",
                 return_value=lambda: set(),
             ),
-            patch("onyx.onyxbot.discord.cache.get_session_with_tenant") as mock_session,
+            patch("onyx.onyxbot.cache.get_session_with_tenant") as mock_session,
             patch(
                 "onyx.onyxbot.discord.cache.get_guild_configs",
                 return_value=[mock_config1, mock_config2],
@@ -61,10 +61,10 @@ class TestCacheInitialization:
             await cache.refresh_all()
 
         assert cache.is_initialized is True
-        assert 111111 in cache._guild_tenants
-        assert 222222 in cache._guild_tenants
-        assert cache._guild_tenants[111111] == "tenant1"
-        assert cache._guild_tenants[222222] == "tenant1"
+        assert 111111 in cache._entity_tenants
+        assert 222222 in cache._entity_tenants
+        assert cache._entity_tenants[111111] == "tenant1"
+        assert cache._entity_tenants[222222] == "tenant1"
 
     @pytest.mark.asyncio
     async def test_cache_refresh_provisions_api_key(self) -> None:
@@ -77,14 +77,14 @@ class TestCacheInitialization:
 
         with (
             patch(
-                "onyx.onyxbot.discord.cache.get_all_tenant_ids",
+                "onyx.onyxbot.cache.get_all_tenant_ids",
                 return_value=["tenant1"],
             ),
             patch(
-                "onyx.onyxbot.discord.cache.fetch_ee_implementation_or_noop",
+                "onyx.onyxbot.cache.fetch_ee_implementation_or_noop",
                 return_value=lambda: set(),
             ),
-            patch("onyx.onyxbot.discord.cache.get_session_with_tenant") as mock_session,
+            patch("onyx.onyxbot.cache.get_session_with_tenant") as mock_session,
             patch(
                 "onyx.onyxbot.discord.cache.get_guild_configs",
                 return_value=[mock_config],
@@ -110,7 +110,7 @@ class TestCacheLookups:
     def test_get_tenant_returns_correct(self) -> None:
         """Lookup registered guild returns correct tenant ID."""
         cache = DiscordCacheManager()
-        cache._guild_tenants[123456] = "tenant1"
+        cache._entity_tenants[123456] = "tenant1"
 
         result = cache.get_tenant(123456)
         assert result == "tenant1"
@@ -140,7 +140,7 @@ class TestCacheLookups:
     def test_get_all_guild_ids(self) -> None:
         """After loading returns all cached guild IDs."""
         cache = DiscordCacheManager()
-        cache._guild_tenants = {111: "t1", 222: "t2", 333: "t1"}
+        cache._entity_tenants = {111: "t1", 222: "t2", 333: "t1"}
 
         result = cache.get_all_guild_ids()
         assert set(result) == {111, 222, 333}
@@ -159,7 +159,7 @@ class TestCacheUpdates:
         mock_config.enabled = True
 
         with (
-            patch("onyx.onyxbot.discord.cache.get_session_with_tenant") as mock_session,
+            patch("onyx.onyxbot.cache.get_session_with_tenant") as mock_session,
             patch(
                 "onyx.onyxbot.discord.cache.get_guild_configs",
                 return_value=[mock_config],
@@ -187,7 +187,7 @@ class TestCacheUpdates:
         mock_config.enabled = False  # Disabled!
 
         with (
-            patch("onyx.onyxbot.discord.cache.get_session_with_tenant") as mock_session,
+            patch("onyx.onyxbot.cache.get_session_with_tenant") as mock_session,
             patch(
                 "onyx.onyxbot.discord.cache.get_guild_configs",
                 return_value=[mock_config],
@@ -205,7 +205,7 @@ class TestCacheUpdates:
     def test_remove_guild(self) -> None:
         """remove_guild() removes guild from cache."""
         cache = DiscordCacheManager()
-        cache._guild_tenants[111111] = "tenant1"
+        cache._entity_tenants[111111] = "tenant1"
 
         cache.remove_guild(111111)
 
@@ -214,13 +214,13 @@ class TestCacheUpdates:
     def test_clear_removes_all(self) -> None:
         """clear() empties all caches."""
         cache = DiscordCacheManager()
-        cache._guild_tenants = {111: "t1", 222: "t2"}
+        cache._entity_tenants = {111: "t1", 222: "t2"}
         cache._api_keys = {"t1": "key1", "t2": "key2"}
         cache._initialized = True
 
         cache.clear()
 
-        assert cache._guild_tenants == {}
+        assert cache._entity_tenants == {}
         assert cache._api_keys == {}
         assert cache.is_initialized is False
 
@@ -248,11 +248,11 @@ class TestThreadSafety:
 
         with (
             patch(
-                "onyx.onyxbot.discord.cache.get_all_tenant_ids",
+                "onyx.onyxbot.cache.get_all_tenant_ids",
                 return_value=["tenant1"],
             ),
             patch(
-                "onyx.onyxbot.discord.cache.fetch_ee_implementation_or_noop",
+                "onyx.onyxbot.cache.fetch_ee_implementation_or_noop",
                 return_value=lambda: set(),
             ),
             patch.object(cache, "_load_tenant_data", side_effect=slow_refresh),
@@ -271,7 +271,7 @@ class TestThreadSafety:
     async def test_concurrent_read_write(self) -> None:
         """Read during refresh doesn't cause exceptions."""
         cache = DiscordCacheManager()
-        cache._guild_tenants[111111] = "tenant1"
+        cache._entity_tenants[111111] = "tenant1"
 
         async def read_loop() -> None:
             for _ in range(10):
@@ -280,7 +280,7 @@ class TestThreadSafety:
 
         async def write_loop() -> None:
             for i in range(10):
-                cache._guild_tenants[200000 + i] = f"tenant{i}"
+                cache._entity_tenants[200000 + i] = f"tenant{i}"
                 await asyncio.sleep(0.001)
 
         # Should not raise any exceptions
@@ -301,14 +301,14 @@ class TestAPIKeyProvisioning:
 
         with (
             patch(
-                "onyx.onyxbot.discord.cache.get_all_tenant_ids",
+                "onyx.onyxbot.cache.get_all_tenant_ids",
                 return_value=["tenant1"],
             ),
             patch(
-                "onyx.onyxbot.discord.cache.fetch_ee_implementation_or_noop",
+                "onyx.onyxbot.cache.fetch_ee_implementation_or_noop",
                 return_value=lambda: set(),
             ),
-            patch("onyx.onyxbot.discord.cache.get_session_with_tenant") as mock_session,
+            patch("onyx.onyxbot.cache.get_session_with_tenant") as mock_session,
             patch(
                 "onyx.onyxbot.discord.cache.get_guild_configs",
                 return_value=[mock_config],
@@ -339,14 +339,14 @@ class TestAPIKeyProvisioning:
 
         with (
             patch(
-                "onyx.onyxbot.discord.cache.get_all_tenant_ids",
+                "onyx.onyxbot.cache.get_all_tenant_ids",
                 return_value=["tenant1"],
             ),
             patch(
-                "onyx.onyxbot.discord.cache.fetch_ee_implementation_or_noop",
+                "onyx.onyxbot.cache.fetch_ee_implementation_or_noop",
                 return_value=lambda: set(),
             ),
-            patch("onyx.onyxbot.discord.cache.get_session_with_tenant") as mock_session,
+            patch("onyx.onyxbot.cache.get_session_with_tenant") as mock_session,
             patch(
                 "onyx.onyxbot.discord.cache.get_guild_configs",
                 return_value=[mock_config],
@@ -392,14 +392,14 @@ class TestGatedTenantHandling:
 
         with (
             patch(
-                "onyx.onyxbot.discord.cache.get_all_tenant_ids",
+                "onyx.onyxbot.cache.get_all_tenant_ids",
                 return_value=["tenant1", "tenant2"],
             ),
             patch(
-                "onyx.onyxbot.discord.cache.fetch_ee_implementation_or_noop",
+                "onyx.onyxbot.cache.fetch_ee_implementation_or_noop",
                 return_value=lambda: gated_tenants,
             ),
-            patch("onyx.onyxbot.discord.cache.get_session_with_tenant") as mock_session,
+            patch("onyx.onyxbot.cache.get_session_with_tenant") as mock_session,
             patch(
                 "onyx.onyxbot.discord.cache.get_guild_configs",
                 side_effect=mock_get_configs,
@@ -416,9 +416,9 @@ class TestGatedTenantHandling:
             await cache.refresh_all()
 
         # Only tenant1 should be loaded (tenant2 is gated)
-        assert "tenant1" in cache._api_keys and 111111 in cache._guild_tenants
+        assert "tenant1" in cache._api_keys and 111111 in cache._entity_tenants
         # tenant2's guilds should NOT be in cache
-        assert "tenant2" not in cache._api_keys and 222222 not in cache._guild_tenants
+        assert "tenant2" not in cache._api_keys and 222222 not in cache._entity_tenants
 
     @pytest.mark.asyncio
     async def test_gated_check_calls_ee_function(self) -> None:
@@ -427,14 +427,14 @@ class TestGatedTenantHandling:
 
         with (
             patch(
-                "onyx.onyxbot.discord.cache.get_all_tenant_ids",
+                "onyx.onyxbot.cache.get_all_tenant_ids",
                 return_value=["tenant1"],
             ),
             patch(
-                "onyx.onyxbot.discord.cache.fetch_ee_implementation_or_noop",
+                "onyx.onyxbot.cache.fetch_ee_implementation_or_noop",
                 return_value=lambda: set(),
             ) as mock_ee,
-            patch("onyx.onyxbot.discord.cache.get_session_with_tenant") as mock_session,
+            patch("onyx.onyxbot.cache.get_session_with_tenant") as mock_session,
             patch(
                 "onyx.onyxbot.discord.cache.get_guild_configs",
                 return_value=[],
@@ -459,14 +459,14 @@ class TestGatedTenantHandling:
 
         with (
             patch(
-                "onyx.onyxbot.discord.cache.get_all_tenant_ids",
+                "onyx.onyxbot.cache.get_all_tenant_ids",
                 return_value=["tenant1"],
             ),
             patch(
-                "onyx.onyxbot.discord.cache.fetch_ee_implementation_or_noop",
+                "onyx.onyxbot.cache.fetch_ee_implementation_or_noop",
                 return_value=lambda: set(),  # No gated tenants
             ),
-            patch("onyx.onyxbot.discord.cache.get_session_with_tenant") as mock_session,
+            patch("onyx.onyxbot.cache.get_session_with_tenant") as mock_session,
             patch(
                 "onyx.onyxbot.discord.cache.get_guild_configs",
                 return_value=[mock_config],
@@ -504,11 +504,11 @@ class TestCacheErrorHandling:
 
         with (
             patch(
-                "onyx.onyxbot.discord.cache.get_all_tenant_ids",
+                "onyx.onyxbot.cache.get_all_tenant_ids",
                 return_value=["tenant1", "tenant2"],
             ),
             patch(
-                "onyx.onyxbot.discord.cache.fetch_ee_implementation_or_noop",
+                "onyx.onyxbot.cache.fetch_ee_implementation_or_noop",
                 return_value=lambda: set(),
             ),
             patch.object(cache, "_load_tenant_data", side_effect=mock_load),

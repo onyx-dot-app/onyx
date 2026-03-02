@@ -783,6 +783,49 @@ discordbot:
   tolerations: []
   affinity: {}
 
+teamsbot:
+  enabled: false  # Disabled by default - requires Azure Bot Service credentials
+  replicaCount: 1  # Can scale horizontally (HTTP webhook, not WebSocket)
+  # Bot credentials can be provided directly or via Kubernetes secrets
+  # Option 1: Direct values (not recommended for production)
+  appId: ""
+  appSecret: ""
+  azureTenantId: ""  # Optional - for single-tenant bots
+  # Option 2: Reference Kubernetes secrets (recommended)
+  appIdSecretName: ""
+  appIdSecretKey: "app-id"
+  appSecretSecretName: ""
+  appSecretSecretKey: "app-secret"
+  # Bot HTTP port
+  port: 3978
+  image:
+    repository: onyxdotapp/onyx-backend
+    tag: ""  # Overrides the image tag whose default is the chart appVersion.
+  service:
+    type: ClusterIP
+    port: 80
+  podAnnotations: {}
+  podLabels:
+    scope: onyx-backend
+  deploymentLabels:
+    app: teams-bot
+  podSecurityContext:
+    {}
+  securityContext:
+    {}
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+  volumes: []
+  volumeMounts: []
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
 slackbot:
   enabled: true
   replicaCount: 1
