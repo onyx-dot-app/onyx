@@ -50,6 +50,10 @@ export const InMessageImage = memo(function InMessageImage({
 
     try {
       const response = await fetch(buildImgUrl(fileId));
+      if (!response.ok) {
+        console.error("Failed to download image:", response.status);
+        return;
+      }
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
