@@ -19,7 +19,7 @@ const SvgNetworkGraph = ({ size, ...props }: IconProps) => (
     </g>
     <defs>
       <clipPath id="clip0_2828_22555">
-        <rect fill="white" />
+        <rect width="16" height="16" fill="white" />
       </clipPath>
     </defs>
   </svg>
