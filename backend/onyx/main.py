@@ -32,11 +32,13 @@ from onyx.auth.schemas import UserUpdate
 from onyx.auth.users import auth_backend
 from onyx.auth.users import create_onyx_oauth_router
 from onyx.auth.users import fastapi_users
+from onyx.cache.interface import CacheBackendType
 from onyx.configs.app_configs import APP_API_PREFIX
 from onyx.configs.app_configs import APP_HOST
 from onyx.configs.app_configs import APP_PORT
 from onyx.configs.app_configs import AUTH_RATE_LIMITING_ENABLED
 from onyx.configs.app_configs import AUTH_TYPE
+from onyx.configs.app_configs import CACHE_BACKEND
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.app_configs import LOG_ENDPOINT_LATENCY
 from onyx.configs.app_configs import OAUTH_CLIENT_ID
@@ -255,6 +257,20 @@ def include_auth_router_with_prefix(
     )
 
 
+def validate_cache_backend_settings() -> None:
+    """Validate that CACHE_BACKEND=postgres is only used with DISABLE_VECTOR_DB.
+
+    The Postgres cache backend eliminates the Redis dependency, but only works
+    when Celery is not running (which requires DISABLE_VECTOR_DB=true).
+    """
+    if CACHE_BACKEND == CacheBackendType.POSTGRES and not DISABLE_VECTOR_DB:
+        raise RuntimeError(
+            "CACHE_BACKEND=postgres requires DISABLE_VECTOR_DB=true. "
+            "The Postgres cache backend is only supported in no-vector-DB "
+            "deployments where Celery is replaced by the in-process task runner."
+        )
+
+
 def validate_no_vector_db_settings() -> None:
     """Validate that DISABLE_VECTOR_DB is not combined with incompatible settings.
 
@@ -286,6 +302,7 @@ def validate_no_vector_db_settings() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
     validate_no_vector_db_settings()
+    validate_cache_backend_settings()
 
     # Set recursion limit
     if SYSTEM_RECURSION_LIMIT is not None:
