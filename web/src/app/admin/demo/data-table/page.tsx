@@ -576,8 +576,8 @@ export default function DataTableDemoPage() {
       </div>
 
       <div>
-        <div>
-          <Table>
+        <div className="overflow-x-auto">
+          <Table width={table.getTotalSize()}>
             <TableHeader>
               {table.getHeaderGroups().map((headerGroup) => (
                 <TableRow key={headerGroup.id}>
@@ -603,7 +603,12 @@ export default function DataTableDemoPage() {
 
                     if (header.id === "__actions") {
                       return (
-                        <TableHead key={header.id} width={header.getSize()}>
+                        <TableHead
+                          key={header.id}
+                          width={header.getSize()}
+                          sticky
+                          bottomBorder={false}
+                        >
                           {flexRender(
                             header.column.columnDef.header,
                             header.getContext()
@@ -673,6 +678,17 @@ export default function DataTableDemoPage() {
                       );
                     }
 
+                    if (cell.column.id === "__actions") {
+                      return (
+                        <TableCell key={cell.id} sticky>
+                          {flexRender(
+                            cell.column.columnDef.cell,
+                            cell.getContext()
+                          )}
+                        </TableCell>
+                      );
+                    }
+
                     return (
                       <TableCell key={cell.id}>
                         {flexRender(
@@ -714,7 +730,7 @@ export default function DataTableDemoPage() {
 
       <div className="border border-border-01 rounded-lg overflow-hidden">
         <div className="overflow-x-auto">
-          <Table>
+          <Table width={smallTable.getTotalSize()}>
             <TableHeader>
               {smallTable.getHeaderGroups().map((headerGroup) => (
                 <TableRow key={headerGroup.id}>
@@ -745,16 +761,18 @@ export default function DataTableDemoPage() {
 
                     if (header.id === "__actions") {
                       return (
-                        <th
+                        <TableHead
                           key={header.id}
-                          style={{ width: header.getSize() }}
-                          className="px-1"
+                          width={header.getSize()}
+                          size="small"
+                          sticky
+                          bottomBorder={false}
                         >
                           {flexRender(
                             header.column.columnDef.header,
                             header.getContext()
                           )}
-                        </th>
+                        </TableHead>
                       );
                     }
 
@@ -811,7 +829,14 @@ export default function DataTableDemoPage() {
                     }
 
                     if (cell.column.id === "__actions") {
-                      return <td key={cell.id} />;
+                      return (
+                        <TableCell key={cell.id} size="small" sticky>
+                          {flexRender(
+                            cell.column.columnDef.cell,
+                            cell.getContext()
+                          )}
+                        </TableCell>
+                      );
                     }
 
                     return (

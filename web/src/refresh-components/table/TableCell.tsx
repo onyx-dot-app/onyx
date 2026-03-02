@@ -5,17 +5,27 @@ interface TableCellProps
   extends WithoutStyles<React.TdHTMLAttributes<HTMLTableCellElement>> {
   children: React.ReactNode;
   size?: "regular" | "small";
+  /** When `true`, pins the cell to the right edge of the scroll container. */
+  sticky?: boolean;
+  /** Explicit pixel width for the cell. */
+  width?: number;
 }
 
 export default function TableCell({
   size = "regular",
+  sticky,
+  width,
   children,
   ...props
 }: TableCellProps) {
   const isSmall = size === "small";
   return (
     <td
-      className={cn(isSmall ? "pl-0.5 pr-1.5 py-1.5" : "px-1 py-0.5")}
+      className={cn(
+        isSmall ? "pl-0.5 pr-1.5 py-1.5" : "px-1 py-0.5",
+        sticky && "sticky right-0"
+      )}
+      style={width != null ? { width } : undefined}
       {...props}
     >
       <div

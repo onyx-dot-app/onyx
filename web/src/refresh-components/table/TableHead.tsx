@@ -32,6 +32,10 @@ interface TableHeadCustomProps {
   size?: "regular" | "small";
   /** Column width in pixels. Applied as an inline style on the `<th>`. */
   width?: number;
+  /** When `true`, pins the column to the right edge of the scroll container. */
+  sticky?: boolean;
+  /** When `true`, shows a bottom border on hover. Defaults to `true`. */
+  bottomBorder?: boolean;
 }
 
 type TableHeadProps = WithoutStyles<
@@ -79,6 +83,8 @@ export default function TableHead({
   alignment = "left",
   size = "regular",
   width,
+  sticky,
+  bottomBorder = true,
   ...thProps
 }: TableHeadProps) {
   const isSmall = size === "small";
@@ -90,7 +96,8 @@ export default function TableHead({
         "group relative",
         alignmentThClass[alignment],
         isSmall ? "p-1.5" : "px-2 py-1",
-        "border-b border-transparent hover:border-border-03"
+        bottomBorder && "border-b border-transparent hover:border-border-03",
+        sticky && "sticky right-0 z-10"
       )}
     >
       <div
