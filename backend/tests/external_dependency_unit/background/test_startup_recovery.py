@@ -5,7 +5,7 @@ needs_project_sync) then calls ``recover_stuck_user_files`` and verifies
 the drain loops pick them up via ``FOR UPDATE SKIP LOCKED``.
 
 Uses real PostgreSQL (via ``db_session`` / ``tenant_context`` fixtures).
-The per-file ``_impl`` functions are mocked so no real file store or
+The per-file ``*_impl`` functions are mocked so no real file store or
 connector is needed — we only verify that recovery finds and dispatches
 the correct files.
 """
@@ -86,7 +86,7 @@ class TestRecoverProcessingFiles:
         _cleanup_user_files.append(uf)
 
         mock_impl = MagicMock()
-        with patch(f"{_IMPL_MODULE}._process_user_file_impl", mock_impl):
+        with patch(f"{_IMPL_MODULE}.process_user_file_impl", mock_impl):
             recover_stuck_user_files(TEST_TENANT_ID)
 
         called_ids = [call.kwargs["user_file_id"] for call in mock_impl.call_args_list]
@@ -105,7 +105,7 @@ class TestRecoverProcessingFiles:
         _cleanup_user_files.append(uf)
 
         mock_impl = MagicMock()
-        with patch(f"{_IMPL_MODULE}._process_user_file_impl", mock_impl):
+        with patch(f"{_IMPL_MODULE}.process_user_file_impl", mock_impl):
             recover_stuck_user_files(TEST_TENANT_ID)
 
         called_ids = [call.kwargs["user_file_id"] for call in mock_impl.call_args_list]
@@ -128,7 +128,7 @@ class TestRecoverDeletingFiles:
         _cleanup_user_files.append(uf)
 
         mock_impl = MagicMock()
-        with patch(f"{_IMPL_MODULE}._delete_user_file_impl", mock_impl):
+        with patch(f"{_IMPL_MODULE}.delete_user_file_impl", mock_impl):
             recover_stuck_user_files(TEST_TENANT_ID)
 
         called_ids = [call.kwargs["user_file_id"] for call in mock_impl.call_args_list]
@@ -156,7 +156,7 @@ class TestRecoverSyncFiles:
         _cleanup_user_files.append(uf)
 
         mock_impl = MagicMock()
-        with patch(f"{_IMPL_MODULE}._project_sync_user_file_impl", mock_impl):
+        with patch(f"{_IMPL_MODULE}.project_sync_user_file_impl", mock_impl):
             recover_stuck_user_files(TEST_TENANT_ID)
 
         called_ids = [call.kwargs["user_file_id"] for call in mock_impl.call_args_list]
@@ -180,7 +180,7 @@ class TestRecoverSyncFiles:
         _cleanup_user_files.append(uf)
 
         mock_impl = MagicMock()
-        with patch(f"{_IMPL_MODULE}._project_sync_user_file_impl", mock_impl):
+        with patch(f"{_IMPL_MODULE}.project_sync_user_file_impl", mock_impl):
             recover_stuck_user_files(TEST_TENANT_ID)
 
         called_ids = [call.kwargs["user_file_id"] for call in mock_impl.call_args_list]
@@ -208,7 +208,7 @@ class TestRecoveryMultipleFiles:
             files.append(uf)
 
         mock_impl = MagicMock()
-        with patch(f"{_IMPL_MODULE}._process_user_file_impl", mock_impl):
+        with patch(f"{_IMPL_MODULE}.process_user_file_impl", mock_impl):
             recover_stuck_user_files(TEST_TENANT_ID)
 
         called_ids = {call.kwargs["user_file_id"] for call in mock_impl.call_args_list}
