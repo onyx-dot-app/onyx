@@ -287,7 +287,7 @@ export default function CodeInterpreterPage() {
               }
             />
           )}
-          {showErrorMenu && (
+          {showErrorMenu && !isHealthy && (
             <Section
               flexDirection="row"
               justifyContent="end"
