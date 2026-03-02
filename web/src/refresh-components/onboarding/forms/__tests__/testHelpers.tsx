@@ -9,7 +9,7 @@ import {
   WellKnownLLMProviderDescriptor,
   LLMProviderName,
   ModelConfiguration,
-} from "@/app/admin/configuration/llm/interfaces";
+} from "@/interfaces/llm";
 import {
   OnboardingState,
   OnboardingActions,
@@ -34,12 +34,14 @@ export function createMockLLMDescriptor(
               is_visible: true,
               max_input_tokens: 4096,
               supports_image_input: false,
+              supports_reasoning: false,
             },
             {
               name: "test-model-2",
               is_visible: true,
               max_input_tokens: 8192,
               supports_image_input: true,
+              supports_reasoning: false,
             },
           ],
     recommended_default_model: null,
@@ -170,36 +172,42 @@ export const OPENAI_DEFAULT_VISIBLE_MODELS = [
     is_visible: true,
     max_input_tokens: 128000,
     supports_image_input: true,
+    supports_reasoning: false,
   },
   {
     name: "gpt-5-mini",
     is_visible: true,
     max_input_tokens: 128000,
     supports_image_input: true,
+    supports_reasoning: false,
   },
   {
     name: "o1",
     is_visible: true,
     max_input_tokens: 200000,
     supports_image_input: true,
+    supports_reasoning: false,
   },
   {
     name: "o3-mini",
     is_visible: true,
     max_input_tokens: 200000,
     supports_image_input: false,
+    supports_reasoning: false,
   },
   {
     name: "gpt-4o",
     is_visible: true,
     max_input_tokens: 128000,
     supports_image_input: true,
+    supports_reasoning: false,
   },
   {
     name: "gpt-4o-mini",
     is_visible: true,
     max_input_tokens: 128000,
     supports_image_input: true,
+    supports_reasoning: false,
   },
 ];
 
@@ -214,18 +222,21 @@ export const ANTHROPIC_DEFAULT_VISIBLE_MODELS = [
     is_visible: true,
     max_input_tokens: 200000,
     supports_image_input: true,
+    supports_reasoning: false,
   },
   {
     name: "claude-sonnet-4-5",
     is_visible: true,
     max_input_tokens: 200000,
     supports_image_input: true,
+    supports_reasoning: false,
   },
   {
     name: "claude-haiku-4-5",
     is_visible: true,
     max_input_tokens: 200000,
     supports_image_input: true,
+    supports_reasoning: false,
   },
 ];
 
@@ -240,18 +251,21 @@ export const VERTEXAI_DEFAULT_VISIBLE_MODELS = [
     is_visible: true,
     max_input_tokens: 1048576,
     supports_image_input: true,
+    supports_reasoning: false,
   },
   {
     name: "gemini-2.5-flash-lite",
     is_visible: true,
     max_input_tokens: 1048576,
     supports_image_input: true,
+    supports_reasoning: false,
   },
   {
     name: "gemini-2.5-pro",
     is_visible: true,
     max_input_tokens: 1048576,
     supports_image_input: true,
+    supports_reasoning: false,
   },
 ];
 
@@ -270,12 +284,14 @@ export const MOCK_PROVIDERS = {
       is_visible: true,
       max_input_tokens: 4096,
       supports_image_input: false,
+      supports_reasoning: false,
     },
     {
       name: "mistral",
       is_visible: true,
       max_input_tokens: 8192,
       supports_image_input: false,
+      supports_reasoning: false,
     },
   ]),
   azure: createMockLLMDescriptor(LLMProviderName.AZURE, [
@@ -284,6 +300,7 @@ export const MOCK_PROVIDERS = {
       is_visible: true,
       max_input_tokens: 8192,
       supports_image_input: true,
+      supports_reasoning: false,
     },
   ]),
   bedrock: createMockLLMDescriptor(LLMProviderName.BEDROCK, [
@@ -292,6 +309,7 @@ export const MOCK_PROVIDERS = {
       is_visible: true,
       max_input_tokens: 200000,
       supports_image_input: true,
+      supports_reasoning: false,
     },
   ]),
   vertexAi: createMockLLMDescriptor(
@@ -304,6 +322,7 @@ export const MOCK_PROVIDERS = {
       is_visible: true,
       max_input_tokens: 8192,
       supports_image_input: true,
+      supports_reasoning: false,
     },
   ]),
 };

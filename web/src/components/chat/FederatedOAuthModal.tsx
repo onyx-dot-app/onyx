@@ -9,7 +9,7 @@ import { getSourceMetadata } from "@/lib/sources";
 import useFederatedOAuthStatus from "@/hooks/useFederatedOAuthStatus";
 import { SvgLink } from "@opal/icons";
 import { Card } from "@/refresh-components/cards";
-import { LineItemLayout } from "@/layouts/general-layouts";
+import { ContentAction } from "@opal/layouts";
 
 export interface FederatedConnectorOAuthStatus {
   federated_connector_id: number;
@@ -136,10 +136,12 @@ export default function FederatedOAuthModal() {
 
             return (
               <Card key={connector.federated_connector_id}>
-                <LineItemLayout
+                <ContentAction
                   icon={sourceMetadata.icon}
                   title={sourceMetadata.displayName}
                   description={sourceMetadata.category}
+                  sizePreset="main-content"
+                  variant="section"
                   rightChildren={
                     <Button
                       secondary
@@ -149,7 +151,6 @@ export default function FederatedOAuthModal() {
                       Connect
                     </Button>
                   }
-                  center
                 />
               </Card>
             );

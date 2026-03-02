@@ -24,7 +24,7 @@ import {
   BedrockFetchParams,
   OllamaFetchParams,
   OpenRouterFetchParams,
-} from "./interfaces";
+} from "@/interfaces/llm";
 import { SvgAws, SvgOpenrouter } from "@opal/icons";
 
 // Aggregator providers that host models from multiple vendors
@@ -106,8 +106,9 @@ export const getProviderIcon = (
   return CPUIcon;
 };
 
-export const isAnthropic = (provider: string, modelName: string) =>
-  provider === "anthropic" || modelName.toLowerCase().includes("claude");
+export const isAnthropic = (provider: string, modelName?: string) =>
+  provider === LLMProviderName.ANTHROPIC ||
+  !!modelName?.toLowerCase().includes("claude");
 
 /**
  * Fetches Bedrock models directly without any form state dependencies.
@@ -153,6 +154,7 @@ export const fetchBedrockModels = async (
       is_visible: false,
       max_input_tokens: modelData.max_input_tokens,
       supports_image_input: modelData.supports_image_input,
+      supports_reasoning: false,
     }));
 
     return { models };
@@ -205,6 +207,7 @@ export const fetchOllamaModels = async (
       is_visible: true,
       max_input_tokens: modelData.max_input_tokens,
       supports_image_input: modelData.supports_image_input,
+      supports_reasoning: false,
     }));
 
     return { models };
@@ -262,6 +265,7 @@ export const fetchOpenRouterModels = async (
       is_visible: true,
       max_input_tokens: modelData.max_input_tokens,
       supports_image_input: modelData.supports_image_input,
+      supports_reasoning: false,
     }));
 
     return { models };

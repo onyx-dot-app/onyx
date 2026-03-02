@@ -18,7 +18,6 @@ from sqlalchemy.orm import Session
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import Document
 from onyx.connectors.models import TextSection
-from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.enums import UserFileStatus
 from onyx.db.models import Persona
 from onyx.db.models import Persona__UserFile
@@ -58,12 +57,6 @@ def _create_persona(db_session: Session, user: User) -> Persona:
     persona = Persona(
         name=f"Test Persona {uuid4().hex[:8]}",
         description="Test persona",
-        num_chunks=10.0,
-        chunks_above=0,
-        chunks_below=0,
-        llm_relevance_filter=False,
-        llm_filter_extraction=False,
-        recency_bias=RecencyBiasSetting.NO_DECAY,
         system_prompt="test",
         task_prompt="test",
         tools=[],

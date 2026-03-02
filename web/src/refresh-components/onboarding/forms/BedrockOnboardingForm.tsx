@@ -11,7 +11,7 @@ import Text from "@/refresh-components/texts/Text";
 import { Button } from "@opal/components";
 import { cn, noProp } from "@/lib/utils";
 import { SvgAlertCircle, SvgRefreshCw } from "@opal/icons";
-import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
+import { WellKnownLLMProviderDescriptor } from "@/interfaces/llm";
 import {
   OnboardingFormWrapper,
   OnboardingFormChildProps,

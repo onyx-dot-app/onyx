@@ -150,7 +150,8 @@ export default async function RootLayout({
   // middleware returns 402 for all non-allowlisted API calls, preventing data
   // leakage. The user sees a brief loading state before being redirected.
   const content =
-    productGating === ApplicationStatus.GATED_ACCESS ? (
+    productGating === ApplicationStatus.GATED_ACCESS ||
+    productGating === ApplicationStatus.SEAT_LIMIT_EXCEEDED ? (
       <GatedContentWrapper>{children}</GatedContentWrapper>
     ) : (
       children

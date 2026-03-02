@@ -23,14 +23,13 @@ def _get_provider_by_id(admin_user: DATestUser, provider_id: str) -> dict | None
         headers=admin_user.headers,
     )
     assert response.status_code == 200
-    providers = response.json()
+    providers = response.json()["providers"]
     return next((p for p in providers if p["id"] == provider_id), None)
 
 
 def assert_response_is_equivalent(
     admin_user: DATestUser,
     response: Response,
-    default_model_name: str,
     model_configurations: list[ModelConfigurationUpsertRequest],
     api_key: str | None = None,
 ) -> None:
@@ -40,7 +39,6 @@ def assert_response_is_equivalent(
     provider_data = _get_provider_by_id(admin_user, created_provider["id"])
     assert provider_data is not None
 
-    assert provider_data["default_model_name"] == default_model_name
     assert provider_data["personas"] == []
 
     def fill_max_input_tokens_and_supports_image_input(
@@ -109,11 +107,10 @@ def assert_response_is_equivalent(
 
 # Test creating an LLM Provider with some various model-configurations.
 @pytest.mark.parametrize(
-    "default_model_name, model_configurations, expected",
+    "model_configurations, expected",
     [
         # Test the case in which a basic model-configuration is passed.
         (
-            "gpt-4",
             [
                 ModelConfigurationUpsertRequest(
                     name="gpt-4", is_visible=True, max_input_tokens=4096
@@ -127,7 +124,6 @@ def assert_response_is_equivalent(
         ),
         # Test the case in which multiple model-configuration are passed.
         (
-            "gpt-4",
             [
                 ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True),
                 ModelConfigurationUpsertRequest(name="gpt-4o", is_visible=True),
@@ -139,40 +135,13 @@ def assert_response_is_equivalent(
         ),
         # Test the case in which duplicate model-configuration are passed.
         (
-            "gpt-4",
             [ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True)] * 4,
             [ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True)],
-        ),
-        # Test the case in which no model-configurations are passed.
-        # In this case, a model-configuration for "gpt-4" should be inferred
-        # (`ModelConfiguration(name="gpt-4", is_visible=True, max_input_tokens=None)`).
-        (
-            "gpt-4",
-            [],
-            [ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True)],
-        ),
-        # Test the case in which the default-model-name is not contained inside of the model-configurations list.
-        # Once again, in this case, a model-configuration for "gpt-4" should be inferred
-        # (`ModelConfiguration(name="gpt-4", is_visible=True, max_input_tokens=None)`).
-        (
-            "gpt-4",
-            [
-                ModelConfigurationUpsertRequest(
-                    name="gpt-4o", is_visible=True, max_input_tokens=4096
-                )
-            ],
-            [
-                ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True),
-                ModelConfigurationUpsertRequest(
-                    name="gpt-4o", is_visible=True, max_input_tokens=4096
-                ),
-            ],
         ),
     ],
 )
 def test_create_llm_provider(
     reset: None,  # noqa: ARG001
-    default_model_name: str,
     model_configurations: list[ModelConfigurationUpsertRequest],
     expected: list[ModelConfigurationUpsertRequest],
 ) -> None:
@@ -185,7 +154,6 @@ def test_create_llm_provider(
             "name": str(uuid.uuid4()),
             "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000000",
-            "default_model_name": default_model_name,
             "model_configurations": [
                 model_configuration.model_dump()
                 for model_configuration in model_configurations
@@ -198,7 +166,6 @@ def test_create_llm_provider(
     assert_response_is_equivalent(
         admin_user,
         response,
-        default_model_name,
         expected,
         "sk-0****0000",
     )
@@ -284,7 +251,6 @@ def test_update_model_configurations(
             "name": name,
             "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000000",
-            "default_model_name": default_model_name,
             "model_configurations": [
                 model_configuration.dict()
                 for model_configuration in model_configurations
@@ -298,9 +264,18 @@ def test_update_model_configurations(
     assert_response_is_equivalent(
         admin_user,
         response,
-        default_model_name,
         initial_expected,
     )
+
+    response = requests.post(
+        f"{API_SERVER_URL}/admin/llm/default",
+        headers=admin_user.headers,
+        json={
+            "provider_id": created_provider["id"],
+            "model_name": updated_default_model_name,
+        },
+    )
+    assert response.status_code == 200
 
     response = requests.put(
         f"{API_SERVER_URL}/admin/llm/provider",
@@ -310,7 +285,6 @@ def test_update_model_configurations(
             "name": name,
             "provider": created_provider["provider"],
             "api_key": "sk-000000000000000000000000000000000000000000000001",
-            "default_model_name": updated_default_model_name,
             "model_configurations": [
                 model_configuration.dict()
                 for model_configuration in updated_model_configurations
@@ -322,10 +296,19 @@ def test_update_model_configurations(
     assert_response_is_equivalent(
         admin_user,
         response,
-        updated_default_model_name,
         updated_expected,
         "sk-0****0000",
     )
+
+    response = requests.post(
+        f"{API_SERVER_URL}/admin/llm/default",
+        headers=admin_user.headers,
+        json={
+            "provider_id": created_provider["id"],
+            "model_name": updated_default_model_name,
+        },
+    )
+    assert response.status_code == 200
 
     response = requests.put(
         f"{API_SERVER_URL}/admin/llm/provider",
@@ -335,7 +318,6 @@ def test_update_model_configurations(
             "name": name,
             "provider": created_provider["provider"],
             "api_key": "sk-000000000000000000000000000000000000000000000001",
-            "default_model_name": updated_default_model_name,
             "model_configurations": [
                 model_configuration.dict()
                 for model_configuration in updated_model_configurations
@@ -348,35 +330,27 @@ def test_update_model_configurations(
     assert_response_is_equivalent(
         admin_user,
         response,
-        updated_default_model_name,
         updated_expected,
         "sk-0****0001",
     )
 
 
 @pytest.mark.parametrize(
-    "default_model_name, model_configurations",
+    "model_configurations",
     [
-        (
-            "gpt-4",
-            [
-                ModelConfigurationUpsertRequest(
-                    name="gpt-4", is_visible=True, max_input_tokens=4096
-                )
-            ],
-        ),
-        (
-            "gpt-4",
-            [
-                ModelConfigurationUpsertRequest(name="gpt-4o", is_visible=True),
-                ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True),
-            ],
-        ),
+        [
+            ModelConfigurationUpsertRequest(
+                name="gpt-4", is_visible=True, max_input_tokens=4096
+            )
+        ],
+        [
+            ModelConfigurationUpsertRequest(name="gpt-4o", is_visible=True),
+            ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True),
+        ],
     ],
 )
 def test_delete_llm_provider(
     reset: None,  # noqa: ARG001
-    default_model_name: str,
     model_configurations: list[ModelConfigurationUpsertRequest],
 ) -> None:
     admin_user = UserManager.create(name="admin_user")
@@ -389,7 +363,6 @@ def test_delete_llm_provider(
             "name": "test-provider-delete",
             "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000000",
-            "default_model_name": default_model_name,
             "model_configurations": [
                 model_configuration.dict()
                 for model_configuration in model_configurations
@@ -411,6 +384,92 @@ def test_delete_llm_provider(
     # Verify provider is deleted by checking it's not in the list
     provider_data = _get_provider_by_id(admin_user, created_provider["id"])
     assert provider_data is None
+
+
+def test_duplicate_provider_name_rejected(reset: None) -> None:  # noqa: ARG001
+    """Creating a provider with a name that already exists should return 400."""
+    admin_user = UserManager.create(name="admin_user")
+    provider_name = f"unique-provider-{uuid.uuid4()}"
+
+    base_payload = {
+        "name": provider_name,
+        "provider": LlmProviderNames.OPENAI,
+        "api_key": "sk-000000000000000000000000000000000000000000000000",
+        "model_configurations": [
+            ModelConfigurationUpsertRequest(
+                name="gpt-4o-mini", is_visible=True
+            ).model_dump()
+        ],
+        "is_public": True,
+        "groups": [],
+    }
+
+    # First creation succeeds
+    response = requests.put(
+        f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
+        headers=admin_user.headers,
+        json=base_payload,
+    )
+    assert response.status_code == 200
+
+    # Second creation with the same name is rejected
+    response = requests.put(
+        f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
+        headers=admin_user.headers,
+        json=base_payload,
+    )
+    assert response.status_code == 400
+    assert "already exists" in response.json()["detail"]
+
+
+def test_rename_provider_rejected(reset: None) -> None:  # noqa: ARG001
+    """Renaming a provider is not currently supported and should return 400."""
+    admin_user = UserManager.create(name="admin_user")
+
+    create_payload = {
+        "name": f"original-name-{uuid.uuid4()}",
+        "provider": LlmProviderNames.OPENAI,
+        "api_key": "sk-000000000000000000000000000000000000000000000000",
+        "model_configurations": [
+            ModelConfigurationUpsertRequest(
+                name="gpt-4o-mini", is_visible=True
+            ).model_dump()
+        ],
+        "is_public": True,
+        "groups": [],
+    }
+
+    response = requests.put(
+        f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
+        headers=admin_user.headers,
+        json=create_payload,
+    )
+    assert response.status_code == 200
+    provider_id = response.json()["id"]
+
+    # Attempt to rename — should be rejected
+    new_name = f"renamed-provider-{uuid.uuid4()}"
+    update_payload = {**create_payload, "id": provider_id, "name": new_name}
+    response = requests.put(
+        f"{API_SERVER_URL}/admin/llm/provider?is_creation=false",
+        headers=admin_user.headers,
+        json=update_payload,
+    )
+    assert response.status_code == 400
+    assert "not currently supported" in response.json()["detail"]
+
+    # Verify no duplicate was created — only the original provider should exist
+    provider = _get_provider_by_id(admin_user, provider_id)
+    assert provider is not None
+    assert provider["name"] == create_payload["name"]
+
+    all_response = requests.get(
+        f"{API_SERVER_URL}/admin/llm/provider",
+        headers=admin_user.headers,
+    )
+    assert all_response.status_code == 200
+    all_names = [p["name"] for p in all_response.json()["providers"]]
+    assert new_name not in all_names
 
 
 def test_model_visibility_preserved_on_edit(reset: None) -> None:  # noqa: ARG001
@@ -460,7 +519,6 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:  # noqa: ARG00
             "name": "test-visibility-provider",
             "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000000",
-            "default_model_name": "gpt-4o",
             "model_configurations": [config.dict() for config in model_configs],
             "is_public": True,
             "groups": [],
@@ -506,10 +564,10 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:  # noqa: ARG00
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=false",
         headers=admin_user.headers,
         json={
+            "id": created_provider["id"],
             "name": "test-visibility-provider",
             "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000000",
-            "default_model_name": "gpt-4o",
             "model_configurations": [
                 config.dict() for config in edit_configs_all_visible
             ],
@@ -554,10 +612,10 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:  # noqa: ARG00
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=false",
         headers=admin_user.headers,
         json={
+            "id": created_provider["id"],
             "name": "test-visibility-provider",
             "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000000",
-            "default_model_name": "gpt-4o",
             "model_configurations": [
                 config.dict() for config in edit_configs_one_visible
             ],
@@ -576,6 +634,116 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:  # noqa: ARG00
     ]
     assert len(visible_models) == 1
     assert visible_models[0]["name"] == "gpt-4o"
+
+    # Make none visible
+    edit_configs_none_visible = [
+        ModelConfigurationUpsertRequest(
+            name="gpt-4o",
+            is_visible=False,
+            max_input_tokens=None,
+            supports_image_input=None,
+        ),
+        ModelConfigurationUpsertRequest(
+            name="gpt-4o-mini",
+            is_visible=False,
+            max_input_tokens=None,
+            supports_image_input=None,
+        ),
+        ModelConfigurationUpsertRequest(
+            name="gpt-4-turbo",
+            is_visible=False,
+            max_input_tokens=None,
+            supports_image_input=None,
+        ),
+    ]
+    edit_response_3 = requests.put(
+        f"{API_SERVER_URL}/admin/llm/provider?is_creation=false",
+        headers=admin_user.headers,
+        json={
+            "id": created_provider["id"],
+            "name": "test-visibility-provider",
+            "provider": LlmProviderNames.OPENAI,
+            "api_key": "sk-000000000000000000000000000000000000000000000000",
+            "model_configurations": [
+                config.dict() for config in edit_configs_none_visible
+            ],
+            "is_public": True,
+            "groups": [],
+            "personas": [],
+        },
+    )
+    assert edit_response_3.status_code == 200
+
+    # Verify no models are visible
+    provider_data = _get_provider_by_id(admin_user, created_provider["id"])
+    assert provider_data is not None
+    visible_models = [
+        model for model in provider_data["model_configurations"] if model["is_visible"]
+    ]
+    assert len(visible_models) == 0
+
+    # Make gpt-4o the default
+    _set_default_provider(admin_user, created_provider["id"], "gpt-4o")
+
+    # Verify gpt-4o is the default
+    provider_data = _get_provider_by_id(admin_user, created_provider["id"])
+    assert provider_data is not None
+    visible_models = [
+        model for model in provider_data["model_configurations"] if model["is_visible"]
+    ]
+    assert len(visible_models) == 1
+    assert visible_models[0]["name"] == "gpt-4o"
+
+
+def _get_provider_by_name(providers: list[dict], provider_name: str) -> dict | None:
+    return next((p for p in providers if p["name"] == provider_name), None)
+
+
+def _get_providers_admin(
+    admin_user: DATestUser,
+) -> dict | None:
+    response = requests.get(
+        f"{API_SERVER_URL}/admin/llm/provider",
+        headers=admin_user.headers,
+    )
+    assert response.status_code == 200
+    resp_json = response.json()
+
+    return resp_json
+
+
+def _unpack_data(data: dict) -> tuple[list[dict], dict | None, dict | None]:
+    providers = data["providers"]
+    text_default = data.get("default_text")
+    vision_default = data.get("default_vision")
+
+    return providers, text_default, vision_default
+
+
+def _get_providers_basic(
+    user: DATestUser,
+) -> dict | None:
+    response = requests.get(
+        f"{API_SERVER_URL}/llm/provider",
+        headers=user.headers,
+    )
+    assert response.status_code == 200
+    resp_json = response.json()
+
+    return resp_json
+
+
+def _validate_default_model(
+    default: dict | None,
+    provider_id: int | None = None,
+    model_name: str | None = None,
+) -> None:
+    if default is None:
+        assert provider_id is None and model_name is None
+        return
+
+    assert default["provider_id"] == provider_id
+    assert default["model_name"] == model_name
 
 
 def _get_provider_by_name_admin(
@@ -598,7 +766,7 @@ def _get_provider_by_name_basic(user: DATestUser, provider_name: str) -> dict | 
         headers=user.headers,
     )
     assert response.status_code == 200
-    providers = response.json()
+    providers = response.json()["providers"]
     return next((p for p in providers if p["name"] == provider_name), None)
 
 
@@ -649,13 +817,9 @@ def _validate_provider_data(
     provider_data: dict,
     expected_name: str,
     expected_provider: str,
-    expected_default_model: str,
-    expected_is_default: bool | None,
     expected_model_names: list[str],
     expected_visible: dict[str, bool] | None = None,
     expected_is_public: bool | None = None,
-    expected_is_default_vision: bool | None = None,
-    expected_default_vision_model: str | None = None,
     expected_image_support: dict[str, bool] | None = None,
 ) -> None:
     """
@@ -665,13 +829,9 @@ def _validate_provider_data(
         provider_data: Provider dict from the API response
         expected_name: Expected provider name
         expected_provider: Expected provider type (e.g., 'openai')
-        expected_default_model: Expected default model name
-        expected_is_default: Expected is_default_provider value
         expected_model_names: List of expected model names in configurations
         expected_visible: Optional dict mapping model name to expected visibility
         expected_is_public: Optional expected is_public value (admin endpoint only)
-        expected_is_default_vision: Optional expected is_default_vision_provider value
-        expected_default_vision_model: Optional expected default_vision_model value
         expected_image_support: Optional dict mapping model name to expected supports_image_input
     """
     assert (
@@ -680,38 +840,12 @@ def _validate_provider_data(
     assert (
         provider_data["provider"] == expected_provider
     ), f"Provider type mismatch. Expected: {expected_provider}, Actual: {provider_data['provider']}"
-    assert provider_data["default_model_name"] == expected_default_model, (
-        f"Default model mismatch. Expected: {expected_default_model}, "
-        f"Actual: {provider_data['default_model_name']}"
-    )
-    assert provider_data["is_default_provider"] == expected_is_default, (
-        f"is_default_provider mismatch. Expected: {expected_is_default}, "
-        f"Actual: {provider_data['is_default_provider']}"
-    )
 
     # Validate is_public if provided (only available in admin endpoint response)
     if expected_is_public is not None and "is_public" in provider_data:
         assert provider_data["is_public"] == expected_is_public, (
             f"is_public mismatch. Expected: {expected_is_public}, "
             f"Actual: {provider_data['is_public']}"
-        )
-
-    # Validate vision-related fields if provided
-    if expected_is_default_vision is not None:
-        assert (
-            provider_data.get("is_default_vision_provider")
-            == expected_is_default_vision
-        ), (
-            f"is_default_vision_provider mismatch. Expected: {expected_is_default_vision}, "
-            f"Actual: {provider_data.get('is_default_vision_provider')}"
-        )
-
-    if expected_default_vision_model is not None:
-        assert (
-            provider_data.get("default_vision_model") == expected_default_vision_model
-        ), (
-            f"default_vision_model mismatch. Expected: {expected_default_vision_model}, "
-            f"Actual: {provider_data.get('default_vision_model')}"
         )
 
     # Validate model configurations
@@ -746,7 +880,6 @@ def test_default_model_persistence_and_update(reset: None) -> None:  # noqa: ARG
     assert basic_user.role == UserRole.BASIC or basic_user.role != UserRole.ADMIN
 
     provider_name = f"test-default-model-{uuid.uuid4()}"
-    initial_default_model = "gpt-4"
     updated_default_model = "gpt-4o"
 
     # Model configurations including all models we'll use
@@ -773,7 +906,6 @@ def test_default_model_persistence_and_update(reset: None) -> None:  # noqa: ARG
             "name": provider_name,
             "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000000",
-            "default_model_name": initial_default_model,
             "model_configurations": [config.model_dump() for config in model_configs],
             "is_public": True,
             "groups": [],
@@ -782,42 +914,61 @@ def test_default_model_persistence_and_update(reset: None) -> None:  # noqa: ARG
     )
     assert create_response.status_code == 200
 
+    # Capture initial defaults (setup_postgres may have created a DevEnvPresetOpenAI default)
+    initial_data = _get_providers_admin(admin_user)
+    assert initial_data is not None
+    _, initial_text_default, initial_vision_default = _unpack_data(initial_data)
+
     # Step 2: Verify via admin endpoint that all provider data is correct
-    admin_provider_data = _get_provider_by_name_admin(admin_user, provider_name)
+    admin_data = _get_providers_admin(admin_user)
+    assert admin_data is not None
+    providers, text_default, vision_default = _unpack_data(admin_data)
+    # Defaults should be unchanged from initial state (new provider not set as default)
+    assert text_default == initial_text_default
+    assert vision_default == initial_vision_default
+
+    admin_provider_data = _get_provider_by_name(providers, provider_name)
     assert admin_provider_data is not None
+
     _validate_provider_data(
         admin_provider_data,
         expected_name=provider_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model=initial_default_model,
-        expected_is_default=False,
         expected_model_names=expected_model_names,
         expected_visible=expected_visible,
         expected_is_public=True,
     )
 
     # Step 3: Verify via basic endpoint (admin user) that all provider data is correct
-    admin_basic_provider_data = _get_provider_by_name_basic(admin_user, provider_name)
+    admin_basic_data = _get_providers_basic(admin_user)
+    assert admin_basic_data is not None
+    providers, text_default, vision_default = _unpack_data(admin_basic_data)
+    assert text_default == initial_text_default
+    assert vision_default == initial_vision_default
+
+    admin_basic_provider_data = _get_provider_by_name(providers, provider_name)
     assert admin_basic_provider_data is not None
     _validate_provider_data(
         admin_basic_provider_data,
         expected_name=provider_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model=initial_default_model,
-        expected_is_default=False,
         expected_model_names=expected_model_names,
         expected_visible=expected_visible,
     )
 
     # Step 4: Verify non-admin user sees the same provider data via basic endpoint
-    basic_user_provider_data = _get_provider_by_name_basic(basic_user, provider_name)
+    basic_user_data = _get_providers_basic(basic_user)
+    assert basic_user_data is not None
+    providers, text_default, vision_default = _unpack_data(basic_user_data)
+    assert text_default == initial_text_default
+    assert vision_default == initial_vision_default
+
+    basic_user_provider_data = _get_provider_by_name(providers, provider_name)
     assert basic_user_provider_data is not None
     _validate_provider_data(
         basic_user_provider_data,
         expected_name=provider_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model=initial_default_model,
-        expected_is_default=False,
         expected_model_names=expected_model_names,
         expected_visible=expected_visible,
     )
@@ -827,10 +978,10 @@ def test_default_model_persistence_and_update(reset: None) -> None:  # noqa: ARG
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=false",
         headers=admin_user.headers,
         json={
+            "id": create_response.json()["id"],
             "name": provider_name,
             "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000000",
-            "default_model_name": updated_default_model,
             "model_configurations": [config.model_dump() for config in model_configs],
             "is_public": True,
             "groups": [],
@@ -840,47 +991,75 @@ def test_default_model_persistence_and_update(reset: None) -> None:  # noqa: ARG
     assert update_response.status_code == 200
 
     default_provider_response = requests.post(
-        f"{API_SERVER_URL}/admin/llm/provider/{update_response.json()['id']}/default",
+        f"{API_SERVER_URL}/admin/llm/default",
+        json={
+            "provider_id": update_response.json()["id"],
+            "model_name": updated_default_model,
+        },
         headers=admin_user.headers,
     )
     assert default_provider_response.status_code == 200
 
     # Step 6a: Verify the updated provider data via admin endpoint
-    admin_provider_data = _get_provider_by_name_admin(admin_user, provider_name)
+    admin_data = _get_providers_admin(admin_user)
+    assert admin_data is not None
+    providers, text_default, vision_default = _unpack_data(admin_data)
+    _validate_default_model(
+        text_default,
+        provider_id=update_response.json()["id"],
+        model_name=updated_default_model,
+    )
+    _validate_default_model(vision_default)  # None
+
+    admin_provider_data = _get_provider_by_name(providers, provider_name)
     assert admin_provider_data is not None
     _validate_provider_data(
         admin_provider_data,
         expected_name=provider_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model=updated_default_model,
-        expected_is_default=True,
         expected_model_names=expected_model_names,
         expected_visible=expected_visible,
         expected_is_public=True,
     )
 
     # Step 6b: Verify the updated provider data via basic endpoint (admin user)
-    admin_basic_provider_data = _get_provider_by_name_basic(admin_user, provider_name)
+    admin_basic_data = _get_providers_basic(admin_user)
+    assert admin_basic_data is not None
+    providers, text_default, vision_default = _unpack_data(admin_basic_data)
+    _validate_default_model(
+        text_default,
+        provider_id=update_response.json()["id"],
+        model_name=updated_default_model,
+    )
+    _validate_default_model(vision_default)  # None
+
+    admin_basic_provider_data = _get_provider_by_name(providers, provider_name)
     assert admin_basic_provider_data is not None
     _validate_provider_data(
         admin_basic_provider_data,
         expected_name=provider_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model=updated_default_model,
-        expected_is_default=True,
         expected_model_names=expected_model_names,
         expected_visible=expected_visible,
     )
 
     # Step 7: Verify non-admin user sees the updated provider data
-    basic_user_provider_data = _get_provider_by_name_basic(basic_user, provider_name)
+    basic_user_data = _get_providers_basic(basic_user)
+    assert basic_user_data is not None
+    providers, text_default, vision_default = _unpack_data(basic_user_data)
+    _validate_default_model(
+        text_default,
+        provider_id=update_response.json()["id"],
+        model_name=updated_default_model,
+    )
+    _validate_default_model(vision_default)  # None
+
+    basic_user_provider_data = _get_provider_by_name(providers, provider_name)
     assert basic_user_provider_data is not None
     _validate_provider_data(
         basic_user_provider_data,
         expected_name=provider_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model=updated_default_model,
-        expected_is_default=True,
         expected_model_names=expected_model_names,
         expected_visible=expected_visible,
     )
@@ -893,7 +1072,7 @@ def _get_all_providers_basic(user: DATestUser) -> list[dict]:
         headers=user.headers,
     )
     assert response.status_code == 200
-    return response.json()
+    return response.json()["providers"]
 
 
 def _get_all_providers_admin(admin_user: DATestUser) -> list[dict]:
@@ -903,13 +1082,19 @@ def _get_all_providers_admin(admin_user: DATestUser) -> list[dict]:
         headers=admin_user.headers,
     )
     assert response.status_code == 200
-    return response.json()
+    return response.json()["providers"]
 
 
-def _set_default_provider(admin_user: DATestUser, provider_id: int) -> None:
+def _set_default_provider(
+    admin_user: DATestUser, provider_id: int, model_name: str
+) -> None:
     """Utility function to set a provider as the default."""
     response = requests.post(
-        f"{API_SERVER_URL}/admin/llm/provider/{provider_id}/default",
+        f"{API_SERVER_URL}/admin/llm/default",
+        json={
+            "provider_id": provider_id,
+            "model_name": model_name,
+        },
         headers=admin_user.headers,
     )
     assert response.status_code == 200
@@ -919,21 +1104,15 @@ def _set_default_vision_provider(
     admin_user: DATestUser, provider_id: int, vision_model: str | None = None
 ) -> None:
     """Utility function to set a provider as the default vision provider."""
-    url = f"{API_SERVER_URL}/admin/llm/provider/{provider_id}/default-vision"
-    if vision_model:
-        url += f"?vision_model={vision_model}"
-    response = requests.post(url, headers=admin_user.headers)
+    response = requests.post(
+        f"{API_SERVER_URL}/admin/llm/default-vision",
+        json={
+            "provider_id": provider_id,
+            "model_name": vision_model,
+        },
+        headers=admin_user.headers,
+    )
     assert response.status_code == 200
-
-
-def _find_default_provider(providers: list[dict]) -> dict | None:
-    """Find the default provider from a list of providers."""
-    return next((p for p in providers if p.get("is_default_provider")), None)
-
-
-def _find_default_vision_provider(providers: list[dict]) -> dict | None:
-    """Find the default vision provider from a list of providers."""
-    return next((p for p in providers if p.get("is_default_vision_provider")), None)
 
 
 def test_multiple_providers_default_switching(reset: None) -> None:  # noqa: ARG001
@@ -1005,8 +1184,6 @@ def test_multiple_providers_default_switching(reset: None) -> None:  # noqa: ARG
             "name": provider_1_name,
             "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000001",
-            "is_default_provider": True,
-            "default_model_name": shared_model_name,
             "model_configurations": [c.model_dump() for c in provider_1_configs],
             "is_public": True,
             "groups": [],
@@ -1016,6 +1193,8 @@ def test_multiple_providers_default_switching(reset: None) -> None:  # noqa: ARG
     assert create_response_1.status_code == 200
     provider_1 = create_response_1.json()
 
+    _set_default_provider(admin_user, provider_1["id"], shared_model_name)
+
     # Create provider 2 with provider_2_unique_model as default initially
     create_response_2 = requests.put(
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
@@ -1024,7 +1203,6 @@ def test_multiple_providers_default_switching(reset: None) -> None:  # noqa: ARG
             "name": provider_2_name,
             "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000002",
-            "default_model_name": provider_2_unique_model,
             "model_configurations": [c.model_dump() for c in provider_2_configs],
             "is_public": True,
             "groups": [],
@@ -1035,64 +1213,72 @@ def test_multiple_providers_default_switching(reset: None) -> None:  # noqa: ARG
     provider_2 = create_response_2.json()
 
     # Step 2: Set provider 1 as the default provider
-    _set_default_provider(admin_user, provider_1["id"])
+    _set_default_provider(admin_user, provider_1["id"], shared_model_name)
 
     # Step 3: Both admin and basic_user query and verify they see the same default
     # Validate via admin endpoint
-    admin_providers = _get_all_providers_admin(admin_user)
-    admin_default = _find_default_provider(admin_providers)
-    assert admin_default is not None
+    admin_data = _get_providers_admin(admin_user)
+    assert admin_data is not None
+    providers, text_default, vision_default = _unpack_data(admin_data)
+    _validate_default_model(
+        text_default, provider_id=provider_1["id"], model_name=shared_model_name
+    )
+    _validate_default_model(vision_default)  # None
+    admin_provider_data = _get_provider_by_name(providers, provider_1_name)
+    assert admin_provider_data is not None
     _validate_provider_data(
-        admin_default,
+        admin_provider_data,
         expected_name=provider_1_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model=shared_model_name,
-        expected_is_default=True,
         expected_model_names=provider_1_model_names,
         expected_visible=provider_1_visible,
         expected_is_public=True,
     )
 
     # Validate provider 2 via admin endpoint (should not be default)
-    admin_provider_2 = next(
-        (p for p in admin_providers if p["name"] == provider_2_name), None
-    )
+    admin_provider_2 = _get_provider_by_name(providers, provider_2_name)
     assert admin_provider_2 is not None
     _validate_provider_data(
         admin_provider_2,
         expected_name=provider_2_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model=provider_2_unique_model,
-        expected_is_default=False,
         expected_model_names=provider_2_model_names,
         expected_visible=provider_2_visible,
         expected_is_public=True,
     )
 
     # Validate via basic endpoint (basic_user)
-    basic_providers = _get_all_providers_basic(basic_user)
-    basic_default = _find_default_provider(basic_providers)
-    assert basic_default is not None
+    basic_data = _get_providers_basic(basic_user)
+    assert basic_data is not None
+    providers, text_default, vision_default = _unpack_data(basic_data)
+    _validate_default_model(
+        text_default, provider_id=provider_1["id"], model_name=shared_model_name
+    )
+    _validate_default_model(vision_default)  # None
+    basic_provider_data = _get_provider_by_name(providers, provider_1_name)
+    assert basic_provider_data is not None
     _validate_provider_data(
-        basic_default,
+        basic_provider_data,
         expected_name=provider_1_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model=shared_model_name,
-        expected_is_default=True,
         expected_model_names=provider_1_model_names,
         expected_visible=provider_1_visible,
     )
 
     # Also verify admin sees the same via basic endpoint
-    admin_basic_providers = _get_all_providers_basic(admin_user)
-    admin_basic_default = _find_default_provider(admin_basic_providers)
-    assert admin_basic_default is not None
+    admin_basic_data = _get_providers_basic(admin_user)
+    assert admin_basic_data is not None
+    providers, text_default, vision_default = _unpack_data(admin_basic_data)
+    _validate_default_model(
+        text_default, provider_id=provider_1["id"], model_name=shared_model_name
+    )
+    _validate_default_model(vision_default)  # None
+    admin_basic_provider_data = _get_provider_by_name(providers, provider_1_name)
+    assert admin_basic_provider_data is not None
     _validate_provider_data(
-        admin_basic_default,
+        admin_basic_provider_data,
         expected_name=provider_1_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model=shared_model_name,
-        expected_is_default=True,
         expected_model_names=provider_1_model_names,
         expected_visible=provider_1_visible,
     )
@@ -1103,11 +1289,10 @@ def test_multiple_providers_default_switching(reset: None) -> None:  # noqa: ARG
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=false",
         headers=admin_user.headers,
         json={
+            "id": provider_2["id"],
             "name": provider_2_name,
             "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000002",
-            "is_default_provider": True,
-            "default_model_name": provider_2_unique_model,
             "model_configurations": [c.model_dump() for c in provider_2_configs],
             "is_public": True,
             "groups": [],
@@ -1117,64 +1302,72 @@ def test_multiple_providers_default_switching(reset: None) -> None:  # noqa: ARG
     assert update_response.status_code == 200
 
     # Now set provider 2 as the default
-    _set_default_provider(admin_user, provider_2["id"])
+    _set_default_provider(admin_user, provider_2["id"], provider_2_unique_model)
 
     # Step 5: Both admin and basic_user verify they see the updated default
     # Validate via admin endpoint
-    admin_providers = _get_all_providers_admin(admin_user)
-    admin_default = _find_default_provider(admin_providers)
-    assert admin_default is not None
+    admin_data = _get_providers_admin(admin_user)
+    assert admin_data is not None
+    providers, text_default, vision_default = _unpack_data(admin_data)
+    _validate_default_model(
+        text_default, provider_id=provider_2["id"], model_name=provider_2_unique_model
+    )
+    _validate_default_model(vision_default)  # None
+    admin_provider_data = _get_provider_by_name(providers, provider_2_name)
+    assert admin_provider_data is not None
     _validate_provider_data(
-        admin_default,
+        admin_provider_data,
         expected_name=provider_2_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model=provider_2_unique_model,
-        expected_is_default=True,
         expected_model_names=provider_2_model_names,
         expected_visible=provider_2_visible,
         expected_is_public=True,
     )
 
     # Validate provider 1 via admin endpoint (should no longer be default)
-    admin_provider_1 = next(
-        (p for p in admin_providers if p["name"] == provider_1_name), None
-    )
+    admin_provider_1 = _get_provider_by_name(providers, provider_1_name)
     assert admin_provider_1 is not None
     _validate_provider_data(
         admin_provider_1,
         expected_name=provider_1_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model=shared_model_name,
-        expected_is_default=False,
         expected_model_names=provider_1_model_names,
         expected_visible=provider_1_visible,
         expected_is_public=True,
     )
 
     # Validate via basic endpoint (basic_user)
-    basic_providers = _get_all_providers_basic(basic_user)
-    basic_default = _find_default_provider(basic_providers)
-    assert basic_default is not None
+    basic_data = _get_providers_basic(basic_user)
+    assert basic_data is not None
+    providers, text_default, vision_default = _unpack_data(basic_data)
+    _validate_default_model(
+        text_default, provider_id=provider_2["id"], model_name=provider_2_unique_model
+    )
+    _validate_default_model(vision_default)  # None
+    basic_provider_data = _get_provider_by_name(providers, provider_2_name)
+    assert basic_provider_data is not None
     _validate_provider_data(
-        basic_default,
+        basic_provider_data,
         expected_name=provider_2_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model=provider_2_unique_model,
-        expected_is_default=True,
         expected_model_names=provider_2_model_names,
         expected_visible=provider_2_visible,
     )
 
     # Validate via basic endpoint (admin_user)
-    admin_basic_providers = _get_all_providers_basic(admin_user)
-    admin_basic_default = _find_default_provider(admin_basic_providers)
-    assert admin_basic_default is not None
+    admin_basic_data = _get_providers_basic(admin_user)
+    assert admin_basic_data is not None
+    providers, text_default, vision_default = _unpack_data(admin_basic_data)
+    _validate_default_model(
+        text_default, provider_id=provider_2["id"], model_name=provider_2_unique_model
+    )
+    _validate_default_model(vision_default)  # None
+    admin_basic_provider_data = _get_provider_by_name(providers, provider_2_name)
+    assert admin_basic_provider_data is not None
     _validate_provider_data(
-        admin_basic_default,
+        admin_basic_provider_data,
         expected_name=provider_2_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model=provider_2_unique_model,
-        expected_is_default=True,
         expected_model_names=provider_2_model_names,
         expected_visible=provider_2_visible,
     )
@@ -1185,11 +1378,10 @@ def test_multiple_providers_default_switching(reset: None) -> None:  # noqa: ARG
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=false",
         headers=admin_user.headers,
         json={
+            "id": provider_2["id"],
             "name": provider_2_name,
             "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000002",
-            "is_default_provider": True,
-            "default_model_name": shared_model_name,  # Same name as provider 1's model
             "model_configurations": [c.model_dump() for c in provider_2_configs],
             "is_public": True,
             "groups": [],
@@ -1198,76 +1390,84 @@ def test_multiple_providers_default_switching(reset: None) -> None:  # noqa: ARG
     )
     assert update_response.status_code == 200
 
+    _set_default_provider(
+        admin_user, provider_2["id"], shared_model_name
+    )  # Same name as provider 1's model
+
     # Step 7: Both users verify they see provider 2 as default with the shared model name
     # Validate via admin endpoint
-    admin_providers = _get_all_providers_admin(admin_user)
-    admin_default = _find_default_provider(admin_providers)
-    assert admin_default is not None
+    admin_data = _get_providers_admin(admin_user)
+    assert admin_data is not None
+    providers, text_default, vision_default = _unpack_data(admin_data)
+    _validate_default_model(
+        text_default, provider_id=provider_2["id"], model_name=shared_model_name
+    )
+    _validate_default_model(vision_default)  # None
+    admin_provider_data = _get_provider_by_name(providers, provider_2_name)
+    assert admin_provider_data is not None
     _validate_provider_data(
-        admin_default,
+        admin_provider_data,
         expected_name=provider_2_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model=shared_model_name,
-        expected_is_default=True,
         expected_model_names=provider_2_model_names,
         expected_visible=provider_2_visible,
         expected_is_public=True,
     )
 
     # Validate via basic endpoint (basic_user)
-    basic_providers = _get_all_providers_basic(basic_user)
-    basic_default = _find_default_provider(basic_providers)
-    assert basic_default is not None
+    basic_data = _get_providers_basic(basic_user)
+    assert basic_data is not None
+    providers, text_default, vision_default = _unpack_data(basic_data)
+    _validate_default_model(
+        text_default, provider_id=provider_2["id"], model_name=shared_model_name
+    )
+    _validate_default_model(vision_default)  # None
+    basic_provider_data = _get_provider_by_name(providers, provider_2_name)
+    assert basic_provider_data is not None
     _validate_provider_data(
-        basic_default,
+        basic_provider_data,
         expected_name=provider_2_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model=shared_model_name,
-        expected_is_default=True,
         expected_model_names=provider_2_model_names,
         expected_visible=provider_2_visible,
     )
 
     # Validate via basic endpoint (admin_user)
-    admin_basic_providers = _get_all_providers_basic(admin_user)
-    admin_basic_default = _find_default_provider(admin_basic_providers)
-    assert admin_basic_default is not None
+    admin_basic_data = _get_providers_basic(admin_user)
+    assert admin_basic_data is not None
+    providers, text_default, vision_default = _unpack_data(admin_basic_data)
+    _validate_default_model(
+        text_default, provider_id=provider_2["id"], model_name=shared_model_name
+    )
+    _validate_default_model(vision_default)  # None
+    admin_basic_provider_data = _get_provider_by_name(providers, provider_2_name)
+    assert admin_basic_provider_data is not None
     _validate_provider_data(
-        admin_basic_default,
+        admin_basic_provider_data,
         expected_name=provider_2_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model=shared_model_name,
-        expected_is_default=True,
         expected_model_names=provider_2_model_names,
         expected_visible=provider_2_visible,
     )
 
     # Verify provider 1 is no longer the default and has correct data
-    provider_1_admin = next(
-        (p for p in admin_providers if p["name"] == provider_1_name), None
-    )
-    assert provider_1_admin is not None
+    admin_provider_1 = _get_provider_by_name(providers, provider_1_name)
+    assert admin_provider_1 is not None
     _validate_provider_data(
-        provider_1_admin,
+        admin_provider_1,
         expected_name=provider_1_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model=shared_model_name,
-        expected_is_default=False,
         expected_model_names=provider_1_model_names,
         expected_visible=provider_1_visible,
         expected_is_public=True,
     )
 
-    provider_1_basic = next(
-        (p for p in basic_providers if p["name"] == provider_1_name), None
-    )
-    assert provider_1_basic is not None
+    basic_provider_1 = _get_provider_by_name(providers, provider_1_name)
+    assert basic_provider_1 is not None
     _validate_provider_data(
-        provider_1_basic,
+        basic_provider_1,
         expected_name=provider_1_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model=shared_model_name,
-        expected_is_default=False,
         expected_model_names=provider_1_model_names,
         expected_visible=provider_1_visible,
     )
@@ -1354,7 +1554,6 @@ def test_default_provider_and_vision_provider_selection(
             "name": provider_1_name,
             "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000001",
-            "default_model_name": provider_1_non_vision_model,
             "model_configurations": [c.model_dump() for c in provider_1_configs],
             "is_public": True,
             "groups": [],
@@ -1372,7 +1571,6 @@ def test_default_provider_and_vision_provider_selection(
             "name": provider_2_name,
             "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000002",
-            "default_model_name": provider_2_vision_model_1,
             "model_configurations": [c.model_dump() for c in provider_2_configs],
             "is_public": True,
             "groups": [],
@@ -1383,7 +1581,7 @@ def test_default_provider_and_vision_provider_selection(
     provider_2 = create_response_2.json()
 
     # Step 3: Set provider 1 as the general default provider
-    _set_default_provider(admin_user, provider_1["id"])
+    _set_default_provider(admin_user, provider_1["id"], provider_1_non_vision_model)
 
     # Step 4: Set provider 2 with a specific vision model as the default vision provider
     _set_default_vision_provider(
@@ -1391,99 +1589,112 @@ def test_default_provider_and_vision_provider_selection(
     )
 
     # Step 5: Verify via admin endpoint
-    admin_providers = _get_all_providers_admin(admin_user)
+    admin_data = _get_providers_admin(admin_user)
+    assert admin_data is not None
 
     # Find and validate the default provider (provider 1)
-    admin_default = _find_default_provider(admin_providers)
+    providers, text_default, vision_default = _unpack_data(admin_data)
+    _validate_default_model(
+        text_default,
+        provider_id=provider_1["id"],
+        model_name=provider_1_non_vision_model,
+    )
+    _validate_default_model(
+        vision_default,
+        provider_id=provider_2["id"],
+        model_name=provider_2_vision_model_1,
+    )
+    admin_default = _get_provider_by_name(providers, provider_1_name)
     assert admin_default is not None
     _validate_provider_data(
         admin_default,
         expected_name=provider_1_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model=provider_1_non_vision_model,
-        expected_is_default=True,
         expected_model_names=provider_1_model_names,
         expected_visible=provider_1_visible,
         expected_is_public=True,
-        expected_is_default_vision=None,  # Provider 1 is NOT the vision default
     )
 
     # Find and validate the default vision provider (provider 2)
-    admin_vision_default = _find_default_vision_provider(admin_providers)
+    admin_vision_default = _get_provider_by_name(providers, provider_2_name)
     assert admin_vision_default is not None
     _validate_provider_data(
         admin_vision_default,
         expected_name=provider_2_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model=provider_2_vision_model_1,
-        expected_is_default=False,  # Provider 2 is NOT the general default
         expected_model_names=provider_2_model_names,
         expected_visible=provider_2_visible,
         expected_is_public=True,
-        expected_is_default_vision=True,
-        expected_default_vision_model=provider_2_vision_model_1,
     )
 
     # Step 6: Verify via basic endpoint (basic_user)
-    basic_providers = _get_all_providers_basic(basic_user)
-
     # Find and validate the default provider (provider 1)
-    basic_default = _find_default_provider(basic_providers)
+    basic_data = _get_providers_basic(basic_user)
+    assert basic_data is not None
+    providers, text_default, vision_default = _unpack_data(basic_data)
+    _validate_default_model(
+        text_default,
+        provider_id=provider_1["id"],
+        model_name=provider_1_non_vision_model,
+    )
+    _validate_default_model(
+        vision_default,
+        provider_id=provider_2["id"],
+        model_name=provider_2_vision_model_1,
+    )
+    basic_default = _get_provider_by_name(providers, provider_1_name)
     assert basic_default is not None
     _validate_provider_data(
         basic_default,
         expected_name=provider_1_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model=provider_1_non_vision_model,
-        expected_is_default=True,
         expected_model_names=provider_1_model_names,
         expected_visible=provider_1_visible,
-        expected_is_default_vision=None,
     )
 
     # Find and validate the default vision provider (provider 2)
-    basic_vision_default = _find_default_vision_provider(basic_providers)
+    basic_vision_default = _get_provider_by_name(providers, provider_2_name)
     assert basic_vision_default is not None
     _validate_provider_data(
         basic_vision_default,
         expected_name=provider_2_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model=provider_2_vision_model_1,
-        expected_is_default=False,
         expected_model_names=provider_2_model_names,
         expected_visible=provider_2_visible,
-        expected_is_default_vision=True,
-        expected_default_vision_model=provider_2_vision_model_1,
     )
 
     # Step 7: Verify via basic endpoint (admin_user sees same as basic_user)
-    admin_basic_providers = _get_all_providers_basic(admin_user)
-
-    admin_basic_default = _find_default_provider(admin_basic_providers)
+    admin_basic_data = _get_providers_basic(admin_user)
+    assert admin_basic_data is not None
+    providers, text_default, vision_default = _unpack_data(admin_basic_data)
+    _validate_default_model(
+        text_default,
+        provider_id=provider_1["id"],
+        model_name=provider_1_non_vision_model,
+    )
+    _validate_default_model(
+        vision_default,
+        provider_id=provider_2["id"],
+        model_name=provider_2_vision_model_1,
+    )
+    admin_basic_default = _get_provider_by_name(providers, provider_1_name)
     assert admin_basic_default is not None
     _validate_provider_data(
         admin_basic_default,
         expected_name=provider_1_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model=provider_1_non_vision_model,
-        expected_is_default=True,
         expected_model_names=provider_1_model_names,
         expected_visible=provider_1_visible,
-        expected_is_default_vision=None,
     )
 
-    admin_basic_vision_default = _find_default_vision_provider(admin_basic_providers)
+    admin_basic_vision_default = _get_provider_by_name(providers, provider_2_name)
     assert admin_basic_vision_default is not None
     _validate_provider_data(
         admin_basic_vision_default,
         expected_name=provider_2_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model=provider_2_vision_model_1,
-        expected_is_default=False,
         expected_model_names=provider_2_model_names,
         expected_visible=provider_2_visible,
-        expected_is_default_vision=True,
-        expected_default_vision_model=provider_2_vision_model_1,
     )
 
     # Verify that the providers are distinct (different providers for regular vs vision)
@@ -1535,7 +1746,6 @@ def test_default_provider_is_not_default_vision_provider(
             "name": provider_name,
             "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000000",
-            "default_model_name": "gpt-4",
             "model_configurations": [c.model_dump() for c in model_configs],
             "is_public": True,
             "groups": [],
@@ -1546,72 +1756,47 @@ def test_default_provider_is_not_default_vision_provider(
     created_provider = create_response.json()
 
     # Step 2: Set it as the default provider
-    _set_default_provider(admin_user, created_provider["id"])
+    _set_default_provider(admin_user, created_provider["id"], "gpt-4")
 
     # Step 3 & 4: Verify via admin endpoint
-    admin_provider_data = _get_provider_by_name_admin(admin_user, provider_name)
+    admin_data = _get_providers_admin(admin_user)
+    assert admin_data is not None
+    providers, text_default, vision_default = _unpack_data(admin_data)
+    _validate_default_model(
+        text_default, provider_id=created_provider["id"], model_name="gpt-4"
+    )
+    _validate_default_model(vision_default)  # None
+    admin_provider_data = _get_provider_by_name(providers, provider_name)
     assert admin_provider_data is not None
-
-    # Verify it IS the default provider
-    assert (
-        admin_provider_data["is_default_provider"] is True
-    ), "Provider should be the default provider"
-
-    # Verify it is NOT the default vision provider
-    assert admin_provider_data.get("is_default_vision_provider") is not True, (
-        f"Provider should NOT be the default vision provider, "
-        f"but got is_default_vision_provider={admin_provider_data.get('is_default_vision_provider')}"
-    )
-
-    # Verify default_vision_model is not set
-    assert admin_provider_data.get("default_vision_model") is None, (
-        f"Provider should not have a default_vision_model set, "
-        f"but got default_vision_model={admin_provider_data.get('default_vision_model')}"
-    )
 
     # Full validation of provider data
     _validate_provider_data(
         admin_provider_data,
         expected_name=provider_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model="gpt-4",
-        expected_is_default=True,
         expected_model_names=expected_model_names,
         expected_visible=expected_visible,
         expected_is_public=True,
-        expected_is_default_vision=None,  # NOT a vision default
-        expected_default_vision_model=None,  # No vision model set
     )
 
     # Also verify via basic endpoint
-    basic_provider_data = _get_provider_by_name_basic(admin_user, provider_name)
+    basic_data = _get_providers_basic(admin_user)
+    assert basic_data is not None
+    providers, text_default, vision_default = _unpack_data(basic_data)
+    _validate_default_model(
+        text_default, provider_id=created_provider["id"], model_name="gpt-4"
+    )
+    _validate_default_model(vision_default)  # None
+    basic_provider_data = _get_provider_by_name(providers, provider_name)
     assert basic_provider_data is not None
-
-    assert (
-        basic_provider_data["is_default_provider"] is True
-    ), "Provider should be the default provider (basic endpoint)"
-    assert (
-        basic_provider_data.get("is_default_vision_provider") is not True
-    ), "Provider should NOT be the default vision provider (basic endpoint)"
 
     _validate_provider_data(
         basic_provider_data,
         expected_name=provider_name,
         expected_provider=LlmProviderNames.OPENAI,
-        expected_default_model="gpt-4",
-        expected_is_default=True,
         expected_model_names=expected_model_names,
         expected_visible=expected_visible,
-        expected_is_default_vision=None,
-        expected_default_vision_model=None,
     )
-
-    # Verify there is no default vision provider at all
-    admin_providers = _get_all_providers_admin(admin_user)
-    vision_default = _find_default_vision_provider(admin_providers)
-    assert (
-        vision_default is None
-    ), "There should be no default vision provider since we only set a regular default"
 
 
 def _get_all_image_gen_configs(admin_user: DATestUser) -> list[dict]:
@@ -1721,7 +1906,6 @@ def test_all_three_provider_types_no_mixup(reset: None) -> None:  # noqa: ARG001
             "name": regular_provider_name,
             "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000001",
-            "default_model_name": "gpt-4",
             "model_configurations": [c.model_dump() for c in regular_model_configs],
             "is_public": True,
             "groups": [],
@@ -1732,7 +1916,7 @@ def test_all_three_provider_types_no_mixup(reset: None) -> None:  # noqa: ARG001
     regular_provider = create_regular_response.json()
 
     # Set as default provider
-    _set_default_provider(admin_user, regular_provider["id"])
+    _set_default_provider(admin_user, regular_provider["id"], "gpt-4")
 
     # Step 2: Create vision LLM provider
     create_vision_response = requests.put(
@@ -1769,37 +1953,46 @@ def test_all_three_provider_types_no_mixup(reset: None) -> None:  # noqa: ARG001
     # Step 4: Verify all three types are correctly tracked
 
     # Get all LLM providers (via admin endpoint)
-    admin_providers = _get_all_providers_admin(admin_user)
+    admin_data = _get_providers_admin(admin_user)
+    assert admin_data is not None
+    providers, text_default, vision_default = _unpack_data(admin_data)
+    _validate_default_model(
+        text_default, provider_id=regular_provider["id"], model_name="gpt-4"
+    )
+    _validate_default_model(
+        vision_default,
+        provider_id=vision_provider["id"],
+        model_name="gpt-4-vision-preview",
+    )
+    _validate_default_model(
+        vision_default, vision_provider["id"], "gpt-4-vision-preview"
+    )
+    _get_provider_by_name(providers, regular_provider_name)
 
     # Get all image generation configs
     image_gen_configs = _get_all_image_gen_configs(admin_user)
 
     # Verify the regular provider is the default provider
-    regular_provider_data = next(
-        (p for p in admin_providers if p["name"] == regular_provider_name), None
+    admin_regular_provider_data = _get_provider_by_name(
+        providers, regular_provider_name
     )
-    assert regular_provider_data is not None, "Regular provider not found"
-    assert (
-        regular_provider_data["is_default_provider"] is True
-    ), "Regular provider should be the default provider"
-    assert (
-        regular_provider_data.get("is_default_vision_provider") is not True
-    ), "Regular provider should NOT be the default vision provider"
-
-    # Verify the vision provider is the default vision provider
-    vision_provider_data = next(
-        (p for p in admin_providers if p["name"] == vision_provider_name), None
+    assert admin_regular_provider_data is not None
+    _validate_provider_data(
+        admin_regular_provider_data,
+        expected_name=regular_provider_name,
+        expected_provider=LlmProviderNames.OPENAI,
+        expected_model_names=[c.name for c in regular_model_configs],
+        expected_visible={c.name: True for c in regular_model_configs},
     )
-    assert vision_provider_data is not None, "Vision provider not found"
-    assert (
-        vision_provider_data.get("is_default_provider") is not True
-    ), "Vision provider should NOT be the default provider"
-    assert (
-        vision_provider_data["is_default_vision_provider"] is True
-    ), "Vision provider should be the default vision provider"
-    assert (
-        vision_provider_data["default_vision_model"] == "gpt-4-vision-preview"
-    ), "Vision provider should have correct default vision model"
+    admin_vision_provider_data = _get_provider_by_name(providers, vision_provider_name)
+    assert admin_vision_provider_data is not None
+    _validate_provider_data(
+        admin_vision_provider_data,
+        expected_name=vision_provider_name,
+        expected_provider=LlmProviderNames.OPENAI,
+        expected_model_names=[c.name for c in vision_model_configs],
+        expected_visible={c.name: True for c in vision_model_configs},
+    )
 
     # Verify the image gen config is the default image generation config
     image_gen_config_data = next(
@@ -1819,97 +2012,47 @@ def test_all_three_provider_types_no_mixup(reset: None) -> None:  # noqa: ARG001
     ), "Image gen config should have correct model name"
 
     # Step 5: Verify no mixup - image gen providers don't appear in LLM provider lists
-
-    # The image gen config creates an LLM provider with name "Image Gen - {image_provider_id}"
-    # This should NOT be returned by the regular LLM provider endpoints
-    [p["name"] for p in admin_providers]
-    image_gen_llm_provider_name = f"Image Gen - {image_gen_provider_id}"
-
-    # Note: The image gen provider IS an LLM provider internally, so it may appear in the list
-    # But it should NOT be marked as default provider or default vision provider
-    image_gen_llm_provider = next(
-        (p for p in admin_providers if p["name"] == image_gen_llm_provider_name), None
-    )
-    if image_gen_llm_provider:
-        # If it appears, verify it's not marked as default for either type
-        assert (
-            image_gen_llm_provider.get("is_default_provider") is not True
-        ), "Image gen's internal LLM provider should NOT be the default provider"
-        assert (
-            image_gen_llm_provider.get("is_default_vision_provider") is not True
-        ), "Image gen's internal LLM provider should NOT be the default vision provider"
+    # Image gen provider should not appear in the list
+    assert image_gen_provider_id not in [p["name"] for p in providers]
 
     # Step 6: Verify via basic endpoint (non-admin user)
-    basic_providers = _get_all_providers_basic(basic_user)
-
-    # Verify regular provider is default for basic user
-    basic_regular = next(
-        (p for p in basic_providers if p["name"] == regular_provider_name), None
+    basic_data = _get_providers_basic(basic_user)
+    assert basic_data is not None
+    providers, text_default, vision_default = _unpack_data(basic_data)
+    _validate_default_model(
+        text_default, provider_id=regular_provider["id"], model_name="gpt-4"
     )
-    assert basic_regular is not None, "Regular provider not visible to basic user"
-    assert (
-        basic_regular["is_default_provider"] is True
-    ), "Regular provider should be default for basic user"
-
-    # Verify vision provider is default vision for basic user
-    basic_vision = next(
-        (p for p in basic_providers if p["name"] == vision_provider_name), None
+    _validate_default_model(
+        vision_default,
+        provider_id=vision_provider["id"],
+        model_name="gpt-4-vision-preview",
     )
-    assert basic_vision is not None, "Vision provider not visible to basic user"
-    assert (
-        basic_vision["is_default_vision_provider"] is True
-    ), "Vision provider should be default vision for basic user"
+    _validate_default_model(
+        vision_default, vision_provider["id"], "gpt-4-vision-preview"
+    )
+    basic_provider_data = _get_provider_by_name(providers, regular_provider_name)
+    assert basic_provider_data is not None
+    _validate_provider_data(
+        basic_provider_data,
+        expected_name=regular_provider_name,
+        expected_provider=LlmProviderNames.OPENAI,
+        expected_model_names=[c.name for c in regular_model_configs],
+        expected_visible={c.name: True for c in regular_model_configs},
+    )
+    basic_vision_provider_data = _get_provider_by_name(providers, vision_provider_name)
+    assert basic_vision_provider_data is not None
+    _validate_provider_data(
+        basic_vision_provider_data,
+        expected_name=vision_provider_name,
+        expected_provider=LlmProviderNames.OPENAI,
+        expected_model_names=[c.name for c in vision_model_configs],
+        expected_visible={c.name: True for c in vision_model_configs},
+    )
 
     # Step 7: Verify the counts are as expected
-    # We should have at least 2 user-created providers plus the image gen internal provider
-    user_created_providers = [
-        p
-        for p in admin_providers
-        if p["name"] in [regular_provider_name, vision_provider_name]
-    ]
-    assert (
-        len(user_created_providers) == 2
-    ), f"Expected 2 user-created providers, got {len(user_created_providers)}"
-
-    # We should have exactly 1 image gen config
-    assert (
-        len(
-            [
-                c
-                for c in image_gen_configs
-                if c["image_provider_id"] == image_gen_provider_id
-            ]
-        )
-        == 1
-    ), "Expected exactly 1 image gen config with our ID"
-
-    # Verify that our explicitly created providers are tracked correctly:
-    # - Only ONE provider has is_default_provider=True
-    default_providers = [
-        p for p in admin_providers if p.get("is_default_provider") is True
-    ]
-    assert (
-        len(default_providers) == 1
-    ), f"Expected exactly 1 default provider, got {len(default_providers)}"
-    assert default_providers[0]["name"] == regular_provider_name
-
-    # - Only ONE provider has is_default_vision_provider=True
-    default_vision_providers = [
-        p for p in admin_providers if p.get("is_default_vision_provider") is True
-    ]
-    assert (
-        len(default_vision_providers) == 1
-    ), f"Expected exactly 1 default vision provider, got {len(default_vision_providers)}"
-    assert default_vision_providers[0]["name"] == vision_provider_name
-
-    # - Only ONE image gen config has is_default=True
-    default_image_gen_configs = [
-        c for c in image_gen_configs if c.get("is_default") is True
-    ]
-    assert (
-        len(default_image_gen_configs) == 1
-    ), f"Expected exactly 1 default image gen config, got {len(default_image_gen_configs)}"
-    assert default_image_gen_configs[0]["image_provider_id"] == image_gen_provider_id
+    # We should have at least 2 user-created providers (setup_postgres may add more)
+    assert len(providers) >= 2
+    assert len(image_gen_configs) == 1
 
     # Clean up: Delete the image gen config (to clean up the internal LLM provider)
     _delete_image_gen_config(admin_user, image_gen_provider_id)

@@ -5,7 +5,8 @@ import Button from "@/refresh-components/buttons/Button";
 import { FINAL_SETUP_CONFIG } from "@/refresh-components/onboarding/constants";
 import { FinalStepItemProps } from "@/refresh-components/onboarding/types";
 import { SvgExternalLink } from "@opal/icons";
-import { LineItemLayout, Section } from "@/layouts/general-layouts";
+import { Section } from "@/layouts/general-layouts";
+import { ContentAction } from "@opal/layouts";
 import { Card } from "@/refresh-components/cards";
 
 const FinalStepItem = React.memo(
@@ -23,10 +24,13 @@ const FinalStepItem = React.memo(
 
     return (
       <Card padding={0.25} variant="secondary">
-        <LineItemLayout
+        <ContentAction
           icon={Icon}
           title={title}
           description={description}
+          sizePreset="main-ui"
+          variant="section"
+          paddingVariant="sm"
           rightChildren={
             <Link href={buttonHref as Route} {...linkProps}>
               <Button tertiary rightIcon={SvgExternalLink}>
@@ -34,8 +38,6 @@ const FinalStepItem = React.memo(
               </Button>
             </Link>
           }
-          reducedPadding
-          variant="tertiary"
         />
       </Card>
     );

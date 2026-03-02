@@ -2,8 +2,11 @@ import {
   LLMProviderView,
   ModelConfiguration,
   WellKnownLLMProviderDescriptor,
-} from "../interfaces";
-import { LLM_PROVIDERS_ADMIN_URL } from "../constants";
+} from "@/interfaces/llm";
+import {
+  LLM_ADMIN_URL,
+  LLM_PROVIDERS_ADMIN_URL,
+} from "@/lib/llmConfig/constants";
 import { toast } from "@/hooks/useToast";
 import * as Yup from "yup";
 import isEqual from "lodash/isEqual";
@@ -15,10 +18,7 @@ export const buildDefaultInitialValues = (
   existingLlmProvider?: LLMProviderView,
   modelConfigurations?: ModelConfiguration[]
 ) => {
-  const defaultModelName =
-    existingLlmProvider?.default_model_name ??
-    modelConfigurations?.[0]?.name ??
-    "";
+  const defaultModelName = modelConfigurations?.[0]?.name ?? "";
 
   // Auto mode must be explicitly enabled by the user
   // Default to false for new providers, preserve existing value when editing
@@ -119,6 +119,7 @@ export const filterModelConfigurations = (
         is_visible: visibleModels.includes(modelConfiguration.name),
         max_input_tokens: modelConfiguration.max_input_tokens ?? null,
         supports_image_input: modelConfiguration.supports_image_input,
+        supports_reasoning: modelConfiguration.supports_reasoning,
         display_name: modelConfiguration.display_name,
       })
     )
@@ -141,6 +142,7 @@ export const getAutoModeModelConfigurations = (
       is_visible: modelConfiguration.is_visible,
       max_input_tokens: modelConfiguration.max_input_tokens ?? null,
       supports_image_input: modelConfiguration.supports_image_input,
+      supports_reasoning: modelConfiguration.supports_reasoning,
       display_name: modelConfiguration.display_name,
     })
   );
@@ -223,6 +225,8 @@ export const submitLLMProvider = async <T extends BaseLLMFormValues>({
       body: JSON.stringify({
         provider: providerName,
         ...finalValues,
+        model: finalDefaultModelName,
+        id: existingLlmProvider?.id,
       }),
     });
     setIsTesting(false);
@@ -247,6 +251,7 @@ export const submitLLMProvider = async <T extends BaseLLMFormValues>({
       body: JSON.stringify({
         provider: providerName,
         ...finalValues,
+        id: existingLlmProvider?.id,
       }),
     }
   );
@@ -262,12 +267,16 @@ export const submitLLMProvider = async <T extends BaseLLMFormValues>({
 
   if (shouldMarkAsDefault) {
     const newLlmProvider = (await response.json()) as LLMProviderView;
-    const setDefaultResponse = await fetch(
-      `${LLM_PROVIDERS_ADMIN_URL}/${newLlmProvider.id}/default`,
-      {
-        method: "POST",
-      }
-    );
+    const setDefaultResponse = await fetch(`${LLM_ADMIN_URL}/default`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        provider_id: newLlmProvider.id,
+        model_name: finalDefaultModelName,
+      }),
+    });
     if (!setDefaultResponse.ok) {
       const errorMsg = (await setDefaultResponse.json()).detail;
       toast.error(`Failed to set provider as default: ${errorMsg}`);

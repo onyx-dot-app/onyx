@@ -138,7 +138,13 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     currentChatSessionId,
     isLoading: isLoadingChatSessions,
   } = useChatSessions();
-  const { ccPairs } = useCCPairs();
+  // handle redirect if chat page is disabled
+  // NOTE: this must be done here, in a client component since
+  // settings are passed in via Context and therefore aren't
+  // available in server-side components
+  const settings = useSettingsContext();
+  const vectorDbEnabled = settings?.settings.vector_db_enabled !== false;
+  const { ccPairs } = useCCPairs(vectorDbEnabled);
   const { tags } = useTags();
   const { documentSets } = useDocumentSets();
   const {
@@ -155,12 +161,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   useEffect(() => {
     setForcedToolIds([]);
   }, [currentProjectId, setForcedToolIds]);
-
-  // handle redirect if chat page is disabled
-  // NOTE: this must be done here, in a client component since
-  // settings are passed in via Context and therefore aren't
-  // available in server-side components
-  const settings = useSettingsContext();
 
   const isInitialLoad = useRef(true);
 

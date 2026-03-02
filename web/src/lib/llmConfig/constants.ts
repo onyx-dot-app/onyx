@@ -1,4 +1,5 @@
-export const LLM_PROVIDERS_ADMIN_URL = "/api/admin/llm/provider";
+export const LLM_ADMIN_URL = "/api/admin/llm";
+export const LLM_PROVIDERS_ADMIN_URL = `${LLM_ADMIN_URL}/provider`;
 
 export const LLM_CONTEXTUAL_COST_ADMIN_URL =
   "/api/admin/llm/provider-contextual-cost";

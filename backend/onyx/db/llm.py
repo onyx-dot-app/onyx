@@ -213,11 +213,29 @@ def upsert_llm_provider(
     llm_provider_upsert_request: LLMProviderUpsertRequest,
     db_session: Session,
 ) -> LLMProviderView:
-    existing_llm_provider = fetch_existing_llm_provider(
-        name=llm_provider_upsert_request.name, db_session=db_session
-    )
+    existing_llm_provider: LLMProviderModel | None = None
+    if llm_provider_upsert_request.id:
+        existing_llm_provider = fetch_existing_llm_provider_by_id(
+            id=llm_provider_upsert_request.id, db_session=db_session
+        )
+        if not existing_llm_provider:
+            raise ValueError(
+                f"LLM provider with id {llm_provider_upsert_request.id} not found"
+            )
 
-    if not existing_llm_provider:
+        if existing_llm_provider.name != llm_provider_upsert_request.name:
+            raise ValueError(
+                f"LLM provider with id {llm_provider_upsert_request.id} name change not allowed"
+            )
+    else:
+        existing_llm_provider = fetch_existing_llm_provider(
+            name=llm_provider_upsert_request.name, db_session=db_session
+        )
+        if existing_llm_provider:
+            raise ValueError(
+                f"LLM provider with name '{llm_provider_upsert_request.name}'"
+                " already exists"
+            )
         existing_llm_provider = LLMProviderModel(name=llm_provider_upsert_request.name)
         db_session.add(existing_llm_provider)
 
@@ -238,11 +256,7 @@ def upsert_llm_provider(
     existing_llm_provider.api_base = api_base
     existing_llm_provider.api_version = llm_provider_upsert_request.api_version
     existing_llm_provider.custom_config = custom_config
-    # TODO: Remove default model name on api change
-    # Needed due to /provider/{id}/default endpoint not disclosing the default model name
-    existing_llm_provider.default_model_name = (
-        llm_provider_upsert_request.default_model_name
-    )
+
     existing_llm_provider.is_public = llm_provider_upsert_request.is_public
     existing_llm_provider.is_auto_mode = llm_provider_upsert_request.is_auto_mode
     existing_llm_provider.deployment_name = llm_provider_upsert_request.deployment_name
@@ -305,15 +319,6 @@ def upsert_llm_provider(
                 max_input_tokens=max_input_tokens,
                 display_name=model_config.display_name,
             )
-
-    default_model = fetch_default_model(db_session, LLMModelFlowType.CHAT)
-    if default_model and default_model.llm_provider_id == existing_llm_provider.id:
-        _update_default_model(
-            db_session=db_session,
-            provider_id=existing_llm_provider.id,
-            model=existing_llm_provider.default_model_name,
-            flow_type=LLMModelFlowType.CHAT,
-        )
 
     # Make sure the relationship table stays up to date
     update_group_llm_provider_relationships__no_commit(
@@ -488,6 +493,22 @@ def fetch_existing_llm_provider(
     return provider_model
 
 
+def fetch_existing_llm_provider_by_id(
+    id: int, db_session: Session
+) -> LLMProviderModel | None:
+    provider_model = db_session.scalar(
+        select(LLMProviderModel)
+        .where(LLMProviderModel.id == id)
+        .options(
+            selectinload(LLMProviderModel.model_configurations),
+            selectinload(LLMProviderModel.groups),
+            selectinload(LLMProviderModel.personas),
+        )
+    )
+
+    return provider_model
+
+
 def fetch_embedding_provider(
     db_session: Session, provider_type: EmbeddingProvider
 ) -> CloudEmbeddingProviderModel | None:
@@ -604,22 +625,13 @@ def remove_llm_provider__no_commit(db_session: Session, provider_id: int) -> Non
     db_session.flush()
 
 
-def update_default_provider(provider_id: int, db_session: Session) -> None:
-    # Attempt to get the default_model_name from the provider first
-    # TODO: Remove default_model_name check
-    provider = db_session.scalar(
-        select(LLMProviderModel).where(
-            LLMProviderModel.id == provider_id,
-        )
-    )
-
-    if provider is None:
-        raise ValueError(f"LLM Provider with id={provider_id} does not exist")
-
+def update_default_provider(
+    provider_id: int, model_name: str, db_session: Session
+) -> None:
     _update_default_model(
         db_session,
         provider_id,
-        provider.default_model_name,  # type: ignore[arg-type]
+        model_name,
         LLMModelFlowType.CHAT,
     )
 
@@ -804,12 +816,6 @@ def sync_auto_mode_models(
                 display_name=model_config.display_name,
             )
             changes += 1
-
-    # In Auto mode, default model is always set from GitHub config
-    default_model = llm_recommendations.get_default_model(provider.provider)
-    if default_model and provider.default_model_name != default_model.name:
-        provider.default_model_name = default_model.name
-        changes += 1
 
     db_session.commit()
     return changes

@@ -7,7 +7,7 @@ import {
   Formik,
   ErrorMessage,
 } from "formik";
-import { LLMProviderFormProps, LLMProviderView } from "../interfaces";
+import { LLMProviderFormProps, LLMProviderView } from "@/interfaces/llm";
 import * as Yup from "yup";
 import { ProviderFormEntrypointWrapper } from "./components/FormWrapper";
 import { DisplayNameField } from "./components/DisplayNameField";
@@ -21,7 +21,7 @@ import {
 } from "./formUtils";
 import { AdvancedOptions } from "./components/AdvancedOptions";
 import { TextFormField } from "@/components/Field";
-import { ModelConfigurationField } from "../ModelConfigurationField";
+import { ModelConfigurationField } from "@/app/admin/configuration/llm/ModelConfigurationField";
 import Text from "@/refresh-components/texts/Text";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import IconButton from "@/refresh-components/buttons/IconButton";
@@ -38,9 +38,11 @@ function customConfigProcessing(customConfigsList: [string, string][]) {
   return customConfig;
 }
 
-export function CustomForm({
+export function CustomModal({
   existingLlmProvider,
   shouldMarkAsDefault,
+  open,
+  onOpenChange,
 }: LLMProviderFormProps) {
   return (
     <ProviderFormEntrypointWrapper
@@ -48,6 +50,8 @@ export function CustomForm({
       existingLlmProvider={existingLlmProvider}
       buttonMode={!existingLlmProvider}
       buttonText="Add Custom LLM Provider"
+      open={open}
+      onOpenChange={onOpenChange}
     >
       {({
         onClose,
@@ -68,7 +72,15 @@ export function CustomForm({
               ...modelConfiguration,
               max_input_tokens: modelConfiguration.max_input_tokens ?? null,
             })
-          ) ?? [{ name: "", is_visible: true, max_input_tokens: null }],
+          ) ?? [
+            {
+              name: "",
+              is_visible: true,
+              max_input_tokens: null,
+              supports_image_input: false,
+              supports_reasoning: false,
+            },
+          ],
           custom_config_list: existingLlmProvider?.custom_config
             ? Object.entries(existingLlmProvider.custom_config)
             : [],
@@ -112,7 +124,8 @@ export function CustomForm({
                   name: mc.name,
                   is_visible: mc.is_visible,
                   max_input_tokens: mc.max_input_tokens ?? null,
-                  supports_image_input: null,
+                  supports_image_input: mc.supports_image_input ?? false,
+                  supports_reasoning: mc.supports_reasoning ?? false,
                 }))
                 .filter(
                   (mc) => mc.name === values.default_model_name || mc.is_visible

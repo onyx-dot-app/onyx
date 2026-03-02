@@ -36,7 +36,6 @@ from onyx.background.celery.tasks.user_file_processing.tasks import (
 from onyx.background.celery.tasks.user_file_processing.tasks import (
     user_file_project_sync_lock_key,
 )
-from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.enums import UserFileStatus
 from onyx.db.models import Persona
 from onyx.db.models import Persona__UserFile
@@ -86,12 +85,6 @@ def _create_test_persona(
     persona = Persona(
         name=f"Test Persona {uuid4().hex[:8]}",
         description="Test persona",
-        num_chunks=10.0,
-        chunks_above=0,
-        chunks_below=0,
-        llm_relevance_filter=False,
-        llm_filter_extraction=False,
-        recency_bias=RecencyBiasSetting.NO_DECAY,
         system_prompt="You are a test assistant",
         task_prompt="Answer the question",
         tools=[],
@@ -410,10 +403,6 @@ class TestUpsertPersonaMarksSyncFlag:
             user=user,
             name=f"persona-{uuid4().hex[:8]}",
             description="test",
-            num_chunks=10.0,
-            llm_relevance_filter=False,
-            llm_filter_extraction=False,
-            recency_bias=RecencyBiasSetting.NO_DECAY,
             llm_model_provider_override=None,
             llm_model_version_override=None,
             starter_messages=None,
@@ -442,10 +431,6 @@ class TestUpsertPersonaMarksSyncFlag:
             user=user,
             name=f"persona-{uuid4().hex[:8]}",
             description="test",
-            num_chunks=10.0,
-            llm_relevance_filter=False,
-            llm_filter_extraction=False,
-            recency_bias=RecencyBiasSetting.NO_DECAY,
             llm_model_provider_override=None,
             llm_model_version_override=None,
             starter_messages=None,
@@ -461,16 +446,11 @@ class TestUpsertPersonaMarksSyncFlag:
         uf_old.needs_persona_sync = False
         db_session.commit()
 
-        assert persona.num_chunks is not None
         # Now update the persona to swap files
         upsert_persona(
             user=user,
             name=persona.name,
             description=persona.description,
-            num_chunks=persona.num_chunks,
-            llm_relevance_filter=persona.llm_relevance_filter,
-            llm_filter_extraction=persona.llm_filter_extraction,
-            recency_bias=persona.recency_bias,
             llm_model_provider_override=None,
             llm_model_version_override=None,
             starter_messages=None,
@@ -501,10 +481,6 @@ class TestUpsertPersonaMarksSyncFlag:
             user=user,
             name=f"persona-{uuid4().hex[:8]}",
             description="test",
-            num_chunks=10.0,
-            llm_relevance_filter=False,
-            llm_filter_extraction=False,
-            recency_bias=RecencyBiasSetting.NO_DECAY,
             llm_model_provider_override=None,
             llm_model_version_override=None,
             starter_messages=None,
@@ -519,15 +495,10 @@ class TestUpsertPersonaMarksSyncFlag:
         uf.needs_persona_sync = False
         db_session.commit()
 
-        assert persona.num_chunks is not None
         upsert_persona(
             user=user,
             name=persona.name,
             description=persona.description,
-            num_chunks=persona.num_chunks,
-            llm_relevance_filter=persona.llm_relevance_filter,
-            llm_filter_extraction=persona.llm_filter_extraction,
-            recency_bias=persona.recency_bias,
             llm_model_provider_override=None,
             llm_model_version_override=None,
             starter_messages=None,

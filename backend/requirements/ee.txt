@@ -90,7 +90,7 @@ docstring-parser==0.17.0
     # via google-cloud-aiplatform
 durationpy==0.10
     # via kubernetes
-fastapi==0.128.0
+fastapi==0.133.1
     # via onyx
 fastavro==1.12.1
     # via cohere
@@ -398,6 +398,7 @@ typing-extensions==4.15.0
     #   typing-inspection
 typing-inspection==0.4.2
     # via
+    #   fastapi
     #   mcp
     #   pydantic
     #   pydantic-settings

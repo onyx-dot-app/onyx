@@ -1,5 +1,5 @@
 import { Form, Formik } from "formik";
-import { LLMProviderFormProps } from "../interfaces";
+import { LLMProviderFormProps } from "@/interfaces/llm";
 import * as Yup from "yup";
 import {
   ProviderFormEntrypointWrapper,
@@ -21,15 +21,19 @@ import { DisplayModels } from "./components/DisplayModels";
 export const ANTHROPIC_PROVIDER_NAME = "anthropic";
 const DEFAULT_DEFAULT_MODEL_NAME = "claude-sonnet-4-5";
 
-export function AnthropicForm({
+export function AnthropicModal({
   existingLlmProvider,
   shouldMarkAsDefault,
+  open,
+  onOpenChange,
 }: LLMProviderFormProps) {
   return (
     <ProviderFormEntrypointWrapper
       providerName="Anthropic"
       providerEndpoint={ANTHROPIC_PROVIDER_NAME}
       existingLlmProvider={existingLlmProvider}
+      open={open}
+      onOpenChange={onOpenChange}
     >
       {({
         onClose,
@@ -52,7 +56,6 @@ export function AnthropicForm({
           api_key: existingLlmProvider?.api_key ?? "",
           api_base: existingLlmProvider?.api_base ?? undefined,
           default_model_name:
-            existingLlmProvider?.default_model_name ??
             wellKnownLLMProvider?.recommended_default_model?.name ??
             DEFAULT_DEFAULT_MODEL_NAME,
           // Default to auto mode for new Anthropic providers

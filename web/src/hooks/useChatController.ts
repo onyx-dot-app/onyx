@@ -42,7 +42,7 @@ import {
   getFinalLLM,
   modelSupportsImageInput,
   structureValue,
-} from "@/lib/llm/utils";
+} from "@/lib/llmConfig/utils";
 import {
   CurrentMessageFIFO,
   updateCurrentMessageFIFO,

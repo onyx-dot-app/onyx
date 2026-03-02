@@ -10,7 +10,7 @@ import { SvgRefreshCw } from "@opal/icons";
 import {
   ModelConfiguration,
   WellKnownLLMProviderDescriptor,
-} from "@/app/admin/configuration/llm/interfaces";
+} from "@/interfaces/llm";
 import {
   OnboardingFormWrapper,
   OnboardingFormChildProps,

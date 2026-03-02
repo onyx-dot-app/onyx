@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import Button from "@/refresh-components/buttons/Button";
 import Text from "@/refresh-components/texts/Text";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
-import { ModelConfiguration } from "../../interfaces";
+import { ModelConfiguration } from "@/interfaces/llm";
 
 interface FetchModelsButtonProps {
   onFetch: () => Promise<{ models: ModelConfiguration[]; error?: string }>;

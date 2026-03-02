@@ -42,7 +42,6 @@ def _create_llm_provider_and_model(
             name=provider_name,
             provider="openai",
             api_key="test-api-key",
-            default_model_name=model_name,
             model_configurations=[
                 ModelConfigurationUpsertRequest(
                     name=model_name,
