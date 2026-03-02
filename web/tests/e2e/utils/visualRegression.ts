@@ -32,7 +32,7 @@ const DEFAULT_MASK_SELECTORS: string[] = [
 const DEFAULT_HIDE_SELECTORS: string[] = [
   '[data-testid="toast-container"]',
   // TODO: Remove once it loads consistently.
-  '[data-testid="action-management-toggle"]',
+  '[data-testid="actions-container"]',
 ];
 
 interface ScreenshotOptions {
