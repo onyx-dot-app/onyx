@@ -704,7 +704,8 @@ fn apply_settings_to_window(app: &AppHandle, window: &tauri::WebviewWindow) {
     }
     let state = app.state::<ConfigState>();
     let config = state.config.read().unwrap();
-    if !config.show_menu_bar {
+    let temp_visible = *state.menu_temporarily_visible.read().unwrap();
+    if !config.show_menu_bar && !temp_visible {
         let _ = window.hide_menu();
     }
     if config.hide_window_decorations {
