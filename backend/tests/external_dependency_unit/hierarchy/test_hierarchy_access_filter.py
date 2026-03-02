@@ -85,7 +85,7 @@ def test_group_overlap_filter(
     results = _get_accessible_hierarchy_nodes_for_source(
         db_session,
         source=DocumentSource.GOOGLE_DRIVE,
-        user_email=None,
+        user_email="",
         external_group_ids=["group_engineering"],
     )
     result_ids = {n.raw_node_id for n in results}
@@ -124,7 +124,7 @@ def test_no_credentials_returns_only_public(
     results = _get_accessible_hierarchy_nodes_for_source(
         db_session,
         source=DocumentSource.GOOGLE_DRIVE,
-        user_email=None,
+        user_email="",
         external_group_ids=[],
     )
     result_ids = {n.raw_node_id for n in results}
