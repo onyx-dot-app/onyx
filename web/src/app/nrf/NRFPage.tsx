@@ -591,7 +591,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                 />
               ) : (
                 <div className="flex flex-col items-center">
-                  {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
+                  {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
                   <Button
                     className="w-full"
                     secondary
@@ -613,7 +613,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       )}
 
       {user && !llmManager.isLoadingProviders && !llmManager.hasAnyProvider && (
-        // TODO(opal-migration): migrate to opal Button once className/iconClassName is removed
+        // TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved
         <Button
           className="w-full"
           secondary

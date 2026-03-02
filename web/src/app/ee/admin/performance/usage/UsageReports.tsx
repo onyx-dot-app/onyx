@@ -103,7 +103,7 @@ function GenerateReportInput({
       <div className="grid gap-2 mb-3">
         <Popover>
           <Popover.Trigger asChild>
-            {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
+            {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
             <Button
               secondary
               className={cn(
@@ -144,7 +144,7 @@ function GenerateReportInput({
               disabled={(date) => date > new Date()}
             />
             <div className="border-t p-3">
-              {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
+              {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
               <Button
                 tertiary
                 className="w-full justify-start"
@@ -158,7 +158,7 @@ function GenerateReportInput({
               >
                 Last 7 days
               </Button>
-              {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
+              {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
               <Button
                 tertiary
                 className="w-full justify-start"
@@ -172,7 +172,7 @@ function GenerateReportInput({
               >
                 Last 30 days
               </Button>
-              {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
+              {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
               <Button
                 tertiary
                 className="w-full justify-start"
@@ -186,7 +186,7 @@ function GenerateReportInput({
               >
                 Last year
               </Button>
-              {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
+              {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
               <Button
                 tertiary
                 className="w-full justify-start"

@@ -840,7 +840,7 @@ export function FederatedConnectorForm({
                 </div>
               )}
 
-              {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
+              {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
               <Button
                 type="button"
                 secondary
@@ -850,7 +850,7 @@ export function FederatedConnectorForm({
               >
                 {isValidating ? "Validating..." : "Validate"}
               </Button>
-              {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
+              {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
               <Button
                 type="submit"
                 disabled={isSubmitting || !formState.schema}

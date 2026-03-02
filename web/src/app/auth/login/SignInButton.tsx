@@ -49,7 +49,7 @@ export default function SignInButton({
   }
 
   return (
-    // TODO(opal-migration): migrate to opal Button once className/iconClassName is removed
+    // TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved
     <Button
       secondary={
         authType === AuthType.GOOGLE_OAUTH || authType === AuthType.CLOUD

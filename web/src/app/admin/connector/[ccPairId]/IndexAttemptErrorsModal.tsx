@@ -229,7 +229,7 @@ export default function IndexAttemptErrorsModal({
             <div className="flex w-full">
               <div className="flex gap-2 ml-auto">
                 {hasUnresolvedErrors && !isResolvingErrors && (
-                  // TODO(opal-migration): migrate to opal Button once className/iconClassName is removed
+                  // TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved
                   <Button
                     onClick={onResolveAll}
                     className="ml-4 whitespace-nowrap"

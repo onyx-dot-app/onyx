@@ -22,7 +22,7 @@ export default function Page() {
           <li>Create a new Onyx team</li>
         </ul>
         <div className="flex justify-center">
-          {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
+          {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
           <Button
             href={`${REGISTRATION_URL}/register`}
             className="w-full"

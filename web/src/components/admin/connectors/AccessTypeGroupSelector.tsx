@@ -136,7 +136,7 @@ export function AccessTypeGroupSelector({
                       let isSelected = ind !== -1;
                       return (
                         <Button
-                          variant="action"
+                          variant={isSelected ? "action" : "default"}
                           key={userGroup.id}
                           icon={SvgUsers}
                           onClick={() => {

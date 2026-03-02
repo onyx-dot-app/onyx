@@ -194,7 +194,7 @@ export function DisplayModels<T extends BaseLLMFormValues>({
               }
               aria-label="Select all models"
             />
-            {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
+            {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
             <Button
               main
               internal
@@ -218,7 +218,7 @@ export function DisplayModels<T extends BaseLLMFormValues>({
             </Button>
           </Section>
           {areSomeModelsSelected && (
-            // TODO(opal-migration): migrate to opal Button once className/iconClassName is removed
+            // TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved
             <Button
               main
               internal
@@ -350,7 +350,7 @@ export function DisplayModels<T extends BaseLLMFormValues>({
                         {modelConfiguration.name}
                       </Text>
                     </div>
-                    {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
+                    {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
                     <Button
                       main
                       internal

@@ -185,8 +185,8 @@ export function ProviderFormEntrypointWrapper({
 
             <div className="ml-auto my-auto">
               <Button
-                variant="action"
-                prominence="secondary"
+                variant={!existingLlmProvider ? "action" : "default"}
+                prominence={!!existingLlmProvider ? "secondary" : "primary"}
                 onClick={() => setFormIsVisible(true)}
               >
                 Edit

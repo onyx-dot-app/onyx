@@ -49,7 +49,7 @@ export const AdminDateRangeSelector = memo(function AdminDateRangeSelector({
     <div className="grid gap-2">
       <Popover open={isOpen} onOpenChange={setIsOpen}>
         <Popover.Trigger asChild>
-          {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
+          {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
           <Button
             secondary
             className={cn("justify-start", !value && "text-muted-foreground")}
@@ -88,7 +88,7 @@ export const AdminDateRangeSelector = memo(function AdminDateRangeSelector({
           />
           <div className="border-t p-3">
             {presets.map((preset) => (
-              // TODO(opal-migration): migrate to opal Button once className/iconClassName is removed
+              // TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved
               <Button
                 key={preset.label}
                 internal

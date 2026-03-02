@@ -247,7 +247,7 @@ export default function MCPActionCard({
 
     return (
       <div className="flex items-center gap-2">
-        {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
+        {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
         <IconButton
           icon={SvgRefreshCw}
           internal

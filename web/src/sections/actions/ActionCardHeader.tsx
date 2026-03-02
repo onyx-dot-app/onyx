@@ -116,7 +116,7 @@ function ActionCardHeader({
             </Text>
           )}
           {showRenameIcon && (
-            // TODO(opal-migration): migrate to opal Button once className/iconClassName is removed
+            // TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved
             <IconButton
               icon={SvgEdit}
               tooltip="Rename"

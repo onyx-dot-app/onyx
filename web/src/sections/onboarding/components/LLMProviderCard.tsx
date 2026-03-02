@@ -92,7 +92,7 @@ function LLMProviderCardInner({
         {isConnected ? (
           <div className="flex items-start gap-1 p-1">
             {isHovered && (
-              // TODO(opal-migration): migrate to opal Button once className/iconClassName is removed
+              // TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved
               <IconButton
                 internal
                 icon={SvgSettings}

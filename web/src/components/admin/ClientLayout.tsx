@@ -75,7 +75,7 @@ export function ClientLayout({
           <strong className="font-bold">Warning:</strong> Your trial ends in
           less than 5 days and no payment method has been added.
           <div className="mt-2">
-            {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
+            {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
             <Button className="w-full" href="/admin/billing">
               Update Billing Information
             </Button>

@@ -97,7 +97,7 @@ export default function EditCredential({
               <OpalButton onClick={() => resetForm()} icon={SvgTrash}>
                 Reset Changes
               </OpalButton>
-              {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
+              {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
               <Button
                 type="submit"
                 disabled={isSubmitting}

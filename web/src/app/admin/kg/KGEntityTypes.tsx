@@ -237,7 +237,7 @@ export default function KGEntityTypes({
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
-        {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
+        {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
         <Button
           className="h-9"
           onClick={allClosed ? handleExpandAll : handleCollapseAll}

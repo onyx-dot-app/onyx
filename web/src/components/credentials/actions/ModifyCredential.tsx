@@ -255,7 +255,7 @@ export default function ModifyCredential({
         {!showIfEmpty && (
           <div className="flex mt-8 justify-between">
             {onCreateNew ? (
-              // TODO(opal-migration): migrate to opal Button once className/iconClassName is removed
+              // TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved
               <Button
                 onClick={() => {
                   onCreateNew();
@@ -273,7 +273,7 @@ export default function ModifyCredential({
               <div />
             )}
 
-            {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
+            {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
             <Button
               disabled={selectedCredential == null}
               onClick={() => {

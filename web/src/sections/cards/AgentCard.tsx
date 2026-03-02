@@ -146,7 +146,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
               rightChildren={
                 <>
                   {isOwnedByUser && isPaidEnterpriseFeaturesEnabled && (
-                    // TODO(opal-migration): migrate to opal Button once className/iconClassName is removed
+                    // TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved
                     <IconButton
                       icon={SvgBarChart}
                       tertiary
@@ -158,7 +158,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
                     />
                   )}
                   {isOwnedByUser && (
-                    // TODO(opal-migration): migrate to opal Button once className/iconClassName is removed
+                    // TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved
                     <IconButton
                       icon={SvgEdit}
                       tertiary
@@ -170,7 +170,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
                     />
                   )}
                   {isOwnedByUser && (
-                    // TODO(opal-migration): migrate to opal Button once className/iconClassName is removed
+                    // TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved
                     <IconButton
                       icon={SvgShare}
                       tertiary
@@ -179,7 +179,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
                       className="hidden group-hover/AgentCard:flex"
                     />
                   )}
-                  {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
+                  {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
                   <IconButton
                     icon={pinned ? SvgPinned : SvgPin}
                     tertiary

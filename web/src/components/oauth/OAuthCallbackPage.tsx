@@ -259,7 +259,7 @@ export default function OAuthCallbackPage({ config }: OAuthCallbackPageProps) {
             <div className="flex flex-col space-y-3">
               {isError && (
                 <div className="flex flex-col space-y-2">
-                  {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
+                  {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
                   <Button
                     onClick={() => {
                       const target =

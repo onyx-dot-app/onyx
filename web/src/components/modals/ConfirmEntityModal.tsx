@@ -54,7 +54,7 @@ export function ConfirmEntityModal({
       title={`${buttonText} ${entityType}`}
       onClose={onClose}
       submit={
-        <Button variant="danger" onClick={onSubmit}>
+        <Button variant={danger ? "danger" : "default"} onClick={onSubmit}>
           {buttonText}
         </Button>
       }

@@ -10,6 +10,7 @@ import useSWR from "swr";
 import { errorHandlingFetcher, FetchError } from "@/lib/fetcher";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { Callout } from "@/components/ui/callout";
+import Button from "@/refresh-components/buttons/Button";
 import { Button as OpalButton } from "@opal/components";
 import { cn } from "@/lib/utils";
 import {
@@ -90,9 +91,10 @@ function HoverIconButton({
 }: HoverIconButtonProps) {
   return (
     <div onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
-      <OpalButton {...buttonProps} rightIcon={isHovered ? SvgX : SvgCheckSquare}>
+      {/* TODO(opal-migration, @raunakab): migrate to opal Button once HoverIconButtonProps typing is resolved */}
+      <Button {...buttonProps} rightIcon={isHovered ? SvgX : SvgCheckSquare}>
         {children}
-      </OpalButton>
+      </Button>
     </div>
   );
 }
@@ -1009,9 +1011,10 @@ export default function Page() {
                             {buttonState.label}
                           </HoverIconButton>
                         ) : (
-                          <OpalButton
-                            variant="action"
-                            prominence="tertiary"
+                          // TODO(opal-migration, @raunakab): migrate to opal Button once action={false} tertiary is resolved
+                          <Button
+                            action={false}
+                            tertiary
                             disabled={
                               buttonState.disabled || !buttonState.onClick
                             }
@@ -1028,7 +1031,7 @@ export default function Page() {
                             }
                           >
                             {buttonState.label}
-                          </OpalButton>
+                          </Button>
                         )}
                       </div>
                     </div>
@@ -1201,9 +1204,10 @@ export default function Page() {
                           {buttonState.label}
                         </HoverIconButton>
                       ) : (
-                        <OpalButton
-                          variant="action"
-                          prominence="tertiary"
+                        // TODO(opal-migration, @raunakab): migrate to opal Button once action={false} tertiary is resolved
+                        <Button
+                          action={false}
+                          tertiary
                           disabled={
                             buttonState.disabled || !buttonState.onClick
                           }
@@ -1220,7 +1224,7 @@ export default function Page() {
                           }
                         >
                           {buttonState.label}
-                        </OpalButton>
+                        </Button>
                       )}
                     </div>
                   </div>

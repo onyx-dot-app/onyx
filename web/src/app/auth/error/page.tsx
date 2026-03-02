@@ -35,7 +35,7 @@ const Page = () => {
           </ul>
         </div>
 
-        {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
+        {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
         <Button href="/auth/login" className="w-full">
           Return to Login Page
         </Button>

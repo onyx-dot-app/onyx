@@ -99,7 +99,7 @@ export default function ShareButton({
         <Popover.Trigger asChild>
           <Button
             variant="action"
-            prominence="tertiary"
+            prominence={isShared ? "primary" : "tertiary"}
             icon={SvgLink}
             aria-label="Share webapp"
           >

@@ -242,7 +242,7 @@ export const FilterComponent = forwardRef<
             >
               <div className="flex gap-2">
                 <OpalButton
-                  prominence="secondary"
+                  prominence={docsOperator !== ">" ? "secondary" : "primary"}
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
@@ -253,7 +253,7 @@ export const FilterComponent = forwardRef<
                   &gt;
                 </OpalButton>
                 <OpalButton
-                  prominence="secondary"
+                  prominence={docsOperator !== "<" ? "secondary" : "primary"}
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
@@ -264,7 +264,7 @@ export const FilterComponent = forwardRef<
                   &lt;
                 </OpalButton>
                 <OpalButton
-                  prominence="secondary"
+                  prominence={docsOperator !== "=" ? "secondary" : "primary"}
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
@@ -285,7 +285,7 @@ export const FilterComponent = forwardRef<
               />
             </div>
             <div className="px-2 py-1.5">
-              {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
+              {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
               <Button
                 className="w-full"
                 onClick={(e) => {

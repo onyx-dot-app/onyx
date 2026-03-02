@@ -468,7 +468,7 @@ export const GroupDisplay = ({
       />
 
       {isAdmin && (
-        // TODO(opal-migration): migrate to opal Button once className/iconClassName is removed
+        // TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved
         <Button
           className="mt-3"
           onClick={() => setAddRateLimitFormVisible(true)}

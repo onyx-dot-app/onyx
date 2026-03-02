@@ -258,7 +258,7 @@ export default function CreateCredential({
               )}
             </CardSection>
             {swapConnector && (
-              // TODO(opal-migration): migrate to opal Button once className/iconClassName is removed
+              // TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved
               <Button
                 className="bg-rose-500 hover:bg-rose-400"
                 onClick={() =>

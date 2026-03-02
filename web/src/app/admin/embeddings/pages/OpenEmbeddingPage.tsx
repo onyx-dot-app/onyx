@@ -62,7 +62,7 @@ export default function OpenEmbeddingPage({
         Onyx team.
       </Text>
       {!configureModel && (
-        // TODO(opal-migration): migrate to opal Button once className/iconClassName is removed
+        // TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved
         <Button
           onClick={() => setConfigureModel(true)}
           className="mt-4"

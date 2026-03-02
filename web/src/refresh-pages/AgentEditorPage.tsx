@@ -222,7 +222,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
               iconName={values.icon_name ?? undefined}
               name={values.name}
             />
-            {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
+            {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
             <Button
               className="absolute bottom-0 left-1/2 -translate-x-1/2 h-[1.75rem] mb-2 invisible group-hover/InputAvatar:visible"
               secondary

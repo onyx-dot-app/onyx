@@ -25,9 +25,13 @@ export default function NoAgentModal() {
                 admin panel.
               </Text>
 <<<<<<< HEAD:web/src/components/modals/NoAgentModal.tsx
+<<<<<<< HEAD:web/src/components/modals/NoAgentModal.tsx
               <Button className="w-full" href="/admin/agents">
 =======
               {/* TODO(opal-migration): migrate to opal Button once className/iconClassName/onHover is removed */}
+=======
+              {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
+>>>>>>> 448208b2e (fix conditional variant and prominence):web/src/components/modals/NoAssistantModal.tsx
               <Button className="w-full" href="/admin/assistants">
 >>>>>>> 99f4dcc5d (chore(fe): opal button migration):web/src/components/modals/NoAssistantModal.tsx
                 Go to Admin Panel

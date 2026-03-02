@@ -200,7 +200,7 @@ function RetrievalSourceSection() {
       </InputSelect>
 
       {hasChanges && (
-        // TODO(opal-migration): migrate to opal Button once className/iconClassName is removed
+        // TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved
         <Button
           className="self-center"
           onClick={handleUpdate}

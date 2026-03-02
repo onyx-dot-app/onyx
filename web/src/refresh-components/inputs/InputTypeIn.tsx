@@ -166,7 +166,7 @@ const InputTypeIn = React.forwardRef<HTMLInputElement, InputTypeInProps>(
         />
 
         {showClearButton && !disabled && !isReadOnly && (
-          // TODO(opal-migration): migrate to opal Button once className/iconClassName is removed
+          // TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved
           <IconButton
             icon={SvgX}
             disabled={disabled}
