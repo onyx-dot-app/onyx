@@ -23,7 +23,7 @@ import useCodeInterpreter, {
   type CodeInterpreterHealthStatus,
 } from "@/hooks/useCodeInterpreter";
 import { updateCodeInterpreter } from "@/lib/admin/code-interpreter/svc";
-import { ContentAction } from "@opal/layouts";
+import { Content, ContentAction } from "@opal/layouts";
 import { toast } from "@/hooks/useToast";
 
 const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.CODE_INTERPRETER]!;
@@ -99,14 +99,20 @@ const STATUS_CONFIG: Record<
 interface ConnectionStatusProps {
   status: CodeInterpreterHealthStatus;
   isLoading: boolean;
+  onIconHover: (hovered: boolean) => void;
 }
 
-function ConnectionStatus({ status, isLoading }: ConnectionStatusProps) {
+function ConnectionStatus({
+  status,
+  isLoading,
+  onIconHover,
+}: ConnectionStatusProps) {
   if (isLoading) {
     return <CheckingStatus />;
   }
 
   const { label, icon: Icon, iconColor } = STATUS_CONFIG[status];
+  const hasError = status !== "healthy";
 
   return (
     <Section
@@ -119,7 +125,13 @@ function ConnectionStatus({ status, isLoading }: ConnectionStatusProps) {
       <Text mainUiAction text03>
         {label}
       </Text>
-      <Icon size={16} className={iconColor} />
+      <div
+        onMouseEnter={() => hasError && onIconHover(true)}
+        onMouseLeave={() => onIconHover(false)}
+        className={hasError ? "cursor-pointer" : undefined}
+      >
+        <Icon size={16} className={iconColor} />
+      </div>
     </Section>
   );
 }
@@ -166,10 +178,11 @@ function ActionButtons({
 }
 
 export default function CodeInterpreterPage() {
-  const { status, isEnabled, isLoading, refetch } = useCodeInterpreter();
+  const { status, error, isEnabled, isLoading, refetch } = useCodeInterpreter();
   const isHealthy = status === "healthy";
   const [showDisconnectModal, setShowDisconnectModal] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
+  const [showErrorMenu, setShowErrorMenu] = useState(false);
 
   async function handleToggle(enabled: boolean) {
     const action = enabled ? "reconnect" : "disconnect";
@@ -197,51 +210,76 @@ export default function CodeInterpreterPage() {
       />
 
       <SettingsLayouts.Body>
-        {isEnabled || isLoading ? (
-          <CodeInterpreterCard
-            title="Code Interpreter"
-            variant={isHealthy ? "primary" : "secondary"}
-            strikethrough={!isHealthy}
-            rightContent={
-              <Section
-                flexDirection="column"
-                justifyContent="center"
-                alignItems="end"
-                gap={0}
-                padding={0}
-              >
-                <ConnectionStatus status={status} isLoading={isLoading} />
-                <ActionButtons
-                  onDisconnect={() => setShowDisconnectModal(true)}
-                  onRefresh={refetch}
-                  disabled={isLoading}
+        <Section flexDirection="column" padding={0} gap={0.2}>
+          {isEnabled || isLoading ? (
+            <CodeInterpreterCard
+              title="Code Interpreter"
+              variant={isHealthy ? "primary" : "secondary"}
+              strikethrough={!isHealthy}
+              rightContent={
+                <Section
+                  flexDirection="column"
+                  justifyContent="center"
+                  alignItems="end"
+                  gap={0}
+                  padding={0}
+                >
+                  <ConnectionStatus
+                    status={status}
+                    isLoading={isLoading}
+                    onIconHover={setShowErrorMenu}
+                  />
+                  <ActionButtons
+                    onDisconnect={() => setShowDisconnectModal(true)}
+                    onRefresh={refetch}
+                    disabled={isLoading}
+                  />
+                </Section>
+              }
+            />
+          ) : (
+            <CodeInterpreterCard
+              variant="secondary"
+              title="Code Interpreter"
+              middleText="(Disconnected)"
+              strikethrough={true}
+              rightContent={
+                <Section flexDirection="row" alignItems="center" padding={0.5}>
+                  {isReconnecting ? (
+                    <CheckingStatus />
+                  ) : (
+                    <Button
+                      prominence="tertiary"
+                      rightIcon={SvgArrowExchange}
+                      onClick={() => handleToggle(true)}
+                    >
+                      Reconnect
+                    </Button>
+                  )}
+                </Section>
+              }
+            />
+          )}
+          {showErrorMenu && (
+            <Section flexDirection="row" justifyContent="end">
+              <Card className="w-[15rem]">
+                <Content
+                  icon={(props) => (
+                    <SvgXOctagon {...props} className="text-status-error-05" />
+                  )}
+                  title={
+                    status === "connection_lost"
+                      ? "Connection Lost Error"
+                      : "Code Interpreter Error"
+                  }
+                  description={error}
+                  variant="section"
+                  sizePreset="main-ui"
                 />
-              </Section>
-            }
-          />
-        ) : (
-          <CodeInterpreterCard
-            variant="secondary"
-            title="Code Interpreter"
-            middleText="(Disconnected)"
-            strikethrough={true}
-            rightContent={
-              <Section flexDirection="row" alignItems="center" padding={0.5}>
-                {isReconnecting ? (
-                  <CheckingStatus />
-                ) : (
-                  <Button
-                    prominence="tertiary"
-                    rightIcon={SvgArrowExchange}
-                    onClick={() => handleToggle(true)}
-                  >
-                    Reconnect
-                  </Button>
-                )}
-              </Section>
-            }
-          />
-        )}
+              </Card>
+            </Section>
+          )}
+        </Section>
       </SettingsLayouts.Body>
 
       {showDisconnectModal && (
