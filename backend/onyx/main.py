@@ -355,7 +355,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
     if AUTH_RATE_LIMITING_ENABLED:
         await setup_auth_limiter()
 
+    if DISABLE_VECTOR_DB:
+        from onyx.background.periodic_poller import recover_stuck_user_files
+        from onyx.background.periodic_poller import start_periodic_poller
+
+        recover_stuck_user_files(POSTGRES_DEFAULT_SCHEMA)
+        start_periodic_poller(POSTGRES_DEFAULT_SCHEMA)
+
     yield
+
+    if DISABLE_VECTOR_DB:
+        from onyx.background.periodic_poller import stop_periodic_poller
+
+        stop_periodic_poller()
 
     SqlEngine.reset_engine()
 
