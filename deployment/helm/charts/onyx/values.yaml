@@ -523,7 +523,6 @@ celery_shared:
 
 celery_beat:
   replicaCount: 1
-  logLevel: INFO
   podAnnotations: {}
   podLabels:
     scope: onyx-backend-celery
@@ -544,7 +543,6 @@ celery_beat:
 
 celery_worker_heavy:
   replicaCount: 1
-  logLevel: INFO
   autoscaling:
     enabled: false
     minReplicas: 1
@@ -578,7 +576,6 @@ celery_worker_heavy:
 
 celery_worker_docprocessing:
   replicaCount: 1
-  logLevel: INFO
   autoscaling:
     enabled: false
     minReplicas: 1
@@ -612,7 +609,6 @@ celery_worker_docprocessing:
 
 celery_worker_light:
   replicaCount: 1
-  logLevel: INFO
   autoscaling:
     enabled: false
     minReplicas: 1
@@ -646,7 +642,6 @@ celery_worker_light:
 
 celery_worker_monitoring:
   replicaCount: 1
-  logLevel: INFO
   autoscaling:
     enabled: false
     minReplicas: 1
@@ -680,7 +675,6 @@ celery_worker_monitoring:
 
 celery_worker_primary:
   replicaCount: 1
-  logLevel: INFO
   autoscaling:
     enabled: false
     minReplicas: 1
@@ -714,7 +708,6 @@ celery_worker_primary:
 
 celery_worker_user_file_processing:
   replicaCount: 1
-  logLevel: INFO
   autoscaling:
     enabled: false
     minReplicas: 1
@@ -859,7 +852,6 @@ mcpServer:
 
 celery_worker_docfetching:
   replicaCount: 1
-  logLevel: INFO
   autoscaling:
     enabled: false
     minReplicas: 1
@@ -1176,10 +1168,25 @@ auth:
     values:
       opensearch_admin_username: "admin"
       opensearch_admin_password: "OnyxDev1!"
+  userauth:
+    # -- Required when AUTH_TYPE is "basic". Used for signing password reset
+    # tokens, email verification tokens, and JWT tokens.
+    enabled: true
+    # -- Overwrite the default secret name, ignored if existingSecret is defined
+    secretName: 'onyx-userauth'
+    # -- Use a secret specified elsewhere
+    existingSecret: ""
+    # -- This defines the env var to secret map
+    secretKeys:
+      USER_AUTH_SECRET: user_auth_secret
+    # -- Secret value. CHANGE THIS FOR PRODUCTION.
+    # Generate a secure value with: openssl rand -hex 32
+    values:
+      user_auth_secret: "OnyxDevSecret1!"
 
 configMap:
   # Change this for production uses unless Onyx is only accessible behind VPN
-  AUTH_TYPE: "disabled"
+  AUTH_TYPE: "basic"
   # 1 Day Default
   SESSION_EXPIRE_TIME_SECONDS: "86400"
   # Can be something like onyx.app, as an extra double-check
