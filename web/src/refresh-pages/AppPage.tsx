@@ -628,11 +628,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   // handle error case where no assistants are available
   // Only show this after agents have loaded to prevent flash during initial load
   if (noAgents && !isLoadingAgents) {
-    return (
-      <>
-        <NoAgentModal />
-      </>
-    );
+    return <NoAgentModal />;
   }
 
   const hasStarterMessages = (liveAgent?.starter_messages?.length ?? 0) > 0;
