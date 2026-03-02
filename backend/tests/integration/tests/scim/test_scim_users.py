@@ -390,7 +390,7 @@ def test_delete_user(scim_token: str, idp_style: str) -> None:
 
 
 def test_create_user_missing_external_id(scim_token: str) -> None:
-    """POST /Users without externalId returns 400."""
+    """POST /Users without externalId succeeds (RFC 7643: externalId is optional)."""
     resp = ScimClient.post(
         "/Users",
         scim_token,
@@ -400,8 +400,10 @@ def test_create_user_missing_external_id(scim_token: str) -> None:
             "active": True,
         },
     )
-    assert resp.status_code == 400
-    assert "externalId" in resp.json()["detail"]
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["userName"] == "scim_no_extid@example.com"
+    assert body.get("externalId") is None
 
 
 def test_create_user_duplicate_email(scim_token: str, idp_style: str) -> None:
