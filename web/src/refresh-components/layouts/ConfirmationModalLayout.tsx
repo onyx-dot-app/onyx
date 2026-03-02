@@ -53,11 +53,7 @@ export default function ConfirmationModalLayout({
         </Modal.Body>
         <Modal.Footer>
           {!hideCancel && (
-<<<<<<< HEAD
             <Button prominence="secondary" onClick={onClose}>
-=======
-            <Button prominence="secondary" onClick={onClose} type="button">
->>>>>>> 99f4dcc5d (chore(fe): opal button migration)
               Cancel
             </Button>
           )}

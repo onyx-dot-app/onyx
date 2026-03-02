@@ -6,7 +6,7 @@ import {
   OnboardingStep,
 } from "@/interfaces/onboarding";
 import Text from "@/refresh-components/texts/Text";
-import { Button as OpalButton } from "@opal/components";
+import { Button } from "@opal/components";
 import { SvgProgressCircle, SvgX } from "@opal/icons";
 import { Card } from "@/refresh-components/cards";
 import { Section } from "@/layouts/general-layouts";
@@ -58,15 +58,15 @@ const OnboardingHeader = React.memo(
                     {onboardingState.totalSteps}
                   </Text>
                 )}
-                <OpalButton
+                <Button
                   onClick={handleButtonClick}
                   disabled={!onboardingState.isButtonActive}
                 >
                   {stepButtonText}
-                </OpalButton>
+                </Button>
               </Section>
             ) : (
-              <OpalButton
+              <Button
                 prominence="tertiary"
                 size="sm"
                 icon={SvgX}

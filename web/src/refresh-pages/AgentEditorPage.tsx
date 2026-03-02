@@ -5,12 +5,8 @@ import { useRouter } from "next/navigation";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import Button from "@/refresh-components/buttons/Button";
-<<<<<<< HEAD
-import { FullPersona } from "@/app/admin/agents/interfaces";
-=======
 import { Button as OpalButton } from "@opal/components";
-import { FullPersona } from "@/app/admin/assistants/interfaces";
->>>>>>> 99f4dcc5d (chore(fe): opal button migration)
+import { FullPersona } from "@/app/admin/agents/interfaces";
 import { buildImgUrl } from "@/app/app/components/files/images/utils";
 import { Formik, Form, FieldArray } from "formik";
 import * as Yup from "yup";
