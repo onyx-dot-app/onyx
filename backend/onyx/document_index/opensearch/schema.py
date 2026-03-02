@@ -569,6 +569,7 @@ class DocumentSchema:
             }
         }
 
+    @staticmethod
     def get_index_settings_based_on_environment() -> dict[str, Any]:
         """
         Returns the index settings based on the environment.
