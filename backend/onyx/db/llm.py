@@ -124,39 +124,23 @@ def can_user_access_llm_provider(
     5. is_public=False, only personas set → must use whitelisted persona
     6. is_public=False, neither set → admin-only (locked)
     """
-    # Extract IDs once to avoid multiple iterations
-    provider_group_ids = (
-        {group.id for group in provider.groups} if provider.groups else set()
-    )
-    provider_persona_ids = (
-        {p.id for p in provider.personas} if provider.personas else set()
-    )
-
+    provider_group_ids = {g.id for g in (provider.groups or [])}
+    provider_persona_ids = {p.id for p in (provider.personas or [])}
+    has_groups = bool(provider_group_ids)
     has_personas = bool(provider_persona_ids)
 
     # Persona restrictions are always enforced when set, regardless of is_public
-    if has_personas:
-        persona_allowed = persona.id in provider_persona_ids if persona else False
-        if not persona_allowed:
-            return False
+    if has_personas and not (persona and persona.id in provider_persona_ids):
+        return False
 
-    # Public providers bypass user/group checks
     if provider.is_public:
         return True
 
-    has_groups = bool(provider_group_ids)
-
-    # Groups set → user must be in one of the groups (admins bypass)
     if has_groups:
         return is_admin or bool(user_group_ids & provider_group_ids)
 
-    # Only personas set (no groups) — persona check already passed above,
-    # so the user is allowed via persona whitelist alone
-    if has_personas:
-        return True
-
-    # Neither groups nor personas set, and not public → admin-only (locked)
-    return is_admin
+    # No groups: either persona-whitelisted (already passed) or admin-only if locked
+    return has_personas or is_admin
 
 
 def validate_persona_ids_exist(
