@@ -113,7 +113,7 @@ function Main() {
   );
 }
 
-const Page = () => {
+export default function Page() {
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header icon={SvgDownload} title="Debug Logs" separator />
@@ -122,6 +122,4 @@ const Page = () => {
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );
-};
-
-export default Page;
+}

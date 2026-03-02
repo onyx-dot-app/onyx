@@ -5,7 +5,6 @@ import SimpleTabs from "@/refresh-components/SimpleTabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import InvitedUserTable from "@/components/admin/users/InvitedUserTable";
 import SignedUpUserTable from "@/components/admin/users/SignedUpUserTable";
-
 import Modal from "@/refresh-components/Modal";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { toast } from "@/hooks/useToast";
@@ -48,7 +47,7 @@ function CountDisplay({ label, value, isLoading }: CountDisplayProps) {
   );
 }
 
-const UsersTables = ({
+function UsersTables({
   q,
   isDownloadingUsers,
   setIsDownloadingUsers,
@@ -56,7 +55,7 @@ const UsersTables = ({
   q: string;
   isDownloadingUsers: boolean;
   setIsDownloadingUsers: (loading: boolean) => void;
-}) => {
+}) {
   const [currentUsersCount, setCurrentUsersCount] = useState<number | null>(
     null
   );
@@ -236,9 +235,9 @@ const UsersTables = ({
   });
 
   return <SimpleTabs tabs={tabs} defaultValue="current" />;
-};
+}
 
-const SearchableTables = () => {
+function SearchableTables() {
   const [query, setQuery] = useState("");
   const [isDownloadingUsers, setIsDownloadingUsers] = useState(false);
 
@@ -262,7 +261,7 @@ const SearchableTables = () => {
       </div>
     </div>
   );
-};
+}
 
 function AddUserButton() {
   const [bulkAddUsersModal, setBulkAddUsersModal] = useState(false);
@@ -325,7 +324,7 @@ function AddUserButton() {
   );
 }
 
-const Page = () => {
+export default function Page() {
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header title="Manage Users" icon={SvgUser} separator />
@@ -334,6 +333,4 @@ const Page = () => {
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );
-};
-
-export default Page;
+}

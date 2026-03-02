@@ -10,7 +10,7 @@ import { SvgSlack } from "@opal/icons";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import { DOCS_ADMINS_PATH } from "@/lib/constants";
 
-const Main = () => {
+function Main() {
   const {
     data: slackBots,
     isLoading: isSlackBotsLoading,
@@ -72,9 +72,9 @@ const Main = () => {
       <SlackBotTable slackBots={slackBots} />
     </div>
   );
-};
+}
 
-const Page = () => {
+export default function Page() {
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header icon={SvgSlack} title="Slack Bots" separator />
@@ -84,6 +84,4 @@ const Page = () => {
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );
-};
-
-export default Page;
+}

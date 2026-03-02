@@ -343,7 +343,7 @@ const StandardAnswersTable = ({
   );
 };
 
-const Main = () => {
+function Main() {
   const {
     data: standardAnswers,
     error: standardAnswersError,
@@ -412,9 +412,9 @@ const Main = () => {
       </div>
     </div>
   );
-};
+}
 
-const Page = () => {
+export default function Page() {
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
@@ -427,6 +427,4 @@ const Page = () => {
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );
-};
-
-export default Page;
+}

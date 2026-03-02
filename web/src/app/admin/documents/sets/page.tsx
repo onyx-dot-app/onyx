@@ -359,7 +359,7 @@ const DocumentSetTable = ({
   );
 };
 
-const Main = () => {
+function Main() {
   const {
     data: documentSets,
     isLoading: isDocumentSetsLoading,
@@ -419,9 +419,9 @@ const Main = () => {
       )}
     </div>
   );
-};
+}
 
-const Page = () => {
+export default function Page() {
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
@@ -434,6 +434,4 @@ const Page = () => {
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );
-};
-
-export default Page;
+}

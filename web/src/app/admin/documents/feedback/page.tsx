@@ -7,7 +7,8 @@ import { numPages, numToDisplay } from "./constants";
 import Title from "@/components/ui/title";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { SvgThumbsUp } from "@opal/icons";
-const Main = () => {
+
+function Main() {
   const {
     data: mostLikedDocuments,
     isLoading: isMostLikedDocumentsLoading,
@@ -57,9 +58,9 @@ const Main = () => {
       />
     </div>
   );
-};
+}
 
-const Page = () => {
+export default function Page() {
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
@@ -72,6 +73,4 @@ const Page = () => {
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );
-};
-
-export default Page;
+}

@@ -1,17 +1,16 @@
 "use client";
-import { use } from "react";
 
+import { use } from "react";
 import { GroupDisplay } from "./GroupDisplay";
 import { useSpecificUserGroup } from "./hook";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { useConnectorStatus } from "@/lib/hooks";
-import { useRouter } from "next/navigation";
 import useUsers from "@/hooks/useUsers";
 import { SvgUsers } from "@opal/icons";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
-const Page = (props: { params: Promise<{ groupId: string }> }) => {
+
+export default function Page(props: { params: Promise<{ groupId: string }> }) {
   const params = use(props.params);
-  const router = useRouter();
 
   const {
     userGroup,
@@ -73,6 +72,4 @@ const Page = (props: { params: Promise<{ groupId: string }> }) => {
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );
-};
-
-export default Page;
+}

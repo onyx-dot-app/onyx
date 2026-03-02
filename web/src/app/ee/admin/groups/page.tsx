@@ -6,12 +6,12 @@ import { useState } from "react";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { useConnectorStatus, useUserGroups } from "@/lib/hooks";
 import useUsers from "@/hooks/useUsers";
-
 import { useUser } from "@/providers/UserProvider";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import { SvgUsers } from "@opal/icons";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
-const Main = () => {
+
+function Main() {
   const [showForm, setShowForm] = useState(false);
 
   const { data, isLoading, error, refreshUserGroups } = useUserGroups();
@@ -70,9 +70,9 @@ const Main = () => {
       )}
     </>
   );
-};
+}
 
-const Page = () => {
+export default function Page() {
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
@@ -86,6 +86,4 @@ const Page = () => {
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );
-};
-
-export default Page;
+}
