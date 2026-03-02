@@ -193,6 +193,9 @@ export default function CodeInterpreterPage() {
       }
       setShowErrorMenu(true);
     } else {
+      if (fadeTimeoutRef.current) {
+        clearTimeout(fadeTimeoutRef.current);
+      }
       fadeTimeoutRef.current = setTimeout(() => {
         setShowErrorMenu(false);
         fadeTimeoutRef.current = null;
