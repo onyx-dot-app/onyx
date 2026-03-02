@@ -191,6 +191,40 @@ model_server = [
     "sentry-sdk[fastapi,celery,starlette]==2.14.0",
 ]
 
+[tool.mypy]
+plugins = "sqlalchemy.ext.mypy.plugin"
+mypy_path = "backend"
+explicit_package_bases = true
+disallow_untyped_defs = true
+warn_unused_ignores = true
+enable_error_code = ["possibly-undefined"]
+strict_equality = true
+# Patterns match paths whether mypy is run from backend/ (CI) or repo root (e.g. VS Code extension with target ./backend)
+exclude = [
+  "(?:^|/)generated/",
+  "(?:^|/)\\.venv/",
+  "(?:^|/)onyx/server/features/build/sandbox/kubernetes/docker/skills/",
+  "(?:^|/)onyx/server/features/build/sandbox/kubernetes/docker/templates/",
+]
+
+[[tool.mypy.overrides]]
+module = "alembic.versions.*"
+disable_error_code = ["var-annotated"]
+
+[[tool.mypy.overrides]]
+module = "alembic_tenants.versions.*"
+disable_error_code = ["var-annotated"]
+
+[[tool.mypy.overrides]]
+module = "generated.*"
+follow_imports = "silent"
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = "transformers.*"
+follow_imports = "skip"
+ignore_errors = true
+
 [tool.uv.workspace]
 members = ["backend", "tools/ods"]
 
