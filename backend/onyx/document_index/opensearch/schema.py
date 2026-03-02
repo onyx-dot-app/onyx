@@ -12,6 +12,7 @@ from pydantic import model_validator
 from pydantic import SerializerFunctionWrapHandler
 
 from onyx.configs.app_configs import OPENSEARCH_TEXT_ANALYZER
+from onyx.configs.app_configs import USING_AWS_MANAGED_OPENSEARCH
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.constants import DEFAULT_MAX_CHUNK_SIZE
 from onyx.document_index.opensearch.constants import EF_CONSTRUCTION
@@ -577,3 +578,19 @@ class DocumentSchema:
                 "knn.algo_param.ef_search": EF_SEARCH,
             }
         }
+
+    def get_index_settings_based_on_environment() -> dict[str, Any]:
+        """
+        Returns the index settings based on the environment.
+        """
+        if USING_AWS_MANAGED_OPENSEARCH:
+            if MULTI_TENANT:
+                return (
+                    DocumentSchema.get_index_settings_for_aws_managed_opensearch_mt_cloud()
+                )
+            else:
+                return (
+                    DocumentSchema.get_index_settings_for_aws_managed_opensearch_st_dev()
+                )
+        else:
+            return DocumentSchema.get_index_settings()

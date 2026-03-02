@@ -6,7 +6,6 @@ import httpx
 from opensearchpy import NotFoundError
 
 from onyx.access.models import DocumentAccess
-from onyx.configs.app_configs import USING_AWS_MANAGED_OPENSEARCH
 from onyx.configs.app_configs import VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT
 from onyx.configs.chat_configs import NUM_RETURNED_HITS
 from onyx.configs.chat_configs import TITLE_CONTENT_RATIO
@@ -563,12 +562,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
         )
 
         if not self._client.index_exists():
-            if USING_AWS_MANAGED_OPENSEARCH:
-                index_settings = (
-                    DocumentSchema.get_index_settings_for_aws_managed_opensearch()
-                )
-            else:
-                index_settings = DocumentSchema.get_index_settings()
+            index_settings = DocumentSchema.get_index_settings_based_on_environment()
             self._client.create_index(
                 mappings=expected_mappings,
                 settings=index_settings,
