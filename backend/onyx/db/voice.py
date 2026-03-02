@@ -131,7 +131,9 @@ def set_default_stt_provider(*, db_session: Session, provider_id: int) -> VoiceP
     return provider
 
 
-def set_default_tts_provider(*, db_session: Session, provider_id: int) -> VoiceProvider:
+def set_default_tts_provider(
+    *, db_session: Session, provider_id: int, tts_model: str | None = None
+) -> VoiceProvider:
     """Set a voice provider as the default TTS provider."""
     provider = fetch_voice_provider_by_id(db_session, provider_id)
     if provider is None:
@@ -149,6 +151,10 @@ def set_default_tts_provider(*, db_session: Session, provider_id: int) -> VoiceP
 
     # Activate this provider
     provider.is_default_tts = True
+
+    # Update the TTS model if specified
+    if tts_model is not None:
+        provider.tts_model = tts_model
 
     db_session.flush()
     db_session.refresh(provider)

@@ -57,15 +57,7 @@ async def transcribe_audio(
     audio_format = filename.rsplit(".", 1)[-1] if "." in filename else "webm"
 
     try:
-        provider = get_voice_provider(
-            provider_type=provider_db.provider_type,
-            api_key=provider_db.api_key.get_value(apply_mask=False),
-            api_base=provider_db.api_base,
-            custom_config=provider_db.custom_config or {},
-            stt_model=provider_db.stt_model,
-            tts_model=provider_db.tts_model,
-            default_voice=provider_db.default_voice,
-        )
+        provider = get_voice_provider(provider_db)
     except ValueError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
@@ -110,15 +102,7 @@ async def synthesize_speech(
     speed = request.speed or user.voice_playback_speed or 1.0
 
     try:
-        provider = get_voice_provider(
-            provider_type=provider_db.provider_type,
-            api_key=provider_db.api_key.get_value(apply_mask=False),
-            api_base=provider_db.api_base,
-            custom_config=provider_db.custom_config or {},
-            stt_model=provider_db.stt_model,
-            tts_model=provider_db.tts_model,
-            default_voice=provider_db.default_voice,
-        )
+        provider = get_voice_provider(provider_db)
     except ValueError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 

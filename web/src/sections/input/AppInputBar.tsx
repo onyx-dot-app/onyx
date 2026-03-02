@@ -57,6 +57,7 @@ import { useQueryController } from "@/providers/QueryControllerProvider";
 import { Section } from "@/layouts/general-layouts";
 import Spacer from "@/refresh-components/Spacer";
 import MicrophoneButton from "@/sections/input/MicrophoneButton";
+import RecordingWaveform from "@/sections/input/RecordingWaveform";
 
 const LINE_HEIGHT = 24;
 const MIN_INPUT_HEIGHT = 44;
@@ -157,6 +158,10 @@ const AppInputBar = React.memo(
   }: AppInputBarProps) => {
     // Internal message state - kept local to avoid parent re-renders on every keystroke
     const [message, setMessage] = useState(initialMessage);
+    const [isRecording, setIsRecording] = useState(false);
+    const stopRecordingRef = useRef<(() => Promise<string | null>) | null>(
+      null
+    );
     const textAreaRef = useRef<HTMLTextAreaElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const { user } = useUser();
@@ -444,7 +449,7 @@ const AppInputBar = React.memo(
           ref={containerRef}
           id="onyx-chat-input"
           className={cn(
-            "w-full flex flex-col shadow-01 bg-background-neutral-00 rounded-16"
+            "w-full flex flex-col shadow-01 bg-background-neutral-00 rounded-16 relative"
             // # Note (from @raunakab):
             //
             // `shadow-01` extends ~14px below the element (2px offset + 12px blur).
@@ -515,9 +520,11 @@ const AppInputBar = React.memo(
                   role="textarea"
                   aria-multiline
                   placeholder={
-                    isSearchMode
-                      ? "Search connected sources"
-                      : "How can I help you today"
+                    isRecording
+                      ? "Listening..."
+                      : isSearchMode
+                        ? "Search connected sources"
+                        : "How can I help you today"
                   }
                   value={message}
                   onKeyDown={(event) => {
@@ -765,15 +772,18 @@ const AppInputBar = React.memo(
                   />
                 </div>
 
-                {/* Microphone button for voice input */}
+                {/* Microphone button for voice input (toggles mute when recording) */}
                 <MicrophoneButton
                   onTranscription={(text) => setMessage(text)}
                   disabled={disabled || chatState === "streaming"}
                   autoSend={user?.preferences?.voice_auto_send ?? false}
-                  onAutoSend={() => {
-                    if (message) {
-                      onSubmit(message);
-                    }
+                  autoListen={user?.preferences?.voice_auto_playback ?? false}
+                  chatState={chatState}
+                  onRecordingChange={setIsRecording}
+                  stopRecordingRef={stopRecordingRef}
+                  onRecordingStart={() => setMessage("")}
+                  onAutoSend={(text) => {
+                    onSubmit(text);
                   }}
                 />
 
@@ -801,6 +811,13 @@ const AppInputBar = React.memo(
                   }}
                 />
               </div>
+            </div>
+          )}
+
+          {/* Recording waveform - shown below input when recording */}
+          {isRecording && (
+            <div className="absolute left-0 right-0 -bottom-12 px-1">
+              <RecordingWaveform isRecording={isRecording} />
             </div>
           )}
         </div>

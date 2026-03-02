@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, RefObject, useMemo } from "react";
+import React, { useRef, RefObject, useMemo, useEffect } from "react";
 import { Packet, StopReason } from "@/app/app/services/streamingModels";
 import { FullChatState } from "@/app/app/message/messageComponents/interfaces";
 import { FeedbackType } from "@/app/app/interfaces";
@@ -14,6 +14,9 @@ import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import { Message } from "@/app/app/interfaces";
 import Text from "@/refresh-components/texts/Text";
 import { AgentTimeline } from "@/app/app/message/messageComponents/timeline/AgentTimeline";
+import { useVoiceMode } from "@/providers/VoiceModeProvider";
+import { getTextContent } from "@/app/app/services/packetUtils";
+import { removeThinkingTokens } from "@/app/app/services/thinkingTokens";
 
 // Type for the regeneration factory function passed from ChatUI
 export type RegenerationFactory = (regenerationRequest: {
@@ -157,6 +160,24 @@ const AgentMessage = React.memo(function AgentMessage({
     otherMessagesCanSwitchTo,
     onMessageSelection,
   });
+
+  // Streaming TTS integration
+  const { streamTTS, resetTTS } = useVoiceMode();
+
+  // Stream TTS as text content arrives
+  useEffect(() => {
+    const textContent = removeThinkingTokens(getTextContent(rawPackets));
+    if (typeof textContent === "string" && textContent.length > 0) {
+      streamTTS(textContent, isComplete);
+    }
+  }, [rawPackets, isComplete, streamTTS]);
+
+  // Reset TTS when component unmounts or nodeId changes
+  useEffect(() => {
+    return () => {
+      resetTTS();
+    };
+  }, [nodeId, resetTTS]);
 
   return (
     <div

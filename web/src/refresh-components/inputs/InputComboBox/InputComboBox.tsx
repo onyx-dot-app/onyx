@@ -129,6 +129,7 @@ const InputComboBox = ({
   leftSearchIcon = false,
   rightSection,
   separatorLabel = "Other options",
+  showAddPrefix = false,
   ...rest
 }: WithoutStyles<InputComboBoxProps>) => {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -153,22 +154,27 @@ const InputComboBox = ({
   const { matchedOptions, unmatchedOptions, hasSearchTerm } =
     useOptionFiltering({ options, inputValue });
 
-  // Whether to show the create option (only when no partial matches)
-  const showCreateOption =
-    !strict &&
-    hasSearchTerm &&
-    inputValue.trim() !== "" &&
-    matchedOptions.length === 0;
+  // Whether to show the create option (always show when typing in non-strict mode)
+  const showCreateOption = !strict && hasSearchTerm && inputValue.trim() !== "";
 
   // Combined list for keyboard navigation (includes create option when shown)
+  // Only show matched options when searching (hide unmatched)
   const allVisibleOptions = useMemo(() => {
-    const baseOptions = [...matchedOptions, ...unmatchedOptions];
+    const baseOptions = hasSearchTerm
+      ? matchedOptions
+      : [...matchedOptions, ...unmatchedOptions];
     if (showCreateOption) {
       // Prepend a synthetic option for the "create new" item
       return [{ value: inputValue, label: inputValue }, ...baseOptions];
     }
     return baseOptions;
-  }, [matchedOptions, unmatchedOptions, showCreateOption, inputValue]);
+  }, [
+    matchedOptions,
+    unmatchedOptions,
+    showCreateOption,
+    inputValue,
+    hasSearchTerm,
+  ]);
 
   // Floating UI for dropdown positioning
   const { refs, floatingStyles } = useFloating({
@@ -437,6 +443,7 @@ const InputComboBox = ({
           inputValue={inputValue}
           allowCreate={!strict}
           showCreateOption={showCreateOption}
+          showAddPrefix={showAddPrefix}
         />
       </>
 

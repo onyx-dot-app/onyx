@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useMemo, useState } from "react";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { InfoIcon } from "@/components/icons/icons";
@@ -15,13 +16,12 @@ import { cn } from "@/lib/utils";
 import {
   SvgArrowExchange,
   SvgArrowRightCircle,
+  SvgAudio,
   SvgCheckSquare,
   SvgEdit,
   SvgMicrophone,
-  SvgOpenai,
   SvgX,
 } from "@opal/icons";
-import { AzureIcon } from "@/components/icons/icons";
 import VoiceProviderSetupModal from "./VoiceProviderSetupModal";
 
 const VOICE_PROVIDERS_URL = "/api/admin/voice/providers";
@@ -36,41 +36,101 @@ interface VoiceProviderView {
   tts_model: string | null;
   default_voice: string | null;
   has_api_key: boolean;
+  target_uri: string | null;
 }
 
-interface ProviderDetails {
+interface ModelDetails {
+  id: string;
   label: string;
   subtitle: string;
-  icon: React.ComponentType<{ size?: number; className?: string }>;
-  supportsSTT: boolean;
-  supportsTTS: boolean;
+  logoSrc?: string;
+  providerType: string;
 }
 
-const PROVIDER_DETAILS: Record<string, ProviderDetails> = {
-  openai: {
-    label: "OpenAI",
-    subtitle: "Whisper for STT, TTS-1/TTS-1-HD for speech synthesis",
-    icon: SvgOpenai,
-    supportsSTT: true,
-    supportsTTS: true,
-  },
-  azure: {
-    label: "Azure Speech Services",
-    subtitle: "Microsoft Azure Speech-to-Text and Text-to-Speech",
-    icon: AzureIcon,
-    supportsSTT: true,
-    supportsTTS: true,
-  },
-  elevenlabs: {
-    label: "ElevenLabs",
-    subtitle: "High-quality voice synthesis",
-    icon: SvgMicrophone,
-    supportsSTT: true,
-    supportsTTS: true,
-  },
-};
+interface ProviderGroup {
+  providerType: string;
+  providerLabel: string;
+  logoSrc?: string;
+  models: ModelDetails[];
+}
 
-const PROVIDER_ORDER = ["openai", "azure", "elevenlabs"];
+// STT Models - individual cards
+const STT_MODELS: ModelDetails[] = [
+  {
+    id: "whisper",
+    label: "Whisper",
+    subtitle: "OpenAI's general purpose speech recognition model.",
+    logoSrc: "/Openai.svg",
+    providerType: "openai",
+  },
+  {
+    id: "azure-speech-stt",
+    label: "Azure Speech",
+    subtitle: "Speech to text in Microsoft Foundry Tools.",
+    logoSrc: "/Azure.png",
+    providerType: "azure",
+  },
+  {
+    id: "elevenlabs-stt",
+    label: "ElevenAPI",
+    subtitle: "ElevenLabs Speech to Text API.",
+    logoSrc: "/ElevenLabs.svg",
+    providerType: "elevenlabs",
+  },
+];
+
+// TTS Models - grouped by provider
+const TTS_PROVIDER_GROUPS: ProviderGroup[] = [
+  {
+    providerType: "openai",
+    providerLabel: "OpenAI",
+    logoSrc: "/Openai.svg",
+    models: [
+      {
+        id: "tts-1",
+        label: "TTS-1",
+        subtitle: "OpenAI's text-to-speech model optimized for speed.",
+        logoSrc: "/Openai.svg",
+        providerType: "openai",
+      },
+      {
+        id: "tts-1-hd",
+        label: "TTS-1 HD",
+        subtitle: "OpenAI's text-to-speech model optimized for quality.",
+        logoSrc: "/Openai.svg",
+        providerType: "openai",
+      },
+    ],
+  },
+  {
+    providerType: "azure",
+    providerLabel: "Azure",
+    logoSrc: "/Azure.png",
+    models: [
+      {
+        id: "azure-speech-tts",
+        label: "Azure Speech",
+        subtitle: "Text to speech in Microsoft Foundry Tools.",
+        logoSrc: "/Azure.png",
+        providerType: "azure",
+      },
+    ],
+  },
+  {
+    providerType: "elevenlabs",
+    providerLabel: "ElevenLabs",
+    logoSrc: "/ElevenLabs.svg",
+    models: [
+      {
+        id: "elevenlabs-tts",
+        label: "ElevenAPI",
+        subtitle: "ElevenLabs Text to Speech API.",
+        logoSrc: "/ElevenLabs.svg",
+        providerType: "elevenlabs",
+      },
+    ],
+  },
+];
 
 interface HoverIconButtonProps extends React.ComponentProps<typeof Button> {
   isHovered: boolean;
@@ -103,6 +163,7 @@ export default function VoiceConfigurationPage() {
   const [editingProvider, setEditingProvider] =
     useState<VoiceProviderView | null>(null);
   const [modalMode, setModalMode] = useState<ProviderMode>("stt");
+  const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
   const [sttActivationError, setSTTActivationError] = useState<string | null>(
     null
   );
@@ -118,31 +179,49 @@ export default function VoiceConfigurationPage() {
     mutate,
   } = useSWR<VoiceProviderView[]>(VOICE_PROVIDERS_URL, errorHandlingFetcher);
 
-  const handleConnect = (providerType: string, mode: ProviderMode) => {
+  const handleConnect = (
+    providerType: string,
+    mode: ProviderMode,
+    modelId?: string
+  ) => {
     setSelectedProvider(providerType);
     setEditingProvider(null);
     setModalMode(mode);
+    setSelectedModelId(modelId ?? null);
     setModalOpen(true);
     setSTTActivationError(null);
     setTTSActivationError(null);
   };
 
-  const handleEdit = (provider: VoiceProviderView, mode: ProviderMode) => {
+  const handleEdit = (
+    provider: VoiceProviderView,
+    mode: ProviderMode,
+    modelId?: string
+  ) => {
     setSelectedProvider(provider.provider_type);
     setEditingProvider(provider);
     setModalMode(mode);
+    setSelectedModelId(modelId ?? null);
     setModalOpen(true);
   };
 
-  const handleSetDefault = async (providerId: number, mode: ProviderMode) => {
+  const handleSetDefault = async (
+    providerId: number,
+    mode: ProviderMode,
+    modelId?: string
+  ) => {
     const setError =
       mode === "stt" ? setSTTActivationError : setTTSActivationError;
     setError(null);
     try {
-      const response = await fetch(
+      const url = new URL(
         `${VOICE_PROVIDERS_URL}/${providerId}/activate-${mode}`,
-        { method: "POST" }
+        window.location.origin
       );
+      if (mode === "tts" && modelId) {
+        url.searchParams.set("tts_model", modelId);
+      }
+      const response = await fetch(url.toString(), { method: "POST" });
       if (!response.ok) {
         const errorBody = await response.json().catch(() => ({}));
         throw new Error(
@@ -188,6 +267,7 @@ export default function VoiceConfigurationPage() {
     setModalOpen(false);
     setSelectedProvider(null);
     setEditingProvider(null);
+    setSelectedModelId(null);
   };
 
   const handleModalSuccess = () => {
@@ -199,44 +279,24 @@ export default function VoiceConfigurationPage() {
     return !!provider?.has_api_key;
   };
 
-  const combinedProviders = useMemo(() => {
-    const byType = new Map(
-      (providers ?? []).map((p) => [p.provider_type, p] as const)
-    );
-
-    const ordered = PROVIDER_ORDER.map((providerType) => {
-      const provider = byType.get(providerType);
-      const details = PROVIDER_DETAILS[providerType];
-      return {
-        key: provider?.id ?? providerType,
-        providerType,
-        label: details?.label ?? providerType,
-        subtitle: details?.subtitle ?? "",
-        icon: details?.icon ?? SvgMicrophone,
-        supportsSTT: details?.supportsSTT ?? false,
-        supportsTTS: details?.supportsTTS ?? false,
-        provider,
-      };
-    });
-
-    return ordered;
+  // Map provider types to their configured provider data
+  const providersByType = useMemo(() => {
+    return new Map((providers ?? []).map((p) => [p.provider_type, p] as const));
   }, [providers]);
 
   const hasActiveSTTProvider =
     providers?.some((p) => p.is_default_stt) ?? false;
   const hasActiveTTSProvider =
     providers?.some((p) => p.is_default_tts) ?? false;
-  const hasConfiguredProvider =
-    providers?.some((p) => isProviderConfigured(p)) ?? false;
 
-  const renderIcon = ({
-    Icon,
+  const renderLogo = ({
+    logoSrc,
+    alt,
     size = 16,
-    isHighlighted = false,
   }: {
-    Icon: React.ComponentType<{ size?: number; className?: string }>;
+    logoSrc?: string;
+    alt: string;
     size?: number;
-    isHighlighted?: boolean;
   }) => {
     const containerSizeClass = size === 24 ? "size-7" : "size-5";
 
@@ -247,38 +307,29 @@ export default function VoiceConfigurationPage() {
           containerSizeClass
         )}
       >
-        <Icon
-          size={size}
-          className={
-            isHighlighted ? "text-action-text-link-05" : "text-text-02"
-          }
-        />
+        {logoSrc ? (
+          <Image src={logoSrc} alt={alt} width={size} height={size} />
+        ) : (
+          <SvgMicrophone size={size} className="text-text-02" />
+        )}
       </div>
     );
   };
 
-  const renderProviderCard = ({
-    providerType,
-    label,
-    subtitle,
-    icon: Icon,
-    provider,
+  const renderModelCard = ({
+    model,
     mode,
-    supportsMode,
   }: {
-    providerType: string;
-    label: string;
-    subtitle: string;
-    icon: React.ComponentType<{ size?: number; className?: string }>;
-    provider?: VoiceProviderView;
+    model: ModelDetails;
     mode: ProviderMode;
-    supportsMode: boolean;
   }) => {
-    if (!supportsMode) return null;
-
+    const provider = providersByType.get(model.providerType);
     const isConfigured = isProviderConfigured(provider);
+    // For TTS, also check that this specific model is the default (not just the provider)
     const isActive =
-      mode === "stt" ? provider?.is_default_stt : provider?.is_default_tts;
+      mode === "stt"
+        ? provider?.is_default_stt
+        : provider?.is_default_tts && provider?.tts_model === model.id;
     const isHighlighted = isActive ?? false;
     const providerId = provider?.id;
 
@@ -288,7 +339,7 @@ export default function VoiceConfigurationPage() {
           label: "Connect",
           disabled: false,
           icon: "arrow" as const,
-          onClick: () => handleConnect(providerType, mode),
+          onClick: () => handleConnect(model.providerType, mode, model.id),
         };
       }
 
@@ -308,12 +359,12 @@ export default function VoiceConfigurationPage() {
         disabled: false,
         icon: "arrow-circle" as const,
         onClick: providerId
-          ? () => handleSetDefault(providerId, mode)
+          ? () => handleSetDefault(providerId, mode, model.id)
           : undefined,
       };
     })();
 
-    const buttonKey = `${mode}-${providerType}`;
+    const buttonKey = `${mode}-${model.id}`;
     const isButtonHovered = hoveredButtonKey === buttonKey;
     const isCardClickable =
       buttonState.icon === "arrow" &&
@@ -328,27 +379,27 @@ export default function VoiceConfigurationPage() {
 
     return (
       <div
-        key={`${mode}-${providerType}`}
+        key={`${mode}-${model.id}`}
         onClick={isCardClickable ? handleCardClick : undefined}
         className={cn(
-          "flex items-start justify-between gap-3 rounded-16 border p-1 bg-background-neutral-00",
+          "flex items-start justify-between gap-3 rounded-16 border p-2 bg-background-neutral-01",
           isHighlighted ? "border-action-link-05" : "border-border-01",
           isCardClickable &&
             "cursor-pointer hover:bg-background-tint-01 transition-colors"
         )}
       >
-        <div className="flex flex-1 items-start gap-1 px-2 py-1">
-          {renderIcon({
-            Icon,
+        <div className="flex flex-1 items-start gap-1 p-2">
+          {renderLogo({
+            logoSrc: model.logoSrc,
+            alt: `${model.label} logo`,
             size: 16,
-            isHighlighted,
           })}
-          <div className="flex flex-col gap-0.5">
-            <Text as="p" mainUiAction text05>
-              {label}
+          <div className="flex flex-col">
+            <Text as="p" mainUiAction text04>
+              {model.label}
             </Text>
             <Text as="p" secondaryBody text03>
-              {subtitle}
+              {model.subtitle}
             </Text>
           </div>
         </div>
@@ -359,10 +410,11 @@ export default function VoiceConfigurationPage() {
               tooltip="Edit"
               prominence="tertiary"
               size="sm"
-              onClick={() => {
-                if (provider) handleEdit(provider, mode);
+              onClick={(e) => {
+                e.stopPropagation();
+                if (provider) handleEdit(provider, mode, model.id);
               }}
-              aria-label={`Edit ${label}`}
+              aria-label={`Edit ${model.label}`}
             />
           )}
           {buttonState.icon === "check" ? (
@@ -448,11 +500,10 @@ export default function VoiceConfigurationPage() {
 
   return (
     <>
-      <AdminPageTitle icon={SvgMicrophone} title="Voice" />
+      <AdminPageTitle icon={SvgAudio} title="Voice" />
       <div className="pt-4 pb-4">
-        <Text as="p" className="text-text-dark">
-          Configure voice providers for Speech-to-Text (STT) and Text-to-Speech
-          (TTS) capabilities.
+        <Text as="p" secondaryBody text03>
+          Speech to text (STT) and text to speech (TTS) capabilities.
         </Text>
       </div>
 
@@ -461,17 +512,12 @@ export default function VoiceConfigurationPage() {
       <div className="flex w-full flex-col gap-8 pb-6">
         {/* Speech-to-Text Section */}
         <div className="flex w-full max-w-[960px] flex-col gap-3">
-          <div className="flex flex-col gap-0.5">
-            <Text as="p" mainContentEmphasis text05>
-              Speech-to-Text
+          <div className="flex flex-col">
+            <Text as="p" mainContentEmphasis text04>
+              Speech to Text
             </Text>
-            <Text
-              as="p"
-              className="flex items-start gap-[2px] self-stretch text-text-03"
-              secondaryBody
-              text03
-            >
-              Transcribe voice input from users into text.
+            <Text as="p" secondaryBody text03>
+              Select a model to transcribe speech to text in chats.
             </Text>
           </div>
 
@@ -483,7 +529,7 @@ export default function VoiceConfigurationPage() {
 
           {!hasActiveSTTProvider && (
             <div
-              className="flex items-start rounded-16 border p-1"
+              className="flex items-start rounded-16 border p-2"
               style={{
                 backgroundColor: "var(--status-info-00)",
                 borderColor: "var(--status-info-02)",
@@ -501,50 +547,25 @@ export default function VoiceConfigurationPage() {
                   </div>
                 </div>
                 <Text as="p" className="flex-1 px-0.5" mainUiBody text04>
-                  {hasConfiguredProvider
-                    ? "Select a provider to enable speech-to-text."
-                    : "Connect a provider to enable speech-to-text."}
+                  Connect a speech to text provider to use in chat.
                 </Text>
               </div>
             </div>
           )}
 
           <div className="flex flex-col gap-2">
-            {combinedProviders.map(
-              ({
-                providerType,
-                label,
-                subtitle,
-                icon,
-                supportsSTT,
-                provider,
-              }) =>
-                renderProviderCard({
-                  providerType,
-                  label,
-                  subtitle,
-                  icon,
-                  provider,
-                  mode: "stt",
-                  supportsMode: supportsSTT,
-                })
-            )}
+            {STT_MODELS.map((model) => renderModelCard({ model, mode: "stt" }))}
           </div>
         </div>
 
         {/* Text-to-Speech Section */}
         <div className="flex w-full max-w-[960px] flex-col gap-3">
-          <div className="flex flex-col gap-0.5">
-            <Text as="p" mainContentEmphasis text05>
-              Text-to-Speech
+          <div className="flex flex-col">
+            <Text as="p" mainContentEmphasis text04>
+              Text to Speech
             </Text>
-            <Text
-              as="p"
-              className="flex items-start gap-[2px] self-stretch text-text-03"
-              secondaryBody
-              text03
-            >
-              Read responses back to users with natural-sounding voices.
+            <Text as="p" secondaryBody text03>
+              Select a model to speak out chat responses.
             </Text>
           </div>
 
@@ -556,7 +577,7 @@ export default function VoiceConfigurationPage() {
 
           {!hasActiveTTSProvider && (
             <div
-              className="flex items-start rounded-16 border p-1"
+              className="flex items-start rounded-16 border p-2"
               style={{
                 backgroundColor: "var(--status-info-00)",
                 borderColor: "var(--status-info-02)",
@@ -574,34 +595,25 @@ export default function VoiceConfigurationPage() {
                   </div>
                 </div>
                 <Text as="p" className="flex-1 px-0.5" mainUiBody text04>
-                  {hasConfiguredProvider
-                    ? "Select a provider to enable text-to-speech."
-                    : "Connect a provider to enable text-to-speech."}
+                  Connect a text to speech provider to use in chat.
                 </Text>
               </div>
             </div>
           )}
 
-          <div className="flex flex-col gap-2">
-            {combinedProviders.map(
-              ({
-                providerType,
-                label,
-                subtitle,
-                icon,
-                supportsTTS,
-                provider,
-              }) =>
-                renderProviderCard({
-                  providerType,
-                  label,
-                  subtitle,
-                  icon,
-                  provider,
-                  mode: "tts",
-                  supportsMode: supportsTTS,
-                })
-            )}
+          <div className="flex flex-col gap-4">
+            {TTS_PROVIDER_GROUPS.map((group) => (
+              <div key={group.providerType} className="flex flex-col gap-2">
+                <Text as="p" secondaryBody text03 className="px-0.5">
+                  {group.providerLabel}
+                </Text>
+                <div className="flex flex-col gap-2">
+                  {group.models.map((model) =>
+                    renderModelCard({ model, mode: "tts" })
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -611,6 +623,7 @@ export default function VoiceConfigurationPage() {
           providerType={selectedProvider}
           existingProvider={editingProvider}
           mode={modalMode}
+          defaultModelId={selectedModelId}
           onClose={handleModalClose}
           onSuccess={handleModalSuccess}
         />

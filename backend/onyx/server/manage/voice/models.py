@@ -19,6 +19,10 @@ class VoiceProviderView(BaseModel):
         default=False,
         description="Indicates whether an API key is stored for this provider.",
     )
+    target_uri: str | None = Field(
+        default=None,
+        description="Target URI for Azure Speech Services.",
+    )
 
 
 class VoiceProviderUpsertRequest(BaseModel):
@@ -35,7 +39,15 @@ class VoiceProviderUpsertRequest(BaseModel):
         default=False,
         description="Set to true when providing a new API key for an existing provider.",
     )
+    llm_provider_id: int | None = Field(
+        default=None,
+        description="If set, copies the API key from the specified LLM provider.",
+    )
     api_base: str | None = None
+    target_uri: str | None = Field(
+        default=None,
+        description="Target URI for Azure Speech Services (maps to api_base).",
+    )
     custom_config: dict[str, Any] | None = None
     stt_model: str | None = None
     tts_model: str | None = None
@@ -63,6 +75,10 @@ class VoiceProviderTestRequest(BaseModel):
         description="If true, use the stored API key for this provider type.",
     )
     api_base: str | None = None
+    target_uri: str | None = Field(
+        default=None,
+        description="Target URI for Azure Speech Services (maps to api_base).",
+    )
     custom_config: dict[str, Any] | None = None
 
 

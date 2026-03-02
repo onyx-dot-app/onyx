@@ -114,6 +114,10 @@ def check_router_auth(
         if is_route_in_spec_list(route, public_endpoint_specs):
             continue
 
+        # Skip WebSocket routes - they handle auth differently
+        if "WebSocket" in type(route).__name__:
+            continue
+
         # check for auth
         found_auth = False
         route_dependant_obj = cast(

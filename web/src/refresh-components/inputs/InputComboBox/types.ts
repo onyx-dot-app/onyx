@@ -40,4 +40,6 @@ export interface InputComboBoxProps
   rightSection?: React.ReactNode;
   /** Label for the separator between matched and unmatched options */
   separatorLabel?: string;
+  /** Show "Add" prefix in create option (e.g., "Add [value]") */
+  showAddPrefix?: boolean;
 }

@@ -6,7 +6,9 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_admin_user
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import User
+from onyx.db.models import VoiceProvider
 from onyx.db.voice import deactivate_stt_provider
 from onyx.db.voice import deactivate_tts_provider
 from onyx.db.voice import delete_voice_provider
@@ -39,6 +41,7 @@ def _provider_to_view(provider) -> VoiceProviderView:
         tts_model=provider.tts_model,
         default_voice=provider.default_voice,
         has_api_key=bool(provider.api_key),
+        target_uri=provider.api_base,  # api_base stores the target URI for Azure
     )
 
 
@@ -59,14 +62,36 @@ def upsert_voice_provider_endpoint(
     db_session: Session = Depends(get_session),
 ) -> VoiceProviderView:
     """Create or update a voice provider."""
+    api_key = request.api_key
+    api_key_changed = request.api_key_changed
+
+    # If llm_provider_id is specified, copy the API key from that LLM provider
+    if request.llm_provider_id is not None:
+        llm_provider = db_session.get(LLMProviderModel, request.llm_provider_id)
+        if llm_provider is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"LLM provider with id {request.llm_provider_id} not found.",
+            )
+        if llm_provider.api_key is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Selected LLM provider has no API key configured.",
+            )
+        api_key = llm_provider.api_key.get_value(apply_mask=False)
+        api_key_changed = True
+
+    # Use target_uri if provided, otherwise fall back to api_base
+    api_base = request.target_uri or request.api_base
+
     provider = upsert_voice_provider(
         db_session=db_session,
         provider_id=request.id,
         name=request.name,
         provider_type=request.provider_type,
-        api_key=request.api_key,
-        api_key_changed=request.api_key_changed,
-        api_base=request.api_base,
+        api_key=api_key,
+        api_key_changed=api_key_changed,
+        api_base=api_base,
         custom_config=request.custom_config,
         stt_model=request.stt_model,
         tts_model=request.tts_model,
@@ -120,11 +145,14 @@ def deactivate_stt_provider_endpoint(
 @admin_router.post("/providers/{provider_id}/activate-tts")
 def activate_tts_provider_endpoint(
     provider_id: int,
+    tts_model: str | None = None,
     _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> VoiceProviderView:
     """Set a voice provider as the default TTS provider."""
-    provider = set_default_tts_provider(db_session=db_session, provider_id=provider_id)
+    provider = set_default_tts_provider(
+        db_session=db_session, provider_id=provider_id, tts_model=tts_model
+    )
     db_session.commit()
     return _provider_to_view(provider)
 
@@ -167,20 +195,22 @@ def test_voice_provider(
             detail="API key is required. Either provide api_key or set use_stored_key to true.",
         )
 
+    # Use target_uri if provided, otherwise fall back to api_base
+    api_base = request.target_uri or request.api_base
+
+    # Create a temporary VoiceProvider for testing (not saved to DB)
+    temp_provider = VoiceProvider(
+        name="__test__",
+        provider_type=request.provider_type,
+        api_base=api_base,
+        custom_config=request.custom_config or {},
+    )
+    temp_provider.api_key = api_key  # type: ignore[assignment]
+
     try:
-        provider = get_voice_provider(
-            provider_type=request.provider_type,
-            api_key=api_key,
-            api_base=request.api_base,
-            custom_config=request.custom_config or {},
-        )
+        provider = get_voice_provider(temp_provider)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    if provider is None:
-        raise HTTPException(
-            status_code=400, detail="Unable to build provider configuration."
-        )
 
     # Test the provider by getting available voices (lightweight check)
     try:
@@ -220,12 +250,31 @@ def get_provider_voices(
         )
 
     try:
-        provider = get_voice_provider(
-            provider_type=provider_db.provider_type,
-            api_key=provider_db.api_key.get_value(apply_mask=False),
-            api_base=provider_db.api_base,
-            custom_config=provider_db.custom_config or {},
-        )
+        provider = get_voice_provider(provider_db)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return provider.get_available_voices()
+
+
+@admin_router.get("/voices")
+def get_voices_by_type(
+    provider_type: str,
+    _: User = Depends(current_admin_user),
+) -> list[dict[str, str]]:
+    """Get available voices for a provider type.
+
+    For providers like ElevenLabs and OpenAI, this fetches voices
+    without requiring an existing provider configuration.
+    """
+    # Create a temporary VoiceProvider to get static voice list
+    temp_provider = VoiceProvider(
+        name="__temp__",
+        provider_type=provider_type,
+    )
+
+    try:
+        provider = get_voice_provider(temp_provider)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

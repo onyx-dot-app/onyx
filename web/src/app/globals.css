@@ -556,6 +556,21 @@ textarea {
   animation: fadeIn 0.2s ease-out forwards;
 }
 
+/* Recording waveform animation */
+@keyframes waveform {
+  0%,
+  100% {
+    transform: scaleY(0.3);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+.animate-waveform {
+  animation: waveform 0.8s ease-in-out infinite;
+}
+
 .container {
   margin-bottom: 1rem;
 }
