@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { Card, type CardProps } from "@/refresh-components/cards";
 import {
@@ -183,6 +183,22 @@ export default function CodeInterpreterPage() {
   const [showDisconnectModal, setShowDisconnectModal] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [showErrorMenu, setShowErrorMenu] = useState(false);
+  const fadeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function handleErrorHover(hovered: boolean) {
+    if (hovered) {
+      if (fadeTimeoutRef.current) {
+        clearTimeout(fadeTimeoutRef.current);
+        fadeTimeoutRef.current = null;
+      }
+      setShowErrorMenu(true);
+    } else {
+      fadeTimeoutRef.current = setTimeout(() => {
+        setShowErrorMenu(false);
+        fadeTimeoutRef.current = null;
+      }, 1000);
+    }
+  }
 
   async function handleToggle(enabled: boolean) {
     const action = enabled ? "reconnect" : "disconnect";
@@ -227,7 +243,7 @@ export default function CodeInterpreterPage() {
                   <ConnectionStatus
                     status={status}
                     isLoading={isLoading}
-                    onIconHover={setShowErrorMenu}
+                    onIconHover={handleErrorHover}
                   />
                   <ActionButtons
                     onDisconnect={() => setShowDisconnectModal(true)}
@@ -261,7 +277,12 @@ export default function CodeInterpreterPage() {
             />
           )}
           {showErrorMenu && (
-            <Section flexDirection="row" justifyContent="end">
+            <Section
+              flexDirection="row"
+              justifyContent="end"
+              onMouseEnter={() => handleErrorHover(true)}
+              onMouseLeave={() => handleErrorHover(false)}
+            >
               <Card className="w-[15rem]">
                 <Content
                   icon={(props) => (
