@@ -76,7 +76,11 @@ export default function ProviderModal({
 
         {onSubmit && (
           <Modal.Footer>
-            <Button prominence="secondary" type="button" onClick={() => onOpenChange(false)}>
+            <Button
+              prominence="secondary"
+              type="button"
+              onClick={() => onOpenChange(false)}
+            >
               {cancelLabel}
             </Button>
             <Button

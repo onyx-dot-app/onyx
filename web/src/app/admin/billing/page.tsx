@@ -5,7 +5,6 @@ import { useSearchParams, useRouter } from "next/navigation";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { Section } from "@/layouts/general-layouts";
 import Button from "@/refresh-components/buttons/Button";
-import { Button as OpalButton } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { SvgArrowUpCircle, SvgWallet } from "@opal/icons";
 import type { IconProps } from "@opal/types";
@@ -67,11 +66,12 @@ function FooterLinks({
           <Text secondaryBody text03>
             Have a license key?
           </Text>
-          <OpalButton variant="action" prominence="tertiary" onClick={onActivateLicense}>
+          {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
+          <Button action tertiary onClick={onActivateLicense}>
             <Text secondaryBody text05 className="underline">
               {licenseText}
             </Text>
-          </OpalButton>
+          </Button>
         </>
       )}
       {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}

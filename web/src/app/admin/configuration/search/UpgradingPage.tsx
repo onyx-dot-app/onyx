@@ -147,7 +147,10 @@ export default function UpgradingPage({
             </Modal.Body>
             <Modal.Footer>
               <OpalButton onClick={onCancel}>Confirm</OpalButton>
-              <OpalButton prominence="secondary" onClick={() => setIsCancelling(false)}>
+              <OpalButton
+                prominence="secondary"
+                onClick={() => setIsCancelling(false)}
+              >
                 Cancel
               </OpalButton>
             </Modal.Footer>

@@ -127,7 +127,12 @@ function ConfigItem({ label, value, onEdit }: ConfigItemProps) {
           </Button>
         )}
         {onEdit && (
-          <Button prominence="tertiary" icon={SvgEdit} onClick={onEdit} tooltip="Edit"/>
+          <Button
+            prominence="tertiary"
+            icon={SvgEdit}
+            onClick={onEdit}
+            tooltip="Edit"
+          />
         )}
       </Section>
     </Section>

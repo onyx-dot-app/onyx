@@ -482,9 +482,7 @@ export const GmailAuthSection = ({
               Revoke Access
             </Button>
             {buildMode && onCredentialCreated && (
-              <Button
-                onClick={() => onCredentialCreated(existingCredential)}
-              >
+              <Button onClick={() => onCredentialCreated(existingCredential)}>
                 Continue
               </Button>
             )}

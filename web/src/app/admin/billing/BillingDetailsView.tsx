@@ -254,10 +254,7 @@ function SubscriptionCard({
               {isReconnecting ? "Connecting..." : "Connect to Stripe"}
             </OpalButton>
           ) : (
-            <OpalButton
-              onClick={handleManagePlan}
-              rightIcon={SvgExternalLink}
-            >
+            <OpalButton onClick={handleManagePlan} rightIcon={SvgExternalLink}>
               Manage Plan
             </OpalButton>
           )}
@@ -378,7 +375,11 @@ function SeatsCard({
             sizePreset="main-content"
             variant="section"
           />
-          <OpalButton prominence="secondary" onClick={handleCancel} disabled={isSubmitting}>
+          <OpalButton
+            prominence="secondary"
+            onClick={handleCancel}
+            disabled={isSubmitting}
+          >
             Cancel
           </OpalButton>
         </Section>
@@ -499,7 +500,11 @@ function SeatsCard({
           height="auto"
           width="auto"
         >
-          <OpalButton prominence="tertiary" href="/admin/users" icon={SvgExternalLink}>
+          <OpalButton
+            prominence="tertiary"
+            href="/admin/users"
+            icon={SvgExternalLink}
+          >
             View Users
           </OpalButton>
           {!hideUpdateSeats && (

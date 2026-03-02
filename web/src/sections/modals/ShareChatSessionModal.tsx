@@ -236,7 +236,11 @@ export default function ShareChatSessionModal({
         </Modal.Body>
         <Modal.Footer>
           {!isShared && (
-            <OpalButton prominence="secondary" onClick={onClose} aria-label="share-modal-cancel">
+            <OpalButton
+              prominence="secondary"
+              onClick={onClose}
+              aria-label="share-modal-cancel"
+            >
               Cancel
             </OpalButton>
           )}

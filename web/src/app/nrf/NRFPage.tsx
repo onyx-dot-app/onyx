@@ -566,7 +566,10 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                 onClose={() => setShowTurnOffModal(false)}
               />
               <Modal.Footer>
-                <OpalButton prominence="secondary" onClick={() => setShowTurnOffModal(false)}>
+                <OpalButton
+                  prominence="secondary"
+                  onClick={() => setShowTurnOffModal(false)}
+                >
                   Cancel
                 </OpalButton>
                 <OpalButton variant="danger" onClick={confirmTurnOff}>

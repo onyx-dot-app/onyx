@@ -342,7 +342,11 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
         <BasicModalFooter
           left={
             agentId ? (
-              <Button prominence="secondary" icon={SvgLink} onClick={handleCopyLink}>
+              <Button
+                prominence="secondary"
+                icon={SvgLink}
+                onClick={handleCopyLink}
+              >
                 Copy Link
               </Button>
             ) : undefined

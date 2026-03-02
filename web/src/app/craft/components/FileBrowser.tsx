@@ -196,7 +196,11 @@ function FileNode({ entry, sessionId, depth, onPreview }: FileNodeProps) {
           download={entry.name}
           onClick={(e) => e.stopPropagation()}
         >
-          <Button variant="action" prominence="tertiary" icon={SvgDownloadCloud}>
+          <Button
+            variant="action"
+            prominence="tertiary"
+            icon={SvgDownloadCloud}
+          >
             Download
           </Button>
         </a>

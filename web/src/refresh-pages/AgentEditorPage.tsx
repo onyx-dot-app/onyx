@@ -1166,7 +1166,10 @@ export default function AgentEditorPage({
                       icon={SvgTrash}
                       title="Delete Agent"
                       submit={
-                        <OpalButton variant="danger" onClick={handleDeleteAgent}>
+                        <OpalButton
+                          variant="danger"
+                          onClick={handleDeleteAgent}
+                        >
                           Delete Agent
                         </OpalButton>
                       }

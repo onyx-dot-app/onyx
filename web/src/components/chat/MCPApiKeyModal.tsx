@@ -250,7 +250,11 @@ export default function MCPApiKeyModal({
             )}
 
             <div className="flex justify-end space-x-2 pt-4">
-              <Button prominence="secondary" onClick={handleClose} disabled={isSubmitting}>
+              <Button
+                prominence="secondary"
+                onClick={handleClose}
+                disabled={isSubmitting}
+              >
                 Cancel
               </Button>
               <Button

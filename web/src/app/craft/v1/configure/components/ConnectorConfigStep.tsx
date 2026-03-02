@@ -95,14 +95,14 @@ function ConnectorConfigForm({
             />
           ))}
         <Section flexDirection="row" justifyContent="between" height="fit">
-          <Button prominence="secondary" onClick={onBack} disabled={isSubmitting}>
-            Back
-          </Button>
           <Button
-            type="button"
-            onClick={handleSubmit}
+            prominence="secondary"
+            onClick={onBack}
             disabled={isSubmitting}
           >
+            Back
+          </Button>
+          <Button type="button" onClick={handleSubmit} disabled={isSubmitting}>
             {isSubmitting ? "Creating..." : "Create Connector"}
           </Button>
         </Section>

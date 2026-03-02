@@ -89,7 +89,11 @@ export default function FilePreviewModal({
         </Modal.Body>
         <Modal.Footer>
           <a href={downloadUrl} download={entry.name}>
-            <Button variant="action" prominence="secondary" icon={SvgDownloadCloud}>
+            <Button
+              variant="action"
+              prominence="secondary"
+              icon={SvgDownloadCloud}
+            >
               Download
             </Button>
           </a>

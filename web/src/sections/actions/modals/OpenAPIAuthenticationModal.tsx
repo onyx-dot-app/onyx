@@ -663,7 +663,11 @@ export default function OpenAPIAuthenticationModal({
               </Modal.Body>
 
               <Modal.Footer>
-                <Button prominence="tertiary" type="button" onClick={handleSkip}>
+                <Button
+                  prominence="tertiary"
+                  type="button"
+                  onClick={handleSkip}
+                >
                   Cancel
                 </Button>
                 <Button

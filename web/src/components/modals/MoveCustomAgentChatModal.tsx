@@ -23,9 +23,7 @@ export default function MoveCustomAgentChatModal({
       title="Move Custom Agent Chat"
       onClose={onCancel}
       submit={
-        <Button onClick={() => onConfirm(doNotShowAgain)}>
-          Confirm Move
-        </Button>
+        <Button onClick={() => onConfirm(doNotShowAgain)}>Confirm Move</Button>
       }
     >
       <div className="flex flex-col gap-4">

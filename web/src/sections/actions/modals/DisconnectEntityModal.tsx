@@ -66,7 +66,11 @@ export default function DisconnectEntityModal({
         </Modal.Body>
 
         <Modal.Footer>
-          <Button prominence="secondary" onClick={onClose} disabled={isDisconnecting}>
+          <Button
+            prominence="secondary"
+            onClick={onClose}
+            disabled={isDisconnecting}
+          >
             Cancel
           </Button>
           {onConfirmDisconnectAndDelete && (

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import Modal from "@/refresh-components/Modal";
-import { Button } from "@opal/components";
+import Button from "@/refresh-components/buttons/Button";
 import { User } from "@/lib/types";
 import { toast } from "@/hooks/useToast";
 import Text from "@/refresh-components/texts/Text";
@@ -74,10 +74,11 @@ export default function ResetPasswordModal({
               </Text>
             </div>
           ) : (
+            // TODO(opal-migration, @raunakab): migrate to opal Button once it supports ReactNode children
             <Button
               onClick={handleResetPassword}
               disabled={isLoading}
-              icon={SvgRefreshCw}
+              leftIcon={SvgRefreshCw}
             >
               {isLoading ? (
                 <Text as="p">

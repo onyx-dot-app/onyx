@@ -29,6 +29,7 @@ import Switch from "@/refresh-components/inputs/Switch";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
+import IconButton from "@/refresh-components/buttons/IconButton";
 
 /**
  * Build a hierarchical tree from a flat list of library entries.
@@ -456,10 +457,11 @@ function LibraryTreeView({
 
               {/* Expand/collapse for directories */}
               {entry.is_directory ? (
-                <Button
-                  size="xs"
+                // TODO(opal-migration, @raunakab): migrate to opal Button once it supports style prop
+                <IconButton
                   icon={SvgChevronRight}
                   onClick={() => onToggleFolder(entry.path)}
+                  small
                   tooltip={isExpanded ? "Collapse" : "Expand"}
                   style={{
                     transform: isExpanded ? "rotate(90deg)" : undefined,
@@ -516,7 +518,7 @@ function LibraryTreeView({
               >
                 {entry.is_directory && (
                   <Button
-                    size="xs"
+                    size="sm"
                     icon={SvgUploadCloud}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -529,7 +531,7 @@ function LibraryTreeView({
                 )}
                 <Button
                   variant="danger"
-                  size="xs"
+                  size="sm"
                   icon={SvgTrash}
                   onClick={() => onDelete(entry)}
                   tooltip="Delete"

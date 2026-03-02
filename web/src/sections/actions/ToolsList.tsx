@@ -122,7 +122,10 @@ const ToolsList: React.FC<ToolsListProps> = ({
                 />
               )}
               {onUpdateToolsStatus && enabledCount === 0 && (
-                <Button prominence="tertiary" onClick={() => onUpdateToolsStatus(true)}>
+                <Button
+                  prominence="tertiary"
+                  onClick={() => onUpdateToolsStatus(true)}
+                >
                   Enable all
                 </Button>
               )}

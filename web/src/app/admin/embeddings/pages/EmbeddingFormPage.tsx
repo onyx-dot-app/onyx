@@ -560,7 +560,10 @@ export default function EmbeddingForm() {
                 </div>
               </Modal.Body>
               <Modal.Footer>
-                <OpalButton prominence="secondary" onClick={() => setShowPoorModel(false)}>
+                <OpalButton
+                  prominence="secondary"
+                  onClick={() => setShowPoorModel(false)}
+                >
                   Cancel update
                 </OpalButton>
                 <OpalButton

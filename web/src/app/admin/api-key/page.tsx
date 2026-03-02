@@ -165,7 +165,7 @@ function Main() {
                       onClick={() => handleEdit(apiKey)}
                       icon={SvgEdit}
                     >
-                      {apiKey.api_key_name || <i>null</i>}
+                      {apiKey.api_key_name || "null"}
                     </Button>
                   </TableCell>
                   <TableCell className="max-w-64">

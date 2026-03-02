@@ -104,7 +104,11 @@ function GuildDetailContent({
                 width="fit"
                 gap={0.5}
               >
-                <Button prominence="secondary" onClick={handleEnableAll} disabled={disabled}>
+                <Button
+                  prominence="secondary"
+                  onClick={handleEnableAll}
+                  disabled={disabled}
+                >
                   Enable All
                 </Button>
                 <Button

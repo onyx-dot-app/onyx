@@ -146,7 +146,11 @@ export default function LicenseActivationCard({
           <Text headingH3>
             {hasLicense ? "Update License Key" : "Activate License Key"}
           </Text>
-          <Button prominence="secondary" onClick={handleClose} disabled={isActivating}>
+          <Button
+            prominence="secondary"
+            onClick={handleClose}
+            disabled={isActivating}
+          >
             Cancel
           </Button>
         </Section>

@@ -1122,7 +1122,10 @@ function AccountsAccessSettings() {
           title="Revoke Access Token"
           onClose={() => setTokenToDelete(null)}
           submit={
-            <Button variant="danger" onClick={() => deletePAT(tokenToDelete.id)}>
+            <Button
+              variant="danger"
+              onClick={() => deletePAT(tokenToDelete.id)}
+            >
               Revoke
             </Button>
           }

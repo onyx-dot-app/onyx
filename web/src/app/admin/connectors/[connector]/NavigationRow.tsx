@@ -22,7 +22,11 @@ const NavigationRow = ({
       <div>
         {((formStep > 0 && !noCredentials) ||
           (formStep > 1 && !noAdvanced)) && (
-          <Button prominence="secondary" onClick={prevFormStep} icon={SvgArrowLeft}>
+          <Button
+            prominence="secondary"
+            onClick={prevFormStep}
+            icon={SvgArrowLeft}
+          >
             Previous
           </Button>
         )}

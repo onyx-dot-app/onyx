@@ -1,6 +1,7 @@
 import { LoadingAnimation } from "@/components/Loading";
 import Text from "@/refresh-components/texts/Text";
-import { Button } from "@opal/components";
+import Button from "@/refresh-components/buttons/Button";
+import { Button as OpalButton } from "@opal/components";
 import { SvgTrash } from "@opal/icons";
 import { LLMProviderView } from "@/interfaces/llm";
 import { LLM_PROVIDERS_ADMIN_URL } from "@/lib/llmConfig/constants";
@@ -57,9 +58,9 @@ export function FormActionButtons({
           )}
         </Button>
         {existingLlmProvider && (
-          <Button variant="danger" icon={SvgTrash} onClick={handleDelete}>
+          <OpalButton variant="danger" icon={SvgTrash} onClick={handleDelete}>
             Delete
-          </Button>
+          </OpalButton>
         )}
       </div>
     </>

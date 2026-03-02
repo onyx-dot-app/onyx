@@ -697,7 +697,11 @@ export default function SourceHierarchyBrowser({
       {viewSelectedOnly ? (
         <>
           <Spacer rem={0.5} />
-          <Button variant="action" prominence="tertiary" onClick={handleToggleViewSelected}>
+          <Button
+            variant="action"
+            prominence="tertiary"
+            onClick={handleToggleViewSelected}
+          >
             Selected items
           </Button>
         </>

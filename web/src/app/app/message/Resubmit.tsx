@@ -60,9 +60,7 @@ export const ErrorBanner = ({
               <div className="flex flex-1 items-center justify-between">
                 <Button
                   prominence="tertiary"
-                  icon={
-                    isStackTraceExpanded ? SvgChevronDown : SvgChevronRight
-                  }
+                  icon={isStackTraceExpanded ? SvgChevronDown : SvgChevronRight}
                   onClick={() => setIsStackTraceExpanded(!isStackTraceExpanded)}
                 >
                   Stack trace

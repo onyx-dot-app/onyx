@@ -97,7 +97,7 @@ export default function ConnectorCard({
   // Always-connected connectors show a settings icon
   // Regular connectors show popover menu when connected, plug icon when not
   const rightContent = isDeleting ? null : isAlwaysConnected ? (
-    <Button prominence="internal" icon={SvgSettings}/>
+    <Button prominence="internal" icon={SvgSettings} />
   ) : isConnected ? (
     <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
       <Popover.Trigger asChild>
