@@ -472,7 +472,7 @@ function ChatPreferencesForm() {
 
                   <Section
                     flexDirection="row"
-                    justifyContent="start"
+                    justifyContent="between"
                     alignItems="center"
                     gap={0.25}
                   >
@@ -480,22 +480,29 @@ function ChatPreferencesForm() {
                       <EmptyMessage title="No connectors set up" />
                     ) : (
                       <>
-                        {uniqueSources.slice(0, 3).map((source) => {
-                          const meta = getSourceMetadata(source);
-                          return (
-                            <Card
-                              key={source}
-                              padding={0.75}
-                              className="w-[10rem]"
-                            >
-                              <Content
-                                icon={meta.icon}
-                                title={meta.displayName}
-                                sizePreset="main-ui"
-                              />
-                            </Card>
-                          );
-                        })}
+                        <Section
+                          flexDirection="row"
+                          justifyContent="start"
+                          alignItems="center"
+                          gap={0.25}
+                        >
+                          {uniqueSources.slice(0, 3).map((source) => {
+                            const meta = getSourceMetadata(source);
+                            return (
+                              <Card
+                                key={source}
+                                padding={0.75}
+                                className="w-[10rem]"
+                              >
+                                <Content
+                                  icon={meta.icon}
+                                  title={meta.displayName}
+                                  sizePreset="main-ui"
+                                />
+                              </Card>
+                            );
+                          })}
+                        </Section>
 
                         <Button
                           href="/admin/indexing/status"
