@@ -18,14 +18,13 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from dataclasses import field
 
-from sqlalchemy import text
-
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 RECOVERY_INTERVAL_SECONDS = 30
 PERIODIC_TASK_LOCK_BASE = 20_000
+PERIODIC_TASK_KV_PREFIX = "periodic_poller:last_claimed:"
 
 
 # ------------------------------------------------------------------
@@ -126,8 +125,50 @@ def _build_periodic_tasks() -> list[_PeriodicTaskDef]:
 
 
 # ------------------------------------------------------------------
-# Periodic task runner with advisory lock dedup
+# Periodic task runner with advisory-lock-guarded claim
 # ------------------------------------------------------------------
+
+
+def _try_claim_task(task_def: _PeriodicTaskDef) -> bool:
+    """Atomically check whether *task_def* should run and record a claim.
+
+    Uses a transaction-scoped advisory lock for atomicity combined with a
+    ``KVStore`` timestamp for cross-instance dedup.  The DB session is held
+    only for this brief claim transaction, not during task execution.
+    """
+    from datetime import datetime
+    from datetime import timezone
+
+    from sqlalchemy import text
+
+    from onyx.db.engine.sql_engine import get_session_with_current_tenant
+    from onyx.db.models import KVStore
+
+    kv_key = PERIODIC_TASK_KV_PREFIX + task_def.name
+
+    with get_session_with_current_tenant() as db_session:
+        acquired = db_session.execute(
+            text("SELECT pg_try_advisory_xact_lock(:id)"),
+            {"id": task_def.lock_id},
+        ).scalar()
+        if not acquired:
+            return False
+
+        row = db_session.query(KVStore).filter_by(key=kv_key).first()
+        if row and row.value is not None:
+            last_claimed = datetime.fromisoformat(str(row.value))
+            elapsed = (datetime.now(timezone.utc) - last_claimed).total_seconds()
+            if elapsed < task_def.interval_seconds:
+                return False
+
+        now_ts = datetime.now(timezone.utc).isoformat()
+        if row:
+            row.value = now_ts
+        else:
+            db_session.add(KVStore(key=kv_key, value=now_ts))
+        db_session.commit()
+
+    return True
 
 
 def _try_run_periodic_task(task_def: _PeriodicTaskDef) -> None:
@@ -136,28 +177,16 @@ def _try_run_periodic_task(task_def: _PeriodicTaskDef) -> None:
     if now - task_def.last_run_at < task_def.interval_seconds:
         return
 
-    from onyx.db.engine.sql_engine import get_session_with_current_tenant
+    if not _try_claim_task(task_def):
+        return
 
-    with get_session_with_current_tenant() as db_session:
-        acquired = db_session.execute(
-            text("SELECT pg_try_advisory_lock(:id)"),
-            {"id": task_def.lock_id},
-        ).scalar()
-        if not acquired:
-            return
-
-        try:
-            task_def.run_fn()
-            task_def.last_run_at = now
-        except Exception:
-            logger.exception(
-                f"Periodic poller - Error running periodic task {task_def.name}"
-            )
-        finally:
-            db_session.execute(
-                text("SELECT pg_advisory_unlock(:id)"),
-                {"id": task_def.lock_id},
-            )
+    try:
+        task_def.run_fn()
+        task_def.last_run_at = now
+    except Exception:
+        logger.exception(
+            f"Periodic poller - Error running periodic task {task_def.name}"
+        )
 
 
 # ------------------------------------------------------------------
@@ -201,10 +230,9 @@ _poller_thread: threading.Thread | None = None
 
 
 def _poller_loop(tenant_id: str) -> None:
-    from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
     from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
-    CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA)
+    CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
 
     periodic_tasks = _build_periodic_tasks()
     logger.info(
