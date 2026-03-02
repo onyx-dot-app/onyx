@@ -66,15 +66,15 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
  * };
  * ```
  */
-export default function useCCPairs() {
+export default function useCCPairs(enabled: boolean = true) {
   const { data, error, isLoading, mutate } = useSWR<CCPairBasicInfo[]>(
-    "/api/manage/connector-status",
+    enabled ? "/api/manage/connector-status" : null,
     errorHandlingFetcher
   );
 
   return {
     ccPairs: data ?? [],
-    isLoading,
+    isLoading: enabled && isLoading,
     error,
     refetch: mutate,
   };

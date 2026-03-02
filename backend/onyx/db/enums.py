@@ -186,6 +186,7 @@ class EmbeddingPrecision(str, PyEnum):
 
 class UserFileStatus(str, PyEnum):
     PROCESSING = "PROCESSING"
+    INDEXING = "INDEXING"
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
     CANCELED = "CANCELED"

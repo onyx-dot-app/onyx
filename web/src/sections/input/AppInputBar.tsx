@@ -294,7 +294,9 @@ const AppInputBar = React.memo(
     );
 
     const { activePromptShortcuts } = usePromptShortcuts();
-    const { ccPairs, isLoading: ccPairsLoading } = useCCPairs();
+    const vectorDbEnabled =
+      combinedSettings?.settings.vector_db_enabled !== false;
+    const { ccPairs, isLoading: ccPairsLoading } = useCCPairs(vectorDbEnabled);
     const { data: federatedConnectorsData, isLoading: federatedLoading } =
       useFederatedConnectors();
 

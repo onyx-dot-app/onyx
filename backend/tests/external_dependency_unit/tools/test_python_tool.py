@@ -933,6 +933,7 @@ from unittest.mock import patch
 
 import pytest
 from fastapi import UploadFile
+from fastapi.background import BackgroundTasks
 from sqlalchemy.orm import Session
 from starlette.datastructures import Headers
 
@@ -1139,6 +1140,7 @@ def test_code_interpreter_receives_chat_files(
     # Upload a test CSV
     csv_content = b"name,age,city\nAlice,30,NYC\nBob,25,SF\n"
     result = upload_user_files(
+        bg_tasks=BackgroundTasks(),
         files=[
             UploadFile(
                 file=io.BytesIO(csv_content),

@@ -892,7 +892,7 @@ export default function AgentKnowledgePane({
   }, [enableKnowledge]);
 
   // Get connected sources from CC pairs
-  const { ccPairs } = useCCPairs();
+  const { ccPairs } = useCCPairs(vectorDbEnabled);
   const connectedSources: ConnectedSource[] = useMemo(() => {
     if (!ccPairs || ccPairs.length === 0) return [];
     const sourceSet = new Set<ValidSources>();

@@ -25,6 +25,7 @@ import {
 import { Section } from "@/layouts/general-layouts";
 import { toast } from "@/hooks/useToast";
 import useAppFocus from "@/hooks/useAppFocus";
+import { useSettingsContext } from "@/providers/SettingsProvider";
 
 function getDisplayName(email?: string, personalName?: string): string {
   // Prioritize custom personal name if set
@@ -165,6 +166,8 @@ export default function UserAvatarPopover({
   const { user } = useUser();
   const router = useRouter();
   const appFocus = useAppFocus();
+  const settings = useSettingsContext();
+  const vectorDbEnabled = settings?.settings.vector_db_enabled !== false;
 
   // Fetch notifications for display
   // The GET endpoint also triggers a refresh if release notes are stale
@@ -183,7 +186,9 @@ export default function UserAvatarPopover({
       // Prefetch user settings data when popover opens for instant modal display
       preload("/api/user/pats", errorHandlingFetcher);
       preload("/api/federated/oauth-status", errorHandlingFetcher);
-      preload("/api/manage/connector-status", errorHandlingFetcher);
+      if (vectorDbEnabled) {
+        preload("/api/manage/connector-status", errorHandlingFetcher);
+      }
       preload("/api/llm/provider", errorHandlingFetcher);
       setPopupState("Settings");
     } else {
