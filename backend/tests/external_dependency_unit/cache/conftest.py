@@ -25,7 +25,7 @@ from tests.external_dependency_unit.constants import TEST_TENANT_ID
 @pytest.fixture(scope="session", autouse=True)
 def _init_db() -> Generator[None, None, None]:
     SqlEngine.init_engine(pool_size=5, max_overflow=2)
-    CacheStore.__table__.create(get_sqlalchemy_engine(), checkfirst=True)
+    CacheStore.metadata.create_all(get_sqlalchemy_engine(), checkfirst=True)
     yield
     with get_session_with_tenant(tenant_id=TEST_TENANT_ID) as session:
         session.execute(delete(CacheStore))
