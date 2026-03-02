@@ -160,7 +160,7 @@ jobs:
           cd deployment/docker_compose
 
           # Get list of running containers
-          containers=$(docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.opensearch.yml ps -q)
+          containers=$(docker compose -f docker-compose.yml -f docker-compose.dev.yml ps -q)
 
           # Collect logs from each container
           for container in $containers; do
