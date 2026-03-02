@@ -1,7 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
-import useSWR, { KeyedMutator } from "swr";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from "react";
+import useSWRInfinite from "swr/infinite";
 import { ChatSession, ChatSessionSharedStatus } from "@/app/app/interfaces";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
@@ -9,8 +15,12 @@ import useAppFocus from "./useAppFocus";
 import { useAgents } from "./useAgents";
 import { DEFAULT_ASSISTANT_ID } from "@/lib/constants";
 
+const PAGE_SIZE = 50;
+const MIN_LOADING_DURATION_MS = 500;
+
 interface ChatSessionsResponse {
   sessions: ChatSession[];
+  has_more: boolean;
 }
 
 export interface PendingChatSessionParams {
@@ -26,17 +36,24 @@ interface UseChatSessionsOutput {
   agentForCurrentChatSession: MinimalPersonaSnapshot | null;
   isLoading: boolean;
   error: any;
-  refreshChatSessions: KeyedMutator<ChatSessionsResponse>;
+  refreshChatSessions: () => Promise<ChatSessionsResponse[] | undefined>;
   addPendingChatSession: (params: PendingChatSessionParams) => void;
+  removeSession: (sessionId: string) => void;
+  hasMore: boolean;
+  isLoadingMore: boolean;
+  loadMore: () => void;
 }
 
-// Module-level store for pending chat sessions
-// This persists across SWR revalidations and component re-renders
-// Pending sessions are shown in the sidebar until the server returns them
+// ---------------------------------------------------------------------------
+// Shared module-level store for pending chat sessions
+// ---------------------------------------------------------------------------
+// Pending sessions are optimistic new sessions shown in the sidebar before
+// the server returns them. This must be module-level so all hook instances
+// (sidebar, ChatButton, etc.) share the same state.
+
 const pendingSessionsStore = {
   sessions: new Map<string, ChatSession>(),
   listeners: new Set<() => void>(),
-  // Cached snapshot to avoid creating new array references on every call
   cachedSnapshot: [] as ChatSession[],
 
   add(session: ChatSession) {
@@ -74,7 +91,7 @@ const pendingSessionsStore = {
   },
 };
 
-// Stable empty array for SSR - must be defined outside component to avoid infinite loop
+// Stable empty array for SSR
 const EMPTY_SESSIONS: ChatSession[] = [];
 
 function usePendingSessions(): ChatSession[] {
@@ -84,6 +101,10 @@ function usePendingSessions(): ChatSession[] {
     () => EMPTY_SESSIONS
   );
 }
+
+// ---------------------------------------------------------------------------
+// Helper hooks
+// ---------------------------------------------------------------------------
 
 function useFindAgentForCurrentChatSession(
   currentChatSession: ChatSession | null
@@ -111,35 +132,102 @@ function useFindAgentForCurrentChatSession(
   return agents.find((agent) => agent.id === agentIdToFind) ?? null;
 }
 
+// ---------------------------------------------------------------------------
+// Main hook
+// ---------------------------------------------------------------------------
+
 export default function useChatSessions(): UseChatSessionsOutput {
-  const { data, error, mutate } = useSWR<ChatSessionsResponse>(
-    "/api/chat/get-user-chat-sessions",
+  const getKey = (
+    pageIndex: number,
+    previousPageData: ChatSessionsResponse | null
+  ): string | null => {
+    // No more pages
+    if (previousPageData && !previousPageData.has_more) return null;
+
+    // First page — no cursor
+    if (pageIndex === 0) {
+      return `/api/chat/get-user-chat-sessions?page_size=${PAGE_SIZE}`;
+    }
+
+    // Subsequent pages — cursor from the last session of the previous page
+    const lastSession =
+      previousPageData!.sessions[previousPageData!.sessions.length - 1];
+    if (!lastSession) return null;
+
+    const params = new URLSearchParams({
+      page_size: PAGE_SIZE.toString(),
+      before: lastSession.time_updated,
+    });
+    return `/api/chat/get-user-chat-sessions?${params.toString()}`;
+  };
+
+  const { data, error, setSize, mutate } = useSWRInfinite<ChatSessionsResponse>(
+    getKey,
     errorHandlingFetcher,
     {
       revalidateOnFocus: false,
+      revalidateFirstPage: true,
+      revalidateAll: false,
       dedupingInterval: 30000,
     }
   );
 
   const appFocus = useAppFocus();
   const pendingSessions = usePendingSessions();
-  const fetchedSessions = data?.sessions ?? [];
+
+  // Flatten all pages into a single session list
+  const allFetchedSessions = useMemo(
+    () => (data ? data.flatMap((page) => page.sessions) : []),
+    [data]
+  );
+
+  // hasMore: check the last loaded page
+  const hasMore = useMemo(() => {
+    if (!data || data.length === 0) return false;
+    const lastPage = data[data.length - 1];
+    return lastPage ? lastPage.has_more : false;
+  }, [data]);
+
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+
+  const loadMore = useCallback(async () => {
+    if (isLoadingMore || !hasMore) return;
+
+    setIsLoadingMore(true);
+    const loadStart = Date.now();
+
+    try {
+      await setSize((s) => s + 1);
+
+      // Enforce minimum loading duration to avoid skeleton flash
+      const elapsed = Date.now() - loadStart;
+      if (elapsed < MIN_LOADING_DURATION_MS) {
+        await new Promise((r) =>
+          setTimeout(r, MIN_LOADING_DURATION_MS - elapsed)
+        );
+      }
+    } catch (err) {
+      console.error("Failed to load more chat sessions:", err);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [isLoadingMore, hasMore, setSize]);
 
   // Clean up pending sessions that now appear in fetched data
   // (they now have messages and the server returns them)
   useEffect(() => {
-    const fetchedIds = new Set(fetchedSessions.map((s) => s.id));
+    const fetchedIds = new Set(allFetchedSessions.map((s) => s.id));
     pendingSessions.forEach((pending) => {
       if (fetchedIds.has(pending.id)) {
         pendingSessionsStore.remove(pending.id);
       }
     });
-  }, [fetchedSessions, pendingSessions]);
+  }, [allFetchedSessions, pendingSessions]);
 
-  // Merge fetched sessions with pending sessions
-  // This ensures pending sessions persist across SWR revalidations
+  // Merge fetched sessions with pending sessions.
+  // This ensures pending sessions persist across SWR revalidations.
   const chatSessions = useMemo(() => {
-    const fetchedIds = new Set(fetchedSessions.map((s) => s.id));
+    const fetchedIds = new Set(allFetchedSessions.map((s) => s.id));
 
     // Get pending sessions that are not yet in fetched data
     const remainingPending = pendingSessions.filter(
@@ -147,8 +235,8 @@ export default function useChatSessions(): UseChatSessionsOutput {
     );
 
     // Pending sessions go first (most recent), then fetched sessions
-    return [...remainingPending, ...fetchedSessions];
-  }, [fetchedSessions, pendingSessions]);
+    return [...remainingPending, ...allFetchedSessions];
+  }, [allFetchedSessions, pendingSessions]);
 
   const currentChatSessionId = appFocus.isChat() ? appFocus.getId() : null;
   const currentChatSession =
@@ -159,27 +247,18 @@ export default function useChatSessions(): UseChatSessionsOutput {
   const agentForCurrentChatSession =
     useFindAgentForCurrentChatSession(currentChatSession);
 
-  // Add a pending chat session that will persist across SWR revalidations
-  // The session will be automatically removed once it appears in the server response
+  // Add a pending chat session that will persist across SWR revalidations.
+  // The session will be automatically removed once it appears in the server response.
   const addPendingChatSession = useCallback(
     ({ chatSessionId, personaId, projectId }: PendingChatSessionParams) => {
       // Don't add sessions that belong to a project
-      if (projectId != null) {
-        return;
-      }
+      if (projectId != null) return;
 
       // Don't add if already in pending store (duplicates are also filtered during merge)
-      if (pendingSessionsStore.has(chatSessionId)) {
-        return;
-      }
-
-      // Note: This check uses stale fetchedSessions due to empty deps, but is defensive
-      if (fetchedSessions.some((s) => s.id === chatSessionId)) {
-        return;
-      }
+      if (pendingSessionsStore.has(chatSessionId)) return;
 
       const now = new Date().toISOString();
-      const pendingSession: ChatSession = {
+      pendingSessionsStore.add({
         id: chatSessionId,
         name: "", // Empty name will display as "New Chat" via UNNAMED_CHAT constant
         persona_id: personaId,
@@ -189,12 +268,28 @@ export default function useChatSessions(): UseChatSessionsOutput {
         project_id: projectId ?? null,
         current_alternate_model: "",
         current_temperature_override: null,
-      };
-
-      pendingSessionsStore.add(pendingSession);
+      });
     },
     []
   );
+
+  const removeSession = useCallback(
+    (sessionId: string) => {
+      pendingSessionsStore.remove(sessionId);
+      // Optimistically remove from all loaded pages
+      mutate(
+        (pages) =>
+          pages?.map((page) => ({
+            ...page,
+            sessions: page.sessions.filter((s) => s.id !== sessionId),
+          })),
+        { revalidate: false }
+      );
+    },
+    [mutate]
+  );
+
+  const refreshChatSessions = useCallback(() => mutate(), [mutate]);
 
   return {
     chatSessions,
@@ -203,7 +298,11 @@ export default function useChatSessions(): UseChatSessionsOutput {
     agentForCurrentChatSession,
     isLoading: !error && !data,
     error,
-    refreshChatSessions: mutate,
+    refreshChatSessions,
     addPendingChatSession,
+    removeSession,
+    hasMore,
+    isLoadingMore,
+    loadMore,
   };
 }

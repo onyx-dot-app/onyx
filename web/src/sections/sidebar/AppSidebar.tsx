@@ -67,6 +67,7 @@ import {
   SvgSearchMenu,
   SvgSettings,
 } from "@opal/icons";
+import SidebarTabSkeleton from "@/refresh-components/skeletons/SidebarTabSkeleton";
 import BuildModeIntroBackground from "@/app/craft/components/IntroBackground";
 import BuildModeIntroContent from "@/app/craft/components/IntroContent";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
@@ -99,17 +100,58 @@ function buildVisibleAgents(
   return [visibleAgents, currentAgentIsPinned];
 }
 
-interface RecentsSectionProps {
-  chatSessions: ChatSession[];
+const SKELETON_WIDTHS_BASE = ["w-4/5", "w-4/5", "w-3/5"];
+
+function shuffleWidths(): string[] {
+  return [...SKELETON_WIDTHS_BASE].sort(() => Math.random() - 0.5);
 }
 
-function RecentsSection({ chatSessions }: RecentsSectionProps) {
+interface RecentsSectionProps {
+  chatSessions: ChatSession[];
+  hasMore: boolean;
+  isLoadingMore: boolean;
+  onLoadMore: () => void;
+}
+
+function RecentsSection({
+  chatSessions,
+  hasMore,
+  isLoadingMore,
+  onLoadMore,
+}: RecentsSectionProps) {
   const { setNodeRef, isOver } = useDroppable({
     id: DRAG_TYPES.RECENTS,
     data: {
       type: DRAG_TYPES.RECENTS,
     },
   });
+
+  // Re-shuffle skeleton widths each time loaded session count changes
+  const skeletonWidths = useMemo(shuffleWidths, [chatSessions.length]);
+
+  // Sentinel ref for IntersectionObserver-based infinite scroll
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const onLoadMoreRef = useRef(onLoadMore);
+  onLoadMoreRef.current = onLoadMore;
+
+  useEffect(() => {
+    if (!hasMore || isLoadingMore) return;
+
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          onLoadMoreRef.current();
+        }
+      },
+      { threshold: 0 }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMore, isLoadingMore]);
 
   return (
     <div
@@ -125,13 +167,28 @@ function RecentsSection({ chatSessions }: RecentsSectionProps) {
             Try sending a message! Your chat history will appear here.
           </Text>
         ) : (
-          chatSessions.map((chatSession) => (
-            <ChatButton
-              key={chatSession.id}
-              chatSession={chatSession}
-              draggable
-            />
-          ))
+          <>
+            {chatSessions.map((chatSession) => (
+              <ChatButton
+                key={chatSession.id}
+                chatSession={chatSession}
+                draggable
+              />
+            ))}
+            {hasMore &&
+              skeletonWidths.map((width, i) => (
+                <div
+                  key={i}
+                  ref={i === 0 ? sentinelRef : undefined}
+                  className={cn(
+                    "transition-opacity duration-300",
+                    isLoadingMore ? "opacity-100" : "opacity-40"
+                  )}
+                >
+                  <SidebarTabSkeleton textWidth={width} />
+                </div>
+              ))}
+          </>
         )}
       </SidebarSection>
     </div>
@@ -157,6 +214,9 @@ const MemoizedAppSidebarInner = memo(
       chatSessions,
       refreshChatSessions,
       isLoading: isLoadingChatSessions,
+      hasMore,
+      isLoadingMore,
+      loadMore,
     } = useChatSessions();
     const {
       projects,
@@ -700,7 +760,12 @@ const MemoizedAppSidebarInner = memo(
                   </SidebarSection>
 
                   {/* Recents */}
-                  <RecentsSection chatSessions={chatSessions} />
+                  <RecentsSection
+                    chatSessions={chatSessions}
+                    hasMore={hasMore}
+                    isLoadingMore={isLoadingMore}
+                    onLoadMore={loadMore}
+                  />
                 </DndContext>
               </>
             )}

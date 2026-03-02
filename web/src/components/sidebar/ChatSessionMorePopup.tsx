@@ -52,7 +52,7 @@ export function ChatSessionMorePopup({
 }: ChatSessionMorePopupProps) {
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const { refreshChatSessions } = useChatSessions();
+  const { refreshChatSessions, removeSession } = useChatSessions();
   const { fetchProjects, projects } = useProjectsContext();
 
   const [pendingMoveProjectId, setPendingMoveProjectId] = useState<
@@ -79,13 +79,20 @@ export function ChatSessionMorePopup({
     async (e: React.MouseEvent<HTMLButtonElement>) => {
       e.stopPropagation();
       await deleteChatSession(chatSession.id);
+      removeSession(chatSession.id);
       await refreshChatSessions();
       await fetchProjects();
       setIsDeleteModalOpen(false);
       setPopoverOpen(false);
       afterDelete?.();
     },
-    [chatSession, refreshChatSessions, fetchProjects, afterDelete]
+    [
+      chatSession,
+      refreshChatSessions,
+      removeSession,
+      fetchProjects,
+      afterDelete,
+    ]
   );
 
   const performMove = useCallback(
