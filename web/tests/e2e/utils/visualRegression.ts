@@ -29,7 +29,11 @@ const DEFAULT_MASK_SELECTORS: string[] = [
  * Default selectors to hide (visibility: hidden) across all screenshots.
  * These elements are overlays or ephemeral UI that would cause spurious diffs.
  */
-const DEFAULT_HIDE_SELECTORS: string[] = ['[data-testid="toast-container"]'];
+const DEFAULT_HIDE_SELECTORS: string[] = [
+  '[data-testid="toast-container"]',
+  // TODO: Remove once it loads consistently.
+  '[data-testid="action-management-toggle"]',
+];
 
 interface ScreenshotOptions {
   /**
