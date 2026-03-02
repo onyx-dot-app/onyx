@@ -42,3 +42,4 @@ ignore_errors = true
 module = "transformers.*"
 follow_imports = "skip"
 ignore_errors = true
+feedparser = "^7.4.2"

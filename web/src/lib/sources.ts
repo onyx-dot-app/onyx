@@ -317,6 +317,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "Email",
     category: SourceCategory.Messaging,
   },
+  google_groups: {
+    icon: MediaWikiIcon,
+    displayName: "Google Groups",
+    category: SourceCategory.Messaging,
+    docs: `${DOCS_ADMINS_PATH}/connectors/official/google_groups`,
+  },
   discord: {
     icon: ColorDiscordIcon,
     displayName: "Discord",

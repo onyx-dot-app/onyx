@@ -1755,6 +1755,21 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
     ],
     advanced_values: [],
   },
+  google_groups: {
+    description: "Configure Google Groups connector",
+    values: [
+      {
+        type: "text",
+        query: "Enter the Group Name:",
+        label: "Group Name",
+        name: "group_name",
+        optional: false,
+        description:
+          "The name of the Google Group to index (e.g. 'dataverse-community')",
+      },
+    ],
+    advanced_values: [],
+  },
 };
 type ConnectorField = ConnectionConfiguration["values"][number];
 
@@ -2095,4 +2110,8 @@ export interface ImapConfig {
   host: string;
   port?: number;
   mailboxes?: string[];
+}
+
+export interface GoogleGroupsConfig {
+  group_name: string;
 }
