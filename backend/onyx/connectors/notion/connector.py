@@ -275,7 +275,10 @@ class NotionConnector(LoadConnector, PollConnector):
             # new data sources endpoint to handle that case correctly.
             if code == "object_not_found" or (
                 code == "validation_error"
-                and "does not contain any data sources" in json_data.get("message", "")
+                and (
+                    "does not contain any data sources" in json_data.get("message", "")
+                    or "multiple data sources are not supported" in json_data.get("message", "")
+                )
             ):
                 # this happens when a database is not shared with the integration
                 # in this case, we should just ignore the database
