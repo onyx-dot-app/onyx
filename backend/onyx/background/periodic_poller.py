@@ -32,13 +32,16 @@ PERIODIC_TASK_KV_PREFIX = "periodic_poller:last_claimed:"
 # ------------------------------------------------------------------
 
 
+_NEVER_RAN: float = -1e18
+
+
 @dataclass
 class _PeriodicTaskDef:
     name: str
     interval_seconds: float
     lock_id: int
     run_fn: Callable[[], None]
-    last_run_at: float = field(default=0.0)
+    last_run_at: float = field(default=_NEVER_RAN)
 
 
 def _run_auto_llm_update() -> None:

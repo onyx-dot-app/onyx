@@ -46,10 +46,10 @@ def _make_task(
     run_fn: MagicMock | None = None,
 ) -> _PeriodicTaskDef:
     return _PeriodicTaskDef(
-        name=name or f"test-{uuid4().hex[:8]}",
+        name=name if name is not None else f"test-{uuid4().hex[:8]}",
         interval_seconds=interval,
-        lock_id=lock_id or _TEST_LOCK_BASE,
-        run_fn=run_fn or MagicMock(),
+        lock_id=lock_id if lock_id is not None else _TEST_LOCK_BASE,
+        run_fn=run_fn if run_fn is not None else MagicMock(),
     )
 
 
