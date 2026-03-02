@@ -393,7 +393,10 @@ for (const theme of THEMES) {
           const bubble = el.querySelector<HTMLElement>(
             ".whitespace-break-spaces"
           );
-          if (!bubble) throw new Error("Expected human message bubble (.whitespace-break-spaces) to exist");
+          if (!bubble)
+            throw new Error(
+              "Expected human message bubble (.whitespace-break-spaces) to exist"
+            );
           return bubble.scrollWidth > bubble.offsetWidth;
         });
         expect(overflows).toBe(false);
