@@ -525,7 +525,7 @@ class DocumentSchema:
         }
 
     @staticmethod
-    def get_index_settings_for_aws_managed_opensearch() -> dict[str, Any]:
+    def get_index_settings_for_aws_managed_opensearch_st_dev() -> dict[str, Any]:
         """
         Settings for AWS-managed OpenSearch.
 
@@ -541,6 +541,37 @@ class DocumentSchema:
             "index": {
                 "number_of_shards": 3,
                 "number_of_replicas": 2,
+                # Required for vector search.
+                "knn": True,
+                "knn.algo_param.ef_search": EF_SEARCH,
+            }
+        }
+
+    @staticmethod
+    def get_index_settings_for_aws_managed_opensearch_mt_cloud() -> dict[str, Any]:
+        """
+        Settings for AWS-managed OpenSearch in multi-tenant cloud.
+
+        555 shards very roughly targets a storage load of ~20Gb per shard, which
+        according to AWS OpenSearch documentation is within a good target range.
+
+        We have 1 replica/copy of the data.
+
+        As documented above, the number of total primary + replica shards must
+        be divisible by the number of AZs, which is 3.
+
+        To ensure even distribution of data + replica shards across
+        the 18 data nodes of the cluster, we also chose a number of shards that
+        is divisible by 18.
+
+        However, with only 1 replica we do not guarantee that each AZ has a
+        complete copy of all data. If we see that this is an issue we can
+        increase replicas to 2, at the expense of storage of course.
+        """
+        return {
+            "index": {
+                "number_of_shards": 558,
+                "number_of_replicas": 1,
                 # Required for vector search.
                 "knn": True,
                 "knn.algo_param.ef_search": EF_SEARCH,
