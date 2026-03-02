@@ -725,11 +725,19 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         if user_by_session:
                             user = user_by_session
 
+                # If the user is inactive, check seat availability before
+                # upgrading role — otherwise they'd become an inactive BASIC
+                # user who still can't log in.
+                if not user.is_active:
+                    with get_session_with_current_tenant() as sync_db:
+                        enforce_seat_limit(sync_db)
+
                 await self.user_db.update(
                     user,
                     {
                         "is_verified": is_verified_by_default,
                         "role": UserRole.BASIC,
+                        **({"is_active": True} if not user.is_active else {}),
                     },
                 )
 
