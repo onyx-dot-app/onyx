@@ -6,6 +6,9 @@ import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
 
 const SHORT_USER_MESSAGE = "What is Onyx?";
 
+const LONG_WORD_USER_MESSAGE =
+  "Please look into this issue: __________________________________________ and also this token: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA and this URL: https://example.com/a/very/long/path/that/keeps/going/and/going/and/going/without/any/breaks/whatsoever/to/test/overflow";
+
 const LONG_USER_MESSAGE = `I've been evaluating several enterprise search and AI platforms for our organization, and I have a number of detailed questions about Onyx that I'd like to understand before we make a decision.
 
 First, can you explain how Onyx handles document indexing across multiple data sources? We currently use Confluence, Google Drive, Slack, and GitHub, and we need to ensure that all of these can be indexed simultaneously without performance degradation.
@@ -367,6 +370,36 @@ for (const theme of THEMES) {
           page,
           `chat-short-message-long-response-${theme}`
         );
+      });
+
+      test("user message with very long words wraps without overflowing", async ({
+        page,
+      }) => {
+        await openChat(page);
+        await mockChatEndpoint(page, SHORT_AI_RESPONSE);
+
+        await sendMessage(page, LONG_WORD_USER_MESSAGE);
+
+        const userMessage = page.locator("#onyx-human-message").first();
+        await expect(userMessage).toContainText("__________");
+
+        await screenshotChatContainer(
+          page,
+          `chat-long-word-user-message-${theme}`
+        );
+
+        // Assert the message bubble does not overflow horizontally.
+        const overflows = await userMessage.evaluate((el) => {
+          const bubble = el.querySelector<HTMLElement>(
+            ".whitespace-break-spaces"
+          );
+          if (!bubble)
+            throw new Error(
+              "Expected human message bubble (.whitespace-break-spaces) to exist"
+            );
+          return bubble.scrollWidth > bubble.offsetWidth;
+        });
+        expect(overflows).toBe(false);
       });
 
       test("long user message with long AI response renders correctly", async ({
