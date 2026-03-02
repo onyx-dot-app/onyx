@@ -6,6 +6,7 @@ import requests
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.freshdesk_solutions.connector import _create_doc_from_article
+from onyx.connectors.freshdesk_solutions.connector import FRESHDESK_MAX_RETRIES
 from onyx.connectors.freshdesk_solutions.connector import FreshdeskSolutionsConnector
 from onyx.connectors.models import ConnectorMissingCredentialError
 
@@ -181,3 +182,23 @@ def test_create_doc_from_article_image_error_does_not_log_sensitive_url() -> Non
     assert "super-secret-token" not in logged_args
     assert "token=" not in logged_args
     assert "RequestException" in logged_args
+
+
+def test_fetch_articles_uses_bounded_retries() -> None:
+    connector = FreshdeskSolutionsConnector()
+    connector.api_key = "key"
+    connector.password = "x"
+    connector.domain = "acme"
+    folder = {"id": 1}
+
+    response_204 = Mock()
+    response_204.status_code = 204
+    response_204.headers = {}
+
+    with patch.object(
+        connector, "_request_with_retries", return_value=response_204
+    ) as mock_request:
+        articles_pages = list(connector._fetch_articles(folder))
+
+    assert articles_pages == [[]]
+    assert mock_request.call_args.kwargs["max_retries"] == FRESHDESK_MAX_RETRIES

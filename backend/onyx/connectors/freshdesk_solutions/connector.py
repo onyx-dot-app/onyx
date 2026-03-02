@@ -382,7 +382,7 @@ class FreshdeskSolutionsConnector(PollConnector, LoadConnector):
                 url,
                 params=params,
                 request_delay=FRESHDESK_API_REQUEST_DELAY_SECONDS,
-                max_retries=None,
+                max_retries=FRESHDESK_MAX_RETRIES,
                 error_context="articles",
             )
             if response.status_code == 204:
