@@ -7,8 +7,8 @@ metadata:
     {{- if not .Values.ingress.className }}
     kubernetes.io/ingress.class: nginx
     {{- end }}
-    nginx.ingress.kubernetes.io/rewrite-target: /$2
-    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.org/rewrite-target: /$2
+    nginx.org/path-regex: "case_insensitive"
     cert-manager.io/cluster-issuer: {{ include "onyx.fullname" . }}-letsencrypt
 spec:
   {{- if .Values.ingress.className }}

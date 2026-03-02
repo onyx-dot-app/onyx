@@ -274,40 +274,41 @@ nginx:
       http: 1024
 
     # NOTE: When onyx-nginx-conf changes, nginx pods need to restart.
-    # The ingress-nginx subchart doesn't auto-detect our custom ConfigMap changes.
+    # The F5/NGINX Ingress Controller subchart doesn't auto-detect our custom ConfigMap changes.
     # Workaround: Helm upgrade will restart if the following annotation value changes.
-    podAnnotations:
-      onyx.app/nginx-config-version: "1"
+    pod:
+      annotations:
+        onyx.app/nginx-config-version: "1"
 
     # Propagate DOMAIN into nginx so server_name continues to use the same env var
-    extraEnvs:
+    env:
       - name: DOMAIN
         value: localhost
 
     config:
-      # Expose DOMAIN to the nginx config and pull in our custom snippets
-      main-snippet: |
-        env DOMAIN;
-      http-snippet: |
-        include /etc/nginx/custom-snippets/upstreams.conf;
-        include /etc/nginx/custom-snippets/server.conf;
+      entries:
+        # Expose DOMAIN to the nginx config and pull in our custom snippets
+        main-snippets: |
+          env DOMAIN;
+        http-snippets: |
+          include /etc/nginx/custom-snippets/upstreams.conf;
+          include /etc/nginx/custom-snippets/server.conf;
 
     # Mount the existing nginx ConfigMap that holds the upstream and server snippets
-    extraVolumes:
+    volumes:
       - name: nginx-config
         configMap:
           name: onyx-nginx-conf
-    extraVolumeMounts:
+    volumeMounts:
       - name: nginx-config
         mountPath: /etc/nginx/custom-snippets
         readOnly: true
 
     service:
       type: LoadBalancer
-      ports:
-        http: 80
-      targetPorts:
-        http: http
+      httpPort:
+        port: 80
+        targetPort: 1024
 
 webserver:
   replicaCount: 1
