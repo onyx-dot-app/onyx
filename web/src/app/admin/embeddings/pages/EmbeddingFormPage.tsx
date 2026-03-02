@@ -1,7 +1,7 @@
 "use client";
 
 import { toast } from "@/hooks/useToast";
-import { HealthCheckBanner } from "@/components/health/healthcheck";
+import { AppHealthBanner } from "@/sections/AppHealthBanner";
 import EmbeddingModelSelection from "../EmbeddingModelSelectionForm";
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import Text from "@/refresh-components/texts/Text";
@@ -482,7 +482,7 @@ export default function EmbeddingForm() {
   return (
     <div className="mx-auto mb-8 w-full">
       <div className="mb-4">
-        <HealthCheckBanner />
+        <AppHealthBanner />
       </div>
       <div className="mx-auto max-w-4xl">
         {formStep == 0 && (

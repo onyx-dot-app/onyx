@@ -6,13 +6,15 @@ import Modal from "@/refresh-components/Modal";
 import { useCallback, useEffect, useState, useRef } from "react";
 import { getSecondsUntilExpiration } from "@/lib/time";
 import { User } from "@/lib/types";
-import { refreshToken } from "./refreshUtils";
+import { refreshToken } from "@/lib/user";
 import { NEXT_PUBLIC_CUSTOM_REFRESH_URL } from "@/lib/constants";
 import Button from "@/refresh-components/buttons/Button";
 import { logout } from "@/lib/user";
 import { usePathname, useRouter } from "next/navigation";
-import { SvgLogOut } from "@opal/icons";
-export const HealthCheckBanner = () => {
+import { SvgAlertTriangle, SvgLogOut } from "@opal/icons";
+import { Content } from "@opal/layouts";
+
+export function AppHealthBanner() {
   const router = useRouter();
   const { error } = useSWR("/api/health", errorHandlingFetcher);
   const [expired, setExpired] = useState(false);
@@ -211,16 +213,15 @@ export const HealthCheckBanner = () => {
     return null;
   } else {
     return (
-      <div className="fixed top-0 left-0 z-[101] w-full text-xs mx-auto bg-gradient-to-r from-red-900 to-red-700 p-2 rounded-sm border-hidden text-neutral-50 dark:text-neutral-100">
-        <p className="font-bold pb-1">The backend is currently unavailable.</p>
-
-        <p className="px-1">
-          If this is your initial setup or you just updated your Onyx
-          deployment, this is likely because the backend is still starting up.
-          Give it a minute or two, and then refresh the page. If that does not
-          work, make sure the backend is setup and/or contact an administrator.
-        </p>
+      <div className="fixed top-0 left-0 z-[101] w-full bg-status-error-01 p-3">
+        <Content
+          icon={SvgAlertTriangle}
+          title="The backend is currently unavailable"
+          description="If this is your initial setup or you just updated your Onyx deployment, this is likely because the backend is still starting up. Give it a minute or two, and then refresh the page. If that does not work, make sure the backend is setup and/or contact an administrator."
+          sizePreset="main-content"
+          variant="section"
+        />
       </div>
     );
   }
-};
+}

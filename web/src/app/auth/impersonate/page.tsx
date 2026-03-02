@@ -1,7 +1,7 @@
 "use client";
 
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
-import { HealthCheckBanner } from "@/components/health/healthcheck";
+import { AppHealthBanner } from "@/sections/AppHealthBanner";
 import { useUser } from "@/providers/UserProvider";
 import { redirect, useRouter } from "next/navigation";
 import type { Route } from "next";
@@ -62,7 +62,7 @@ export default function ImpersonatePage() {
   return (
     <AuthFlowContainer>
       <div className="absolute top-10x w-full">
-        <HealthCheckBanner />
+        <AppHealthBanner />
       </div>
 
       <div className="flex flex-col w-full justify-center">

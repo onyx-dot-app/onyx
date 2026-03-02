@@ -1,4 +1,4 @@
-import { HealthCheckBanner } from "@/components/health/healthcheck";
+import { AppHealthBanner } from "@/sections/AppHealthBanner";
 import { User } from "@/lib/types";
 import {
   getCurrentUserSS,
@@ -106,7 +106,7 @@ export default async function Page(props: PageProps) {
         footerContent={ssoLoginFooterContent}
       >
         <div className="absolute top-10x w-full">
-          <HealthCheckBanner />
+          <AppHealthBanner />
         </div>
 
         <LoginPage
