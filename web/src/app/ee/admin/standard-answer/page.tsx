@@ -1,6 +1,5 @@
 "use client";
 
-import { EditIcon } from "@/components/icons/icons";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { toast } from "@/hooks/useToast";
 import { useStandardAnswers, useStandardAnswerCategories } from "./hooks";
@@ -29,7 +28,7 @@ import { PageSelector } from "@/components/PageSelector";
 import Text from "@/components/ui/text";
 import { TableHeader } from "@/components/ui/table";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
-import { SvgClipboard, SvgTrash } from "@opal/icons";
+import { SvgClipboard, SvgEdit, SvgTrash } from "@opal/icons";
 import { Button } from "@opal/components";
 const NUM_RESULTS_PER_PAGE = 10;
 
@@ -113,7 +112,7 @@ const StandardAnswersTableRow = ({
           key={`edit-${standardAnswer.id}`}
           href={`/ee/admin/standard-answer/${standardAnswer.id}` as Route}
         >
-          <EditIcon />
+          <SvgEdit size={16} />
         </Link>,
         <div key={`categories-${standardAnswer.id}`}>
           {standardAnswer.categories.map((category) => (
