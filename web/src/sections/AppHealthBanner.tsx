@@ -5,7 +5,6 @@ import useSWR from "swr";
 import Modal from "@/refresh-components/Modal";
 import { useCallback, useEffect, useState, useRef } from "react";
 import { getSecondsUntilExpiration } from "@/lib/time";
-import { User } from "@/lib/types";
 import { refreshToken } from "@/lib/user";
 import { NEXT_PUBLIC_CUSTOM_REFRESH_URL } from "@/lib/constants";
 import Button from "@/refresh-components/buttons/Button";
@@ -13,8 +12,9 @@ import { logout } from "@/lib/user";
 import { usePathname, useRouter } from "next/navigation";
 import { SvgAlertTriangle, SvgLogOut } from "@opal/icons";
 import { Content } from "@opal/layouts";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 
-export function AppHealthBanner() {
+export default function AppHealthBanner() {
   const router = useRouter();
   const { error } = useSWR("/api/health", errorHandlingFetcher);
   const [expired, setExpired] = useState(false);
@@ -23,16 +23,7 @@ export function AppHealthBanner() {
   const expirationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const refreshIntervalRef = useRef<NodeJS.Timer | null>(null);
 
-  // Reduce revalidation frequency with dedicated SWR config
-  const {
-    data: user,
-    mutate: mutateUser,
-    error: userError,
-  } = useSWR<User>("/api/me", errorHandlingFetcher, {
-    revalidateOnFocus: false,
-    revalidateOnReconnect: false,
-    dedupingInterval: 30000, // 30 seconds
-  });
+  const { user, mutateUser, userError } = useCurrentUser();
 
   // Handle 403 errors from the /api/me endpoint
   useEffect(() => {
@@ -46,10 +37,10 @@ export function AppHealthBanner() {
   }, [userError, pathname]);
 
   // Function to handle the "Log in" button click
-  const handleLogin = () => {
+  function handleLogin() {
     setShowLoggedOutModal(false);
     router.push("/auth/login");
-  };
+  }
 
   // Function to set up expiration timeout
   const setupExpirationTimeout = useCallback(

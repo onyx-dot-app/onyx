@@ -30,7 +30,7 @@ import GatedContentWrapper from "@/components/GatedContentWrapper";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { fetchAppSidebarMetadata } from "@/lib/appSidebarSS";
 import StatsOverlayLoader from "@/components/dev/StatsOverlayLoader";
-import { AppHealthBanner } from "@/sections/AppHealthBanner";
+import AppHealthBanner from "@/sections/AppHealthBanner";
 
 const inter = Inter({
   subsets: ["latin"],
