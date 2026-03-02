@@ -1,7 +1,6 @@
 "use client";
 
 import { JSX } from "react";
-
 import Separator from "@/refresh-components/Separator";
 import type { IconProps } from "@opal/types";
 import Text from "@/refresh-components/texts/Text";
