@@ -1,7 +1,6 @@
 "use client";
 
 import { redirect, useRouter, useSearchParams } from "next/navigation";
-import { HealthCheckBanner } from "@/components/health/healthcheck";
 import {
   personaIncludesRetrieval,
   getAvailableContextTokens,
@@ -628,12 +627,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   // handle error case where no assistants are available
   // Only show this after agents have loaded to prevent flash during initial load
   if (noAgents && !isLoadingAgents) {
-    return (
-      <>
-        <HealthCheckBanner />
-        <NoAgentModal />
-      </>
-    );
+    return <NoAgentModal />;
   }
 
   const hasStarterMessages = (liveAgent?.starter_messages?.length ?? 0) > 0;
@@ -654,8 +648,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   return (
     <>
-      <HealthCheckBanner />
-
       <AppPopup />
 
       {retrievalEnabled && documentSidebarVisible && settings.isMobile && (
