@@ -732,14 +732,14 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     with get_session_with_current_tenant() as sync_db:
                         enforce_seat_limit(sync_db)
 
-                update_dict: Dict[str, Any] = {
-                    "is_verified": is_verified_by_default,
-                    "role": UserRole.BASIC,
-                }
-                if not user.is_active:
-                    update_dict["is_active"] = True
-
-                await self.user_db.update(user, update_dict)
+                await self.user_db.update(
+                    user,
+                    {
+                        "is_verified": is_verified_by_default,
+                        "role": UserRole.BASIC,
+                        **({"is_active": True} if not user.is_active else {}),
+                    },
+                )
 
             # this is needed if an organization goes from `TRACK_EXTERNAL_IDP_EXPIRY=true` to `false`
             # otherwise, the oidc expiry will always be old, and the user will never be able to login
