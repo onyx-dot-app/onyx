@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { Card, type CardProps } from "@/refresh-components/cards";
 import {
@@ -97,7 +97,7 @@ const STATUS_CONFIG: Record<
 };
 
 interface ConnectionStatusProps {
-  status: CodeInterpreterHealthStatus;
+  status: CodeInterpreterHealthStatus | undefined;
   isLoading: boolean;
   onIconHover: (hovered: boolean) => void;
 }
@@ -111,7 +111,7 @@ function ConnectionStatus({
     return <CheckingStatus />;
   }
 
-  const { label, icon: Icon, iconColor } = STATUS_CONFIG[status];
+  const { label, icon: Icon, iconColor } = STATUS_CONFIG[status!];
   const hasError = status !== "healthy";
 
   return (
@@ -218,6 +218,14 @@ export default function CodeInterpreterPage() {
       setIsReconnecting(false);
     }
   }
+
+  useEffect(() => {
+    return () => {
+      if (fadeTimeoutRef.current) {
+        clearTimeout(fadeTimeoutRef.current);
+      }
+    };
+  }, []);
 
   return (
     <SettingsLayouts.Root>

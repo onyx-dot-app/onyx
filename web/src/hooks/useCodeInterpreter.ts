@@ -51,7 +51,7 @@ export default function useCodeInterpreter() {
   const error = healthFetchError?.message || healthData?.error || undefined;
 
   return {
-    status,
+    status: isStatusLoading ? undefined : status,
     error,
     isEnabled: statusData?.enabled ?? false,
     isLoading: isHealthLoading || isStatusLoading,
