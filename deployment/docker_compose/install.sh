@@ -658,6 +658,10 @@ else
     sed -i.bak 's/^AUTH_TYPE=.*/AUTH_TYPE=basic/' "$ENV_FILE" 2>/dev/null || true
     print_success "Basic authentication enabled in configuration"
 
+    # Generate a secure USER_AUTH_SECRET
+    USER_AUTH_SECRET=$(openssl rand -hex 32)
+    sed -i.bak "s/^USER_AUTH_SECRET=.*/USER_AUTH_SECRET=\"$USER_AUTH_SECRET\"/" "$ENV_FILE" 2>/dev/null || true
+
     # Configure Craft based on flag or if using a craft-* image tag
     # By default, env.template has Craft commented out (disabled)
     if [ "$INCLUDE_CRAFT" = true ] || [[ "$VERSION" == craft-* ]]; then
