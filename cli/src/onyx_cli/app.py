@@ -121,10 +121,8 @@ class OnyxApp(App):
         except Exception:
             chat.show_info("Could not load assistants. Using default.")
 
+        status.set_server(self._config.server_url)
         status.set_persona(self._persona_name)
-        chat.show_info(
-            f"Connected to {self._config.server_url} \u00b7 Assistant: {self._persona_name}"
-        )
 
     # ── Message Handling ─────────────────────────────────────────────
 

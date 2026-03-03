@@ -426,8 +426,8 @@ class TestOnyxAppFocus:
                 assert chat_input.value == "hello"
 
     @pytest.mark.asyncio
-    async def test_welcome_message_shown(self) -> None:
-        """Welcome/connected message should appear after init."""
+    async def test_status_bar_shows_server_after_init(self) -> None:
+        """Status bar should show the server URL after initialization."""
         config = _make_test_config()
         app = OnyxApp(config=config)
 
@@ -437,6 +437,5 @@ class TestOnyxAppFocus:
                 # Wait for the background worker to complete
                 await pilot.pause()
                 await pilot.pause()
-                chat = pilot.app.query_one(ChatDisplay)
-                status_msgs = chat.query(StatusMessage)
-                assert len(status_msgs) >= 1
+                status = pilot.app.query_one(StatusBar)
+                assert status._server_url == "https://test.example.com"
