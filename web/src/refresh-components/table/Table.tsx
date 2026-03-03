@@ -15,10 +15,7 @@ function Table({ ref, width, ...props }: TableProps) {
   return (
     <table
       ref={ref}
-      className={cn(
-        "border-separate border-spacing-0",
-        width == null && "min-w-full"
-      )}
+      className={cn("border-separate border-spacing-0", "min-w-full")}
       style={{ tableLayout: "fixed", width: width ?? undefined }}
       {...props}
     />

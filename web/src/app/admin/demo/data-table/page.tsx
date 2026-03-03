@@ -4,6 +4,10 @@
 import { useState } from "react";
 import { createColumnHelper, flexRender } from "@tanstack/react-table";
 import useDataTable, { toOnyxSortDirection } from "@/hooks/useDataTable";
+import useColumnWidths, {
+  internalColumn,
+  buildInternalColumns,
+} from "@/hooks/useColumnWidths";
 import useDraggableRows from "@/hooks/useDraggableRows";
 import { ColumnVisibilityPopover } from "@/refresh-components/table/ColumnVisibilityPopover";
 import { SortingPopover } from "@/refresh-components/table/SortingPopover";
@@ -300,213 +304,254 @@ const STATUS_CONFIG = {
 
 const columnHelper = createColumnHelper<TeamMember>();
 
-const columns = [
-  columnHelper.display({
-    id: "qualifier",
-    size: 56,
-    enableResizing: false,
-    enableSorting: false,
-    enableHiding: false,
-    cell: ({ row }) => (
-      <TableQualifier
-        content="avatar-user"
-        initials={row.original.initials}
-        selectable
-        selected={row.getIsSelected()}
-        onSelectChange={(checked) => {
-          row.toggleSelected(checked);
-        }}
-      />
-    ),
-  }),
-  columnHelper.accessor("name", {
-    header: "Name",
-    size: 200,
-    enableSorting: true,
-    enableResizing: true,
-    cell: (info) => (
-      <Content sizePreset="main-ui" variant="body" title={info.getValue()} />
-    ),
-  }),
-  columnHelper.accessor("email", {
-    header: "Email",
-    size: 240,
-    enableSorting: true,
-    enableResizing: true,
-    cell: (info) => (
-      <Content
-        sizePreset="main-ui"
-        variant="body"
-        title={info.getValue()}
-        prominence="muted"
-      />
-    ),
-  }),
-  columnHelper.accessor("role", {
-    header: "Role",
-    size: 140,
-    enableSorting: true,
-    enableResizing: true,
-    cell: (info) => (
-      <Content sizePreset="main-ui" variant="body" title={info.getValue()} />
-    ),
-  }),
-  columnHelper.accessor("department", {
-    header: "Department",
-    size: 160,
-    enableSorting: true,
-    enableResizing: true,
-    cell: (info) => (
-      <Content sizePreset="main-ui" variant="body" title={info.getValue()} />
-    ),
-  }),
-  columnHelper.accessor("status", {
-    header: "Status",
-    size: 120,
-    enableSorting: true,
-    enableResizing: true,
-    cell: (info) => {
-      const status = info.getValue();
-      const { icon } = STATUS_CONFIG[status];
-      return (
+const { columns, widthConfig } = buildInternalColumns([
+  internalColumn(
+    columnHelper.display({
+      id: "qualifier",
+      enableResizing: false,
+      enableSorting: false,
+      enableHiding: false,
+      cell: ({ row }) => (
+        <TableQualifier
+          content="avatar-user"
+          initials={row.original.initials}
+          selectable
+          selected={row.getIsSelected()}
+          onSelectChange={(checked) => {
+            row.toggleSelected(checked);
+          }}
+        />
+      ),
+    }),
+    { fixed: 56 }
+  ),
+  internalColumn(
+    columnHelper.accessor("name", {
+      header: "Name",
+      enableSorting: true,
+      enableResizing: true,
+      cell: (info) => (
+        <Content sizePreset="main-ui" variant="body" title={info.getValue()} />
+      ),
+    }),
+    { weight: 200, minWidth: 120 }
+  ),
+  internalColumn(
+    columnHelper.accessor("email", {
+      header: "Email",
+      enableSorting: true,
+      enableResizing: true,
+      cell: (info) => (
         <Content
           sizePreset="main-ui"
           variant="body"
-          icon={icon}
-          title={status.charAt(0).toUpperCase() + status.slice(1)}
+          title={info.getValue()}
+          prominence="muted"
         />
-      );
-    },
-  }),
-  columnHelper.display({
-    id: "__actions",
-    size: 88,
-    enableHiding: false,
-    enableSorting: false,
-    enableResizing: false,
-    header: ({ table }) => (
-      <div className="flex flex-row items-center">
-        <ColumnVisibilityPopover
-          table={table}
-          columnVisibility={table.getState().columnVisibility}
-        />
-        <SortingPopover
-          table={table}
-          sorting={table.getState().sorting}
-          footerText="Everyone in your organization will see the explore agents list in this order."
-        />
-      </div>
-    ),
-    cell: () => null,
-  }),
-];
+      ),
+    }),
+    { weight: 240, minWidth: 150 }
+  ),
+  internalColumn(
+    columnHelper.accessor("role", {
+      header: "Role",
+      enableSorting: true,
+      enableResizing: true,
+      cell: (info) => (
+        <Content sizePreset="main-ui" variant="body" title={info.getValue()} />
+      ),
+    }),
+    { weight: 140, minWidth: 80 }
+  ),
+  internalColumn(
+    columnHelper.accessor("department", {
+      header: "Department",
+      enableSorting: true,
+      enableResizing: true,
+      cell: (info) => (
+        <Content sizePreset="main-ui" variant="body" title={info.getValue()} />
+      ),
+    }),
+    { weight: 160, minWidth: 100 }
+  ),
+  internalColumn(
+    columnHelper.accessor("status", {
+      header: "Status",
+      enableSorting: true,
+      enableResizing: true,
+      cell: (info) => {
+        const status = info.getValue();
+        const { icon } = STATUS_CONFIG[status];
+        return (
+          <Content
+            sizePreset="main-ui"
+            variant="body"
+            icon={icon}
+            title={status.charAt(0).toUpperCase() + status.slice(1)}
+          />
+        );
+      },
+    }),
+    { weight: 120, minWidth: 80 }
+  ),
+  internalColumn(
+    columnHelper.display({
+      id: "__actions",
+      enableHiding: false,
+      enableSorting: false,
+      enableResizing: false,
+      header: ({ table }) => (
+        <div className="flex flex-row items-center">
+          <ColumnVisibilityPopover
+            table={table}
+            columnVisibility={table.getState().columnVisibility}
+          />
+          <SortingPopover
+            table={table}
+            sorting={table.getState().sorting}
+            footerText="Everyone in your organization will see the explore agents list in this order."
+          />
+        </div>
+      ),
+      cell: () => null,
+    }),
+    { fixed: 88 }
+  ),
+]);
 
 // ---------------------------------------------------------------------------
 // Small column definitions
 // ---------------------------------------------------------------------------
 
-const smallColumns = [
-  columnHelper.display({
-    id: "qualifier",
-    size: 40,
-    enableResizing: false,
-    enableSorting: false,
-    enableHiding: false,
-    cell: ({ row }) => (
-      <TableQualifier
-        content="avatar-user"
-        initials={row.original.initials}
-        selectable
-        selected={row.getIsSelected()}
-        onSelectChange={(checked) => {
-          row.toggleSelected(checked);
-        }}
-        size="small"
-      />
+const { columns: smallColumns, widthConfig: smallWidthConfig } =
+  buildInternalColumns([
+    internalColumn(
+      columnHelper.display({
+        id: "qualifier",
+        enableResizing: false,
+        enableSorting: false,
+        enableHiding: false,
+        cell: ({ row }) => (
+          <TableQualifier
+            content="avatar-user"
+            initials={row.original.initials}
+            selectable
+            selected={row.getIsSelected()}
+            onSelectChange={(checked) => {
+              row.toggleSelected(checked);
+            }}
+            size="small"
+          />
+        ),
+      }),
+      { fixed: 40 }
     ),
-  }),
-  columnHelper.accessor("name", {
-    header: "Name",
-    size: 200,
-    enableSorting: true,
-    enableResizing: true,
-    cell: (info) => (
-      <Content sizePreset="secondary" variant="body" title={info.getValue()} />
+    internalColumn(
+      columnHelper.accessor("name", {
+        header: "Name",
+        enableSorting: true,
+        enableResizing: true,
+        cell: (info) => (
+          <Content
+            sizePreset="secondary"
+            variant="body"
+            title={info.getValue()}
+          />
+        ),
+      }),
+      { weight: 200, minWidth: 120 }
     ),
-  }),
-  columnHelper.accessor("email", {
-    header: "Email",
-    size: 240,
-    enableSorting: true,
-    enableResizing: true,
-    cell: (info) => (
-      <Content
-        sizePreset="secondary"
-        variant="body"
-        title={info.getValue()}
-        prominence="muted"
-      />
+    internalColumn(
+      columnHelper.accessor("email", {
+        header: "Email",
+        enableSorting: true,
+        enableResizing: true,
+        cell: (info) => (
+          <Content
+            sizePreset="secondary"
+            variant="body"
+            title={info.getValue()}
+            prominence="muted"
+          />
+        ),
+      }),
+      { weight: 240, minWidth: 150 }
     ),
-  }),
-  columnHelper.accessor("role", {
-    header: "Role",
-    size: 140,
-    enableSorting: true,
-    enableResizing: true,
-    cell: (info) => (
-      <Content sizePreset="secondary" variant="body" title={info.getValue()} />
+    internalColumn(
+      columnHelper.accessor("role", {
+        header: "Role",
+        enableSorting: true,
+        enableResizing: true,
+        cell: (info) => (
+          <Content
+            sizePreset="secondary"
+            variant="body"
+            title={info.getValue()}
+          />
+        ),
+      }),
+      { weight: 140, minWidth: 80 }
     ),
-  }),
-  columnHelper.accessor("department", {
-    header: "Department",
-    size: 160,
-    enableSorting: true,
-    enableResizing: true,
-    cell: (info) => (
-      <Content sizePreset="secondary" variant="body" title={info.getValue()} />
+    internalColumn(
+      columnHelper.accessor("department", {
+        header: "Department",
+        enableSorting: true,
+        enableResizing: true,
+        cell: (info) => (
+          <Content
+            sizePreset="secondary"
+            variant="body"
+            title={info.getValue()}
+          />
+        ),
+      }),
+      { weight: 160, minWidth: 100 }
     ),
-  }),
-  columnHelper.accessor("status", {
-    header: "Status",
-    size: 120,
-    enableSorting: true,
-    enableResizing: true,
-    cell: (info) => {
-      const status = info.getValue();
-      const { icon } = STATUS_CONFIG[status];
-      return (
-        <Content
-          sizePreset="secondary"
-          variant="body"
-          icon={icon}
-          title={status.charAt(0).toUpperCase() + status.slice(1)}
-        />
-      );
-    },
-  }),
-  columnHelper.display({
-    id: "__actions",
-    size: 88,
-    enableHiding: false,
-    enableSorting: false,
-    enableResizing: false,
-    header: ({ table }) => (
-      <div className="flex flex-row items-center">
-        <SortingPopover
-          table={table}
-          sorting={table.getState().sorting}
-          size="small"
-        />
-        <ColumnVisibilityPopover
-          table={table}
-          columnVisibility={table.getState().columnVisibility}
-          size="small"
-        />
-      </div>
+    internalColumn(
+      columnHelper.accessor("status", {
+        header: "Status",
+        enableSorting: true,
+        enableResizing: true,
+        cell: (info) => {
+          const status = info.getValue();
+          const { icon } = STATUS_CONFIG[status];
+          return (
+            <Content
+              sizePreset="secondary"
+              variant="body"
+              icon={icon}
+              title={status.charAt(0).toUpperCase() + status.slice(1)}
+            />
+          );
+        },
+      }),
+      { weight: 120, minWidth: 80 }
     ),
-    cell: () => null,
-  }),
-];
+    internalColumn(
+      columnHelper.display({
+        id: "__actions",
+        enableHiding: false,
+        enableSorting: false,
+        enableResizing: false,
+        header: ({ table }) => (
+          <div className="flex flex-row items-center">
+            <SortingPopover
+              table={table}
+              sorting={table.getState().sorting}
+              size="small"
+            />
+            <ColumnVisibilityPopover
+              table={table}
+              columnVisibility={table.getState().columnVisibility}
+              size="small"
+            />
+          </div>
+        ),
+        cell: () => null,
+      }),
+      { fixed: 20 }
+    ),
+  ]);
 
 // ---------------------------------------------------------------------------
 // Page component
@@ -565,6 +610,24 @@ export default function DataTableDemoPage() {
     initialColumnVisibility: { department: false },
   });
 
+  const {
+    containerRef: tableRef,
+    columnWidths,
+    createResizeHandler,
+  } = useColumnWidths({
+    headers: table.getHeaderGroups()[0]?.headers ?? [],
+    ...widthConfig,
+  });
+
+  const {
+    containerRef: smallTableRef,
+    columnWidths: smallColumnWidths,
+    createResizeHandler: smallCreateResizeHandler,
+  } = useColumnWidths({
+    headers: smallTable.getHeaderGroups()[0]?.headers ?? [],
+    ...smallWidthConfig,
+  });
+
   return (
     <div className="p-6 space-y-8">
       <div className="flex flex-col space-y-4">
@@ -576,19 +639,21 @@ export default function DataTableDemoPage() {
       </div>
 
       <div>
-        <div className="overflow-x-auto">
-          <Table width={table.getTotalSize()}>
+        <div className="overflow-x-auto" ref={tableRef}>
+          <Table>
             <TableHeader>
               {table.getHeaderGroups().map((headerGroup) => (
                 <TableRow key={headerGroup.id}>
-                  {headerGroup.headers.map((header) => {
+                  {headerGroup.headers.map((header, headerIndex) => {
                     const canSort = header.column.getCanSort();
-                    const canResize = header.column.getCanResize();
                     const sortDir = header.column.getIsSorted();
 
                     if (header.id === "qualifier") {
                       return (
-                        <TableHead key={header.id} width={header.getSize()}>
+                        <TableHead
+                          key={header.id}
+                          width={columnWidths[header.id]}
+                        >
                           <TableQualifier
                             content="simple"
                             selectable
@@ -605,7 +670,7 @@ export default function DataTableDemoPage() {
                       return (
                         <TableHead
                           key={header.id}
-                          width={header.getSize()}
+                          width={columnWidths[header.id]}
                           sticky
                           bottomBorder={false}
                         >
@@ -617,10 +682,16 @@ export default function DataTableDemoPage() {
                       );
                     }
 
+                    const nextHeader = headerGroup.headers[headerIndex + 1];
+                    const canResize =
+                      header.column.getCanResize() &&
+                      !!nextHeader &&
+                      !widthConfig.fixedColumnIds.has(nextHeader.id);
+
                     return (
                       <TableHead
                         key={header.id}
-                        width={header.getSize()}
+                        width={columnWidths[header.id]}
                         sorted={
                           canSort ? toOnyxSortDirection(sortDir) : undefined
                         }
@@ -631,7 +702,9 @@ export default function DataTableDemoPage() {
                         }
                         resizable={canResize}
                         onResizeStart={
-                          canResize ? header.getResizeHandler() : undefined
+                          canResize
+                            ? createResizeHandler(header.id, nextHeader.id)
+                            : undefined
                         }
                       >
                         {flexRender(
@@ -729,21 +802,20 @@ export default function DataTableDemoPage() {
       </div>
 
       <div className="border border-border-01 rounded-lg overflow-hidden">
-        <div className="overflow-x-auto">
-          <Table width={smallTable.getTotalSize()}>
+        <div className="overflow-x-auto" ref={smallTableRef}>
+          <Table>
             <TableHeader>
               {smallTable.getHeaderGroups().map((headerGroup) => (
                 <TableRow key={headerGroup.id}>
-                  {headerGroup.headers.map((header) => {
+                  {headerGroup.headers.map((header, headerIndex) => {
                     const canSort = header.column.getCanSort();
-                    const canResize = header.column.getCanResize();
                     const sortDir = header.column.getIsSorted();
 
                     if (header.id === "qualifier") {
                       return (
                         <TableHead
                           key={header.id}
-                          width={header.getSize()}
+                          width={smallColumnWidths[header.id]}
                           size="small"
                         >
                           <TableQualifier
@@ -763,7 +835,7 @@ export default function DataTableDemoPage() {
                       return (
                         <TableHead
                           key={header.id}
-                          width={header.getSize()}
+                          width={smallColumnWidths[header.id]}
                           size="small"
                           sticky
                           bottomBorder={false}
@@ -776,10 +848,16 @@ export default function DataTableDemoPage() {
                       );
                     }
 
+                    const nextHeader = headerGroup.headers[headerIndex + 1];
+                    const canResize =
+                      header.column.getCanResize() &&
+                      !!nextHeader &&
+                      !smallWidthConfig.fixedColumnIds.has(nextHeader.id);
+
                     return (
                       <TableHead
                         key={header.id}
-                        width={header.getSize()}
+                        width={smallColumnWidths[header.id]}
                         size="small"
                         sorted={
                           canSort ? toOnyxSortDirection(sortDir) : undefined
@@ -791,7 +869,9 @@ export default function DataTableDemoPage() {
                         }
                         resizable={canResize}
                         onResizeStart={
-                          canResize ? header.getResizeHandler() : undefined
+                          canResize
+                            ? smallCreateResizeHandler(header.id, nextHeader.id)
+                            : undefined
                         }
                       >
                         {flexRender(
