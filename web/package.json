@@ -23,6 +23,7 @@
     "test:verbose": "jest --verbose",
     "test:ci": "jest --ci --maxWorkers=2 --silent --bail",
     "test:changed": "jest --onlyChanged",
+    "test:diff": "jest --changedSince=main",
     "test:debug": "node --inspect-brk node_modules/.bin/jest --runInBand"
   },
   "dependencies": {
