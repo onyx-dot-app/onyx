@@ -130,7 +130,7 @@ function useOnboardingState(liveAgent?: MinimalPersonaSnapshot): {
       }
     }
     dispatch({ type: OnboardingActionType.NEXT_STEP });
-  }, [state, refreshProviderInfo, llmProviders, refreshPersonaProviders]);
+  }, [state, refreshProviderInfo, refreshPersonaProviders, liveAgent]);
 
   const prevStep = useCallback(() => {
     dispatch({ type: OnboardingActionType.PREV_STEP });
@@ -152,7 +152,7 @@ function useOnboardingState(liveAgent?: MinimalPersonaSnapshot): {
       }
       dispatch({ type: OnboardingActionType.GO_TO_STEP, step });
     },
-    [state, llmProviders]
+    [state]
   );
 
   const updateName = useCallback(
@@ -241,7 +241,7 @@ function useOnboardingState(liveAgent?: MinimalPersonaSnapshot): {
       setError,
       reset,
     },
-    isLoading: isLoadingProviders || !!liveAgent,
+    isLoading: isLoadingProviders,
   };
 }
 
