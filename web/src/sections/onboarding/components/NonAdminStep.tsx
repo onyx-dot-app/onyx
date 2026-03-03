@@ -9,7 +9,7 @@ import { Button as OpalButton } from "@opal/components";
 import InputAvatar from "@/refresh-components/inputs/InputAvatar";
 import { cn } from "@/lib/utils";
 import { SvgCheckCircle, SvgEdit, SvgUser, SvgX } from "@opal/icons";
-import { Content, ContentAction } from "@opal/layouts";
+import { ContentAction } from "@opal/layouts";
 
 export default function NonAdminStep() {
   const inputRef = useRef<HTMLInputElement>(null);
