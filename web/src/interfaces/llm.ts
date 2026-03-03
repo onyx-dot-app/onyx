@@ -118,6 +118,7 @@ export interface BedrockFetchParams {
 export interface OllamaFetchParams {
   api_base?: string;
   provider_name?: string;
+  signal?: AbortSignal;
 }
 
 export interface OpenRouterFetchParams {
