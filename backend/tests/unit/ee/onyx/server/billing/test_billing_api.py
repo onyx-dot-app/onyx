@@ -134,6 +134,7 @@ class TestCreateCustomerPortalSession:
             )
 
         assert exc_info.value.status_code == 400
+        assert isinstance(exc_info.value.detail, dict)
         assert exc_info.value.detail["message"] == "No license found"
 
     @pytest.mark.asyncio
@@ -241,6 +242,7 @@ class TestUpdateSeats:
             await update_seats(request=request, _=MagicMock(), db_session=MagicMock())
 
         assert exc_info.value.status_code == 400
+        assert isinstance(exc_info.value.detail, dict)
         assert exc_info.value.detail["message"] == "No license found"
 
     @pytest.mark.asyncio
@@ -344,6 +346,7 @@ class TestCircuitBreaker:
             await get_billing_information(_=MagicMock(), db_session=MagicMock())
 
         assert exc_info.value.status_code == 503
+        assert isinstance(exc_info.value.detail, dict)
         assert "Connect to Stripe" in exc_info.value.detail["message"]
 
     @pytest.mark.asyncio

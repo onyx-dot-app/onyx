@@ -70,6 +70,7 @@ class TestGetStripePublishableKey:
             await get_stripe_publishable_key()
 
         assert exc_info.value.status_code == 500
+        assert isinstance(exc_info.value.detail, dict)
         assert (
             exc_info.value.detail["message"] == "Invalid Stripe publishable key format"
         )
@@ -98,6 +99,7 @@ class TestGetStripePublishableKey:
                 await get_stripe_publishable_key()
 
         assert exc_info.value.status_code == 500
+        assert isinstance(exc_info.value.detail, dict)
         assert (
             exc_info.value.detail["message"] == "Invalid Stripe publishable key format"
         )
@@ -122,6 +124,7 @@ class TestGetStripePublishableKey:
                 await get_stripe_publishable_key()
 
         assert exc_info.value.status_code == 500
+        assert isinstance(exc_info.value.detail, dict)
         assert (
             exc_info.value.detail["message"] == "Failed to fetch Stripe publishable key"
         )
@@ -139,6 +142,7 @@ class TestGetStripePublishableKey:
             await get_stripe_publishable_key()
 
         assert exc_info.value.status_code == 500
+        assert isinstance(exc_info.value.detail, dict)
         assert "not configured" in exc_info.value.detail["message"]
 
     @pytest.mark.asyncio
