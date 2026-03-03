@@ -97,7 +97,7 @@ Streams the answer as plain text to stdout. Exit code 0 on success, non-zero on 
 onyx ask --json "What authentication methods do we support?"
 ```
 
-Outputs NDJSON (one JSON object per line). Key event types:
+Outputs JSON-encoded parsed stream events (one object per line). Key event objects include message deltas, stop, errors, search-start, and citation payloads.
 
 | Event Type | Description |
 |------------|-------------|
