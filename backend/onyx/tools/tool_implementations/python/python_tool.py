@@ -107,7 +107,11 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
         if not CODE_INTERPRETER_BASE_URL:
             return False
         server = fetch_code_interpreter_server(db_session)
-        return server.server_enabled
+        if not server.server_enabled:
+            return False
+
+        client = CodeInterpreterClient()
+        return client.health(use_cache=True)
 
     def tool_definition(self) -> dict:
         return {
