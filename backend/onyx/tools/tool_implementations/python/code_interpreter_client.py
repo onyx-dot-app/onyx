@@ -14,8 +14,8 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 _HEALTH_CACHE_TTL_SECONDS = 30
-
 _health_cache: dict[str, tuple[float, bool]] = {}
+
 
 class FileInput(TypedDict):
     """Input file to be staged in execution workspace"""
