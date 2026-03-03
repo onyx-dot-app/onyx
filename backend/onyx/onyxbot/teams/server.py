@@ -66,7 +66,18 @@ async def _handle_messages(request: web.Request) -> web.Response:
         await bot.on_turn(turn_context)
 
     try:
-        await adapter.process_activity(activity, auth_header, _turn_callback)
+        invoke_response = await adapter.process_activity(
+            activity, auth_header, _turn_callback
+        )
+        # For invoke activities (messaging extensions, task modules),
+        # process_activity returns an InvokeResponse with status/body
+        # that must be forwarded to the Bot Framework.
+        if invoke_response:
+            return web.Response(
+                status=invoke_response.status,
+                body=invoke_response.body,
+                content_type="application/json",
+            )
         return web.Response(status=200)
     except Exception as e:
         logger.exception(f"Error processing activity: {e}")

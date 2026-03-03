@@ -36,6 +36,7 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.PrimaryKeyConstraint("id"),
+        sa.CheckConstraint("id = 'SINGLETON'", name="ck_teams_bot_config_singleton"),
     )
 
     op.create_table(

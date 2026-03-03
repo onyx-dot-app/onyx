@@ -1127,7 +1127,7 @@ DISCORD_BOT_INVOKE_CHAR = os.environ.get("DISCORD_BOT_INVOKE_CHAR", "!")
 TEAMS_BOT_APP_ID = os.environ.get("TEAMS_BOT_APP_ID")
 TEAMS_BOT_APP_SECRET = os.environ.get("TEAMS_BOT_APP_SECRET")
 TEAMS_BOT_AZURE_TENANT_ID = os.environ.get("TEAMS_BOT_AZURE_TENANT_ID")
-TEAMS_BOT_PORT = int(os.environ.get("TEAMS_BOT_PORT", "3978"))
+TEAMS_BOT_PORT = int(os.environ.get("TEAMS_BOT_PORT") or "3978")
 
 
 ## Stripe Configuration

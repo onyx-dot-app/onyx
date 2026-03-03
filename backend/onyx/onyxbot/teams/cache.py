@@ -2,8 +2,8 @@
 
 from sqlalchemy.orm import Session
 
-from onyx.db.teams_bot import get_or_create_teams_service_api_key
 from onyx.db.teams_bot import get_team_configs
+from onyx.db.teams_bot import provision_teams_service_api_key
 from onyx.onyxbot.cache import BotCacheManager
 
 
@@ -22,7 +22,7 @@ class TeamsCacheManager(BotCacheManager[str]):
         ]
 
     def _get_or_create_api_key(self, db: Session, tenant_id: str) -> str:
-        return get_or_create_teams_service_api_key(db, tenant_id)
+        return provision_teams_service_api_key(db, tenant_id)
 
     # Convenience aliases for caller clarity
     async def refresh_team(self, team_id: str, tenant_id: str) -> None:

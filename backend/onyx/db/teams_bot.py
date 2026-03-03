@@ -79,24 +79,25 @@ def get_teams_service_api_key(db_session: Session) -> ApiKey | None:
     )
 
 
-def get_or_create_teams_service_api_key(
+def provision_teams_service_api_key(
     db_session: Session,
     tenant_id: str,
 ) -> str:
-    """Get existing Teams service API key or create one.
+    """Create or regenerate the Teams service API key, returning the raw key.
 
-    The API key is used by the Teams bot to authenticate with the
-    Onyx API pods when sending chat requests.
+    The database only stores the hashed key. When the cache is cold
+    (e.g. after a pod restart), the raw key is unrecoverable, so we
+    regenerate a new one and update the stored hash. This is safe because
+    the bot is the sole consumer of this key.
 
-    Returns:
-        The raw API key string (not hashed).
+    This function is **not** idempotent — it mutates the stored hash on
+    every call when a key already exists. Only call it on cache miss.
     """
     existing = get_teams_service_api_key(db_session)
     if existing:
-        # Database only stores the hash, so we must regenerate to get the raw key.
         logger.debug(
-            f"Found existing Teams service API key for tenant {tenant_id} that isn't in cache, "
-            "regenerating to update cache"
+            f"Regenerating Teams service API key for tenant {tenant_id} "
+            "(raw key unrecoverable from hash)"
         )
         new_api_key = generate_api_key(tenant_id)
         existing.hashed_api_key = hash_api_key(new_api_key)
@@ -184,13 +185,19 @@ def get_team_config_by_teams_id(
 def get_team_config_by_registration_key(
     db_session: Session,
     registration_key: str,
+    for_update: bool = False,
 ) -> TeamsTeamConfig | None:
-    """Get a team config by its registration key."""
-    return db_session.scalar(
-        select(TeamsTeamConfig).where(
-            TeamsTeamConfig.registration_key == registration_key
-        )
+    """Get a team config by its registration key.
+
+    Use ``for_update=True`` to acquire a row-level lock, preventing
+    concurrent registration races.
+    """
+    stmt = select(TeamsTeamConfig).where(
+        TeamsTeamConfig.registration_key == registration_key
     )
+    if for_update:
+        stmt = stmt.with_for_update()
+    return db_session.scalar(stmt)
 
 
 def create_team_config(

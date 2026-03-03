@@ -1,6 +1,7 @@
 """Teams bot message handling and response logic."""
 
-from pydantic import BaseModel
+from dataclasses import dataclass
+from dataclasses import field
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.models import TeamsChannelConfig
@@ -18,13 +19,14 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-class ShouldRespondContext(BaseModel):
+@dataclass
+class ShouldRespondContext:
     """Context for whether the bot should respond to a message."""
 
     should_respond: bool
     persona_id: int | None
-    tenant_id: str | None = None
-    api_key: str | None = None
+    tenant_id: str | None = field(default=None)
+    api_key: str | None = field(default=None)
 
 
 def should_respond(

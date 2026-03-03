@@ -239,7 +239,7 @@ class TestThreadSafety:
 
         call_count = 0
 
-        async def slow_refresh() -> tuple[list[int], str]:
+        async def slow_refresh(_tenant_id: str) -> tuple[list[int], str]:
             nonlocal call_count
             call_count += 1
             # Simulate slow operation
@@ -499,7 +499,7 @@ class TestCacheErrorHandling:
             nonlocal call_count
             call_count += 1
             if tenant_id == "tenant1":
-                raise Exception("Tenant 1 error")
+                raise ConnectionError("Tenant 1 connection failed")
             return ([222222], "api_key")
 
         with (

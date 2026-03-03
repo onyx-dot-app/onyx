@@ -96,8 +96,9 @@ class OnyxTeamsBot(ActivityHandler):
                 logger.debug(f"No tenant found for team {team_id}")
                 return
         else:
-            # DM — not in a team context, we can't determine tenant
-            # TODO: Could support DM registration or use a default tenant
+            # DM — not in a team context, so we can't determine tenant.
+            # TODO(nik): support DM registration or default tenant lookup
+            logger.debug("Ignoring DM (no team context to resolve tenant)")
             return
 
         # Check if bot should respond

@@ -44,7 +44,7 @@ class TestCacheInitialization:
                 return_value=[mock_config1, mock_config2],
             ),
             patch(
-                "onyx.onyxbot.teams.cache.get_or_create_teams_service_api_key",
+                "onyx.onyxbot.teams.cache.provision_teams_service_api_key",
                 return_value="test_api_key",
             ),
         ):
@@ -82,7 +82,7 @@ class TestCacheInitialization:
                 return_value=[mock_config],
             ),
             patch(
-                "onyx.onyxbot.teams.cache.get_or_create_teams_service_api_key",
+                "onyx.onyxbot.teams.cache.provision_teams_service_api_key",
                 return_value="new_api_key",
             ) as mock_provision,
         ):
@@ -142,7 +142,7 @@ class TestCacheUpdates:
                 return_value=[mock_config],
             ),
             patch(
-                "onyx.onyxbot.teams.cache.get_or_create_teams_service_api_key",
+                "onyx.onyxbot.teams.cache.provision_teams_service_api_key",
                 return_value="api_key",
             ),
         ):
@@ -200,7 +200,7 @@ class TestGatedTenantHandling:
                 return_value=[mock_config],
             ),
             patch(
-                "onyx.onyxbot.teams.cache.get_or_create_teams_service_api_key",
+                "onyx.onyxbot.teams.cache.provision_teams_service_api_key",
                 return_value="api_key",
             ),
         ):

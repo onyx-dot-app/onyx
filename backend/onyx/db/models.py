@@ -20,6 +20,7 @@ from fastapi_users_db_sqlalchemy import SQLAlchemyBaseUserTableUUID
 from fastapi_users_db_sqlalchemy.access_token import SQLAlchemyBaseAccessTokenTableUUID
 from fastapi_users_db_sqlalchemy.generics import TIMESTAMPAware
 from sqlalchemy import Boolean
+from sqlalchemy import CheckConstraint
 from sqlalchemy import DateTime
 from sqlalchemy import desc
 from sqlalchemy import Enum
@@ -3676,6 +3677,9 @@ class TeamsBotConfig(Base):
     """
 
     __tablename__ = "teams_bot_config"
+    __table_args__ = (
+        CheckConstraint("id = 'SINGLETON'", name="ck_teams_bot_config_singleton"),
+    )
 
     id: Mapped[str] = mapped_column(
         String, primary_key=True, server_default=text("'SINGLETON'")

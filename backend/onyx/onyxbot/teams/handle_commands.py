@@ -53,7 +53,10 @@ async def handle_registration_command(
 
     def _register() -> str:
         with get_session_with_tenant(tenant_id=tenant_id) as db:
-            config = get_team_config_by_registration_key(db, registration_key)
+            # Lock the row to prevent concurrent registration with the same key
+            config = get_team_config_by_registration_key(
+                db, registration_key, for_update=True
+            )
             if not config:
                 raise RegistrationError("Registration key not found or already used.")
 

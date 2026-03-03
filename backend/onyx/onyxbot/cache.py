@@ -10,6 +10,7 @@ from abc import abstractmethod
 from typing import Generic
 from typing import TypeVar
 
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
@@ -58,76 +59,85 @@ class BotCacheManager(ABC, Generic[EntityIdT]):
         return self._initialized
 
     async def refresh_all(self) -> None:
-        """Full cache refresh from all tenants."""
-        async with self._lock:
-            logger.info(f"Starting {self._entity_name} cache refresh")
+        """Full cache refresh from all tenants.
 
-            new_entity_tenants: dict[EntityIdT, str] = {}
-            new_api_keys: dict[str, str] = {}
+        Data is loaded outside the lock; the lock is only held for the
+        atomic swap of the cache dicts so that ``refresh_entity`` and
+        read operations are not blocked during I/O.
+        """
+        logger.info(f"Starting {self._entity_name} cache refresh")
 
-            try:
-                gated = fetch_ee_implementation_or_noop(
-                    "onyx.server.tenants.product_gating",
-                    "get_gated_tenants",
-                    set(),
-                )()
+        new_entity_tenants: dict[EntityIdT, str] = {}
+        new_api_keys: dict[str, str] = {}
 
-                tenant_ids = await asyncio.to_thread(get_all_tenant_ids)
-                for tenant_id in tenant_ids:
-                    if tenant_id in gated:
+        try:
+            gated = fetch_ee_implementation_or_noop(
+                "onyx.server.tenants.product_gating",
+                "get_gated_tenants",
+                set(),
+            )()
+
+            tenant_ids = await asyncio.to_thread(get_all_tenant_ids)
+            for tenant_id in tenant_ids:
+                if tenant_id in gated:
+                    continue
+
+                context_token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+                try:
+                    entity_ids, api_key = await self._load_tenant_data(tenant_id)
+                    if not entity_ids:
+                        logger.debug(
+                            f"No {self._entity_name} found for tenant " f"{tenant_id}"
+                        )
                         continue
 
-                    context_token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
-                    try:
-                        entity_ids, api_key = await self._load_tenant_data(tenant_id)
-                        if not entity_ids:
-                            logger.debug(
-                                f"No {self._entity_name} found for tenant "
-                                f"{tenant_id}"
-                            )
-                            continue
+                    if not api_key:
+                        logger.warning(
+                            f"Service API key missing for tenant that has "
+                            f"registered {self._entity_name}. {tenant_id} "
+                            f"will not be handled in this refresh cycle."
+                        )
+                        continue
 
-                        if not api_key:
-                            logger.warning(
-                                f"Service API key missing for tenant that has "
-                                f"registered {self._entity_name}. {tenant_id} "
-                                f"will not be handled in this refresh cycle."
-                            )
-                            continue
+                    for entity_id in entity_ids:
+                        new_entity_tenants[entity_id] = tenant_id
 
-                        for entity_id in entity_ids:
-                            new_entity_tenants[entity_id] = tenant_id
+                    new_api_keys[tenant_id] = api_key
+                except (OperationalError, ConnectionError, OSError) as e:
+                    logger.warning(f"Failed to refresh tenant {tenant_id}: {e}")
+                finally:
+                    CURRENT_TENANT_ID_CONTEXTVAR.reset(context_token)
 
-                        new_api_keys[tenant_id] = api_key
-                    except Exception as e:
-                        logger.warning(f"Failed to refresh tenant {tenant_id}: {e}")
-                    finally:
-                        CURRENT_TENANT_ID_CONTEXTVAR.reset(context_token)
-
+            # Atomic swap under lock
+            async with self._lock:
                 self._entity_tenants = new_entity_tenants
                 self._api_keys = new_api_keys
                 self._initialized = True
 
-                logger.info(
-                    f"Cache refresh complete: "
-                    f"{len(new_entity_tenants)} {self._entity_name}, "
-                    f"{len(new_api_keys)} tenants"
-                )
+            logger.info(
+                f"Cache refresh complete: "
+                f"{len(new_entity_tenants)} {self._entity_name}, "
+                f"{len(new_api_keys)} tenants"
+            )
 
-            except Exception as e:
-                logger.error(f"Cache refresh failed: {e}")
-                raise CacheError(f"Failed to refresh cache: {e}") from e
+        except (OperationalError, ConnectionError, OSError) as e:
+            logger.error(f"Cache refresh failed: {e}")
+            raise CacheError(f"Failed to refresh cache: {e}") from e
 
     async def refresh_entity(self, entity_id: EntityIdT, tenant_id: str) -> None:
         """Add a single entity to cache after registration."""
-        async with self._lock:
-            logger.info(
-                f"Refreshing cache for {self._entity_name} entity "
-                f"{entity_id} (tenant: {tenant_id})"
-            )
+        logger.info(
+            f"Refreshing cache for {self._entity_name} entity "
+            f"{entity_id} (tenant: {tenant_id})"
+        )
 
+        context_token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+        try:
             entity_ids, api_key = await self._load_tenant_data(tenant_id)
+        finally:
+            CURRENT_TENANT_ID_CONTEXTVAR.reset(context_token)
 
+        async with self._lock:
             if entity_id in entity_ids:
                 self._entity_tenants[entity_id] = tenant_id
                 if api_key:
