@@ -44,6 +44,8 @@ var askCmd = &cobra.Command{
 			nil,
 		)
 
+		var lastErr error
+		gotStop := false
 		for event := range ch {
 			if askJSON {
 				data, err := json.Marshal(event)
@@ -52,6 +54,12 @@ var askCmd = &cobra.Command{
 					continue
 				}
 				fmt.Println(string(data))
+				if _, ok := event.(models.ErrorEvent); ok {
+					lastErr = fmt.Errorf("%s", event.(models.ErrorEvent).Error)
+				}
+				if _, ok := event.(models.StopEvent); ok {
+					gotStop = true
+				}
 				continue
 			}
 
@@ -66,8 +74,13 @@ var askCmd = &cobra.Command{
 			}
 		}
 
-		if !askJSON {
-			fmt.Println()
+		if askJSON {
+			return lastErr
+		}
+
+		fmt.Println()
+		if !gotStop {
+			return fmt.Errorf("stream ended unexpectedly")
 		}
 		return nil
 	},

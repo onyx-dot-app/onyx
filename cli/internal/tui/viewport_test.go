@@ -122,8 +122,8 @@ func TestFinishAgentEmpty(t *testing.T) {
 	if v.streaming {
 		t.Error("expected streaming to be false")
 	}
-	if len(v.entries) != 1 {
-		t.Errorf("expected 1 entry (spacer only), got %d", len(v.entries))
+	if len(v.entries) != 0 {
+		t.Errorf("expected 0 entries (spacer removed), got %d", len(v.entries))
 	}
 }
 

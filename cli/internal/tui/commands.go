@@ -54,14 +54,20 @@ func handleSlashCommand(m Model, text string) (Model, tea.Cmd) {
 
 	case "/connectors":
 		url := m.config.ServerURL + "/admin/indexing/status"
-		util.OpenBrowser(url)
-		m.viewport.addInfo("Opened " + url + " in browser")
+		if util.OpenBrowser(url) {
+			m.viewport.addInfo("Opened " + url + " in browser")
+		} else {
+			m.viewport.addWarning("Failed to open browser. Visit: " + url)
+		}
 		return m, nil
 
 	case "/settings":
 		url := m.config.ServerURL + "/app/settings/general"
-		util.OpenBrowser(url)
-		m.viewport.addInfo("Opened " + url + " in browser")
+		if util.OpenBrowser(url) {
+			m.viewport.addInfo("Opened " + url + " in browser")
+		} else {
+			m.viewport.addWarning("Failed to open browser. Visit: " + url)
+		}
 		return m, nil
 
 	case "/quit":

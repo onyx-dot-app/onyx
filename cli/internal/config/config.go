@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -64,8 +65,9 @@ func Load() OnyxCliConfig {
 
 	data, err := os.ReadFile(ConfigFilePath())
 	if err == nil {
-		// Ignore JSON errors - fall back to defaults
-		_ = json.Unmarshal(data, &cfg)
+		if jsonErr := json.Unmarshal(data, &cfg); jsonErr != nil {
+			fmt.Fprintf(os.Stderr, "warning: config file %s is malformed: %v (using defaults)\n", ConfigFilePath(), jsonErr)
+		}
 	}
 
 	// Environment overrides
@@ -98,5 +100,5 @@ func Save(cfg OnyxCliConfig) error {
 		return err
 	}
 
-	return os.WriteFile(ConfigFilePath(), data, 0o644)
+	return os.WriteFile(ConfigFilePath(), data, 0o600)
 }

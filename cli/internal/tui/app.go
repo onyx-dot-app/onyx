@@ -585,13 +585,13 @@ func (m Model) handleSessionResumed(msg SessionResumedMsg) (tea.Model, tea.Cmd) 
 	}
 
 	// Replay messages
-	for _, msg := range detail.Messages {
-		switch msg.MessageType {
+	for _, chatMsg := range detail.Messages {
+		switch chatMsg.MessageType {
 		case "user":
-			m.viewport.addUserMessage(msg.Message)
+			m.viewport.addUserMessage(chatMsg.Message)
 		case "assistant":
 			m.viewport.startAgent()
-			m.viewport.appendToken(msg.Message)
+			m.viewport.appendToken(chatMsg.Message)
 			m.viewport.finishAgent()
 		}
 	}

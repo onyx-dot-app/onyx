@@ -7,7 +7,8 @@ import (
 )
 
 // OpenBrowser opens the given URL in the user's default browser.
-func OpenBrowser(url string) {
+// Returns true if the browser was launched successfully.
+func OpenBrowser(url string) bool {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "darwin":
@@ -21,6 +22,8 @@ func OpenBrowser(url string) {
 		if err := cmd.Start(); err == nil {
 			// Reap the child process to avoid zombies.
 			go cmd.Wait()
+			return true
 		}
 	}
+	return false
 }

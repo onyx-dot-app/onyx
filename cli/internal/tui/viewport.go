@@ -115,6 +115,10 @@ func (v *viewport) appendToken(token string) {
 func (v *viewport) finishAgent() {
 	if v.streamBuf == "" {
 		v.streaming = false
+		// Remove the blank spacer entry added by startAgent()
+		if len(v.entries) > 0 && v.entries[len(v.entries)-1].kind == entryInfo && v.entries[len(v.entries)-1].rendered == "" {
+			v.entries = v.entries[:len(v.entries)-1]
+		}
 		return
 	}
 
@@ -291,8 +295,9 @@ func (v *viewport) renderPicker(width, height int) string {
 	for i := startIdx; i < endIdx; i++ {
 		item := v.pickerItems[i]
 		label := item.label
-		if len(label) > innerWidth-4 {
-			label = label[:innerWidth-7] + "..."
+		labelRunes := []rune(label)
+		if len(labelRunes) > innerWidth-4 {
+			label = string(labelRunes[:innerWidth-7]) + "..."
 		}
 		if i == v.pickerIndex {
 			line := lipgloss.NewStyle().Foreground(accentColor).Bold(true).Render("> " + label)
@@ -318,15 +323,16 @@ func (v *viewport) renderPicker(width, height int) string {
 		Bold(true).
 		Render(" " + title + " ")
 
-	// Place title on top border
+	// Place title on top border (replace border runes to keep width constant)
 	panelLines := strings.Split(panel, "\n")
 	if len(panelLines) > 0 {
 		border := panelLines[0]
 		runes := []rune(border)
-		if len(runes) > 4 {
-			// Insert title after the 2nd rune of the border
-			titleRunes := []rune(titleRendered)
-			panelLines[0] = string(runes[:2]) + string(titleRunes) + string(runes[2:])
+		titleRunes := []rune(titleRendered)
+		titleLen := len(titleRunes)
+		if len(runes) > titleLen+2 {
+			// Replace border runes starting at position 2 with the title
+			panelLines[0] = string(runes[:2]) + string(titleRunes) + string(runes[2+titleLen:])
 		}
 	}
 	panel = strings.Join(panelLines, "\n")

@@ -114,6 +114,9 @@ func (c *Client) SendMessageStream(
 				}
 			}
 		}
+		if err := scanner.Err(); err != nil && ctx.Err() == nil {
+			ch <- models.ErrorEvent{Error: fmt.Sprintf("stream read error: %v", err), IsRetryable: true}
+		}
 	}()
 
 	return ch

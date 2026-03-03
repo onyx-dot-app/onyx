@@ -15,10 +15,15 @@ func TestEmptyLineReturnsNil(t *testing.T) {
 	}
 }
 
-func TestInvalidJSONReturnsNil(t *testing.T) {
+func TestInvalidJSONReturnsErrorEvent(t *testing.T) {
 	for _, line := range []string{"not json", "{broken"} {
-		if ParseStreamLine(line) != nil {
-			t.Errorf("expected nil for %q", line)
+		event := ParseStreamLine(line)
+		if event == nil {
+			t.Errorf("expected ErrorEvent for %q, got nil", line)
+			continue
+		}
+		if _, ok := event.(models.ErrorEvent); !ok {
+			t.Errorf("expected ErrorEvent for %q, got %T", line, event)
 		}
 	}
 }

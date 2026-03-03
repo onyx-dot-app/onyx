@@ -60,7 +60,7 @@ func Run(existing *config.OnyxCliConfig) *config.OnyxCliConfig {
 	fmt.Println("  " + dimStyle.Render("or paste your key below."))
 	fmt.Println()
 
-	apiKey := prompt(reader, "  API key", cfg.APIKey)
+	apiKey := promptSecret("  API key", cfg.APIKey)
 
 	if apiKey == "" {
 		// Open browser to API key page
@@ -70,7 +70,7 @@ func Run(existing *config.OnyxCliConfig) *config.OnyxCliConfig {
 		fmt.Println("  " + dimStyle.Render("Copy your API key, then paste it here."))
 		fmt.Println()
 
-		apiKey = prompt(reader, "  API key", "")
+		apiKey = promptSecret("  API key", "")
 		if apiKey == "" {
 			fmt.Println("\n  " + redStyle.Render("No API key provided. Exiting."))
 			return nil
@@ -96,11 +96,31 @@ func Run(existing *config.OnyxCliConfig) *config.OnyxCliConfig {
 
 	if err := config.Save(cfg); err != nil {
 		fmt.Println("  " + redStyle.Render("Could not save config: "+err.Error()))
+		return nil
 	}
 	fmt.Println("  " + greenStyle.Render("Connected and authenticated."))
 	fmt.Println()
 	printQuickStart()
 	return &cfg
+}
+
+func promptSecret(label, defaultVal string) string {
+	if defaultVal != "" {
+		fmt.Printf("%s %s: ", label, dimStyle.Render("[hidden]"))
+	} else {
+		fmt.Printf("%s: ", label)
+	}
+
+	password, err := term.ReadPassword(int(os.Stdin.Fd()))
+	fmt.Println() // ReadPassword doesn't echo a newline
+	if err != nil {
+		return defaultVal
+	}
+	line := strings.TrimSpace(string(password))
+	if line == "" {
+		return defaultVal
+	}
+	return line
 }
 
 func prompt(reader *bufio.Reader, label, defaultVal string) string {
@@ -111,14 +131,15 @@ func prompt(reader *bufio.Reader, label, defaultVal string) string {
 	}
 
 	line, err := reader.ReadString('\n')
+	// ReadString may return partial data along with an error (e.g. EOF without newline)
+	line = strings.TrimSpace(line)
+	if line != "" {
+		return line
+	}
 	if err != nil {
 		return defaultVal
 	}
-	line = strings.TrimSpace(line)
-	if line == "" {
-		return defaultVal
-	}
-	return line
+	return defaultVal
 }
 
 func printQuickStart() {

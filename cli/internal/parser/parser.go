@@ -3,6 +3,7 @@ package parser
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	"github.com/onyx-dot-app/onyx/cli/internal/models"
@@ -20,7 +21,7 @@ func ParseStreamLine(line string) models.StreamEvent {
 
 	var data map[string]any
 	if err := json.Unmarshal([]byte(line), &data); err != nil {
-		return nil
+		return models.ErrorEvent{Error: fmt.Sprintf("malformed stream data: %v", err), IsRetryable: false}
 	}
 
 	// Case 1: CreateChatSessionID
