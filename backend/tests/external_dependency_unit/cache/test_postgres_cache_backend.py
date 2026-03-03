@@ -8,8 +8,13 @@ and the periodic cleanup function.
 import time
 from uuid import uuid4
 
+from sqlalchemy import select
+
+from onyx.cache.interface import TTL_KEY_NOT_FOUND
+from onyx.cache.interface import TTL_NO_EXPIRY
 from onyx.cache.postgres_backend import cleanup_expired_cache_entries
 from onyx.cache.postgres_backend import PostgresCacheBackend
+from onyx.db.models import CacheStore
 
 
 def _key() -> str:
@@ -78,10 +83,10 @@ class TestTTL:
     def test_ttl_no_expiry(self, pg_cache: PostgresCacheBackend) -> None:
         k = _key()
         pg_cache.set(k, b"forever")
-        assert pg_cache.ttl(k) == -1
+        assert pg_cache.ttl(k) == TTL_NO_EXPIRY
 
     def test_ttl_missing_key(self, pg_cache: PostgresCacheBackend) -> None:
-        assert pg_cache.ttl(_key()) == -2
+        assert pg_cache.ttl(_key()) == TTL_KEY_NOT_FOUND
 
     def test_ttl_remaining(self, pg_cache: PostgresCacheBackend) -> None:
         k = _key()
@@ -93,12 +98,12 @@ class TestTTL:
         k = _key()
         pg_cache.set(k, b"x", ex=1)
         time.sleep(1.5)
-        assert pg_cache.ttl(k) == -2
+        assert pg_cache.ttl(k) == TTL_KEY_NOT_FOUND
 
     def test_expire_adds_ttl(self, pg_cache: PostgresCacheBackend) -> None:
         k = _key()
         pg_cache.set(k, b"x")
-        assert pg_cache.ttl(k) == -1
+        assert pg_cache.ttl(k) == TTL_NO_EXPIRY
         pg_cache.expire(k, 10)
         assert 8 <= pg_cache.ttl(k) <= 10
 
@@ -199,11 +204,17 @@ class TestList:
 
 class TestCleanup:
     def test_removes_expired_rows(self, pg_cache: PostgresCacheBackend) -> None:
+        from onyx.db.engine.sql_engine import get_session_with_current_tenant
+
         k = _key()
         pg_cache.set(k, b"stale", ex=1)
         time.sleep(1.5)
         cleanup_expired_cache_entries()
-        assert pg_cache.ttl(k) == -2
+
+        stmt = select(CacheStore.key).where(CacheStore.key == k)
+        with get_session_with_current_tenant() as session:
+            row = session.execute(stmt).first()
+        assert row is None, "expired row should be physically deleted"
 
     def test_preserves_unexpired_rows(self, pg_cache: PostgresCacheBackend) -> None:
         k = _key()

@@ -1,6 +1,9 @@
 import abc
 from enum import Enum
 
+TTL_KEY_NOT_FOUND = -2
+TTL_NO_EXPIRY = -1
+
 
 class CacheBackendType(str, Enum):
     REDIS = "redis"
@@ -73,7 +76,11 @@ class CacheBackend(abc.ABC):
 
     @abc.abstractmethod
     def ttl(self, key: str) -> int:
-        """Return remaining TTL in seconds. -1 if no expiry, -2 if key missing."""
+        """Return remaining TTL in seconds.
+
+        Returns ``TTL_NO_EXPIRY`` (-1) if key exists without expiry,
+        ``TTL_KEY_NOT_FOUND`` (-2) if key is missing or expired.
+        """
         raise NotImplementedError
 
     # -- distributed lock --------------------------------------------------

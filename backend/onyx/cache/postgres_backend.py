@@ -23,6 +23,8 @@ from sqlalchemy.orm import Session
 
 from onyx.cache.interface import CacheBackend
 from onyx.cache.interface import CacheLock
+from onyx.cache.interface import TTL_KEY_NOT_FOUND
+from onyx.cache.interface import TTL_NO_EXPIRY
 from onyx.db.models import CacheStore
 
 _LIST_KEY_PREFIX = "_q:"
@@ -170,7 +172,11 @@ class PostgresCacheBackend(CacheBackend):
         from onyx.db.engine.sql_engine import get_session_with_tenant
 
         value_bytes = _to_bytes(value)
-        expires_at = datetime.now(timezone.utc) + timedelta(seconds=ex) if ex else None
+        expires_at = (
+            datetime.now(timezone.utc) + timedelta(seconds=ex)
+            if ex is not None
+            else None
+        )
         stmt = (
             pg_insert(CacheStore)
             .values(key=key, value=value_bytes, expires_at=expires_at)
@@ -227,13 +233,13 @@ class PostgresCacheBackend(CacheBackend):
         with get_session_with_tenant(tenant_id=self._tenant_id) as session:
             result = session.execute(stmt).first()
         if result is None:
-            return -2
+            return TTL_KEY_NOT_FOUND
         expires_at: datetime | None = result[0]
         if expires_at is None:
-            return -1
+            return TTL_NO_EXPIRY
         remaining = (expires_at - datetime.now(timezone.utc)).total_seconds()
         if remaining <= 0:
-            return -2
+            return TTL_KEY_NOT_FOUND
         return int(remaining)
 
     # -- distributed lock --------------------------------------------------
@@ -249,9 +255,15 @@ class PostgresCacheBackend(CacheBackend):
         self.set(_list_item_key(key), value, ex=_LIST_ITEM_TTL_SECONDS)
 
     def blpop(self, keys: list[str], timeout: int = 0) -> tuple[bytes, bytes] | None:
+        if timeout <= 0:
+            raise ValueError(
+                "PostgresCacheBackend.blpop requires timeout > 0. "
+                "timeout=0 would block the calling thread indefinitely "
+                "with no way to interrupt short of process termination."
+            )
         from onyx.db.engine.sql_engine import get_session_with_tenant
 
-        deadline = (time.monotonic() + timeout) if timeout > 0 else None
+        deadline = time.monotonic() + timeout
         while True:
             for key in keys:
                 lower = f"{_LIST_KEY_PREFIX}{key}:"
@@ -277,7 +289,7 @@ class PostgresCacheBackend(CacheBackend):
                         session.delete(row)
                         session.commit()
                         return (key.encode(), value)
-            if deadline is not None and time.monotonic() >= deadline:
+            if time.monotonic() >= deadline:
                 return None
             time.sleep(_BLPOP_POLL_INTERVAL)
 

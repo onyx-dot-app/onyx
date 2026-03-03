@@ -9,6 +9,8 @@ import time
 from uuid import uuid4
 
 from onyx.cache.interface import CacheBackend
+from onyx.cache.interface import TTL_KEY_NOT_FOUND
+from onyx.cache.interface import TTL_NO_EXPIRY
 
 
 def _key() -> str:
@@ -55,12 +57,12 @@ class TestKVParity:
 
 class TestTTLParity:
     def test_ttl_missing(self, cache: CacheBackend) -> None:
-        assert cache.ttl(_key()) == -2
+        assert cache.ttl(_key()) == TTL_KEY_NOT_FOUND
 
     def test_ttl_no_expiry(self, cache: CacheBackend) -> None:
         k = _key()
         cache.set(k, b"x")
-        assert cache.ttl(k) == -1
+        assert cache.ttl(k) == TTL_NO_EXPIRY
 
     def test_ttl_remaining(self, cache: CacheBackend) -> None:
         k = _key()
