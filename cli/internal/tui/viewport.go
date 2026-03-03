@@ -57,6 +57,7 @@ type viewport struct {
 	pickerIndex  int
 	pickerType   pickerKind
 	scrollOffset int // lines scrolled up from bottom (0 = pinned to bottom)
+	lastMaxScroll int // cached from last render for clamping in scrollUp
 }
 
 // newMarkdownRenderer creates a Glamour renderer with zero left margin.
@@ -469,7 +470,7 @@ func (v *viewport) renderPicker(width, height int) string {
 	// panelWidth+2 accounts for the left and right border characters.
 	borderColor := lipgloss.NewStyle().Foreground(accentColor)
 	titleWidth := lipgloss.Width(titleRendered)
-	rightDashes := panelWidth + 2 - 2 - titleWidth // total - corners - title
+	rightDashes := panelWidth + 2 - 3 - titleWidth // total - "╭─" - "╮" - title
 	if rightDashes < 0 {
 		rightDashes = 0
 	}
