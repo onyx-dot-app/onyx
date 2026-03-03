@@ -1,8 +1,7 @@
-"""Unit tests for WebSearchTool.run(), focusing on query coercion and dispatch."""
-
 from __future__ import annotations
 
 from typing import Any
+from typing import cast
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
@@ -57,9 +56,8 @@ def _run(tool: WebSearchTool, queries: Any) -> list[str]:
     placement = Placement(turn_index=0, tab_index=0)
     override_kwargs = WebSearchToolOverrideKwargs(starting_citation_num=1)
     tool.run(placement=placement, override_kwargs=override_kwargs, queries=queries)
-    return [
-        call.args[0] for call in tool._provider.search.call_args_list
-    ]  # noqa: SLF001
+    search_mock = cast(MagicMock, tool._provider.search)  # noqa: SLF001
+    return [call.args[0] for call in search_mock.call_args_list]
 
 
 class TestNormalizeQueriesInput:
@@ -129,7 +127,7 @@ class TestWebSearchToolRunQueryCoercion:
 
         _run(tool, "hi")
 
-        for call in mock_provider.search.call_args_list:
+        for call in cast(MagicMock, mock_provider.search).call_args_list:
             query_arg = call.args[0]
             assert (
                 len(query_arg) > 1
@@ -154,7 +152,7 @@ class TestWebSearchToolRunQueryCoercion:
         placement = Placement(turn_index=0, tab_index=0)
         override_kwargs = WebSearchToolOverrideKwargs(starting_citation_num=1)
 
-        with pytest.raises(ToolCallException) as exc_info:
+        with pytest.raises(ToolCallException) as exc_info:  # noqa: F821
             tool.run(
                 placement=placement,
                 override_kwargs=override_kwargs,
@@ -162,4 +160,4 @@ class TestWebSearchToolRunQueryCoercion:
             )
 
         assert "No valid" in str(exc_info.value)
-        mock_provider.search.assert_not_called()
+        cast(MagicMock, mock_provider.search).assert_not_called()
