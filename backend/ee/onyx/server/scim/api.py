@@ -430,9 +430,9 @@ def create_user(
 
     # Check for existing user — if they exist but aren't SCIM-managed yet,
     # link them to the IdP rather than rejecting with 409.
-    external_id = user_resource.externalId
-    scim_username = user_resource.userName.strip()
-    fields = _fields_from_resource(user_resource)
+    external_id: str | None = user_resource.externalId
+    scim_username: str = user_resource.userName.strip()
+    fields: ScimMappingFields = _fields_from_resource(user_resource)
 
     existing_user = dal.get_user_by_email(email)
     if existing_user:
@@ -442,17 +442,25 @@ def create_user(
 
         # Adopt pre-existing user into SCIM management
         personal_name = _scim_name_to_str(user_resource.name)
-        if personal_name:
-            dal.update_user(existing_user, personal_name=personal_name)
-
-        dal.create_user_mapping(
-            external_id=external_id,
-            user_id=existing_user.id,
-            scim_username=scim_username,
-            fields=fields,
+        dal.update_user(
+            existing_user,
+            is_active=user_resource.active,
+            **({"personal_name": personal_name} if personal_name else {}),
         )
 
-        dal.commit()
+        try:
+            dal.create_user_mapping(
+                external_id=external_id,
+                user_id=existing_user.id,
+                scim_username=scim_username,
+                fields=fields,
+            )
+            dal.commit()
+        except IntegrityError:
+            dal.rollback()
+            return _scim_error_response(
+                409, f"externalId {external_id} is already in use"
+            )
 
         return _scim_resource_response(
             provider.build_user_resource(
@@ -483,14 +491,17 @@ def create_user(
 
     # Always create a SCIM mapping so that the user is marked as
     # SCIM-managed. externalId may be None (RFC 7643 says it's optional).
-    dal.create_user_mapping(
-        external_id=external_id,
-        user_id=user.id,
-        scim_username=scim_username,
-        fields=fields,
-    )
-
-    dal.commit()
+    try:
+        dal.create_user_mapping(
+            external_id=external_id,
+            user_id=user.id,
+            scim_username=scim_username,
+            fields=fields,
+        )
+        dal.commit()
+    except IntegrityError:
+        dal.rollback()
+        return _scim_error_response(409, f"externalId {external_id} is already in use")
 
     return _scim_resource_response(
         provider.build_user_resource(

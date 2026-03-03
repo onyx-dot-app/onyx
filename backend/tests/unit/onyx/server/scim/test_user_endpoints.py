@@ -292,6 +292,10 @@ class TestCreateUser:
         assert parsed.userName == "admin@example.com"
         # Should NOT create a new user — reuse existing
         mock_dal.add_user.assert_not_called()
+        # Should sync is_active and personal_name from the SCIM request
+        mock_dal.update_user.assert_called_once_with(
+            existing, is_active=True, personal_name="Test User"
+        )
         # Should create a SCIM mapping for the existing user
         mock_dal.create_user_mapping.assert_called_once()
         mock_dal.commit.assert_called_once()

@@ -119,7 +119,7 @@ class TestOktaProvider:
 
         # Falls back to deriving name from email local part
         assert result.name == ScimName(
-            givenName="test", familyName="test", formatted="test"
+            givenName="test", familyName="", formatted="test"
         )
         assert result.displayName is None
 

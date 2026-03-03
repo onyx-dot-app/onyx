@@ -173,7 +173,7 @@ class ScimProvider(ABC):
             # Derive a reasonable name from the email so that SCIM spec tests
             # see non-empty givenName / familyName for every user resource.
             local = user.email.split("@")[0] if user.email else ""
-            return ScimName(givenName=local, familyName=local, formatted=local)
+            return ScimName(givenName=local, familyName="", formatted=local)
         parts = user.personal_name.split(" ", 1)
         return ScimName(
             givenName=parts[0],
