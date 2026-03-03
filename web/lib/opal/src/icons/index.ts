@@ -25,6 +25,7 @@ export { default as SvgBarChartSmall } from "@opal/icons/bar-chart-small";
 export { default as SvgBell } from "@opal/icons/bell";
 export { default as SvgBlocks } from "@opal/icons/blocks";
 export { default as SvgBookOpen } from "@opal/icons/book-open";
+export { default as SvgBookmark } from "@opal/icons/bookmark";
 export { default as SvgBooksLineSmall } from "@opal/icons/books-line-small";
 export { default as SvgBooksStackSmall } from "@opal/icons/books-stack-small";
 export { default as SvgBracketCurly } from "@opal/icons/bracket-curly";
