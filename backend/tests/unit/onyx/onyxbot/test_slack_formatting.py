@@ -104,3 +104,71 @@ def test_format_slack_message_ampersand_not_double_escaped() -> None:
 
     assert "&amp;" in formatted
     assert "&quot;" not in formatted
+
+
+# -- Table rendering tests --
+
+
+def test_table_renders_as_labelled_bullet_rows() -> None:
+    message = (
+        "| Feature | Status | Owner |\n"
+        "|---------|--------|-------|\n"
+        "| Auth | Done | Alice |\n"
+        "| Search | In Progress | Bob |\n"
+    )
+
+    formatted = format_slack_message(message)
+
+    assert "• *Feature:* Auth  |  *Status:* Done  |  *Owner:* Alice" in formatted
+    assert "• *Feature:* Search  |  *Status:* In Progress  |  *Owner:* Bob" in formatted
+    # No raw pipe-and-dash table syntax
+    assert "---|" not in formatted
+
+
+def test_table_single_column() -> None:
+    message = "| Name |\n|------|\n| Alice |\n| Bob |\n"
+
+    formatted = format_slack_message(message)
+
+    assert "• *Name:* Alice" in formatted
+    assert "• *Name:* Bob" in formatted
+
+
+def test_table_embedded_in_text() -> None:
+    message = (
+        "Here are the results:\n\n"
+        "| Item | Count |\n"
+        "|------|-------|\n"
+        "| Apples | 5 |\n"
+        "\n"
+        "That's all."
+    )
+
+    formatted = format_slack_message(message)
+
+    assert "Here are the results:" in formatted
+    assert "• *Item:* Apples  |  *Count:* 5" in formatted
+    assert "That's all." in formatted
+
+
+def test_table_with_formatted_cells() -> None:
+    message = (
+        "| Name | Link |\n"
+        "|------|------|\n"
+        "| **Alice** | [profile](https://example.com) |\n"
+    )
+
+    formatted = format_slack_message(message)
+
+    assert "*Alice*" in formatted
+    assert "<https://example.com|profile>" in formatted
+
+
+def test_table_with_alignment_specifiers() -> None:
+    message = (
+        "| Left | Center | Right |\n" "|:-----|:------:|------:|\n" "| a | b | c |\n"
+    )
+
+    formatted = format_slack_message(message)
+
+    assert "• *Left:* a  |  *Center:* b  |  *Right:* c" in formatted

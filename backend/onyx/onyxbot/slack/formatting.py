@@ -130,7 +130,7 @@ def format_slack_message(message: str | None) -> str:
     message = _transform_outside_code_blocks(message, _sanitize_html)
     message = _convert_slack_links_to_markdown(message)
     normalized_message = _normalize_link_destinations(message)
-    md = create_markdown(renderer=SlackRenderer(), plugins=["strikethrough"])
+    md = create_markdown(renderer=SlackRenderer(), plugins=["strikethrough", "table"])
     result = md(normalized_message)
     # With HTMLRenderer, result is always str (not AST list)
     assert isinstance(result, str)
@@ -145,6 +145,11 @@ class SlackRenderer(HTMLRenderer):
     """
 
     SPECIALS: dict[str, str] = {"&": "&amp;", "<": "&lt;", ">": "&gt;"}
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._table_headers: list[str] = []
+        self._current_row_cells: list[str] = []
 
     def escape_special(self, text: str) -> str:
         for special, replacement in self.SPECIALS.items():
@@ -217,6 +222,38 @@ class SlackRenderer(HTMLRenderer):
         # HTMLRenderer.text() also escapes " to &quot; which Slack renders
         # as literal &quot; text since Slack doesn't recognize that entity.
         return self.escape_special(text)
+
+    # -- Table rendering (converts markdown tables to labelled bullet rows) --
+
+    def table_cell(
+        self, text: str, align: str | None = None, head: bool = False  # noqa: ARG002
+    ) -> str:
+        self._current_row_cells.append(text.strip())
+        return ""
+
+    def table_head(self, text: str) -> str:  # noqa: ARG002
+        self._table_headers = list(self._current_row_cells)
+        self._current_row_cells = []
+        return ""
+
+    def table_row(self, text: str) -> str:  # noqa: ARG002
+        cells = self._current_row_cells
+        self._current_row_cells = []
+        parts: list[str] = []
+        for i, cell in enumerate(cells):
+            if i < len(self._table_headers):
+                parts.append(f"*{self._table_headers[i]}:* {cell}")
+            else:
+                parts.append(cell)
+        return "• " + "  |  ".join(parts) + "\n"
+
+    def table_body(self, text: str) -> str:
+        return text
+
+    def table(self, text: str) -> str:
+        self._table_headers = []
+        self._current_row_cells = []
+        return text + "\n"
 
     def paragraph(self, text: str) -> str:
         return f"{text}\n\n"
