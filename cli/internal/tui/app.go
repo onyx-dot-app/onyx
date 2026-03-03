@@ -214,13 +214,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.input.menuVisible = false
 			return m, nil
 		}
-		if m.isStreaming && m.streamCancel != nil {
-			m.streamCancel()
-			if m.chatSessionID != nil {
-				sid := *m.chatSessionID
-				go m.client.StopChatSession(sid)
-			}
-			return m, nil
+		if m.isStreaming {
+			return m.cancelStream()
 		}
 		// Dismiss picker
 		if m.viewport.pickerActive {
@@ -230,6 +225,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyCtrlD:
+		// If streaming, cancel first; require a fresh Ctrl+D pair to quit
+		if m.isStreaming {
+			return m.cancelStream()
+		}
 		if m.quitPending {
 			return m, tea.Quit
 		}
@@ -310,6 +309,19 @@ func (m Model) handleFileDrop(path string) (tea.Model, tea.Cmd) {
 	return cmdAttach(m, path)
 }
 
+func (m Model) cancelStream() (Model, tea.Cmd) {
+	if m.streamCancel != nil {
+		m.streamCancel()
+	}
+	if m.chatSessionID != nil {
+		sid := *m.chatSessionID
+		go m.client.StopChatSession(sid)
+	}
+	m, cmd := m.finishStream(nil)
+	m.viewport.addInfo("Generation stopped.")
+	return m, cmd
+}
+
 func (m Model) sendMessage(message string) (Model, tea.Cmd) {
 	if m.isStreaming {
 		return m, nil
@@ -346,6 +358,10 @@ func (m Model) sendMessage(message string) (Model, tea.Cmd) {
 }
 
 func (m Model) handleStreamEvent(msg api.StreamEventMsg) (tea.Model, tea.Cmd) {
+	// Ignore stale events after cancellation
+	if !m.isStreaming {
+		return m, nil
+	}
 	if msg.Event == nil {
 		return m, api.WaitForStreamEvent(m.streamCh)
 	}
@@ -430,6 +446,10 @@ func (m Model) handleStreamEvent(msg api.StreamEventMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleStreamDone(msg api.StreamDoneMsg) (tea.Model, tea.Cmd) {
+	// Ignore if already cancelled
+	if !m.isStreaming {
+		return m, nil
+	}
 	return m.finishStream(msg.Err)
 }
 
