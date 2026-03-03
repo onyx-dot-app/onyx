@@ -95,7 +95,7 @@ func Run(existing *config.OnyxCliConfig) *config.OnyxCliConfig {
 	if err := client.TestConnection(context.Background()); err != nil {
 		fmt.Println("  " + redStyle.Render("Connection failed.") + " " + err.Error())
 		fmt.Println()
-		fmt.Println("  " + dimStyle.Render("Run ") + boldStyle.Render("onyx-cli configure") + dimStyle.Render(" to try again."))
+		fmt.Println("  " + dimStyle.Render("Run ") + boldStyle.Render("onyx configure") + dimStyle.Render(" to try again."))
 		return nil
 	}
 
