@@ -68,27 +68,17 @@ function Main({ documentSetId }: { documentSetId: number }) {
   }
 
   return (
-    <SettingsLayouts.Root>
-      <SettingsLayouts.Header
-        icon={SvgBookOpen}
-        title={documentSet.name}
-        separator
-        backButton
+    <CardSection>
+      <DocumentSetCreationForm
+        ccPairs={ccPairs}
+        userGroups={userGroups}
+        onClose={() => {
+          refreshDocumentSets();
+          router.push("/admin/documents/sets");
+        }}
+        existingDocumentSet={documentSet}
       />
-      <SettingsLayouts.Body>
-        <CardSection>
-          <DocumentSetCreationForm
-            ccPairs={ccPairs}
-            userGroups={userGroups}
-            onClose={() => {
-              refreshDocumentSets();
-              router.push("/admin/documents/sets");
-            }}
-            existingDocumentSet={documentSet}
-          />
-        </CardSection>
-      </SettingsLayouts.Body>
-    </SettingsLayouts.Root>
+    </CardSection>
   );
 }
 
@@ -98,5 +88,17 @@ export default function Page(props: {
   const params = use(props.params);
   const documentSetId = parseInt(params.documentSetId);
 
-  return <Main documentSetId={documentSetId} />;
+  return (
+    <SettingsLayouts.Root>
+      <SettingsLayouts.Header
+        icon={SvgBookOpen}
+        title="Edit Document Set"
+        separator
+        backButton
+      />
+      <SettingsLayouts.Body>
+        <Main documentSetId={documentSetId} />
+      </SettingsLayouts.Body>
+    </SettingsLayouts.Root>
+  );
 }

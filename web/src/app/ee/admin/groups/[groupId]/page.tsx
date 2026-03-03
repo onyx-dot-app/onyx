@@ -9,15 +9,13 @@ import useUsers from "@/hooks/useUsers";
 import { SvgUsers } from "@opal/icons";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 
-export default function Page(props: { params: Promise<{ groupId: string }> }) {
-  const params = use(props.params);
-
+function Main({ groupId }: { groupId: string }) {
   const {
     userGroup,
     isLoading: userGroupIsLoading,
     error: userGroupError,
     refreshUserGroup,
-  } = useSpecificUserGroup(params.groupId);
+  } = useSpecificUserGroup(groupId);
   const {
     data: users,
     isLoading: userIsLoading,
@@ -50,25 +48,29 @@ export default function Page(props: { params: Promise<{ groupId: string }> }) {
   }
 
   return (
+    <GroupDisplay
+      users={users.accepted}
+      ccPairs={ccPairs}
+      userGroup={userGroup}
+      refreshUserGroup={refreshUserGroup}
+    />
+  );
+}
+
+export default function Page(props: { params: Promise<{ groupId: string }> }) {
+  const params = use(props.params);
+
+  return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={SvgUsers}
-        title={userGroup.name || "Unknown"}
+        title="User Group"
         separator
         backButton
       />
 
       <SettingsLayouts.Body>
-        {userGroup ? (
-          <GroupDisplay
-            users={users.accepted}
-            ccPairs={ccPairs}
-            userGroup={userGroup}
-            refreshUserGroup={refreshUserGroup}
-          />
-        ) : (
-          <div>Unable to fetch User Group :(</div>
-        )}
+        <Main groupId={params.groupId} />
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );
