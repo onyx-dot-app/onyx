@@ -96,11 +96,7 @@ export default function EditCredential({
               <Button onClick={() => resetForm()} icon={SvgTrash}>
                 Reset Changes
               </Button>
-              <Button
-                type="submit"
-                disabled={isSubmitting}
-                icon={FaNewspaper}
-              >
+              <Button type="submit" disabled={isSubmitting} icon={FaNewspaper}>
                 Update
               </Button>
             </div>

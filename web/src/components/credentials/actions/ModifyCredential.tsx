@@ -9,7 +9,12 @@ import {
   Credential,
 } from "@/lib/connectors/credentials";
 import { Connector } from "@/lib/connectors/connectors";
-import { SvgArrowExchange, SvgAlertTriangle, SvgBubbleText, SvgTrash } from "@opal/icons";
+import {
+  SvgArrowExchange,
+  SvgAlertTriangle,
+  SvgBubbleText,
+  SvgTrash,
+} from "@opal/icons";
 import { Button } from "@opal/components";
 interface CredentialSelectionTableProps {
   credentials: Credential<any>[];
@@ -254,10 +259,7 @@ export default function ModifyCredential({
         {!showIfEmpty && (
           <div className="flex mt-8 justify-between">
             {onCreateNew ? (
-              <Button
-                onClick={onCreateNew}
-                icon={SvgBubbleText}
-              >
+              <Button onClick={onCreateNew} icon={SvgBubbleText}>
                 Create
               </Button>
             ) : (
@@ -277,7 +279,6 @@ export default function ModifyCredential({
                 if (onSwitch) {
                   onSwitch(selectedCredential!);
                 }
-
               }}
               icon={SvgArrowExchange}
             >
