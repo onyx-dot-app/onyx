@@ -29,13 +29,40 @@ jobs:
         run: |
           set +e
 
-          {
-            echo "should_cherrypick=false"
-            echo "pr_number="
-            echo "merged_by="
-            echo "gate_status=success"
-            echo "gate_reason="
-          } >> "$GITHUB_OUTPUT"
+          GATE_LAST_ERROR=""
+          GATE_DETAILS_DELIM="GATE_DETAILS_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}_${RANDOM}_$$"
+
+          set_output() {
+            printf '%s=%s\n' "$1" "$2" >> "$GITHUB_OUTPUT"
+          }
+
+          set_multiline_output() {
+            local key="$1"
+            local value="$2"
+            {
+              echo "${key}<<${GATE_DETAILS_DELIM}"
+              printf '%s\n' "$value"
+              echo "${GATE_DETAILS_DELIM}"
+            } >> "$GITHUB_OUTPUT"
+          }
+
+          fail_gate() {
+            local reason="$1"
+            local message="$2"
+            local details="$3"
+
+            echo "::error::${message}"
+            set_output "gate_status" "failure"
+            set_output "gate_reason" "$reason"
+            set_multiline_output "gate_details" "$(printf '%s\n' "$details" | tail -n 20)"
+            exit 0
+          }
+
+          set_output "should_cherrypick" "false"
+          set_output "pr_number" ""
+          set_output "merged_by" ""
+          set_output "gate_status" "success"
+          set_output "gate_reason" ""
 
           api_call_with_retry() {
             local endpoint="$1"
@@ -48,16 +75,14 @@ jobs:
             tmp_err="$(mktemp)"
 
             while [ "${attempt}" -le "${max_attempts}" ]; do
-              response="$(gh api "$endpoint" 2>"$tmp_err")"
-              local exit_code=$?
-              if [ "${exit_code}" -eq 0 ]; then
+              if response="$(gh api "$endpoint" 2>"$tmp_err")"; then
                 rm -f "$tmp_err"
                 printf '%s' "$response"
                 return 0
               fi
 
               GATE_LAST_ERROR="$(cat "$tmp_err")"
-              if [ "${attempt}" -lt "${max_attempts}" ] && echo "$GATE_LAST_ERROR" | grep -qiE "rate limit|HTTP 403|HTTP 5[0-9][0-9]|timeout|connection reset|unexpected EOF"; then
+              if [ "${attempt}" -lt "${max_attempts}" ] && echo "$GATE_LAST_ERROR" | grep -qiE "rate limit|secondary rate limit|abuse detection|HTTP 5[0-9][0-9]|timeout|connection reset|unexpected EOF"; then
                 echo "::warning::GitHub API call failed (attempt ${attempt}/${max_attempts}). Retrying in ${sleep_seconds}s." >&2
                 sleep "${sleep_seconds}"
                 sleep_seconds=$((sleep_seconds * 2))
@@ -71,38 +96,20 @@ jobs:
 
           }
 
-          GATE_LAST_ERROR=""
-          GATE_DETAILS_DELIM="GATE_DETAILS_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}_${RANDOM}_$$"
-
           # For the commit that triggered this workflow (HEAD on main), fetch all
           # associated PRs and keep only the PR that was actually merged into main
           # with this exact merge commit SHA.
           if ! pr_numbers_json="$(api_call_with_retry "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls")"; then
-            echo "::error::Unable to resolve PRs for commit ${GITHUB_SHA}."
-            {
-              echo "gate_status=failure"
-              echo "gate_reason=resolve-prs-failed"
-              echo "gate_details<<${GATE_DETAILS_DELIM}"
-              printf '%s\n' "$GATE_LAST_ERROR" | tail -n 20
-              echo "${GATE_DETAILS_DELIM}"
-            } >> "$GITHUB_OUTPUT"
-            exit 0
+            fail_gate "resolve-prs-failed" "Unable to resolve PRs for commit ${GITHUB_SHA}." "$GATE_LAST_ERROR"
           fi
 
           if ! pr_numbers="$(printf '%s' "$pr_numbers_json" | jq -r --arg sha "${GITHUB_SHA}" '.[] | select(.merged_at != null and .base.ref == "main" and .merge_commit_sha == $sha) | .number')"; then
-            echo "::error::Unable to parse PR association response for commit ${GITHUB_SHA}."
-            {
-              echo "gate_status=failure"
-              echo "gate_reason=parse-prs-failed"
-              echo "gate_details<<${GATE_DETAILS_DELIM}"
-              printf '%s\n' "$pr_numbers_json" | tail -n 20
-              echo "${GATE_DETAILS_DELIM}"
-            } >> "$GITHUB_OUTPUT"
-            exit 0
+            fail_gate "parse-prs-failed" "Unable to parse PR association response for commit ${GITHUB_SHA}." "$pr_numbers_json"
           fi
 
-          match_count="$(printf '%s\n' "$pr_numbers" | sed '/^[[:space:]]*$/d' | wc -l | tr -d ' ')"
-          pr_number="$(printf '%s\n' "$pr_numbers" | sed '/^[[:space:]]*$/d' | head -n 1)"
+          filtered_pr_numbers="$(printf '%s\n' "$pr_numbers" | sed '/^[[:space:]]*$/d')"
+          match_count="$(printf '%s\n' "$filtered_pr_numbers" | wc -l | tr -d ' ')"
+          pr_number="$(printf '%s\n' "$filtered_pr_numbers" | head -n 1)"
 
           if [ "${match_count}" -gt 1 ]; then
             echo "::warning::Multiple merged PRs matched commit ${GITHUB_SHA}. Using PR #${pr_number}."
@@ -110,61 +117,35 @@ jobs:
 
           if [ -z "$pr_number" ]; then
             echo "No merged PR associated with commit ${GITHUB_SHA}; skipping."
-            echo "should_cherrypick=false" >> "$GITHUB_OUTPUT"
+            set_output "should_cherrypick" "false"
             exit 0
           fi
 
           # Persist as soon as known so downstream gate-failure notifications can include source PR.
-          echo "pr_number=$pr_number" >> "$GITHUB_OUTPUT"
+          set_output "pr_number" "$pr_number"
 
           # Read the PR once so we can gate behavior and infer preferred actor.
           if ! pr_json="$(api_call_with_retry "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}")"; then
-            echo "::error::Unable to resolve PR #${pr_number} details."
-            {
-              echo "gate_status=failure"
-              echo "gate_reason=resolve-pr-failed"
-              echo "gate_details<<${GATE_DETAILS_DELIM}"
-              printf '%s\n' "$GATE_LAST_ERROR" | tail -n 20
-              echo "${GATE_DETAILS_DELIM}"
-            } >> "$GITHUB_OUTPUT"
-            exit 0
+            fail_gate "resolve-pr-failed" "Unable to resolve PR #${pr_number} details." "$GATE_LAST_ERROR"
           fi
 
           if ! pr_body="$(printf '%s' "$pr_json" | jq -r '.body // ""')"; then
-            echo "::error::Unable to parse PR #${pr_number} body."
-            {
-              echo "gate_status=failure"
-              echo "gate_reason=parse-pr-failed"
-              echo "gate_details<<${GATE_DETAILS_DELIM}"
-              printf '%s\n' "$pr_json" | tail -n 20
-              echo "${GATE_DETAILS_DELIM}"
-            } >> "$GITHUB_OUTPUT"
-            exit 0
+            fail_gate "parse-pr-failed" "Unable to parse PR #${pr_number} body." "$pr_json"
           fi
 
           if ! merged_by="$(printf '%s' "$pr_json" | jq -r '.merged_by.login // ""')"; then
-            echo "::error::Unable to parse PR #${pr_number} details."
-            {
-              echo "gate_status=failure"
-              echo "gate_reason=parse-pr-failed"
-              echo "gate_details<<${GATE_DETAILS_DELIM}"
-              printf '%s\n' "$pr_json" | tail -n 20
-              echo "${GATE_DETAILS_DELIM}"
-            } >> "$GITHUB_OUTPUT"
-            exit 0
+            fail_gate "parse-pr-failed" "Unable to parse PR #${pr_number} details." "$pr_json"
           fi
 
-          {
-            echo "merged_by=$merged_by"
-          } >> "$GITHUB_OUTPUT"
+          set_output "merged_by" "$merged_by"
 
           if echo "$pr_body" | grep -qiE "\\[x\\][[:space:]]*(\\[[^]]+\\][[:space:]]*)?Please cherry-pick this PR to the latest release version"; then
-            echo "should_cherrypick=true" >> "$GITHUB_OUTPUT"
+            set_output "should_cherrypick" "true"
             echo "Cherry-pick checkbox checked for PR #${pr_number}."
             exit 0
           fi
 
-          echo "should_cherrypick=false" >> "$GITHUB_OUTPUT"
+          set_output "should_cherrypick" "false"
           echo "Cherry-pick checkbox not checked for PR #${pr_number}. Skipping."
 
       - name: Mark workflow as failed if gate failed
@@ -246,7 +227,7 @@ jobs:
   notify-slack-on-cherry-pick-failure:
     needs:
       - cherry-pick-to-latest-release
-    if: always() && needs.cherry-pick-to-latest-release.result != 'success' && (needs.cherry-pick-to-latest-release.outputs.should_cherrypick == 'true' || needs.cherry-pick-to-latest-release.outputs.gate_status == 'failure')
+    if: always() && needs.cherry-pick-to-latest-release.result == 'failure' && (needs.cherry-pick-to-latest-release.outputs.should_cherrypick == 'true' || needs.cherry-pick-to-latest-release.outputs.gate_status == 'failure')
     runs-on: ubuntu-slim
     timeout-minutes: 10
     steps:
