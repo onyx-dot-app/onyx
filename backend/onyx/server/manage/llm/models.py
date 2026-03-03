@@ -176,7 +176,8 @@ class ModelConfigurationUpsertRequest(BaseModel):
             name=model_configuration_model.name,
             is_visible=model_configuration_model.is_visible,
             max_input_tokens=model_configuration_model.max_input_tokens,
-            supports_image_input=model_configuration_model.supports_image_input,
+            supports_image_input=LLMModelFlowType.VISION
+            in model_configuration_model.llm_model_flow_types,
             display_name=model_configuration_model.display_name,
         )
 
