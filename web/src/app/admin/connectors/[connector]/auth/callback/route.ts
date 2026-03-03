@@ -26,7 +26,12 @@ export const GET = async (request: NextRequest) => {
   });
 
   if (!response.ok) {
-    return NextResponse.redirect(new URL("/auth/error", getDomain(request)));
+    return NextResponse.redirect(
+      new URL(
+        `/admin/connectors/${connector}?message=oauth_failed`,
+        getDomain(request)
+      )
+    );
   }
 
   // Check for build mode OAuth flag (redirects to build admin panel)
