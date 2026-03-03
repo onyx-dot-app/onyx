@@ -7,7 +7,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/onyx-dot-app/onyx/cli/internal/api"
 	"github.com/onyx-dot-app/onyx/cli/internal/config"
 	"github.com/onyx-dot-app/onyx/cli/internal/tui"
@@ -15,12 +14,13 @@ import (
 	"golang.org/x/term"
 )
 
+// Aliases for shared styles.
 var (
-	boldStyle    = lipgloss.NewStyle().Bold(true)
-	dimStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#555577"))
-	greenStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#00cc66")).Bold(true)
-	redStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#ff5555")).Bold(true)
-	yellowStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#ffcc00"))
+	boldStyle   = util.BoldStyle
+	dimStyle    = util.DimStyle
+	greenStyle  = util.GreenStyle
+	redStyle    = util.RedStyle
+	yellowStyle = util.YellowStyle
 )
 
 func getTermSize() (int, int) {
@@ -64,7 +64,7 @@ func Run(existing *config.OnyxCliConfig) *config.OnyxCliConfig {
 
 	if apiKey == "" {
 		// Open browser to API key page
-		url := strings.TrimRight(serverURL, "/") + "/admin/api-key"
+		url := strings.TrimRight(serverURL, "/") + "/app/settings/accounts-access"
 		fmt.Printf("\n  Opening %s ...\n", url)
 		util.OpenBrowser(url)
 		fmt.Println("  " + dimStyle.Render("Copy your API key, then paste it here."))

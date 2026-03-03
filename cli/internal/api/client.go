@@ -122,7 +122,7 @@ func (c *Client) TestConnection() error {
 	}
 
 	// Step 2: Authenticated check
-	req2, err := c.newRequest("GET", "/api/chat/get-user-chat-sessions", nil)
+	req2, err := c.newRequest("GET", "/api/me", nil)
 	if err != nil {
 		return fmt.Errorf("server reachable but API error: %w", err)
 	}

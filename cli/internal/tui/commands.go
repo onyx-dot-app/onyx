@@ -49,8 +49,7 @@ func handleSlashCommand(m Model, text string) (Model, tea.Cmd) {
 		return m, nil
 
 	case "/clear":
-		m.viewport.clearDisplay()
-		return m, nil
+		return cmdNew(m)
 
 	case "/connectors":
 		url := m.config.ServerURL + "/admin/indexing/status"

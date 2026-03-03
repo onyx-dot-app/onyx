@@ -1,31 +1,39 @@
 // Package cmd implements Cobra CLI commands for the Onyx CLI.
 package cmd
 
-import (
-	"fmt"
-	"os"
+import "github.com/spf13/cobra"
 
-	"github.com/spf13/cobra"
+// Version and Commit are set via ldflags at build time.
+var (
+	Version string
+	Commit  string
 )
 
-const version = "0.1.0"
-
-var rootCmd = &cobra.Command{
-	Use:   "onyx",
-	Short: "Terminal UI for chatting with Onyx",
-	Long:  "Onyx CLI — a terminal interface for chatting with your Onyx agent.",
+func fullVersion() string {
+	if Commit != "" && Commit != "none" && len(Commit) > 7 {
+		return Version + " (" + Commit[:7] + ")"
+	}
+	return Version
 }
 
-func init() {
-	rootCmd.Version = version
+// Execute creates and runs the root command.
+func Execute() error {
+	rootCmd := &cobra.Command{
+		Use:     "onyx",
+		Short:   "Terminal UI for chatting with Onyx",
+		Long:    "Onyx CLI — a terminal interface for chatting with your Onyx agent.",
+		Version: fullVersion(),
+	}
+
+	// Register subcommands
+	chatCmd := newChatCmd()
+	rootCmd.AddCommand(chatCmd)
+	rootCmd.AddCommand(newAskCmd())
+	rootCmd.AddCommand(newAgentsCmd())
+	rootCmd.AddCommand(newConfigureCmd())
+
 	// Default command is chat
 	rootCmd.RunE = chatCmd.RunE
-}
 
-// Execute runs the root command.
-func Execute() {
-	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
+	return rootCmd.Execute()
 }

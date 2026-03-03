@@ -6,16 +6,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var configureCmd = &cobra.Command{
-	Use:   "configure",
-	Short: "Configure server URL and API key",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		cfg := config.Load()
-		onboarding.Run(&cfg)
-		return nil
-	},
-}
-
-func init() {
-	rootCmd.AddCommand(configureCmd)
+func newConfigureCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "configure",
+		Short: "Configure server URL and API key",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg := config.Load()
+			onboarding.Run(&cfg)
+			return nil
+		},
+	}
 }
