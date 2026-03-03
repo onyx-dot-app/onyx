@@ -29,6 +29,12 @@ type FileUploadedMsg struct {
 	Err        error
 }
 
+// AgentsLoadedMsg carries freshly fetched agents from the API.
+type AgentsLoadedMsg struct {
+	Agents []models.AgentSummary
+	Err    error
+}
+
 // InfoMsg is a simple informational message for display.
 type InfoMsg struct {
 	Text string

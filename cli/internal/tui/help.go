@@ -6,8 +6,7 @@ const helpText = `Onyx CLI Commands
   /new               Start a new chat session
   /agent             List and switch agents
   /attach <path>     Attach a file to next message
-  /sessions          List recent chat sessions
-  /resume <id>       Resume a previous session
+  /sessions          Browse and resume previous sessions
   /clear             Clear the chat display
   /configure         Re-run connection setup
   /connectors        Open connectors page in browser

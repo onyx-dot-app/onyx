@@ -39,11 +39,11 @@ func handleSlashCommand(m Model, text string) (Model, tea.Cmd) {
 	case "/attach":
 		return cmdAttach(m, arg)
 
-	case "/sessions":
+	case "/sessions", "/resume":
+		if arg != "" {
+			return cmdResume(m, arg)
+		}
 		return cmdSessions(m)
-
-	case "/resume":
-		return cmdResume(m, arg)
 
 	case "/configure":
 		m.viewport.addInfo("Run 'onyx-cli configure' to change connection settings.")
@@ -69,7 +69,7 @@ func handleSlashCommand(m Model, text string) (Model, tea.Cmd) {
 		return m, tea.Quit
 
 	default:
-		m.viewport.addInfo(fmt.Sprintf("Unknown command: %s. Type /help for available commands.", command))
+		m.viewport.addWarning(fmt.Sprintf("Unknown command: %s. Type /help for available commands.", command))
 		return m, nil
 	}
 }
@@ -92,34 +92,18 @@ func cmdNew(m Model) (Model, tea.Cmd) {
 }
 
 func cmdShowAgents(m Model) (Model, tea.Cmd) {
-	if len(m.agents) == 0 {
-		m.viewport.addInfo("No agents available. Try again after loading completes.")
-		return m, nil
+	m.viewport.addInfo("Loading agents...")
+	client := m.client
+	return m, func() tea.Msg {
+		agents, err := client.ListAgents()
+		return AgentsLoadedMsg{Agents: agents, Err: err}
 	}
-
-	m.viewport.addInfo("Available Agents")
-	for _, p := range m.agents {
-		marker := ""
-		if p.ID == m.agentID {
-			marker = " *"
-		}
-		desc := p.Description
-		if len(desc) > 60 {
-			desc = desc[:60] + "..."
-		}
-		if desc != "" {
-			desc = " - " + desc
-		}
-		m.viewport.addInfo(fmt.Sprintf("  %d: %s%s%s", p.ID, p.Name, desc, marker))
-	}
-	m.viewport.addInfo("Use /agent <id> to switch. Example: /agent 1")
-	return m, nil
 }
 
 func cmdSelectAgent(m Model, idStr string) (Model, tea.Cmd) {
 	pid, err := strconv.Atoi(strings.TrimSpace(idStr))
 	if err != nil {
-		m.viewport.addInfo("Invalid agent ID. Use a number.")
+		m.viewport.addWarning("Invalid agent ID. Use a number.")
 		return m, nil
 	}
 
@@ -132,7 +116,7 @@ func cmdSelectAgent(m Model, idStr string) (Model, tea.Cmd) {
 	}
 
 	if target == nil {
-		m.viewport.addInfo(fmt.Sprintf("Agent %d not found. Use /agent to see available agents.", pid))
+		m.viewport.addWarning(fmt.Sprintf("Agent %d not found. Use /agent to see available agents.", pid))
 		return m, nil
 	}
 
@@ -150,7 +134,7 @@ func cmdSelectAgent(m Model, idStr string) (Model, tea.Cmd) {
 
 func cmdAttach(m Model, pathStr string) (Model, tea.Cmd) {
 	if pathStr == "" {
-		m.viewport.addInfo("Usage: /attach <file_path>")
+		m.viewport.addWarning("Usage: /attach <file_path>")
 		return m, nil
 	}
 
@@ -176,11 +160,6 @@ func cmdSessions(m Model) (Model, tea.Cmd) {
 }
 
 func cmdResume(m Model, sessionIDStr string) (Model, tea.Cmd) {
-	if sessionIDStr == "" {
-		m.viewport.addInfo("Usage: /resume <session_id>")
-		return m, nil
-	}
-
 	client := m.client
 	return m, func() tea.Msg {
 		// Try to find session by prefix match

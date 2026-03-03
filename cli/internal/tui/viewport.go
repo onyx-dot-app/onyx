@@ -29,6 +29,20 @@ type chatEntry struct {
 	citations []string // citation lines (for citation entries)
 }
 
+// pickerKind distinguishes what the picker is selecting.
+type pickerKind int
+
+const (
+	pickerSession pickerKind = iota
+	pickerAgent
+)
+
+// pickerItem is a selectable item in the picker.
+type pickerItem struct {
+	id    string
+	label string
+}
+
 // viewport manages the chat display.
 type viewport struct {
 	entries      []chatEntry
@@ -37,15 +51,11 @@ type viewport struct {
 	streamBuf    string
 	showSources  bool
 	renderer     *glamour.TermRenderer
-	sessionItems []sessionItem // for session picker
+	pickerItems  []pickerItem
 	pickerActive bool
 	pickerIndex  int
+	pickerType   pickerKind
 	scrollOffset int // lines scrolled up from bottom (0 = pinned to bottom)
-}
-
-type sessionItem struct {
-	id    string
-	label string
 }
 
 // newMarkdownRenderer creates a Glamour renderer with zero left margin.
@@ -142,7 +152,7 @@ func (v *viewport) renderMarkdown(md string) string {
 }
 
 func (v *viewport) addInfo(msg string) {
-	rendered := statusMsgStyle.Render("● " + msg)
+	rendered := infoStyle.Render("● " + msg)
 	v.entries = append(v.entries, chatEntry{
 		kind:     entryInfo,
 		content:  msg,
@@ -150,8 +160,26 @@ func (v *viewport) addInfo(msg string) {
 	})
 }
 
+func (v *viewport) addDimInfo(msg string) {
+	rendered := dimInfoStyle.Render("● " + msg)
+	v.entries = append(v.entries, chatEntry{
+		kind:     entryInfo,
+		content:  msg,
+		rendered: rendered,
+	})
+}
+
+func (v *viewport) addWarning(msg string) {
+	rendered := warnStyle.Render("● " + msg)
+	v.entries = append(v.entries, chatEntry{
+		kind:     entryError,
+		content:  msg,
+		rendered: rendered,
+	})
+}
+
 func (v *viewport) addError(msg string) {
-	rendered := errorStyle.Render("Error: ") + msg
+	rendered := errorStyle.Render("● Error: ") + msg
 	v.entries = append(v.entries, chatEntry{
 		kind:     entryError,
 		content:  msg,
@@ -184,8 +212,9 @@ func (v *viewport) addCitations(citations map[int]string) {
 	})
 }
 
-func (v *viewport) showSessionPicker(items []sessionItem) {
-	v.sessionItems = items
+func (v *viewport) showPicker(kind pickerKind, items []pickerItem) {
+	v.pickerItems = items
+	v.pickerType = kind
 	v.pickerActive = true
 	v.pickerIndex = 0
 }
@@ -210,7 +239,7 @@ func (v *viewport) clearAll() {
 	v.entries = nil
 	v.streaming = false
 	v.streamBuf = ""
-	v.sessionItems = nil
+	v.pickerItems = nil
 	v.pickerActive = false
 	v.scrollOffset = 0
 }
@@ -220,8 +249,111 @@ func (v *viewport) clearDisplay() {
 	v.scrollOffset = 0
 }
 
+// pickerTitle returns a title for the current picker kind.
+func (v *viewport) pickerTitle() string {
+	switch v.pickerType {
+	case pickerAgent:
+		return "Select Agent"
+	case pickerSession:
+		return "Resume Session"
+	default:
+		return "Select"
+	}
+}
+
+// renderPicker renders the picker as a bordered overlay.
+func (v *viewport) renderPicker(width, height int) string {
+	title := v.pickerTitle()
+
+	// Determine picker dimensions
+	maxItems := len(v.pickerItems)
+	panelWidth := width - 4
+	if panelWidth < 30 {
+		panelWidth = 30
+	}
+	if panelWidth > 70 {
+		panelWidth = 70
+	}
+	innerWidth := panelWidth - 4 // border + padding
+
+	// Visible window of items (scroll if too many)
+	maxVisible := height - 6 // room for border, title, hint
+	if maxVisible < 3 {
+		maxVisible = 3
+	}
+	if maxVisible > maxItems {
+		maxVisible = maxItems
+	}
+
+	// Calculate scroll window around current index
+	startIdx := 0
+	if v.pickerIndex >= maxVisible {
+		startIdx = v.pickerIndex - maxVisible + 1
+	}
+	endIdx := startIdx + maxVisible
+	if endIdx > maxItems {
+		endIdx = maxItems
+		startIdx = endIdx - maxVisible
+		if startIdx < 0 {
+			startIdx = 0
+		}
+	}
+
+	var itemLines []string
+	for i := startIdx; i < endIdx; i++ {
+		item := v.pickerItems[i]
+		label := item.label
+		if len(label) > innerWidth-4 {
+			label = label[:innerWidth-7] + "..."
+		}
+		if i == v.pickerIndex {
+			line := lipgloss.NewStyle().Foreground(accentColor).Bold(true).Render("> " + label)
+			itemLines = append(itemLines, line)
+		} else {
+			itemLines = append(itemLines, "  "+label)
+		}
+	}
+
+	hint := lipgloss.NewStyle().Foreground(dimColor).Render("↑↓ navigate • enter select • esc cancel")
+
+	body := strings.Join(itemLines, "\n") + "\n\n" + hint
+
+	panel := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(accentColor).
+		Padding(1, 2).
+		Width(panelWidth).
+		Render(body)
+
+	titleRendered := lipgloss.NewStyle().
+		Foreground(accentColor).
+		Bold(true).
+		Render(" " + title + " ")
+
+	// Place title on top border
+	panelLines := strings.Split(panel, "\n")
+	if len(panelLines) > 0 {
+		border := panelLines[0]
+		runes := []rune(border)
+		if len(runes) > 4 {
+			// Insert title after the 2nd rune of the border
+			titleRunes := []rune(titleRendered)
+			panelLines[0] = string(runes[:2]) + string(titleRunes) + string(runes[2:])
+		}
+	}
+	panel = strings.Join(panelLines, "\n")
+
+	// Center the panel in the viewport
+	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, panel)
+}
+
 // view renders the full viewport content.
 func (v *viewport) view(height int) string {
+	// If picker is active, render it as an overlay
+	if v.pickerActive && len(v.pickerItems) > 0 {
+		return v.renderPicker(v.width, height)
+	}
+
 	var lines []string
 
 	for _, e := range v.entries {
@@ -243,19 +375,6 @@ func (v *viewport) view(height int) string {
 		lines = append(lines, strings.Join(bufLines, "\n"))
 	} else if v.streaming {
 		lines = append(lines, agentDot+" ")
-	}
-
-	// Session picker
-	if v.pickerActive && len(v.sessionItems) > 0 {
-		lines = append(lines, "")
-		for i, item := range v.sessionItems {
-			prefix := "  "
-			if i == v.pickerIndex {
-				prefix = lipgloss.NewStyle().Foreground(accentColor).Render("> ")
-			}
-			lines = append(lines, prefix+item.label)
-		}
-		lines = append(lines, "")
 	}
 
 	content := strings.Join(lines, "\n")

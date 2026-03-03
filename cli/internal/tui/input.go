@@ -20,8 +20,7 @@ var slashCommands = []slashCommand{
 	{"/new", "Start a new chat session"},
 	{"/agent", "List and switch agents"},
 	{"/attach", "Attach a file to next message"},
-	{"/sessions", "List recent chat sessions"},
-	{"/resume", "Resume a previous session"},
+	{"/sessions", "Browse and resume previous sessions"},
 	{"/clear", "Clear the chat display"},
 	{"/configure", "Re-run connection setup"},
 	{"/connectors", "Open connectors in browser"},
@@ -31,9 +30,7 @@ var slashCommands = []slashCommand{
 
 // Commands that take arguments (filled in with trailing space on Tab/Enter).
 var argCommands = map[string]bool{
-	"/attach":  true,
-	"/agent": true,
-	"/resume":  true,
+	"/attach": true,
 }
 
 // inputModel manages the text input and slash command menu.

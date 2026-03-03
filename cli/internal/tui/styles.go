@@ -14,8 +14,11 @@ var (
 	// Styles
 	userPrefixStyle = lipgloss.NewStyle().Foreground(dimColor)
 	agentDot    = lipgloss.NewStyle().Foreground(accentColor).Bold(true).Render("◉")
-	statusMsgStyle  = lipgloss.NewStyle().Foreground(dimColor)
+	infoStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("#b0b0cc"))
+	dimInfoStyle    = lipgloss.NewStyle().Foreground(dimColor)
+	statusMsgStyle  = dimInfoStyle // used for slash menu descriptions, file badges
 	errorStyle      = lipgloss.NewStyle().Foreground(errorColor).Bold(true)
+	warnStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("#ffcc00"))
 	citationStyle   = lipgloss.NewStyle().Foreground(citationColor)
 	statusBarStyle  = lipgloss.NewStyle().Foreground(dimColor)
 	inputPrompt     = lipgloss.NewStyle().Foreground(accentColor).Render("❯ ")

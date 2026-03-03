@@ -4,6 +4,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -131,6 +132,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case api.StreamDoneMsg:
 		return m.handleStreamDone(msg)
 
+	case AgentsLoadedMsg:
+		return m.handleAgentsLoaded(msg)
+
 	case SessionsLoadedMsg:
 		return m.handleSessionsLoaded(msg)
 
@@ -217,7 +221,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
-		// Dismiss session picker
+		// Dismiss picker
 		if m.viewport.pickerActive {
 			m.viewport.pickerActive = false
 			return m, nil
@@ -239,11 +243,16 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyEnter:
-		// If session picker is active, handle selection
-		if m.viewport.pickerActive && len(m.viewport.sessionItems) > 0 {
-			item := m.viewport.sessionItems[m.viewport.pickerIndex]
+		// If picker is active, handle selection
+		if m.viewport.pickerActive && len(m.viewport.pickerItems) > 0 {
+			item := m.viewport.pickerItems[m.viewport.pickerIndex]
 			m.viewport.pickerActive = false
-			return cmdResume(m, item.id)
+			switch m.viewport.pickerType {
+			case pickerSession:
+				return cmdResume(m, item.id)
+			case pickerAgent:
+				return cmdSelectAgent(m, item.id)
+			}
 		}
 
 	case tea.KeyUp:
@@ -253,7 +262,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 
 	case tea.KeyDown:
-		if m.viewport.pickerActive && m.viewport.pickerIndex < len(m.viewport.sessionItems)-1 {
+		if m.viewport.pickerActive && m.viewport.pickerIndex < len(m.viewport.pickerItems)-1 {
 			m.viewport.pickerIndex++
 			return m, nil
 		}
@@ -451,7 +460,7 @@ func (m Model) finishStream(err error) (Model, tea.Cmd) {
 
 func (m Model) handleInitDone(msg InitDoneMsg) (tea.Model, tea.Cmd) {
 	if msg.Err != nil {
-		m.viewport.addInfo("Could not load agents. Using default.")
+		m.viewport.addWarning("Could not load agents. Using default.")
 	} else {
 		m.agents = msg.Agents
 		for _, p := range m.agents {
@@ -463,6 +472,41 @@ func (m Model) handleInitDone(msg InitDoneMsg) (tea.Model, tea.Cmd) {
 	}
 	m.status.setServer(m.config.ServerURL)
 	m.status.setAgent(m.agentName)
+	return m, nil
+}
+
+func (m Model) handleAgentsLoaded(msg AgentsLoadedMsg) (tea.Model, tea.Cmd) {
+	if msg.Err != nil {
+		m.viewport.addError("Could not load agents: " + msg.Err.Error())
+		return m, nil
+	}
+	m.agents = msg.Agents
+	if len(m.agents) == 0 {
+		m.viewport.addInfo("No agents available.")
+		return m, nil
+	}
+
+	m.viewport.addInfo("Select an agent (Enter to select, Esc to cancel):")
+
+	var items []pickerItem
+	for _, p := range m.agents {
+		label := fmt.Sprintf("%d: %s", p.ID, p.Name)
+		if p.ID == m.agentID {
+			label += " *"
+		}
+		desc := p.Description
+		if len(desc) > 50 {
+			desc = desc[:50] + "..."
+		}
+		if desc != "" {
+			label += " - " + desc
+		}
+		items = append(items, pickerItem{
+			id:    strconv.Itoa(p.ID),
+			label: label,
+		})
+	}
+	m.viewport.showPicker(pickerAgent, items)
 	return m, nil
 }
 
@@ -478,7 +522,7 @@ func (m Model) handleSessionsLoaded(msg SessionsLoadedMsg) (tea.Model, tea.Cmd) 
 
 	m.viewport.addInfo("Select a session to resume (Enter to select, Esc to cancel):")
 
-	var items []sessionItem
+	var items []pickerItem
 	for i, s := range msg.Sessions {
 		if i >= 15 {
 			break
@@ -491,12 +535,12 @@ func (m Model) handleSessionsLoaded(msg SessionsLoadedMsg) (tea.Model, tea.Cmd) 
 		if len(sid) > 8 {
 			sid = sid[:8]
 		}
-		items = append(items, sessionItem{
+		items = append(items, pickerItem{
 			id:    s.ID,
 			label: sid + "  " + name + "  (" + s.Created + ")",
 		})
 	}
-	m.viewport.showSessionPicker(items)
+	m.viewport.showPicker(pickerSession, items)
 	return m, nil
 }
 
