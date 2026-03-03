@@ -2,26 +2,24 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
+from unittest.mock import patch
 
 import pytest
-from textual.app import App, ComposeResult
-
 from onyx_cli.app import OnyxApp
 from onyx_cli.config import OnyxCliConfig
-from onyx_cli.widgets.chat_display import (
-    AssistantMessage,
-    ChatDisplay,
-    ErrorMessage,
-    StatusMessage,
-    UserMessage,
-)
-from onyx_cli.widgets.input_area import (
-    AttachedFilesBadge,
-    ChatInput,
-    InputArea,
-)
+from onyx_cli.widgets.chat_display import AssistantMessage
+from onyx_cli.widgets.chat_display import ChatDisplay
+from onyx_cli.widgets.chat_display import CitationBlock
+from onyx_cli.widgets.chat_display import ErrorMessage
+from onyx_cli.widgets.chat_display import StatusMessage
+from onyx_cli.widgets.chat_display import UserMessage
+from onyx_cli.widgets.input_area import AttachedFilesBadge
+from onyx_cli.widgets.input_area import ChatInput
+from onyx_cli.widgets.input_area import InputArea
 from onyx_cli.widgets.status_bar import StatusBar
+from textual.app import App
+from textual.app import ComposeResult
 
 
 # ── Minimal test apps ────────────────────────────────────────────────
@@ -157,6 +155,7 @@ class TestChatDisplay:
         async with ChatDisplayApp().run_test() as pilot:
             chat = pilot.app.query_one(ChatDisplay)
             chat.start_assistant_message()
+            await pilot.pause()  # Let AssistantMessage compose its children
             chat.append_token("Hello ")
             chat.append_token("world")
             await pilot.pause()
@@ -171,6 +170,7 @@ class TestChatDisplay:
         async with ChatDisplayApp().run_test() as pilot:
             chat = pilot.app.query_one(ChatDisplay)
             chat.start_assistant_message()
+            await pilot.pause()  # Let AssistantMessage compose its children
             chat.append_token("Response text")
             chat.finish_assistant_message()
             await pilot.pause()
@@ -242,11 +242,13 @@ class TestChatDisplay:
 
             chat.add_user_message("First question")
             chat.start_assistant_message()
+            await pilot.pause()
             chat.append_token("First answer")
             chat.finish_assistant_message()
 
             chat.add_user_message("Second question")
             chat.start_assistant_message()
+            await pilot.pause()
             chat.append_token("Second answer")
             chat.finish_assistant_message()
             await pilot.pause()
@@ -257,21 +259,47 @@ class TestChatDisplay:
 
     @pytest.mark.asyncio
     async def test_citations(self) -> None:
-        """Citations should mount a StatusMessage and attach to history."""
+        """Citations should mount a CitationBlock (hidden by default) and attach to history."""
         async with ChatDisplayApp().run_test() as pilot:
             chat = pilot.app.query_one(ChatDisplay)
             chat.start_assistant_message()
+            await pilot.pause()
             chat.append_token("Here are results")
             chat.finish_assistant_message()
             chat.show_citations({1: "doc-abc", 2: "doc-def"})
             await pilot.pause()
 
-            # Should have a status message for citations
-            status_widgets = chat.query(StatusMessage)
-            assert len(status_widgets) == 1
+            # Should have a CitationBlock (hidden by default)
+            citation_widgets = chat.query(CitationBlock)
+            assert len(citation_widgets) == 1
+            assert not citation_widgets[0].has_class("visible")
 
             # Should be attached to the assistant history entry
             assert chat._history[0].citations == {1: "doc-abc", 2: "doc-def"}
+
+    @pytest.mark.asyncio
+    async def test_toggle_sources(self) -> None:
+        """toggle_sources should show/hide all CitationBlocks."""
+        async with ChatDisplayApp().run_test() as pilot:
+            chat = pilot.app.query_one(ChatDisplay)
+            chat.start_assistant_message()
+            await pilot.pause()
+            chat.append_token("Answer")
+            chat.finish_assistant_message()
+            chat.show_citations({1: "doc-abc"})
+            await pilot.pause()
+
+            # Initially hidden
+            block = chat.query_one(CitationBlock)
+            assert not block.has_class("visible")
+
+            # Toggle on
+            chat.toggle_sources()
+            assert block.has_class("visible")
+
+            # Toggle off
+            chat.toggle_sources()
+            assert not block.has_class("visible")
 
     @pytest.mark.asyncio
     async def test_reasoning_flow(self) -> None:

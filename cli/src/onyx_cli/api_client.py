@@ -8,19 +8,15 @@ from pathlib import Path
 from uuid import UUID
 
 import httpx
-
 from onyx_cli.config import OnyxCliConfig
-from onyx_cli.models import (
-    CategorizedFilesSnapshot,
-    ChatSessionCreationInfo,
-    ChatSessionDetailResponse,
-    ChatSessionDetails,
-    ChatFileType,
-    FileDescriptorPayload,
-    PersonaSummary,
-    SendMessagePayload,
-    StreamEvent,
-)
+from onyx_cli.models import CategorizedFilesSnapshot
+from onyx_cli.models import ChatSessionCreationInfo
+from onyx_cli.models import ChatSessionDetailResponse
+from onyx_cli.models import ChatSessionDetails
+from onyx_cli.models import FileDescriptorPayload
+from onyx_cli.models import PersonaSummary
+from onyx_cli.models import SendMessagePayload
+from onyx_cli.models import StreamEvent
 from onyx_cli.stream_parser import parse_stream_line
 
 
@@ -109,9 +105,9 @@ class OnyxApiClient:
                     "  to allowlist your IP."
                 )
             return False, (
-                f"HTTP 403 on base URL — the server is blocking all traffic.\n"
-                f"  This is likely a firewall, WAF, or IP allowlist restriction.\n"
-                f"  Try connecting from an allowed network or VPN."
+                "HTTP 403 on base URL — the server is blocking all traffic.\n"
+                "  This is likely a firewall, WAF, or IP allowlist restriction.\n"
+                "  Try connecting from an allowed network or VPN."
             )
 
         # Step 2: Authenticated check — call an endpoint that requires
@@ -198,11 +194,25 @@ class OnyxApiClient:
         data = resp.json()
         return ChatSessionDetailResponse(**data)
 
+    async def rename_chat_session(
+        self, session_id: UUID, name: str | None = None
+    ) -> str:
+        """Rename a chat session. If name is None, the backend auto-generates one via LLM."""
+        payload: dict[str, str | None] = {"chat_session_id": str(session_id)}
+        if name is not None:
+            payload["name"] = name
+        resp = await self.client.put("/api/chat/rename-chat-session", json=payload)
+        resp.raise_for_status()
+        data = resp.json()
+        return data.get("new_name", "")
+
     # ── File Upload ──────────────────────────────────────────────────
 
     async def upload_file(self, file_path: Path) -> FileDescriptorPayload:
         """Upload a file and return a file descriptor for use in messages."""
-        mime_type = mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"
+        mime_type = (
+            mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"
+        )
 
         with open(file_path, "rb") as f:
             files = {"files": (file_path.name, f, mime_type)}

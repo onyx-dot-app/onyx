@@ -7,15 +7,18 @@ the DOM is untouched.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from dataclasses import field
 from enum import Enum
 
 from rich.markdown import Markdown
-from rich.panel import Panel
 from rich.text import Text
-
+from textual.containers import Horizontal
 from textual.containers import VerticalScroll
+from textual.message import Message
+from textual.widgets import OptionList
 from textual.widgets import Static
+from textual.widgets.option_list import Option
 
 
 class _EntryKind(Enum):
@@ -32,42 +35,47 @@ class _HistoryEntry:
 
 
 class UserMessage(Static):
-    """A user message rendered in a bordered panel."""
+    """A user message with a dimmed prefix."""
 
     DEFAULT_CSS = """
     UserMessage {
-        width: 100%;
-        padding: 0 1;
-        margin: 1 0 0 0;
-    }
-    """
-
-    def __init__(self, content: str) -> None:
-        panel = Panel(
-            Text(content),
-            border_style="dim",
-            expand=True,
-            padding=(0, 1),
-        )
-        super().__init__(panel)
-
-
-class AssistantMessage(Static):
-    """An assistant message with a colored prefix.
-
-    During streaming, content is rendered as plain Rich Text for speed.
-    On finish, it re-renders once with Rich Markdown for proper formatting.
-    """
-
-    DEFAULT_CSS = """
-    AssistantMessage {
         width: 100%;
         padding: 0 1 0 3;
         margin: 1 0 0 0;
     }
     """
 
-    _PREFIX = Text.from_markup("[bold #6c8ebf]\u25c9[/bold #6c8ebf] ")
+    def __init__(self, content: str) -> None:
+        label = Text()
+        label.append("\u276f ", style="dim")
+        label.append(content)
+        super().__init__(label)
+
+
+class _AssistantPrefix(Static):
+    """The colored dot prefix for assistant messages."""
+
+    DEFAULT_CSS = """
+    _AssistantPrefix {
+        width: 2;
+        height: 1;
+        padding: 0;
+    }
+    """
+
+    def __init__(self) -> None:
+        super().__init__(Text.from_markup("[bold #6c8ebf]\u25c9[/bold #6c8ebf]"))
+
+
+class _AssistantContent(Static):
+    """The text content of an assistant message."""
+
+    DEFAULT_CSS = """
+    _AssistantContent {
+        width: 1fr;
+        height: auto;
+    }
+    """
 
     def __init__(self) -> None:
         super().__init__("")
@@ -76,22 +84,67 @@ class AssistantMessage(Static):
     def append(self, token: str) -> None:
         """Append a token and re-render as plain text (fast)."""
         self._buffer += token
-        label = Text()
-        label.append_text(self._PREFIX.copy())
-        label.append(self._buffer)
-        self.update(label)
+        self.update(Text(self._buffer))
 
     def finish(self) -> None:
         """Final render with full Markdown formatting."""
         if self._buffer:
-            from rich.console import Group
-
-            rendered = Group(self._PREFIX, Markdown(self._buffer))
-            self.update(rendered)
+            self.update(Markdown(self._buffer))
 
     @property
     def buffer(self) -> str:
         return self._buffer
+
+
+class AssistantMessage(Horizontal):
+    """An assistant message with a colored dot prefix inline with content.
+
+    Uses a Horizontal layout: dot on the left, content on the right.
+    During streaming, content is rendered as plain Rich Text for speed.
+    On finish, it re-renders once with Rich Markdown for proper formatting.
+    """
+
+    DEFAULT_CSS = """
+    AssistantMessage {
+        width: 100%;
+        padding: 0 1 0 1;
+        margin: 1 0 0 0;
+        height: auto;
+    }
+    """
+
+    def compose(self) -> None:
+        yield _AssistantPrefix()
+        yield _AssistantContent()
+
+    def append(self, token: str) -> None:
+        """Append a token to the content area."""
+        self.query_one(_AssistantContent).append(token)
+
+    def finish(self) -> None:
+        """Final render with Markdown formatting."""
+        self.query_one(_AssistantContent).finish()
+
+    @property
+    def buffer(self) -> str:
+        return self.query_one(_AssistantContent).buffer
+
+
+class CitationBlock(Static):
+    """Citation references, hidden by default. Toggle with Ctrl+O."""
+
+    DEFAULT_CSS = """
+    CitationBlock {
+        width: 100%;
+        padding: 0 1 0 3;
+        color: #666688;
+        display: none;
+    }
+
+    CitationBlock.visible {
+        display: block;
+    }
+    """
 
 
 class StatusMessage(Static):
@@ -126,6 +179,59 @@ class ErrorMessage(Static):
         super().__init__(label)
 
 
+class SessionPicker(OptionList):
+    """Interactive session picker with arrow key navigation."""
+
+    DEFAULT_CSS = """
+    SessionPicker {
+        width: 100%;
+        height: auto;
+        max-height: 16;
+        margin: 0 0 0 3;
+        background: $surface;
+        border: tall $border-blurred;
+        padding: 0 1;
+    }
+
+    SessionPicker:focus {
+        border: tall $border;
+    }
+    """
+
+    class SessionSelected(Message):
+        """Fired when a session is selected."""
+
+        def __init__(self, session_id: str) -> None:
+            super().__init__()
+            self.session_id = session_id
+
+    def __init__(self, sessions: list[tuple[str, str]]) -> None:
+        """sessions: list of (session_id, display_label) tuples."""
+        super().__init__()
+        self._sessions = sessions
+
+    def on_mount(self) -> None:
+        for sid, label in self._sessions:
+            self.add_option(Option(label, id=sid))
+        if self._sessions:
+            self.highlighted = 0
+
+    def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
+        """When an option is selected, post our custom message and remove ourselves."""
+        if event.option.id:
+            self.post_message(self.SessionSelected(event.option.id))
+        self.remove()
+
+    def on_key(self, event: object) -> None:
+        """Handle Escape to dismiss the picker."""
+        from textual.events import Key
+
+        if isinstance(event, Key) and event.key == "escape":
+            event.prevent_default()
+            event.stop()
+            self.remove()
+
+
 class ChatDisplay(VerticalScroll):
     """Scrollable message area with individual message widgets.
 
@@ -150,6 +256,7 @@ class ChatDisplay(VerticalScroll):
         self._is_streaming: bool = False
         self._reasoning_text: str = ""
         self._is_reasoning: bool = False
+        self._sources_visible: bool = False
 
     def add_user_message(self, message: str) -> None:
         """Add a user message to the display."""
@@ -178,7 +285,9 @@ class ChatDisplay(VerticalScroll):
         self._is_streaming = False
         if self._current_assistant_text:
             self._history.append(
-                _HistoryEntry(kind=_EntryKind.ASSISTANT, content=self._current_assistant_text)
+                _HistoryEntry(
+                    kind=_EntryKind.ASSISTANT, content=self._current_assistant_text
+                )
             )
         if self._current_assistant is not None:
             self._current_assistant.finish()
@@ -226,7 +335,7 @@ class ChatDisplay(VerticalScroll):
         self._scroll_to_end()
 
     def show_citations(self, citations: dict[int, str]) -> None:
-        """Show citation references at the end of a response."""
+        """Show citation references (hidden by default, toggle with Ctrl+O)."""
         if not citations:
             return
 
@@ -236,10 +345,26 @@ class ChatDisplay(VerticalScroll):
                 entry.citations = dict(citations)
                 break
 
-        parts = [f"[dim][{num}][/dim] {doc_id}" for num, doc_id in sorted(citations.items())]
-        citation_text = "Sources: " + "  ".join(parts)
-        self.mount(StatusMessage(citation_text))
+        parts = [
+            f"[dim][{num}][/dim] {doc_id}" for num, doc_id in sorted(citations.items())
+        ]
+        citation_text = f"Sources ({len(citations)}): " + "  ".join(parts)
+        block = CitationBlock(Text.from_markup(f"[dim]\u25cf {citation_text}[/dim]"))
+        if self._sources_visible:
+            block.add_class("visible")
+        self.mount(block)
         self._scroll_to_end()
+
+    def toggle_sources(self) -> None:
+        """Toggle visibility of all citation blocks."""
+        self._sources_visible = not self._sources_visible
+        for block in self.query(CitationBlock):
+            if self._sources_visible:
+                block.add_class("visible")
+            else:
+                block.remove_class("visible")
+        if self._sources_visible:
+            self._scroll_to_end()
 
     def show_tool_start(self, tool_name: str) -> None:
         """Show that a tool is being used."""

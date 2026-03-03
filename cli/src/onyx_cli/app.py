@@ -7,36 +7,39 @@ import webbrowser
 from pathlib import Path
 from uuid import UUID
 
-from textual.app import App, ComposeResult
-from textual.binding import Binding
-
-from onyx_cli.api_client import OnyxApiClient, OnyxApiError
-from onyx_cli.config import OnyxCliConfig, load_config, save_config
-from onyx_cli.models import (
-    CitationEvent,
-    DeepResearchPlanDeltaEvent,
-    ErrorEvent,
-    FileDescriptorPayload,
-    IntermediateReportDeltaEvent,
-    MessageDeltaEvent,
-    MessageIdEvent,
-    MessageStartEvent,
-    PersonaSummary,
-    ReasoningDeltaEvent,
-    ReasoningDoneEvent,
-    ReasoningStartEvent,
-    ResearchAgentStartEvent,
-    SearchDocumentsEvent,
-    SearchQueriesEvent,
-    SearchStartEvent,
-    SessionCreatedEvent,
-    StopEvent,
-    StreamEventType,
-    ToolStartEvent,
-)
+from onyx_cli.api_client import OnyxApiClient
+from onyx_cli.api_client import OnyxApiError
+from onyx_cli.config import load_config
+from onyx_cli.config import OnyxCliConfig
+from onyx_cli.config import save_config
+from onyx_cli.models import CitationEvent
+from onyx_cli.models import DeepResearchPlanDeltaEvent
+from onyx_cli.models import ErrorEvent
+from onyx_cli.models import FileDescriptorPayload
+from onyx_cli.models import IntermediateReportDeltaEvent
+from onyx_cli.models import MessageDeltaEvent
+from onyx_cli.models import MessageIdEvent
+from onyx_cli.models import MessageStartEvent
+from onyx_cli.models import PersonaSummary
+from onyx_cli.models import ReasoningDeltaEvent
+from onyx_cli.models import ReasoningDoneEvent
+from onyx_cli.models import ReasoningStartEvent
+from onyx_cli.models import ResearchAgentStartEvent
+from onyx_cli.models import SearchDocumentsEvent
+from onyx_cli.models import SearchQueriesEvent
+from onyx_cli.models import SearchStartEvent
+from onyx_cli.models import SessionCreatedEvent
+from onyx_cli.models import StopEvent
+from onyx_cli.models import ToolStartEvent
 from onyx_cli.widgets.chat_display import ChatDisplay
-from onyx_cli.widgets.input_area import AttachedFilesBadge, ChatInput, InputArea
+from onyx_cli.widgets.chat_display import SessionPicker
+from onyx_cli.widgets.input_area import AttachedFilesBadge
+from onyx_cli.widgets.input_area import ChatInput
+from onyx_cli.widgets.input_area import InputArea
 from onyx_cli.widgets.status_bar import StatusBar
+from textual.app import App
+from textual.app import ComposeResult
+from textual.binding import Binding
 
 
 HELP_TEXT = """\
@@ -57,6 +60,7 @@ HELP_TEXT = """\
 
   [bold cyan]Enter[/bold cyan]              Send message
   [bold cyan]Escape[/bold cyan]             Cancel current generation
+  [bold cyan]Ctrl+O[/bold cyan]             Toggle source citations
   [bold cyan]Ctrl+D[/bold cyan]             Quit (press twice)
 """
 
@@ -75,6 +79,7 @@ class OnyxApp(App):
     BINDINGS = [
         Binding("escape", "cancel_stream", "Cancel", show=False),
         Binding("ctrl+d", "quit_app", "Quit", show=False),
+        Binding("ctrl+o", "toggle_sources", "Sources", show=False),
     ]
 
     def __init__(self, config: OnyxCliConfig | None = None) -> None:
@@ -92,6 +97,7 @@ class OnyxApp(App):
         self._quit_pending: bool = False
         self._assistant_started: bool = False
         self._parent_message_id: int | None = -1
+        self._needs_rename: bool = False
 
     def compose(self) -> ComposeResult:
         yield ChatDisplay()
@@ -126,7 +132,9 @@ class OnyxApp(App):
 
     # ── Message Handling ─────────────────────────────────────────────
 
-    async def on_chat_input_message_submitted(self, event: ChatInput.MessageSubmitted) -> None:
+    async def on_chat_input_message_submitted(
+        self, event: ChatInput.MessageSubmitted
+    ) -> None:
         """Handle submitted text from the chat input."""
         text = event.text
 
@@ -184,6 +192,7 @@ class OnyxApp(App):
                 match event:
                     case SessionCreatedEvent():
                         self._chat_session_id = event.chat_session_id
+                        self._needs_rename = True
                         status.set_session(str(event.chat_session_id))
 
                     case MessageIdEvent():
@@ -255,6 +264,20 @@ class OnyxApp(App):
             status.set_streaming(False)
             self._stream_task = None
 
+            # Auto-name new sessions after the first response
+            if self._needs_rename and self._chat_session_id:
+                self._needs_rename = False
+                asyncio.create_task(self._auto_rename_session())
+
+    async def _auto_rename_session(self) -> None:
+        """Ask the backend to auto-generate a session name via LLM."""
+        if not self._chat_session_id:
+            return
+        try:
+            await self._client.rename_chat_session(self._chat_session_id)
+        except Exception:
+            pass  # Best-effort; don't disrupt the user
+
     # ── Slash Commands ───────────────────────────────────────────────
 
     async def _handle_slash_command(self, text: str) -> None:
@@ -288,7 +311,9 @@ class OnyxApp(App):
                 await self._resume_session(arg)
 
             case "/configure":
-                chat.show_info("Run 'onyx-cli configure' to change connection settings.")
+                chat.show_info(
+                    "Run 'onyx-cli configure' to change connection settings."
+                )
 
             case "/connectors":
                 url = f"{self._config.server_url}/admin/connectors"
@@ -304,7 +329,9 @@ class OnyxApp(App):
                 self.exit()
 
             case _:
-                chat.show_info(f"Unknown command: {command}. Type /help for available commands.")
+                chat.show_info(
+                    f"Unknown command: {command}. Type /help for available commands."
+                )
 
     async def _new_session(self) -> None:
         """Start a new chat session."""
@@ -313,6 +340,7 @@ class OnyxApp(App):
 
         self._chat_session_id = None
         self._parent_message_id = -1
+        self._needs_rename = False
         self._citations = {}
         chat.clear_all()
         status.set_session("")
@@ -336,7 +364,11 @@ class OnyxApp(App):
         chat.write("[bold]Available Assistants[/bold]")
         for p in self._personas:
             marker = " [bold green]*[/bold green]" if p.id == self._persona_id else ""
-            desc = f" - {p.description[:60]}..." if p.description and len(p.description) > 60 else f" - {p.description}" if p.description else ""
+            desc = (
+                f" - {p.description[:60]}..."
+                if p.description and len(p.description) > 60
+                else f" - {p.description}" if p.description else ""
+            )
             chat.write(f"  [bold]{p.id}[/bold]: {p.name}{desc}{marker}")
         chat.write("")
         chat.show_info("Use /persona <id> to switch. Example: /persona 1")
@@ -363,7 +395,9 @@ class OnyxApp(App):
                 break
 
         if target is None:
-            chat.show_info(f"Persona {pid} not found. Use /persona to see available assistants.")
+            chat.show_info(
+                f"Persona {pid} not found. Use /persona to see available assistants."
+            )
             return
 
         self._persona_id = target.id
@@ -400,7 +434,7 @@ class OnyxApp(App):
             chat.show_error(f"Upload failed: {e}")
 
     async def _show_sessions(self) -> None:
-        """Show recent chat sessions."""
+        """Show recent chat sessions as an interactive picker."""
         chat = self.query_one(ChatDisplay)
 
         try:
@@ -413,14 +447,28 @@ class OnyxApp(App):
             chat.show_info("No previous sessions found.")
             return
 
-        chat.write("")
-        chat.write("[bold]Recent Sessions[/bold]")
+        chat.show_info("Select a session to resume (Enter to select, Esc to cancel):")
+
+        # Build options: (full_session_id, display_label)
+        options: list[tuple[str, str]] = []
         for s in sessions[:15]:
             name = s.name or "Untitled"
             sid = str(s.id)[:8]
-            chat.write(f"  [bold]{sid}[/bold]: {name}  [dim]({s.time_created})[/dim]")
-        chat.write("")
-        chat.show_info("Use /resume <id> to continue a session.")
+            label = f"{sid}  {name}  [dim]({s.time_created})[/dim]"
+            options.append((str(s.id), label))
+
+        picker = SessionPicker(options)
+        chat.mount(picker)
+        chat._scroll_to_end()
+        picker.focus()
+
+    async def on_session_picker_session_selected(
+        self, event: SessionPicker.SessionSelected
+    ) -> None:
+        """Handle session selection from the interactive picker."""
+        await self._resume_session(event.session_id)
+        # Return focus to the chat input
+        self.query_one(ChatInput).focus()
 
     async def _resume_session(self, session_id_str: str) -> None:
         """Resume a previous chat session."""
@@ -491,7 +539,14 @@ class OnyxApp(App):
         if self._is_streaming and self._stream_task:
             self._stream_task.cancel()
             if self._chat_session_id:
-                asyncio.create_task(self._client.stop_chat_session(self._chat_session_id))
+                asyncio.create_task(
+                    self._client.stop_chat_session(self._chat_session_id)
+                )
+
+    def action_toggle_sources(self) -> None:
+        """Toggle visibility of citation sources."""
+        chat = self.query_one(ChatDisplay)
+        chat.toggle_sources()
 
     def action_quit_app(self) -> None:
         """Quit with double Ctrl+D confirmation."""
