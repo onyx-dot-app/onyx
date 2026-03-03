@@ -483,6 +483,13 @@ def delete_llm_provider(
     db_session: Session = Depends(get_session),
 ) -> None:
     try:
+        model = fetch_default_llm_model(db_session)
+
+        if model and model.llm_provider_id == provider_id:
+            raise HTTPException(
+                status_code=400, detail="Cannot delete the default LLM provider"
+            )
+
         remove_llm_provider(db_session, provider_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

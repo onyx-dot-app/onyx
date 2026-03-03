@@ -386,6 +386,126 @@ def test_delete_llm_provider(
     assert provider_data is None
 
 
+def test_delete_default_llm_provider_rejected(reset: None) -> None:  # noqa: ARG001
+    """Deleting the default LLM provider should return 400."""
+    admin_user = UserManager.create(name="admin_user")
+
+    # Create a provider
+    response = requests.put(
+        f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
+        headers=admin_user.headers,
+        json={
+            "name": "test-provider-default-delete",
+            "provider": LlmProviderNames.OPENAI,
+            "api_key": "sk-000000000000000000000000000000000000000000000000",
+            "model_configurations": [
+                ModelConfigurationUpsertRequest(
+                    name="gpt-4o-mini", is_visible=True
+                ).model_dump()
+            ],
+            "is_public": True,
+            "groups": [],
+        },
+    )
+    assert response.status_code == 200
+    created_provider = response.json()
+
+    # Set this provider as the default
+    set_default_response = requests.post(
+        f"{API_SERVER_URL}/admin/llm/default",
+        headers=admin_user.headers,
+        json={
+            "provider_id": created_provider["id"],
+            "model_name": "gpt-4o-mini",
+        },
+    )
+    assert set_default_response.status_code == 200
+
+    # Attempt to delete the default provider — should be rejected
+    delete_response = requests.delete(
+        f"{API_SERVER_URL}/admin/llm/provider/{created_provider['id']}",
+        headers=admin_user.headers,
+    )
+    assert delete_response.status_code == 400
+    assert "Cannot delete the default LLM provider" in delete_response.json()["detail"]
+
+    # Verify provider still exists
+    provider_data = _get_provider_by_id(admin_user, created_provider["id"])
+    assert provider_data is not None
+
+
+def test_delete_non_default_llm_provider_with_default_set(
+    reset: None,  # noqa: ARG001
+) -> None:
+    """Deleting a non-default provider should succeed even when a default is set."""
+    admin_user = UserManager.create(name="admin_user")
+
+    # Create two providers
+    response_default = requests.put(
+        f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
+        headers=admin_user.headers,
+        json={
+            "name": "default-provider",
+            "provider": LlmProviderNames.OPENAI,
+            "api_key": "sk-000000000000000000000000000000000000000000000000",
+            "model_configurations": [
+                ModelConfigurationUpsertRequest(
+                    name="gpt-4o-mini", is_visible=True
+                ).model_dump()
+            ],
+            "is_public": True,
+            "groups": [],
+        },
+    )
+    assert response_default.status_code == 200
+    default_provider = response_default.json()
+
+    response_other = requests.put(
+        f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
+        headers=admin_user.headers,
+        json={
+            "name": "other-provider",
+            "provider": LlmProviderNames.OPENAI,
+            "api_key": "sk-000000000000000000000000000000000000000000000000",
+            "model_configurations": [
+                ModelConfigurationUpsertRequest(
+                    name="gpt-4o", is_visible=True
+                ).model_dump()
+            ],
+            "is_public": True,
+            "groups": [],
+        },
+    )
+    assert response_other.status_code == 200
+    other_provider = response_other.json()
+
+    # Set the first provider as default
+    set_default_response = requests.post(
+        f"{API_SERVER_URL}/admin/llm/default",
+        headers=admin_user.headers,
+        json={
+            "provider_id": default_provider["id"],
+            "model_name": "gpt-4o-mini",
+        },
+    )
+    assert set_default_response.status_code == 200
+
+    # Delete the non-default provider — should succeed
+    delete_response = requests.delete(
+        f"{API_SERVER_URL}/admin/llm/provider/{other_provider['id']}",
+        headers=admin_user.headers,
+    )
+    assert delete_response.status_code == 200
+
+    # Verify the non-default provider is gone
+    provider_data = _get_provider_by_id(admin_user, other_provider["id"])
+    assert provider_data is None
+
+    # Verify the default provider still exists
+    default_data = _get_provider_by_id(admin_user, default_provider["id"])
+    assert default_data is not None
+
+
 def test_duplicate_provider_name_rejected(reset: None) -> None:  # noqa: ARG001
     """Creating a provider with a name that already exists should return 400."""
     admin_user = UserManager.create(name="admin_user")
