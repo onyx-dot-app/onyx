@@ -100,7 +100,7 @@ function useOnboardingState(liveAgent?: MinimalPersonaSnapshot): {
       type: OnboardingActionType.GO_TO_STEP,
       step: OnboardingStep.Complete,
     });
-  }, [llmProviders, isLoadingProviders]);
+  }, [llmProviders, isLoadingProviders, userName, hasLlmProviders]);
 
   const nextStep = useCallback(() => {
     dispatch({
@@ -138,7 +138,7 @@ function useOnboardingState(liveAgent?: MinimalPersonaSnapshot): {
 
   const goToStep = useCallback(
     (step: OnboardingStep) => {
-      const hasProviders = state.data.llmProviders?.length || 0 > 0;
+      const hasProviders = (state.data.llmProviders?.length ?? 0) > 0;
       if (step === OnboardingStep.LlmSetup && hasProviders) {
         dispatch({
           type: OnboardingActionType.SET_BUTTON_ACTIVE,
@@ -152,7 +152,7 @@ function useOnboardingState(liveAgent?: MinimalPersonaSnapshot): {
       }
       dispatch({ type: OnboardingActionType.GO_TO_STEP, step });
     },
-    [llmProviders]
+    [state, llmProviders]
   );
 
   const updateName = useCallback(
