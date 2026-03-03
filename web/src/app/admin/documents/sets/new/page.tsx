@@ -1,7 +1,7 @@
 "use client";
 
 import * as SettingsLayouts from "@/layouts/settings-layouts";
-import { SvgBookOpen } from "@opal/icons";
+import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
 import { DocumentSetCreationForm } from "../DocumentSetCreationForm";
 import { useConnectorStatus, useUserGroups } from "@/lib/hooks";
 import { ThreeDotsLoader } from "@/components/Loading";
@@ -56,10 +56,12 @@ function Main() {
 }
 
 export default function Page() {
+  const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.DOCUMENT_SETS]!;
+
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
-        icon={SvgBookOpen}
+        icon={route.icon}
         title="New Document Set"
         separator
         backButton

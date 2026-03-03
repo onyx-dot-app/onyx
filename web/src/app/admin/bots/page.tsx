@@ -6,7 +6,7 @@ import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
 import { SlackBotTable } from "./SlackBotTable";
 import { useSlackBots } from "./[bot-id]/hooks";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
-import { SvgSlack } from "@opal/icons";
+import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import { DOCS_ADMINS_PATH } from "@/lib/constants";
 
@@ -75,9 +75,11 @@ function Main() {
 }
 
 export default function Page() {
+  const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.SLACK_BOTS]!;
+
   return (
     <SettingsLayouts.Root>
-      <SettingsLayouts.Header icon={SvgSlack} title="Slack Bots" separator />
+      <SettingsLayouts.Header icon={route.icon} title={route.title} separator />
       <SettingsLayouts.Body>
         <InstantSSRAutoRefresh />
         <Main />

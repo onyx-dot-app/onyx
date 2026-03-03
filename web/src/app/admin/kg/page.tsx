@@ -29,7 +29,10 @@ import { useIsKGExposed } from "@/app/admin/kg/utils";
 import KGEntityTypes from "@/app/admin/kg/KGEntityTypes";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
-import { SvgNetworkGraph, SvgSettings } from "@opal/icons";
+import { SvgSettings } from "@opal/icons";
+import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
+
+const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.KNOWLEDGE_GRAPH]!;
 
 function createDomainField(
   name: string,
@@ -324,11 +327,7 @@ export default function Page() {
 
   return (
     <SettingsLayouts.Root>
-      <SettingsLayouts.Header
-        icon={SvgNetworkGraph}
-        title="Knowledge Graph"
-        separator
-      />
+      <SettingsLayouts.Header icon={route.icon} title={route.title} separator />
       <SettingsLayouts.Body>
         <Main />
       </SettingsLayouts.Body>

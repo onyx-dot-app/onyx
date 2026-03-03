@@ -4,7 +4,7 @@ import { CCPairIndexingStatusTable } from "./CCPairIndexingStatusTable";
 import { SearchAndFilterControls } from "./SearchAndFilterControls";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import Link from "next/link";
-import { SvgBookOpen } from "@opal/icons";
+import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
 import Text from "@/components/ui/text";
 import { useConnectorIndexingStatusWithPagination } from "@/lib/hooks";
 import { useToastFromQuery } from "@/hooks/useToast";
@@ -201,6 +201,8 @@ function Main() {
 }
 
 export default function Status() {
+  const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.INDEXING_STATUS]!;
+
   useToastFromQuery({
     "connector-created": {
       message: "Connector created successfully",
@@ -215,8 +217,8 @@ export default function Status() {
   return (
     <SettingsLayouts.Root width="full">
       <SettingsLayouts.Header
-        icon={SvgBookOpen}
-        title="Existing Connectors"
+        icon={route.icon}
+        title={route.title}
         rightChildren={
           <Button href="/admin/add-connector">Add Connector</Button>
         }

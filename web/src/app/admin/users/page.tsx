@@ -21,7 +21,11 @@ import CreateButton from "@/refresh-components/buttons/CreateButton";
 import Button from "@/refresh-components/buttons/Button";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { Spinner } from "@/components/Spinner";
-import { SvgDownloadCloud, SvgUser, SvgUserPlus } from "@opal/icons";
+import { SvgDownloadCloud, SvgUserPlus } from "@opal/icons";
+import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
+
+const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.USERS]!;
+
 interface CountDisplayProps {
   label: string;
   value: number | null;
@@ -327,7 +331,7 @@ function AddUserButton() {
 export default function Page() {
   return (
     <SettingsLayouts.Root>
-      <SettingsLayouts.Header title="Manage Users" icon={SvgUser} separator />
+      <SettingsLayouts.Header title={route.title} icon={route.icon} separator />
       <SettingsLayouts.Body>
         <SearchableTables />
       </SettingsLayouts.Body>

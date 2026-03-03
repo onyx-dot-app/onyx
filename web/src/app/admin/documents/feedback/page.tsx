@@ -6,7 +6,7 @@ import { DocumentFeedbackTable } from "./DocumentFeedbackTable";
 import { numPages, numToDisplay } from "./constants";
 import Title from "@/components/ui/title";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
-import { SvgThumbsUp } from "@opal/icons";
+import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
 
 function Main() {
   const {
@@ -61,13 +61,11 @@ function Main() {
 }
 
 export default function Page() {
+  const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.DOCUMENT_FEEDBACK]!;
+
   return (
     <SettingsLayouts.Root>
-      <SettingsLayouts.Header
-        icon={SvgThumbsUp}
-        title="Document Feedback"
-        separator
-      />
+      <SettingsLayouts.Header icon={route.icon} title={route.title} separator />
       <SettingsLayouts.Body>
         <Main />
       </SettingsLayouts.Body>

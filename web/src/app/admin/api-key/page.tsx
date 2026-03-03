@@ -32,6 +32,9 @@ import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import Text from "@/refresh-components/texts/Text";
 import { SvgEdit, SvgKey, SvgRefreshCw } from "@opal/icons";
 import { useCloudSubscription } from "@/hooks/useCloudSubscription";
+import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
+
+const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.API_KEYS]!;
 
 function Main() {
   const {
@@ -234,7 +237,7 @@ function Main() {
 export default function Page() {
   return (
     <SettingsLayouts.Root>
-      <SettingsLayouts.Header title="API Keys" icon={SvgKey} separator />
+      <SettingsLayouts.Header title={route.title} icon={route.icon} separator />
       <SettingsLayouts.Body>
         <Main />
       </SettingsLayouts.Body>

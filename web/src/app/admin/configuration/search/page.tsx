@@ -19,7 +19,10 @@ import { SettingsContext } from "@/providers/SettingsProvider";
 import CardSection from "@/components/admin/CardSection";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { useToastFromQuery } from "@/hooks/useToast";
-import { SvgSearch } from "@opal/icons";
+import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
+
+const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.SEARCH_SETTINGS]!;
+
 export interface EmbeddingDetails {
   api_key: string;
   custom_config: any;
@@ -142,11 +145,7 @@ function Main() {
 export default function Page() {
   return (
     <SettingsLayouts.Root>
-      <SettingsLayouts.Header
-        title="Search Settings"
-        icon={SvgSearch}
-        separator
-      />
+      <SettingsLayouts.Header title={route.title} icon={route.icon} separator />
       <SettingsLayouts.Body>
         <Main />
       </SettingsLayouts.Body>

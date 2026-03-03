@@ -9,8 +9,10 @@ import { useTimeRange } from "@/app/ee/admin/performance/lib";
 import UsageReports from "@/app/ee/admin/performance/usage/UsageReports";
 import Separator from "@/refresh-components/Separator";
 import { useAdminPersonas } from "@/hooks/useAdminPersonas";
-import { SvgActivity } from "@opal/icons";
+import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
+
+const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.USAGE]!;
 
 export default function AnalyticsPage() {
   const [timeRange, setTimeRange] = useTimeRange();
@@ -18,11 +20,7 @@ export default function AnalyticsPage() {
 
   return (
     <SettingsLayouts.Root>
-      <SettingsLayouts.Header
-        icon={SvgActivity}
-        title="Usage Statistics"
-        separator
-      />
+      <SettingsLayouts.Header icon={route.icon} title={route.title} separator />
       <SettingsLayouts.Body>
         <AdminDateRangeSelector
           value={timeRange}

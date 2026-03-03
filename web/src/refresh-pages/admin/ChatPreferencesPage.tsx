@@ -18,13 +18,13 @@ import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import InputSelectField from "@/refresh-components/form/InputSelectField";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import {
-  SvgBubbleText,
   SvgAddLines,
   SvgActions,
   SvgExpand,
   SvgFold,
   SvgExternalLink,
 } from "@opal/icons";
+import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
 import { Content } from "@opal/layouts";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import useCCPairs from "@/hooks/useCCPairs";
@@ -54,6 +54,8 @@ import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import useFilter from "@/hooks/useFilter";
 import { MCPServer } from "@/lib/tools/interfaces";
 import type { IconProps } from "@opal/types";
+
+const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.CHAT_PREFERENCES]!;
 
 interface DefaultAgentConfiguration {
   tool_ids: number[];
@@ -323,8 +325,8 @@ function ChatPreferencesForm() {
     <>
       <SettingsLayouts.Root>
         <SettingsLayouts.Header
-          icon={SvgBubbleText}
-          title="Chat Preferences"
+          icon={route.icon}
+          title={route.title}
           description="Organization-wide chat settings and defaults. Users can override some of these in their personal settings."
           separator
         />

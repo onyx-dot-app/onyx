@@ -11,7 +11,7 @@ import { useAdminPersonas } from "@/hooks/useAdminPersonas";
 import { Persona } from "./interfaces";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { SvgOnyxOctagon } from "@opal/icons";
+import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
 import { useState, useEffect } from "react";
 import Pagination from "@/refresh-components/Pagination";
 
@@ -120,6 +120,7 @@ function MainContent({
 }
 
 export default function Page() {
+  const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.AGENTS]!;
   const [currentPage, setCurrentPage] = useState(1);
   const { personas, totalItems, isLoading, error, refresh } = useAdminPersonas({
     pageNum: currentPage - 1, // Backend uses 0-indexed pages
@@ -128,7 +129,7 @@ export default function Page() {
 
   return (
     <SettingsLayouts.Root>
-      <SettingsLayouts.Header icon={SvgOnyxOctagon} title="Agents" separator />
+      <SettingsLayouts.Header icon={route.icon} title={route.title} separator />
 
       <SettingsLayouts.Body>
         {isLoading && <ThreeDotsLoader />}

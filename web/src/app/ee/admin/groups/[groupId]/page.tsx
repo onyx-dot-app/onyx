@@ -6,8 +6,10 @@ import { useSpecificUserGroup } from "./hook";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { useConnectorStatus } from "@/lib/hooks";
 import useUsers from "@/hooks/useUsers";
-import { SvgUsers } from "@opal/icons";
+import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
+
+const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.GROUPS]!;
 
 function Main({ groupId }: { groupId: string }) {
   const {
@@ -63,7 +65,7 @@ export default function Page(props: { params: Promise<{ groupId: string }> }) {
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
-        icon={SvgUsers}
+        icon={route.icon}
         title="User Group"
         separator
         backButton

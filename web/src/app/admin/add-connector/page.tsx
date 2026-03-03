@@ -32,7 +32,7 @@ import { SettingsContext } from "@/providers/SettingsProvider";
 import SourceTile from "@/components/SourceTile";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import Text from "@/refresh-components/texts/Text";
-import { SvgUploadCloud } from "@opal/icons";
+import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
 function SourceTileTooltipWrapper({
   sourceMetadata,
   preSelect,
@@ -124,6 +124,7 @@ function SourceTileTooltipWrapper({
 }
 
 export default function Page() {
+  const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.ADD_CONNECTOR]!;
   const sources = useMemo(() => listSourceMetadata(), []);
 
   const [rawSearchTerm, setSearchTerm] = useState("");
@@ -250,8 +251,8 @@ export default function Page() {
   return (
     <SettingsLayouts.Root width="full">
       <SettingsLayouts.Header
-        icon={SvgUploadCloud}
-        title="Add Connector"
+        icon={route.icon}
+        title={route.title}
         rightChildren={
           <Button href="/admin/indexing/status" primary>
             See Connectors

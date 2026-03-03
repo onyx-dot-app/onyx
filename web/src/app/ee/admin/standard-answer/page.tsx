@@ -28,9 +28,12 @@ import { PageSelector } from "@/components/PageSelector";
 import Text from "@/components/ui/text";
 import { TableHeader } from "@/components/ui/table";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
-import { SvgClipboard, SvgEdit, SvgTrash } from "@opal/icons";
+import { SvgEdit, SvgTrash } from "@opal/icons";
 import { Button } from "@opal/components";
+import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
 const NUM_RESULTS_PER_PAGE = 10;
+
+const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.STANDARD_ANSWERS]!;
 
 type Displayable = JSX.Element | string;
 
@@ -417,11 +420,7 @@ function Main() {
 export default function Page() {
   return (
     <SettingsLayouts.Root>
-      <SettingsLayouts.Header
-        icon={SvgClipboard}
-        title="Standard Answers"
-        separator
-      />
+      <SettingsLayouts.Header icon={route.icon} title={route.title} separator />
       <SettingsLayouts.Body>
         <Main />
       </SettingsLayouts.Body>

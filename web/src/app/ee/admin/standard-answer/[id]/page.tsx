@@ -2,8 +2,10 @@ import { StandardAnswerCreationForm } from "@/app/ee/admin/standard-answer/Stand
 import { fetchSS } from "@/lib/utilsSS";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
-import { SvgClipboard } from "@opal/icons";
+import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
 import { StandardAnswer, StandardAnswerCategory } from "@/lib/types";
+
+const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.STANDARD_ANSWERS]!;
 
 async function Main({ id }: { id: string }) {
   const tasks = [
@@ -80,7 +82,7 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
-        icon={SvgClipboard}
+        icon={route.icon}
         title="Edit Standard Answer"
         backButton
         separator
