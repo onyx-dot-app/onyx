@@ -50,6 +50,7 @@ HELP_TEXT = """\
   [bold cyan]/attach <path>[/bold cyan]     Attach a file to next message
   [bold cyan]/sessions[/bold cyan]          List recent chat sessions
   [bold cyan]/resume <id>[/bold cyan]       Resume a previous session
+  [bold cyan]/clear[/bold cyan]             Clear the chat display
   [bold cyan]/configure[/bold cyan]         Re-run connection setup
   [bold cyan]/connectors[/bold cyan]        Open connectors page in browser
   [bold cyan]/settings[/bold cyan]          Open Onyx settings in browser
@@ -301,13 +302,16 @@ class OnyxApp(App):
             case "/configure":
                 chat.show_info("Run 'onyx-cli configure' to change connection settings.")
 
+            case "/clear":
+                chat.clear()
+
             case "/connectors":
                 url = f"{self._config.server_url}/admin/connectors"
                 webbrowser.open(url)
                 chat.show_info(f"Opened {url} in browser")
 
             case "/settings":
-                url = f"{self._config.server_url}/admin/settings"
+                url = f"{self._config.server_url}/app/settings/general"
                 webbrowser.open(url)
                 chat.show_info(f"Opened {url} in browser")
 
@@ -327,7 +331,7 @@ class OnyxApp(App):
         self._citations = {}
         chat.clear_all()
         status.set_session("")
-        chat.show_info("New conversation started. Type a message to begin.")
+        chat.show_splash()
 
     async def _show_personas(self) -> None:
         """Show available personas and let user pick one."""

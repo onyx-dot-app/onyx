@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from textual.app import ComposeResult
-from textual.containers import Center, Vertical
+from textual.containers import Center
+from textual.containers import Vertical
 from textual.widgets import Static
 
 
@@ -36,13 +37,25 @@ class SplashWidget(Static):
         super().__init__(ONYX_LOGO)
 
 
+class _HintLine(Static):
+    """Subtle hint text below the tagline."""
+
+    DEFAULT_CSS = """
+    _HintLine {
+        text-align: center;
+        color: #555577;
+        padding: 1 0 0 0;
+    }
+    """
+
+
 class SplashScreen(Vertical):
-    """Full splash screen with logo and tagline."""
+    """Full splash screen with logo and tagline, vertically centered."""
 
     DEFAULT_CSS = """
     SplashScreen {
         width: 100%;
-        height: auto;
+        height: 1fr;
         align: center middle;
         padding: 1 2;
     }
@@ -50,7 +63,7 @@ class SplashScreen(Vertical):
     SplashScreen .tagline {
         text-align: center;
         color: #A0A0A0;
-        padding: 0 0 1 0;
+        padding: 0 0 0 0;
     }
     """
 
@@ -58,3 +71,4 @@ class SplashScreen(Vertical):
         with Center():
             yield SplashWidget()
         yield Static(TAGLINE, classes="tagline")
+        yield _HintLine("Type a message to begin  \u00b7  /help for commands")
