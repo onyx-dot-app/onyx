@@ -13,7 +13,7 @@ import {
   OnboardingFormWrapper,
   OnboardingFormChildProps,
 } from "./OnboardingFormWrapper";
-import { OnboardingActions, OnboardingState } from "../types";
+import { OnboardingActions, OnboardingState } from "@/interfaces/onboarding";
 import { buildInitialValues } from "../components/llmConnectionHelpers";
 import ConnectionProviderIcon from "@/refresh-components/ConnectionProviderIcon";
 import InlineExternalLink from "@/refresh-components/InlineExternalLink";

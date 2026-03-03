@@ -4,7 +4,7 @@ import {
   OnboardingActions,
   OnboardingState,
   OnboardingStep,
-} from "@/sections/onboarding/types";
+} from "@/interfaces/onboarding";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
 import { Button as OpalButton } from "@opal/components";

@@ -8,7 +8,7 @@ import {
   OnboardingData,
   OnboardingState,
   OnboardingStep,
-} from "@/sections/onboarding/types";
+} from "@/interfaces/onboarding";
 import { WellKnownLLMProviderDescriptor } from "@/interfaces/llm";
 import { updateUserPersonalization } from "@/lib/userSettings";
 import { useUser } from "@/providers/UserProvider";

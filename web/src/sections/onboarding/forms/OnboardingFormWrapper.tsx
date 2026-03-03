@@ -10,7 +10,7 @@ import {
   LLM_ADMIN_URL,
   LLM_PROVIDERS_ADMIN_URL,
 } from "@/lib/llmConfig/constants";
-import { OnboardingActions, OnboardingState } from "../types";
+import { OnboardingActions, OnboardingState } from "@/interfaces/onboarding";
 import { APIFormFieldState } from "@/refresh-components/form/types";
 import {
   testApiKeyHelper,

@@ -15,7 +15,7 @@ import {
   OnboardingFormWrapper,
   OnboardingFormChildProps,
 } from "./OnboardingFormWrapper";
-import { OnboardingActions, OnboardingState } from "../types";
+import { OnboardingActions, OnboardingState } from "@/interfaces/onboarding";
 import {
   buildInitialValues,
   testApiKeyHelper,

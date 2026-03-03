@@ -1,7 +1,4 @@
-import {
-  OnboardingStep,
-  FinalStepItemProps,
-} from "@/sections/onboarding/types";
+import { OnboardingStep, FinalStepItemProps } from "@/interfaces/onboarding";
 import { SvgGlobe, SvgImage, SvgUsers } from "@opal/icons";
 
 type StepConfig = {

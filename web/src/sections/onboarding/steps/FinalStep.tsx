@@ -3,7 +3,7 @@ import Link from "next/link";
 import type { Route } from "next";
 import Button from "@/refresh-components/buttons/Button";
 import { FINAL_SETUP_CONFIG } from "@/sections/onboarding/constants";
-import { FinalStepItemProps } from "@/sections/onboarding/types";
+import { FinalStepItemProps } from "@/interfaces/onboarding";
 import { SvgExternalLink } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import { ContentAction } from "@opal/layouts";
