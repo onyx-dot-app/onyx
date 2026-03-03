@@ -1,12 +1,12 @@
-import React, { useMemo } from "react";
+"use client";
+
+import { useMemo } from "react";
 import * as Yup from "yup";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import { FormField } from "@/refresh-components/form/FormField";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox";
 import InputFile from "@/refresh-components/inputs/InputFile";
 import Separator from "@/refresh-components/Separator";
-import { cn, noProp } from "@/lib/utils";
-import { SvgRefreshCw } from "@opal/icons";
 import {
   ModelConfiguration,
   WellKnownLLMProviderDescriptor,

@@ -1,3 +1,5 @@
+"use client";
+
 import { useMemo, useState } from "react";
 import * as Yup from "yup";
 import { FormikField } from "@/refresh-components/form/FormikField";
