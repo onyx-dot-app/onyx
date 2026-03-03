@@ -213,7 +213,7 @@ export default function Status() {
   });
 
   return (
-    <SettingsLayouts.Root>
+    <SettingsLayouts.Root width="full">
       <SettingsLayouts.Header
         icon={SvgBookOpen}
         title="Existing Connectors"

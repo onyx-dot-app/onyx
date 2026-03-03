@@ -248,7 +248,7 @@ export default function Page() {
   };
 
   return (
-    <SettingsLayouts.Root>
+    <SettingsLayouts.Root width="full">
       <SettingsLayouts.Header
         icon={SvgUploadCloud}
         title="Add Connector"
