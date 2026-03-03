@@ -7,18 +7,30 @@ import (
 	"testing"
 )
 
-
 func clearEnvVars(t *testing.T) {
 	t.Helper()
 	for _, key := range []string{EnvServerURL, EnvAPIKey, EnvAgentID} {
 		t.Setenv(key, "")
-		os.Unsetenv(key)
+		if err := os.Unsetenv(key); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func writeConfig(t *testing.T, dir string, data []byte) {
+	t.Helper()
+	onyxDir := filepath.Join(dir, "onyx-cli")
+	if err := os.MkdirAll(onyxDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(onyxDir, "config.json"), data, 0o644); err != nil {
+		t.Fatal(err)
 	}
 }
 
 func TestDefaultConfig(t *testing.T) {
 	cfg := DefaultConfig()
-	if cfg.ServerURL != "http://localhost:3000" {
+	if cfg.ServerURL != "https://cloud.onyx.app" {
 		t.Errorf("expected default server URL, got %s", cfg.ServerURL)
 	}
 	if cfg.APIKey != "" {
@@ -46,7 +58,7 @@ func TestLoadDefaults(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", dir)
 
 	cfg := Load()
-	if cfg.ServerURL != "http://localhost:3000" {
+	if cfg.ServerURL != "https://cloud.onyx.app" {
 		t.Errorf("expected default URL, got %s", cfg.ServerURL)
 	}
 	if cfg.APIKey != "" {
@@ -59,15 +71,12 @@ func TestLoadFromFile(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
 
-	onyxDir := filepath.Join(dir, "onyx-cli")
-	os.MkdirAll(onyxDir, 0o755)
-
 	data, _ := json.Marshal(map[string]interface{}{
-		"server_url":        "https://my-onyx.example.com",
-		"api_key":           "test-key-123",
+		"server_url":         "https://my-onyx.example.com",
+		"api_key":            "test-key-123",
 		"default_persona_id": 5,
 	})
-	os.WriteFile(filepath.Join(onyxDir, "config.json"), data, 0o644)
+	writeConfig(t, dir, data)
 
 	cfg := Load()
 	if cfg.ServerURL != "https://my-onyx.example.com" {
@@ -86,12 +95,10 @@ func TestLoadCorruptFile(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
 
-	onyxDir := filepath.Join(dir, "onyx-cli")
-	os.MkdirAll(onyxDir, 0o755)
-	os.WriteFile(filepath.Join(onyxDir, "config.json"), []byte("not valid json {{{"), 0o644)
+	writeConfig(t, dir, []byte("not valid json {{{"))
 
 	cfg := Load()
-	if cfg.ServerURL != "http://localhost:3000" {
+	if cfg.ServerURL != "https://cloud.onyx.app" {
 		t.Errorf("expected default URL on corrupt file, got %s", cfg.ServerURL)
 	}
 }
@@ -149,13 +156,11 @@ func TestEnvOverridesFileValues(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
 
-	onyxDir := filepath.Join(dir, "onyx-cli")
-	os.MkdirAll(onyxDir, 0o755)
 	data, _ := json.Marshal(map[string]interface{}{
 		"server_url": "https://file-url.com",
 		"api_key":    "file-key",
 	})
-	os.WriteFile(filepath.Join(onyxDir, "config.json"), data, 0o644)
+	writeConfig(t, dir, data)
 
 	t.Setenv(EnvServerURL, "https://env-url.com")
 
@@ -174,8 +179,8 @@ func TestSaveAndReload(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", dir)
 
 	cfg := OnyxCliConfig{
-		ServerURL:        "https://saved.example.com",
-		APIKey:           "saved-key",
+		ServerURL:      "https://saved.example.com",
+		APIKey:         "saved-key",
 		DefaultAgentID: 10,
 	}
 	if err := Save(cfg); err != nil {

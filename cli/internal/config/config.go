@@ -24,7 +24,7 @@ type OnyxCliConfig struct {
 // DefaultConfig returns a config with default values.
 func DefaultConfig() OnyxCliConfig {
 	return OnyxCliConfig{
-		ServerURL:        "http://localhost:3000",
+		ServerURL:        "https://cloud.onyx.app",
 		APIKey:           "",
 		DefaultAgentID: 0,
 	}

@@ -84,7 +84,7 @@ func (c *Client) doJSON(method, path string, reqBody any, result any) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		respBody, _ := io.ReadAll(resp.Body)
@@ -110,7 +110,7 @@ func (c *Client) TestConnection() error {
 	if err != nil {
 		return fmt.Errorf("cannot connect to %s — is the server running?", c.baseURL)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
 	serverHeader := strings.ToLower(resp.Header.Get("Server"))
 
@@ -131,7 +131,7 @@ func (c *Client) TestConnection() error {
 	if err != nil {
 		return fmt.Errorf("server reachable but API error: %w", err)
 	}
-	defer resp2.Body.Close()
+	defer func() { _ = resp2.Body.Close() }()
 
 	if resp2.StatusCode == 200 {
 		return nil
@@ -217,7 +217,7 @@ func (c *Client) UploadFile(filePath string) (*models.FileDescriptorPayload, err
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	var buf bytes.Buffer
 	writer := multipart.NewWriter(&buf)
@@ -229,7 +229,7 @@ func (c *Client) UploadFile(filePath string) (*models.FileDescriptorPayload, err
 	if _, err := io.Copy(part, file); err != nil {
 		return nil, err
 	}
-	writer.Close()
+	_ = writer.Close()
 
 	req, err := c.newRequest("POST", "/api/user/projects/file/upload", &buf)
 	if err != nil {
@@ -241,7 +241,7 @@ func (c *Client) UploadFile(filePath string) (*models.FileDescriptorPayload, err
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(resp.Body)
@@ -275,5 +275,5 @@ func (c *Client) StopChatSession(sessionID string) {
 	if err != nil {
 		return
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 }

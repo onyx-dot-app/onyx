@@ -21,7 +21,7 @@ func OpenBrowser(url string) bool {
 	if cmd != nil {
 		if err := cmd.Start(); err == nil {
 			// Reap the child process to avoid zombies.
-			go cmd.Wait()
+			go func() { _ = cmd.Wait() }()
 			return true
 		}
 	}

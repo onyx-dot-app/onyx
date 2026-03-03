@@ -43,15 +43,15 @@ func newAgentsCmd() *cobra.Command {
 			}
 
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 4, 2, ' ', 0)
-			fmt.Fprintln(w, "ID\tNAME\tDESCRIPTION")
+			_, _ = fmt.Fprintln(w, "ID\tNAME\tDESCRIPTION")
 			for _, a := range agents {
 				desc := a.Description
 				if len(desc) > 60 {
 					desc = desc[:57] + "..."
 				}
-				fmt.Fprintf(w, "%d\t%s\t%s\n", a.ID, a.Name, desc)
+				_, _ = fmt.Fprintf(w, "%d\t%s\t%s\n", a.ID, a.Name, desc)
 			}
-			w.Flush()
+			_ = w.Flush()
 
 			return nil
 		},
