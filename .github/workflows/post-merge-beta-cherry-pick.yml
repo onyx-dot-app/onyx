@@ -72,6 +72,7 @@ jobs:
           }
 
           GATE_LAST_ERROR=""
+          GATE_DETAILS_DELIM="GATE_DETAILS_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}_${RANDOM}_$$"
 
           # For the commit that triggered this workflow (HEAD on main), fetch all
           # associated PRs and keep only the PR that was actually merged into main
@@ -81,9 +82,9 @@ jobs:
             {
               echo "gate_status=failure"
               echo "gate_reason=resolve-prs-failed"
-              echo "gate_details<<EOF"
+              echo "gate_details<<${GATE_DETAILS_DELIM}"
               printf '%s\n' "$GATE_LAST_ERROR" | tail -n 20
-              echo "EOF"
+              echo "${GATE_DETAILS_DELIM}"
             } >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -93,9 +94,9 @@ jobs:
             {
               echo "gate_status=failure"
               echo "gate_reason=parse-prs-failed"
-              echo "gate_details<<EOF"
+              echo "gate_details<<${GATE_DETAILS_DELIM}"
               printf '%s\n' "$pr_numbers_json" | tail -n 20
-              echo "EOF"
+              echo "${GATE_DETAILS_DELIM}"
             } >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -119,9 +120,9 @@ jobs:
             {
               echo "gate_status=failure"
               echo "gate_reason=resolve-pr-failed"
-              echo "gate_details<<EOF"
+              echo "gate_details<<${GATE_DETAILS_DELIM}"
               printf '%s\n' "$GATE_LAST_ERROR" | tail -n 20
-              echo "EOF"
+              echo "${GATE_DETAILS_DELIM}"
             } >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -131,9 +132,9 @@ jobs:
             {
               echo "gate_status=failure"
               echo "gate_reason=parse-pr-failed"
-              echo "gate_details<<EOF"
+              echo "gate_details<<${GATE_DETAILS_DELIM}"
               printf '%s\n' "$pr_json" | tail -n 20
-              echo "EOF"
+              echo "${GATE_DETAILS_DELIM}"
             } >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -143,9 +144,9 @@ jobs:
             {
               echo "gate_status=failure"
               echo "gate_reason=parse-pr-failed"
-              echo "gate_details<<EOF"
+              echo "gate_details<<${GATE_DETAILS_DELIM}"
               printf '%s\n' "$pr_json" | tail -n 20
-              echo "EOF"
+              echo "${GATE_DETAILS_DELIM}"
             } >> "$GITHUB_OUTPUT"
             exit 0
           fi
