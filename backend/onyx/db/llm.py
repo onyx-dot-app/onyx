@@ -532,6 +532,7 @@ def fetch_default_model(
 ) -> ModelConfiguration | None:
     model_config = db_session.scalar(
         select(ModelConfiguration)
+        .options(selectinload(ModelConfiguration.llm_provider))
         .join(LLMModelFlow)
         .where(
             ModelConfiguration.is_visible == True,  # noqa: E712

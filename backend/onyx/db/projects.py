@@ -52,7 +52,7 @@ def create_user_files(
 ) -> CategorizedFilesResult:
 
     # Categorize the files
-    categorized_files = categorize_uploaded_files(files)
+    categorized_files = categorize_uploaded_files(files, db_session)
     # NOTE: At the moment, zip metadata is not used for user files.
     # Should revisit to decide whether this should be a feature.
     upload_response = upload_files(categorized_files.acceptable, FileOrigin.USER_FILE)
