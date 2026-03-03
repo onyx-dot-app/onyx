@@ -1,5 +1,5 @@
 import type { IconProps } from "@opal/types";
-const SvgEmptyState = ({ size, ...props }: IconProps) => (
+const SvgEmpty = ({ size, ...props }: IconProps) => (
   <svg
     width={size}
     height={size}
@@ -29,4 +29,4 @@ const SvgEmptyState = ({ size, ...props }: IconProps) => (
     />
   </svg>
 );
-export default SvgEmptyState;
+export default SvgEmpty;

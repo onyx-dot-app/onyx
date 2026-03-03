@@ -2,7 +2,7 @@ export { default as SvgBrokenKey } from "@opal/illustrations/broken-key";
 export { default as SvgConnect } from "@opal/illustrations/connect";
 export { default as SvgConnected } from "@opal/illustrations/connected";
 export { default as SvgDisconnected } from "@opal/illustrations/disconnected";
-export { default as SvgEmptyState } from "@opal/illustrations/empty";
+export { default as SvgEmpty } from "@opal/illustrations/empty";
 export { default as SvgEndOfLine } from "@opal/illustrations/end-of-line";
 export { default as SvgLimitAlert } from "@opal/illustrations/limit-alert";
 export { default as SvgLongWait } from "@opal/illustrations/long-wait";
