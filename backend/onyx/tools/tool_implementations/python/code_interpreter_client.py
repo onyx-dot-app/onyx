@@ -104,8 +104,6 @@ class CodeInterpreterClient:
 
     def health(self, use_cache: bool = False) -> bool:
         """Check if the Code Interpreter service is healthy"""
-        global _health_cache
-
         if use_cache:
             cached = _health_cache.get(self.base_url)
             if cached is not None:
