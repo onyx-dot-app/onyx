@@ -506,6 +506,85 @@ def test_delete_non_default_llm_provider_with_default_set(
     assert default_data is not None
 
 
+def test_delete_default_vision_provider_clears_vision_default(
+    reset: None,  # noqa: ARG001
+) -> None:
+    """Deleting the default vision provider should succeed and clear the vision default."""
+    admin_user = UserManager.create(name="admin_user")
+
+    # Create a text provider and set it as default (so we have a default text provider)
+    text_response = requests.put(
+        f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
+        headers=admin_user.headers,
+        json={
+            "name": "text-provider",
+            "provider": LlmProviderNames.OPENAI,
+            "api_key": "sk-000000000000000000000000000000000000000000000001",
+            "model_configurations": [
+                ModelConfigurationUpsertRequest(
+                    name="gpt-4o-mini", is_visible=True
+                ).model_dump()
+            ],
+            "is_public": True,
+            "groups": [],
+        },
+    )
+    assert text_response.status_code == 200
+    text_provider = text_response.json()
+    _set_default_provider(admin_user, text_provider["id"], "gpt-4o-mini")
+
+    # Create a vision provider and set it as default vision
+    vision_response = requests.put(
+        f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
+        headers=admin_user.headers,
+        json={
+            "name": "vision-provider",
+            "provider": LlmProviderNames.OPENAI,
+            "api_key": "sk-000000000000000000000000000000000000000000000002",
+            "model_configurations": [
+                ModelConfigurationUpsertRequest(
+                    name="gpt-4o",
+                    is_visible=True,
+                    supports_image_input=True,
+                ).model_dump()
+            ],
+            "is_public": True,
+            "groups": [],
+        },
+    )
+    assert vision_response.status_code == 200
+    vision_provider = vision_response.json()
+    _set_default_vision_provider(admin_user, vision_provider["id"], "gpt-4o")
+
+    # Verify vision default is set
+    data = _get_providers_admin(admin_user)
+    assert data is not None
+    _, _, vision_default = _unpack_data(data)
+    assert vision_default is not None
+    assert vision_default["provider_id"] == vision_provider["id"]
+
+    # Delete the vision provider — should succeed (only text default is protected)
+    delete_response = requests.delete(
+        f"{API_SERVER_URL}/admin/llm/provider/{vision_provider['id']}",
+        headers=admin_user.headers,
+    )
+    assert delete_response.status_code == 200
+
+    # Verify the vision provider is gone
+    provider_data = _get_provider_by_id(admin_user, vision_provider["id"])
+    assert provider_data is None
+
+    # Verify there is no default vision provider
+    data = _get_providers_admin(admin_user)
+    assert data is not None
+    _, text_default, vision_default = _unpack_data(data)
+    assert vision_default is None
+
+    # Verify the text default is still intact
+    assert text_default is not None
+    assert text_default["provider_id"] == text_provider["id"]
+
+
 def test_duplicate_provider_name_rejected(reset: None) -> None:  # noqa: ARG001
     """Creating a provider with a name that already exists should return 400."""
     admin_user = UserManager.create(name="admin_user")
