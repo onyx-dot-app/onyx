@@ -617,6 +617,40 @@ Keep it high level. You can reference certain files or functions though.
 
 Before writing your plan, make sure to do research. Explore the relevant sections in the codebase.
 
+## Error Handling
+
+**Always use `OnyxErrorCode` from `onyx.error_handling.error_codes` when raising `HTTPException`. Never hardcode
+status codes or use `starlette.status` / `fastapi.status` constants directly.**
+
+**Reason:** Standardized error codes give API consumers a stable, machine-readable `error_code` field to match on,
+and keep HTTP status codes consistent across the entire backend.
+
+```python
+from fastapi import HTTPException
+from onyx.error_handling.error_codes import OnyxErrorCode
+
+# ✅ Good
+raise HTTPException(
+    status_code=OnyxErrorCode.NOT_FOUND.status_code,
+    detail=OnyxErrorCode.NOT_FOUND.detail("Session not found"),
+)
+
+# ✅ Good — no extra message needed
+raise HTTPException(
+    status_code=OnyxErrorCode.UNAUTHENTICATED.status_code,
+    detail=OnyxErrorCode.UNAUTHENTICATED.detail(),
+)
+
+# ❌ Bad — hardcoded status code
+raise HTTPException(status_code=404, detail="Session not found")
+
+# ❌ Bad — starlette constant
+raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+```
+
+Available error codes are defined in `backend/onyx/error_handling/error_codes.py`. If a new error
+category is needed, add it there first — do not invent ad-hoc codes.
+
 ## Best Practices
 
 In addition to the other content in this file, best practices for contributing

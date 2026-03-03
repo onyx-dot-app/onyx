@@ -58,6 +58,7 @@ from onyx.configs.app_configs import STRIPE_PUBLISHABLE_KEY_OVERRIDE
 from onyx.configs.app_configs import STRIPE_PUBLISHABLE_KEY_URL
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.db.engine.sql_engine import get_session
+from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.redis.redis_pool import get_shared_redis_client
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
@@ -170,9 +171,11 @@ async def create_checkout_session(
         used_seats = get_used_seats(tenant_id)
         if seats < used_seats:
             raise HTTPException(
-                status_code=400,
-                detail=f"Cannot subscribe with fewer seats than current usage. "
-                f"You have {used_seats} active users/integrations but requested {seats} seats.",
+                status_code=OnyxErrorCode.VALIDATION_ERROR.status_code,
+                detail=OnyxErrorCode.VALIDATION_ERROR.detail(
+                    f"Cannot subscribe with fewer seats than current usage. "
+                    f"You have {used_seats} active users/integrations but requested {seats} seats."
+                ),
             )
 
     # Build redirect URL for after checkout completion
@@ -206,7 +209,10 @@ async def create_customer_portal_session(
 
     # Self-hosted requires license
     if not MULTI_TENANT and not license_data:
-        raise HTTPException(status_code=400, detail="No license found")
+        raise HTTPException(
+            status_code=OnyxErrorCode.VALIDATION_ERROR.status_code,
+            detail=OnyxErrorCode.VALIDATION_ERROR.detail("No license found"),
+        )
 
     return_url = request.return_url if request else f"{WEB_DOMAIN}/admin/billing"
 
@@ -241,8 +247,10 @@ async def get_billing_information(
     # Check circuit breaker (self-hosted only)
     if _is_billing_circuit_open():
         raise HTTPException(
-            status_code=503,
-            detail="Stripe connection temporarily disabled. Click 'Connect to Stripe' to retry.",
+            status_code=OnyxErrorCode.SERVICE_UNAVAILABLE.status_code,
+            detail=OnyxErrorCode.SERVICE_UNAVAILABLE.detail(
+                "Stripe connection temporarily disabled. Click 'Connect to Stripe' to retry."
+            ),
         )
 
     try:
@@ -274,15 +282,20 @@ async def update_seats(
 
     # Self-hosted requires license
     if not MULTI_TENANT and not license_data:
-        raise HTTPException(status_code=400, detail="No license found")
+        raise HTTPException(
+            status_code=OnyxErrorCode.VALIDATION_ERROR.status_code,
+            detail=OnyxErrorCode.VALIDATION_ERROR.detail("No license found"),
+        )
 
     # Validate that new seat count is not less than current used seats
     used_seats = get_used_seats(tenant_id)
     if request.new_seat_count < used_seats:
         raise HTTPException(
-            status_code=400,
-            detail=f"Cannot reduce seats below current usage. "
-            f"You have {used_seats} active users/integrations but requested {request.new_seat_count} seats.",
+            status_code=OnyxErrorCode.VALIDATION_ERROR.status_code,
+            detail=OnyxErrorCode.VALIDATION_ERROR.detail(
+                f"Cannot reduce seats below current usage. "
+                f"You have {used_seats} active users/integrations but requested {request.new_seat_count} seats."
+            ),
         )
 
     try:
@@ -330,8 +343,10 @@ async def get_stripe_publishable_key() -> StripePublishableKeyResponse:
             key = STRIPE_PUBLISHABLE_KEY_OVERRIDE.strip()
             if not key.startswith("pk_"):
                 raise HTTPException(
-                    status_code=500,
-                    detail="Invalid Stripe publishable key format",
+                    status_code=OnyxErrorCode.INTERNAL_ERROR.status_code,
+                    detail=OnyxErrorCode.INTERNAL_ERROR.detail(
+                        "Invalid Stripe publishable key format"
+                    ),
                 )
             _stripe_publishable_key_cache = key
             return StripePublishableKeyResponse(publishable_key=key)
@@ -339,8 +354,10 @@ async def get_stripe_publishable_key() -> StripePublishableKeyResponse:
         # Fall back to S3 bucket
         if not STRIPE_PUBLISHABLE_KEY_URL:
             raise HTTPException(
-                status_code=500,
-                detail="Stripe publishable key is not configured",
+                status_code=OnyxErrorCode.INTERNAL_ERROR.status_code,
+                detail=OnyxErrorCode.INTERNAL_ERROR.detail(
+                    "Stripe publishable key is not configured"
+                ),
             )
 
         try:
@@ -352,16 +369,20 @@ async def get_stripe_publishable_key() -> StripePublishableKeyResponse:
                 # Validate key format
                 if not key.startswith("pk_"):
                     raise HTTPException(
-                        status_code=500,
-                        detail="Invalid Stripe publishable key format",
+                        status_code=OnyxErrorCode.INTERNAL_ERROR.status_code,
+                        detail=OnyxErrorCode.INTERNAL_ERROR.detail(
+                            "Invalid Stripe publishable key format"
+                        ),
                     )
 
                 _stripe_publishable_key_cache = key
                 return StripePublishableKeyResponse(publishable_key=key)
         except httpx.HTTPError:
             raise HTTPException(
-                status_code=500,
-                detail="Failed to fetch Stripe publishable key",
+                status_code=OnyxErrorCode.INTERNAL_ERROR.status_code,
+                detail=OnyxErrorCode.INTERNAL_ERROR.detail(
+                    "Failed to fetch Stripe publishable key"
+                ),
             )
 
 

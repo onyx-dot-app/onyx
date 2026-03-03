@@ -43,6 +43,7 @@ from onyx.auth.users import User
 from onyx.configs.app_configs import STRIPE_PUBLISHABLE_KEY_OVERRIDE
 from onyx.configs.app_configs import STRIPE_PUBLISHABLE_KEY_URL
 from onyx.configs.app_configs import WEB_DOMAIN
+from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from shared_configs.contextvars import get_current_tenant_id
@@ -118,7 +119,10 @@ async def create_customer_portal_session(
         return {"stripe_customer_portal_url": portal_url}
     except Exception as e:
         logger.exception("Failed to create customer portal session")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=OnyxErrorCode.INTERNAL_ERROR.status_code,
+            detail=OnyxErrorCode.INTERNAL_ERROR.detail(str(e)),
+        )
 
 
 @router.post("/create-checkout-session")
@@ -136,7 +140,10 @@ async def create_checkout_session(
         return {"stripe_checkout_url": checkout_url}
     except Exception as e:
         logger.exception("Failed to create checkout session")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=OnyxErrorCode.INTERNAL_ERROR.status_code,
+            detail=OnyxErrorCode.INTERNAL_ERROR.detail(str(e)),
+        )
 
 
 @router.post("/create-subscription-session")
@@ -147,7 +154,10 @@ async def create_subscription_session(
     try:
         tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
         if not tenant_id:
-            raise HTTPException(status_code=400, detail="Tenant ID not found")
+            raise HTTPException(
+                status_code=OnyxErrorCode.VALIDATION_ERROR.status_code,
+                detail=OnyxErrorCode.VALIDATION_ERROR.detail("Tenant ID not found"),
+            )
 
         billing_period = request.billing_period if request else "monthly"
         session_id = fetch_stripe_checkout_session(tenant_id, billing_period)
@@ -155,7 +165,10 @@ async def create_subscription_session(
 
     except Exception as e:
         logger.exception("Failed to create subscription session")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=OnyxErrorCode.INTERNAL_ERROR.status_code,
+            detail=OnyxErrorCode.INTERNAL_ERROR.detail(str(e)),
+        )
 
 
 @router.get("/stripe-publishable-key")
@@ -187,8 +200,10 @@ async def get_stripe_publishable_key() -> StripePublishableKeyResponse:
             key = STRIPE_PUBLISHABLE_KEY_OVERRIDE.strip()
             if not key.startswith("pk_"):
                 raise HTTPException(
-                    status_code=500,
-                    detail="Invalid Stripe publishable key format",
+                    status_code=OnyxErrorCode.INTERNAL_ERROR.status_code,
+                    detail=OnyxErrorCode.INTERNAL_ERROR.detail(
+                        "Invalid Stripe publishable key format"
+                    ),
                 )
             _stripe_publishable_key_cache = key
             return StripePublishableKeyResponse(publishable_key=key)
@@ -196,8 +211,10 @@ async def get_stripe_publishable_key() -> StripePublishableKeyResponse:
         # Fall back to S3 bucket
         if not STRIPE_PUBLISHABLE_KEY_URL:
             raise HTTPException(
-                status_code=500,
-                detail="Stripe publishable key is not configured",
+                status_code=OnyxErrorCode.INTERNAL_ERROR.status_code,
+                detail=OnyxErrorCode.INTERNAL_ERROR.detail(
+                    "Stripe publishable key is not configured"
+                ),
             )
 
         try:
@@ -209,14 +226,18 @@ async def get_stripe_publishable_key() -> StripePublishableKeyResponse:
                 # Validate key format
                 if not key.startswith("pk_"):
                     raise HTTPException(
-                        status_code=500,
-                        detail="Invalid Stripe publishable key format",
+                        status_code=OnyxErrorCode.INTERNAL_ERROR.status_code,
+                        detail=OnyxErrorCode.INTERNAL_ERROR.detail(
+                            "Invalid Stripe publishable key format"
+                        ),
                     )
 
                 _stripe_publishable_key_cache = key
                 return StripePublishableKeyResponse(publishable_key=key)
         except httpx.HTTPError:
             raise HTTPException(
-                status_code=500,
-                detail="Failed to fetch Stripe publishable key",
+                status_code=OnyxErrorCode.INTERNAL_ERROR.status_code,
+                detail=OnyxErrorCode.INTERNAL_ERROR.detail(
+                    "Failed to fetch Stripe publishable key"
+                ),
             )
