@@ -18,53 +18,21 @@ from sqlalchemy import delete
 from onyx.cache.interface import CacheBackend
 from onyx.cache.postgres_backend import PostgresCacheBackend
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.engine.sql_engine import get_sqlalchemy_engine
-from onyx.db.engine.sql_engine import SqlEngine
 from onyx.db.models import CacheStore
 from onyx.db.models import KVStore
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.key_value_store.store import PgRedisKVStore
 from onyx.key_value_store.store import REDIS_KEY_PREFIX
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
 
 
-@pytest.fixture(scope="session", autouse=True)
-def _init_db() -> Generator[None, None, None]:
-    SqlEngine.init_engine(pool_size=5, max_overflow=2)
-    engine = get_sqlalchemy_engine()
-    CacheStore.__table__.create(engine, checkfirst=True)
-    KVStore.__table__.create(engine, checkfirst=True)
-    yield
-    with get_session_with_tenant(tenant_id=TEST_TENANT_ID) as session:
-        session.execute(delete(CacheStore))
-        session.execute(delete(KVStore))
-        session.commit()
-
-
 @pytest.fixture(autouse=True)
-def _tenant_context() -> Generator[None, None, None]:
-    token = CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
-    try:
-        yield
-    finally:
-        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
-
-
-@pytest.fixture(autouse=True)
-def _clean_kv(
-    _tenant_context: None,
-) -> Generator[None, None, None]:
+def _clean_kv() -> Generator[None, None, None]:
     yield
     with get_session_with_tenant(tenant_id=TEST_TENANT_ID) as session:
         session.execute(delete(KVStore))
         session.execute(delete(CacheStore))
         session.commit()
-
-
-@pytest.fixture
-def pg_cache() -> PostgresCacheBackend:
-    return PostgresCacheBackend(TEST_TENANT_ID)
 
 
 @pytest.fixture
