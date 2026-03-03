@@ -1,5 +1,6 @@
 import json
 import string
+import time
 from collections.abc import Callable
 from collections.abc import Mapping
 from datetime import datetime
@@ -18,6 +19,7 @@ from onyx.background.celery.tasks.opensearch_migration.transformer import (
 )
 from onyx.configs.app_configs import LOG_VESPA_TIMING_INFORMATION
 from onyx.configs.app_configs import VESPA_LANGUAGE_OVERRIDE
+from onyx.configs.app_configs import VESPA_MIGRATION_REQUEST_TIMEOUT_S
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunkUncleaned
 from onyx.document_index.interfaces import VespaChunkRequest
@@ -47,6 +49,7 @@ from onyx.document_index.vespa_constants import MAX_ID_SEARCH_QUERY_SIZE
 from onyx.document_index.vespa_constants import MAX_OR_CONDITIONS
 from onyx.document_index.vespa_constants import METADATA
 from onyx.document_index.vespa_constants import METADATA_SUFFIX
+from onyx.document_index.vespa_constants import PERSONAS
 from onyx.document_index.vespa_constants import PRIMARY_OWNERS
 from onyx.document_index.vespa_constants import SEARCH_ENDPOINT
 from onyx.document_index.vespa_constants import SECONDARY_OWNERS
@@ -56,6 +59,7 @@ from onyx.document_index.vespa_constants import SOURCE_LINKS
 from onyx.document_index.vespa_constants import SOURCE_TYPE
 from onyx.document_index.vespa_constants import TENANT_ID
 from onyx.document_index.vespa_constants import TITLE
+from onyx.document_index.vespa_constants import USER_PROJECT
 from onyx.document_index.vespa_constants import YQL_BASE
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
@@ -269,6 +273,18 @@ def get_chunks_via_visit_api(
                         )
                         continue
 
+                # NOTE: Document Selector Language doesn't support `contains`, so
+                # project_id and persona_id must be enforced as post-filters here.
+                if filters.project_id is not None:
+                    user_project = document["fields"].get(USER_PROJECT, [])
+                    if filters.project_id not in user_project:
+                        continue
+
+                if filters.persona_id is not None:
+                    personas = document["fields"].get(PERSONAS, [])
+                    if filters.persona_id not in personas:
+                        continue
+
                 document_chunks.append(document)
 
         # Check for continuation token to handle pagination
@@ -339,11 +355,17 @@ def get_all_chunks_paginated(
 
         response: httpx.Response | None = None
         try:
-            with get_vespa_http_client() as http_client:
+            start_time = time.monotonic()
+            with get_vespa_http_client(
+                timeout=VESPA_MIGRATION_REQUEST_TIMEOUT_S
+            ) as http_client:
                 response = http_client.get(url, params=params)
                 response.raise_for_status()
         except httpx.HTTPError as e:
-            error_base = f"Failed to get chunks from Vespa slice {slice_id} with continuation token {continuation_token}."
+            error_base = (
+                f"Failed to get chunks from Vespa slice {slice_id} with continuation token "
+                f"{continuation_token} in {time.monotonic() - start_time:.3f} seconds."
+            )
             logger.exception(
                 f"Request URL: {e.request.url}\n"
                 f"Request Headers: {e.request.headers}\n"
