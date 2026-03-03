@@ -165,6 +165,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // View renders the UI.
+// viewportHeight returns the number of visible chat rows, accounting for the
+// dynamic bottom area (separator, menu, file badges, input, status bar).
+func (m Model) viewportHeight() int {
+	menuHeight := 0
+	if m.input.menuVisible {
+		menuHeight = len(m.input.menuItems)
+	}
+	fileHeight := 0
+	if len(m.input.attachedFiles) > 0 {
+		fileHeight = 1
+	}
+	h := m.height - (1 + menuHeight + fileHeight + 1 + 1 + 1)
+	if h < 1 {
+		return 1
+	}
+	return h
+}
+
 func (m Model) View() string {
 	if m.width == 0 || m.height == 0 {
 		return ""
@@ -174,23 +192,8 @@ func (m Model) View() string {
 		strings.Repeat("─", m.width),
 	)
 
-	// Calculate heights: separator(1) + menu + file badges + input(1) + separator(1) + status(1)
 	menuView := m.input.viewMenu(m.width)
-	menuHeight := 0
-	if menuView != "" {
-		menuHeight = strings.Count(menuView, "\n") + 1
-	}
-
-	fileHeight := 0
-	if len(m.input.attachedFiles) > 0 {
-		fileHeight = 1
-	}
-
-	bottomHeight := 1 + menuHeight + fileHeight + 1 + 1 + 1 // sep + menu + files + input + sep + status
-	viewportHeight := m.height - bottomHeight
-	if viewportHeight < 1 {
-		viewportHeight = 1
-	}
+	viewportHeight := m.viewportHeight()
 
 	var parts []string
 	parts = append(parts, m.viewport.view(viewportHeight))
@@ -268,19 +271,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 
 	case tea.KeyPgUp:
-		viewportHeight := m.height - 4
-		if viewportHeight < 1 {
-			viewportHeight = 1
-		}
-		m.viewport.scrollUp(viewportHeight / 2)
+		m.viewport.scrollUp(m.viewportHeight() / 2)
 		return m, nil
 
 	case tea.KeyPgDown:
-		viewportHeight := m.height - 4
-		if viewportHeight < 1 {
-			viewportHeight = 1
-		}
-		m.viewport.scrollDown(viewportHeight / 2)
+		m.viewport.scrollDown(m.viewportHeight() / 2)
 		return m, nil
 
 	case tea.KeyShiftUp:

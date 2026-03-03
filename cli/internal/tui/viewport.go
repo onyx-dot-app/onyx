@@ -323,17 +323,20 @@ func (v *viewport) renderPicker(width, height int) string {
 		Bold(true).
 		Render(" " + title + " ")
 
-	// Place title on top border (replace border runes to keep width constant)
+	// Build top border manually to avoid ANSI-corrupted rune slicing.
+	// panelWidth+2 accounts for the left and right border characters.
+	borderColor := lipgloss.NewStyle().Foreground(accentColor)
+	titleWidth := lipgloss.Width(titleRendered)
+	rightDashes := panelWidth + 2 - 2 - titleWidth // total - corners - title
+	if rightDashes < 0 {
+		rightDashes = 0
+	}
+	topBorder := borderColor.Render("╭─") + titleRendered +
+		borderColor.Render(strings.Repeat("─", rightDashes)+"╮")
+
 	panelLines := strings.Split(panel, "\n")
 	if len(panelLines) > 0 {
-		border := panelLines[0]
-		runes := []rune(border)
-		titleRunes := []rune(titleRendered)
-		titleLen := len(titleRunes)
-		if len(runes) > titleLen+2 {
-			// Replace border runes starting at position 2 with the title
-			panelLines[0] = string(runes[:2]) + string(titleRunes) + string(runes[2+titleLen:])
-		}
+		panelLines[0] = topBorder
 	}
 	panel = strings.Join(panelLines, "\n")
 

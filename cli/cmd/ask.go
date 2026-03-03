@@ -74,13 +74,17 @@ var askCmd = &cobra.Command{
 			}
 		}
 
-		if askJSON {
+		if lastErr != nil {
 			return lastErr
 		}
-
-		fmt.Println()
 		if !gotStop {
+			if !askJSON {
+				fmt.Println()
+			}
 			return fmt.Errorf("stream ended unexpectedly")
+		}
+		if !askJSON {
+			fmt.Println()
 		}
 		return nil
 	},
