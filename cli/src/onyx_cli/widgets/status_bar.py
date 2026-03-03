@@ -48,6 +48,7 @@ class StatusBar(Horizontal):
     def __init__(self) -> None:
         super().__init__()
         self._persona_name: str = "Default"
+        self._server_url: str = ""
         self._session_id: str = ""
         self._is_streaming: bool = False
 
@@ -57,6 +58,10 @@ class StatusBar(Horizontal):
 
     def set_persona(self, name: str) -> None:
         self._persona_name = name
+        self._refresh_text()
+
+    def set_server(self, url: str) -> None:
+        self._server_url = url
         self._refresh_text()
 
     def set_session(self, session_id: str) -> None:
@@ -73,5 +78,9 @@ class StatusBar(Horizontal):
         except Exception:
             return
 
-        left.update(self._persona_name or "Default")
+        left_parts: list[str] = []
+        if self._server_url:
+            left_parts.append(self._server_url)
+        left_parts.append(self._persona_name or "Default")
+        left.update(" \u00b7 ".join(left_parts))
         right.update("Esc to cancel" if self._is_streaming else "Ctrl+D to quit")

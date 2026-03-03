@@ -149,6 +149,7 @@ class InputArea(Vertical):
         yield _Separator()
         yield AttachedFilesBadge()
         yield _InputRow()
+        yield _Separator()
 
     @property
     def chat_input(self) -> ChatInput:
