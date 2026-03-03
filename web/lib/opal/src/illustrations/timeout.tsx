@@ -6,7 +6,6 @@ const SvgTimeout = ({ size, ...props }: IconProps) => (
     viewBox="0 0 120 120"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
-    stroke="currentColor"
     {...props}
   >
     <path
@@ -29,12 +28,14 @@ const SvgTimeout = ({ size, ...props }: IconProps) => (
     />
     <path
       d="M52.5 63.75L30.5554 49.6428C27.8721 47.9178 26.25 44.9467 26.25 41.7567V26.25M52.5 63.75L74.4446 77.8572C77.1279 79.5822 78.75 82.5533 78.75 85.7433V101.25M52.5 63.75L30.5554 77.8572C27.8721 79.5822 26.25 82.5533 26.25 85.7433V101.25M52.5 63.75L72.6052 50.8252M26.25 26.25H18.75M26.25 26.25H66.8006M78.75 101.25H26.25M78.75 101.25H86.25M26.25 101.25H18.75"
+      stroke="#A4A4A4"
       strokeWidth={3.5}
       strokeLinecap="round"
       strokeLinejoin="round"
     />
     <path
       d="M82.5 26.25H97.5L82.5 41.25H97.5"
+      stroke="#CCCCCC"
       strokeWidth={3.5}
       strokeLinecap="round"
       strokeLinejoin="round"

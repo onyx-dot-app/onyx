@@ -6,7 +6,6 @@ const SvgDisconnected = ({ size, ...props }: IconProps) => (
     viewBox="0 0 120 120"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
-    stroke="currentColor"
     {...props}
   >
     <path
@@ -15,6 +14,7 @@ const SvgDisconnected = ({ size, ...props }: IconProps) => (
     />
     <path
       d="M60 83.8554L50.1149 93.7498C43.5248 100.34 32.8401 100.34 26.25 93.7498M60 83.8554L36.1351 59.9906M60 83.8554L63.75 87.6055M36.1351 59.9906L26.25 69.8849C19.6599 76.475 19.6599 87.1597 26.25 93.7498M36.1351 59.9906L32.3946 56.25M26.25 93.7498L15 105"
+      stroke="#CCCCCC"
       strokeWidth={3.5}
       strokeLinecap="round"
       strokeLinejoin="round"
@@ -25,12 +25,14 @@ const SvgDisconnected = ({ size, ...props }: IconProps) => (
     />
     <path
       d="M65.3033 41.4476L56.25 50.5009M65.3033 41.4476L60 36.1443M65.3033 41.4476L78.5616 54.7059M60 36.1443L69.8851 26.25C76.4752 19.6599 87.1599 19.6599 93.75 26.25M60 36.1443L56.25 32.3942M83.8649 60.0092L93.75 50.1148C100.34 43.5247 100.34 32.8401 93.75 26.25M83.8649 60.0092L78.5616 54.7059M83.8649 60.0092L87.6054 63.7498M78.5616 54.7059L69.5177 63.7498M93.75 26.25L105 15"
+      stroke="#A4A4A4"
       strokeWidth={3.5}
       strokeLinecap="round"
       strokeLinejoin="round"
     />
     <path
       d="M30 45H18.75M45 30V18.75M33.75 33.75L24.375 24.375"
+      stroke="#EC5B13"
       strokeWidth={3.5}
       strokeLinecap="round"
       strokeLinejoin="round"
