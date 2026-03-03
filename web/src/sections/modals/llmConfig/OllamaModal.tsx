@@ -71,6 +71,7 @@ function OllamaModalContent({
         signal,
       })
         .then((data) => {
+          if (signal.aborted) return;
           if (data.error) {
             console.error("Error fetching models:", data.error);
             setFetchedModels([]);
@@ -79,7 +80,9 @@ function OllamaModalContent({
           setFetchedModels(data.models);
         })
         .finally(() => {
-          setIsLoadingModels(false);
+          if (!signal.aborted) {
+            setIsLoadingModels(false);
+          }
         });
     },
     [existingLlmProvider?.name, setFetchedModels]
@@ -98,8 +101,11 @@ function OllamaModalContent({
         debouncedFetchModels.cancel();
         controller.abort();
       };
+    } else {
+      setIsLoadingModels(false);
+      setFetchedModels([]);
     }
-  }, [formikProps.values.api_base, debouncedFetchModels]);
+  }, [formikProps.values.api_base, debouncedFetchModels, setFetchedModels]);
 
   const currentModels =
     fetchedModels.length > 0
