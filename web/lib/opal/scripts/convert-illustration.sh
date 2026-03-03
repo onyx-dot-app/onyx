@@ -1,10 +1,14 @@
 #!/bin/bash
 
-# Convert an SVG file to a TypeScript React component
-# Usage: ./convert-svg.sh <filename.svg>
+# Convert an SVG file to a TypeScript React illustration component.
+# Illustrations are NOT colour-overridable: all original stroke and fill colours are preserved.
+# Only width and height attributes are stripped (replaced by the size prop).
+#
+# Usage (from the opal package root — web/lib/opal/):
+#   ./scripts/convert-illustration.sh src/illustrations/<filename.svg>
 
 if [ -z "$1" ]; then
-  echo "Usage: ./convert-svg.sh <filename.svg>" >&2
+  echo "Usage: ./scripts/convert-illustration.sh <filename.svg>" >&2
   exit 1
 fi
 
@@ -25,8 +29,8 @@ fi
 # Get the base name without extension
 BASE_NAME="${SVG_FILE%.svg}"
 
-# Run the conversion with relative path to template
-bunx @svgr/cli "$SVG_FILE" --typescript --svgo-config '{"plugins":[{"name":"removeAttrs","params":{"attrs":["stroke","stroke-opacity","width","height"]}}]}' --template "scripts/icon-template.js" > "${BASE_NAME}.tsx"
+# Run the conversion — only strips width and height attributes (preserves all colours)
+bunx @svgr/cli "$SVG_FILE" --typescript --svgo-config '{"plugins":[{"name":"removeAttrs","params":{"attrs":["width","height"]}}]}' --template "scripts/icon-template.js" > "${BASE_NAME}.tsx"
 
 if [ $? -eq 0 ]; then
   # Verify the output file was created and has content
@@ -35,19 +39,13 @@ if [ $? -eq 0 ]; then
     exit 1
   fi
 
-  # Post-process the file to add width, height, and stroke attributes
+  # Post-process the file to add width and height attributes bound to the size prop
   # Using perl for cross-platform compatibility (works on macOS, Linux, Windows with WSL)
   # Note: perl -i returns 0 even on some failures, so we validate the output
 
   perl -i -pe 's/<svg/<svg width={size} height={size}/g' "${BASE_NAME}.tsx"
   if [ $? -ne 0 ]; then
     echo "Error: Failed to add width/height attributes" >&2
-    exit 1
-  fi
-
-  perl -i -pe 's/\{\.\.\.props\}/stroke="currentColor" {...props}/g' "${BASE_NAME}.tsx"
-  if [ $? -ne 0 ]; then
-    echo "Error: Failed to add stroke attribute" >&2
     exit 1
   fi
 
@@ -58,7 +56,7 @@ if [ $? -eq 0 ]; then
   fi
 
   # Verify required attributes are present in the output
-  if ! grep -q 'width={size}' "${BASE_NAME}.tsx" || ! grep -q 'stroke="currentColor"' "${BASE_NAME}.tsx"; then
+  if ! grep -q 'width={size}' "${BASE_NAME}.tsx"; then
     echo "Error: Post-processing did not add required attributes" >&2
     exit 1
   fi
