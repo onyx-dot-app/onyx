@@ -148,11 +148,14 @@ def drain_processing_loop(tenant_id: str) -> None:
             file_id = _claim_next_processing_file(session)
         if file_id is None:
             break
-        process_user_file_impl(
-            user_file_id=str(file_id),
-            tenant_id=tenant_id,
-            redis_locking=False,
-        )
+        try:
+            process_user_file_impl(
+                user_file_id=str(file_id),
+                tenant_id=tenant_id,
+                redis_locking=False,
+            )
+        except Exception:
+            logger.exception(f"Failed to process user file {file_id}")
 
 
 def drain_delete_loop(tenant_id: str) -> None:
@@ -162,18 +165,21 @@ def drain_delete_loop(tenant_id: str) -> None:
     )
     from onyx.db.engine.sql_engine import get_session_with_current_tenant
 
-    seen: set[UUID] = set()
+    failed: set[UUID] = set()
     while True:
         with get_session_with_current_tenant() as session:
-            file_id = _claim_next_deleting_file(session, exclude_ids=seen)
+            file_id = _claim_next_deleting_file(session, exclude_ids=failed)
         if file_id is None:
             break
-        seen.add(file_id)
-        delete_user_file_impl(
-            user_file_id=str(file_id),
-            tenant_id=tenant_id,
-            redis_locking=False,
-        )
+        try:
+            delete_user_file_impl(
+                user_file_id=str(file_id),
+                tenant_id=tenant_id,
+                redis_locking=False,
+            )
+        except Exception:
+            logger.exception(f"Failed to delete user file {file_id}")
+            failed.add(file_id)
 
 
 def drain_project_sync_loop(tenant_id: str) -> None:
@@ -183,15 +189,18 @@ def drain_project_sync_loop(tenant_id: str) -> None:
     )
     from onyx.db.engine.sql_engine import get_session_with_current_tenant
 
-    seen: set[UUID] = set()
+    failed: set[UUID] = set()
     while True:
         with get_session_with_current_tenant() as session:
-            file_id = _claim_next_sync_file(session, exclude_ids=seen)
+            file_id = _claim_next_sync_file(session, exclude_ids=failed)
         if file_id is None:
             break
-        seen.add(file_id)
-        project_sync_user_file_impl(
-            user_file_id=str(file_id),
-            tenant_id=tenant_id,
-            redis_locking=False,
-        )
+        try:
+            project_sync_user_file_impl(
+                user_file_id=str(file_id),
+                tenant_id=tenant_id,
+                redis_locking=False,
+            )
+        except Exception:
+            logger.exception(f"Failed to sync user file {file_id}")
+            failed.add(file_id)
