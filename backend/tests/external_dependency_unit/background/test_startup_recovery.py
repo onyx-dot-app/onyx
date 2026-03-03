@@ -245,3 +245,108 @@ class TestRecoveryMultipleFiles:
             f"Expected all {len(files)} files to be recovered. "
             f"Missing: {expected_ids - called_ids}"
         )
+
+
+class TestTransientFailures:
+    """Drain loops skip failed files, process the rest, and terminate."""
+
+    def test_processing_failure_skips_and_continues(
+        self,
+        db_session: Session,
+        tenant_context: None,  # noqa: ARG002
+        _cleanup_user_files: list[UserFile],
+    ) -> None:
+        user = create_test_user(db_session, "fail_proc")
+        uf_fail = _create_user_file(
+            db_session, user.id, status=UserFileStatus.PROCESSING
+        )
+        uf_ok = _create_user_file(db_session, user.id, status=UserFileStatus.PROCESSING)
+        _cleanup_user_files.extend([uf_fail, uf_ok])
+
+        fail_id = str(uf_fail.id)
+
+        def side_effect(
+            *, user_file_id: str, tenant_id: str, redis_locking: bool  # noqa: ARG001
+        ) -> None:
+            if user_file_id == fail_id:
+                raise RuntimeError("transient failure")
+
+        mock_impl = MagicMock(side_effect=side_effect)
+        with patch(f"{_IMPL_MODULE}.process_user_file_impl", mock_impl):
+            recover_stuck_user_files(TEST_TENANT_ID)
+
+        called_ids = [call.kwargs["user_file_id"] for call in mock_impl.call_args_list]
+        assert fail_id in called_ids, "Failed file should have been attempted"
+        assert str(uf_ok.id) in called_ids, "Healthy file should have been processed"
+        assert called_ids.count(fail_id) == 1, "Failed file retried — infinite loop"
+        assert called_ids.count(str(uf_ok.id)) == 1
+
+    def test_delete_failure_skips_and_continues(
+        self,
+        db_session: Session,
+        tenant_context: None,  # noqa: ARG002
+        _cleanup_user_files: list[UserFile],
+    ) -> None:
+        user = create_test_user(db_session, "fail_del")
+        uf_fail = _create_user_file(db_session, user.id, status=UserFileStatus.DELETING)
+        uf_ok = _create_user_file(db_session, user.id, status=UserFileStatus.DELETING)
+        _cleanup_user_files.append(uf_fail)
+
+        fail_id = str(uf_fail.id)
+
+        def side_effect(
+            *, user_file_id: str, tenant_id: str, redis_locking: bool
+        ) -> None:
+            if user_file_id == fail_id:
+                raise RuntimeError("transient failure")
+            _fake_delete_impl(user_file_id, tenant_id, redis_locking)
+
+        mock_impl = MagicMock(side_effect=side_effect)
+        with patch(f"{_IMPL_MODULE}.delete_user_file_impl", mock_impl):
+            recover_stuck_user_files(TEST_TENANT_ID)
+
+        called_ids = [call.kwargs["user_file_id"] for call in mock_impl.call_args_list]
+        assert fail_id in called_ids, "Failed file should have been attempted"
+        assert str(uf_ok.id) in called_ids, "Healthy file should have been deleted"
+        assert called_ids.count(fail_id) == 1, "Failed file retried — infinite loop"
+        assert called_ids.count(str(uf_ok.id)) == 1
+
+    def test_sync_failure_skips_and_continues(
+        self,
+        db_session: Session,
+        tenant_context: None,  # noqa: ARG002
+        _cleanup_user_files: list[UserFile],
+    ) -> None:
+        user = create_test_user(db_session, "fail_sync")
+        uf_fail = _create_user_file(
+            db_session,
+            user.id,
+            status=UserFileStatus.COMPLETED,
+            needs_project_sync=True,
+        )
+        uf_ok = _create_user_file(
+            db_session,
+            user.id,
+            status=UserFileStatus.COMPLETED,
+            needs_persona_sync=True,
+        )
+        _cleanup_user_files.extend([uf_fail, uf_ok])
+
+        fail_id = str(uf_fail.id)
+
+        def side_effect(
+            *, user_file_id: str, tenant_id: str, redis_locking: bool
+        ) -> None:
+            if user_file_id == fail_id:
+                raise RuntimeError("transient failure")
+            _fake_sync_impl(user_file_id, tenant_id, redis_locking)
+
+        mock_impl = MagicMock(side_effect=side_effect)
+        with patch(f"{_IMPL_MODULE}.project_sync_user_file_impl", mock_impl):
+            recover_stuck_user_files(TEST_TENANT_ID)
+
+        called_ids = [call.kwargs["user_file_id"] for call in mock_impl.call_args_list]
+        assert fail_id in called_ids, "Failed file should have been attempted"
+        assert str(uf_ok.id) in called_ids, "Healthy file should have been synced"
+        assert called_ids.count(fail_id) == 1, "Failed file retried — infinite loop"
+        assert called_ids.count(str(uf_ok.id)) == 1
