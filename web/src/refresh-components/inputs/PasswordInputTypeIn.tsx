@@ -202,8 +202,32 @@ export default function PasswordInputTypeIn({
 
   const handleBlur = React.useCallback(
     (e: React.FocusEvent<HTMLInputElement>) => {
+      if (
+        e.relatedTarget &&
+        (e.relatedTarget as HTMLElement).closest?.(
+          '[data-password-toggle="true"]'
+        )
+      ) {
+        // Focus is moving to the toggle button. Do not unfocus or notify parent.
+      } else {
+        setIsFocused(false);
+        onBlur?.(e);
+      }
+    },
+    [onBlur]
+  );
+
+  const handleButtonBlur = React.useCallback(
+    (e: React.FocusEvent<HTMLElement>) => {
+      if (
+        e.relatedTarget &&
+        e.currentTarget.parentElement?.contains(e.relatedTarget as Node)
+      ) {
+        // Focus moved back to the input
+        return;
+      }
       setIsFocused(false);
-      onBlur?.(e);
+      onBlur?.(e as unknown as React.FocusEvent<HTMLInputElement>);
     },
     [onBlur]
   );
@@ -287,9 +311,11 @@ export default function PasswordInputTypeIn({
       rightSection={
         showToggleButton ? (
           <Button
+            data-password-toggle="true"
             icon={isRevealed ? SvgEye : SvgEyeClosed}
             disabled={disabled || effectiveNonRevealable}
             onClick={noProp(() => setIsPasswordVisible((v) => !v))}
+            onBlur={handleButtonBlur}
             type="button"
             variant={isRevealed ? "action" : undefined}
             prominence="tertiary"
