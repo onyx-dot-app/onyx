@@ -340,8 +340,8 @@ def get_all_chunks_paginated(
             params["continuation"] = continuation_token
 
         response: httpx.Response | None = None
+        start_time = time.monotonic()
         try:
-            start_time = time.monotonic()
             with get_vespa_http_client(
                 timeout=VESPA_MIGRATION_REQUEST_TIMEOUT_S
             ) as http_client:
