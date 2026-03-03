@@ -634,7 +634,7 @@ def list_connector_files(
             status_code=400, detail="This endpoint only works with file connectors"
         )
 
-    _fetch_and_check_file_connector_cc_pair_permissions(
+    _ = _fetch_and_check_file_connector_cc_pair_permissions(
         connector_id=connector_id,
         user=user,
         db_session=db_session,

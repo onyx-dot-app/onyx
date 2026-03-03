@@ -71,9 +71,8 @@ def _list_connector_files(
     reason="Curator and user group tests are enterprise only",
 )
 def test_only_global_curator_can_update_public_file_connector_files(
-    reset: None,
+    _reset: None,
 ) -> None:
-    _ = reset
     admin_user = UserManager.create(name="admin_user")
 
     global_curator_creator = UserManager.create(name="global_curator_creator")
