@@ -1,5 +1,7 @@
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
+import { useTableSize } from "@/refresh-components/table/TableSizeContext";
+import type { TableSize } from "@/refresh-components/table/TableSizeContext";
 import type { WithoutStyles } from "@/types";
 import { Button } from "@opal/components";
 import { SvgChevronDown, SvgChevronUp, SvgHandle, SvgSort } from "@opal/icons";
@@ -29,7 +31,7 @@ interface TableHeadCustomProps {
   /** Text alignment for the column. Defaults to `"left"`. */
   alignment?: "left" | "center" | "right";
   /** Cell density. `"small"` uses tighter padding for denser layouts. */
-  size?: "regular" | "small";
+  size?: TableSize;
   /** Column width in pixels. Applied as an inline style on the `<th>`. */
   width?: number;
   /** When `true`, pins the column to the right edge of the scroll container. */
@@ -81,29 +83,28 @@ export default function TableHead({
   resizable,
   onResizeStart,
   alignment = "left",
-  size = "regular",
+  size,
   width,
   sticky,
   bottomBorder = true,
   ...thProps
 }: TableHeadProps) {
-  const isSmall = size === "small";
+  const contextSize = useTableSize();
+  const resolvedSize = size ?? contextSize;
+  const isSmall = resolvedSize === "small";
   return (
     <th
       {...thProps}
       style={width != null ? { width } : undefined}
-      className={cn(
-        "group relative",
-        alignmentThClass[alignment],
-        isSmall ? "p-1.5" : "px-2 py-1",
-        bottomBorder && "border-b border-transparent hover:border-border-03",
-        sticky && "sticky right-0 z-10"
-      )}
+      className={cn("table-head group", alignmentThClass[alignment])}
+      data-size={resolvedSize}
+      data-bottom-border={bottomBorder || undefined}
+      data-sticky={sticky || undefined}
     >
       <div
         className={cn("flex items-center gap-1", alignmentFlexClass[alignment])}
       >
-        <div className={isSmall ? "py-1" : "py-2 px-0.5"}>
+        <div className="table-head-label">
           <Text
             mainUiAction={!isSmall}
             secondaryAction={isSmall}
@@ -115,7 +116,7 @@ export default function TableHead({
         </div>
         <div
           className={cn(
-            !isSmall && "py-1.5",
+            "table-head-sort",
             "opacity-0 group-hover:opacity-100 transition-opacity"
           )}
         >

@@ -1,10 +1,12 @@
 import { cn } from "@/lib/utils";
+import { useTableSize } from "@/refresh-components/table/TableSizeContext";
+import type { TableSize } from "@/refresh-components/table/TableSizeContext";
 import type { WithoutStyles } from "@/types";
 
 interface TableCellProps
   extends WithoutStyles<React.TdHTMLAttributes<HTMLTableCellElement>> {
   children: React.ReactNode;
-  size?: "regular" | "small";
+  size?: TableSize;
   /** When `true`, pins the cell to the right edge of the scroll container. */
   sticky?: boolean;
   /** Explicit pixel width for the cell. */
@@ -12,27 +14,25 @@ interface TableCellProps
 }
 
 export default function TableCell({
-  size = "regular",
+  size,
   sticky,
   width,
   children,
   ...props
 }: TableCellProps) {
-  const isSmall = size === "small";
+  const contextSize = useTableSize();
+  const resolvedSize = size ?? contextSize;
   return (
     <td
-      className={cn(
-        isSmall ? "pl-0.5 pr-1.5 py-1.5" : "px-1 py-0.5",
-        sticky && "sticky right-0"
-      )}
+      className="tbl-cell"
+      data-size={resolvedSize}
+      data-sticky={sticky || undefined}
       style={width != null ? { width } : undefined}
       {...props}
     >
       <div
-        className={cn(
-          "flex items-center",
-          isSmall ? "h-6 px-0.5" : "h-10 px-1"
-        )}
+        className={cn("tbl-cell-inner", "flex items-center")}
+        data-size={resolvedSize}
       >
         {children}
       </div>

@@ -5,9 +5,10 @@ import Checkbox from "@/refresh-components/inputs/Checkbox";
 import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import Pagination from "@/refresh-components/table/Pagination";
+import { useTableSize } from "@/refresh-components/table/TableSizeContext";
+import type { TableSize } from "@/refresh-components/table/TableSizeContext";
 import { SvgEye, SvgXCircle } from "@opal/icons";
 
-type FooterSize = "regular" | "small";
 type SelectionState = "none" | "partial" | "all";
 
 /**
@@ -44,7 +45,7 @@ interface FooterSelectionModeProps {
   /** Called when the user navigates to a different page. */
   onPageChange: (page: number) => void;
   /** Controls overall footer sizing. `"regular"` (default) or `"small"`. */
-  size?: FooterSize;
+  size?: TableSize;
   className?: string;
 }
 
@@ -76,7 +77,7 @@ interface FooterSummaryModeProps {
   /** Called when the user navigates to a different page. */
   onPageChange: (page: number) => void;
   /** Controls overall footer sizing. `"regular"` (default) or `"small"`. */
-  size?: FooterSize;
+  size?: TableSize;
   className?: string;
 }
 
@@ -105,15 +106,17 @@ function getSelectionMessage(
  * `mode: "summary"` for read-only tables.
  */
 export default function Footer(props: FooterProps) {
-  const { size = "regular", className } = props;
-  const isSmall = size === "small";
+  const contextSize = useTableSize();
+  const resolvedSize = props.size ?? contextSize;
+  const isSmall = resolvedSize === "small";
   return (
     <div
       className={cn(
+        "table-footer",
         "flex w-full items-center justify-between border-t border-border-01",
-        isSmall ? "min-h-[2.25rem]" : "min-h-[2.75rem]",
-        className
+        props.className
       )}
+      data-size={resolvedSize}
     >
       {/* Left side */}
       <div className="flex items-center gap-1 px-1">

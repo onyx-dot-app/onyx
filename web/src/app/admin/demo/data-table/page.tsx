@@ -22,6 +22,7 @@ import TableCell from "@/refresh-components/table/TableCell";
 import TableQualifier from "@/refresh-components/table/TableQualifier";
 import DragOverlayRow from "@/refresh-components/table/DragOverlayRow";
 import Footer from "@/refresh-components/table/Footer";
+import { TableSizeProvider } from "@/refresh-components/table/TableSizeContext";
 import { SvgCheckCircle, SvgClock, SvgAlertCircle } from "@opal/icons";
 
 // ---------------------------------------------------------------------------
@@ -440,7 +441,6 @@ const { columns: smallColumns, widthConfig: smallWidthConfig } =
             onSelectChange={(checked) => {
               row.toggleSelected(checked);
             }}
-            size="small"
           />
         ),
       }),
@@ -801,44 +801,78 @@ export default function DataTableDemoPage() {
         </Text>
       </div>
 
-      <div className="border border-border-01 rounded-lg overflow-hidden">
-        <div className="overflow-x-auto" ref={smallTableRef}>
-          <Table>
-            <TableHeader>
-              {smallTable.getHeaderGroups().map((headerGroup) => (
-                <TableRow key={headerGroup.id}>
-                  {headerGroup.headers.map((header, headerIndex) => {
-                    const canSort = header.column.getCanSort();
-                    const sortDir = header.column.getIsSorted();
+      <TableSizeProvider size="small">
+        <div className="border border-border-01 rounded-lg overflow-hidden">
+          <div className="overflow-x-auto" ref={smallTableRef}>
+            <Table>
+              <TableHeader>
+                {smallTable.getHeaderGroups().map((headerGroup) => (
+                  <TableRow key={headerGroup.id}>
+                    {headerGroup.headers.map((header, headerIndex) => {
+                      const canSort = header.column.getCanSort();
+                      const sortDir = header.column.getIsSorted();
 
-                    if (header.id === "qualifier") {
+                      if (header.id === "qualifier") {
+                        return (
+                          <TableHead
+                            key={header.id}
+                            width={smallColumnWidths[header.id]}
+                          >
+                            <TableQualifier
+                              content="simple"
+                              selectable
+                              selected={smallIsAllPageRowsSelected}
+                              onSelectChange={(checked) =>
+                                smallToggleAllPageRowsSelected(checked)
+                              }
+                            />
+                          </TableHead>
+                        );
+                      }
+
+                      if (header.id === "__actions") {
+                        return (
+                          <TableHead
+                            key={header.id}
+                            width={smallColumnWidths[header.id]}
+                            sticky
+                            bottomBorder={false}
+                          >
+                            {flexRender(
+                              header.column.columnDef.header,
+                              header.getContext()
+                            )}
+                          </TableHead>
+                        );
+                      }
+
+                      const nextHeader = headerGroup.headers[headerIndex + 1];
+                      const canResize =
+                        header.column.getCanResize() &&
+                        !!nextHeader &&
+                        !smallWidthConfig.fixedColumnIds.has(nextHeader.id);
+
                       return (
                         <TableHead
                           key={header.id}
                           width={smallColumnWidths[header.id]}
-                          size="small"
-                        >
-                          <TableQualifier
-                            content="simple"
-                            selectable
-                            selected={smallIsAllPageRowsSelected}
-                            onSelectChange={(checked) =>
-                              smallToggleAllPageRowsSelected(checked)
-                            }
-                            size="small"
-                          />
-                        </TableHead>
-                      );
-                    }
-
-                    if (header.id === "__actions") {
-                      return (
-                        <TableHead
-                          key={header.id}
-                          width={smallColumnWidths[header.id]}
-                          size="small"
-                          sticky
-                          bottomBorder={false}
+                          sorted={
+                            canSort ? toOnyxSortDirection(sortDir) : undefined
+                          }
+                          onSort={
+                            canSort
+                              ? () => header.column.toggleSorting()
+                              : undefined
+                          }
+                          resizable={canResize}
+                          onResizeStart={
+                            canResize
+                              ? smallCreateResizeHandler(
+                                  header.id,
+                                  nextHeader.id
+                                )
+                              : undefined
+                          }
                         >
                           {flexRender(
                             header.column.columnDef.header,
@@ -846,112 +880,78 @@ export default function DataTableDemoPage() {
                           )}
                         </TableHead>
                       );
-                    }
+                    })}
+                  </TableRow>
+                ))}
+              </TableHeader>
 
-                    const nextHeader = headerGroup.headers[headerIndex + 1];
-                    const canResize =
-                      header.column.getCanResize() &&
-                      !!nextHeader &&
-                      !smallWidthConfig.fixedColumnIds.has(nextHeader.id);
+              <TableBody>
+                {smallTable.getRowModel().rows.map((row) => (
+                  <TableRow
+                    key={row.id}
+                    selected={row.getIsSelected()}
+                    onClick={() => row.toggleSelected()}
+                  >
+                    {row.getVisibleCells().map((cell) => {
+                      if (cell.column.id === "qualifier") {
+                        return (
+                          <TableCell
+                            key={cell.id}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {flexRender(
+                              cell.column.columnDef.cell,
+                              cell.getContext()
+                            )}
+                          </TableCell>
+                        );
+                      }
 
-                    return (
-                      <TableHead
-                        key={header.id}
-                        width={smallColumnWidths[header.id]}
-                        size="small"
-                        sorted={
-                          canSort ? toOnyxSortDirection(sortDir) : undefined
-                        }
-                        onSort={
-                          canSort
-                            ? () => header.column.toggleSorting()
-                            : undefined
-                        }
-                        resizable={canResize}
-                        onResizeStart={
-                          canResize
-                            ? smallCreateResizeHandler(header.id, nextHeader.id)
-                            : undefined
-                        }
-                      >
-                        {flexRender(
-                          header.column.columnDef.header,
-                          header.getContext()
-                        )}
-                      </TableHead>
-                    );
-                  })}
-                </TableRow>
-              ))}
-            </TableHeader>
+                      if (cell.column.id === "__actions") {
+                        return (
+                          <TableCell key={cell.id} sticky>
+                            {flexRender(
+                              cell.column.columnDef.cell,
+                              cell.getContext()
+                            )}
+                          </TableCell>
+                        );
+                      }
 
-            <TableBody>
-              {smallTable.getRowModel().rows.map((row) => (
-                <TableRow
-                  key={row.id}
-                  selected={row.getIsSelected()}
-                  onClick={() => row.toggleSelected()}
-                >
-                  {row.getVisibleCells().map((cell) => {
-                    if (cell.column.id === "qualifier") {
                       return (
-                        <TableCell
-                          key={cell.id}
-                          size="small"
-                          onClick={(e) => e.stopPropagation()}
-                        >
+                        <TableCell key={cell.id}>
                           {flexRender(
                             cell.column.columnDef.cell,
                             cell.getContext()
                           )}
                         </TableCell>
                       );
-                    }
+                    })}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
 
-                    if (cell.column.id === "__actions") {
-                      return (
-                        <TableCell key={cell.id} size="small" sticky>
-                          {flexRender(
-                            cell.column.columnDef.cell,
-                            cell.getContext()
-                          )}
-                        </TableCell>
-                      );
-                    }
-
-                    return (
-                      <TableCell key={cell.id} size="small">
-                        {flexRender(
-                          cell.column.columnDef.cell,
-                          cell.getContext()
-                        )}
-                      </TableCell>
-                    );
-                  })}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <Footer
+            mode="selection"
+            multiSelect
+            selectionState={smallSelectionState}
+            selectedCount={smallSelectedCount}
+            showQualifier
+            qualifierChecked={smallIsAllPageRowsSelected}
+            onQualifierChange={(checked) =>
+              smallToggleAllPageRowsSelected(checked)
+            }
+            onClear={smallClearSelection}
+            pageSize={smallPageSize}
+            totalItems={smallTotalItems}
+            currentPage={smallCurrentPage}
+            totalPages={smallTotalPages}
+            onPageChange={smallSetPage}
+          />
         </div>
-
-        <Footer
-          mode="selection"
-          multiSelect
-          selectionState={smallSelectionState}
-          selectedCount={smallSelectedCount}
-          showQualifier
-          qualifierChecked={smallIsAllPageRowsSelected}
-          onQualifierChange={(checked) =>
-            smallToggleAllPageRowsSelected(checked)
-          }
-          onClear={smallClearSelection}
-          pageSize={smallPageSize}
-          totalItems={smallTotalItems}
-          currentPage={smallCurrentPage}
-          totalPages={smallTotalPages}
-          onPageChange={smallSetPage}
-        />
-      </div>
+      </TableSizeProvider>
     </div>
   );
 }

@@ -2,6 +2,8 @@
 
 import React from "react";
 import { cn } from "@/lib/utils";
+import { useTableSize } from "@/refresh-components/table/TableSizeContext";
+import type { TableSize } from "@/refresh-components/table/TableSizeContext";
 import { SvgUser } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
@@ -12,7 +14,7 @@ interface TableQualifierProps {
   /** Content type displayed in the qualifier */
   content: "icon" | "simple" | "image" | "avatar-icon" | "avatar-user";
   /** Size variant */
-  size?: "regular" | "small";
+  size?: TableSize;
   /** Disables interaction */
   disabled?: boolean;
   /** Whether to show a selection checkbox overlay */
@@ -30,11 +32,6 @@ interface TableQualifierProps {
   /** User initials (for "avatar-user" content type) */
   initials?: string;
 }
-
-const sizeClasses = {
-  regular: "h-9 w-9",
-  small: "h-7 w-7",
-} as const;
 
 const iconSizes = {
   regular: 16,
@@ -72,7 +69,7 @@ function getQualifierStyles(selected: boolean, disabled: boolean) {
 function TableQualifier({
   className,
   content,
-  size = "regular",
+  size,
   disabled = false,
   selectable = false,
   selected = false,
@@ -82,9 +79,10 @@ function TableQualifier({
   imageAlt = "",
   initials,
 }: TableQualifierProps) {
+  const contextSize = useTableSize();
+  const resolvedSize = size ?? contextSize;
   const isRound = content === "avatar-icon" || content === "avatar-user";
-  const containerSize = sizeClasses[size];
-  const iconSize = iconSizes[size];
+  const iconSize = iconSizes[resolvedSize];
   const styles = getQualifierStyles(selected, disabled);
 
   function renderContent() {
@@ -135,21 +133,23 @@ function TableQualifier({
   return (
     <div
       className={cn(
+        "table-qualifier",
         "group relative inline-flex shrink-0 items-center justify-center",
-        containerSize,
         disabled ? "cursor-not-allowed" : "cursor-default",
         className
       )}
+      data-size={resolvedSize}
     >
       {/* Inner qualifier container */}
       <div
         className={cn(
+          "table-qualifier-inner",
           "flex items-center justify-center overflow-hidden transition-colors",
-          containerSize,
           isRound ? "rounded-full" : "rounded-08",
           styles.container,
           content === "image" && disabled && !selected && "opacity-50"
         )}
+        data-size={resolvedSize}
       >
         {renderContent()}
       </div>

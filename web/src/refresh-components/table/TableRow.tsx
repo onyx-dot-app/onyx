@@ -1,6 +1,8 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { useTableSize } from "@/refresh-components/table/TableSizeContext";
+import type { TableSize } from "@/refresh-components/table/TableSizeContext";
 import type { WithoutStyles } from "@/types";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -21,7 +23,7 @@ interface TableRowProps
   /** Show drag handle overlay. Defaults to true when sortableId is set. */
   showDragHandle?: boolean;
   /** Size variant for the drag handle */
-  size?: "regular" | "small";
+  size?: TableSize;
 }
 
 // ---------------------------------------------------------------------------
@@ -31,13 +33,16 @@ interface TableRowProps
 function SortableTableRow({
   sortableId,
   showDragHandle = true,
-  size = "regular",
+  size,
   variant = "list",
   selected,
   ref: _externalRef,
   children,
   ...props
 }: TableRowProps) {
+  const contextSize = useTableSize();
+  const resolvedSize = size ?? contextSize;
+
   const {
     attributes,
     listeners,
@@ -57,21 +62,9 @@ function SortableTableRow({
     <tr
       ref={setNodeRef}
       style={style}
-      className={cn(
-        "group",
-        "[&>td]:bg-background-tint-00",
-        variant === "table" && "[&>td]:border-b [&>td]:border-border-01",
-        variant === "list" && [
-          "[&>td]:bg-clip-padding",
-          "[&>td]:border-y-[4px]",
-          "[&>td]:border-x-0",
-          "[&>td]:border-transparent",
-          "[&>td:first-child]:rounded-l-12",
-          showDragHandle
-            ? "[&>td:nth-last-child(2)]:rounded-r-12"
-            : "[&>td:last-child]:rounded-r-12",
-        ]
-      )}
+      className="tbl-row group/row"
+      data-variant={variant}
+      data-drag-handle={showDragHandle || undefined}
       {...attributes}
       {...props}
     >
@@ -82,20 +75,21 @@ function SortableTableRow({
             width: 0,
             padding: 0,
             position: "relative",
+            zIndex: 20,
           }}
         >
           <button
             type="button"
             className={cn(
-              "absolute top-1/2 -translate-y-1/2 cursor-grab",
-              "opacity-0 group-hover:opacity-100 transition-opacity",
+              "absolute right-0 top-1/2 -translate-y-1/2 cursor-grab",
+              "opacity-0 group-hover/row:opacity-100 transition-opacity",
               "flex items-center justify-center rounded"
             )}
             aria-label="Drag to reorder"
             {...listeners}
           >
             <SvgHandle
-              size={size === "small" ? 12 : 16}
+              size={resolvedSize === "small" ? 12 : 16}
               className="text-border-02"
             />
           </button>
@@ -135,18 +129,8 @@ function TableRow({
   return (
     <tr
       ref={ref}
-      className={cn(
-        "[&>td]:bg-background-tint-00",
-        variant === "table" && "[&>td]:border-b [&>td]:border-border-01",
-        variant === "list" && [
-          "[&>td]:bg-clip-padding",
-          "[&>td]:border-y-[4px]",
-          "[&>td]:border-x-0",
-          "[&>td]:border-transparent",
-          "[&>td:first-child]:rounded-l-12",
-          "[&>td:last-child]:rounded-r-12",
-        ]
-      )}
+      className="tbl-row group/row"
+      data-variant={variant}
       {...props}
     />
   );

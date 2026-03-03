@@ -1,0 +1,106 @@
+/* ---------------------------------------------------------------------------
+ * Table primitives — data-attribute driven styling
+ * Follows the same pattern as card.css / line-item.css.
+ * ------------------------------------------------------------------------- */
+
+/* ---- TableCell ---- */
+
+.tbl-cell[data-size="regular"] {
+  @apply px-1 py-0.5;
+}
+.tbl-cell[data-size="small"] {
+  @apply pl-0.5 pr-1.5 py-1.5;
+}
+.tbl-cell[data-sticky] {
+  @apply sticky right-0;
+}
+
+.tbl-cell-inner[data-size="regular"] {
+  @apply h-10 px-1;
+}
+.tbl-cell-inner[data-size="small"] {
+  @apply h-6 px-0.5;
+}
+
+/* ---- TableHead ---- */
+
+.table-head {
+  @apply relative;
+}
+.table-head[data-size="regular"] {
+  @apply px-2 py-1;
+}
+.table-head[data-size="small"] {
+  @apply p-1.5;
+}
+.table-head[data-bottom-border] {
+  @apply border-b border-transparent hover:border-border-03;
+}
+.table-head[data-sticky] {
+  @apply sticky right-0 z-10;
+}
+
+/* Inner text wrapper */
+.table-head[data-size="regular"] .table-head-label {
+  @apply py-2 px-0.5;
+}
+.table-head[data-size="small"] .table-head-label {
+  @apply py-1;
+}
+
+/* Sort button wrapper */
+.table-head[data-size="regular"] .table-head-sort {
+  @apply py-1.5;
+}
+
+/* ---- TableRow ---- */
+
+.tbl-row > td {
+  @apply bg-background-tint-00;
+}
+
+.tbl-row[data-variant="table"] > td {
+  @apply border-b border-border-01;
+}
+
+.tbl-row[data-variant="list"] > td {
+  @apply bg-clip-padding border-y-[4px] border-x-0 border-transparent;
+}
+.tbl-row[data-variant="list"] > td:first-child {
+  @apply rounded-l-12;
+}
+.tbl-row[data-variant="list"] > td:last-child {
+  @apply rounded-r-12;
+}
+
+/* When a drag handle is present the second-to-last td gets the rounding */
+.tbl-row[data-variant="list"][data-drag-handle] > td:nth-last-child(2) {
+  @apply rounded-r-12;
+}
+.tbl-row[data-variant="list"][data-drag-handle] > td:last-child {
+  border-radius: 0;
+}
+
+/* ---- TableQualifier ---- */
+
+.table-qualifier[data-size="regular"] {
+  @apply h-9 w-9;
+}
+.table-qualifier[data-size="small"] {
+  @apply h-7 w-7;
+}
+.table-qualifier-inner[data-size="regular"] {
+  @apply h-9 w-9;
+}
+.table-qualifier-inner[data-size="small"] {
+  @apply h-7 w-7;
+}
+
+/* ---- Footer ---- */
+
+.table-footer[data-size="regular"] {
+  @apply min-h-[2.75rem];
+}
+.table-footer[data-size="small"] {
+  @apply min-h-[2.25rem];
+}
