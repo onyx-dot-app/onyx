@@ -1,59 +1,56 @@
 # Onyx CLI
 
-Terminal UI for chatting with [Onyx](https://onyx.app) - your AI-powered enterprise search platform.
+A terminal interface for chatting with your [Onyx](https://github.com/onyx-dot-app/onyx) assistant. Built with Go using [Bubble Tea](https://github.com/charmbracelet/bubbletea) for the TUI framework.
 
-```
-   ██████╗ ███╗   ██╗██╗   ██╗██╗  ██╗
-  ██╔═══██╗████╗  ██║╚██╗ ██╔╝╚██╗██╔╝
-  ██║   ██║██╔██╗ ██║ ╚████╔╝  ╚███╔╝
-  ██║   ██║██║╚██╗██║  ╚██╔╝   ██╔██╗
-  ╚██████╔╝██║ ╚████║   ██║   ██╔╝ ██╗
-   ╚═════╝ ╚═╝  ╚═══╝   ╚═╝   ╚═╝  ╚═╝
-```
-
-## Install
+## Installation
 
 ```bash
-pip install onyx-cli
-```
-
-Or run from source:
-
-```bash
+# From source
 cd cli
-uv sync
-uv run onyx-cli
+go build -o onyx-cli .
+
+# Or install directly
+go install github.com/onyx-dot-app/onyx/cli@latest
 ```
 
-## Quick Start
+## Usage
 
 ```bash
-# Launch the interactive TUI
-onyx-cli
+# Launch interactive chat (default)
+./onyx-cli
 
-# Configure connection settings
-onyx-cli configure
+# First-run setup
+./onyx-cli configure
 
-# One-shot question (non-interactive)
-onyx-cli ask "What is our company's PTO policy?"
+# One-shot question
+./onyx-cli ask "What is Onyx?"
+./onyx-cli ask --persona-id 5 "Summarize this topic"
+./onyx-cli ask --json "Hello"
 ```
-
-On first launch, Onyx CLI will guide you through connecting to your Onyx server.
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `/help` | Show all commands |
-| `/new` | Start a new conversation |
+| `chat` | Launch the interactive chat TUI (default) |
+| `ask` | Ask a one-shot question (non-interactive) |
+| `configure` | Configure server URL and API key |
+
+## Slash Commands (in TUI)
+
+| Command | Description |
+|---------|-------------|
+| `/help` | Show help message |
+| `/new` | Start a new chat session |
 | `/persona` | List and switch assistants |
-| `/attach <path>` | Attach a file |
-| `/sessions` | List recent sessions |
+| `/attach <path>` | Attach a file to next message |
+| `/sessions` | List recent chat sessions |
 | `/resume <id>` | Resume a previous session |
-| `/configure` | Change connection settings |
-| `/connectors` | Open connectors page in browser |
-| `/settings` | Open Onyx settings in browser |
-| `/quit` | Exit |
+| `/clear` | Clear the chat display |
+| `/configure` | Re-run connection setup |
+| `/connectors` | Open connectors in browser |
+| `/settings` | Open settings in browser |
+| `/quit` | Exit Onyx CLI |
 
 ## Keyboard Shortcuts
 
@@ -61,6 +58,7 @@ On first launch, Onyx CLI will guide you through connecting to your Onyx server.
 |-----|--------|
 | `Enter` | Send message |
 | `Escape` | Cancel current generation |
+| `Ctrl+O` | Toggle source citations |
 | `Ctrl+D` | Quit (press twice) |
 
 ## Configuration
@@ -69,15 +67,17 @@ Config is stored at `~/.config/onyx-cli/config.json`. Environment variables over
 
 | Variable | Description |
 |----------|-------------|
-| `ONYX_SERVER_URL` | Server URL (default: `http://localhost:3000`) |
-| `ONYX_API_KEY` | API key or Personal Access Token |
+| `ONYX_SERVER_URL` | Server URL |
+| `ONYX_API_KEY` | API key |
 | `DANSWER_API_KEY` | Legacy API key (fallback) |
-| `ONYX_PERSONA_ID` | Default assistant ID |
+| `ONYX_PERSONA_ID` | Default persona ID |
 
 ## Development
 
 ```bash
-cd cli
-uv sync
-uv run pytest tests/unit -xv
+# Run tests
+go test ./...
+
+# Build
+go build -o onyx-cli .
 ```

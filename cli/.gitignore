@@ -1,5 +1,3 @@
-__pycache__/
-*.pyc
-dist/
-*.egg-info/
-.venv/
+onyx-cli
+cli
+onyx.cli
