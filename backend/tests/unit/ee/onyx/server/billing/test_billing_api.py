@@ -103,7 +103,9 @@ class TestCreateCheckoutSession:
             )
 
         assert exc_info.value.status_code == 502
-        assert "Stripe error" in exc_info.value.detail
+        assert isinstance(exc_info.value.detail, dict)
+        assert exc_info.value.detail["error_code"] == "BILLING_SERVICE_ERROR"
+        assert exc_info.value.detail["message"] == "Stripe error"
 
 
 class TestCreateCustomerPortalSession:
@@ -316,7 +318,9 @@ class TestUpdateSeats:
             await update_seats(request=request, _=MagicMock(), db_session=MagicMock())
 
         assert exc_info.value.status_code == 400
-        assert "Cannot reduce below 10 seats" in exc_info.value.detail
+        assert isinstance(exc_info.value.detail, dict)
+        assert exc_info.value.detail["error_code"] == "BILLING_SERVICE_ERROR"
+        assert exc_info.value.detail["message"] == "Cannot reduce below 10 seats"
 
 
 class TestCircuitBreaker:

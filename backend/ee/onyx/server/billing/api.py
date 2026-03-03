@@ -191,7 +191,11 @@ async def create_checkout_session(
             tenant_id=tenant_id,
         )
     except BillingServiceError as e:
-        raise HTTPException(status_code=e.status_code, detail=e.message)
+        # Preserve upstream status code; wrap message in structured format
+        raise HTTPException(
+            status_code=e.status_code,
+            detail={"error_code": "BILLING_SERVICE_ERROR", "message": e.message},
+        )
 
 
 @router.post("/create-customer-portal-session")
@@ -223,7 +227,11 @@ async def create_customer_portal_session(
             tenant_id=tenant_id,
         )
     except BillingServiceError as e:
-        raise HTTPException(status_code=e.status_code, detail=e.message)
+        # Preserve upstream status code; wrap message in structured format
+        raise HTTPException(
+            status_code=e.status_code,
+            detail={"error_code": "BILLING_SERVICE_ERROR", "message": e.message},
+        )
 
 
 @router.get("/billing-information")
@@ -262,7 +270,11 @@ async def get_billing_information(
         # Open circuit breaker on connection failures (self-hosted only)
         if e.status_code in (502, 503, 504):
             _open_billing_circuit()
-        raise HTTPException(status_code=e.status_code, detail=e.message)
+        # Preserve upstream status code; wrap message in structured format
+        raise HTTPException(
+            status_code=e.status_code,
+            detail={"error_code": "BILLING_SERVICE_ERROR", "message": e.message},
+        )
 
 
 @router.post("/seats/update")
@@ -311,7 +323,11 @@ async def update_seats(
 
         return result
     except BillingServiceError as e:
-        raise HTTPException(status_code=e.status_code, detail=e.message)
+        # Preserve upstream status code; wrap message in structured format
+        raise HTTPException(
+            status_code=e.status_code,
+            detail={"error_code": "BILLING_SERVICE_ERROR", "message": e.message},
+        )
 
 
 @router.get("/stripe-publishable-key")

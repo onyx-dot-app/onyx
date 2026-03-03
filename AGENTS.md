@@ -651,6 +651,12 @@ raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied
 Available error codes are defined in `backend/onyx/error_handling/error_codes.py`. If a new error
 category is needed, add it there first — do not invent ad-hoc codes.
 
+**Exception — upstream service errors:** When forwarding errors from an upstream service (e.g.
+`BillingServiceError`), the HTTP status code is dynamic and comes from the upstream response.
+In these cases, use `error_code: "BILLING_SERVICE_ERROR"` (or similar) with the upstream message
+wrapped in the standard `{"error_code": "...", "message": "..."}` dict shape. Do not map these
+to `OnyxErrorCode` members since the status code is not fixed.
+
 ## Best Practices
 
 In addition to the other content in this file, best practices for contributing
