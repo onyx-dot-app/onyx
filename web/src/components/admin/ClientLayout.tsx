@@ -4,7 +4,7 @@ import AdminSidebar from "@/sections/sidebar/AdminSidebar";
 import { usePathname } from "next/navigation";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import { ApplicationStatus } from "@/interfaces/settings";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { cn } from "@/lib/utils";
 import { ADMIN_PATHS } from "@/lib/admin-routes";
 
@@ -75,8 +75,7 @@ export function ClientLayout({
           <strong className="font-bold">Warning:</strong> Your trial ends in
           less than 5 days and no payment method has been added.
           <div className="mt-2">
-            {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
-            <Button className="w-full" href="/admin/billing">
+            <Button width="full" href="/admin/billing">
               Update Billing Information
             </Button>
           </div>

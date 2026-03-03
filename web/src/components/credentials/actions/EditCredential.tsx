@@ -1,5 +1,4 @@
-import Button from "@/refresh-components/buttons/Button";
-import { Button as OpalButton } from "@opal/components";
+import { Button } from "@opal/components";
 import Text from "@/components/ui/text";
 
 import { FaNewspaper, FaTrash } from "react-icons/fa";
@@ -94,15 +93,13 @@ export default function EditCredential({
               )
             )}
             <div className="flex justify-between w-full">
-              <OpalButton onClick={() => resetForm()} icon={SvgTrash}>
+              <Button onClick={() => resetForm()} icon={SvgTrash}>
                 Reset Changes
-              </OpalButton>
-              {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
+              </Button>
               <Button
                 type="submit"
                 disabled={isSubmitting}
-                className="bg-indigo-500 hover:bg-indigo-400"
-                leftIcon={FaNewspaper}
+                icon={FaNewspaper}
               >
                 Update
               </Button>

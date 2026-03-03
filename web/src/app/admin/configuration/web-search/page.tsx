@@ -1011,10 +1011,8 @@ export default function Page() {
                             {buttonState.label}
                           </HoverIconButton>
                         ) : (
-                          // TODO(opal-migration, @raunakab): migrate to opal Button once action={false} tertiary is resolved
-                          <Button
-                            action={false}
-                            tertiary
+                          <OpalButton
+                            prominence="tertiary"
                             disabled={
                               buttonState.disabled || !buttonState.onClick
                             }
@@ -1031,7 +1029,7 @@ export default function Page() {
                             }
                           >
                             {buttonState.label}
-                          </Button>
+                          </OpalButton>
                         )}
                       </div>
                     </div>
@@ -1204,10 +1202,8 @@ export default function Page() {
                           {buttonState.label}
                         </HoverIconButton>
                       ) : (
-                        // TODO(opal-migration, @raunakab): migrate to opal Button once action={false} tertiary is resolved
-                        <Button
-                          action={false}
-                          tertiary
+                        <OpalButton
+                          prominence="tertiary"
                           disabled={
                             buttonState.disabled || !buttonState.onClick
                           }
@@ -1224,7 +1220,7 @@ export default function Page() {
                           }
                         >
                           {buttonState.label}
-                        </Button>
+                        </OpalButton>
                       )}
                     </div>
                   </div>
