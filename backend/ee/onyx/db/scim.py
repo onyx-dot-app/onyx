@@ -270,8 +270,13 @@ class ScimDAL(DAL):
         Raises:
             ValueError: If the filter uses an unsupported attribute.
         """
-        query = select(User).where(
-            User.role.notin_([UserRole.SLACK_USER, UserRole.EXT_PERM_USER])
+        # Inner-join with ScimUserMapping so only SCIM-managed users appear.
+        # Pre-existing system accounts (anonymous, admin, etc.) are excluded
+        # unless they were explicitly linked via SCIM provisioning.
+        query = (
+            select(User)
+            .join(ScimUserMapping, ScimUserMapping.user_id == User.id)  # type: ignore[arg-type]
+            .where(User.role.notin_([UserRole.SLACK_USER, UserRole.EXT_PERM_USER]))
         )
 
         if scim_filter:
