@@ -819,7 +819,9 @@ RERANK_COUNT = int(os.environ.get("RERANK_COUNT") or 1000)
 # Tool Configs
 #####
 # Code Interpreter Service Configuration
-CODE_INTERPRETER_BASE_URL = os.environ.get("CODE_INTERPRETER_BASE_URL")
+CODE_INTERPRETER_BASE_URL = os.environ.get(
+    "CODE_INTERPRETER_BASE_URL", "http://localhost:8000"
+)
 
 CODE_INTERPRETER_DEFAULT_TIMEOUT_MS = int(
     os.environ.get("CODE_INTERPRETER_DEFAULT_TIMEOUT_MS") or 60_000
