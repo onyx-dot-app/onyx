@@ -17,11 +17,12 @@ Terminal UI for chatting with [Onyx](https://onyx.app) - your AI-powered enterpr
 pip install onyx-cli
 ```
 
-Or install from source:
+Or run from source:
 
 ```bash
 cd cli
-pip install -e .
+uv sync
+uv run onyx-cli
 ```
 
 ## Quick Start
@@ -77,6 +78,6 @@ Config is stored at `~/.config/onyx-cli/config.json`. Environment variables over
 
 ```bash
 cd cli
-pip install -e ".[dev]"
-pytest tests/unit -xv
+uv sync
+uv run pytest tests/unit -xv
 ```

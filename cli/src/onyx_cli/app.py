@@ -51,6 +51,7 @@ HELP_TEXT = """\
   [bold cyan]/attach <path>[/bold cyan]     Attach a file to next message
   [bold cyan]/sessions[/bold cyan]          List recent chat sessions
   [bold cyan]/resume <id>[/bold cyan]       Resume a previous session
+  [bold cyan]/clear[/bold cyan]             Clear the chat display
   [bold cyan]/configure[/bold cyan]         Re-run connection setup
   [bold cyan]/connectors[/bold cyan]        Open connectors page in browser
   [bold cyan]/settings[/bold cyan]          Open Onyx settings in browser
@@ -77,9 +78,9 @@ class OnyxApp(App):
     """
 
     BINDINGS = [
-        Binding("escape", "cancel_stream", "Cancel", show=False),
-        Binding("ctrl+d", "quit_app", "Quit", show=False),
-        Binding("ctrl+o", "toggle_sources", "Sources", show=False),
+        Binding("escape", "cancel_stream", "Cancel", show=False, priority=True),
+        Binding("ctrl+d", "quit_app", "Quit", show=False, priority=True),
+        Binding("ctrl+o", "toggle_sources", "Sources", show=False, priority=True),
     ]
 
     def __init__(self, config: OnyxCliConfig | None = None) -> None:
@@ -129,8 +130,13 @@ class OnyxApp(App):
 
         status.set_server(self._config.server_url)
         status.set_persona(self._persona_name)
+        chat.show_splash()
 
     # ── Message Handling ─────────────────────────────────────────────
+
+    async def on_chat_input_file_dropped(self, event: ChatInput.FileDropped) -> None:
+        """Handle a file path pasted/dropped into the input."""
+        await self._attach_file(event.path)
 
     async def on_chat_input_message_submitted(
         self, event: ChatInput.MessageSubmitted
@@ -315,13 +321,16 @@ class OnyxApp(App):
                     "Run 'onyx-cli configure' to change connection settings."
                 )
 
+            case "/clear":
+                chat.clear()
+
             case "/connectors":
                 url = f"{self._config.server_url}/admin/connectors"
                 webbrowser.open(url)
                 chat.show_info(f"Opened {url} in browser")
 
             case "/settings":
-                url = f"{self._config.server_url}/admin/settings"
+                url = f"{self._config.server_url}/app/settings/general"
                 webbrowser.open(url)
                 chat.show_info(f"Opened {url} in browser")
 
@@ -344,7 +353,7 @@ class OnyxApp(App):
         self._citations = {}
         chat.clear_all()
         status.set_session("")
-        chat.show_info("New conversation started. Type a message to begin.")
+        chat.show_splash()
 
     async def _show_personas(self) -> None:
         """Show available personas and let user pick one."""

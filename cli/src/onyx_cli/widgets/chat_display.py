@@ -258,6 +258,12 @@ class ChatDisplay(VerticalScroll):
         self._is_reasoning: bool = False
         self._sources_visible: bool = False
 
+    def show_splash(self) -> None:
+        """Show the Onyx ASCII art splash screen."""
+        from onyx_cli.widgets.splash import SplashScreen
+
+        self.mount(SplashScreen())
+
     def add_user_message(self, message: str) -> None:
         """Add a user message to the display."""
         self._history.append(_HistoryEntry(kind=_EntryKind.USER, content=message))
