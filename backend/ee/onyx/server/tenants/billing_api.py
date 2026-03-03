@@ -117,11 +117,13 @@ async def create_customer_portal_session(
     try:
         portal_url = fetch_customer_portal_session(tenant_id, return_url)
         return {"stripe_customer_portal_url": portal_url}
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to create customer portal session")
         raise HTTPException(
             status_code=OnyxErrorCode.INTERNAL_ERROR.status_code,
-            detail=OnyxErrorCode.INTERNAL_ERROR.detail(str(e)),
+            detail=OnyxErrorCode.INTERNAL_ERROR.detail(
+                "Failed to create customer portal session"
+            ),
         )
 
 
@@ -138,11 +140,13 @@ async def create_checkout_session(
     try:
         checkout_url = fetch_stripe_checkout_session(tenant_id, billing_period, seats)
         return {"stripe_checkout_url": checkout_url}
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to create checkout session")
         raise HTTPException(
             status_code=OnyxErrorCode.INTERNAL_ERROR.status_code,
-            detail=OnyxErrorCode.INTERNAL_ERROR.detail(str(e)),
+            detail=OnyxErrorCode.INTERNAL_ERROR.detail(
+                "Failed to create checkout session"
+            ),
         )
 
 
@@ -163,11 +167,15 @@ async def create_subscription_session(
         session_id = fetch_stripe_checkout_session(tenant_id, billing_period)
         return SubscriptionSessionResponse(sessionId=session_id)
 
-    except Exception as e:
+    except HTTPException:
+        raise
+    except Exception:
         logger.exception("Failed to create subscription session")
         raise HTTPException(
             status_code=OnyxErrorCode.INTERNAL_ERROR.status_code,
-            detail=OnyxErrorCode.INTERNAL_ERROR.detail(str(e)),
+            detail=OnyxErrorCode.INTERNAL_ERROR.detail(
+                "Failed to create subscription session"
+            ),
         )
 
 
