@@ -50,12 +50,23 @@ function Main({ groupId }: { groupId: string }) {
   }
 
   return (
-    <GroupDisplay
-      users={users.accepted}
-      ccPairs={ccPairs}
-      userGroup={userGroup}
-      refreshUserGroup={refreshUserGroup}
-    />
+    <>
+      <SettingsLayouts.Header
+        icon={route.icon}
+        title={userGroup.name || "Unknown"}
+        separator
+        backButton
+      />
+
+      <SettingsLayouts.Body>
+        <GroupDisplay
+          users={users.accepted}
+          ccPairs={ccPairs}
+          userGroup={userGroup}
+          refreshUserGroup={refreshUserGroup}
+        />
+      </SettingsLayouts.Body>
+    </>
   );
 }
 
@@ -64,16 +75,7 @@ export default function Page(props: { params: Promise<{ groupId: string }> }) {
 
   return (
     <SettingsLayouts.Root>
-      <SettingsLayouts.Header
-        icon={route.icon}
-        title="User Group"
-        separator
-        backButton
-      />
-
-      <SettingsLayouts.Body>
-        <Main groupId={params.groupId} />
-      </SettingsLayouts.Body>
+      <Main groupId={params.groupId} />
     </SettingsLayouts.Root>
   );
 }
