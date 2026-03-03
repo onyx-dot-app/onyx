@@ -18,7 +18,7 @@
 
 "use client";
 
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { AuthType } from "@/lib/constants";
 import { FcGoogle } from "react-icons/fc";
 import type { IconProps } from "@opal/types";
@@ -49,16 +49,17 @@ export default function SignInButton({
   }
 
   return (
-    // TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved
     <Button
-      secondary={
+      prominence={
         authType === AuthType.GOOGLE_OAUTH || authType === AuthType.CLOUD
+          ? "secondary"
+          : "primary"
       }
-      className="!w-full"
-      leftIcon={icon}
+      width="full"
+      icon={icon}
       href={authorizeUrl}
     >
-      {button}
+      button
     </Button>
   );
 }

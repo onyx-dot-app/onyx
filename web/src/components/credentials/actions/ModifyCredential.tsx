@@ -266,7 +266,6 @@ export default function ModifyCredential({
               <div />
             )}
 
-            {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
             <Button
               disabled={selectedCredential == null}
               onClick={() => {

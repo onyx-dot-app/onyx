@@ -2,7 +2,7 @@
 
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import { REGISTRATION_URL } from "@/lib/constants";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import Link from "next/link";
 import { SvgImport } from "@opal/icons";
 
@@ -25,8 +25,8 @@ export default function Page() {
           {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
           <Button
             href={`${REGISTRATION_URL}/register`}
-            className="w-full"
-            leftIcon={SvgImport}
+            width="full"
+            icon={SvgImport}
           >
             Create New Organization
           </Button>

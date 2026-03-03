@@ -10,11 +10,10 @@ import {
   DropdownMenuTrigger,
   DropdownMenuCheckboxItem,
 } from "@/components/ui/dropdown-menu";
-import Button from "@/refresh-components/buttons/Button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { AccessType, ValidStatuses } from "@/lib/types";
-import { Button as OpalButton } from "@opal/components";
+import { Button } from "@opal/components";
 import { SvgFilter } from "@opal/icons";
 export interface FilterOptions {
   accessType: AccessType[] | null;
@@ -128,11 +127,7 @@ export const FilterComponent = forwardRef<
     <div className="relative">
       <DropdownMenu open={isOpen} onOpenChange={handleOpenChange}>
         <DropdownMenuTrigger asChild>
-          <OpalButton
-            icon={SvgFilter}
-            prominence="secondary"
-            transient={isOpen}
-          />
+          <Button icon={SvgFilter} prominence="secondary" transient={isOpen} />
         </DropdownMenuTrigger>
         <DropdownMenuContent
           align="end"
@@ -241,7 +236,7 @@ export const FilterComponent = forwardRef<
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex gap-2">
-                <OpalButton
+                <Button
                   prominence={docsOperator !== ">" ? "secondary" : "primary"}
                   onClick={(e) => {
                     e.preventDefault();
@@ -251,8 +246,8 @@ export const FilterComponent = forwardRef<
                   type="button"
                 >
                   &gt;
-                </OpalButton>
-                <OpalButton
+                </Button>
+                <Button
                   prominence={docsOperator !== "<" ? "secondary" : "primary"}
                   onClick={(e) => {
                     e.preventDefault();
@@ -262,8 +257,8 @@ export const FilterComponent = forwardRef<
                   type="button"
                 >
                   &lt;
-                </OpalButton>
-                <OpalButton
+                </Button>
+                <Button
                   prominence={docsOperator !== "=" ? "secondary" : "primary"}
                   onClick={(e) => {
                     e.preventDefault();
@@ -273,7 +268,7 @@ export const FilterComponent = forwardRef<
                   type="button"
                 >
                   =
-                </OpalButton>
+                </Button>
               </div>
               <Input
                 type="number"
@@ -285,9 +280,8 @@ export const FilterComponent = forwardRef<
               />
             </div>
             <div className="px-2 py-1.5">
-              {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
               <Button
-                className="w-full"
+                width="full"
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();

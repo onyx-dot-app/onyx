@@ -2,7 +2,7 @@
 
 import { toast } from "@/hooks/useToast";
 import { basicLogin, basicSignup } from "@/lib/user";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { Form, Formik } from "formik";
 import * as Yup from "yup";
 import { requestEmailVerification } from "../lib";
@@ -18,6 +18,7 @@ import { validateInternalRedirect } from "@/lib/auth/redirectValidation";
 import { APIFormFieldState } from "@/refresh-components/form/types";
 import { SvgArrowRightCircle } from "@opal/icons";
 import { useCaptcha } from "@/lib/hooks/useCaptcha";
+import Spacer from "@/refresh-components/Spacer";
 
 interface EmailPasswordFormProps {
   isSignup?: boolean;
@@ -239,10 +240,10 @@ export default function EmailPasswordForm({
                 )}
               />
 
-              {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
+              <Spacer rem={1} />
               <Button
                 type="submit"
-                className="w-full mt-1"
+                width="full"
                 disabled={isSubmitting || !isValid || !dirty}
                 rightIcon={SvgArrowRightCircle}
               >

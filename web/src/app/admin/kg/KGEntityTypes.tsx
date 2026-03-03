@@ -7,7 +7,7 @@ import CollapsibleCard from "@/components/CollapsibleCard";
 import { ValidSources } from "@/lib/types";
 import { FaCircleQuestion } from "react-icons/fa6";
 import { CheckmarkIcon } from "@/components/icons/icons";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { cn } from "@/lib/utils";
@@ -237,11 +237,7 @@ export default function KGEntityTypes({
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
-        {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
-        <Button
-          className="h-9"
-          onClick={allClosed ? handleExpandAll : handleCollapseAll}
-        >
+        <Button onClick={allClosed ? handleExpandAll : handleCollapseAll}>
           {allClosed ? "Expand All" : "Collapse All"}
         </Button>
       </div>

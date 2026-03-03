@@ -26,8 +26,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
-import Button from "@/refresh-components/buttons/Button";
-import { Button as OpalButton } from "@opal/components";
+import { Button } from "@opal/components";
 import { DeleteButton } from "@/components/DeleteButton";
 import { Bubble } from "@/components/Bubble";
 import { BookmarkIcon, RobotIcon } from "@/components/icons/icons";
@@ -35,6 +34,7 @@ import { AddTokenRateLimitForm } from "./AddTokenRateLimitForm";
 import { GenericTokenRateLimitTable } from "@/app/admin/token-rate-limits/TokenRateLimitTables";
 import { useUser } from "@/providers/UserProvider";
 import GenericConfirmModal from "@/components/modals/GenericConfirmModal";
+import Spacer from "@/refresh-components/Spacer";
 
 interface GroupDisplayProps {
   users: User[];
@@ -278,7 +278,7 @@ export const GroupDisplay = ({
         tooltip="Cannot update group while sync is occurring"
         disabled={userGroup.is_up_to_date}
       >
-        <OpalButton
+        <Button
           disabled={!userGroup.is_up_to_date}
           onClick={() => {
             if (userGroup.is_up_to_date) {
@@ -287,7 +287,7 @@ export const GroupDisplay = ({
           }}
         >
           Add Users
-        </OpalButton>
+        </Button>
       </SimpleTooltip>
       {addMemberFormVisible && (
         <AddMemberForm
@@ -378,7 +378,7 @@ export const GroupDisplay = ({
         tooltip="Cannot update group while sync is occurring"
         disabled={userGroup.is_up_to_date}
       >
-        <OpalButton
+        <Button
           disabled={!userGroup.is_up_to_date}
           onClick={() => {
             if (userGroup.is_up_to_date) {
@@ -387,7 +387,7 @@ export const GroupDisplay = ({
           }}
         >
           Add Connectors
-        </OpalButton>
+        </Button>
       </SimpleTooltip>
 
       {addConnectorFormVisible && (
@@ -468,13 +468,12 @@ export const GroupDisplay = ({
       />
 
       {isAdmin && (
-        // TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved
-        <Button
-          className="mt-3"
-          onClick={() => setAddRateLimitFormVisible(true)}
-        >
-          Create a Token Rate Limit
-        </Button>
+        <>
+          <Spacer rem={3} />
+          <Button onClick={() => setAddRateLimitFormVisible(true)}>
+            Create a Token Rate Limit
+          </Button>
+        </>
       )}
     </div>
   );

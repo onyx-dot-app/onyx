@@ -5,7 +5,7 @@ import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import Title from "@/components/ui/title";
 import Text from "@/components/ui/text";
 import Link from "next/link";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { Form, Formik } from "formik";
 import * as Yup from "yup";
 import { TextFormField } from "@/components/Field";
@@ -99,12 +99,7 @@ const ResetPasswordPage: React.FC = () => {
               />
 
               <div className="flex">
-                {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
-                <Button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="mx-auto w-full"
-                >
+                <Button type="submit" disabled={isSubmitting} width="full">
                   Reset Password
                 </Button>
               </div>
