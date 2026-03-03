@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from textual import events
 from textual.app import ComposeResult
 from textual.containers import Horizontal
 from textual.containers import Vertical
@@ -19,6 +20,7 @@ SLASH_COMMANDS: list[tuple[str, str]] = [
     ("/attach", "Attach a file to next message"),
     ("/sessions", "List recent chat sessions"),
     ("/resume", "Resume a previous session"),
+    ("/clear", "Clear the chat display"),
     ("/configure", "Re-run connection setup"),
     ("/connectors", "Open connectors in browser"),
     ("/settings", "Open settings in browser"),
@@ -200,6 +202,13 @@ class ChatInput(Input):
     class SlashCleared(Message):
         """Fired when the input no longer starts with /."""
 
+    class FileDropped(Message):
+        """Fired when a file path is pasted/dropped into the input."""
+
+        def __init__(self, path: str) -> None:
+            super().__init__()
+            self.path = path
+
     def __init__(self) -> None:
         super().__init__(
             placeholder="Send a message\u2026",
@@ -237,6 +246,24 @@ class ChatInput(Input):
         if text:
             self.post_message(self.MessageSubmitted(text))
             self.value = ""
+
+    def _on_paste(self, event: events.Paste) -> None:
+        """Intercept paste events to detect file paths (e.g. drag-and-drop)."""
+        from pathlib import Path
+
+        text = event.text.strip().strip("'\"")
+        try:
+            path = Path(text).expanduser().resolve()
+        except (ValueError, OSError):
+            path = None
+
+        if path is not None and path.is_file():
+            event.stop()
+            event.prevent_default()
+            self.post_message(self.FileDropped(str(path)))
+        else:
+            # Default Input paste behavior
+            super()._on_paste(event)
 
     async def on_key(self, event: Input.Changed | object) -> None:
         """Intercept arrow keys for slash menu navigation."""
