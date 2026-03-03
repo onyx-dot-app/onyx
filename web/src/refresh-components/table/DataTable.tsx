@@ -97,16 +97,15 @@ function processColumns<TData>(
  * Config-driven table component that wires together `useDataTable`,
  * `useColumnWidths`, and `useDraggableRows` automatically.
  *
- * Reduces table setup from ~450 lines to ~30 lines while preserving
- * full flexibility via the column definitions from `createTableColumns()`.
+ * Full flexibility via the column definitions from `createTableColumns()`.
  *
  * @example
  * ```tsx
  * const tc = createTableColumns<TeamMember>();
  * const columns = [
  *   tc.qualifier({ content: "avatar-user", getInitials: (r) => r.initials }),
- *   tc.column("name", { header: "Name", weight: 200, minWidth: 120 }),
- *   tc.column("email", { header: "Email", weight: 240 }),
+ *   tc.column("name", { header: "Name", weight: 23, minWidth: 120 }),
+ *   tc.column("email", { header: "Email", weight: 28 }),
  *   tc.actions(),
  * ];
  *

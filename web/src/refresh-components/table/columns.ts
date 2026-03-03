@@ -50,7 +50,7 @@ interface DataColumnConfig<TData, TValue> {
   enableResizing?: boolean;
   /** Enable hiding for this column. @default true */
   enableHiding?: boolean;
-  /** Column weight for proportional distribution. @default 150 */
+  /** Column weight for proportional distribution. @default 20 */
   weight?: number;
   /** Minimum column width in pixels. @default 50 */
   minWidth?: number;
@@ -125,8 +125,8 @@ interface TableColumnsBuilder<TData> {
  * const tc = createTableColumns<TeamMember>();
  * const columns = [
  *   tc.qualifier({ content: "avatar-user", getInitials: (r) => r.initials }),
- *   tc.column("name", { header: "Name", weight: 200, minWidth: 120 }),
- *   tc.column("email", { header: "Email", weight: 240, minWidth: 150 }),
+ *   tc.column("name", { header: "Name", weight: 23, minWidth: 120 }),
+ *   tc.column("email", { header: "Email", weight: 28, minWidth: 150 }),
  *   tc.actions(),
  * ];
  * ```
@@ -170,7 +170,7 @@ export function createTableColumns<TData>(): TableColumnsBuilder<TData> {
         enableSorting = true,
         enableResizing = true,
         enableHiding = true,
-        weight = 150,
+        weight = 20,
         minWidth = 50,
       } = config;
 

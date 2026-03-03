@@ -112,7 +112,7 @@ function computeColumnWidths(
   const dataColumns: { id: string; weight: number; minWidth: number }[] = [];
 
   for (const h of headers) {
-    const baseSize = h.column.columnDef.size ?? 150;
+    const baseSize = h.column.columnDef.size ?? 20;
     if (fixedColumnIds.has(h.id)) {
       fixedTotal += baseSize;
     } else {
@@ -131,7 +131,7 @@ function computeColumnWidths(
 
   if (tableWidth === 0) {
     for (const h of headers) {
-      result[h.id] = h.column.columnDef.size ?? 150;
+      result[h.id] = h.column.columnDef.size ?? 20;
     }
     return result;
   }
@@ -174,7 +174,7 @@ function computeColumnWidths(
   // Fixed columns keep their base size
   for (const h of headers) {
     if (fixedColumnIds.has(h.id)) {
-      result[h.id] = h.column.columnDef.size ?? 150;
+      result[h.id] = h.column.columnDef.size ?? 20;
     }
   }
 
@@ -275,11 +275,11 @@ export default function useColumnWidths({
         customWeights[columnId] ??
           columnWeights[columnId] ??
           header?.column.columnDef.size ??
-          150,
+          20,
         customWeights[neighborId] ??
           columnWeights[neighborId] ??
           neighbor?.column.columnDef.size ??
-          150,
+          20,
         columnMinWidths[columnId] ?? 50,
         columnMinWidths[neighborId] ?? 50,
         setCustomWeights

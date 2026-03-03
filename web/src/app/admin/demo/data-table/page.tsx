@@ -292,7 +292,7 @@ const columns = [
   tc.qualifier({ content: "avatar-user", getInitials: (r) => r.initials }),
   tc.column("name", {
     header: "Name",
-    weight: 200,
+    weight: 23,
     minWidth: 120,
     cell: (value) => (
       <Content sizePreset="main-ui" variant="body" title={value} />
@@ -300,7 +300,7 @@ const columns = [
   }),
   tc.column("email", {
     header: "Email",
-    weight: 240,
+    weight: 28,
     minWidth: 150,
     cell: (value) => (
       <Content
@@ -313,7 +313,7 @@ const columns = [
   }),
   tc.column("role", {
     header: "Role",
-    weight: 140,
+    weight: 16,
     minWidth: 80,
     cell: (value) => (
       <Content sizePreset="main-ui" variant="body" title={value} />
@@ -321,7 +321,7 @@ const columns = [
   }),
   tc.column("department", {
     header: "Department",
-    weight: 160,
+    weight: 19,
     minWidth: 100,
     cell: (value) => (
       <Content sizePreset="main-ui" variant="body" title={value} />
@@ -329,7 +329,7 @@ const columns = [
   }),
   tc.column("status", {
     header: "Status",
-    weight: 120,
+    weight: 14,
     minWidth: 80,
     cell: (value) => {
       const { icon } = STATUS_CONFIG[value];
