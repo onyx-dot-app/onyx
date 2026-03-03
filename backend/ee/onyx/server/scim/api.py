@@ -423,11 +423,6 @@ def create_user(
 
     email = user_resource.userName.strip()
 
-    # Enforce seat limit
-    seat_error = _check_seat_availability(dal)
-    if seat_error:
-        return _scim_error_response(403, seat_error)
-
     # Check for existing user — if they exist but aren't SCIM-managed yet,
     # link them to the IdP rather than rejecting with 409.
     external_id: str | None = user_resource.externalId
@@ -471,6 +466,12 @@ def create_user(
             ),
             status_code=201,
         )
+
+    # Only enforce seat limit for net-new users — adopting a pre-existing
+    # user doesn't consume a new seat.
+    seat_error = _check_seat_availability(dal)
+    if seat_error:
+        return _scim_error_response(403, seat_error)
 
     # Create user with a random password (SCIM users authenticate via IdP)
     personal_name = _scim_name_to_str(user_resource.name)
