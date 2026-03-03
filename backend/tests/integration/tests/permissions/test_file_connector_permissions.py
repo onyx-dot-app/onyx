@@ -55,6 +55,17 @@ def _update_connector_files(
     )
 
 
+def _list_connector_files(
+    *,
+    connector_id: int,
+    user_performing_action: DATestUser,
+) -> requests.Response:
+    return requests.get(
+        f"{API_SERVER_URL}/manage/admin/connector/{connector_id}/files",
+        headers=user_performing_action.headers,
+    )
+
+
 @pytest.mark.skipif(
     os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
     reason="Curator and user group tests are enterprise only",
@@ -128,6 +139,24 @@ def test_only_global_curator_can_update_public_file_connector_files(
         access_type=AccessType.PUBLIC,
         groups=[],
         name="public_file_connector_cc_pair",
+    )
+
+    curator_list_response = _list_connector_files(
+        connector_id=connector.id,
+        user_performing_action=curator_user,
+    )
+    curator_list_response.raise_for_status()
+    curator_list_payload = curator_list_response.json()
+    assert any(f["file_id"] == initial_file_id for f in curator_list_payload["files"])
+
+    global_curator_list_response = _list_connector_files(
+        connector_id=connector.id,
+        user_performing_action=global_curator_editor,
+    )
+    global_curator_list_response.raise_for_status()
+    global_curator_list_payload = global_curator_list_response.json()
+    assert any(
+        f["file_id"] == initial_file_id for f in global_curator_list_payload["files"]
     )
 
     denied_response = _update_connector_files(

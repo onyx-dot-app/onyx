@@ -602,14 +602,7 @@ def _fetch_and_check_file_connector_cc_pair_permissions(
         and user.role == UserRole.GLOBAL_CURATOR
         and cc_pair.access_type == AccessType.PUBLIC
     ):
-        has_view_access = verify_user_has_access_to_cc_pair(
-            cc_pair_id=cc_pair.id,
-            db_session=db_session,
-            user=user,
-            get_editable=False,
-        )
-        if has_view_access:
-            return cc_pair
+        return cc_pair
 
     raise HTTPException(
         status_code=403,
