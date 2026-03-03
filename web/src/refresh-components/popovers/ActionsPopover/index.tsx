@@ -42,6 +42,27 @@ import { useProjectsContext } from "@/providers/ProjectsContext";
 import { SvgActions, SvgChevronRight, SvgKey, SvgSliders } from "@opal/icons";
 import { Button } from "@opal/components";
 
+function buildTooltipMessage(
+  actionDescription: string,
+  isConfigured: boolean,
+  isAdmin: boolean
+) {
+  const _ADMIN_CONFIGURE_MESSAGE = "Press the settings cog to enable.";
+  const _USER_NOT_ADMIN_MESSAGE = "Ask an admin to configure.";
+
+  let message = actionDescription;
+
+  if (!isConfigured && isAdmin) {
+    message += " " + _ADMIN_CONFIGURE_MESSAGE;
+  }
+
+  if (!isAdmin) {
+    message += " " + _USER_NOT_ADMIN_MESSAGE;
+  }
+
+  return message;
+}
+
 const UNAVAILABLE_TOOL_TOOLTIP_FALLBACK =
   "This action is not configured yet. Ask an admin to enable it.";
 const UNAVAILABLE_TOOL_TOOLTIP_ADMIN_FALLBACK =
