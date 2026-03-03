@@ -158,7 +158,7 @@ export default function NewTeamModal() {
             <div className="space-y-4">
               <p className="text-status-text-error-05">{error}</p>
               <div className="flex w-full pt-2">
-                {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
+                {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
                 <Button
                   onClick={handleContinueToNewOrg}
                   className="w-full"
@@ -176,7 +176,7 @@ export default function NewTeamModal() {
                 request.
               </p>
               <div className="flex w-full pt-2">
-                {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
+                {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
                 <Button
                   onClick={handleContinueToNewOrg}
                   className="w-full"
@@ -192,7 +192,7 @@ export default function NewTeamModal() {
                 Your join request can be approved by any admin of {appDomain}.
               </p>
               <div className="flex flex-col items-center justify-center gap-4 mt-4">
-                {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
+                {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
                 <Button
                   onClick={handleRequestInvite}
                   className="w-full"
@@ -204,7 +204,7 @@ export default function NewTeamModal() {
                     : "Request to join your team"}
                 </Button>
               </div>
-              {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
+              {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
               <Button
                 onClick={handleContinueToNewOrg}
                 className="w-full"

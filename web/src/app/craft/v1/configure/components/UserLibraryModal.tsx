@@ -457,7 +457,7 @@ function LibraryTreeView({
 
               {/* Expand/collapse for directories */}
               {entry.is_directory ? (
-                // TODO(opal-migration, @raunakab): migrate to opal Button once it supports style prop
+                // TODO(@raunakab): migrate to opal Button once it supports style prop
                 <IconButton
                   icon={SvgChevronRight}
                   onClick={() => onToggleFolder(entry.path)}

@@ -167,7 +167,7 @@ export default function UpgradingPage({
               {futureEmbeddingModel.model_name}
             </div>
 
-            {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
+            {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
             <Button
               danger
               className="mt-4"

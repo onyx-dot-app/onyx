@@ -248,7 +248,7 @@ export default function EmbeddingForm() {
       return needsReIndex ? (
         <div className="flex mx-auto gap-x-1 ml-auto items-center">
           <div className="flex items-center h-fit">
-            {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
+            {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
             <Button
               onClick={() => {
                 if (switchoverType == SwitchoverType.INSTANT) {
@@ -270,7 +270,7 @@ export default function EmbeddingForm() {
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
+                {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
                 <Button
                   disabled={!isOverallFormValid}
                   action

@@ -268,7 +268,7 @@ export default function ChangeCredentialsModal({
                   </Callout>
                 )}
 
-                {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
+                {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
                 <Button
                   className="mr-auto mt-4"
                   onClick={() => handleSubmit()}
@@ -290,7 +290,7 @@ export default function ChangeCredentialsModal({
             embedding type!
           </Text>
 
-          {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
+          {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
           <Button className="mr-auto" onClick={handleDelete} danger>
             Delete Configuration
           </Button>

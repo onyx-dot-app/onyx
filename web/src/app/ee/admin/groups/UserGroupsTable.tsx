@@ -70,7 +70,7 @@ export const UserGroupsTable = ({
               return (
                 <TableRow key={userGroup.id}>
                   <TableCell>
-                    {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
+                    {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
                     <Button
                       internal
                       leftIcon={SvgEdit}

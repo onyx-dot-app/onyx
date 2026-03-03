@@ -70,7 +70,7 @@ const AgentButton = memo(({ agent }: AgentButtonProps) => {
           rightChildren={
             // Hide unpin button for current agent since auto-pin would immediately re-pin
             isCurrentAgent ? null : (
-              // TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved
+              // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
               <IconButton
                 icon={
                   SvgX /* We only show the unpin button for pinned agents */

@@ -59,7 +59,7 @@ export function ListFieldInput({
       <div className="mt-3">
         <div className="flex flex-wrap gap-1.5">
           {values.map((value, index) => (
-            // TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved
+            // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
             <Button
               key={index}
               internal

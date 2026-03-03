@@ -101,14 +101,14 @@ export function EditableStringFieldDisplay({
       {isEditing && isEditable ? (
         <>
           <div className={cn("flex", "flex-row")}>
-            {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
+            {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
             <IconButton
               onClick={handleUpdate}
               internal
               className="ml-2"
               icon={SvgCheck}
             />
-            {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
+            {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
             <IconButton
               onClick={resetEditing}
               internal

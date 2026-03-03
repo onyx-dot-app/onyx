@@ -60,7 +60,7 @@ const AddUserFormRenderer = ({
     {touched.emails && errors.emails && (
       <div className="text-error text-sm">{errors.emails}</div>
     )}
-    {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
+    {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
     <Button type="submit" disabled={isSubmitting} className="self-end">
       Add
     </Button>

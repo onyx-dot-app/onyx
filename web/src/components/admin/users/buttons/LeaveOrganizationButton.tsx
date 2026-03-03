@@ -51,7 +51,7 @@ export const LeaveOrganizationButton = ({
         />
       )}
 
-      {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
+      {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
       <Button
         className={className}
         onClick={() => setShowLeaveModal(true)}

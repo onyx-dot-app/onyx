@@ -258,7 +258,7 @@ function SubscriptionCard({
               Manage Plan
             </OpalButton>
           )}
-          {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
+          {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
           <Button tertiary onClick={onViewPlans} className="billing-text-link">
             <Text secondaryBody text03>
               View Plan Details

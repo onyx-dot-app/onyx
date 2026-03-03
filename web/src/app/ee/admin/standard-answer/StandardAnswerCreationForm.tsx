@@ -198,7 +198,7 @@ export const StandardAnswerCreationForm = ({
                 />
               </div>
               <div className="py-4 flex">
-                {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
+                {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
                 <Button
                   type="submit"
                   disabled={isSubmitting}

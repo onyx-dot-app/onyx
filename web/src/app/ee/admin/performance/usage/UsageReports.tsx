@@ -103,7 +103,7 @@ function GenerateReportInput({
       <div className="grid gap-2 mb-3">
         <Popover>
           <Popover.Trigger asChild>
-            {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
+            {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
             <Button
               secondary
               className={cn(

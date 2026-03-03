@@ -150,7 +150,7 @@ export default function ProjectContextPanel({
                 <Text as="p" headingH2 className="font-heading-h2">
                   {projectName}
                 </Text>
-                {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
+                {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
                 <IconButton
                   icon={SvgEdit}
                   internal

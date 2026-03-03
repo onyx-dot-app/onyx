@@ -91,7 +91,7 @@ function HoverIconButton({
 }: HoverIconButtonProps) {
   return (
     <div onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
-      {/* TODO(opal-migration, @raunakab): migrate to opal Button once HoverIconButtonProps typing is resolved */}
+      {/* TODO(@raunakab): migrate to opal Button once HoverIconButtonProps typing is resolved */}
       <Button {...buttonProps} rightIcon={isHovered ? SvgX : SvgCheckSquare}>
         {children}
       </Button>

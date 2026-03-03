@@ -13,7 +13,7 @@ export function AdvancedOptionsToggle({
   title,
 }: AdvancedOptionsToggleProps) {
   return (
-    // TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved
+    // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
     <Button
       internal
       leftIcon={({ className }) => (

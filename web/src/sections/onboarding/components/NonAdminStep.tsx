@@ -150,7 +150,7 @@ export default function NonAdminStep() {
             </Text>
           </div>
           <div className="p-1 flex items-center gap-1">
-            {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
+            {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
             <IconButton
               internal
               icon={SvgEdit}

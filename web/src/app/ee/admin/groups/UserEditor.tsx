@@ -73,7 +73,7 @@ export const UserEditor = ({
           leftSearchIcon
         />
         {onSubmit && (
-          // TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved
+          // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
           <Button
             className="ml-3 flex-nowrap w-32"
             onClick={() => onSubmit(selectedUsers)}

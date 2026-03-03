@@ -95,7 +95,7 @@ export default function BillingInformationPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
+          {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
           <Button
             onClick={handleManageSubscription}
             className="w-full"

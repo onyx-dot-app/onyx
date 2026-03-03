@@ -147,7 +147,7 @@ function PlanCard({
         {/* Button */}
         <div className="plan-card-button">
           {isCurrentPlan ? (
-            // TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved
+            // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
             <Button tertiary transient className="pointer-events-none">
               <Text mainUiAction text03>
                 Your Current Plan
@@ -167,7 +167,7 @@ function PlanCard({
               {buttonLabel}
             </OpalButton>
           ) : (
-            // TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved
+            // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
             <Button tertiary transient className="pointer-events-none">
               <Text mainUiAction text03>
                 Included in your plan

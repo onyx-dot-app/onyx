@@ -66,7 +66,7 @@ function FooterLinks({
           <Text secondaryBody text03>
             Have a license key?
           </Text>
-          {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
+          {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
           <Button action tertiary onClick={onActivateLicense}>
             <Text secondaryBody text05 className="underline">
               {licenseText}
@@ -74,7 +74,7 @@ function FooterLinks({
           </Button>
         </>
       )}
-      {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
+      {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
       <Button
         action
         tertiary

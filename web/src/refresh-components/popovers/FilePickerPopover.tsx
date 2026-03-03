@@ -73,7 +73,7 @@ function FileLineItem({
       }
       rightChildren={
         <div className="h-[1rem] flex flex-col justify-center">
-          {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
+          {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
           <IconButton
             icon={SvgExternalLink}
             onClick={noProp(() => onFileClick(projectFile))}

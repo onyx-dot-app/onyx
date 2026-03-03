@@ -24,7 +24,7 @@ export default function NoAgentModal() {
                 As an administrator, you can create a new agent by visiting the
                 admin panel.
               </Text>
-              {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
+              {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
               <Button className="w-full" href="/admin/agents">
                 Go to Admin Panel
               </Button>

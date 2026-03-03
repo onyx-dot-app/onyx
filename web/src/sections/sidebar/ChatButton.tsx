@@ -397,7 +397,7 @@ const ChatButton = memo(
       <>
         <Popover.Trigger asChild onClick={noProp()}>
           <div>
-            {/* TODO(opal-migration, @raunakab): migrate to opal Button once className/iconClassName is resolved */}
+            {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
             <IconButton
               icon={SvgMoreHorizontal}
               className={cn(
