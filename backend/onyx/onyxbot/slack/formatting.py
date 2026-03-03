@@ -223,7 +223,7 @@ class SlackRenderer(HTMLRenderer):
         # as literal &quot; text since Slack doesn't recognize that entity.
         return self.escape_special(text)
 
-    # -- Table rendering (converts markdown tables to labelled bullet rows) --
+    # -- Table rendering (converts markdown tables to vertical cards) --
 
     def table_cell(
         self, text: str, align: str | None = None, head: bool = False  # noqa: ARG002
@@ -239,13 +239,17 @@ class SlackRenderer(HTMLRenderer):
     def table_row(self, text: str) -> str:  # noqa: ARG002
         cells = self._current_row_cells
         self._current_row_cells = []
-        parts: list[str] = []
-        for i, cell in enumerate(cells):
-            if i < len(self._table_headers):
-                parts.append(f"*{self._table_headers[i]}:* {cell}")
-            else:
-                parts.append(cell)
-        return "• " + "  |  ".join(parts) + "\n"
+        # First column becomes the bold title, remaining columns are key-value lines
+        lines: list[str] = []
+        if cells:
+            title = cells[0]
+            lines.append(f"*{title}*")
+            for i, cell in enumerate(cells[1:], start=1):
+                if i < len(self._table_headers):
+                    lines.append(f"  {self._table_headers[i]}: {cell}")
+                else:
+                    lines.append(f"  {cell}")
+        return "\n".join(lines) + "\n"
 
     def table_body(self, text: str) -> str:
         return text
