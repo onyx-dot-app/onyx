@@ -8,6 +8,7 @@ import InputAvatar from "@/refresh-components/inputs/InputAvatar";
 import { cn } from "@/lib/utils";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgCheckCircle, SvgEdit, SvgUser } from "@opal/icons";
+import { ContentAction } from "@opal/layouts";
 
 export interface NameStepProps {
   state: OnboardingState;
@@ -40,26 +41,23 @@ const NameStep = React.memo(
         role="group"
         aria-label="onboarding-name-step"
       >
-        <div className="flex items-center gap-1 h-full">
-          <div className="h-full p-0.5">
-            <SvgUser className="w-4 h-4 stroke-text-03" />
-          </div>
-          <div>
-            <Text as="p" text04 mainUiAction>
-              What should Onyx call you?
-            </Text>
-            <Text as="p" text03 secondaryBody>
-              We will display this name in the app.
-            </Text>
-          </div>
-        </div>
-        <InputTypeIn
-          ref={inputRef}
-          placeholder="Your name"
-          value={userName || ""}
-          onChange={(e) => updateName(e.target.value)}
-          onKeyDown={handleKeyDown}
-          className="max-w-60"
+        <ContentAction
+          icon={SvgUser}
+          title="What should Onyx call you?"
+          description="We will display this name in the app."
+          sizePreset="main-ui"
+          variant="section"
+          paddingVariant="fit"
+          rightChildren={
+            <InputTypeIn
+              ref={inputRef}
+              placeholder="Your name"
+              value={userName || ""}
+              onChange={(e) => updateName(e.target.value)}
+              onKeyDown={handleKeyDown}
+              className="max-w-60"
+            />
+          }
         />
       </div>
     ) : (
