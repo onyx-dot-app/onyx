@@ -461,7 +461,7 @@ def create_user(
         except IntegrityError:
             dal.rollback()
             return _scim_error_response(
-                409, f"externalId {external_id} is already in use"
+                409, f"User with email {email} already has a SCIM mapping"
             )
 
         return _scim_resource_response(
@@ -509,7 +509,9 @@ def create_user(
         dal.commit()
     except IntegrityError:
         dal.rollback()
-        return _scim_error_response(409, f"externalId {external_id} is already in use")
+        return _scim_error_response(
+            409, f"User with email {email} already has a SCIM mapping"
+        )
 
     return _scim_resource_response(
         provider.build_user_resource(

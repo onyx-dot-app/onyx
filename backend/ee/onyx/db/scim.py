@@ -330,34 +330,37 @@ class ScimDAL(DAL):
         scim_username: str | None = None,
         fields: ScimMappingFields | None = None,
     ) -> None:
-        """Create, update, or delete the external ID mapping for a user.
+        """Sync the SCIM mapping for a user.
+
+        If a mapping already exists, its fields are updated (including
+        setting ``external_id`` to ``None`` when the IdP omits it).
+        If no mapping exists and ``new_external_id`` is provided, a new
+        mapping is created.  A mapping is never deleted here — SCIM-managed
+        users must retain their mapping to remain visible in ``GET /Users``.
 
         When *fields* is provided, all mapping fields are written
         unconditionally — including ``None`` values — so that a caller can
         clear a previously-set field (e.g. removing a department).
         """
         mapping = self.get_user_mapping_by_user_id(user_id)
-        if new_external_id:
-            if mapping:
-                if mapping.external_id != new_external_id:
-                    mapping.external_id = new_external_id
-                if scim_username is not None:
-                    mapping.scim_username = scim_username
-                if fields is not None:
-                    mapping.department = fields.department
-                    mapping.manager = fields.manager
-                    mapping.given_name = fields.given_name
-                    mapping.family_name = fields.family_name
-                    mapping.scim_emails_json = fields.scim_emails_json
-            else:
-                self.create_user_mapping(
-                    external_id=new_external_id,
-                    user_id=user_id,
-                    scim_username=scim_username,
-                    fields=fields,
-                )
-        elif mapping:
-            self.delete_user_mapping(mapping.id)
+        if mapping:
+            if mapping.external_id != new_external_id:
+                mapping.external_id = new_external_id
+            if scim_username is not None:
+                mapping.scim_username = scim_username
+            if fields is not None:
+                mapping.department = fields.department
+                mapping.manager = fields.manager
+                mapping.given_name = fields.given_name
+                mapping.family_name = fields.family_name
+                mapping.scim_emails_json = fields.scim_emails_json
+        elif new_external_id:
+            self.create_user_mapping(
+                external_id=new_external_id,
+                user_id=user_id,
+                scim_username=scim_username,
+                fields=fields,
+            )
 
     def _get_user_mappings_batch(
         self, user_ids: list[UUID]
