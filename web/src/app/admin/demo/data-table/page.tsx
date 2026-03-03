@@ -2,27 +2,10 @@
 "use no memo";
 
 import { useState } from "react";
-import { createColumnHelper, flexRender } from "@tanstack/react-table";
-import useDataTable, { toOnyxSortDirection } from "@/hooks/useDataTable";
-import useColumnWidths, {
-  internalColumn,
-  buildInternalColumns,
-} from "@/hooks/useColumnWidths";
-import useDraggableRows from "@/hooks/useDraggableRows";
-import { ColumnVisibilityPopover } from "@/refresh-components/table/ColumnVisibilityPopover";
-import { SortingPopover } from "@/refresh-components/table/SortingPopover";
-import Text from "@/refresh-components/texts/Text";
 import { Content } from "@opal/layouts";
-import Table from "@/refresh-components/table/Table";
-import TableHeader from "@/refresh-components/table/TableHeader";
-import TableBody from "@/refresh-components/table/TableBody";
-import TableRow from "@/refresh-components/table/TableRow";
-import TableHead from "@/refresh-components/table/TableHead";
-import TableCell from "@/refresh-components/table/TableCell";
-import TableQualifier from "@/refresh-components/table/TableQualifier";
-import DragOverlayRow from "@/refresh-components/table/DragOverlayRow";
-import Footer from "@/refresh-components/table/Footer";
-import { TableSizeProvider } from "@/refresh-components/table/TableSizeContext";
+import Text from "@/refresh-components/texts/Text";
+import DataTable from "@/refresh-components/table/DataTable";
+import { createTableColumns } from "@/refresh-components/table/columns";
 import { SvgCheckCircle, SvgClock, SvgAlertCircle } from "@opal/icons";
 
 // ---------------------------------------------------------------------------
@@ -300,258 +283,71 @@ const STATUS_CONFIG = {
 } as const;
 
 // ---------------------------------------------------------------------------
-// Column definitions
+// Column definitions (module scope — stable reference)
 // ---------------------------------------------------------------------------
 
-const columnHelper = createColumnHelper<TeamMember>();
+const tc = createTableColumns<TeamMember>();
 
-const { columns, widthConfig } = buildInternalColumns([
-  internalColumn(
-    columnHelper.display({
-      id: "qualifier",
-      enableResizing: false,
-      enableSorting: false,
-      enableHiding: false,
-      cell: ({ row }) => (
-        <TableQualifier
-          content="avatar-user"
-          initials={row.original.initials}
-          selectable
-          selected={row.getIsSelected()}
-          onSelectChange={(checked) => {
-            row.toggleSelected(checked);
-          }}
-        />
-      ),
-    }),
-    { fixed: 56 }
-  ),
-  internalColumn(
-    columnHelper.accessor("name", {
-      header: "Name",
-      enableSorting: true,
-      enableResizing: true,
-      cell: (info) => (
-        <Content sizePreset="main-ui" variant="body" title={info.getValue()} />
-      ),
-    }),
-    { weight: 200, minWidth: 120 }
-  ),
-  internalColumn(
-    columnHelper.accessor("email", {
-      header: "Email",
-      enableSorting: true,
-      enableResizing: true,
-      cell: (info) => (
+const columns = [
+  tc.qualifier({ content: "avatar-user", getInitials: (r) => r.initials }),
+  tc.column("name", {
+    header: "Name",
+    weight: 200,
+    minWidth: 120,
+    cell: (value) => (
+      <Content sizePreset="main-ui" variant="body" title={value} />
+    ),
+  }),
+  tc.column("email", {
+    header: "Email",
+    weight: 240,
+    minWidth: 150,
+    cell: (value) => (
+      <Content
+        sizePreset="main-ui"
+        variant="body"
+        title={value}
+        prominence="muted"
+      />
+    ),
+  }),
+  tc.column("role", {
+    header: "Role",
+    weight: 140,
+    minWidth: 80,
+    cell: (value) => (
+      <Content sizePreset="main-ui" variant="body" title={value} />
+    ),
+  }),
+  tc.column("department", {
+    header: "Department",
+    weight: 160,
+    minWidth: 100,
+    cell: (value) => (
+      <Content sizePreset="main-ui" variant="body" title={value} />
+    ),
+  }),
+  tc.column("status", {
+    header: "Status",
+    weight: 120,
+    minWidth: 80,
+    cell: (value) => {
+      const { icon } = STATUS_CONFIG[value];
+      return (
         <Content
           sizePreset="main-ui"
           variant="body"
-          title={info.getValue()}
-          prominence="muted"
+          icon={icon}
+          title={value.charAt(0).toUpperCase() + value.slice(1)}
         />
-      ),
-    }),
-    { weight: 240, minWidth: 150 }
-  ),
-  internalColumn(
-    columnHelper.accessor("role", {
-      header: "Role",
-      enableSorting: true,
-      enableResizing: true,
-      cell: (info) => (
-        <Content sizePreset="main-ui" variant="body" title={info.getValue()} />
-      ),
-    }),
-    { weight: 140, minWidth: 80 }
-  ),
-  internalColumn(
-    columnHelper.accessor("department", {
-      header: "Department",
-      enableSorting: true,
-      enableResizing: true,
-      cell: (info) => (
-        <Content sizePreset="main-ui" variant="body" title={info.getValue()} />
-      ),
-    }),
-    { weight: 160, minWidth: 100 }
-  ),
-  internalColumn(
-    columnHelper.accessor("status", {
-      header: "Status",
-      enableSorting: true,
-      enableResizing: true,
-      cell: (info) => {
-        const status = info.getValue();
-        const { icon } = STATUS_CONFIG[status];
-        return (
-          <Content
-            sizePreset="main-ui"
-            variant="body"
-            icon={icon}
-            title={status.charAt(0).toUpperCase() + status.slice(1)}
-          />
-        );
-      },
-    }),
-    { weight: 120, minWidth: 80 }
-  ),
-  internalColumn(
-    columnHelper.display({
-      id: "__actions",
-      enableHiding: false,
-      enableSorting: false,
-      enableResizing: false,
-      header: ({ table }) => (
-        <div className="flex flex-row items-center">
-          <ColumnVisibilityPopover
-            table={table}
-            columnVisibility={table.getState().columnVisibility}
-          />
-          <SortingPopover
-            table={table}
-            sorting={table.getState().sorting}
-            footerText="Everyone in your organization will see the explore agents list in this order."
-          />
-        </div>
-      ),
-      cell: () => null,
-    }),
-    { fixed: 88 }
-  ),
-]);
-
-// ---------------------------------------------------------------------------
-// Small column definitions
-// ---------------------------------------------------------------------------
-
-const { columns: smallColumns, widthConfig: smallWidthConfig } =
-  buildInternalColumns([
-    internalColumn(
-      columnHelper.display({
-        id: "qualifier",
-        enableResizing: false,
-        enableSorting: false,
-        enableHiding: false,
-        cell: ({ row }) => (
-          <TableQualifier
-            content="avatar-user"
-            initials={row.original.initials}
-            selectable
-            selected={row.getIsSelected()}
-            onSelectChange={(checked) => {
-              row.toggleSelected(checked);
-            }}
-          />
-        ),
-      }),
-      { fixed: 40 }
-    ),
-    internalColumn(
-      columnHelper.accessor("name", {
-        header: "Name",
-        enableSorting: true,
-        enableResizing: true,
-        cell: (info) => (
-          <Content
-            sizePreset="secondary"
-            variant="body"
-            title={info.getValue()}
-          />
-        ),
-      }),
-      { weight: 200, minWidth: 120 }
-    ),
-    internalColumn(
-      columnHelper.accessor("email", {
-        header: "Email",
-        enableSorting: true,
-        enableResizing: true,
-        cell: (info) => (
-          <Content
-            sizePreset="secondary"
-            variant="body"
-            title={info.getValue()}
-            prominence="muted"
-          />
-        ),
-      }),
-      { weight: 240, minWidth: 150 }
-    ),
-    internalColumn(
-      columnHelper.accessor("role", {
-        header: "Role",
-        enableSorting: true,
-        enableResizing: true,
-        cell: (info) => (
-          <Content
-            sizePreset="secondary"
-            variant="body"
-            title={info.getValue()}
-          />
-        ),
-      }),
-      { weight: 140, minWidth: 80 }
-    ),
-    internalColumn(
-      columnHelper.accessor("department", {
-        header: "Department",
-        enableSorting: true,
-        enableResizing: true,
-        cell: (info) => (
-          <Content
-            sizePreset="secondary"
-            variant="body"
-            title={info.getValue()}
-          />
-        ),
-      }),
-      { weight: 160, minWidth: 100 }
-    ),
-    internalColumn(
-      columnHelper.accessor("status", {
-        header: "Status",
-        enableSorting: true,
-        enableResizing: true,
-        cell: (info) => {
-          const status = info.getValue();
-          const { icon } = STATUS_CONFIG[status];
-          return (
-            <Content
-              sizePreset="secondary"
-              variant="body"
-              icon={icon}
-              title={status.charAt(0).toUpperCase() + status.slice(1)}
-            />
-          );
-        },
-      }),
-      { weight: 120, minWidth: 80 }
-    ),
-    internalColumn(
-      columnHelper.display({
-        id: "__actions",
-        enableHiding: false,
-        enableSorting: false,
-        enableResizing: false,
-        header: ({ table }) => (
-          <div className="flex flex-row items-center">
-            <SortingPopover
-              table={table}
-              sorting={table.getState().sorting}
-              size="small"
-            />
-            <ColumnVisibilityPopover
-              table={table}
-              columnVisibility={table.getState().columnVisibility}
-              size="small"
-            />
-          </div>
-        ),
-        cell: () => null,
-      }),
-      { fixed: 20 }
-    ),
-  ]);
+      );
+    },
+  }),
+  tc.actions({
+    sortingFooterText:
+      "Everyone in your organization will see the explore agents list in this order.",
+  }),
+];
 
 // ---------------------------------------------------------------------------
 // Page component
@@ -561,72 +357,6 @@ const PAGE_SIZE = 10;
 
 export default function DataTableDemoPage() {
   const [items, setItems] = useState(DATA);
-
-  const {
-    table,
-    currentPage,
-    totalPages,
-    totalItems,
-    setPage,
-    pageSize,
-    selectionState,
-    selectedCount,
-    clearSelection,
-    toggleAllPageRowsSelected,
-    isAllPageRowsSelected,
-  } = useDataTable({
-    data: items,
-    columns,
-    pageSize: PAGE_SIZE,
-    initialColumnVisibility: { department: false },
-  });
-
-  const draggable = useDraggableRows({
-    data: items,
-    getRowId: (row) => row.id,
-    enabled: table.getState().sorting.length === 0,
-    onReorder: (ids, changedOrders) => {
-      setItems(ids.map((id) => items.find((r) => r.id === id)!));
-      console.log("Changed sort orders:", changedOrders);
-    },
-  });
-
-  const {
-    table: smallTable,
-    currentPage: smallCurrentPage,
-    totalPages: smallTotalPages,
-    totalItems: smallTotalItems,
-    setPage: smallSetPage,
-    pageSize: smallPageSize,
-    selectionState: smallSelectionState,
-    selectedCount: smallSelectedCount,
-    clearSelection: smallClearSelection,
-    toggleAllPageRowsSelected: smallToggleAllPageRowsSelected,
-    isAllPageRowsSelected: smallIsAllPageRowsSelected,
-  } = useDataTable({
-    data: DATA,
-    columns: smallColumns,
-    pageSize: PAGE_SIZE,
-    initialColumnVisibility: { department: false },
-  });
-
-  const {
-    containerRef: tableRef,
-    columnWidths,
-    createResizeHandler,
-  } = useColumnWidths({
-    headers: table.getHeaderGroups()[0]?.headers ?? [],
-    ...widthConfig,
-  });
-
-  const {
-    containerRef: smallTableRef,
-    columnWidths: smallColumnWidths,
-    createResizeHandler: smallCreateResizeHandler,
-  } = useColumnWidths({
-    headers: smallTable.getHeaderGroups()[0]?.headers ?? [],
-    ...smallWidthConfig,
-  });
 
   return (
     <div className="p-6 space-y-8">
@@ -638,161 +368,20 @@ export default function DataTableDemoPage() {
         </Text>
       </div>
 
-      <div>
-        <div className="overflow-x-auto" ref={tableRef}>
-          <Table>
-            <TableHeader>
-              {table.getHeaderGroups().map((headerGroup) => (
-                <TableRow key={headerGroup.id}>
-                  {headerGroup.headers.map((header, headerIndex) => {
-                    const canSort = header.column.getCanSort();
-                    const sortDir = header.column.getIsSorted();
-
-                    if (header.id === "qualifier") {
-                      return (
-                        <TableHead
-                          key={header.id}
-                          width={columnWidths[header.id]}
-                        >
-                          <TableQualifier
-                            content="simple"
-                            selectable
-                            selected={isAllPageRowsSelected}
-                            onSelectChange={(checked) =>
-                              toggleAllPageRowsSelected(checked)
-                            }
-                          />
-                        </TableHead>
-                      );
-                    }
-
-                    if (header.id === "__actions") {
-                      return (
-                        <TableHead
-                          key={header.id}
-                          width={columnWidths[header.id]}
-                          sticky
-                          bottomBorder={false}
-                        >
-                          {flexRender(
-                            header.column.columnDef.header,
-                            header.getContext()
-                          )}
-                        </TableHead>
-                      );
-                    }
-
-                    const nextHeader = headerGroup.headers[headerIndex + 1];
-                    const canResize =
-                      header.column.getCanResize() &&
-                      !!nextHeader &&
-                      !widthConfig.fixedColumnIds.has(nextHeader.id);
-
-                    return (
-                      <TableHead
-                        key={header.id}
-                        width={columnWidths[header.id]}
-                        sorted={
-                          canSort ? toOnyxSortDirection(sortDir) : undefined
-                        }
-                        onSort={
-                          canSort
-                            ? () => header.column.toggleSorting()
-                            : undefined
-                        }
-                        resizable={canResize}
-                        onResizeStart={
-                          canResize
-                            ? createResizeHandler(header.id, nextHeader.id)
-                            : undefined
-                        }
-                      >
-                        {flexRender(
-                          header.column.columnDef.header,
-                          header.getContext()
-                        )}
-                      </TableHead>
-                    );
-                  })}
-                </TableRow>
-              ))}
-            </TableHeader>
-
-            <TableBody
-              dndSortable={draggable}
-              renderDragOverlay={(activeId) => {
-                const row = table
-                  .getRowModel()
-                  .rows.find((r) => r.original.id === activeId);
-                if (!row) return null;
-                return <DragOverlayRow row={row} variant="table" />;
-              }}
-            >
-              {table.getRowModel().rows.map((row) => (
-                <TableRow
-                  key={row.id}
-                  variant="table"
-                  sortableId={row.original.id}
-                  selected={row.getIsSelected()}
-                  onClick={() => row.toggleSelected()}
-                >
-                  {row.getVisibleCells().map((cell) => {
-                    if (cell.column.id === "qualifier") {
-                      return (
-                        <TableCell
-                          key={cell.id}
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {flexRender(
-                            cell.column.columnDef.cell,
-                            cell.getContext()
-                          )}
-                        </TableCell>
-                      );
-                    }
-
-                    if (cell.column.id === "__actions") {
-                      return (
-                        <TableCell key={cell.id} sticky>
-                          {flexRender(
-                            cell.column.columnDef.cell,
-                            cell.getContext()
-                          )}
-                        </TableCell>
-                      );
-                    }
-
-                    return (
-                      <TableCell key={cell.id}>
-                        {flexRender(
-                          cell.column.columnDef.cell,
-                          cell.getContext()
-                        )}
-                      </TableCell>
-                    );
-                  })}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-
-        <Footer
-          mode="selection"
-          multiSelect
-          selectionState={selectionState}
-          selectedCount={selectedCount}
-          showQualifier
-          qualifierChecked={isAllPageRowsSelected}
-          onQualifierChange={(checked) => toggleAllPageRowsSelected(checked)}
-          onClear={clearSelection}
-          pageSize={pageSize}
-          totalItems={totalItems}
-          currentPage={currentPage}
-          totalPages={totalPages}
-          onPageChange={setPage}
-        />
-      </div>
+      <DataTable
+        data={items}
+        columns={columns}
+        pageSize={PAGE_SIZE}
+        initialColumnVisibility={{ department: false }}
+        draggable={{
+          getRowId: (row) => row.id,
+          onReorder: (ids, changedOrders) => {
+            setItems(ids.map((id) => items.find((r) => r.id === id)!));
+            console.log("Changed sort orders:", changedOrders);
+          },
+        }}
+        footer={{ mode: "selection" }}
+      />
 
       <div className="space-y-4">
         <Text headingH3>Small Variant</Text>
@@ -801,157 +390,16 @@ export default function DataTableDemoPage() {
         </Text>
       </div>
 
-      <TableSizeProvider size="small">
-        <div className="border border-border-01 rounded-lg overflow-hidden">
-          <div className="overflow-x-auto" ref={smallTableRef}>
-            <Table>
-              <TableHeader>
-                {smallTable.getHeaderGroups().map((headerGroup) => (
-                  <TableRow key={headerGroup.id}>
-                    {headerGroup.headers.map((header, headerIndex) => {
-                      const canSort = header.column.getCanSort();
-                      const sortDir = header.column.getIsSorted();
-
-                      if (header.id === "qualifier") {
-                        return (
-                          <TableHead
-                            key={header.id}
-                            width={smallColumnWidths[header.id]}
-                          >
-                            <TableQualifier
-                              content="simple"
-                              selectable
-                              selected={smallIsAllPageRowsSelected}
-                              onSelectChange={(checked) =>
-                                smallToggleAllPageRowsSelected(checked)
-                              }
-                            />
-                          </TableHead>
-                        );
-                      }
-
-                      if (header.id === "__actions") {
-                        return (
-                          <TableHead
-                            key={header.id}
-                            width={smallColumnWidths[header.id]}
-                            sticky
-                            bottomBorder={false}
-                          >
-                            {flexRender(
-                              header.column.columnDef.header,
-                              header.getContext()
-                            )}
-                          </TableHead>
-                        );
-                      }
-
-                      const nextHeader = headerGroup.headers[headerIndex + 1];
-                      const canResize =
-                        header.column.getCanResize() &&
-                        !!nextHeader &&
-                        !smallWidthConfig.fixedColumnIds.has(nextHeader.id);
-
-                      return (
-                        <TableHead
-                          key={header.id}
-                          width={smallColumnWidths[header.id]}
-                          sorted={
-                            canSort ? toOnyxSortDirection(sortDir) : undefined
-                          }
-                          onSort={
-                            canSort
-                              ? () => header.column.toggleSorting()
-                              : undefined
-                          }
-                          resizable={canResize}
-                          onResizeStart={
-                            canResize
-                              ? smallCreateResizeHandler(
-                                  header.id,
-                                  nextHeader.id
-                                )
-                              : undefined
-                          }
-                        >
-                          {flexRender(
-                            header.column.columnDef.header,
-                            header.getContext()
-                          )}
-                        </TableHead>
-                      );
-                    })}
-                  </TableRow>
-                ))}
-              </TableHeader>
-
-              <TableBody>
-                {smallTable.getRowModel().rows.map((row) => (
-                  <TableRow
-                    key={row.id}
-                    selected={row.getIsSelected()}
-                    onClick={() => row.toggleSelected()}
-                  >
-                    {row.getVisibleCells().map((cell) => {
-                      if (cell.column.id === "qualifier") {
-                        return (
-                          <TableCell
-                            key={cell.id}
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            {flexRender(
-                              cell.column.columnDef.cell,
-                              cell.getContext()
-                            )}
-                          </TableCell>
-                        );
-                      }
-
-                      if (cell.column.id === "__actions") {
-                        return (
-                          <TableCell key={cell.id} sticky>
-                            {flexRender(
-                              cell.column.columnDef.cell,
-                              cell.getContext()
-                            )}
-                          </TableCell>
-                        );
-                      }
-
-                      return (
-                        <TableCell key={cell.id}>
-                          {flexRender(
-                            cell.column.columnDef.cell,
-                            cell.getContext()
-                          )}
-                        </TableCell>
-                      );
-                    })}
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-
-          <Footer
-            mode="selection"
-            multiSelect
-            selectionState={smallSelectionState}
-            selectedCount={smallSelectedCount}
-            showQualifier
-            qualifierChecked={smallIsAllPageRowsSelected}
-            onQualifierChange={(checked) =>
-              smallToggleAllPageRowsSelected(checked)
-            }
-            onClear={smallClearSelection}
-            pageSize={smallPageSize}
-            totalItems={smallTotalItems}
-            currentPage={smallCurrentPage}
-            totalPages={smallTotalPages}
-            onPageChange={smallSetPage}
-          />
-        </div>
-      </TableSizeProvider>
+      <div className="border border-border-01 rounded-lg overflow-hidden">
+        <DataTable
+          data={DATA}
+          columns={columns}
+          pageSize={PAGE_SIZE}
+          size="small"
+          initialColumnVisibility={{ department: false }}
+          footer={{ mode: "selection" }}
+        />
+      </div>
     </div>
   );
 }

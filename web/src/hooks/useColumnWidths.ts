@@ -44,25 +44,6 @@ import { ColumnDef, Header } from "@tanstack/react-table";
 // Types
 // ---------------------------------------------------------------------------
 
-/** Width config for a data column (participates in proportional distribution). */
-interface DataColumnWidth {
-  weight: number;
-  minWidth?: number;
-}
-
-/** Width config for a fixed column (exact pixels, no proportional distribution). */
-interface FixedColumnWidth {
-  fixed: number;
-}
-
-type ColumnWidth = DataColumnWidth | FixedColumnWidth;
-
-/** A TanStack column def paired with its width config. */
-interface InternalColumnDef<TData> {
-  def: ColumnDef<TData, any>;
-  width: ColumnWidth;
-}
-
 /** Extracted config ready to pass to useColumnWidths. */
 export interface WidthConfig {
   fixedColumnIds: Set<string>;
@@ -91,53 +72,6 @@ interface UseColumnWidthsReturn {
     columnId: string,
     neighborId: string
   ) => (event: React.MouseEvent | React.TouchEvent) => void;
-}
-
-// ---------------------------------------------------------------------------
-// Column builder utilities
-// ---------------------------------------------------------------------------
-
-/** Pairs a TanStack column def with explicit width config. */
-export function internalColumn<TData, TValue = unknown>(
-  def: ColumnDef<TData, TValue>,
-  width: ColumnWidth
-): InternalColumnDef<TData> {
-  // Set def.size so TanStack has a reasonable internal value
-  (def as ColumnDef<TData, any>).size =
-    "fixed" in width ? width.fixed : width.weight;
-  return { def: def as ColumnDef<TData, any>, width };
-}
-
-/** Extracts columns array + widthConfig from an array of InternalColumnDefs. */
-export function buildInternalColumns<TData>(defs: InternalColumnDef<TData>[]): {
-  columns: ColumnDef<TData, any>[];
-  widthConfig: WidthConfig;
-} {
-  const columns: ColumnDef<TData, any>[] = [];
-  const fixedColumnIds = new Set<string>();
-  const columnWeights: Record<string, number> = {};
-  const columnMinWidths: Record<string, number> = {};
-
-  for (const { def, width } of defs) {
-    const id =
-      def.id ??
-      (def as ColumnDef<TData, any> & { accessorKey?: string }).accessorKey;
-    columns.push(def);
-
-    if (!id) continue;
-
-    if ("fixed" in width) {
-      fixedColumnIds.add(id);
-    } else {
-      columnWeights[id] = width.weight;
-      columnMinWidths[id] = width.minWidth ?? 50;
-    }
-  }
-
-  return {
-    columns,
-    widthConfig: { fixedColumnIds, columnWeights, columnMinWidths },
-  };
 }
 
 // ---------------------------------------------------------------------------

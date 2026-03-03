@@ -6,13 +6,14 @@ import { useTableSize } from "@/refresh-components/table/TableSizeContext";
 import type { TableSize } from "@/refresh-components/table/TableSizeContext";
 import { SvgUser } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
+import type { QualifierContentType } from "@/refresh-components/table/dataTableTypes";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
 import Text from "@/refresh-components/texts/Text";
 
 interface TableQualifierProps {
   className?: string;
   /** Content type displayed in the qualifier */
-  content: "icon" | "simple" | "image" | "avatar-icon" | "avatar-user";
+  content: QualifierContentType;
   /** Size variant */
   size?: TableSize;
   /** Disables interaction */
