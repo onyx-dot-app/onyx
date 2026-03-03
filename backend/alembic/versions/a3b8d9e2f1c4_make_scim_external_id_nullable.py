@@ -6,8 +6,8 @@ Create Date: 2026-03-02
 
 """
 
-import sqlalchemy as sa
 from alembic import op
+from sqlalchemy import text
 
 
 # revision identifiers, used by Alembic.
@@ -27,10 +27,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     # Delete any rows where external_id is NULL before re-applying NOT NULL
-    scim_user_mapping = sa.table("scim_user_mapping", sa.column("external_id"))
-    op.execute(
-        scim_user_mapping.delete().where(scim_user_mapping.c.external_id.is_(None))
-    )
+    op.execute(text("DELETE FROM scim_user_mapping WHERE external_id IS NULL"))
     op.alter_column(
         "scim_user_mapping",
         "external_id",
