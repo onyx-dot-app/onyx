@@ -383,6 +383,104 @@ func (v *viewport) totalLines() int {
 	return len(strings.Split(content, "\n"))
 }
 
+// pickerTitle returns a title for the current picker kind.
+func (v *viewport) pickerTitle() string {
+	switch v.pickerType {
+	case pickerAgent:
+		return "Select Agent"
+	case pickerSession:
+		return "Resume Session"
+	default:
+		return "Select"
+	}
+}
+
+// renderPicker renders the picker as a bordered overlay.
+func (v *viewport) renderPicker(width, height int) string {
+	title := v.pickerTitle()
+
+	// Determine picker dimensions
+	maxItems := len(v.pickerItems)
+	panelWidth := width - 4
+	if panelWidth < 30 {
+		panelWidth = 30
+	}
+	if panelWidth > 70 {
+		panelWidth = 70
+	}
+	innerWidth := panelWidth - 4 // border + padding
+
+	// Visible window of items (scroll if too many)
+	maxVisible := height - 6 // room for border, title, hint
+	if maxVisible < 3 {
+		maxVisible = 3
+	}
+	if maxVisible > maxItems {
+		maxVisible = maxItems
+	}
+
+	// Calculate scroll window around current index
+	startIdx := 0
+	if v.pickerIndex >= maxVisible {
+		startIdx = v.pickerIndex - maxVisible + 1
+	}
+	endIdx := startIdx + maxVisible
+	if endIdx > maxItems {
+		endIdx = maxItems
+		startIdx = endIdx - maxVisible
+		if startIdx < 0 {
+			startIdx = 0
+		}
+	}
+
+	var itemLines []string
+	for i := startIdx; i < endIdx; i++ {
+		item := v.pickerItems[i]
+		label := item.label
+		if len(label) > innerWidth-4 {
+			label = label[:innerWidth-7] + "..."
+		}
+		if i == v.pickerIndex {
+			line := lipgloss.NewStyle().Foreground(accentColor).Bold(true).Render("> " + label)
+			itemLines = append(itemLines, line)
+		} else {
+			itemLines = append(itemLines, "  "+label)
+		}
+	}
+
+	hint := lipgloss.NewStyle().Foreground(dimColor).Render("↑↓ navigate • enter select • esc cancel")
+
+	body := strings.Join(itemLines, "\n") + "\n\n" + hint
+
+	panel := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(accentColor).
+		Padding(1, 2).
+		Width(panelWidth).
+		Render(body)
+
+	titleRendered := lipgloss.NewStyle().
+		Foreground(accentColor).
+		Bold(true).
+		Render(" " + title + " ")
+
+	// Place title on top border
+	panelLines := strings.Split(panel, "\n")
+	if len(panelLines) > 0 {
+		border := panelLines[0]
+		runes := []rune(border)
+		if len(runes) > 4 {
+			// Insert title after the 2nd rune of the border
+			titleRunes := []rune(titleRendered)
+			panelLines[0] = string(runes[:2]) + string(titleRunes) + string(runes[2:])
+		}
+	}
+	panel = strings.Join(panelLines, "\n")
+
+	// Center the panel in the viewport
+	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, panel)
+}
+
 // view renders the full viewport content.
 func (v *viewport) view(height int) string {
 	// If picker is active, render it as an overlay
