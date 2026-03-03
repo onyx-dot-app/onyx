@@ -51,7 +51,7 @@ import {
   SvgStop,
   SvgX,
 } from "@opal/icons";
-import { Button, OpenButton } from "@opal/components";
+import { Button } from "@opal/components";
 import Popover from "@/refresh-components/Popover";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { useQueryController } from "@/providers/QueryControllerProvider";
