@@ -30,11 +30,11 @@ func handleSlashCommand(m Model, text string) (Model, tea.Cmd) {
 	case "/new":
 		return cmdNew(m)
 
-	case "/persona", "/assistant":
+	case "/agent":
 		if arg != "" {
-			return cmdSelectPersona(m, arg)
+			return cmdSelectAgent(m, arg)
 		}
-		return cmdShowPersonas(m)
+		return cmdShowAgents(m)
 
 	case "/attach":
 		return cmdAttach(m, arg)
@@ -91,16 +91,16 @@ func cmdNew(m Model) (Model, tea.Cmd) {
 	return m, nil
 }
 
-func cmdShowPersonas(m Model) (Model, tea.Cmd) {
-	if len(m.personas) == 0 {
-		m.viewport.addInfo("No assistants available. Try again after loading completes.")
+func cmdShowAgents(m Model) (Model, tea.Cmd) {
+	if len(m.agents) == 0 {
+		m.viewport.addInfo("No agents available. Try again after loading completes.")
 		return m, nil
 	}
 
-	m.viewport.addInfo("Available Assistants")
-	for _, p := range m.personas {
+	m.viewport.addInfo("Available Agents")
+	for _, p := range m.agents {
 		marker := ""
-		if p.ID == m.personaID {
+		if p.ID == m.agentID {
 			marker = " *"
 		}
 		desc := p.Description
@@ -112,37 +112,37 @@ func cmdShowPersonas(m Model) (Model, tea.Cmd) {
 		}
 		m.viewport.addInfo(fmt.Sprintf("  %d: %s%s%s", p.ID, p.Name, desc, marker))
 	}
-	m.viewport.addInfo("Use /persona <id> to switch. Example: /persona 1")
+	m.viewport.addInfo("Use /agent <id> to switch. Example: /agent 1")
 	return m, nil
 }
 
-func cmdSelectPersona(m Model, idStr string) (Model, tea.Cmd) {
+func cmdSelectAgent(m Model, idStr string) (Model, tea.Cmd) {
 	pid, err := strconv.Atoi(strings.TrimSpace(idStr))
 	if err != nil {
-		m.viewport.addInfo("Invalid persona ID. Use a number.")
+		m.viewport.addInfo("Invalid agent ID. Use a number.")
 		return m, nil
 	}
 
-	var target *models.PersonaSummary
-	for i := range m.personas {
-		if m.personas[i].ID == pid {
-			target = &m.personas[i]
+	var target *models.AgentSummary
+	for i := range m.agents {
+		if m.agents[i].ID == pid {
+			target = &m.agents[i]
 			break
 		}
 	}
 
 	if target == nil {
-		m.viewport.addInfo(fmt.Sprintf("Persona %d not found. Use /persona to see available assistants.", pid))
+		m.viewport.addInfo(fmt.Sprintf("Agent %d not found. Use /agent to see available agents.", pid))
 		return m, nil
 	}
 
-	m.personaID = target.ID
-	m.personaName = target.Name
-	m.status.setPersona(target.Name)
-	m.viewport.addInfo("Switched to assistant: " + target.Name)
+	m.agentID = target.ID
+	m.agentName = target.Name
+	m.status.setAgent(target.Name)
+	m.viewport.addInfo("Switched to agent: " + target.Name)
 
 	// Save preference
-	m.config.DefaultPersonaID = target.ID
+	m.config.DefaultAgentID = target.ID
 	_ = config.Save(m.config)
 
 	return m, nil
@@ -225,10 +225,10 @@ func openBrowser(url string) {
 	}
 }
 
-// loadPersonasCmd returns a tea.Cmd that loads personas from the API.
-func loadPersonasCmd(client *api.Client) tea.Cmd {
+// loadAgentsCmd returns a tea.Cmd that loads agents from the API.
+func loadAgentsCmd(client *api.Client) tea.Cmd {
 	return func() tea.Msg {
-		personas, err := client.ListPersonas()
-		return InitDoneMsg{Personas: personas, Err: err}
+		agents, err := client.ListAgents()
+		return InitDoneMsg{Agents: agents, Err: err}
 	}
 }

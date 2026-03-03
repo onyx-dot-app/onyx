@@ -4,7 +4,7 @@ const helpText = `Onyx CLI Commands
 
   /help              Show this help message
   /new               Start a new chat session
-  /persona           List and switch assistants
+  /agent             List and switch agents
   /attach <path>     Attach a file to next message
   /sessions          List recent chat sessions
   /resume <id>       Resume a previous session

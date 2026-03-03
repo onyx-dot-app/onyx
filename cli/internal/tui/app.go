@@ -28,9 +28,9 @@ type Model struct {
 
 	// Chat state
 	chatSessionID   *string
-	personaID       int
-	personaName     string
-	personas        []models.PersonaSummary
+	agentID       int
+	agentName     string
+	agents        []models.AgentSummary
 	parentMessageID *int
 	isStreaming      bool
 	streamCancel    context.CancelFunc
@@ -38,7 +38,7 @@ type Model struct {
 	citations       map[int]string
 	attachedFiles   []models.FileDescriptorPayload
 	needsRename     bool
-	assistantStarted bool
+	agentStarted bool
 
 	// Quit state
 	quitPending    bool
@@ -57,8 +57,8 @@ func NewModel(cfg config.OnyxCliConfig) Model {
 		viewport:        newViewport(80),
 		input:           newInputModel(),
 		status:          newStatusBar(),
-		personaID:       cfg.DefaultPersonaID,
-		personaName:     "Default",
+		agentID:       cfg.DefaultAgentID,
+		agentName:     "Default",
 		parentMessageID: &parentID,
 		citations:       make(map[int]string),
 	}
@@ -66,7 +66,7 @@ func NewModel(cfg config.OnyxCliConfig) Model {
 
 // Init initializes the model.
 func (m Model) Init() tea.Cmd {
-	return loadPersonasCmd(m.client)
+	return loadAgentsCmd(m.client)
 }
 
 // Update handles messages.
@@ -306,7 +306,7 @@ func (m Model) sendMessage(message string) (Model, tea.Cmd) {
 	}
 
 	m.viewport.addUserMessage(message)
-	m.viewport.startAssistant()
+	m.viewport.startAgent()
 
 	// Prepare file descriptors
 	fileDescs := make([]models.FileDescriptorPayload, len(m.attachedFiles))
@@ -315,7 +315,7 @@ func (m Model) sendMessage(message string) (Model, tea.Cmd) {
 	m.input.clearFiles()
 
 	m.isStreaming = true
-	m.assistantStarted = false
+	m.agentStarted = false
 	m.citations = make(map[int]string)
 	m.status.setStreaming(true)
 
@@ -326,7 +326,7 @@ func (m Model) sendMessage(message string) (Model, tea.Cmd) {
 		ctx,
 		message,
 		m.chatSessionID,
-		m.personaID,
+		m.agentID,
 		m.parentMessageID,
 		fileDescs,
 	)
@@ -347,13 +347,13 @@ func (m Model) handleStreamEvent(msg api.StreamEventMsg) (tea.Model, tea.Cmd) {
 		m.status.setSession(e.ChatSessionID)
 
 	case models.MessageIDEvent:
-		m.parentMessageID = &e.ReservedAssistantMessageID
+		m.parentMessageID = &e.ReservedAgentMessageID
 
 	case models.MessageStartEvent:
-		m.assistantStarted = true
+		m.agentStarted = true
 
 	case models.MessageDeltaEvent:
-		m.assistantStarted = true
+		m.agentStarted = true
 		m.viewport.appendToken(e.Content)
 
 	case models.SearchStartEvent:
@@ -424,14 +424,14 @@ func (m Model) handleStreamDone(msg api.StreamDoneMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) finishStream(err error) (Model, tea.Cmd) {
-	if m.assistantStarted {
-		m.viewport.finishAssistant()
+	if m.agentStarted {
+		m.viewport.finishAgent()
 		if len(m.citations) > 0 {
 			m.viewport.addCitations(m.citations)
 		}
 	}
 	m.isStreaming = false
-	m.assistantStarted = false
+	m.agentStarted = false
 	m.status.setStreaming(false)
 	m.streamCancel = nil
 	m.streamCh = nil
@@ -451,18 +451,18 @@ func (m Model) finishStream(err error) (Model, tea.Cmd) {
 
 func (m Model) handleInitDone(msg InitDoneMsg) (tea.Model, tea.Cmd) {
 	if msg.Err != nil {
-		m.viewport.addInfo("Could not load assistants. Using default.")
+		m.viewport.addInfo("Could not load agents. Using default.")
 	} else {
-		m.personas = msg.Personas
-		for _, p := range m.personas {
-			if p.ID == m.personaID {
-				m.personaName = p.Name
+		m.agents = msg.Agents
+		for _, p := range m.agents {
+			if p.ID == m.agentID {
+				m.agentName = p.Name
 				break
 			}
 		}
 	}
 	m.status.setServer(m.config.ServerURL)
-	m.status.setPersona(m.personaName)
+	m.status.setAgent(m.agentName)
 	return m, nil
 }
 
@@ -511,12 +511,12 @@ func (m Model) handleSessionResumed(msg SessionResumedMsg) (tea.Model, tea.Cmd) 
 	m.viewport.clearDisplay()
 	m.status.setSession(detail.ChatSessionID)
 
-	if detail.PersonaName != nil {
-		m.personaName = *detail.PersonaName
-		m.status.setPersona(*detail.PersonaName)
+	if detail.AgentName != nil {
+		m.agentName = *detail.AgentName
+		m.status.setAgent(*detail.AgentName)
 	}
-	if detail.PersonaID != nil {
-		m.personaID = *detail.PersonaID
+	if detail.AgentID != nil {
+		m.agentID = *detail.AgentID
 	}
 
 	// Replay messages
@@ -525,9 +525,9 @@ func (m Model) handleSessionResumed(msg SessionResumedMsg) (tea.Model, tea.Cmd) 
 		case "user":
 			m.viewport.addUserMessage(msg.Message)
 		case "assistant":
-			m.viewport.startAssistant()
+			m.viewport.startAgent()
 			m.viewport.appendToken(msg.Message)
-			m.viewport.finishAssistant()
+			m.viewport.finishAgent()
 		}
 	}
 

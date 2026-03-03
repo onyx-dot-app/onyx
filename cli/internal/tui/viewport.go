@@ -15,7 +15,7 @@ type entryKind int
 
 const (
 	entryUser entryKind = iota
-	entryAssistant
+	entryAgent
 	entryInfo
 	entryError
 	entryCitation
@@ -24,7 +24,7 @@ const (
 // chatEntry is a single rendered entry in the chat history.
 type chatEntry struct {
 	kind      entryKind
-	content   string   // raw content (for assistant: the markdown source)
+	content   string   // raw content (for agent: the markdown source)
 	rendered  string   // pre-rendered output
 	citations []string // citation lines (for citation entries)
 }
@@ -89,10 +89,10 @@ func (v *viewport) addUserMessage(msg string) {
 	})
 }
 
-func (v *viewport) startAssistant() {
+func (v *viewport) startAgent() {
 	v.streaming = true
 	v.streamBuf = ""
-	// Add a blank-line spacer entry before the assistant message
+	// Add a blank-line spacer entry before the agent message
 	v.entries = append(v.entries, chatEntry{kind: entryInfo, rendered: ""})
 }
 
@@ -101,7 +101,7 @@ func (v *viewport) appendToken(token string) {
 	v.scrollOffset = 0 // auto-scroll to bottom on new content
 }
 
-func (v *viewport) finishAssistant() {
+func (v *viewport) finishAgent() {
 	if v.streamBuf == "" {
 		v.streaming = false
 		return
@@ -114,7 +114,7 @@ func (v *viewport) finishAssistant() {
 	lines := strings.Split(rendered, "\n")
 	// Prefix first line with dot, indent continuation lines
 	if len(lines) > 0 {
-		lines[0] = assistantDot + " " + lines[0]
+		lines[0] = agentDot + " " + lines[0]
 		for i := 1; i < len(lines); i++ {
 			lines[i] = "  " + lines[i]
 		}
@@ -122,7 +122,7 @@ func (v *viewport) finishAssistant() {
 	rendered = strings.Join(lines, "\n")
 
 	v.entries = append(v.entries, chatEntry{
-		kind:     entryAssistant,
+		kind:     entryAgent,
 		content:  v.streamBuf,
 		rendered: rendered,
 	})
@@ -235,14 +235,14 @@ func (v *viewport) view(height int) string {
 	if v.streaming && v.streamBuf != "" {
 		bufLines := strings.Split(v.streamBuf, "\n")
 		if len(bufLines) > 0 {
-			bufLines[0] = assistantDot + " " + bufLines[0]
+			bufLines[0] = agentDot + " " + bufLines[0]
 			for i := 1; i < len(bufLines); i++ {
 				bufLines[i] = "  " + bufLines[i]
 			}
 		}
 		lines = append(lines, strings.Join(bufLines, "\n"))
 	} else if v.streaming {
-		lines = append(lines, assistantDot+" ")
+		lines = append(lines, agentDot+" ")
 	}
 
 	// Session picker

@@ -83,7 +83,7 @@ func Run(existing *config.OnyxCliConfig) *config.OnyxCliConfig {
 	cfg = config.OnyxCliConfig{
 		ServerURL:        serverURL,
 		APIKey:           apiKey,
-		DefaultPersonaID: cfg.DefaultPersonaID,
+		DefaultAgentID: cfg.DefaultAgentID,
 	}
 
 	fmt.Println("\n  " + yellowStyle.Render("Testing connection..."))
@@ -128,13 +128,13 @@ func prompt(reader *bufio.Reader, label, defaultVal string) string {
 func printQuickStart() {
 	fmt.Println("  " + boldStyle.Render("Quick start"))
 	fmt.Println()
-	fmt.Println("  Just type to chat with your Onyx assistant.")
+	fmt.Println("  Just type to chat with your Onyx agent.")
 	fmt.Println()
 
 	rows := [][2]string{
 		{"/help", "Show all commands"},
 		{"/attach", "Attach a file"},
-		{"/persona", "Switch assistant"},
+		{"/agent", "Switch agent"},
 		{"/new", "New conversation"},
 		{"/sessions", "Browse previous chats"},
 		{"Esc", "Cancel generation"},

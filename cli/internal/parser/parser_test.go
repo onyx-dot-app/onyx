@@ -50,8 +50,8 @@ func TestMessageIDInfo(t *testing.T) {
 	if e.UserMessageID == nil || *e.UserMessageID != 1 {
 		t.Errorf("expected user_message_id=1")
 	}
-	if e.ReservedAssistantMessageID != 2 {
-		t.Errorf("got %d", e.ReservedAssistantMessageID)
+	if e.ReservedAgentMessageID != 2 {
+		t.Errorf("got %d", e.ReservedAgentMessageID)
 	}
 }
 
@@ -68,8 +68,8 @@ func TestMessageIDInfoNullUserID(t *testing.T) {
 	if e.UserMessageID != nil {
 		t.Error("expected nil user_message_id")
 	}
-	if e.ReservedAssistantMessageID != 5 {
-		t.Errorf("got %d", e.ReservedAssistantMessageID)
+	if e.ReservedAgentMessageID != 5 {
+		t.Errorf("got %d", e.ReservedAgentMessageID)
 	}
 }
 

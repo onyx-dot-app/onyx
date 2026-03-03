@@ -3,8 +3,8 @@ package models
 
 import "time"
 
-// PersonaSummary represents an assistant/persona from the API.
-type PersonaSummary struct {
+// AgentSummary represents an agent from the API.
+type AgentSummary struct {
 	ID               int    `json:"id"`
 	Name             string `json:"name"`
 	Description      string `json:"description"`
@@ -16,7 +16,7 @@ type PersonaSummary struct {
 type ChatSessionSummary struct {
 	ID        string    `json:"id"`
 	Name      *string   `json:"name"`
-	PersonaID *int      `json:"persona_id"`
+	AgentID *int      `json:"persona_id"`
 	Created   time.Time `json:"time_created"`
 }
 
@@ -24,7 +24,7 @@ type ChatSessionSummary struct {
 type ChatSessionDetails struct {
 	ID        string  `json:"id"`
 	Name      *string `json:"name"`
-	PersonaID *int    `json:"persona_id"`
+	AgentID *int    `json:"persona_id"`
 	Created   string  `json:"time_created"`
 	Updated   string  `json:"time_updated"`
 }
@@ -44,8 +44,8 @@ type ChatMessageDetail struct {
 type ChatSessionDetailResponse struct {
 	ChatSessionID string              `json:"chat_session_id"`
 	Description   *string             `json:"description"`
-	PersonaID     *int                `json:"persona_id"`
-	PersonaName   *string             `json:"persona_name"`
+	AgentID     *int                `json:"persona_id"`
+	AgentName   *string             `json:"persona_name"`
 	Messages      []ChatMessageDetail `json:"messages"`
 }
 
@@ -81,7 +81,7 @@ type CategorizedFilesSnapshot struct {
 
 // ChatSessionCreationInfo is included when creating a new session inline.
 type ChatSessionCreationInfo struct {
-	PersonaID int `json:"persona_id"`
+	AgentID int `json:"persona_id"`
 }
 
 // SendMessagePayload is the request body for POST /api/chat/send-chat-message.

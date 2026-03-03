@@ -8,7 +8,7 @@ import (
 
 // statusBar manages the footer status display.
 type statusBar struct {
-	personaName string
+	agentName string
 	serverURL   string
 	sessionID   string
 	streaming   bool
@@ -17,11 +17,11 @@ type statusBar struct {
 
 func newStatusBar() statusBar {
 	return statusBar{
-		personaName: "Default",
+		agentName: "Default",
 	}
 }
 
-func (s *statusBar) setPersona(name string) { s.personaName = name }
+func (s *statusBar) setAgent(name string) { s.agentName = name }
 func (s *statusBar) setServer(url string)    { s.serverURL = url }
 func (s *statusBar) setSession(id string) {
 	if len(id) > 8 {
@@ -37,7 +37,7 @@ func (s statusBar) view() string {
 	if s.serverURL != "" {
 		leftParts = append(leftParts, s.serverURL)
 	}
-	name := s.personaName
+	name := s.agentName
 	if name == "" {
 		name = "Default"
 	}

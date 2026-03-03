@@ -11,14 +11,14 @@ const (
 	EnvServerURL    = "ONYX_SERVER_URL"
 	EnvAPIKey       = "ONYX_API_KEY"
 	EnvAPIKeyLegacy = "DANSWER_API_KEY"
-	EnvPersonaID    = "ONYX_PERSONA_ID"
+	EnvAgentID    = "ONYX_PERSONA_ID"
 )
 
 // OnyxCliConfig holds the CLI configuration.
 type OnyxCliConfig struct {
 	ServerURL        string `json:"server_url"`
 	APIKey           string `json:"api_key"`
-	DefaultPersonaID int    `json:"default_persona_id"`
+	DefaultAgentID int    `json:"default_persona_id"`
 }
 
 // DefaultConfig returns a config with default values.
@@ -26,7 +26,7 @@ func DefaultConfig() OnyxCliConfig {
 	return OnyxCliConfig{
 		ServerURL:        "http://localhost:3000",
 		APIKey:           "",
-		DefaultPersonaID: 0,
+		DefaultAgentID: 0,
 	}
 }
 
@@ -77,9 +77,9 @@ func Load() OnyxCliConfig {
 	} else if v := os.Getenv(EnvAPIKeyLegacy); v != "" {
 		cfg.APIKey = v
 	}
-	if v := os.Getenv(EnvPersonaID); v != "" {
+	if v := os.Getenv(EnvAgentID); v != "" {
 		if id, err := strconv.Atoi(v); err == nil {
-			cfg.DefaultPersonaID = id
+			cfg.DefaultAgentID = id
 		}
 	}
 

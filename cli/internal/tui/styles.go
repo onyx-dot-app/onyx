@@ -13,7 +13,7 @@ var (
 
 	// Styles
 	userPrefixStyle = lipgloss.NewStyle().Foreground(dimColor)
-	assistantDot    = lipgloss.NewStyle().Foreground(accentColor).Bold(true).Render("◉")
+	agentDot    = lipgloss.NewStyle().Foreground(accentColor).Bold(true).Render("◉")
 	statusMsgStyle  = lipgloss.NewStyle().Foreground(dimColor)
 	errorStyle      = lipgloss.NewStyle().Foreground(errorColor).Bold(true)
 	citationStyle   = lipgloss.NewStyle().Foreground(citationColor)

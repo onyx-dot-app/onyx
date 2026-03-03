@@ -32,7 +32,7 @@ func (c *Client) SendMessageStream(
 	ctx context.Context,
 	message string,
 	chatSessionID *string,
-	personaID int,
+	agentID int,
 	parentMessageID *int,
 	fileDescriptors []models.FileDescriptorPayload,
 ) <-chan models.StreamEvent {
@@ -53,7 +53,7 @@ func (c *Client) SendMessageStream(
 		if chatSessionID != nil {
 			payload.ChatSessionID = chatSessionID
 		} else {
-			payload.ChatSessionInfo = &models.ChatSessionCreationInfo{PersonaID: personaID}
+			payload.ChatSessionInfo = &models.ChatSessionCreationInfo{AgentID: agentID}
 		}
 
 		for _, fd := range fileDescriptors {

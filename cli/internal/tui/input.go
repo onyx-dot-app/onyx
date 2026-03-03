@@ -18,7 +18,7 @@ type slashCommand struct {
 var slashCommands = []slashCommand{
 	{"/help", "Show help message"},
 	{"/new", "Start a new chat session"},
-	{"/persona", "List and switch assistants"},
+	{"/agent", "List and switch agents"},
 	{"/attach", "Attach a file to next message"},
 	{"/sessions", "List recent chat sessions"},
 	{"/resume", "Resume a previous session"},
@@ -32,7 +32,7 @@ var slashCommands = []slashCommand{
 // Commands that take arguments (filled in with trailing space on Tab/Enter).
 var argCommands = map[string]bool{
 	"/attach":  true,
-	"/persona": true,
+	"/agent": true,
 	"/resume":  true,
 }
 

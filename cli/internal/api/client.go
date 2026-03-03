@@ -151,13 +151,13 @@ func (c *Client) TestConnection() (bool, string) {
 	return false, detail
 }
 
-// ListPersonas returns visible personas/assistants.
-func (c *Client) ListPersonas() ([]models.PersonaSummary, error) {
-	var raw []models.PersonaSummary
+// ListAgents returns visible agents.
+func (c *Client) ListAgents() ([]models.AgentSummary, error) {
+	var raw []models.AgentSummary
 	if err := c.doJSON("GET", "/api/persona", nil, &raw); err != nil {
 		return nil, err
 	}
-	var result []models.PersonaSummary
+	var result []models.AgentSummary
 	for _, p := range raw {
 		if p.IsVisible {
 			result = append(result, p)

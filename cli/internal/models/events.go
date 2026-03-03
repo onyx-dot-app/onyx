@@ -40,10 +40,10 @@ type SessionCreatedEvent struct {
 
 func (e SessionCreatedEvent) EventType() string { return EventSessionCreated }
 
-// MessageIDEvent carries the user and assistant message IDs.
+// MessageIDEvent carries the user and agent message IDs.
 type MessageIDEvent struct {
 	UserMessageID              *int
-	ReservedAssistantMessageID int
+	ReservedAgentMessageID int
 }
 
 func (e MessageIDEvent) EventType() string { return EventMessageIDInfo }
@@ -66,7 +66,7 @@ type ErrorEvent struct {
 
 func (e ErrorEvent) EventType() string { return EventError }
 
-// MessageStartEvent signals the beginning of an assistant message.
+// MessageStartEvent signals the beginning of an agent message.
 type MessageStartEvent struct {
 	Placement *Placement
 	Documents []SearchDoc
@@ -74,7 +74,7 @@ type MessageStartEvent struct {
 
 func (e MessageStartEvent) EventType() string { return EventMessageStart }
 
-// MessageDeltaEvent carries a token of assistant content.
+// MessageDeltaEvent carries a token of agent content.
 type MessageDeltaEvent struct {
 	Placement *Placement
 	Content   string

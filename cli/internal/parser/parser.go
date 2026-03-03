@@ -39,7 +39,7 @@ func ParseStreamLine(line string) models.StreamEvent {
 		}
 		return models.MessageIDEvent{
 			UserMessageID:              userMsgID,
-			ReservedAssistantMessageID: reservedID,
+			ReservedAgentMessageID: reservedID,
 		}
 	}
 

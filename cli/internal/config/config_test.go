@@ -28,7 +28,7 @@ func withTempConfig(t *testing.T, content string, fn func()) {
 
 func clearEnvVars(t *testing.T) {
 	t.Helper()
-	for _, key := range []string{EnvServerURL, EnvAPIKey, EnvAPIKeyLegacy, EnvPersonaID} {
+	for _, key := range []string{EnvServerURL, EnvAPIKey, EnvAPIKeyLegacy, EnvAgentID} {
 		t.Setenv(key, "")
 		os.Unsetenv(key)
 	}
@@ -42,8 +42,8 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.APIKey != "" {
 		t.Errorf("expected empty API key, got %s", cfg.APIKey)
 	}
-	if cfg.DefaultPersonaID != 0 {
-		t.Errorf("expected default persona ID 0, got %d", cfg.DefaultPersonaID)
+	if cfg.DefaultAgentID != 0 {
+		t.Errorf("expected default agent ID 0, got %d", cfg.DefaultAgentID)
 	}
 }
 
@@ -94,8 +94,8 @@ func TestLoadFromFile(t *testing.T) {
 	if cfg.APIKey != "test-key-123" {
 		t.Errorf("got %s", cfg.APIKey)
 	}
-	if cfg.DefaultPersonaID != 5 {
-		t.Errorf("got %d", cfg.DefaultPersonaID)
+	if cfg.DefaultAgentID != 5 {
+		t.Errorf("got %d", cfg.DefaultAgentID)
 	}
 }
 
@@ -150,27 +150,27 @@ func TestEnvOverrideLegacyAPIKey(t *testing.T) {
 	}
 }
 
-func TestEnvOverridePersonaID(t *testing.T) {
+func TestEnvOverrideAgentID(t *testing.T) {
 	clearEnvVars(t)
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
-	t.Setenv(EnvPersonaID, "42")
+	t.Setenv(EnvAgentID, "42")
 
 	cfg := Load()
-	if cfg.DefaultPersonaID != 42 {
-		t.Errorf("got %d", cfg.DefaultPersonaID)
+	if cfg.DefaultAgentID != 42 {
+		t.Errorf("got %d", cfg.DefaultAgentID)
 	}
 }
 
-func TestEnvOverrideInvalidPersonaID(t *testing.T) {
+func TestEnvOverrideInvalidAgentID(t *testing.T) {
 	clearEnvVars(t)
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
-	t.Setenv(EnvPersonaID, "not-a-number")
+	t.Setenv(EnvAgentID, "not-a-number")
 
 	cfg := Load()
-	if cfg.DefaultPersonaID != 0 {
-		t.Errorf("got %d", cfg.DefaultPersonaID)
+	if cfg.DefaultAgentID != 0 {
+		t.Errorf("got %d", cfg.DefaultAgentID)
 	}
 }
 
@@ -206,7 +206,7 @@ func TestSaveAndReload(t *testing.T) {
 	cfg := OnyxCliConfig{
 		ServerURL:        "https://saved.example.com",
 		APIKey:           "saved-key",
-		DefaultPersonaID: 10,
+		DefaultAgentID: 10,
 	}
 	if err := Save(cfg); err != nil {
 		t.Fatal(err)
@@ -219,8 +219,8 @@ func TestSaveAndReload(t *testing.T) {
 	if loaded.APIKey != "saved-key" {
 		t.Errorf("got %s", loaded.APIKey)
 	}
-	if loaded.DefaultPersonaID != 10 {
-		t.Errorf("got %d", loaded.DefaultPersonaID)
+	if loaded.DefaultAgentID != 10 {
+		t.Errorf("got %d", loaded.DefaultAgentID)
 	}
 }
 

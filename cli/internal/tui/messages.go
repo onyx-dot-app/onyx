@@ -6,7 +6,7 @@ import (
 
 // InitDoneMsg signals that async initialization is complete.
 type InitDoneMsg struct {
-	Personas []models.PersonaSummary
+	Agents []models.AgentSummary
 	Err      error
 }
 

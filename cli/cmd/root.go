@@ -13,7 +13,7 @@ const version = "0.1.0"
 var rootCmd = &cobra.Command{
 	Use:   "onyx-cli",
 	Short: "Terminal UI for chatting with Onyx",
-	Long:  "Onyx CLI — a terminal interface for chatting with your Onyx assistant.",
+	Long:  "Onyx CLI — a terminal interface for chatting with your Onyx agent.",
 }
 
 func init() {

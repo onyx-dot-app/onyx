@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	askPersonaID int
+	askAgentID int
 	askJSON      bool
 )
 
@@ -29,9 +29,9 @@ var askCmd = &cobra.Command{
 		}
 
 		question := args[0]
-		personaID := cfg.DefaultPersonaID
-		if cmd.Flags().Changed("persona-id") {
-			personaID = askPersonaID
+		agentID := cfg.DefaultAgentID
+		if cmd.Flags().Changed("agent-id") {
+			agentID = askAgentID
 		}
 
 		client := api.NewClient(cfg)
@@ -40,7 +40,7 @@ var askCmd = &cobra.Command{
 			context.Background(),
 			question,
 			nil,
-			personaID,
+			agentID,
 			&parentID,
 			nil,
 		)
@@ -72,7 +72,7 @@ var askCmd = &cobra.Command{
 }
 
 func init() {
-	askCmd.Flags().IntVar(&askPersonaID, "persona-id", 0, "Persona/assistant ID to use")
+	askCmd.Flags().IntVar(&askAgentID, "agent-id", 0, "Agent ID to use")
 	askCmd.Flags().BoolVar(&askJSON, "json", false, "Output raw JSON events")
 	rootCmd.AddCommand(askCmd)
 }

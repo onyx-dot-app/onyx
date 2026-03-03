@@ -36,12 +36,12 @@ func TestAddUserMessage(t *testing.T) {
 	}
 }
 
-func TestStartAndFinishAssistant(t *testing.T) {
+func TestStartAndFinishAgent(t *testing.T) {
 	v := newViewport(80)
-	v.startAssistant()
+	v.startAgent()
 
 	if !v.streaming {
-		t.Error("expected streaming to be true after startAssistant")
+		t.Error("expected streaming to be true after startAgent")
 	}
 	if len(v.entries) != 1 {
 		t.Fatalf("expected 1 spacer entry, got %d", len(v.entries))
@@ -57,21 +57,21 @@ func TestStartAndFinishAssistant(t *testing.T) {
 		t.Errorf("expected streamBuf 'Hello world', got %q", v.streamBuf)
 	}
 
-	v.finishAssistant()
+	v.finishAgent()
 
 	if v.streaming {
-		t.Error("expected streaming to be false after finishAssistant")
+		t.Error("expected streaming to be false after finishAgent")
 	}
 	if v.streamBuf != "" {
 		t.Errorf("expected empty streamBuf after finish, got %q", v.streamBuf)
 	}
 	if len(v.entries) != 2 {
-		t.Fatalf("expected 2 entries (spacer + assistant), got %d", len(v.entries))
+		t.Fatalf("expected 2 entries (spacer + agent), got %d", len(v.entries))
 	}
 
 	e := v.entries[1]
-	if e.kind != entryAssistant {
-		t.Errorf("expected entryAssistant, got %d", e.kind)
+	if e.kind != entryAgent {
+		t.Errorf("expected entryAgent, got %d", e.kind)
 	}
 	if e.content != "Hello world" {
 		t.Errorf("expected content 'Hello world', got %q", e.content)
@@ -82,11 +82,11 @@ func TestStartAndFinishAssistant(t *testing.T) {
 	}
 }
 
-func TestFinishAssistantNoPadding(t *testing.T) {
+func TestFinishAgentNoPadding(t *testing.T) {
 	v := newViewport(80)
-	v.startAssistant()
+	v.startAgent()
 	v.appendToken("Test message")
-	v.finishAssistant()
+	v.finishAgent()
 
 	e := v.entries[1]
 	// First line should not start with plain spaces (ANSI codes are OK)
@@ -97,11 +97,11 @@ func TestFinishAssistantNoPadding(t *testing.T) {
 	}
 }
 
-func TestFinishAssistantMultiline(t *testing.T) {
+func TestFinishAgentMultiline(t *testing.T) {
 	v := newViewport(80)
-	v.startAssistant()
+	v.startAgent()
 	v.appendToken("Line one\n\nLine three")
-	v.finishAssistant()
+	v.finishAgent()
 
 	e := v.entries[1]
 	plain := stripANSI(e.rendered)
@@ -114,10 +114,10 @@ func TestFinishAssistantMultiline(t *testing.T) {
 	}
 }
 
-func TestFinishAssistantEmpty(t *testing.T) {
+func TestFinishAgentEmpty(t *testing.T) {
 	v := newViewport(80)
-	v.startAssistant()
-	v.finishAssistant()
+	v.startAgent()
+	v.finishAgent()
 
 	if v.streaming {
 		t.Error("expected streaming to be false")
@@ -213,7 +213,7 @@ func TestCitationVisibility(t *testing.T) {
 func TestClearAll(t *testing.T) {
 	v := newViewport(80)
 	v.addUserMessage("test")
-	v.startAssistant()
+	v.startAgent()
 	v.appendToken("response")
 
 	v.clearAll()
