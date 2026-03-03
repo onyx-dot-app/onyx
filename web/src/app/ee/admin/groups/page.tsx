@@ -5,13 +5,15 @@ import UserGroupCreationForm from "./UserGroupCreationForm";
 import { useState } from "react";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { useConnectorStatus, useUserGroups } from "@/lib/hooks";
-import { AdminPageTitle } from "@/components/admin/Title";
 import useUsers from "@/hooks/useUsers";
-
 import { useUser } from "@/providers/UserProvider";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
-import { SvgUsers } from "@opal/icons";
-const Main = () => {
+import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
+import * as SettingsLayouts from "@/layouts/settings-layouts";
+
+const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.GROUPS]!;
+
+function Main() {
   const [showForm, setShowForm] = useState(false);
 
   const { data, isLoading, error, refreshUserGroups } = useUserGroups();
@@ -70,16 +72,16 @@ const Main = () => {
       )}
     </>
   );
-};
+}
 
-const Page = () => {
+export default function Page() {
   return (
-    <>
-      <AdminPageTitle title="Manage User Groups" icon={SvgUsers} />
+    <SettingsLayouts.Root>
+      <SettingsLayouts.Header icon={route.icon} title={route.title} separator />
 
-      <Main />
-    </>
+      <SettingsLayouts.Body>
+        <Main />
+      </SettingsLayouts.Body>
+    </SettingsLayouts.Root>
   );
-};
-
-export default Page;
+}

@@ -1,9 +1,11 @@
-import { AdminPageTitle } from "@/components/admin/Title";
+import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { CUSTOM_ANALYTICS_ENABLED } from "@/lib/constants";
 import { Callout } from "@/components/ui/callout";
-import { FiBarChart2 } from "react-icons/fi";
+import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
 import Text from "@/components/ui/text";
 import { CustomAnalyticsUpdateForm } from "./CustomAnalyticsUpdateForm";
+
+const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.CUSTOM_ANALYTICS]!;
 
 function Main() {
   if (!CUSTOM_ANALYTICS_ENABLED) {
@@ -35,13 +37,11 @@ function Main() {
 
 export default function Page() {
   return (
-    <main className="pt-4 mx-auto container">
-      <AdminPageTitle
-        title="Custom Analytics"
-        icon={<FiBarChart2 size={32} />}
-      />
-
-      <Main />
-    </main>
+    <SettingsLayouts.Root>
+      <SettingsLayouts.Header icon={route.icon} title={route.title} separator />
+      <SettingsLayouts.Body>
+        <Main />
+      </SettingsLayouts.Body>
+    </SettingsLayouts.Root>
   );
 }

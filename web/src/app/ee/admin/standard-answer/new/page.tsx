@@ -1,10 +1,11 @@
-import { AdminPageTitle } from "@/components/admin/Title";
 import { StandardAnswerCreationForm } from "@/app/ee/admin/standard-answer/StandardAnswerCreationForm";
 import { fetchSS } from "@/lib/utilsSS";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import BackButton from "@/refresh-components/buttons/BackButton";
-import { ClipboardIcon } from "@/components/icons/icons";
+import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
 import { StandardAnswerCategory } from "@/lib/types";
+
+const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.STANDARD_ANSWERS]!;
 
 async function Page() {
   const standardAnswerCategoriesResponse = await fetchSS(
@@ -23,17 +24,19 @@ async function Page() {
     (await standardAnswerCategoriesResponse.json()) as StandardAnswerCategory[];
 
   return (
-    <>
-      <BackButton />
-      <AdminPageTitle
+    <SettingsLayouts.Root>
+      <SettingsLayouts.Header
+        icon={route.icon}
         title="New Standard Answer"
-        icon={<ClipboardIcon size={32} />}
+        backButton
+        separator
       />
-
-      <StandardAnswerCreationForm
-        standardAnswerCategories={standardAnswerCategories}
-      />
-    </>
+      <SettingsLayouts.Body>
+        <StandardAnswerCreationForm
+          standardAnswerCategories={standardAnswerCategories}
+        />
+      </SettingsLayouts.Body>
+    </SettingsLayouts.Root>
   );
 }
 

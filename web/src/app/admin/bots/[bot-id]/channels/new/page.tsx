@@ -1,13 +1,12 @@
-import { AdminPageTitle } from "@/components/admin/Title";
 import { SlackChannelConfigCreationForm } from "../SlackChannelConfigCreationForm";
 import { fetchSS } from "@/lib/utilsSS";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { DocumentSetSummary, ValidSources } from "@/lib/types";
-import BackButton from "@/refresh-components/buttons/BackButton";
+import { DocumentSetSummary } from "@/lib/types";
 import { fetchAgentsSS } from "@/lib/agentsSS";
 import { getStandardAnswerCategoriesIfEE } from "@/components/standardAnswers/getStandardAnswerCategoriesIfEE";
 import { redirect } from "next/navigation";
-import { SourceIcon } from "@/components/SourceIcon";
+import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SvgSlack } from "@opal/icons";
 
 async function NewChannelConfigPage(props: {
   params: Promise<{ "bot-id": string }>;
@@ -50,20 +49,22 @@ async function NewChannelConfigPage(props: {
   }
 
   return (
-    <>
-      <BackButton />
-      <AdminPageTitle
-        icon={<SourceIcon iconSize={32} sourceType={ValidSources.Slack} />}
+    <SettingsLayouts.Root>
+      <SettingsLayouts.Header
+        icon={SvgSlack}
         title="Configure OnyxBot for Slack Channel"
+        separator
+        backButton
       />
-
-      <SlackChannelConfigCreationForm
-        slack_bot_id={slack_bot_id}
-        documentSets={documentSets}
-        personas={agentsResponse[0]}
-        standardAnswerCategoryResponse={standardAnswerCategoryResponse}
-      />
-    </>
+      <SettingsLayouts.Body>
+        <SlackChannelConfigCreationForm
+          slack_bot_id={slack_bot_id}
+          documentSets={documentSets}
+          personas={agentsResponse[0]}
+          standardAnswerCategoryResponse={standardAnswerCategoryResponse}
+        />
+      </SettingsLayouts.Body>
+    </SettingsLayouts.Root>
   );
 }
 

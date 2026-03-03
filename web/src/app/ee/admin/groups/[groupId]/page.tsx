@@ -1,25 +1,23 @@
 "use client";
-import { use } from "react";
 
+import { use } from "react";
 import { GroupDisplay } from "./GroupDisplay";
 import { useSpecificUserGroup } from "./hook";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { useConnectorStatus } from "@/lib/hooks";
-import { useRouter } from "next/navigation";
 import useUsers from "@/hooks/useUsers";
-import BackButton from "@/refresh-components/buttons/BackButton";
-import { AdminPageTitle } from "@/components/admin/Title";
-import { SvgUsers } from "@opal/icons";
-const Page = (props: { params: Promise<{ groupId: string }> }) => {
-  const params = use(props.params);
-  const router = useRouter();
+import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
+import * as SettingsLayouts from "@/layouts/settings-layouts";
 
+const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.GROUPS]!;
+
+function Main({ groupId }: { groupId: string }) {
   const {
     userGroup,
     isLoading: userGroupIsLoading,
     error: userGroupError,
     refreshUserGroup,
-  } = useSpecificUserGroup(params.groupId);
+  } = useSpecificUserGroup(groupId);
   const {
     data: users,
     isLoading: userIsLoading,
@@ -53,22 +51,31 @@ const Page = (props: { params: Promise<{ groupId: string }> }) => {
 
   return (
     <>
-      <BackButton />
+      <SettingsLayouts.Header
+        icon={route.icon}
+        title={userGroup.name || "Unknown"}
+        separator
+        backButton
+      />
 
-      <AdminPageTitle title={userGroup.name || "Unknown"} icon={SvgUsers} />
-
-      {userGroup ? (
+      <SettingsLayouts.Body>
         <GroupDisplay
           users={users.accepted}
           ccPairs={ccPairs}
           userGroup={userGroup}
           refreshUserGroup={refreshUserGroup}
         />
-      ) : (
-        <div>Unable to fetch User Group :(</div>
-      )}
+      </SettingsLayouts.Body>
     </>
   );
-};
+}
 
-export default Page;
+export default function Page(props: { params: Promise<{ groupId: string }> }) {
+  const params = use(props.params);
+
+  return (
+    <SettingsLayouts.Root>
+      <Main groupId={params.groupId} />
+    </SettingsLayouts.Root>
+  );
+}
