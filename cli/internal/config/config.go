@@ -10,8 +10,7 @@ import (
 
 const (
 	EnvServerURL    = "ONYX_SERVER_URL"
-	EnvAPIKey       = "ONYX_API_KEY"
-	EnvAPIKeyLegacy = "DANSWER_API_KEY"
+	EnvAPIKey = "ONYX_API_KEY"
 	EnvAgentID    = "ONYX_PERSONA_ID"
 )
 
@@ -75,8 +74,6 @@ func Load() OnyxCliConfig {
 		cfg.ServerURL = v
 	}
 	if v := os.Getenv(EnvAPIKey); v != "" {
-		cfg.APIKey = v
-	} else if v := os.Getenv(EnvAPIKeyLegacy); v != "" {
 		cfg.APIKey = v
 	}
 	if v := os.Getenv(EnvAgentID); v != "" {

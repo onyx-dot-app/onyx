@@ -184,6 +184,11 @@ func detectFileDrop(text string) string {
 	if cleaned == "" {
 		return ""
 	}
+	// Only treat as a file drop if it looks explicitly path-like
+	if !strings.HasPrefix(cleaned, "/") && !strings.HasPrefix(cleaned, "~") &&
+		!strings.HasPrefix(cleaned, "./") && !strings.HasPrefix(cleaned, "../") {
+		return ""
+	}
 	// Expand ~ to home dir
 	if strings.HasPrefix(cleaned, "~") {
 		home, err := os.UserHomeDir()

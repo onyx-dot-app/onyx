@@ -10,7 +10,7 @@ import (
 
 func clearEnvVars(t *testing.T) {
 	t.Helper()
-	for _, key := range []string{EnvServerURL, EnvAPIKey, EnvAPIKeyLegacy, EnvAgentID} {
+	for _, key := range []string{EnvServerURL, EnvAPIKey, EnvAgentID} {
 		t.Setenv(key, "")
 		os.Unsetenv(key)
 	}
@@ -116,18 +116,6 @@ func TestEnvOverrideAPIKey(t *testing.T) {
 
 	cfg := Load()
 	if cfg.APIKey != "env-key" {
-		t.Errorf("got %s", cfg.APIKey)
-	}
-}
-
-func TestEnvOverrideLegacyAPIKey(t *testing.T) {
-	clearEnvVars(t)
-	dir := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", dir)
-	t.Setenv(EnvAPIKeyLegacy, "legacy-key")
-
-	cfg := Load()
-	if cfg.APIKey != "legacy-key" {
 		t.Errorf("got %s", cfg.APIKey)
 	}
 }

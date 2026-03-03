@@ -259,14 +259,18 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 
 	case tea.KeyUp:
-		if m.viewport.pickerActive && m.viewport.pickerIndex > 0 {
-			m.viewport.pickerIndex--
+		if m.viewport.pickerActive {
+			if m.viewport.pickerIndex > 0 {
+				m.viewport.pickerIndex--
+			}
 			return m, nil
 		}
 
 	case tea.KeyDown:
-		if m.viewport.pickerActive && m.viewport.pickerIndex < len(m.viewport.pickerItems)-1 {
-			m.viewport.pickerIndex++
+		if m.viewport.pickerActive {
+			if m.viewport.pickerIndex < len(m.viewport.pickerItems)-1 {
+				m.viewport.pickerIndex++
+			}
 			return m, nil
 		}
 
@@ -564,6 +568,11 @@ func (m Model) handleSessionResumed(msg SessionResumedMsg) (tea.Model, tea.Cmd) 
 	if msg.Err != nil {
 		m.viewport.addError("Could not load session: " + msg.Err.Error())
 		return m, nil
+	}
+
+	// Cancel any in-progress stream before replacing the session
+	if m.isStreaming {
+		m, _ = m.cancelStream()
 	}
 
 	detail := msg.Detail

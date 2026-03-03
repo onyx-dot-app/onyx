@@ -45,7 +45,7 @@ func handleSlashCommand(m Model, text string) (Model, tea.Cmd) {
 		return cmdSessions(m)
 
 	case "/configure":
-		m.viewport.addInfo("Run 'onyx configure' to change connection settings.")
+		m.viewport.addInfo("Run 'onyx-cli configure' to change connection settings.")
 		return m, nil
 
 	case "/clear":
@@ -86,7 +86,7 @@ func cmdNew(m Model) (Model, tea.Cmd) {
 	m.citations = nil
 	m.viewport.clearAll()
 	// Re-add splash as a scrollable entry
-	viewportHeight := m.height - 4
+	viewportHeight := m.viewportHeight()
 	if viewportHeight < 1 {
 		viewportHeight = m.height
 	}

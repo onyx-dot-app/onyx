@@ -19,7 +19,7 @@ uv pip install onyx-cli
 Run the interactive setup:
 
 ```shell
-onyx configure
+onyx-cli configure
 ```
 
 This prompts for your Onyx server URL and API key, tests the connection, and saves config to `~/.config/onyx-cli/config.json`.
@@ -30,7 +30,6 @@ Environment variables override config file values:
 |----------|----------|-------------|
 | `ONYX_SERVER_URL` | No | Server base URL (default: `http://localhost:3000`) |
 | `ONYX_API_KEY` | Yes | API key for authentication |
-| `DANSWER_API_KEY` | No | Legacy fallback for `ONYX_API_KEY` |
 | `ONYX_PERSONA_ID` | No | Default agent/persona ID |
 
 ## Usage
@@ -38,15 +37,15 @@ Environment variables override config file values:
 ### Interactive chat (default)
 
 ```shell
-onyx
+onyx-cli
 ```
 
 ### One-shot question
 
 ```shell
-onyx ask "What is our company's PTO policy?"
-onyx ask --agent-id 5 "Summarize this topic"
-onyx ask --json "Hello"
+onyx-cli ask "What is our company's PTO policy?"
+onyx-cli ask --agent-id 5 "Summarize this topic"
+onyx-cli ask --json "Hello"
 ```
 
 | Flag | Description |
@@ -57,8 +56,8 @@ onyx ask --json "Hello"
 ### List agents
 
 ```shell
-onyx agents
-onyx agents --json
+onyx-cli agents
+onyx-cli agents --json
 ```
 
 ## Commands
@@ -102,7 +101,7 @@ Requires [Go 1.24+](https://go.dev/dl/).
 
 ```shell
 cd cli
-go build -o onyx .
+go build -o onyx-cli .
 ```
 
 ## Development
@@ -112,7 +111,7 @@ go build -o onyx .
 go test ./...
 
 # Build
-go build -o onyx .
+go build -o onyx-cli .
 
 # Lint
 staticcheck ./...

@@ -19,7 +19,7 @@ func fullVersion() string {
 // Execute creates and runs the root command.
 func Execute() error {
 	rootCmd := &cobra.Command{
-		Use:     "onyx",
+		Use:     "onyx-cli",
 		Short:   "Terminal UI for chatting with Onyx",
 		Long:    "Onyx CLI — a terminal interface for chatting with your Onyx agent.",
 		Version: fullVersion(),

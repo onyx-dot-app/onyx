@@ -57,6 +57,7 @@ type viewport struct {
 	pickerIndex  int
 	pickerType   pickerKind
 	scrollOffset int // lines scrolled up from bottom (0 = pinned to bottom)
+	lastMaxScroll int // cached from last render for clamping in scrollUp
 }
 
 // newMarkdownRenderer creates a Glamour renderer with zero left margin.
@@ -109,7 +110,10 @@ func (v *viewport) startAgent() {
 
 func (v *viewport) appendToken(token string) {
 	v.streamBuf += token
-	v.scrollOffset = 0 // auto-scroll to bottom on new content
+	// Only auto-scroll when already pinned to bottom; preserve user's scroll position
+	if v.scrollOffset == 0 {
+		v.scrollOffset = 0
+	}
 }
 
 func (v *viewport) finishAgent() {
@@ -217,7 +221,9 @@ func (v *viewport) showPicker(kind pickerKind, items []pickerItem) {
 
 func (v *viewport) scrollUp(n int) {
 	v.scrollOffset += n
-	// Clamped in view() since we need to know total content height
+	if v.scrollOffset > v.lastMaxScroll {
+		v.scrollOffset = v.lastMaxScroll
+	}
 }
 
 func (v *viewport) scrollDown(n int) {
@@ -239,6 +245,8 @@ func (v *viewport) clearAll() {
 func (v *viewport) clearDisplay() {
 	v.entries = nil
 	v.scrollOffset = 0
+	v.streaming = false
+	v.streamBuf = ""
 }
 
 // pickerTitle returns a title for the current picker kind.
@@ -327,7 +335,7 @@ func (v *viewport) renderPicker(width, height int) string {
 	// panelWidth+2 accounts for the left and right border characters.
 	borderColor := lipgloss.NewStyle().Foreground(accentColor)
 	titleWidth := lipgloss.Width(titleRendered)
-	rightDashes := panelWidth + 2 - 2 - titleWidth // total - corners - title
+	rightDashes := panelWidth + 2 - 3 - titleWidth // total - "╭─" - "╮" - title
 	if rightDashes < 0 {
 		rightDashes = 0
 	}
@@ -378,13 +386,15 @@ func (v *viewport) view(height int) string {
 	contentLines := strings.Split(content, "\n")
 	total := len(contentLines)
 
-	// Clamp scroll offset
+	// Cache max scroll for clamping in scrollUp()
 	maxScroll := total - height
 	if maxScroll < 0 {
 		maxScroll = 0
 	}
-	if v.scrollOffset > maxScroll {
-		v.scrollOffset = maxScroll
+	v.lastMaxScroll = maxScroll
+	scrollOffset := v.scrollOffset
+	if scrollOffset > maxScroll {
+		scrollOffset = maxScroll
 	}
 
 	if total <= height {
@@ -396,7 +406,7 @@ func (v *viewport) view(height int) string {
 		contentLines = append(padding, contentLines...)
 	} else {
 		// Show a window: end is (total - scrollOffset), start is (end - height)
-		end := total - v.scrollOffset
+		end := total - scrollOffset
 		start := end - height
 		if start < 0 {
 			start = 0

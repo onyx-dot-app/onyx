@@ -1,18 +1,18 @@
 ---
 name: onyx-cli
-description: Query the Onyx knowledge base using the onyx command. Use when the user wants to search company documents, ask questions about internal knowledge, query connected data sources, or look up information stored in Onyx.
+description: Query the Onyx knowledge base using the onyx-cli command. Use when the user wants to search company documents, ask questions about internal knowledge, query connected data sources, or look up information stored in Onyx.
 ---
 
 # Onyx CLI — Agent Tool
 
-Onyx is an enterprise search and Gen-AI platform that connects to company documents, apps, and people. The `onyx` CLI provides non-interactive commands to query the Onyx knowledge base and list available agents.
+Onyx is an enterprise search and Gen-AI platform that connects to company documents, apps, and people. The `onyx-cli` CLI provides non-interactive commands to query the Onyx knowledge base and list available agents.
 
 ## Prerequisites
 
 ### 1. Check if installed
 
 ```bash
-which onyx
+which onyx-cli
 ```
 
 ### 2. Install (if needed)
@@ -26,7 +26,7 @@ pip install onyx-cli
 **From source (Go):**
 
 ```bash
-cd cli && go build -o onyx . && sudo mv onyx /usr/local/bin/
+cd cli && go build -o onyx-cli . && sudo mv onyx-cli /usr/local/bin/
 ```
 
 ### 3. Check if configured
@@ -42,7 +42,7 @@ If unconfigured, you have two options:
 **Option A — Interactive setup (requires user input):**
 
 ```bash
-onyx configure
+onyx-cli configure
 ```
 
 This prompts for the Onyx server URL and API key, tests the connection, and saves config.
@@ -60,11 +60,10 @@ Environment variables override the config file. If these are set, no config file
 |----------|----------|-------------|
 | `ONYX_SERVER_URL` | No | Onyx server base URL (default: `http://localhost:3000`) |
 | `ONYX_API_KEY` | Yes | API key for authentication |
-| `DANSWER_API_KEY` | No | Legacy fallback for `ONYX_API_KEY` |
 | `ONYX_PERSONA_ID` | No | Default agent/persona ID |
 
-If neither the config file nor environment variables are set, tell the user that `onyx` needs to be configured and ask them to either:
-- Run `onyx configure` interactively, or
+If neither the config file nor environment variables are set, tell the user that `onyx-cli` needs to be configured and ask them to either:
+- Run `onyx-cli configure` interactively, or
 - Set `ONYX_SERVER_URL` and `ONYX_API_KEY` environment variables
 
 ## Commands
@@ -72,13 +71,13 @@ If neither the config file nor environment variables are set, tell the user that
 ### List available agents
 
 ```bash
-onyx agents
+onyx-cli agents
 ```
 
 Prints a table of agent IDs, names, and descriptions. Use `--json` for structured output:
 
 ```bash
-onyx agents --json
+onyx-cli agents --json
 ```
 
 Use agent IDs with `ask --agent-id` to query a specific agent.
@@ -86,7 +85,7 @@ Use agent IDs with `ask --agent-id` to query a specific agent.
 ### Basic query (plain text output)
 
 ```bash
-onyx ask "What is our company's PTO policy?"
+onyx-cli ask "What is our company's PTO policy?"
 ```
 
 Streams the answer as plain text to stdout. Exit code 0 on success, non-zero on error.
@@ -94,7 +93,7 @@ Streams the answer as plain text to stdout. Exit code 0 on success, non-zero on 
 ### JSON output (structured events)
 
 ```bash
-onyx ask --json "What authentication methods do we support?"
+onyx-cli ask --json "What authentication methods do we support?"
 ```
 
 Outputs JSON-encoded parsed stream events (one object per line). Key event objects include message deltas, stop, errors, search-start, and citation payloads.
@@ -110,7 +109,7 @@ Outputs JSON-encoded parsed stream events (one object per line). Key event objec
 ### Specify an agent
 
 ```bash
-onyx ask --agent-id 5 "Summarize our Q4 roadmap"
+onyx-cli ask --agent-id 5 "Summarize our Q4 roadmap"
 ```
 
 Uses a specific Onyx agent/persona instead of the default.
@@ -124,7 +123,7 @@ Uses a specific Onyx agent/persona instead of the default.
 
 ## When to Use
 
-Use `onyx ask` when:
+Use `onyx-cli ask` when:
 
 - The user asks about company-specific information (policies, docs, processes)
 - You need to search internal knowledge bases or connected data sources
@@ -141,14 +140,14 @@ Do NOT use when:
 
 ```bash
 # Simple question
-onyx ask "What are the steps to deploy to production?"
+onyx-cli ask "What are the steps to deploy to production?"
 
 # Get structured output for parsing
-onyx ask --json "List all active API integrations"
+onyx-cli ask --json "List all active API integrations"
 
 # Use a specialized agent
-onyx ask --agent-id 3 "What were the action items from last week's standup?"
+onyx-cli ask --agent-id 3 "What were the action items from last week's standup?"
 
 # Pipe the answer into another command
-onyx ask "What is the database schema for users?" | head -20
+onyx-cli ask "What is the database schema for users?" | head -20
 ```
