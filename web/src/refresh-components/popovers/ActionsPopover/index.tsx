@@ -72,6 +72,10 @@ const ADMIN_CONFIG_LINKS: Record<string, { href: string; tooltip: string }> = {
     href: "/admin/configuration/web-search",
     tooltip: "Configure Web Search",
   },
+  [PYTHON_TOOL_ID]: {
+    href: "/admin/configuration/code-interpreter",
+    tooltip: "Configure Code Interpreter",
+  },
   KnowledgeGraphTool: {
     href: "/admin/kg",
     tooltip: "Configure Knowledge Graph",
