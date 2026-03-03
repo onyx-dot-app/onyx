@@ -215,7 +215,7 @@ class TestCreateUser:
         mock_dal.commit.assert_called_once()
 
     @patch("ee.onyx.server.scim.api._check_seat_availability", return_value=None)
-    def test_missing_external_id_creates_user_without_mapping(
+    def test_missing_external_id_still_creates_mapping(
         self,
         mock_seats: MagicMock,  # noqa: ARG002
         mock_db_session: MagicMock,
@@ -223,6 +223,7 @@ class TestCreateUser:
         mock_dal: MagicMock,
         provider: ScimProvider,
     ) -> None:
+        """Mapping is always created to mark user as SCIM-managed."""
         mock_dal.get_user_by_email.return_value = None
         resource = make_scim_user(externalId=None)
 
@@ -236,7 +237,7 @@ class TestCreateUser:
         parsed = parse_scim_user(result, status=201)
         assert parsed.userName is not None
         mock_dal.add_user.assert_called_once()
-        mock_dal.create_user_mapping.assert_not_called()
+        mock_dal.create_user_mapping.assert_called_once()
         mock_dal.commit.assert_called_once()
 
     @patch("ee.onyx.server.scim.api._check_seat_availability", return_value=None)

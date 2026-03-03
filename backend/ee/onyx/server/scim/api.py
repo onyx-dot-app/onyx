@@ -445,13 +445,12 @@ def create_user(
         if personal_name:
             dal.update_user(existing_user, personal_name=personal_name)
 
-        if external_id:
-            dal.create_user_mapping(
-                external_id=external_id,
-                user_id=existing_user.id,
-                scim_username=scim_username,
-                fields=fields,
-            )
+        dal.create_user_mapping(
+            external_id=external_id,
+            user_id=existing_user.id,
+            scim_username=scim_username,
+            fields=fields,
+        )
 
         dal.commit()
 
@@ -482,16 +481,14 @@ def create_user(
         dal.rollback()
         return _scim_error_response(409, f"User with email {email} already exists")
 
-    # Create SCIM mapping when externalId is provided — this is how the IdP
-    # correlates this user on subsequent requests.  Per RFC 7643, externalId
-    # is optional and assigned by the provisioning client.
-    if external_id:
-        dal.create_user_mapping(
-            external_id=external_id,
-            user_id=user.id,
-            scim_username=scim_username,
-            fields=fields,
-        )
+    # Always create a SCIM mapping so that the user is marked as
+    # SCIM-managed. externalId may be None (RFC 7643 says it's optional).
+    dal.create_user_mapping(
+        external_id=external_id,
+        user_id=user.id,
+        scim_username=scim_username,
+        fields=fields,
+    )
 
     dal.commit()
 

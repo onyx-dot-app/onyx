@@ -126,12 +126,16 @@ class ScimDAL(DAL):
 
     def create_user_mapping(
         self,
-        external_id: str,
+        external_id: str | None,
         user_id: UUID,
         scim_username: str | None = None,
         fields: ScimMappingFields | None = None,
     ) -> ScimUserMapping:
-        """Create a mapping between a SCIM externalId and an Onyx user."""
+        """Create a SCIM mapping for a user.
+
+        ``external_id`` may be ``None`` when the IdP omits it (RFC 7643
+        allows this). The mapping still marks the user as SCIM-managed.
+        """
         f = fields or ScimMappingFields()
         mapping = ScimUserMapping(
             external_id=external_id,
@@ -275,7 +279,7 @@ class ScimDAL(DAL):
         # unless they were explicitly linked via SCIM provisioning.
         query = (
             select(User)
-            .join(ScimUserMapping, ScimUserMapping.user_id == User.id)  # type: ignore[arg-type]
+            .join(ScimUserMapping, ScimUserMapping.user_id == User.id)
             .where(User.role.notin_([UserRole.SLACK_USER, UserRole.EXT_PERM_USER]))
         )
 
