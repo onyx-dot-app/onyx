@@ -14,12 +14,8 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 _HEALTH_CACHE_TTL_SECONDS = 30
-<<<<<<< HEAD
-_health_cache: dict[str, tuple[float, bool]] = {}
-=======
-_health_cache: tuple[float, bool] | None = None
->>>>>>> 0561b0c16 (Hot path concerns)
 
+_health_cache: dict[str, tuple[float, bool]] = {}
 
 class FileInput(TypedDict):
     """Input file to be staged in execution workspace"""
@@ -107,29 +103,19 @@ class CodeInterpreterClient:
         return payload
 
     def health(self, use_cache: bool = False) -> bool:
-<<<<<<< HEAD
-        """Check if the Code Interpreter service is healthy"""
-        if use_cache:
-            cached = _health_cache.get(self.base_url)
-            if cached is not None:
-                cached_at, cached_result = cached
-                if time.monotonic() - cached_at < _HEALTH_CACHE_TTL_SECONDS:
-                    return cached_result
-=======
-        """Check if the Code Interpreter service is healthy.
+        """Check if the Code Interpreter service is healthy
 
         Args:
             use_cache: When True, return a cached result if available and
                        within the TTL window. The cache is always populated
                        after a live request regardless of this flag.
         """
-        global _health_cache
-
-        if use_cache and _health_cache is not None:
-            cached_at, cached_result = _health_cache
-            if time.monotonic() - cached_at < _HEALTH_CACHE_TTL_SECONDS:
-                return cached_result
->>>>>>> 0561b0c16 (Hot path concerns)
+        if use_cache:
+            cached = _health_cache.get(self.base_url)
+            if cached is not None:
+                cached_at, cached_result = cached
+                if time.monotonic() - cached_at < _HEALTH_CACHE_TTL_SECONDS:
+                    return cached_result
 
         url = f"{self.base_url}/health"
         try:
@@ -140,11 +126,7 @@ class CodeInterpreterClient:
             logger.warning(f"Exception caught when checking health, e={e}")
             result = False
 
-<<<<<<< HEAD
         _health_cache[self.base_url] = (time.monotonic(), result)
-=======
-        _health_cache = (time.monotonic(), result)
->>>>>>> 0561b0c16 (Hot path concerns)
         return result
 
     def execute(
