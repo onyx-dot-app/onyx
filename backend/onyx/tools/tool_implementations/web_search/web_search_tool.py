@@ -1,6 +1,5 @@
 import json
 from typing import Any
-from typing import cast
 
 from sqlalchemy.orm import Session
 from typing_extensions import override
@@ -55,6 +54,30 @@ def _sanitize_query(query: str) -> str:
     sanitized = "".join(c for c in query if ord(c) >= 32 and ord(c) != 127)
     # Collapse multiple whitespace characters into single space and strip
     return " ".join(sanitized.split())
+
+
+def _normalize_queries_input(raw: Any) -> list[str]:
+    """Coerce LLM output to a list of sanitized query strings.
+
+    Accepts a bare string or a list (possibly with non-string elements).
+    Sanitizes each query (strip control chars, normalize whitespace) and
+    drops empty or whitespace-only entries.
+    """
+    if isinstance(raw, str):
+        raw = raw.strip()
+        if not raw:
+            return []
+        raw = [raw]
+    elif not isinstance(raw, list):
+        return []
+    result: list[str] = []
+    for q in raw:
+        if q is None:
+            continue
+        sanitized = _sanitize_query(str(q))
+        if sanitized:
+            result.append(sanitized)
+    return result
 
 
 class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
@@ -189,13 +212,7 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
                     f'like: {{"queries": ["your search query here"]}}'
                 ),
             )
-        raw_queries = cast(list[str], llm_kwargs[QUERIES_FIELD])
-
-        # Normalize queries:
-        # - remove control characters (null bytes, etc.) that LLMs sometimes produce
-        # - collapse whitespace and strip
-        # - drop empty/whitespace-only queries
-        queries = [sanitized for q in raw_queries if (sanitized := _sanitize_query(q))]
+        queries = _normalize_queries_input(llm_kwargs[QUERIES_FIELD])
         if not queries:
             raise ToolCallException(
                 message=(
