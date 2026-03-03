@@ -138,6 +138,7 @@ function OpenRouterFormFields(
                 }
                 rightSection={
                   <Button
+                    data-testid="fetch-models-button"
                     prominence="tertiary"
                     size="sm"
                     icon={({ className }) => (

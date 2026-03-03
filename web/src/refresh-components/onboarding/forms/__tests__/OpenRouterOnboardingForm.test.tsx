@@ -163,11 +163,8 @@ describe("OpenRouterOnboardingForm", () => {
       const apiKeyInput = screen.getByPlaceholderText("");
       await user.type(apiKeyInput, "sk-or-test-key-123");
 
-      // Click fetch models button - find it by looking for icon button with data-state
-      const buttons = screen.getAllByRole("button");
-      const fetchButton = buttons.find(
-        (btn) => btn.getAttribute("data-state") === "closed"
-      );
+      // Click fetch models button
+      const fetchButton = screen.getByTestId("fetch-models-button");
       if (fetchButton) {
         await user.click(fetchButton);
       }
@@ -298,11 +295,8 @@ describe("OpenRouterOnboardingForm", () => {
       const apiKeyInput = screen.getByPlaceholderText("");
       await user.type(apiKeyInput, "invalid-key");
 
-      // Click fetch models button - find it by looking for icon button with data-state
-      const buttons = screen.getAllByRole("button");
-      const fetchButton = buttons.find(
-        (btn) => btn.getAttribute("data-state") === "closed"
-      );
+      // Click fetch models button
+      const fetchButton = screen.getByTestId("fetch-models-button");
       if (fetchButton) {
         await user.click(fetchButton);
       }
