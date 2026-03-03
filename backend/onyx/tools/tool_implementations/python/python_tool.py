@@ -111,8 +111,7 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
             return False
 
         client = CodeInterpreterClient()
-        health_check = client.health()
-        return health_check
+        return client.health(use_cache=True)
 
     def tool_definition(self) -> dict:
         return {

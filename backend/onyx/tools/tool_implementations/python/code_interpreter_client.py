@@ -1,4 +1,5 @@
 import json
+import time
 from collections.abc import Generator
 from typing import Literal
 from typing import TypedDict
@@ -11,6 +12,9 @@ from onyx.configs.app_configs import CODE_INTERPRETER_BASE_URL
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+_HEALTH_CACHE_TTL_SECONDS = 30
+_health_cache: tuple[float, bool] | None = None
 
 
 class FileInput(TypedDict):
@@ -98,16 +102,32 @@ class CodeInterpreterClient:
             payload["files"] = files
         return payload
 
-    def health(self) -> bool:
-        """Check if the Code Interpreter service is healthy"""
+    def health(self, use_cache: bool = False) -> bool:
+        """Check if the Code Interpreter service is healthy.
+
+        Args:
+            use_cache: When True, return a cached result if available and
+                       within the TTL window. The cache is always populated
+                       after a live request regardless of this flag.
+        """
+        global _health_cache
+
+        if use_cache and _health_cache is not None:
+            cached_at, cached_result = _health_cache
+            if time.monotonic() - cached_at < _HEALTH_CACHE_TTL_SECONDS:
+                return cached_result
+
         url = f"{self.base_url}/health"
         try:
             response = self.session.get(url, timeout=5)
             response.raise_for_status()
-            return response.json().get("status") == "ok"
+            result = response.json().get("status") == "ok"
         except Exception as e:
             logger.warning(f"Exception caught when checking health, e={e}")
-            return False
+            result = False
+
+        _health_cache = (time.monotonic(), result)
+        return result
 
     def execute(
         self,
