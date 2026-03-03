@@ -34,7 +34,7 @@ cd cli && go build -o onyx . && sudo mv onyx /usr/local/bin/
 The CLI is configured when `~/.config/onyx-cli/config.json` exists and contains an `api_key`. Check with:
 
 ```bash
-cat ~/.config/onyx-cli/config.json 2>/dev/null
+test -s ~/.config/onyx-cli/config.json && echo "configured" || echo "not configured"
 ```
 
 If unconfigured, you have two options:
