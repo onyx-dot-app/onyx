@@ -1,31 +1,64 @@
 # Onyx CLI
 
-A terminal interface for chatting with your [Onyx](https://github.com/onyx-dot-app/onyx) assistant. Built with Go using [Bubble Tea](https://github.com/charmbracelet/bubbletea) for the TUI framework.
+A terminal interface for chatting with your [Onyx](https://github.com/onyx-dot-app/onyx) agent. Built with Go using [Bubble Tea](https://github.com/charmbracelet/bubbletea) for the TUI framework.
 
 ## Installation
 
-```bash
-# From source
-cd cli
-go build -o onyx-cli .
-
-# Or install directly
-go install github.com/onyx-dot-app/onyx/cli@latest
+```shell
+pip install onyx-cli
 ```
+
+Or with uv:
+
+```shell
+uv pip install onyx-cli
+```
+
+## Setup
+
+Run the interactive setup:
+
+```shell
+onyx configure
+```
+
+This prompts for your Onyx server URL and API key, tests the connection, and saves config to `~/.config/onyx-cli/config.json`.
+
+Environment variables override config file values:
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `ONYX_SERVER_URL` | No | Server base URL (default: `http://localhost:3000`) |
+| `ONYX_API_KEY` | Yes | API key for authentication |
+| `DANSWER_API_KEY` | No | Legacy fallback for `ONYX_API_KEY` |
+| `ONYX_PERSONA_ID` | No | Default agent/persona ID |
 
 ## Usage
 
-```bash
-# Launch interactive chat (default)
-./onyx-cli
+### Interactive chat (default)
 
-# First-run setup
-./onyx-cli configure
+```shell
+onyx
+```
 
-# One-shot question
-./onyx-cli ask "What is Onyx?"
-./onyx-cli ask --agent-id 5 "Summarize this topic"
-./onyx-cli ask --json "Hello"
+### One-shot question
+
+```shell
+onyx ask "What is our company's PTO policy?"
+onyx ask --agent-id 5 "Summarize this topic"
+onyx ask --json "Hello"
+```
+
+| Flag | Description |
+|------|-------------|
+| `--agent-id <int>` | Agent ID to use (overrides default) |
+| `--json` | Output raw NDJSON events instead of plain text |
+
+### List agents
+
+```shell
+onyx agents
+onyx agents --json
 ```
 
 ## Commands
@@ -34,6 +67,7 @@ go install github.com/onyx-dot-app/onyx/cli@latest
 |---------|-------------|
 | `chat` | Launch the interactive chat TUI (default) |
 | `ask` | Ask a one-shot question (non-interactive) |
+| `agents` | List available agents |
 | `configure` | Configure server URL and API key |
 
 ## Slash Commands (in TUI)
@@ -45,7 +79,6 @@ go install github.com/onyx-dot-app/onyx/cli@latest
 | `/agent` | List and switch agents |
 | `/attach <path>` | Attach a file to next message |
 | `/sessions` | List recent chat sessions |
-| `/resume <id>` | Resume a previous session |
 | `/clear` | Clear the chat display |
 | `/configure` | Re-run connection setup |
 | `/connectors` | Open connectors in browser |
@@ -63,23 +96,24 @@ go install github.com/onyx-dot-app/onyx/cli@latest
 | `Scroll` / `Shift+Up/Down` | Scroll chat history |
 | `Page Up` / `Page Down` | Scroll half page |
 
-## Configuration
+## Building from Source
 
-Config is stored at `~/.config/onyx-cli/config.json`. Environment variables override file values:
+Requires [Go 1.24+](https://go.dev/dl/).
 
-| Variable | Description |
-|----------|-------------|
-| `ONYX_SERVER_URL` | Server URL |
-| `ONYX_API_KEY` | API key |
-| `DANSWER_API_KEY` | Legacy API key (fallback) |
-| `ONYX_PERSONA_ID` | Default persona ID |
+```shell
+cd cli
+go build -o onyx .
+```
 
 ## Development
 
-```bash
+```shell
 # Run tests
 go test ./...
 
 # Build
-go build -o onyx-cli .
+go build -o onyx .
+
+# Lint
+staticcheck ./...
 ```

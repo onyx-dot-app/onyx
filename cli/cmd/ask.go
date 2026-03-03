@@ -24,7 +24,7 @@ var askCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg := config.Load()
 		if !cfg.IsConfigured() {
-			return fmt.Errorf("onyx CLI is not configured — run 'onyx-cli configure' first")
+			return fmt.Errorf("onyx CLI is not configured — run 'onyx configure' first")
 		}
 
 		question := args[0]

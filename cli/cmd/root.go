@@ -11,7 +11,7 @@ import (
 const version = "0.1.0"
 
 var rootCmd = &cobra.Command{
-	Use:   "onyx-cli",
+	Use:   "onyx",
 	Short: "Terminal UI for chatting with Onyx",
 	Long:  "Onyx CLI — a terminal interface for chatting with your Onyx agent.",
 }
