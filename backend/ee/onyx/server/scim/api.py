@@ -435,7 +435,14 @@ def create_user(
         if existing_mapping:
             return _scim_error_response(409, f"User with email {email} already exists")
 
-        # Adopt pre-existing user into SCIM management
+        # Adopt pre-existing user into SCIM management.
+        # Reactivating a deactivated user consumes a seat, so enforce the
+        # seat limit the same way replace_user does.
+        if user_resource.active and not existing_user.is_active:
+            seat_error = _check_seat_availability(dal)
+            if seat_error:
+                return _scim_error_response(403, seat_error)
+
         personal_name = _scim_name_to_str(user_resource.name)
         dal.update_user(
             existing_user,
