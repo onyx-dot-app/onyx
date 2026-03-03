@@ -73,7 +73,7 @@ class OnyxErrorCode(Enum):
     # ------------------------------------------------------------------
     CONNECTOR_VALIDATION_FAILED = ("CONNECTOR_VALIDATION_FAILED", 400)
     CREDENTIAL_INVALID = ("CREDENTIAL_INVALID", 400)
-    CREDENTIAL_EXPIRED = ("CREDENTIAL_EXPIRED", 400)
+    CREDENTIAL_EXPIRED = ("CREDENTIAL_EXPIRED", 401)
 
     # ------------------------------------------------------------------
     # Server Errors (5xx)
