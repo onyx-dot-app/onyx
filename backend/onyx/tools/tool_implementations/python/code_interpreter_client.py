@@ -103,6 +103,7 @@ class CodeInterpreterClient:
         return payload
 
     def health(self, use_cache: bool = False) -> bool:
+        """Check if the Code Interpreter service is healthy"""
         global _health_cache
 
         if use_cache:
