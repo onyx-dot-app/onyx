@@ -29,11 +29,13 @@ jobs:
         run: |
           set +e
 
-          echo "should_cherrypick=false" >> "$GITHUB_OUTPUT"
-          echo "pr_number=" >> "$GITHUB_OUTPUT"
-          echo "merged_by=" >> "$GITHUB_OUTPUT"
-          echo "gate_status=success" >> "$GITHUB_OUTPUT"
-          echo "gate_reason=" >> "$GITHUB_OUTPUT"
+          {
+            echo "should_cherrypick=false"
+            echo "pr_number="
+            echo "merged_by="
+            echo "gate_status=success"
+            echo "gate_reason="
+          } >> "$GITHUB_OUTPUT"
 
           api_call_with_retry() {
             local endpoint="$1"
@@ -56,7 +58,7 @@ jobs:
 
               GATE_LAST_ERROR="$(cat "$tmp_err")"
               if [ "${attempt}" -lt "${max_attempts}" ] && echo "$GATE_LAST_ERROR" | grep -qiE "rate limit|HTTP 403|timeout|connection reset|unexpected EOF"; then
-                echo "::warning::GitHub API call failed (attempt ${attempt}/${max_attempts}). Retrying in ${sleep_seconds}s."
+                echo "::warning::GitHub API call failed (attempt ${attempt}/${max_attempts}). Retrying in ${sleep_seconds}s." >&2
                 sleep "${sleep_seconds}"
                 sleep_seconds=$((sleep_seconds * 2))
                 attempt=$((attempt + 1))
@@ -67,8 +69,6 @@ jobs:
               return 1
             done
 
-            rm -f "$tmp_err"
-            return 1
           }
 
           GATE_LAST_ERROR=""
@@ -76,12 +76,11 @@ jobs:
           # For the commit that triggered this workflow (HEAD on main), fetch all
           # associated PRs and keep only the PR that was actually merged into main
           # with this exact merge commit SHA.
-          pr_numbers_json="$(api_call_with_retry "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls")"
-          if [ "$?" -ne 0 ]; then
+          if ! pr_numbers_json="$(api_call_with_retry "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls")"; then
             echo "::error::Unable to resolve PRs for commit ${GITHUB_SHA}."
-            echo "gate_status=failure" >> "$GITHUB_OUTPUT"
-            echo "gate_reason=resolve-prs-failed" >> "$GITHUB_OUTPUT"
             {
+              echo "gate_status=failure"
+              echo "gate_reason=resolve-prs-failed"
               echo "gate_details<<EOF"
               printf '%s\n' "$GATE_LAST_ERROR" | tail -n 20
               echo "EOF"
@@ -89,12 +88,11 @@ jobs:
             exit 0
           fi
 
-          pr_numbers="$(printf '%s' "$pr_numbers_json" | jq -r --arg sha "${GITHUB_SHA}" '.[] | select(.merged_at != null and .base.ref == "main" and .merge_commit_sha == $sha) | .number')"
-          if [ "$?" -ne 0 ]; then
+          if ! pr_numbers="$(printf '%s' "$pr_numbers_json" | jq -r --arg sha "${GITHUB_SHA}" '.[] | select(.merged_at != null and .base.ref == "main" and .merge_commit_sha == $sha) | .number')"; then
             echo "::error::Unable to parse PR association response for commit ${GITHUB_SHA}."
-            echo "gate_status=failure" >> "$GITHUB_OUTPUT"
-            echo "gate_reason=parse-prs-failed" >> "$GITHUB_OUTPUT"
             {
+              echo "gate_status=failure"
+              echo "gate_reason=parse-prs-failed"
               echo "gate_details<<EOF"
               printf '%s\n' "$pr_numbers_json" | tail -n 20
               echo "EOF"
@@ -116,12 +114,11 @@ jobs:
           fi
 
           # Read the PR once so we can gate behavior and infer preferred actor.
-          pr_json="$(api_call_with_retry "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}")"
-          if [ "$?" -ne 0 ]; then
+          if ! pr_json="$(api_call_with_retry "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}")"; then
             echo "::error::Unable to resolve PR #${pr_number} details."
-            echo "gate_status=failure" >> "$GITHUB_OUTPUT"
-            echo "gate_reason=resolve-pr-failed" >> "$GITHUB_OUTPUT"
             {
+              echo "gate_status=failure"
+              echo "gate_reason=resolve-pr-failed"
               echo "gate_details<<EOF"
               printf '%s\n' "$GATE_LAST_ERROR" | tail -n 20
               echo "EOF"
@@ -129,13 +126,11 @@ jobs:
             exit 0
           fi
 
-          pr_body="$(printf '%s' "$pr_json" | jq -r '.body // ""')"
-          merged_by="$(printf '%s' "$pr_json" | jq -r '.merged_by.login // ""')"
-          if [ "$?" -ne 0 ]; then
-            echo "::error::Unable to parse PR #${pr_number} details."
-            echo "gate_status=failure" >> "$GITHUB_OUTPUT"
-            echo "gate_reason=parse-pr-failed" >> "$GITHUB_OUTPUT"
+          if ! pr_body="$(printf '%s' "$pr_json" | jq -r '.body // ""')"; then
+            echo "::error::Unable to parse PR #${pr_number} body."
             {
+              echo "gate_status=failure"
+              echo "gate_reason=parse-pr-failed"
               echo "gate_details<<EOF"
               printf '%s\n' "$pr_json" | tail -n 20
               echo "EOF"
@@ -143,8 +138,22 @@ jobs:
             exit 0
           fi
 
-          echo "pr_number=$pr_number" >> "$GITHUB_OUTPUT"
-          echo "merged_by=$merged_by" >> "$GITHUB_OUTPUT"
+          if ! merged_by="$(printf '%s' "$pr_json" | jq -r '.merged_by.login // ""')"; then
+            echo "::error::Unable to parse PR #${pr_number} details."
+            {
+              echo "gate_status=failure"
+              echo "gate_reason=parse-pr-failed"
+              echo "gate_details<<EOF"
+              printf '%s\n' "$pr_json" | tail -n 20
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          {
+            echo "pr_number=$pr_number"
+            echo "merged_by=$merged_by"
+          } >> "$GITHUB_OUTPUT"
 
           if echo "$pr_body" | grep -qiE "\\[x\\][[:space:]]*(\\[[^]]+\\][[:space:]]*)?Please cherry-pick this PR to the latest release version"; then
             echo "should_cherrypick=true" >> "$GITHUB_OUTPUT"
