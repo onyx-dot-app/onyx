@@ -60,8 +60,8 @@ import {
 import ProjectChatSessionList from "@/app/app/components/projects/ProjectChatSessionList";
 import { cn } from "@/lib/utils";
 import Suggestions from "@/sections/Suggestions";
-import OnboardingFlow from "@/refresh-components/onboarding/OnboardingFlow";
-import { OnboardingStep } from "@/refresh-components/onboarding/types";
+import OnboardingFlow from "@/sections/onboarding/OnboardingFlow";
+import { OnboardingStep } from "@/sections/onboarding/types";
 import { useShowOnboarding } from "@/hooks/useShowOnboarding";
 import * as AppLayouts from "@/layouts/app-layouts";
 import { SvgChevronDown, SvgFileText } from "@opal/icons";

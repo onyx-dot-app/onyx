@@ -19,7 +19,7 @@ const mockActions = {
 
 let mockStepIndex = 0;
 
-jest.mock("@/refresh-components/onboarding/useOnboardingState", () => ({
+jest.mock("@/sections/onboarding/useOnboardingState", () => ({
   useOnboardingState: () => ({
     state: {
       currentStep: OnboardingStep.Welcome,

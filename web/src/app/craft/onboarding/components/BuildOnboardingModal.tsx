@@ -23,7 +23,7 @@ import { LLM_PROVIDERS_ADMIN_URL } from "@/lib/llmConfig/constants";
 import {
   buildInitialValues,
   testApiKeyHelper,
-} from "@/refresh-components/onboarding/components/llmConnectionHelpers";
+} from "@/sections/onboarding/components/llmConnectionHelpers";
 import OnboardingInfoPages from "@/app/craft/onboarding/components/OnboardingInfoPages";
 import OnboardingUserInfo from "@/app/craft/onboarding/components/OnboardingUserInfo";
 import OnboardingLlmSetup, {

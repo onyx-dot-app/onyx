@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
-import { useOnboardingState } from "@/refresh-components/onboarding/useOnboardingState";
+import { useOnboardingState } from "@/sections/onboarding/useOnboardingState";
 
 function getOnboardingCompletedKey(userId: string): string {
   return `onyx:onboardingCompleted:${userId}`;

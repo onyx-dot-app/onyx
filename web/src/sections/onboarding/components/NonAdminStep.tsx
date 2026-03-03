@@ -9,6 +9,7 @@ import { Button as OpalButton } from "@opal/components";
 import InputAvatar from "@/refresh-components/inputs/InputAvatar";
 import { cn } from "@/lib/utils";
 import { SvgCheckCircle, SvgEdit, SvgUser, SvgX } from "@opal/icons";
+import { Content, ContentAction } from "@opal/layouts";
 
 export default function NonAdminStep() {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -54,17 +55,21 @@ export default function NonAdminStep() {
           className="flex items-center justify-between w-full min-h-11 py-1 pl-3 pr-2 bg-background-tint-00 rounded-16 shadow-01 mb-2"
           aria-label="non-admin-confirmation"
         >
-          <div className="flex items-center gap-1">
-            <SvgCheckCircle className="w-4 h-4 stroke-status-success-05" />
-            <Text as="p" text03 mainUiBody>
-              You're all set!
-            </Text>
-          </div>
-          <OpalButton
-            prominence="tertiary"
-            size="sm"
-            icon={SvgX}
-            onClick={handleDismissConfirmation}
+          <ContentAction
+            icon={SvgCheckCircle}
+            title="You're all set!"
+            sizePreset="main-ui"
+            variant="body"
+            prominence="muted"
+            paddingVariant="fit"
+            rightChildren={
+              <OpalButton
+                prominence="tertiary"
+                size="sm"
+                icon={SvgX}
+                onClick={handleDismissConfirmation}
+              />
+            }
           />
         </div>
       )}
@@ -75,39 +80,36 @@ export default function NonAdminStep() {
           role="group"
           aria-label="non-admin-name-prompt"
         >
-          <div className="flex items-center gap-1 h-full">
-            <div className="h-full p-0.5">
-              <SvgUser className="w-4 h-4 stroke-text-03" />
-            </div>
-            <div>
-              <Text as="p" text04 mainUiAction>
-                What should Onyx call you?
-              </Text>
-              <Text as="p" text03 secondaryBody>
-                We will display this name in the app.
-              </Text>
-            </div>
-          </div>
-          <div className="flex items-center justify-end gap-2">
-            <InputTypeIn
-              ref={inputRef}
-              placeholder="Your name"
-              value={name || ""}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                setName(e.target.value)
-              }
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && name && name.trim().length > 0) {
-                  e.preventDefault();
-                  handleSave();
-                }
-              }}
-              className="w-[26%] min-w-40"
-            />
-            <Button disabled={name === ""} onClick={handleSave}>
-              Save
-            </Button>
-          </div>
+          <ContentAction
+            icon={SvgUser}
+            title="What should Onyx call you?"
+            description="We will display this name in the app."
+            sizePreset="main-ui"
+            variant="section"
+            paddingVariant="fit"
+            rightChildren={
+              <div className="flex items-center justify-end gap-2">
+                <InputTypeIn
+                  ref={inputRef}
+                  placeholder="Your name"
+                  value={name || ""}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                    setName(e.target.value)
+                  }
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && name && name.trim().length > 0) {
+                      e.preventDefault();
+                      handleSave();
+                    }
+                  }}
+                  className="w-[26%] min-w-40"
+                />
+                <Button disabled={name === ""} onClick={handleSave}>
+                  Save
+                </Button>
+              </div>
+            }
+          />
         </div>
       ) : (
         <div
