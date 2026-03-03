@@ -126,10 +126,8 @@ class TestWebSearchToolRunQueryCoercion:
         mock_provider.supports_site_filter = False
         tool = _make_tool(mock_provider)
 
-        _run(tool, "hi")
-
-        for call in cast(MagicMock, mock_provider.search).call_args_list:
-            query_arg = call.args[0]
+        dispatched = _run(tool, "hi")
+        for query_arg in dispatched:
             assert (
                 len(query_arg) > 1
             ), f"Single-character query dispatched: {query_arg!r}"
