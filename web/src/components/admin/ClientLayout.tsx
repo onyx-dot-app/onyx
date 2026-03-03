@@ -41,10 +41,9 @@ const SETTINGS_LAYOUT_PREFIXES = [
   "/admin/debug",
   "/admin/kg",
   "/admin/bots",
-  "/ee/admin/standard-answer",
-  "/ee/admin/groups",
-  "/ee/admin/billing",
-  "/ee/admin/performance",
+  "/admin/standard-answer",
+  "/admin/groups",
+  "/admin/performance",
 ];
 
 export function ClientLayout({
