@@ -57,7 +57,7 @@ jobs:
               fi
 
               GATE_LAST_ERROR="$(cat "$tmp_err")"
-              if [ "${attempt}" -lt "${max_attempts}" ] && echo "$GATE_LAST_ERROR" | grep -qiE "rate limit|HTTP 403|timeout|connection reset|unexpected EOF"; then
+              if [ "${attempt}" -lt "${max_attempts}" ] && echo "$GATE_LAST_ERROR" | grep -qiE "rate limit|HTTP 403|HTTP 5[0-9][0-9]|timeout|connection reset|unexpected EOF"; then
                 echo "::warning::GitHub API call failed (attempt ${attempt}/${max_attempts}). Retrying in ${sleep_seconds}s." >&2
                 sleep "${sleep_seconds}"
                 sleep_seconds=$((sleep_seconds * 2))
