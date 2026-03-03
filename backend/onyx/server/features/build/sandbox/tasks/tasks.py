@@ -96,7 +96,7 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
 
         # Type guard for kubernetes-specific methods
         if not isinstance(sandbox_manager, KubernetesSandboxManager):
-            task_logger.info(
+            task_logger.debug(
                 "cleanup_idle_sandboxes_task skipped (not kubernetes backend)"
             )
             return
@@ -107,7 +107,7 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
             )
 
             if not idle_sandboxes:
-                task_logger.info("No idle sandboxes found")
+                task_logger.debug("No idle sandboxes found")
                 return
 
             task_logger.info(
@@ -193,7 +193,8 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
     finally:
         if lock.owned():
             lock.release()
-        task_logger.info("cleanup_idle_sandboxes_task completed")
+
+    task_logger.info("cleanup_idle_sandboxes_task completed")
 
 
 def _list_session_directories(
