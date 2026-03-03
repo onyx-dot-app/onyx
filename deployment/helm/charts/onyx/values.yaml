@@ -1186,10 +1186,10 @@ auth:
     # -- This defines the env var to secret map
     secretKeys:
       USER_AUTH_SECRET: user_auth_secret
-    # -- Secret value. CHANGE THIS FOR PRODUCTION.
-    # Generate a secure value with: openssl rand -hex 32
+    # -- Secret value. If empty, a random 64-character secret is auto-generated.
+    # You can also set your own with: openssl rand -hex 32
     values:
-      user_auth_secret: "OnyxDevSecret1!"
+      user_auth_secret: ""
 
 configMap:
   # Change this for production uses unless Onyx is only accessible behind VPN
