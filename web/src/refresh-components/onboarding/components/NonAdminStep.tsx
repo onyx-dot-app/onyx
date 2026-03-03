@@ -56,7 +56,12 @@ export default function NonAdminStep() {
           aria-label="non-admin-confirmation"
         >
           <ContentAction
-            icon={SvgCheckCircle}
+            icon={({ className, ...props }) => (
+              <SvgCheckCircle
+                className={cn(className, "stroke-status-success-05")}
+                {...props}
+              />
+            )}
             title="You're all set!"
             sizePreset="main-ui"
             variant="body"
