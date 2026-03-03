@@ -49,7 +49,6 @@ from onyx.document_index.vespa_constants import MAX_ID_SEARCH_QUERY_SIZE
 from onyx.document_index.vespa_constants import MAX_OR_CONDITIONS
 from onyx.document_index.vespa_constants import METADATA
 from onyx.document_index.vespa_constants import METADATA_SUFFIX
-from onyx.document_index.vespa_constants import PERSONAS
 from onyx.document_index.vespa_constants import PRIMARY_OWNERS
 from onyx.document_index.vespa_constants import SEARCH_ENDPOINT
 from onyx.document_index.vespa_constants import SECONDARY_OWNERS
@@ -59,7 +58,6 @@ from onyx.document_index.vespa_constants import SOURCE_LINKS
 from onyx.document_index.vespa_constants import SOURCE_TYPE
 from onyx.document_index.vespa_constants import TENANT_ID
 from onyx.document_index.vespa_constants import TITLE
-from onyx.document_index.vespa_constants import USER_PROJECT
 from onyx.document_index.vespa_constants import YQL_BASE
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
@@ -271,18 +269,6 @@ def get_chunks_via_visit_api(
                             f"it does not belong to tenant {filters.tenant_id}. "
                             "This should never happen."
                         )
-                        continue
-
-                # NOTE: Document Selector Language doesn't support `contains`, so
-                # project_id and persona_id must be enforced as post-filters here.
-                if filters.project_id is not None:
-                    user_project = document["fields"].get(USER_PROJECT, [])
-                    if filters.project_id not in user_project:
-                        continue
-
-                if filters.persona_id is not None:
-                    personas = document["fields"].get(PERSONAS, [])
-                    if filters.persona_id not in personas:
                         continue
 
                 document_chunks.append(document)
