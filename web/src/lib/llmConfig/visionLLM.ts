@@ -2,7 +2,7 @@ import { LLMProviderResponse, VisionProvider } from "@/interfaces/llm";
 import { LLM_ADMIN_URL } from "@/lib/llmConfig/constants";
 
 export async function fetchVisionProviders(): Promise<VisionProvider[]> {
-  const response = await fetch("/api/admin/llm/vision-providers", {
+  const response = await fetch(`${LLM_ADMIN_URL}/vision-providers`, {
     headers: {
       "Content-Type": "application/json",
     },
