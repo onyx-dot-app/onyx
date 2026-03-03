@@ -25,7 +25,7 @@ export interface ActionItemProps {
   disabled: boolean;
   isForced: boolean;
   isUnavailable?: boolean;
-  unavailableReason?: string;
+  tooltip?: string;
   showAdminConfigure?: boolean;
   adminConfigureHref?: string;
   adminConfigureTooltip?: string;
@@ -47,7 +47,7 @@ export default function ActionLineItem({
   disabled,
   isForced,
   isUnavailable = false,
-  unavailableReason,
+  tooltip,
   showAdminConfigure = false,
   adminConfigureHref,
   adminConfigureTooltip = "Configure",
@@ -88,7 +88,7 @@ export default function ActionLineItem({
     sourceCounts.enabled > 0 &&
     sourceCounts.enabled < sourceCounts.total;
 
-  const tooltipText = isUnavailable ? unavailableReason : tool?.description;
+  const tooltipText = tooltip || tool?.description;
 
   return (
     <SimpleTooltip tooltip={tooltipText} className="max-w-[30rem]">

@@ -50,39 +50,37 @@ function buildTooltipMessage(
   const _ADMIN_CONFIGURE_MESSAGE = "Press the settings cog to enable.";
   const _USER_NOT_ADMIN_MESSAGE = "Ask an admin to configure.";
 
-  let message = actionDescription;
-
-  if (!isConfigured && isAdmin) {
-    message += " " + _ADMIN_CONFIGURE_MESSAGE;
+  if (isConfigured) {
+    return actionDescription;
   }
 
-  if (!isAdmin) {
-    message += " " + _USER_NOT_ADMIN_MESSAGE;
+  if (isAdmin) {
+    return actionDescription + " " + _ADMIN_CONFIGURE_MESSAGE;
   }
 
-  return message;
+  return actionDescription + " " + _USER_NOT_ADMIN_MESSAGE;
 }
 
-const UNAVAILABLE_TOOL_TOOLTIP_FALLBACK =
-  "This action is not configured yet. Ask an admin to enable it.";
-const UNAVAILABLE_TOOL_TOOLTIP_ADMIN_FALLBACK =
-  "This action is not configured yet. If you have access, enable it in the admin panel.";
-const UNAVAILABLE_TOOL_TOOLTIPS: Record<string, string> = {
-  [IMAGE_GENERATION_TOOL_ID]:
-    "Image generation requires a configured model. If you have access, set one up under Settings > Image Generation, or ask an admin.",
-  [WEB_SEARCH_TOOL_ID]:
-    "Web search requires a configured provider. If you have access, set one up under Settings > Web Search, or ask an admin.",
-  [PYTHON_TOOL_ID]:
-    "Code Interpreter requires the service to be configured with a valid base URL. If you have access, configure it in the admin panel, or ask an admin.",
+const TOOL_DESCRIPTIONS: Record<string, string> = {
+  [SEARCH_TOOL_ID]: "Search through connected knowledge to inform the answer.",
+  [IMAGE_GENERATION_TOOL_ID]: "Generate images based on a prompt.",
+  [WEB_SEARCH_TOOL_ID]: "Search the web for up-to-date information.",
+  [PYTHON_TOOL_ID]: "Execute code for complex analysis.",
 };
-const getUnavailableToolTooltip = (
-  inCodeToolId?: string | null,
-  canAdminConfigure?: boolean
-) =>
-  (inCodeToolId && UNAVAILABLE_TOOL_TOOLTIPS[inCodeToolId]) ??
-  (canAdminConfigure
-    ? UNAVAILABLE_TOOL_TOOLTIP_ADMIN_FALLBACK
-    : UNAVAILABLE_TOOL_TOOLTIP_FALLBACK);
+
+const DEFAULT_TOOL_DESCRIPTION = "This action is not configured yet.";
+
+function getToolTooltip(
+  tool: ToolSnapshot,
+  isConfigured: boolean,
+  isAdmin: boolean
+): string {
+  const description =
+    (tool.in_code_tool_id && TOOL_DESCRIPTIONS[tool.in_code_tool_id]) ||
+    tool.description ||
+    DEFAULT_TOOL_DESCRIPTION;
+  return buildTooltipMessage(description, isConfigured, isAdmin);
+}
 
 const ADMIN_CONFIG_LINKS: Record<string, { href: string; tooltip: string }> = {
   [IMAGE_GENERATION_TOOL_ID]: {
@@ -917,14 +915,11 @@ export default function ActionsPopover({
                 disabled={disabledToolIds.includes(tool.id)}
                 isForced={forcedToolIds.includes(tool.id)}
                 isUnavailable={isUnavailable}
-                unavailableReason={
-                  isUnavailable
-                    ? getUnavailableToolTooltip(
-                        tool.in_code_tool_id,
-                        canAdminConfigure
-                      )
-                    : undefined
-                }
+                tooltip={getToolTooltip(
+                  tool,
+                  isToolAvailable,
+                  canAdminConfigure
+                )}
                 showAdminConfigure={!!adminConfigureInfo}
                 adminConfigureHref={adminConfigureInfo?.href}
                 adminConfigureTooltip={adminConfigureInfo?.tooltip}
