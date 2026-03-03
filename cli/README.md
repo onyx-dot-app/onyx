@@ -60,6 +60,8 @@ go install github.com/onyx-dot-app/onyx/cli@latest
 | `Escape` | Cancel current generation |
 | `Ctrl+O` | Toggle source citations |
 | `Ctrl+D` | Quit (press twice) |
+| `Scroll` / `Shift+Up/Down` | Scroll chat history |
+| `Page Up` / `Page Down` | Scroll half page |
 
 ## Configuration
 
