@@ -1,3 +1,5 @@
+"use client";
+
 import { memo, useState, useCallback } from "react";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
@@ -131,16 +133,14 @@ const LLMStepInner = ({
             variant="section"
             paddingVariant="lg"
             rightChildren={
-              <div className="p-0.5">
-                <Button
-                  tertiary
-                  rightIcon={SvgExternalLink}
-                  disabled={disabled}
-                  href="admin/configuration/llm"
-                >
-                  View in Admin Panel
-                </Button>
-              </div>
+              <Button
+                tertiary
+                rightIcon={SvgExternalLink}
+                disabled={disabled}
+                href="admin/configuration/llm"
+              >
+                View in Admin Panel
+              </Button>
             }
           />
           <Separator />
