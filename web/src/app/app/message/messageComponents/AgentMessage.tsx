@@ -76,6 +76,7 @@ function arePropsEqual(
 
 const AgentMessage = React.memo(function AgentMessage({
   rawPackets,
+  packetCount,
   chatState,
   nodeId,
   messageId,
@@ -163,14 +164,36 @@ const AgentMessage = React.memo(function AgentMessage({
 
   // Streaming TTS integration
   const { streamTTS, resetTTS } = useVoiceMode();
+  const ttsCompletedRef = useRef(false);
+  const streamTTSRef = useRef(streamTTS);
 
-  // Stream TTS as text content arrives
+  // Keep streamTTS ref in sync without triggering effect re-runs
   useEffect(() => {
+    streamTTSRef.current = streamTTS;
+  }, [streamTTS]);
+
+  // Stream TTS as text content arrives - only for messages still streaming
+  // Uses ref for streamTTS to avoid re-triggering when its identity changes
+  // Note: packetCount is used instead of rawPackets because the array is mutated in place
+  useEffect(() => {
+    // Skip if we've already finished TTS for this message
+    if (ttsCompletedRef.current) return;
+
     const textContent = removeThinkingTokens(getTextContent(rawPackets));
     if (typeof textContent === "string" && textContent.length > 0) {
-      streamTTS(textContent, isComplete);
+      streamTTSRef.current(textContent, isComplete);
+
+      // Mark as completed once the message is done streaming
+      if (isComplete) {
+        ttsCompletedRef.current = true;
+      }
     }
-  }, [rawPackets, isComplete, streamTTS]);
+  }, [packetCount, isComplete, rawPackets]); // packetCount triggers on new packets since rawPackets is mutated in place
+
+  // Reset TTS completed flag when nodeId changes (new message)
+  useEffect(() => {
+    ttsCompletedRef.current = false;
+  }, [nodeId]);
 
   // Reset TTS when component unmounts or nodeId changes
   useEffect(() => {

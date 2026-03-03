@@ -41,6 +41,35 @@ class StreamingTranscriberProtocol(Protocol):
         ...
 
 
+class StreamingSynthesizerProtocol(Protocol):
+    """Protocol for streaming TTS sessions (real-time text-to-speech)."""
+
+    async def connect(self) -> None:
+        """Establish connection to TTS provider."""
+        ...
+
+    async def send_text(self, text: str) -> None:
+        """Send text to be synthesized."""
+        ...
+
+    async def receive_audio(self) -> bytes | None:
+        """
+        Receive next audio chunk.
+
+        Returns:
+            Audio bytes, or None when stream ends.
+        """
+        ...
+
+    async def flush(self) -> None:
+        """Signal end of text input and wait for pending audio."""
+        ...
+
+    async def close(self) -> None:
+        """Close the session."""
+        ...
+
+
 class VoiceProviderInterface(ABC):
     """Abstract base class for voice providers (STT and TTS)."""
 
@@ -106,6 +135,10 @@ class VoiceProviderInterface(ABC):
         """Returns True if this provider supports streaming STT."""
         return False
 
+    def supports_streaming_tts(self) -> bool:
+        """Returns True if this provider supports real-time streaming TTS."""
+        return False
+
     async def create_streaming_transcriber(
         self, audio_format: str = "webm"
     ) -> StreamingTranscriberProtocol:
@@ -122,3 +155,21 @@ class VoiceProviderInterface(ABC):
             NotImplementedError: If streaming STT is not supported
         """
         raise NotImplementedError("Streaming STT not supported by this provider")
+
+    async def create_streaming_synthesizer(
+        self, voice: str | None = None, speed: float = 1.0
+    ) -> "StreamingSynthesizerProtocol":
+        """
+        Create a streaming TTS session for real-time audio synthesis.
+
+        Args:
+            voice: Voice identifier
+            speed: Playback speed multiplier
+
+        Returns:
+            A streaming synthesizer that can send text and receive audio chunks
+
+        Raises:
+            NotImplementedError: If streaming TTS is not supported
+        """
+        raise NotImplementedError("Streaming TTS not supported by this provider")

@@ -58,6 +58,7 @@ import { Section } from "@/layouts/general-layouts";
 import Spacer from "@/refresh-components/Spacer";
 import MicrophoneButton from "@/sections/input/MicrophoneButton";
 import RecordingWaveform from "@/sections/input/RecordingWaveform";
+import { useVoiceMode } from "@/providers/VoiceModeProvider";
 
 const LINE_HEIGHT = 24;
 const MIN_INPUT_HEIGHT = 44;
@@ -166,6 +167,16 @@ const AppInputBar = React.memo(
     const containerRef = useRef<HTMLDivElement>(null);
     const { user } = useUser();
     const { isClassifying, classification } = useQueryController();
+    const { stopTTS } = useVoiceMode();
+
+    // Wrapper for onSubmit that stops TTS first to prevent overlapping voices
+    const handleSubmit = useCallback(
+      (text: string) => {
+        stopTTS();
+        onSubmit(text);
+      },
+      [stopTTS, onSubmit]
+    );
 
     // Expose reset and focus methods to parent via ref
     React.useImperativeHandle(ref, () => ({
@@ -541,7 +552,7 @@ const AppInputBar = React.memo(
                         !isClassifying &&
                         !hasUploadingFiles
                       ) {
-                        onSubmit(message);
+                        handleSubmit(message);
                       }
                     }
                   }}
@@ -604,7 +615,7 @@ const AppInputBar = React.memo(
                     if (chatState == "streaming") {
                       stopGenerating();
                     } else if (message) {
-                      onSubmit(message);
+                      handleSubmit(message);
                     }
                   }}
                   prominence="tertiary"
@@ -783,7 +794,7 @@ const AppInputBar = React.memo(
                   stopRecordingRef={stopRecordingRef}
                   onRecordingStart={() => setMessage("")}
                   onAutoSend={(text) => {
-                    onSubmit(text);
+                    handleSubmit(text);
                   }}
                 />
 
@@ -806,7 +817,7 @@ const AppInputBar = React.memo(
                     if (chatState == "streaming") {
                       stopGenerating();
                     } else if (message) {
-                      onSubmit(message);
+                      handleSubmit(message);
                     }
                   }}
                 />

@@ -5,6 +5,7 @@ from collections.abc import AsyncIterator
 
 import aiohttp
 
+from onyx.voice.interface import StreamingSynthesizerProtocol
 from onyx.voice.interface import StreamingTranscriberProtocol
 from onyx.voice.interface import TranscriptResult
 from onyx.voice.interface import VoiceProviderInterface
@@ -173,6 +174,138 @@ class ElevenLabsStreamingTranscriber(StreamingTranscriberProtocol):
         self._final_transcript = ""
 
 
+class ElevenLabsStreamingSynthesizer(StreamingSynthesizerProtocol):
+    """Real-time streaming TTS using ElevenLabs WebSocket API."""
+
+    def __init__(
+        self,
+        api_key: str,
+        voice_id: str,
+        model_id: str = "eleven_multilingual_v2",
+        output_format: str = "mp3_44100_64",
+    ):
+        from onyx.utils.logger import setup_logger
+
+        self._logger = setup_logger()
+        self.api_key = api_key
+        self.voice_id = voice_id
+        self.model_id = model_id
+        self.output_format = output_format
+        self._ws: aiohttp.ClientWebSocketResponse | None = None
+        self._session: aiohttp.ClientSession | None = None
+        self._audio_queue: asyncio.Queue[bytes | None] = asyncio.Queue()
+        self._receive_task: asyncio.Task | None = None
+        self._closed = False
+
+    async def connect(self) -> None:
+        """Establish WebSocket connection to ElevenLabs TTS."""
+        self._logger.info("ElevenLabsStreamingSynthesizer: connecting")
+        self._session = aiohttp.ClientSession()
+
+        # WebSocket URL for streaming input TTS with output format for streaming compatibility
+        # Using mp3_44100_64 for good quality with smaller chunks for real-time playback
+        url = (
+            f"wss://api.elevenlabs.io/v1/text-to-speech/{self.voice_id}/stream-input"
+            f"?model_id={self.model_id}&output_format={self.output_format}"
+        )
+
+        self._ws = await self._session.ws_connect(
+            url,
+            headers={"xi-api-key": self.api_key},
+        )
+
+        # Send initial configuration with generation settings optimized for streaming
+        await self._ws.send_str(
+            json.dumps(
+                {
+                    "text": " ",  # Initial space to start the stream
+                    "voice_settings": {
+                        "stability": 0.5,
+                        "similarity_boost": 0.75,
+                    },
+                    "generation_config": {
+                        "chunk_length_schedule": [
+                            120,
+                            160,
+                            250,
+                            290,
+                        ],  # Optimized chunk sizes for streaming
+                    },
+                    "xi_api_key": self.api_key,
+                }
+            )
+        )
+
+        # Start receiving audio in background
+        self._receive_task = asyncio.create_task(self._receive_loop())
+        self._logger.info("ElevenLabsStreamingSynthesizer: connected")
+
+    async def _receive_loop(self) -> None:
+        """Background task to receive audio chunks from WebSocket."""
+        if not self._ws:
+            return
+
+        try:
+            async for msg in self._ws:
+                if self._closed:
+                    break
+                if msg.type == aiohttp.WSMsgType.TEXT:
+                    data = json.loads(msg.data)
+                    if "audio" in data and data["audio"]:
+                        # Audio is base64 encoded
+                        audio_bytes = base64.b64decode(data["audio"])
+                        await self._audio_queue.put(audio_bytes)
+                elif msg.type == aiohttp.WSMsgType.BINARY:
+                    await self._audio_queue.put(msg.data)
+                elif msg.type in (
+                    aiohttp.WSMsgType.CLOSE,
+                    aiohttp.WSMsgType.ERROR,
+                ):
+                    break
+        except Exception as e:
+            self._logger.error(f"ElevenLabsStreamingSynthesizer receive error: {e}")
+        finally:
+            await self._audio_queue.put(None)  # Signal end of stream
+
+    async def send_text(self, text: str) -> None:
+        """Send text to be synthesized."""
+        if self._ws and not self._closed:
+            await self._ws.send_str(
+                json.dumps(
+                    {
+                        "text": text,
+                        "try_trigger_generation": True,
+                    }
+                )
+            )
+
+    async def receive_audio(self) -> bytes | None:
+        """Receive next audio chunk."""
+        try:
+            return await asyncio.wait_for(self._audio_queue.get(), timeout=0.1)
+        except asyncio.TimeoutError:
+            return b""  # No audio yet, but not done
+
+    async def flush(self) -> None:
+        """Signal end of text input to generate remaining audio."""
+        if self._ws and not self._closed:
+            await self._ws.send_str(json.dumps({"text": ""}))
+
+    async def close(self) -> None:
+        """Close the session."""
+        self._closed = True
+        if self._ws:
+            await self._ws.close()
+        if self._receive_task:
+            self._receive_task.cancel()
+            try:
+                await self._receive_task
+            except asyncio.CancelledError:
+                pass
+        if self._session:
+            await self._session.close()
+
+
 class ElevenLabsVoiceProvider(VoiceProviderInterface):
     """ElevenLabs voice provider."""
 
@@ -194,10 +327,51 @@ class ElevenLabsVoiceProvider(VoiceProviderInterface):
         raise NotImplementedError("ElevenLabs STT not yet implemented")
 
     async def synthesize_stream(
-        self, _text: str, _voice: str | None = None, _speed: float = 1.0
+        self, text: str, voice: str | None = None, _speed: float = 1.0
     ) -> AsyncIterator[bytes]:
-        raise NotImplementedError("ElevenLabs TTS not yet implemented")
-        yield b""  # Required for async generator
+        """
+        Convert text to audio using ElevenLabs TTS with streaming.
+
+        Args:
+            text: Text to convert to speech
+            voice: Voice ID (defaults to provider's default voice or Rachel)
+            speed: Playback speed multiplier (not directly supported, ignored)
+
+        Yields:
+            Audio data chunks (mp3 format)
+        """
+        if not self.api_key:
+            raise ValueError("ElevenLabs API key required for TTS")
+
+        voice_id = voice or self.default_voice or "21m00Tcm4TlvDq8ikWAM"  # Rachel
+
+        url = f"{self.api_base}/v1/text-to-speech/{voice_id}/stream"
+
+        headers = {
+            "xi-api-key": self.api_key,
+            "Content-Type": "application/json",
+            "Accept": "audio/mpeg",
+        }
+
+        payload = {
+            "text": text,
+            "model_id": self.tts_model,
+            "voice_settings": {
+                "stability": 0.5,
+                "similarity_boost": 0.75,
+            },
+        }
+
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, headers=headers, json=payload) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    raise RuntimeError(f"ElevenLabs TTS failed: {error_text}")
+
+                # Use 8192 byte chunks for smoother streaming
+                async for chunk in response.content.iter_chunked(8192):
+                    if chunk:
+                        yield chunk
 
     def get_available_voices(self) -> list[dict[str, str]]:
         """Return common ElevenLabs voices."""
@@ -220,6 +394,10 @@ class ElevenLabsVoiceProvider(VoiceProviderInterface):
         """ElevenLabs supports streaming via Scribe Realtime API."""
         return True
 
+    def supports_streaming_tts(self) -> bool:
+        """ElevenLabs supports real-time streaming TTS via WebSocket."""
+        return True
+
     async def create_streaming_transcriber(
         self, _audio_format: str = "webm"
     ) -> ElevenLabsStreamingTranscriber:
@@ -232,3 +410,20 @@ class ElevenLabsVoiceProvider(VoiceProviderInterface):
         )
         await transcriber.connect()
         return transcriber
+
+    async def create_streaming_synthesizer(
+        self, voice: str | None = None, _speed: float = 1.0
+    ) -> ElevenLabsStreamingSynthesizer:
+        """Create a streaming TTS session."""
+        if not self.api_key:
+            raise ValueError("API key required for streaming TTS")
+        voice_id = voice or self.default_voice or "21m00Tcm4TlvDq8ikWAM"
+        synthesizer = ElevenLabsStreamingSynthesizer(
+            api_key=self.api_key,
+            voice_id=voice_id,
+            model_id=self.tts_model or "eleven_multilingual_v2",
+            # Use mp3_44100_64 for streaming - good balance of quality and chunk size
+            output_format="mp3_44100_64",
+        )
+        await synthesizer.connect()
+        return synthesizer

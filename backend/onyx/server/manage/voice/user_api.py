@@ -2,6 +2,7 @@ from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import File
 from fastapi import HTTPException
+from fastapi import Query
 from fastapi import UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -13,7 +14,6 @@ from onyx.db.voice import fetch_default_stt_provider
 from onyx.db.voice import fetch_default_tts_provider
 from onyx.db.voice import update_user_voice_settings
 from onyx.server.manage.models import VoiceSettingsUpdateRequest
-from onyx.server.manage.voice.models import SynthesizeRequest
 from onyx.utils.logger import setup_logger
 from onyx.voice.factory import get_voice_provider
 
@@ -79,39 +79,62 @@ async def transcribe_audio(
 
 @router.post("/synthesize")
 async def synthesize_speech(
-    request: SynthesizeRequest,
+    text: str | None = Query(default=None, description="Text to synthesize"),
+    voice: str | None = Query(default=None, description="Voice ID to use"),
+    speed: float | None = Query(default=None, description="Playback speed (0.5-2.0)"),
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> StreamingResponse:
-    """Synthesize text to speech using the default TTS provider."""
+    """
+    Synthesize text to speech using the default TTS provider.
+
+    Accepts parameters via query string for streaming compatibility.
+    """
+    logger.info(
+        f"TTS request: text length={len(text) if text else 0}, voice={voice}, speed={speed}"
+    )
+
+    if not text:
+        raise HTTPException(status_code=400, detail="Text is required")
+
     provider_db = fetch_default_tts_provider(db_session)
     if provider_db is None:
+        logger.error("No TTS provider configured")
         raise HTTPException(
             status_code=400,
             detail="No text-to-speech provider configured. Please contact your administrator.",
         )
 
     if not provider_db.api_key:
+        logger.error("TTS provider has no API key")
         raise HTTPException(
             status_code=400,
             detail="Voice provider API key not configured.",
         )
 
     # Use request voice, or user's preferred voice, or provider default
-    voice = request.voice or user.preferred_voice or provider_db.default_voice
-    speed = request.speed or user.voice_playback_speed or 1.0
+    final_voice = voice or user.preferred_voice or provider_db.default_voice
+    final_speed = speed or user.voice_playback_speed or 1.0
+
+    logger.info(
+        f"TTS using provider: {provider_db.provider_type}, voice: {final_voice}, speed: {final_speed}"
+    )
 
     try:
         provider = get_voice_provider(provider_db)
     except ValueError as exc:
+        logger.error(f"Failed to get voice provider: {exc}")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     async def audio_stream():
         try:
+            chunk_count = 0
             async for chunk in provider.synthesize_stream(
-                text=request.text, voice=voice, speed=speed
+                text=text, voice=final_voice, speed=final_speed
             ):
+                chunk_count += 1
                 yield chunk
+            logger.info(f"TTS streaming complete: {chunk_count} chunks sent")
         except NotImplementedError as exc:
             logger.error(f"TTS not implemented: {exc}")
             raise
@@ -122,7 +145,12 @@ async def synthesize_speech(
     return StreamingResponse(
         audio_stream(),
         media_type="audio/mpeg",
-        headers={"Content-Disposition": "inline; filename=speech.mp3"},
+        headers={
+            "Content-Disposition": "inline; filename=speech.mp3",
+            # Allow streaming by not setting content-length
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",  # Disable nginx buffering
+        },
     )
 
 

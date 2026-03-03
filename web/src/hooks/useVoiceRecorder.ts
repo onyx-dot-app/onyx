@@ -3,6 +3,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 // Target format for OpenAI Realtime API
 const TARGET_SAMPLE_RATE = 24000;
 const CHUNK_INTERVAL_MS = 250;
+const SILENCE_TIMEOUT_MS = 5000; // Stop recording if no speech detected for 5 seconds
 
 interface TranscriptMessage {
   type: "transcript" | "error";
@@ -43,20 +44,24 @@ class VoiceRecorderSession {
   private transcript = "";
   private stopResolver: ((text: string | null) => void) | null = null;
   private isActive = false;
+  private silenceTimeout: NodeJS.Timeout | null = null;
 
   // Callbacks to update React state
   private onTranscriptChange: (text: string) => void;
   private onFinalTranscript: ((text: string) => void) | null;
   private onError: (error: string) => void;
+  private onSilenceTimeout: (() => void) | null;
 
   constructor(
     onTranscriptChange: (text: string) => void,
     onFinalTranscript: ((text: string) => void) | null,
-    onError: (error: string) => void
+    onError: (error: string) => void,
+    onSilenceTimeout?: () => void
   ) {
     this.onTranscriptChange = onTranscriptChange;
     this.onFinalTranscript = onFinalTranscript;
     this.onError = onError;
+    this.onSilenceTimeout = onSilenceTimeout || null;
   }
 
   get recording(): boolean {

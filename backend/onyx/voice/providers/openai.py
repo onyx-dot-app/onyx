@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 import aiohttp
 
+from onyx.voice.interface import StreamingSynthesizerProtocol
 from onyx.voice.interface import StreamingTranscriberProtocol
 from onyx.voice.interface import TranscriptResult
 from onyx.voice.interface import VoiceProviderInterface
@@ -260,6 +261,157 @@ OPENAI_TTS_MODELS = [
 ]
 
 
+def _create_wav_header(
+    data_length: int,
+    sample_rate: int = 24000,
+    channels: int = 1,
+    bits_per_sample: int = 16,
+) -> bytes:
+    """Create a WAV file header for PCM audio data."""
+    import struct
+
+    byte_rate = sample_rate * channels * bits_per_sample // 8
+    block_align = channels * bits_per_sample // 8
+
+    # WAV header is 44 bytes
+    header = struct.pack(
+        "<4sI4s4sIHHIIHH4sI",
+        b"RIFF",  # ChunkID
+        36 + data_length,  # ChunkSize
+        b"WAVE",  # Format
+        b"fmt ",  # Subchunk1ID
+        16,  # Subchunk1Size (PCM)
+        1,  # AudioFormat (1 = PCM)
+        channels,  # NumChannels
+        sample_rate,  # SampleRate
+        byte_rate,  # ByteRate
+        block_align,  # BlockAlign
+        bits_per_sample,  # BitsPerSample
+        b"data",  # Subchunk2ID
+        data_length,  # Subchunk2Size
+    )
+    return header
+
+
+class OpenAIStreamingSynthesizer(StreamingSynthesizerProtocol):
+    """Streaming TTS using OpenAI HTTP TTS API with streaming responses."""
+
+    def __init__(
+        self,
+        api_key: str,
+        voice: str = "alloy",
+        model: str = "tts-1",
+        speed: float = 1.0,
+    ):
+        from onyx.utils.logger import setup_logger
+
+        self._logger = setup_logger()
+        self.api_key = api_key
+        self.voice = voice
+        self.model = model
+        self.speed = max(0.25, min(4.0, speed))
+        self._session: aiohttp.ClientSession | None = None
+        self._audio_queue: asyncio.Queue[bytes | None] = asyncio.Queue()
+        self._text_queue: asyncio.Queue[str | None] = asyncio.Queue()
+        self._synthesis_task: asyncio.Task | None = None
+        self._closed = False
+
+    async def connect(self) -> None:
+        """Initialize HTTP session for TTS requests."""
+        self._logger.info("OpenAIStreamingSynthesizer: connecting")
+        self._session = aiohttp.ClientSession()
+        # Start background task to process text queue
+        self._synthesis_task = asyncio.create_task(self._process_text_queue())
+        self._logger.info("OpenAIStreamingSynthesizer: connected")
+
+    async def _process_text_queue(self) -> None:
+        """Background task to process queued text for synthesis."""
+        while not self._closed:
+            try:
+                text = await asyncio.wait_for(self._text_queue.get(), timeout=0.1)
+                if text is None:
+                    break
+                await self._synthesize_text(text)
+            except asyncio.TimeoutError:
+                continue
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                self._logger.error(f"Error processing text queue: {e}")
+
+    async def _synthesize_text(self, text: str) -> None:
+        """Make HTTP TTS request and stream audio to queue."""
+        if not self._session or self._closed:
+            return
+
+        url = "https://api.openai.com/v1/audio/speech"
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": self.model,
+            "voice": self.voice,
+            "input": text,
+            "speed": self.speed,
+            "response_format": "mp3",
+        }
+
+        try:
+            async with self._session.post(
+                url, headers=headers, json=payload
+            ) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    self._logger.error(f"OpenAI TTS error: {error_text}")
+                    return
+
+                # Use 8192 byte chunks for smoother streaming
+                # (larger chunks = more complete MP3 frames, better playback)
+                async for chunk in response.content.iter_chunked(8192):
+                    if self._closed:
+                        break
+                    if chunk:
+                        await self._audio_queue.put(chunk)
+        except Exception as e:
+            self._logger.error(f"OpenAIStreamingSynthesizer synthesis error: {e}")
+
+    async def send_text(self, text: str) -> None:
+        """Queue text to be synthesized via HTTP streaming."""
+        if not text.strip() or self._closed:
+            return
+        await self._text_queue.put(text)
+
+    async def receive_audio(self) -> bytes | None:
+        """Receive next audio chunk (MP3 format)."""
+        try:
+            return await asyncio.wait_for(self._audio_queue.get(), timeout=0.1)
+        except asyncio.TimeoutError:
+            return b""  # No audio yet, but not done
+
+    async def flush(self) -> None:
+        """Signal end of text input - wait for queue to drain."""
+        # Wait for text queue to be processed
+        while not self._text_queue.empty():
+            await asyncio.sleep(0.05)
+
+    async def close(self) -> None:
+        """Close the session."""
+        self._closed = True
+        # Signal end of text queue
+        await self._text_queue.put(None)
+        if self._synthesis_task and not self._synthesis_task.done():
+            self._synthesis_task.cancel()
+            try:
+                await self._synthesis_task
+            except asyncio.CancelledError:
+                pass
+        # Signal end of audio stream
+        await self._audio_queue.put(None)
+        if self._session:
+            await self._session.close()
+
+
 class OpenAIVoiceProvider(VoiceProviderInterface):
     """OpenAI voice provider using Whisper for STT and TTS API for speech synthesis."""
 
@@ -333,6 +485,8 @@ class OpenAIVoiceProvider(VoiceProviderInterface):
         speed = max(0.25, min(4.0, speed))
 
         # Use with_streaming_response for proper async streaming
+        # Using 8192 byte chunks for better streaming performance
+        # (larger chunks = fewer round-trips, more complete MP3 frames)
         async with client.audio.speech.with_streaming_response.create(
             model=self.tts_model,
             voice=voice or self.default_voice,
@@ -340,7 +494,7 @@ class OpenAIVoiceProvider(VoiceProviderInterface):
             speed=speed,
             response_format="mp3",
         ) as response:
-            async for chunk in response.iter_bytes(chunk_size=4096):
+            async for chunk in response.iter_bytes(chunk_size=8192):
                 yield chunk
 
     def get_available_voices(self) -> list[dict[str, str]]:
@@ -359,6 +513,10 @@ class OpenAIVoiceProvider(VoiceProviderInterface):
         """OpenAI supports streaming via Realtime API for all STT models."""
         return True
 
+    def supports_streaming_tts(self) -> bool:
+        """OpenAI supports real-time streaming TTS via Realtime API."""
+        return True
+
     async def create_streaming_transcriber(
         self, _audio_format: str = "webm"
     ) -> OpenAIStreamingTranscriber:
@@ -371,3 +529,18 @@ class OpenAIVoiceProvider(VoiceProviderInterface):
         )
         await transcriber.connect()
         return transcriber
+
+    async def create_streaming_synthesizer(
+        self, voice: str | None = None, speed: float = 1.0
+    ) -> OpenAIStreamingSynthesizer:
+        """Create a streaming TTS session using HTTP streaming API."""
+        if not self.api_key:
+            raise ValueError("API key required for streaming TTS")
+        synthesizer = OpenAIStreamingSynthesizer(
+            api_key=self.api_key,
+            voice=voice or self.default_voice or "alloy",
+            model=self.tts_model or "tts-1",
+            speed=speed,
+        )
+        await synthesizer.connect()
+        return synthesizer

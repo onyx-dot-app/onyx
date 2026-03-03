@@ -1,4 +1,4 @@
-"""WebSocket API for streaming speech-to-text."""
+"""WebSocket API for streaming speech-to-text and text-to-speech."""
 
 import asyncio
 import io
@@ -12,8 +12,10 @@ from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_sqlalchemy_engine
 from onyx.db.voice import fetch_default_stt_provider
+from onyx.db.voice import fetch_default_tts_provider
 from onyx.utils.logger import setup_logger
 from onyx.voice.factory import get_voice_provider
+from onyx.voice.interface import StreamingSynthesizerProtocol
 from onyx.voice.interface import StreamingTranscriberProtocol
 from onyx.voice.interface import TranscriptResult
 
@@ -364,3 +366,223 @@ async def websocket_transcribe(websocket: WebSocket) -> None:
         except Exception:
             pass
         logger.info("WebSocket transcribe: connection closed")
+
+
+async def handle_streaming_synthesis(
+    websocket: WebSocket,
+    synthesizer: StreamingSynthesizerProtocol,
+) -> None:
+    """Handle TTS using native streaming API."""
+    logger.info("Streaming synthesis: starting handler")
+
+    async def send_audio() -> None:
+        """Background task to send audio chunks to client."""
+        try:
+            while True:
+                audio_chunk = await synthesizer.receive_audio()
+                if audio_chunk is None:
+                    # End of stream
+                    try:
+                        await websocket.send_json({"type": "audio_done"})
+                    except Exception:
+                        pass  # Client may have disconnected
+                    break
+                if audio_chunk:  # Skip empty chunks
+                    try:
+                        await websocket.send_bytes(audio_chunk)
+                    except Exception:
+                        break  # Client disconnected
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            logger.debug(f"Streaming synthesis: send_audio error: {e}")
+
+    send_task: asyncio.Task | None = None
+    disconnected = False
+
+    try:
+        while not disconnected:
+            try:
+                message = await websocket.receive()
+            except RuntimeError as e:
+                if "disconnect" in str(e).lower():
+                    logger.info("Streaming synthesis: client disconnected")
+                    break
+                raise
+
+            msg_type = message.get("type", "unknown")
+
+            if msg_type == "websocket.disconnect":
+                logger.info("Streaming synthesis: client disconnected")
+                disconnected = True
+                break
+
+            if "text" in message:
+                try:
+                    data = json.loads(message["text"])
+                    logger.info(f"Streaming synthesis: received message: {data}")
+
+                    if data.get("type") == "synthesize":
+                        text = data.get("text", "")
+                        if text:
+                            # Start sending audio in background
+                            if send_task is None or send_task.done():
+                                send_task = asyncio.create_task(send_audio())
+                            await synthesizer.send_text(text)
+
+                    elif data.get("type") == "end":
+                        logger.info("Streaming synthesis: end signal received")
+                        if hasattr(synthesizer, "flush"):
+                            await synthesizer.flush()
+                        break
+
+                except json.JSONDecodeError:
+                    logger.warning(
+                        f"Streaming synthesis: failed to parse JSON: {message.get('text', '')[:100]}"
+                    )
+
+    except Exception as e:
+        if "disconnect" not in str(e).lower():
+            logger.error(f"Streaming synthesis: error: {e}", exc_info=True)
+    finally:
+        if send_task:
+            send_task.cancel()
+            try:
+                await send_task
+            except asyncio.CancelledError:
+                pass
+        logger.info("Streaming synthesis: handler finished")
+
+
+@router.websocket("/synthesize/stream")
+async def websocket_synthesize(websocket: WebSocket) -> None:
+    """
+    WebSocket endpoint for streaming text-to-speech.
+
+    Protocol:
+    - Client sends JSON: {"type": "synthesize", "text": "...", "voice": "...", "speed": 1.0}
+    - Server sends binary audio chunks
+    - Server sends JSON: {"type": "audio_done"} when synthesis completes
+    - Client sends JSON {"type": "end"} to close connection
+    """
+    logger.info("WebSocket synthesize: connection request received")
+
+    try:
+        await websocket.accept()
+        logger.info("WebSocket synthesize: connection accepted")
+    except Exception as e:
+        logger.error(f"WebSocket synthesize: failed to accept connection: {e}")
+        return
+
+    streaming_synthesizer: StreamingSynthesizerProtocol | None = None
+    provider = None
+
+    try:
+        # Get TTS provider
+        logger.info("WebSocket synthesize: fetching TTS provider from database")
+        engine = get_sqlalchemy_engine()
+        with Session(engine) as db_session:
+            provider_db = fetch_default_tts_provider(db_session)
+            if provider_db is None:
+                logger.warning(
+                    "WebSocket synthesize: no default TTS provider configured"
+                )
+                await websocket.send_json(
+                    {
+                        "type": "error",
+                        "message": "No text-to-speech provider configured",
+                    }
+                )
+                return
+
+            if not provider_db.api_key:
+                logger.warning("WebSocket synthesize: TTS provider has no API key")
+                await websocket.send_json(
+                    {
+                        "type": "error",
+                        "message": "Text-to-speech provider has no API key configured",
+                    }
+                )
+                return
+
+            logger.info(
+                f"WebSocket synthesize: creating voice provider: {provider_db.provider_type}"
+            )
+            try:
+                provider = get_voice_provider(provider_db)
+                logger.info(
+                    f"WebSocket synthesize: voice provider created, streaming TTS supported: {provider.supports_streaming_tts()}"
+                )
+            except ValueError as e:
+                logger.error(
+                    f"WebSocket synthesize: failed to create voice provider: {e}"
+                )
+                await websocket.send_json({"type": "error", "message": str(e)})
+                return
+
+        # Use native streaming if provider supports it
+        if provider.supports_streaming_tts():
+            logger.info("WebSocket synthesize: using native streaming TTS")
+            try:
+                # Wait for initial config message with voice/speed
+                message = await websocket.receive()
+                voice = None
+                speed = 1.0
+                if "text" in message:
+                    try:
+                        data = json.loads(message["text"])
+                        voice = data.get("voice")
+                        speed = data.get("speed", 1.0)
+                    except json.JSONDecodeError:
+                        pass
+
+                streaming_synthesizer = await provider.create_streaming_synthesizer(
+                    voice=voice, speed=speed
+                )
+                logger.info(
+                    "WebSocket synthesize: streaming synthesizer created successfully"
+                )
+                await handle_streaming_synthesis(websocket, streaming_synthesizer)
+            except Exception as e:
+                logger.error(
+                    f"WebSocket synthesize: failed to create streaming synthesizer: {e}"
+                )
+                await websocket.send_json(
+                    {"type": "error", "message": f"Streaming TTS failed: {e}"}
+                )
+        else:
+            logger.warning(
+                "WebSocket synthesize: provider doesn't support streaming TTS"
+            )
+            await websocket.send_json(
+                {"type": "error", "message": "Provider doesn't support streaming TTS"}
+            )
+
+    except WebSocketDisconnect:
+        logger.debug("WebSocket synthesize: client disconnected")
+    except RuntimeError as e:
+        if "disconnect" in str(e).lower():
+            logger.debug("WebSocket synthesize: client disconnected")
+        else:
+            logger.error(f"WebSocket synthesize: runtime error: {e}")
+    except Exception as e:
+        error_str = str(e).lower()
+        if "disconnect" in error_str or "websocket.close" in error_str:
+            logger.debug("WebSocket synthesize: client disconnected")
+        else:
+            logger.error(f"WebSocket synthesize: unhandled error: {e}", exc_info=True)
+            try:
+                await websocket.send_json({"type": "error", "message": str(e)})
+            except Exception:
+                pass
+    finally:
+        if streaming_synthesizer:
+            try:
+                await streaming_synthesizer.close()
+            except Exception:
+                pass
+        try:
+            await websocket.close()
+        except Exception:
+            pass
+        logger.info("WebSocket synthesize: connection closed")
