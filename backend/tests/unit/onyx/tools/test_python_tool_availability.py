@@ -23,7 +23,7 @@ def _clear_health_cache() -> None:
     """Reset the health check cache before every test."""
     import onyx.tools.tool_implementations.python.code_interpreter_client as mod
 
-    mod._health_cache = None
+    mod._health_cache = {}
 
 
 # ------------------------------------------------------------------
