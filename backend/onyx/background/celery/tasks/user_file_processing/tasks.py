@@ -520,7 +520,7 @@ def process_user_file_impl(
         task_logger.exception(
             f"process_user_file_impl - Error processing file id={user_file_id} - {e.__class__.__name__}"
         )
-        raise e
+        raise
     finally:
         if file_lock is not None and file_lock.owned():
             file_lock.release()
@@ -676,7 +676,7 @@ def delete_user_file_impl(
         task_logger.exception(
             f"delete_user_file_impl - Error processing file id={user_file_id} - {e.__class__.__name__}"
         )
-        raise e
+        raise
     finally:
         if file_lock is not None and file_lock.owned():
             file_lock.release()
@@ -851,7 +851,7 @@ def project_sync_user_file_impl(
         task_logger.exception(
             f"project_sync_user_file_impl - Error syncing project for file id={user_file_id} - {e.__class__.__name__}"
         )
-        raise e
+        raise
     finally:
         if file_lock is not None and file_lock.owned():
             file_lock.release()
