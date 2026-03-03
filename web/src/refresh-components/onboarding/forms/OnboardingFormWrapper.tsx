@@ -232,17 +232,29 @@ export function OnboardingFormWrapper<T extends Record<string, any>>({
             (payload as Record<string, any>).default_model_name ??
             (payload as Record<string, any>).model_configurations?.[0]?.name ??
             "";
-          const setDefaultResponse = await fetch(`${LLM_ADMIN_URL}/default`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              provider_id: newLlmProvider.id,
-              model_name: defaultModelName,
-            }),
-          });
-          if (!setDefaultResponse.ok) {
-            const err = await setDefaultResponse.json().catch(() => ({}));
-            console.error("Failed to set provider as default", err?.detail);
+
+          if (!defaultModelName) {
+            console.error(
+              "No model name available to set as default — skipping set-default call"
+            );
+          } else {
+            const setDefaultResponse = await fetch(`${LLM_ADMIN_URL}/default`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                provider_id: newLlmProvider.id,
+                model_name: defaultModelName,
+              }),
+            });
+            if (!setDefaultResponse.ok) {
+              const err = await setDefaultResponse.json().catch(() => ({}));
+              setErrorMessage(
+                err?.detail ?? "Failed to set provider as default"
+              );
+              setApiStatus("error");
+              setIsSubmitting(false);
+              return;
+            }
           }
         }
       } catch (_e) {
