@@ -479,16 +479,19 @@ def put_llm_provider(
 @admin_router.delete("/provider/{provider_id}")
 def delete_llm_provider(
     provider_id: int,
+    force: bool = Query(False),
     _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     try:
-        model = fetch_default_llm_model(db_session)
+        if not force:
+            model = fetch_default_llm_model(db_session)
 
-        if model and model.llm_provider_id == provider_id:
-            raise HTTPException(
-                status_code=400, detail="Cannot delete the default LLM provider"
-            )
+            if model and model.llm_provider_id == provider_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Cannot delete the default LLM provider",
+                )
 
         remove_llm_provider(db_session, provider_id)
     except ValueError as e:

@@ -506,6 +506,62 @@ def test_delete_non_default_llm_provider_with_default_set(
     assert default_data is not None
 
 
+def test_force_delete_default_llm_provider(
+    reset: None,  # noqa: ARG001
+) -> None:
+    """Force-deleting the default LLM provider should succeed."""
+    admin_user = UserManager.create(name="admin_user")
+
+    # Create a provider
+    response = requests.put(
+        f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
+        headers=admin_user.headers,
+        json={
+            "name": "test-provider-force-delete",
+            "provider": LlmProviderNames.OPENAI,
+            "api_key": "sk-000000000000000000000000000000000000000000000000",
+            "model_configurations": [
+                ModelConfigurationUpsertRequest(
+                    name="gpt-4o-mini", is_visible=True
+                ).model_dump()
+            ],
+            "is_public": True,
+            "groups": [],
+        },
+    )
+    assert response.status_code == 200
+    created_provider = response.json()
+
+    # Set this provider as the default
+    set_default_response = requests.post(
+        f"{API_SERVER_URL}/admin/llm/default",
+        headers=admin_user.headers,
+        json={
+            "provider_id": created_provider["id"],
+            "model_name": "gpt-4o-mini",
+        },
+    )
+    assert set_default_response.status_code == 200
+
+    # Attempt to delete without force — should be rejected
+    delete_response = requests.delete(
+        f"{API_SERVER_URL}/admin/llm/provider/{created_provider['id']}",
+        headers=admin_user.headers,
+    )
+    assert delete_response.status_code == 400
+
+    # Force delete — should succeed
+    force_delete_response = requests.delete(
+        f"{API_SERVER_URL}/admin/llm/provider/{created_provider['id']}?force=true",
+        headers=admin_user.headers,
+    )
+    assert force_delete_response.status_code == 200
+
+    # Verify provider is gone
+    provider_data = _get_provider_by_id(admin_user, created_provider["id"])
+    assert provider_data is None
+
+
 def test_delete_default_vision_provider_clears_vision_default(
     reset: None,  # noqa: ARG001
 ) -> None:

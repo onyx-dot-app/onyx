@@ -526,8 +526,14 @@ export class OnyxApiClient {
    *
    * @param providerId - The provider ID to delete
    */
-  async deleteProvider(providerId: number): Promise<void> {
-    const response = await this.delete(`/admin/llm/provider/${providerId}`);
+  async deleteProvider(
+    providerId: number,
+    { force = false }: { force?: boolean } = {}
+  ): Promise<void> {
+    const query = force ? "?force=true" : "";
+    const response = await this.delete(
+      `/admin/llm/provider/${providerId}${query}`
+    );
 
     await this.handleResponseSoft(
       response,
