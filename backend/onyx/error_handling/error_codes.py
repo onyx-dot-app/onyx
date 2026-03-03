@@ -3,11 +3,9 @@ Standardized error codes for the Onyx backend.
 
 Usage:
     from onyx.error_handling.error_codes import OnyxErrorCode
+    from onyx.error_handling.exceptions import OnyxError
 
-    raise HTTPException(
-        status_code=OnyxErrorCode.UNAUTHENTICATED.status_code,
-        detail=OnyxErrorCode.UNAUTHENTICATED.detail("Token expired"),
-    )
+    raise OnyxError(OnyxErrorCode.UNAUTHENTICATED, "Token expired")
 """
 
 from enum import Enum
