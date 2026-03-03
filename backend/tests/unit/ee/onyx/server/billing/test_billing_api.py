@@ -11,7 +11,8 @@ from ee.onyx.server.billing.models import CreateCheckoutSessionResponse
 from ee.onyx.server.billing.models import CreateCustomerPortalSessionResponse
 from ee.onyx.server.billing.models import SeatUpdateResponse
 from ee.onyx.server.billing.models import SubscriptionStatusResponse
-from ee.onyx.server.billing.service import BillingServiceError
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 
 
 class TestCreateCheckoutSession:
@@ -88,24 +89,25 @@ class TestCreateCheckoutSession:
         mock_get_tenant: MagicMock,
         mock_service: AsyncMock,
     ) -> None:
-        """Should raise HTTPException when service fails."""
-        from fastapi import HTTPException
-
+        """Should propagate OnyxError when service fails."""
         from ee.onyx.server.billing.api import create_checkout_session
 
         mock_get_license.return_value = None
         mock_get_tenant.return_value = "tenant_123"
-        mock_service.side_effect = BillingServiceError("Stripe error", 502)
+        mock_service.side_effect = OnyxError(
+            OnyxErrorCode.BAD_GATEWAY,
+            "Stripe error",
+            status_code_override=502,
+        )
 
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(OnyxError) as exc_info:
             await create_checkout_session(
                 request=None, _=MagicMock(), db_session=MagicMock()
             )
 
         assert exc_info.value.status_code == 502
-        assert isinstance(exc_info.value.detail, dict)
-        assert exc_info.value.detail["error_code"] == "BILLING_SERVICE_ERROR"
-        assert exc_info.value.detail["message"] == "Stripe error"
+        assert exc_info.value.error_code is OnyxErrorCode.BAD_GATEWAY
+        assert exc_info.value.message == "Stripe error"
 
 
 class TestCreateCustomerPortalSession:
@@ -123,21 +125,19 @@ class TestCreateCustomerPortalSession:
         mock_service: AsyncMock,  # noqa: ARG002
     ) -> None:
         """Should reject self-hosted without license."""
-        from fastapi import HTTPException
-
         from ee.onyx.server.billing.api import create_customer_portal_session
 
         mock_get_license.return_value = None
         mock_get_tenant.return_value = None
 
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(OnyxError) as exc_info:
             await create_customer_portal_session(
                 request=None, _=MagicMock(), db_session=MagicMock()
             )
 
         assert exc_info.value.status_code == 400
-        assert isinstance(exc_info.value.detail, dict)
-        assert exc_info.value.detail["message"] == "No license found"
+        assert exc_info.value.error_code is OnyxErrorCode.VALIDATION_ERROR
+        assert exc_info.value.message == "No license found"
 
     @pytest.mark.asyncio
     @patch("ee.onyx.server.billing.api.create_portal_service")
@@ -230,8 +230,6 @@ class TestUpdateSeats:
         mock_get_tenant: MagicMock,
     ) -> None:
         """Should reject self-hosted without license."""
-        from fastapi import HTTPException
-
         from ee.onyx.server.billing.api import update_seats
         from ee.onyx.server.billing.models import SeatUpdateRequest
 
@@ -240,12 +238,12 @@ class TestUpdateSeats:
 
         request = SeatUpdateRequest(new_seat_count=10)
 
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(OnyxError) as exc_info:
             await update_seats(request=request, _=MagicMock(), db_session=MagicMock())
 
         assert exc_info.value.status_code == 400
-        assert isinstance(exc_info.value.detail, dict)
-        assert exc_info.value.detail["message"] == "No license found"
+        assert exc_info.value.error_code is OnyxErrorCode.VALIDATION_ERROR
+        assert exc_info.value.message == "No license found"
 
     @pytest.mark.asyncio
     @patch("ee.onyx.server.billing.api.get_used_seats")
@@ -299,28 +297,27 @@ class TestUpdateSeats:
         mock_service: AsyncMock,
         mock_get_used_seats: MagicMock,
     ) -> None:
-        """Should convert BillingServiceError to HTTPException."""
-        from fastapi import HTTPException
-
+        """Should propagate OnyxError from service layer."""
         from ee.onyx.server.billing.api import update_seats
         from ee.onyx.server.billing.models import SeatUpdateRequest
 
         mock_get_license.return_value = "license_blob"
         mock_get_tenant.return_value = None
         mock_get_used_seats.return_value = 0
-        mock_service.side_effect = BillingServiceError(
-            "Cannot reduce below 10 seats", 400
+        mock_service.side_effect = OnyxError(
+            OnyxErrorCode.BAD_GATEWAY,
+            "Cannot reduce below 10 seats",
+            status_code_override=400,
         )
 
         request = SeatUpdateRequest(new_seat_count=5)
 
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(OnyxError) as exc_info:
             await update_seats(request=request, _=MagicMock(), db_session=MagicMock())
 
         assert exc_info.value.status_code == 400
-        assert isinstance(exc_info.value.detail, dict)
-        assert exc_info.value.detail["error_code"] == "BILLING_SERVICE_ERROR"
-        assert exc_info.value.detail["message"] == "Cannot reduce below 10 seats"
+        assert exc_info.value.error_code is OnyxErrorCode.BAD_GATEWAY
+        assert exc_info.value.message == "Cannot reduce below 10 seats"
 
 
 class TestCircuitBreaker:
@@ -338,20 +335,18 @@ class TestCircuitBreaker:
         mock_circuit_open: MagicMock,
     ) -> None:
         """Should return 503 when circuit breaker is open."""
-        from fastapi import HTTPException
-
         from ee.onyx.server.billing.api import get_billing_information
 
         mock_get_license.return_value = "license_blob"
         mock_get_tenant.return_value = None
         mock_circuit_open.return_value = True
 
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(OnyxError) as exc_info:
             await get_billing_information(_=MagicMock(), db_session=MagicMock())
 
         assert exc_info.value.status_code == 503
-        assert isinstance(exc_info.value.detail, dict)
-        assert "Connect to Stripe" in exc_info.value.detail["message"]
+        assert exc_info.value.error_code is OnyxErrorCode.SERVICE_UNAVAILABLE
+        assert "Connect to Stripe" in exc_info.value.message
 
     @pytest.mark.asyncio
     @patch("ee.onyx.server.billing.api.MULTI_TENANT", False)
@@ -369,16 +364,18 @@ class TestCircuitBreaker:
         mock_open_circuit: MagicMock,
     ) -> None:
         """Should open circuit breaker on 502 error."""
-        from fastapi import HTTPException
-
         from ee.onyx.server.billing.api import get_billing_information
 
         mock_get_license.return_value = "license_blob"
         mock_get_tenant.return_value = None
         mock_circuit_open_check.return_value = False
-        mock_service.side_effect = BillingServiceError("Connection failed", 502)
+        mock_service.side_effect = OnyxError(
+            OnyxErrorCode.BAD_GATEWAY,
+            "Connection failed",
+            status_code_override=502,
+        )
 
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(OnyxError) as exc_info:
             await get_billing_information(_=MagicMock(), db_session=MagicMock())
 
         assert exc_info.value.status_code == 502
@@ -400,16 +397,18 @@ class TestCircuitBreaker:
         mock_open_circuit: MagicMock,
     ) -> None:
         """Should open circuit breaker on 503 error."""
-        from fastapi import HTTPException
-
         from ee.onyx.server.billing.api import get_billing_information
 
         mock_get_license.return_value = "license_blob"
         mock_get_tenant.return_value = None
         mock_circuit_open_check.return_value = False
-        mock_service.side_effect = BillingServiceError("Service unavailable", 503)
+        mock_service.side_effect = OnyxError(
+            OnyxErrorCode.BAD_GATEWAY,
+            "Service unavailable",
+            status_code_override=503,
+        )
 
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(OnyxError) as exc_info:
             await get_billing_information(_=MagicMock(), db_session=MagicMock())
 
         assert exc_info.value.status_code == 503
@@ -431,16 +430,18 @@ class TestCircuitBreaker:
         mock_open_circuit: MagicMock,
     ) -> None:
         """Should open circuit breaker on 504 error."""
-        from fastapi import HTTPException
-
         from ee.onyx.server.billing.api import get_billing_information
 
         mock_get_license.return_value = "license_blob"
         mock_get_tenant.return_value = None
         mock_circuit_open_check.return_value = False
-        mock_service.side_effect = BillingServiceError("Gateway timeout", 504)
+        mock_service.side_effect = OnyxError(
+            OnyxErrorCode.BAD_GATEWAY,
+            "Gateway timeout",
+            status_code_override=504,
+        )
 
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(OnyxError) as exc_info:
             await get_billing_information(_=MagicMock(), db_session=MagicMock())
 
         assert exc_info.value.status_code == 504
@@ -462,16 +463,18 @@ class TestCircuitBreaker:
         mock_open_circuit: MagicMock,
     ) -> None:
         """Should NOT open circuit breaker on 400 error (client error)."""
-        from fastapi import HTTPException
-
         from ee.onyx.server.billing.api import get_billing_information
 
         mock_get_license.return_value = "license_blob"
         mock_get_tenant.return_value = None
         mock_circuit_open_check.return_value = False
-        mock_service.side_effect = BillingServiceError("Bad request", 400)
+        mock_service.side_effect = OnyxError(
+            OnyxErrorCode.BAD_GATEWAY,
+            "Bad request",
+            status_code_override=400,
+        )
 
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(OnyxError) as exc_info:
             await get_billing_information(_=MagicMock(), db_session=MagicMock())
 
         assert exc_info.value.status_code == 400

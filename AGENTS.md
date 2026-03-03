@@ -619,29 +619,27 @@ Before writing your plan, make sure to do research. Explore the relevant section
 
 ## Error Handling
 
-**Always use `OnyxErrorCode` from `onyx.error_handling.error_codes` when raising `HTTPException`. Never hardcode
-status codes or use `starlette.status` / `fastapi.status` constants directly.**
+**Always raise `OnyxError` from `onyx.error_handling.exceptions` instead of `HTTPException`.
+Never hardcode status codes or use `starlette.status` / `fastapi.status` constants directly.**
 
-**Reason:** Standardized error codes give API consumers a stable, machine-readable `error_code` field to match on,
-and keep HTTP status codes consistent across the entire backend.
+A global FastAPI exception handler converts `OnyxError` into a JSON response with the standard
+`{"error_code": "...", "message": "..."}` shape. This eliminates boilerplate and keeps error
+handling consistent across the entire backend.
 
 ```python
-from fastapi import HTTPException
 from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 
 # ✅ Good
-raise HTTPException(
-    status_code=OnyxErrorCode.NOT_FOUND.status_code,
-    detail=OnyxErrorCode.NOT_FOUND.detail("Session not found"),
-)
+raise OnyxError(OnyxErrorCode.NOT_FOUND, "Session not found")
 
 # ✅ Good — no extra message needed
-raise HTTPException(
-    status_code=OnyxErrorCode.UNAUTHENTICATED.status_code,
-    detail=OnyxErrorCode.UNAUTHENTICATED.detail(),
-)
+raise OnyxError(OnyxErrorCode.UNAUTHENTICATED)
 
-# ❌ Bad — hardcoded status code
+# ✅ Good — upstream service with dynamic status code
+raise OnyxError(OnyxErrorCode.BAD_GATEWAY, detail, status_code_override=upstream_status)
+
+# ❌ Bad — using HTTPException directly
 raise HTTPException(status_code=404, detail="Session not found")
 
 # ❌ Bad — starlette constant
@@ -651,11 +649,12 @@ raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied
 Available error codes are defined in `backend/onyx/error_handling/error_codes.py`. If a new error
 category is needed, add it there first — do not invent ad-hoc codes.
 
-**Exception — upstream service errors:** When forwarding errors from an upstream service (e.g.
-`BillingServiceError`), the HTTP status code is dynamic and comes from the upstream response.
-In these cases, use `error_code: "BILLING_SERVICE_ERROR"` (or similar) with the upstream message
-wrapped in the standard `{"error_code": "...", "message": "..."}` dict shape. Do not map these
-to `OnyxErrorCode` members since the status code is not fixed.
+**Upstream service errors:** When forwarding errors from an upstream service where the HTTP
+status code is dynamic (comes from the upstream response), use `status_code_override`:
+
+```python
+raise OnyxError(OnyxErrorCode.BAD_GATEWAY, detail, status_code_override=e.response.status_code)
+```
 
 ## Best Practices
 

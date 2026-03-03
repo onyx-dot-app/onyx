@@ -16,6 +16,7 @@ from starlette.types import Scope
 from starlette.types import Send
 
 from onyx.configs.app_configs import MCP_SERVER_CORS_ORIGINS
+from onyx.error_handling.exceptions import register_onyx_exception_handlers
 from onyx.mcp_server.auth import OnyxTokenVerifier
 from onyx.mcp_server.utils import shutdown_http_client
 from onyx.utils.logger import setup_logger
@@ -79,6 +80,8 @@ def create_mcp_fastapi_app() -> FastAPI:
         version="1.0.0",
         lifespan=combined_lifespan,
     )
+
+    register_onyx_exception_handlers(app)
 
     # Public health check endpoint (bypasses MCP auth)
     @app.middleware("http")
