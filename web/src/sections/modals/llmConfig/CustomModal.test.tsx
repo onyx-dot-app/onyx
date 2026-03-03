@@ -433,15 +433,18 @@ describe("Custom LLM Provider Configuration Workflow", () => {
 
     // Verify set as default API was called with correct endpoint and body
     await waitFor(() => {
-      expect(fetchSpy).toHaveBeenCalledWith(
-        "/api/admin/llm/default",
-        expect.objectContaining({
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: expect.stringContaining('"provider_id":5'),
-          body: expect.stringContaining('"model_name"'),
-        })
+      const defaultCall = fetchSpy.mock.calls.find(
+        ([url]) => url === "/api/admin/llm/default"
       );
+      expect(defaultCall).toBeDefined();
+
+      const [, options] = defaultCall!;
+      expect(options.method).toBe("POST");
+      expect(options.headers).toEqual({ "Content-Type": "application/json" });
+
+      const body = JSON.parse(options.body);
+      expect(body.provider_id).toBe(5);
+      expect(body).toHaveProperty("model_name");
     });
   });
 
