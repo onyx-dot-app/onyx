@@ -104,7 +104,8 @@ class TestWebSearchToolRunQueryCoercion:
 
         dispatched = _run(tool, ["python decorators", "python generators"])
 
-        assert dispatched == ["python decorators", "python generators"]
+        # run_functions_tuples_in_parallel uses a thread pool; call_args_list order is non-deterministic.
+        assert sorted(dispatched) == ["python decorators", "python generators"]
 
     def test_bare_string_dispatches_as_single_query(self) -> None:
         """LLM returns a bare string instead of an array — must NOT be split char-by-char."""
@@ -142,7 +143,9 @@ class TestWebSearchToolRunQueryCoercion:
 
         dispatched = _run(tool, ["foo\x00bar", "baz\tbaz"])
 
-        assert dispatched == ["foobar", "bazbaz"]
+        # run_functions_tuples_in_parallel uses a thread pool; call_args_list is in
+        # execution order, not submission order, so compare in sorted order.
+        assert sorted(dispatched) == ["bazbaz", "foobar"]
 
     def test_all_empty_or_whitespace_raises_tool_call_exception(self) -> None:
         """When normalization yields no valid queries, run() raises ToolCallException."""
@@ -152,7 +155,7 @@ class TestWebSearchToolRunQueryCoercion:
         placement = Placement(turn_index=0, tab_index=0)
         override_kwargs = WebSearchToolOverrideKwargs(starting_citation_num=1)
 
-        with pytest.raises(ToolCallException) as exc_info:  # noqa: F821
+        with pytest.raises(ToolCallException) as exc_info:
             tool.run(
                 placement=placement,
                 override_kwargs=override_kwargs,
