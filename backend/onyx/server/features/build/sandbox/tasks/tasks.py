@@ -80,7 +80,7 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
 
     # Prevent overlapping runs of this task
     if not lock.acquire(blocking=False):
-        task_logger.debug("cleanup_idle_sandboxes_task - lock not acquired, skipping")
+        task_logger.info("cleanup_idle_sandboxes_task - lock not acquired, skipping")
         return
 
     try:
