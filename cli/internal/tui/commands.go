@@ -2,8 +2,6 @@ package tui
 
 import (
 	"fmt"
-	"os/exec"
-	"runtime"
 	"strconv"
 	"strings"
 
@@ -11,6 +9,7 @@ import (
 	"github.com/onyx-dot-app/onyx/cli/internal/api"
 	"github.com/onyx-dot-app/onyx/cli/internal/config"
 	"github.com/onyx-dot-app/onyx/cli/internal/models"
+	"github.com/onyx-dot-app/onyx/cli/internal/util"
 )
 
 // handleSlashCommand dispatches slash commands and returns updated model + cmd.
@@ -55,13 +54,13 @@ func handleSlashCommand(m Model, text string) (Model, tea.Cmd) {
 
 	case "/connectors":
 		url := m.config.ServerURL + "/admin/indexing/status"
-		openBrowser(url)
+		util.OpenBrowser(url)
 		m.viewport.addInfo("Opened " + url + " in browser")
 		return m, nil
 
 	case "/settings":
 		url := m.config.ServerURL + "/app/settings/general"
-		openBrowser(url)
+		util.OpenBrowser(url)
 		m.viewport.addInfo("Opened " + url + " in browser")
 		return m, nil
 
@@ -186,21 +185,6 @@ func cmdResume(m Model, sessionIDStr string) (Model, tea.Cmd) {
 			return SessionResumedMsg{Err: fmt.Errorf("session not found: %s", sessionIDStr)}
 		}
 		return SessionResumedMsg{Detail: detail}
-	}
-}
-
-func openBrowser(url string) {
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "darwin":
-		cmd = exec.Command("open", url)
-	case "linux":
-		cmd = exec.Command("xdg-open", url)
-	case "windows":
-		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
-	}
-	if cmd != nil {
-		_ = cmd.Start()
 	}
 }
 

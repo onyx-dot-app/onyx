@@ -14,7 +14,7 @@ import (
 
 var (
 	askAgentID int
-	askJSON      bool
+	askJSON    bool
 )
 
 var askCmd = &cobra.Command{
@@ -24,8 +24,7 @@ var askCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg := config.Load()
 		if !cfg.IsConfigured() {
-			fmt.Fprintln(os.Stderr, "Error: Onyx CLI is not configured. Run 'onyx-cli configure' first.")
-			os.Exit(1)
+			return fmt.Errorf("onyx CLI is not configured — run 'onyx-cli configure' first")
 		}
 
 		question := args[0]
@@ -47,7 +46,11 @@ var askCmd = &cobra.Command{
 
 		for event := range ch {
 			if askJSON {
-				data, _ := json.Marshal(event)
+				data, err := json.Marshal(event)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Error marshaling event: %v\n", err)
+					continue
+				}
 				fmt.Println(string(data))
 				continue
 			}
@@ -56,8 +59,7 @@ var askCmd = &cobra.Command{
 			case models.MessageDeltaEvent:
 				fmt.Print(e.Content)
 			case models.ErrorEvent:
-				fmt.Fprintf(os.Stderr, "\nError: %s\n", e.Error)
-				os.Exit(1)
+				return fmt.Errorf("%s", e.Error)
 			case models.StopEvent:
 				fmt.Println()
 				return nil

@@ -187,7 +187,7 @@ func (e IntermediateReportDeltaEvent) EventType() string { return EventIntermedi
 // UnknownEvent is a catch-all for unrecognized stream data.
 type UnknownEvent struct {
 	Placement *Placement
-	RawData   map[string]interface{}
+	RawData   map[string]any
 }
 
 func (e UnknownEvent) EventType() string { return EventUnknown }

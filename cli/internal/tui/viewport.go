@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/charmbracelet/glamour"
@@ -160,15 +161,6 @@ func (v *viewport) addInfo(msg string) {
 	})
 }
 
-func (v *viewport) addDimInfo(msg string) {
-	rendered := dimInfoStyle.Render("● " + msg)
-	v.entries = append(v.entries, chatEntry{
-		kind:     entryInfo,
-		content:  msg,
-		rendered: rendered,
-	})
-}
-
 func (v *viewport) addWarning(msg string) {
 	rendered := warnStyle.Render("● " + msg)
 	v.entries = append(v.entries, chatEntry{
@@ -191,14 +183,14 @@ func (v *viewport) addCitations(citations map[int]string) {
 	if len(citations) == 0 {
 		return
 	}
+	keys := make([]int, 0, len(citations))
+	for k := range citations {
+		keys = append(keys, k)
+	}
+	sort.Ints(keys)
 	var parts []string
-	for num := 1; num <= len(citations)+100; num++ {
-		if docID, ok := citations[num]; ok {
-			parts = append(parts, fmt.Sprintf("[%d] %s", num, docID))
-		}
-		if len(parts) == len(citations) {
-			break
-		}
+	for _, num := range keys {
+		parts = append(parts, fmt.Sprintf("[%d] %s", num, citations[num]))
 	}
 	text := fmt.Sprintf("Sources (%d): %s", len(citations), strings.Join(parts, "  "))
 	var citLines []string
@@ -229,10 +221,6 @@ func (v *viewport) scrollDown(n int) {
 	if v.scrollOffset < 0 {
 		v.scrollOffset = 0
 	}
-}
-
-func (v *viewport) scrollToBottom() {
-	v.scrollOffset = 0
 }
 
 func (v *viewport) clearAll() {

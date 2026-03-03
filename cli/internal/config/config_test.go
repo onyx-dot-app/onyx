@@ -7,24 +7,6 @@ import (
 	"testing"
 )
 
-// helper to override config file path for tests
-func withTempConfig(t *testing.T, content string, fn func()) {
-	t.Helper()
-	dir := t.TempDir()
-	// Use XDG_CONFIG_HOME env var to redirect config dir for tests
-	old := os.Getenv("XDG_CONFIG_HOME")
-	os.Setenv("XDG_CONFIG_HOME", dir)
-	defer os.Setenv("XDG_CONFIG_HOME", old)
-
-	onyxDir := filepath.Join(dir, "onyx-cli")
-	os.MkdirAll(onyxDir, 0o755)
-
-	if content != "" {
-		os.WriteFile(filepath.Join(onyxDir, "config.json"), []byte(content), 0o644)
-	}
-
-	fn()
-}
 
 func clearEnvVars(t *testing.T) {
 	t.Helper()

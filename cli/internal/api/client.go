@@ -3,6 +3,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -19,18 +20,25 @@ import (
 
 // Client is the Onyx API client.
 type Client struct {
-	baseURL    string
-	apiKey     string
-	httpClient *http.Client
+	baseURL        string
+	apiKey         string
+	httpClient     *http.Client // default 30s timeout for quick requests
+	longHTTPClient *http.Client // 5min timeout for streaming/uploads
 }
 
 // NewClient creates a new API client from config.
 func NewClient(cfg config.OnyxCliConfig) *Client {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
 	return &Client{
 		baseURL: strings.TrimRight(cfg.ServerURL, "/"),
 		apiKey:  cfg.APIKey,
 		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout:   30 * time.Second,
+			Transport: transport,
+		},
+		longHTTPClient: &http.Client{
+			Timeout:   5 * time.Minute,
+			Transport: transport,
 		},
 	}
 }
@@ -42,7 +50,7 @@ func (c *Client) UpdateConfig(cfg config.OnyxCliConfig) {
 }
 
 func (c *Client) newRequest(method, path string, body io.Reader) (*http.Request, error) {
-	req, err := http.NewRequest(method, c.baseURL+path, body)
+	req, err := http.NewRequestWithContext(context.Background(), method, c.baseURL+path, body)
 	if err != nil {
 		return nil, err
 	}
@@ -54,7 +62,7 @@ func (c *Client) newRequest(method, path string, body io.Reader) (*http.Request,
 	return req, nil
 }
 
-func (c *Client) doJSON(method, path string, reqBody interface{}, result interface{}) error {
+func (c *Client) doJSON(method, path string, reqBody any, result any) error {
 	var body io.Reader
 	if reqBody != nil {
 		data, err := json.Marshal(reqBody)
@@ -90,16 +98,17 @@ func (c *Client) doJSON(method, path string, reqBody interface{}, result interfa
 }
 
 // TestConnection checks if the server is reachable and credentials are valid.
-func (c *Client) TestConnection() (bool, string) {
+// Returns nil on success, or an error with a descriptive message on failure.
+func (c *Client) TestConnection() error {
 	// Step 1: Basic reachability
 	req, err := c.newRequest("GET", "/", nil)
 	if err != nil {
-		return false, fmt.Sprintf("Cannot connect to %s: %v", c.baseURL, err)
+		return fmt.Errorf("cannot connect to %s: %w", c.baseURL, err)
 	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return false, fmt.Sprintf("Cannot connect to %s. Is the server running?", c.baseURL)
+		return fmt.Errorf("cannot connect to %s — is the server running?", c.baseURL)
 	}
 	resp.Body.Close()
 
@@ -107,26 +116,25 @@ func (c *Client) TestConnection() (bool, string) {
 
 	if resp.StatusCode == 403 {
 		if strings.Contains(serverHeader, "awselb") || strings.Contains(serverHeader, "amazons3") {
-			return false, "Blocked by AWS load balancer (HTTP 403 on all requests).\n  Your IP address may not be in the ALB's security group or WAF allowlist."
+			return fmt.Errorf("blocked by AWS load balancer (HTTP 403 on all requests).\n  Your IP address may not be in the ALB's security group or WAF allowlist")
 		}
-		return false, "HTTP 403 on base URL — the server is blocking all traffic.\n  This is likely a firewall, WAF, or IP allowlist restriction."
+		return fmt.Errorf("HTTP 403 on base URL — the server is blocking all traffic.\n  This is likely a firewall, WAF, or IP allowlist restriction")
 	}
 
 	// Step 2: Authenticated check
 	req2, err := c.newRequest("GET", "/api/chat/get-user-chat-sessions", nil)
 	if err != nil {
-		return false, fmt.Sprintf("Server reachable but API error: %v", err)
+		return fmt.Errorf("server reachable but API error: %w", err)
 	}
 
-	client := &http.Client{Timeout: 120 * time.Second}
-	resp2, err := client.Do(req2)
+	resp2, err := c.longHTTPClient.Do(req2)
 	if err != nil {
-		return false, fmt.Sprintf("Server reachable but API error: %v", err)
+		return fmt.Errorf("server reachable but API error: %w", err)
 	}
 	defer resp2.Body.Close()
 
 	if resp2.StatusCode == 200 {
-		return true, "Connected and authenticated."
+		return nil
 	}
 
 	bodyBytes, _ := io.ReadAll(io.LimitReader(resp2.Body, 300))
@@ -136,19 +144,19 @@ func (c *Client) TestConnection() (bool, string) {
 
 	if resp2.StatusCode == 401 || resp2.StatusCode == 403 {
 		if isHTML || strings.Contains(respServer, "awselb") {
-			return false, fmt.Sprintf("HTTP %d from a reverse proxy (not the Onyx backend).\n  Check your deployment's ingress / proxy configuration.", resp2.StatusCode)
+			return fmt.Errorf("HTTP %d from a reverse proxy (not the Onyx backend).\n  Check your deployment's ingress / proxy configuration", resp2.StatusCode)
 		}
 		if resp2.StatusCode == 401 {
-			return false, fmt.Sprintf("Invalid API key or token.\n  %s", body)
+			return fmt.Errorf("invalid API key or token.\n  %s", body)
 		}
-		return false, fmt.Sprintf("Access denied — check that the API key is valid.\n  %s", body)
+		return fmt.Errorf("access denied — check that the API key is valid.\n  %s", body)
 	}
 
 	detail := fmt.Sprintf("HTTP %d", resp2.StatusCode)
 	if body != "" {
 		detail += fmt.Sprintf("\n  Response: %s", body)
 	}
-	return false, detail
+	return fmt.Errorf("%s", detail)
 }
 
 // ListAgents returns visible agents.
@@ -188,7 +196,7 @@ func (c *Client) GetChatSession(sessionID string) (*models.ChatSessionDetailResp
 
 // RenameChatSession renames a session. If name is empty, the backend auto-generates one.
 func (c *Client) RenameChatSession(sessionID string, name *string) (string, error) {
-	payload := map[string]interface{}{
+	payload := map[string]any{
 		"chat_session_id": sessionID,
 	}
 	if name != nil {
@@ -229,8 +237,7 @@ func (c *Client) UploadFile(filePath string) (*models.FileDescriptorPayload, err
 	}
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
-	client := &http.Client{Timeout: 60 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := c.longHTTPClient.Do(req)
 	if err != nil {
 		return nil, err
 	}

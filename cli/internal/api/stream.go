@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/onyx-dot-app/onyx/cli/internal/models"
@@ -44,24 +43,19 @@ func (c *Client) SendMessageStream(
 		payload := models.SendMessagePayload{
 			Message:          message,
 			ParentMessageID:  parentMessageID,
-			FileDescriptors:  make([]map[string]interface{}, 0),
+			FileDescriptors:  fileDescriptors,
 			Origin:           "api",
 			IncludeCitations: true,
 			Stream:           true,
+		}
+		if payload.FileDescriptors == nil {
+			payload.FileDescriptors = []models.FileDescriptorPayload{}
 		}
 
 		if chatSessionID != nil {
 			payload.ChatSessionID = chatSessionID
 		} else {
 			payload.ChatSessionInfo = &models.ChatSessionCreationInfo{AgentID: agentID}
-		}
-
-		for _, fd := range fileDescriptors {
-			payload.FileDescriptors = append(payload.FileDescriptors, map[string]interface{}{
-				"id":   fd.ID,
-				"type": string(fd.Type),
-				"name": fd.Name,
-			})
 		}
 
 		body, err := json.Marshal(payload)
@@ -85,8 +79,7 @@ func (c *Client) SendMessageStream(
 			req.Header.Set("X-Onyx-Authorization", bearer)
 		}
 
-		client := &http.Client{Timeout: 5 * time.Minute}
-		resp, err := client.Do(req)
+		resp, err := c.longHTTPClient.Do(req)
 		if err != nil {
 			if ctx.Err() != nil {
 				return // cancelled

@@ -24,7 +24,7 @@ go install github.com/onyx-dot-app/onyx/cli@latest
 
 # One-shot question
 ./onyx-cli ask "What is Onyx?"
-./onyx-cli ask --persona-id 5 "Summarize this topic"
+./onyx-cli ask --agent-id 5 "Summarize this topic"
 ./onyx-cli ask --json "Hello"
 ```
 
@@ -42,7 +42,7 @@ go install github.com/onyx-dot-app/onyx/cli@latest
 |---------|-------------|
 | `/help` | Show help message |
 | `/new` | Start a new chat session |
-| `/persona` | List and switch assistants |
+| `/agent` | List and switch agents |
 | `/attach <path>` | Attach a file to next message |
 | `/sessions` | List recent chat sessions |
 | `/resume <id>` | Resume a previous session |

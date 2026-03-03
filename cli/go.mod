@@ -1,6 +1,6 @@
 module github.com/onyx-dot-app/onyx/cli
 
-go 1.23
+go 1.24.0
 
 require (
 	github.com/charmbracelet/bubbles v0.20.0
@@ -39,7 +39,7 @@ require (
 	github.com/yuin/goldmark v1.7.4 // indirect
 	github.com/yuin/goldmark-emoji v1.0.3 // indirect
 	golang.org/x/net v0.27.0 // indirect
-	golang.org/x/sync v0.11.0 // indirect
+	golang.org/x/sync v0.19.0 // indirect
 	golang.org/x/sys v0.30.0 // indirect
-	golang.org/x/text v0.16.0 // indirect
+	golang.org/x/text v0.34.0 // indirect
 )

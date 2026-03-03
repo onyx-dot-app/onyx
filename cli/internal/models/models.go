@@ -90,7 +90,7 @@ type SendMessagePayload struct {
 	ChatSessionID    *string                  `json:"chat_session_id,omitempty"`
 	ChatSessionInfo  *ChatSessionCreationInfo `json:"chat_session_info,omitempty"`
 	ParentMessageID  *int                     `json:"parent_message_id"`
-	FileDescriptors  []map[string]interface{} `json:"file_descriptors"`
+	FileDescriptors  []FileDescriptorPayload `json:"file_descriptors"`
 	Origin           string                   `json:"origin"`
 	IncludeCitations bool                     `json:"include_citations"`
 	Stream           bool                     `json:"stream"`

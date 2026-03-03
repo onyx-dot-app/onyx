@@ -5,14 +5,13 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"os/exec"
-	"runtime"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/onyx-dot-app/onyx/cli/internal/api"
 	"github.com/onyx-dot-app/onyx/cli/internal/config"
 	"github.com/onyx-dot-app/onyx/cli/internal/tui"
+	"github.com/onyx-dot-app/onyx/cli/internal/util"
 	"golang.org/x/term"
 )
 
@@ -41,7 +40,6 @@ func Run(existing *config.OnyxCliConfig) *config.OnyxCliConfig {
 	}
 
 	w, h := getTermSize()
-	_ = tui.RenderSplashOnboarding(w, h)
 	fmt.Print(tui.RenderSplashOnboarding(w, h))
 
 	fmt.Println()
@@ -68,7 +66,7 @@ func Run(existing *config.OnyxCliConfig) *config.OnyxCliConfig {
 		// Open browser to API key page
 		url := strings.TrimRight(serverURL, "/") + "/admin/api-key"
 		fmt.Printf("\n  Opening %s ...\n", url)
-		openBrowser(url)
+		util.OpenBrowser(url)
 		fmt.Println("  " + dimStyle.Render("Copy your API key, then paste it here."))
 		fmt.Println()
 
@@ -89,22 +87,20 @@ func Run(existing *config.OnyxCliConfig) *config.OnyxCliConfig {
 	fmt.Println("\n  " + yellowStyle.Render("Testing connection..."))
 
 	client := api.NewClient(cfg)
-	success, detail := client.TestConnection()
-
-	if success {
-		if err := config.Save(cfg); err != nil {
-			fmt.Println("  " + redStyle.Render("Could not save config: "+err.Error()))
-		}
-		fmt.Println("  " + greenStyle.Render(detail))
+	if err := client.TestConnection(); err != nil {
+		fmt.Println("  " + redStyle.Render("Connection failed.") + " " + err.Error())
 		fmt.Println()
-		printQuickStart()
-		return &cfg
+		fmt.Println("  " + dimStyle.Render("Run ") + boldStyle.Render("onyx-cli configure") + dimStyle.Render(" to try again."))
+		return nil
 	}
 
-	fmt.Println("  " + redStyle.Render("Connection failed.") + " " + detail)
+	if err := config.Save(cfg); err != nil {
+		fmt.Println("  " + redStyle.Render("Could not save config: "+err.Error()))
+	}
+	fmt.Println("  " + greenStyle.Render("Connected and authenticated."))
 	fmt.Println()
-	fmt.Println("  " + dimStyle.Render("Run ")+boldStyle.Render("onyx-cli configure")+dimStyle.Render(" to try again."))
-	return nil
+	printQuickStart()
+	return &cfg
 }
 
 func prompt(reader *bufio.Reader, label, defaultVal string) string {
@@ -146,17 +142,3 @@ func printQuickStart() {
 	fmt.Println()
 }
 
-func openBrowser(url string) {
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "darwin":
-		cmd = exec.Command("open", url)
-	case "linux":
-		cmd = exec.Command("xdg-open", url)
-	case "windows":
-		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
-	}
-	if cmd != nil {
-		_ = cmd.Start()
-	}
-}

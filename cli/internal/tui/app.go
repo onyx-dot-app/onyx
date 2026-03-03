@@ -105,11 +105,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.MouseMsg:
-		switch msg.Type {
-		case tea.MouseWheelUp:
+		switch msg.Button {
+		case tea.MouseButtonWheelUp:
 			m.viewport.scrollUp(3)
 			return m, nil
-		case tea.MouseWheelDown:
+		case tea.MouseButtonWheelDown:
 			m.viewport.scrollDown(3)
 			return m, nil
 		}
@@ -217,7 +217,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.isStreaming && m.streamCancel != nil {
 			m.streamCancel()
 			if m.chatSessionID != nil {
-				go m.client.StopChatSession(*m.chatSessionID)
+				sid := *m.chatSessionID
+				go m.client.StopChatSession(sid)
 			}
 			return m, nil
 		}
@@ -391,7 +392,7 @@ func (m Model) handleStreamEvent(msg api.StreamEventMsg) (tea.Model, tea.Cmd) {
 		if count == 1 {
 			suffix = ""
 		}
-		m.viewport.addInfo("Found " + itoa(count) + " document" + suffix)
+		m.viewport.addInfo("Found " + strconv.Itoa(count) + " document" + suffix)
 
 	case models.ReasoningStartEvent:
 		m.viewport.addInfo("Thinking…")
@@ -603,6 +604,3 @@ func (m Model) handleFileUploaded(msg FileUploadedMsg) (tea.Model, tea.Cmd) {
 type inputReadyMsg struct{}
 type resetQuitMsg struct{}
 
-func itoa(n int) string {
-	return fmt.Sprintf("%d", n)
-}

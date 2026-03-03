@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/onyx-dot-app/onyx/cli/internal/models"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 // ParseStreamLine parses a single NDJSON line into a typed StreamEvent.
@@ -16,7 +18,7 @@ func ParseStreamLine(line string) models.StreamEvent {
 		return nil
 	}
 
-	var data map[string]interface{}
+	var data map[string]any
 	if err := json.Unmarshal([]byte(line), &data); err != nil {
 		return nil
 	}
@@ -67,7 +69,7 @@ func ParseStreamLine(line string) models.StreamEvent {
 	if rawPlacement, ok := data["placement"]; ok {
 		if rawObj, ok := data["obj"]; ok {
 			placement := parsePlacement(rawPlacement)
-			obj, _ := rawObj.(map[string]interface{})
+			obj, _ := rawObj.(map[string]any)
 			if obj == nil {
 				return models.UnknownEvent{Placement: placement, RawData: data}
 			}
@@ -80,7 +82,7 @@ func ParseStreamLine(line string) models.StreamEvent {
 }
 
 func parsePlacement(raw interface{}) *models.Placement {
-	m, ok := raw.(map[string]interface{})
+	m, ok := raw.(map[string]any)
 	if !ok {
 		return nil
 	}
@@ -95,7 +97,7 @@ func parsePlacement(raw interface{}) *models.Placement {
 	return p
 }
 
-func parsePacketObj(obj map[string]interface{}, placement *models.Placement) models.StreamEvent {
+func parsePacketObj(obj map[string]any, placement *models.Placement) models.StreamEvent {
 	objType, _ := obj["type"].(string)
 
 	switch objType {
@@ -115,7 +117,7 @@ func parsePacketObj(obj map[string]interface{}, placement *models.Placement) mod
 
 	case "message_start":
 		var docs []models.SearchDoc
-		if rawDocs, ok := obj["final_documents"].([]interface{}); ok {
+		if rawDocs, ok := obj["final_documents"].([]any); ok {
 			docs = parseSearchDocs(rawDocs)
 		}
 		return models.MessageStartEvent{Placement: placement, Documents: docs}
@@ -130,7 +132,7 @@ func parsePacketObj(obj map[string]interface{}, placement *models.Placement) mod
 
 	case "search_tool_queries_delta":
 		var queries []string
-		if raw, ok := obj["queries"].([]interface{}); ok {
+		if raw, ok := obj["queries"].([]any); ok {
 			for _, q := range raw {
 				if s, ok := q.(string); ok {
 					queries = append(queries, s)
@@ -141,7 +143,7 @@ func parsePacketObj(obj map[string]interface{}, placement *models.Placement) mod
 
 	case "search_tool_documents_delta":
 		var docs []models.SearchDoc
-		if rawDocs, ok := obj["documents"].([]interface{}); ok {
+		if rawDocs, ok := obj["documents"].([]any); ok {
 			docs = parseSearchDocs(rawDocs)
 		}
 		return models.SearchDocumentsEvent{Placement: placement, Documents: docs}
@@ -165,7 +167,7 @@ func parsePacketObj(obj map[string]interface{}, placement *models.Placement) mod
 
 	case "open_url_start", "image_generation_start", "python_tool_start", "file_reader_start":
 		toolName := strings.ReplaceAll(strings.TrimSuffix(objType, "_start"), "_", " ")
-		toolName = strings.Title(toolName) //nolint:staticcheck
+		toolName = cases.Title(language.English).String(toolName)
 		return models.ToolStartEvent{Placement: placement, Type: objType, ToolName: toolName}
 
 	case "custom_tool_start":
@@ -198,10 +200,10 @@ func parsePacketObj(obj map[string]interface{}, placement *models.Placement) mod
 	}
 }
 
-func parseSearchDocs(raw []interface{}) []models.SearchDoc {
+func parseSearchDocs(raw []any) []models.SearchDoc {
 	var docs []models.SearchDoc
 	for _, item := range raw {
-		m, ok := item.(map[string]interface{})
+		m, ok := item.(map[string]any)
 		if !ok {
 			continue
 		}
@@ -218,7 +220,7 @@ func parseSearchDocs(raw []interface{}) []models.SearchDoc {
 	return docs
 }
 
-func jsonInt(v interface{}) int {
+func jsonInt(v any) int {
 	switch n := v.(type) {
 	case float64:
 		return int(n)
@@ -229,12 +231,12 @@ func jsonInt(v interface{}) int {
 	}
 }
 
-func jsonString(v interface{}) string {
+func jsonString(v any) string {
 	s, _ := v.(string)
 	return s
 }
 
-func toString(v interface{}) string {
+func toString(v any) string {
 	switch s := v.(type) {
 	case string:
 		return s
