@@ -6,11 +6,7 @@ import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { adminDeleteCredential } from "@/lib/credential";
 import { setupGoogleDriveOAuth } from "@/lib/googleDrive";
-import {
-  DOCS_ADMINS_PATH,
-  GOOGLE_DRIVE_AUTH_IS_ADMIN_COOKIE_NAME,
-} from "@/lib/constants";
-import Cookies from "js-cookie";
+import { DOCS_ADMINS_PATH } from "@/lib/constants";
 import { TextFormField, SectionHeader } from "@/components/Field";
 import { Form, Formik } from "formik";
 import { User } from "@/lib/types";
@@ -592,11 +588,6 @@ export const DriveAuthSection = ({
           onClick={async () => {
             setIsAuthenticating(true);
             try {
-              // cookie used by callback to determine where to finally redirect to
-              Cookies.set(GOOGLE_DRIVE_AUTH_IS_ADMIN_COOKIE_NAME, "true", {
-                path: "/",
-              });
-
               const [authUrl, errorMsg] = await setupGoogleDriveOAuth({
                 isAdmin: true,
                 name: "OAuth (uploaded)",
