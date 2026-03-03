@@ -39,7 +39,7 @@ func handleSlashCommand(m Model, text string) (Model, tea.Cmd) {
 		return cmdAttach(m, arg)
 
 	case "/sessions", "/resume":
-		if arg != "" {
+		if strings.TrimSpace(arg) != "" {
 			return cmdResume(m, arg)
 		}
 		return cmdSessions(m)
