@@ -15,7 +15,9 @@ from uuid import UUID
 
 from fastapi import APIRouter
 from fastapi import Depends
+from fastapi import FastAPI
 from fastapi import Query
+from fastapi import Request
 from fastapi import Response
 from fastapi.responses import JSONResponse
 from fastapi_users.password import PasswordHelper
@@ -24,6 +26,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.scim import ScimDAL
+from ee.onyx.server.scim.auth import ScimAuthError
 from ee.onyx.server.scim.auth import verify_scim_token
 from ee.onyx.server.scim.filtering import parse_scim_filter
 from ee.onyx.server.scim.models import SCIM_LIST_RESPONSE_SCHEMA
@@ -75,6 +78,22 @@ class ScimJSONResponse(JSONResponse):
 scim_router = APIRouter(prefix="/scim/v2", tags=["SCIM"])
 
 _pw_helper = PasswordHelper()
+
+
+def register_scim_exception_handlers(app: FastAPI) -> None:
+    """Register SCIM-specific exception handlers on the FastAPI app.
+
+    Call this after ``app.include_router(scim_router)`` so that auth
+    failures from ``verify_scim_token`` return RFC 7644 §3.12 error
+    envelopes (with ``schemas`` and ``status`` fields) instead of
+    FastAPI's default ``{"detail": "..."}`` format.
+    """
+
+    @app.exception_handler(ScimAuthError)
+    async def _handle_scim_auth_error(
+        _request: Request, exc: ScimAuthError
+    ) -> ScimJSONResponse:
+        return _scim_error_response(exc.status_code, exc.detail)
 
 
 def _get_provider(
@@ -404,12 +423,6 @@ def create_user(
 
     email = user_resource.userName.strip()
 
-    # externalId is how the IdP correlates this user on subsequent requests.
-    # Without it, the IdP can't find the user and will try to re-create,
-    # hitting a 409 conflict — so we require it up front.
-    if not user_resource.externalId:
-        return _scim_error_response(400, "externalId is required")
-
     # Enforce seat limit
     seat_error = _check_seat_availability(dal)
     if seat_error:
@@ -436,16 +449,19 @@ def create_user(
         dal.rollback()
         return _scim_error_response(409, f"User with email {email} already exists")
 
-    # Create SCIM mapping (externalId is validated above, always present)
+    # Create SCIM mapping when externalId is provided — this is how the IdP
+    # correlates this user on subsequent requests.  Per RFC 7643, externalId
+    # is optional and assigned by the provisioning client.
     external_id = user_resource.externalId
     scim_username = user_resource.userName.strip()
     fields = _fields_from_resource(user_resource)
-    dal.create_user_mapping(
-        external_id=external_id,
-        user_id=user.id,
-        scim_username=scim_username,
-        fields=fields,
-    )
+    if external_id:
+        dal.create_user_mapping(
+            external_id=external_id,
+            user_id=user.id,
+            scim_username=scim_username,
+            fields=fields,
+        )
 
     dal.commit()
 

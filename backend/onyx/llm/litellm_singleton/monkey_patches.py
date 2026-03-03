@@ -67,6 +67,18 @@ Status checked against LiteLLM v1.81.6-nightly (2026-02-02):
    STATUS: STILL NEEDED - litellm_core_utils/litellm_logging.py lines 3185-3199 set
            usage as a dict with chat completion format instead of keeping it as
            ResponseAPIUsage. Our patch creates a deep copy before modification.
+
+7. Responses API metadata=None TypeError (_patch_responses_metadata_none):
+   - LiteLLM's @client decorator wrapper in utils.py uses kwargs.get("metadata", {})
+     to check for router calls, but when metadata is explicitly None (key exists with
+     value None), the default {} is not used
+   - This causes "argument of type 'NoneType' is not iterable" TypeError which swallows
+     the real exception (e.g. AuthenticationError for wrong API key)
+   - Surfaces as: APIConnectionError: OpenAIException - argument of type 'NoneType' is
+     not iterable
+   STATUS: STILL NEEDED - litellm/utils.py wrapper function (line 1721) does not guard
+           against metadata being explicitly None. Triggered when Responses API bridge
+           passes **litellm_params containing metadata=None.
 """
 
 import time
@@ -725,6 +737,44 @@ def _patch_logging_assembled_streaming_response() -> None:
     LiteLLMLoggingObj._get_assembled_streaming_response = _patched_get_assembled_streaming_response  # type: ignore[method-assign]
 
 
+def _patch_responses_metadata_none() -> None:
+    """
+    Patches litellm.responses to normalize metadata=None to metadata={} in kwargs.
+
+    LiteLLM's @client decorator wrapper in utils.py (line 1721) does:
+        _is_litellm_router_call = "model_group" in kwargs.get("metadata", {})
+    When metadata is explicitly None in kwargs, kwargs.get("metadata", {}) returns
+    None (the key exists, so the default is not used), causing:
+        TypeError: argument of type 'NoneType' is not iterable
+
+    This swallows the real exception (e.g. AuthenticationError) and surfaces as:
+        APIConnectionError: OpenAIException - argument of type 'NoneType' is not iterable
+
+    This happens when the Responses API bridge calls litellm.responses() with
+    **litellm_params which may contain metadata=None.
+
+    STATUS: STILL NEEDED - litellm/utils.py wrapper function uses kwargs.get("metadata", {})
+            which does not guard against metadata being explicitly None. Same pattern exists
+            on line 1407 for async path.
+    """
+    import litellm as _litellm
+    from functools import wraps
+
+    original_responses = _litellm.responses
+
+    if getattr(original_responses, "_metadata_patched", False):
+        return
+
+    @wraps(original_responses)
+    def _patched_responses(*args: Any, **kwargs: Any) -> Any:
+        if kwargs.get("metadata") is None:
+            kwargs["metadata"] = {}
+        return original_responses(*args, **kwargs)
+
+    _patched_responses._metadata_patched = True  # type: ignore[attr-defined]
+    _litellm.responses = _patched_responses
+
+
 def apply_monkey_patches() -> None:
     """
     Apply all necessary monkey patches to LiteLLM for compatibility.
@@ -736,6 +786,7 @@ def apply_monkey_patches() -> None:
     - Patching AzureOpenAIResponsesAPIConfig.should_fake_stream to enable native streaming
     - Patching ResponsesAPIResponse.model_construct to fix usage format in all code paths
     - Patching LiteLLMLoggingObj._get_assembled_streaming_response to avoid mutating original response
+    - Patching litellm.responses to fix metadata=None causing TypeError in error handling
     """
     _patch_ollama_chunk_parser()
     _patch_openai_responses_parallel_tool_calls()
@@ -743,3 +794,4 @@ def apply_monkey_patches() -> None:
     _patch_azure_responses_should_fake_stream()
     _patch_responses_api_usage_format()
     _patch_logging_assembled_streaming_response()
+    _patch_responses_metadata_none()
