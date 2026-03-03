@@ -2,31 +2,30 @@ import React, { useMemo } from "react";
 import * as Yup from "yup";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import { FormField } from "@/refresh-components/form/FormField";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox";
 import Separator from "@/refresh-components/Separator";
-import { WellKnownLLMProviderDescriptor } from "@/interfaces/llm";
+import {
+  ModelConfiguration,
+  WellKnownLLMProviderDescriptor,
+} from "@/interfaces/llm";
 import {
   OnboardingFormWrapper,
   OnboardingFormChildProps,
 } from "./OnboardingFormWrapper";
-import { OnboardingActions, OnboardingState } from "../types";
+import { OnboardingActions, OnboardingState } from "@/interfaces/onboarding";
 import { buildInitialValues } from "../components/llmConnectionHelpers";
 import ConnectionProviderIcon from "@/refresh-components/ConnectionProviderIcon";
 import InlineExternalLink from "@/refresh-components/InlineExternalLink";
 import { ProviderIcon } from "@/app/admin/configuration/llm/ProviderIcon";
-import {
-  isValidAzureTargetUri,
-  parseAzureTargetUri,
-} from "@/lib/azureTargetUri";
 
 // Field name constants
 const FIELD_API_KEY = "api_key";
-const FIELD_TARGET_URI = "target_uri";
 const FIELD_DEFAULT_MODEL_NAME = "default_model_name";
 
-interface AzureOnboardingFormProps {
+const DEFAULT_DEFAULT_MODEL_NAME = "gpt-5.2";
+
+interface OpenAIOnboardingFormProps {
   llmDescriptor: WellKnownLLMProviderDescriptor;
   onboardingState: OnboardingState;
   onboardingActions: OnboardingActions;
@@ -34,70 +33,23 @@ interface AzureOnboardingFormProps {
   onOpenChange: (open: boolean) => void;
 }
 
-interface AzureFormValues {
+interface OpenAIFormValues {
   name: string;
   provider: string;
   api_key: string;
   api_key_changed: boolean;
-  api_base: string;
-  api_version: string;
-  deployment_name: string;
-  target_uri: string;
   default_model_name: string;
   model_configurations: any[];
   groups: number[];
   is_public: boolean;
 }
 
-function AzureFormFields(props: OnboardingFormChildProps<AzureFormValues>) {
-  const {
-    formikProps,
-    apiStatus,
-    showApiMessage,
-    errorMessage,
-    modelOptions,
-    disabled,
-  } = props;
+function OpenAIFormFields(props: OnboardingFormChildProps<OpenAIFormValues>) {
+  const { apiStatus, showApiMessage, errorMessage, modelOptions, disabled } =
+    props;
 
   return (
     <>
-      <FormikField<string>
-        name={FIELD_TARGET_URI}
-        render={(field, helper, meta, state) => (
-          <FormField name={FIELD_TARGET_URI} state={state} className="w-full">
-            <FormField.Label>Target URI</FormField.Label>
-            <FormField.Control>
-              <InputTypeIn
-                {...field}
-                placeholder="https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/chat/completions?api-version=2025-01-01-preview"
-                showClearButton={false}
-                variant={disabled ? "disabled" : undefined}
-              />
-            </FormField.Control>
-            <FormField.Message
-              messages={{
-                idle: (
-                  <>
-                    Paste your endpoint target URI from{" "}
-                    <a
-                      href="https://oai.azure.com"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="underline"
-                    >
-                      Azure OpenAI
-                    </a>{" "}
-                    (including API endpoint base, deployment name, and API
-                    version).
-                  </>
-                ),
-                error: meta.error,
-              }}
-            />
-          </FormField>
-        )}
-      />
-
       <FormikField<string>
         name={FIELD_API_KEY}
         render={(field, helper, meta, state) => (
@@ -107,9 +59,9 @@ function AzureFormFields(props: OnboardingFormChildProps<AzureFormValues>) {
               <PasswordInputTypeIn
                 {...field}
                 placeholder=""
-                disabled={disabled || !formikProps.values.target_uri?.trim()}
                 error={apiStatus === "error"}
                 showClearButton={false}
+                disabled={disabled}
               />
             </FormField.Control>
             {!showApiMessage && (
@@ -118,10 +70,10 @@ function AzureFormFields(props: OnboardingFormChildProps<AzureFormValues>) {
                   idle: (
                     <>
                       {"Paste your "}
-                      <InlineExternalLink href="https://oai.azure.com">
+                      <InlineExternalLink href="https://platform.openai.com/api-keys">
                         API key
                       </InlineExternalLink>
-                      {" from Azure OpenAI to access your models."}
+                      {" from OpenAI to access your models."}
                     </>
                   ),
                   error: meta.error,
@@ -132,8 +84,8 @@ function AzureFormFields(props: OnboardingFormChildProps<AzureFormValues>) {
               <FormField.APIMessage
                 state={apiStatus}
                 messages={{
-                  loading: "Checking API key with Azure OpenAI...",
-                  success: "API key valid. Your available models updated.",
+                  loading: "Checking API key with OpenAI...",
+                  success: "API key valid.",
                   error: errorMessage || "Invalid API key",
                 }}
               />
@@ -159,9 +111,9 @@ function AzureFormFields(props: OnboardingFormChildProps<AzureFormValues>) {
                 onValueChange={(value) => helper.setValue(value)}
                 onChange={(e) => helper.setValue(e.target.value)}
                 options={modelOptions}
-                disabled={disabled}
+                disabled={disabled || modelOptions.length === 0}
                 onBlur={field.onBlur}
-                placeholder="Select or type a model name"
+                placeholder="Select a model"
               />
             </FormField.Control>
             <FormField.Message
@@ -177,31 +129,25 @@ function AzureFormFields(props: OnboardingFormChildProps<AzureFormValues>) {
   );
 }
 
-export function AzureOnboardingForm({
+export function OpenAIOnboardingForm({
   llmDescriptor,
   onboardingState,
   onboardingActions,
   open,
   onOpenChange,
-}: AzureOnboardingFormProps) {
+}: OpenAIOnboardingFormProps) {
   const initialValues = useMemo(
-    (): AzureFormValues => ({
+    (): OpenAIFormValues => ({
       ...buildInitialValues(),
       name: llmDescriptor.name,
       provider: llmDescriptor.name,
+      default_model_name: DEFAULT_DEFAULT_MODEL_NAME,
     }),
     [llmDescriptor.name]
   );
 
   const validationSchema = Yup.object().shape({
     [FIELD_API_KEY]: Yup.string().required("API Key is required"),
-    [FIELD_TARGET_URI]: Yup.string()
-      .required("Target URI is required")
-      .test(
-        "valid-target-uri",
-        "Target URI must be a valid URL with api-version query parameter and either a deployment name in the path (/openai/deployments/{name}/...) or /openai/responses for realtime",
-        (value) => (value ? isValidAzureTargetUri(value) : false)
-      ),
     [FIELD_DEFAULT_MODEL_NAME]: Yup.string().required("Model name is required"),
   });
 
@@ -211,11 +157,21 @@ export function AzureOnboardingForm({
     />
   );
 
+  // Enable auto mode if user keeps the recommended default model
+  const transformValues = (
+    values: OpenAIFormValues,
+    modelConfigurations: ModelConfiguration[]
+  ) => ({
+    ...values,
+    model_configurations: modelConfigurations,
+    is_auto_mode: values.default_model_name === DEFAULT_DEFAULT_MODEL_NAME,
+  });
+
   return (
-    <OnboardingFormWrapper<AzureFormValues>
+    <OnboardingFormWrapper<OpenAIFormValues>
       icon={icon}
-      title="Set up Azure OpenAI"
-      description="Connect to Microsoft Azure and set up your Azure OpenAI models."
+      title="Set up GPT"
+      description="Connect to OpenAI and set up your ChatGPT models."
       llmDescriptor={llmDescriptor}
       onboardingState={onboardingState}
       onboardingActions={onboardingActions}
@@ -223,31 +179,9 @@ export function AzureOnboardingForm({
       onOpenChange={onOpenChange}
       initialValues={initialValues}
       validationSchema={validationSchema}
-      transformValues={(values, fetchedModels) => {
-        // Parse the target URI to extract api_base, api_version, and deployment_name
-        let finalValues = { ...values };
-        if (values.target_uri) {
-          try {
-            const { url, apiVersion, deploymentName } = parseAzureTargetUri(
-              values.target_uri
-            );
-            finalValues.api_base = url.origin;
-            finalValues.api_version = apiVersion;
-            if (deploymentName) {
-              finalValues.deployment_name = deploymentName;
-            }
-          } catch (error) {
-            console.error("Failed to parse target_uri:", error);
-          }
-        }
-
-        return {
-          ...finalValues,
-          model_configurations: fetchedModels,
-        };
-      }}
+      transformValues={transformValues}
     >
-      {(props) => <AzureFormFields {...props} />}
+      {(props) => <OpenAIFormFields {...props} />}
     </OnboardingFormWrapper>
   );
 }

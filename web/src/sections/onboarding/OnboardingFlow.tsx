@@ -3,7 +3,11 @@ import OnboardingHeader from "./components/OnboardingHeader";
 import NameStep from "./steps/NameStep";
 import LLMStep from "./steps/LLMStep";
 import FinalStep from "./steps/FinalStep";
-import { OnboardingActions, OnboardingState, OnboardingStep } from "./types";
+import {
+  OnboardingActions,
+  OnboardingState,
+  OnboardingStep,
+} from "@/interfaces/onboarding";
 import { WellKnownLLMProviderDescriptor } from "@/interfaces/llm";
 import { useUser } from "@/providers/UserProvider";
 import { UserRole } from "@/lib/types";

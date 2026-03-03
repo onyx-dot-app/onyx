@@ -3,7 +3,7 @@ import {
   WellKnownLLMProviderDescriptor,
   LLMProviderName,
 } from "@/interfaces/llm";
-import { OnboardingActions, OnboardingState } from "../types";
+import { OnboardingActions, OnboardingState } from "@/interfaces/onboarding";
 import { OpenAIOnboardingForm } from "./OpenAIOnboardingForm";
 import { AnthropicOnboardingForm } from "./AnthropicOnboardingForm";
 import { OllamaOnboardingForm } from "./OllamaOnboardingForm";

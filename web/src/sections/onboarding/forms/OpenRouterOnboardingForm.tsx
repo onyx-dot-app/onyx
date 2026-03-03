@@ -2,35 +2,28 @@ import React, { useMemo } from "react";
 import * as Yup from "yup";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import { FormField } from "@/refresh-components/form/FormField";
+import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox";
-import InputFile from "@/refresh-components/inputs/InputFile";
 import Separator from "@/refresh-components/Separator";
+import { Button } from "@opal/components";
 import { cn, noProp } from "@/lib/utils";
 import { SvgRefreshCw } from "@opal/icons";
-import {
-  ModelConfiguration,
-  WellKnownLLMProviderDescriptor,
-} from "@/interfaces/llm";
+import { WellKnownLLMProviderDescriptor } from "@/interfaces/llm";
 import {
   OnboardingFormWrapper,
   OnboardingFormChildProps,
 } from "./OnboardingFormWrapper";
-import { OnboardingActions, OnboardingState } from "../types";
-import {
-  buildInitialValues,
-  testApiKeyHelper,
-} from "../components/llmConnectionHelpers";
+import { OnboardingActions, OnboardingState } from "@/interfaces/onboarding";
+import { buildInitialValues } from "../components/llmConnectionHelpers";
 import ConnectionProviderIcon from "@/refresh-components/ConnectionProviderIcon";
 import InlineExternalLink from "@/refresh-components/InlineExternalLink";
 import { ProviderIcon } from "@/app/admin/configuration/llm/ProviderIcon";
 
 // Field name constants
+const FIELD_API_KEY = "api_key";
 const FIELD_DEFAULT_MODEL_NAME = "default_model_name";
-const FIELD_VERTEX_CREDENTIALS = "custom_config.vertex_credentials";
 
-const DEFAULT_DEFAULT_MODEL_NAME = "gemini-2.5-pro";
-
-interface VertexAIOnboardingFormProps {
+interface OpenRouterOnboardingFormProps {
   llmDescriptor: WellKnownLLMProviderDescriptor;
   onboardingState: OnboardingState;
   onboardingActions: OnboardingActions;
@@ -38,85 +31,59 @@ interface VertexAIOnboardingFormProps {
   onOpenChange: (open: boolean) => void;
 }
 
-interface VertexAIFormValues {
+interface OpenRouterFormValues {
   name: string;
   provider: string;
+  api_key: string;
+  api_base: string;
   api_key_changed: boolean;
   default_model_name: string;
   model_configurations: any[];
   groups: number[];
   is_public: boolean;
-  custom_config: {
-    vertex_credentials: string;
-  };
 }
 
-function VertexAIFormFields(
-  props: OnboardingFormChildProps<VertexAIFormValues>
+function OpenRouterFormFields(
+  props: OnboardingFormChildProps<OpenRouterFormValues>
 ) {
   const {
     formikProps,
     apiStatus,
-    setApiStatus,
     showApiMessage,
-    setShowApiMessage,
     errorMessage,
-    setErrorMessage,
     modelOptions,
     isFetchingModels,
+    handleFetchModels,
     modelsApiStatus,
     modelsErrorMessage,
     showModelsApiErrorMessage,
     disabled,
-    llmDescriptor,
   } = props;
 
-  const handleFileInputChange = async (value: string) => {
-    if (!llmDescriptor || !value) return;
-
-    setApiStatus("loading");
-    setShowApiMessage(true);
-
-    const result = await testApiKeyHelper(
-      llmDescriptor.name,
-      formikProps.values,
-      undefined,
-      undefined,
-      { vertex_credentials: value }
-    );
-
-    if (result.ok) {
-      setApiStatus("success");
-    } else {
-      setErrorMessage(result.errorMessage);
-      setApiStatus("error");
+  const handleApiKeyInteraction = () => {
+    if (formikProps.values.api_key) {
+      handleFetchModels();
     }
   };
 
   return (
     <>
       <FormikField<string>
-        name={FIELD_VERTEX_CREDENTIALS}
+        name={FIELD_API_KEY}
         render={(field, helper, meta, state) => (
-          <FormField
-            name={FIELD_VERTEX_CREDENTIALS}
-            state={state}
-            className="w-full"
-          >
-            <FormField.Label>Credentials File</FormField.Label>
+          <FormField name={FIELD_API_KEY} state={state} className="w-full">
+            <FormField.Label>API Key</FormField.Label>
             <FormField.Control>
-              <InputFile
-                setValue={(value) => helper.setValue(value)}
-                onValueSet={handleFileInputChange}
+              <PasswordInputTypeIn
+                {...field}
+                placeholder=""
                 error={apiStatus === "error"}
+                showClearButton={false}
+                disabled={disabled}
                 onBlur={(e) => {
                   field.onBlur(e);
-                  if (field.value) {
-                    handleFileInputChange(field.value);
-                  }
+                  handleApiKeyInteraction();
                 }}
-                showClearButton={true}
-                disabled={disabled}
               />
             </FormField.Control>
             {!showApiMessage && (
@@ -125,10 +92,10 @@ function VertexAIFormFields(
                   idle: (
                     <>
                       {"Paste your "}
-                      <InlineExternalLink href="https://console.cloud.google.com/projectselector2/iam-admin/serviceaccounts?supportedpurview=project">
-                        service account credentials
+                      <InlineExternalLink href="https://openrouter.ai/settings/keys">
+                        API key
                       </InlineExternalLink>
-                      {" from Google Cloud Vertex AI."}
+                      {" from OpenRouter to access your models."}
                     </>
                   ),
                   error: meta.error,
@@ -139,9 +106,9 @@ function VertexAIFormFields(
               <FormField.APIMessage
                 state={apiStatus}
                 messages={{
-                  loading: "Verifying credentials with Vertex AI...",
-                  success: "Credentials valid. Your available models updated.",
-                  error: errorMessage || "Invalid credentials",
+                  loading: "Checking API key with OpenRouter...",
+                  success: "API key valid. Your available models updated.",
+                  error: errorMessage || "Invalid API key",
                 }}
               />
             )}
@@ -168,6 +135,26 @@ function VertexAIFormFields(
                 options={modelOptions}
                 disabled={
                   disabled || isFetchingModels || modelOptions.length === 0
+                }
+                rightSection={
+                  <Button
+                    prominence="tertiary"
+                    size="sm"
+                    icon={({ className }) => (
+                      <SvgRefreshCw
+                        className={cn(
+                          className,
+                          isFetchingModels && "animate-spin"
+                        )}
+                      />
+                    )}
+                    onClick={noProp((e) => {
+                      e.preventDefault();
+                      handleFetchModels();
+                    })}
+                    tooltip="Fetch available models"
+                    disabled={disabled || isFetchingModels}
+                  />
                 }
                 onBlur={field.onBlur}
                 placeholder="Select a model"
@@ -198,31 +185,26 @@ function VertexAIFormFields(
   );
 }
 
-export function VertexAIOnboardingForm({
+export function OpenRouterOnboardingForm({
   llmDescriptor,
   onboardingState,
   onboardingActions,
   open,
   onOpenChange,
-}: VertexAIOnboardingFormProps) {
+}: OpenRouterOnboardingFormProps) {
   const initialValues = useMemo(
-    (): VertexAIFormValues => ({
+    (): OpenRouterFormValues => ({
       ...buildInitialValues(),
       name: llmDescriptor.name,
       provider: llmDescriptor.name,
-      custom_config: {
-        vertex_credentials: "",
-      },
-      default_model_name: DEFAULT_DEFAULT_MODEL_NAME,
+      api_base: "https://openrouter.ai/api/v1",
     }),
     [llmDescriptor.name]
   );
 
   const validationSchema = Yup.object().shape({
+    [FIELD_API_KEY]: Yup.string().required("API Key is required"),
     [FIELD_DEFAULT_MODEL_NAME]: Yup.string().required("Model name is required"),
-    custom_config: Yup.object().shape({
-      vertex_credentials: Yup.string().required("Credentials file is required"),
-    }),
   });
 
   const icon = () => (
@@ -231,21 +213,11 @@ export function VertexAIOnboardingForm({
     />
   );
 
-  // Enable auto mode if user keeps the recommended default model
-  const transformValues = (
-    values: VertexAIFormValues,
-    modelConfigurations: ModelConfiguration[]
-  ) => ({
-    ...values,
-    model_configurations: modelConfigurations,
-    is_auto_mode: values.default_model_name === DEFAULT_DEFAULT_MODEL_NAME,
-  });
-
   return (
-    <OnboardingFormWrapper<VertexAIFormValues>
+    <OnboardingFormWrapper<OpenRouterFormValues>
       icon={icon}
-      title="Set up Gemini"
-      description="Connect to Google Cloud Vertex AI and set up your Gemini models."
+      title="Set up OpenRouter"
+      description="Connect to OpenRouter and set up your OpenRouter models."
       llmDescriptor={llmDescriptor}
       onboardingState={onboardingState}
       onboardingActions={onboardingActions}
@@ -253,9 +225,8 @@ export function VertexAIOnboardingForm({
       onOpenChange={onOpenChange}
       initialValues={initialValues}
       validationSchema={validationSchema}
-      transformValues={transformValues}
     >
-      {(props) => <VertexAIFormFields {...props} />}
+      {(props) => <OpenRouterFormFields {...props} />}
     </OnboardingFormWrapper>
   );
 }

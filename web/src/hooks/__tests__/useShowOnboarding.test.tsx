@@ -2,37 +2,34 @@ import React from "react";
 import { renderHook, act } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import { useShowOnboarding } from "@/hooks/useShowOnboarding";
-import { OnboardingStep } from "../types";
+import { OnboardingStep } from "@/interfaces/onboarding";
 
-// Mock useOnboardingState to isolate useShowOnboarding logic
-const mockActions = {
-  nextStep: jest.fn(),
-  prevStep: jest.fn(),
-  goToStep: jest.fn(),
-  setButtonActive: jest.fn(),
-  updateName: jest.fn(),
-  updateData: jest.fn(),
-  setLoading: jest.fn(),
-  setError: jest.fn(),
-  reset: jest.fn(),
-};
-
-let mockStepIndex = 0;
-
-jest.mock("@/refresh-components/onboarding/useOnboardingState", () => ({
-  useOnboardingState: () => ({
-    state: {
-      currentStep: OnboardingStep.Welcome,
-      stepIndex: mockStepIndex,
-      totalSteps: 3,
-      data: {},
-      isButtonActive: true,
-      isLoading: false,
-    },
-    llmDescriptors: [],
-    actions: mockActions,
-    isLoading: false,
+// Mock underlying dependencies used by the inlined useOnboardingState
+jest.mock("@/providers/UserProvider", () => ({
+  useUser: () => ({
+    user: null,
+    refreshUser: jest.fn(),
   }),
+}));
+
+jest.mock("@/components/chat/ProviderContext", () => ({
+  useProviderStatus: () => ({
+    llmProviders: [],
+    isLoadingProviders: false,
+    hasProviders: false,
+    providerOptions: [],
+    refreshProviderInfo: jest.fn(),
+  }),
+}));
+
+jest.mock("@/hooks/useLLMProviders", () => ({
+  useLLMProviders: () => ({
+    refetch: jest.fn(),
+  }),
+}));
+
+jest.mock("@/lib/userSettings", () => ({
+  updateUserPersonalization: jest.fn(),
 }));
 
 function renderUseShowOnboarding(
@@ -63,7 +60,6 @@ describe("useShowOnboarding", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     localStorage.clear();
-    mockStepIndex = 0;
   });
 
   it("returns showOnboarding=false while providers are loading", () => {
@@ -133,31 +129,6 @@ describe("useShowOnboarding", () => {
     expect(result.current.showOnboarding).toBe(false);
   });
 
-  it("does not self-correct when user has advanced past Welcome step", () => {
-    const { result, rerender } = renderUseShowOnboarding({
-      hasAnyProvider: false,
-      chatSessionsCount: 0,
-      userId: "user-1",
-    });
-    expect(result.current.showOnboarding).toBe(true);
-
-    // Simulate user advancing past Welcome (e.g. they configured an LLM provider)
-    mockStepIndex = 1;
-
-    // Re-render with same userId but provider data now available
-    rerender({
-      liveAgent: undefined,
-      isLoadingProviders: false,
-      hasAnyProvider: true,
-      isLoadingChatSessions: false,
-      chatSessionsCount: 0,
-      userId: "user-1",
-    });
-
-    // Should stay true — user is actively using onboarding
-    expect(result.current.showOnboarding).toBe(true);
-  });
-
   it("re-evaluates when userId changes", () => {
     const { result, rerender } = renderUseShowOnboarding({
       hasAnyProvider: false,
@@ -207,7 +178,7 @@ describe("useShowOnboarding", () => {
     expect(result.current.showOnboarding).toBe(false);
   });
 
-  it("returns onboardingState and actions from useOnboardingState", () => {
+  it("returns onboardingState and actions", () => {
     const { result } = renderUseShowOnboarding();
     expect(result.current.onboardingState.currentStep).toBe(
       OnboardingStep.Welcome

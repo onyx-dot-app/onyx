@@ -5,7 +5,11 @@ import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
 import Separator from "@/refresh-components/Separator";
 import LLMProviderCard from "../components/LLMProviderCard";
-import { OnboardingActions, OnboardingState, OnboardingStep } from "../types";
+import {
+  OnboardingActions,
+  OnboardingState,
+  OnboardingStep,
+} from "@/interfaces/onboarding";
 import { WellKnownLLMProviderDescriptor } from "@/interfaces/llm";
 import {
   getOnboardingForm,
