@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { getSourceMetadata, isValidSource } from "@/lib/sources";
 import { ValidSources } from "@/lib/types";
