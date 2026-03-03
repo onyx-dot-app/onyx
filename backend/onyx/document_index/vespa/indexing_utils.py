@@ -279,7 +279,7 @@ def _index_vespa_chunk(
                 ):
                     # Non-retryable errors - fail immediately
                     logger.error(
-                        f"Non-retryable HTTP {e.response.status_code} error for document '{document.id}'"
+                        f"Non-retryable HTTP {e.response.status_code} error for document '{document.id}': {e.response.text}"
                     )
                     raise
                 # Retry other errors with shorter backoff

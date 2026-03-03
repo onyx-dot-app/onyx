@@ -5,8 +5,11 @@ These tests assume Vespa and OpenSearch are running.
 TODO(ENG-3764)(andrei): Consolidate some of these test fixtures.
 """
 
+import os
+import time
 import uuid
 from collections.abc import Generator
+from unittest.mock import patch
 
 import httpx
 import pytest
@@ -57,7 +60,7 @@ def test_index_name() -> Generator[str, None, None]:
     yield f"test_index_{uuid.uuid4().hex[:8]}"  # Test runs here.
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="module")
 def tenant_context() -> Generator[None, None, None]:
     """Sets up tenant context for testing."""
     token = CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
@@ -75,7 +78,6 @@ def httpx_client() -> Generator[httpx.Client, None, None]:
 
 @pytest.fixture(scope="module")
 def vespa_document_index(
-    vespa_available: None,  # noqa: ARG001
     httpx_client: httpx.Client,
     tenant_context: None,  # noqa: ARG001
     test_index_name: str,
@@ -88,12 +90,68 @@ def vespa_document_index(
         multitenant=MULTI_TENANT,
         httpx_client=httpx_client,
     )
-    vespa_index.ensure_indices_exist(
-        primary_embedding_dim=128,
-        primary_embedding_precision=EmbeddingPrecision.FLOAT,
-        secondary_index_embedding_dim=None,
-        secondary_index_embedding_precision=None,
+    backend_dir = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "..", "..")
     )
+    with patch("os.getcwd", return_value=backend_dir):
+        vespa_index.ensure_indices_exist(
+            primary_embedding_dim=128,
+            primary_embedding_precision=EmbeddingPrecision.FLOAT,
+            secondary_index_embedding_dim=None,
+            secondary_index_embedding_precision=None,
+        )
+    # Verify Vespa is running, fails the test if not. Try 90 seconds for testing
+    # in CI.
+    if not wait_for_vespa_with_timeout(wait_limit=90):
+        pytest.fail("Vespa is not available.")
+
+    # Wait until the schema is actually ready for writes on content nodes.
+    # We probe by attempting a PUT; 200 means the schema is live, 400 means not yet.
+    probe_doc = {
+        "fields": {
+            "document_id": "__probe__",
+            "chunk_id": 0,
+            "blurb": "",
+            "title": "",
+            "skip_title": True,
+            "content": "",
+            "content_summary": "",
+            "source_type": "file",
+            "source_links": "null",
+            "semantic_identifier": "",
+            "section_continuation": False,
+            "large_chunk_reference_ids": [],
+            "metadata": "{}",
+            "metadata_list": [],
+            "metadata_suffix": "",
+            "chunk_context": "",
+            "doc_summary": "",
+            "embeddings": {"full_chunk": [1.0] + [0.0] * 127},
+            "access_control_list": {},
+            "document_sets": {},
+            "image_file_name": None,
+            "user_project": [],
+            "personas": [],
+            "boost": 0.0,
+            "aggregated_chunk_boost_factor": 0.0,
+            "primary_owners": [],
+            "secondary_owners": [],
+        }
+    }
+    schema_ready = False
+    probe_url = (
+        f"http://localhost:8081/document/v1/default/{test_index_name}/docid/__probe__"
+    )
+    for _ in range(60):
+        resp = httpx_client.post(probe_url, json=probe_doc)
+        if resp.status_code == 200:
+            schema_ready = True
+            # Clean up the probe document.
+            httpx_client.delete(probe_url)
+            break
+        time.sleep(1)
+    if not schema_ready:
+        pytest.fail(f"Vespa schema '{test_index_name}' did not become ready in time.")
 
     yield vespa_index  # Test runs here.
 
@@ -137,7 +195,7 @@ def document_indices(
     opensearch_document_index: OpenSearchOldDocumentIndex,
 ) -> Generator[list[DocumentIndex], None, None]:
     # Ideally these are parametrized; doing so with pytest fixtures is tricky.
-    yield [vespa_document_index, opensearch_document_index]  # Test runs here.
+    yield [opensearch_document_index, vespa_document_index]  # Test runs here.
 
 
 @pytest.fixture(scope="function")
@@ -157,23 +215,27 @@ def chunks() -> Generator[list[DocMetadataAwareIndexChunk], None, None]:
     user_project: list[int] = list()
     personas: list[int] = list()
     boost = 0
-    blurb = ""
-    content = ""
+    blurb = "blurb"
+    content = "content"
     title_prefix = ""
     doc_summary = ""
     chunk_context = ""
-    title_embedding = None
-    embeddings = ChunkEmbedding(full_embedding=[0] * 128, mini_chunk_embeddings=[])
+    title_embedding = [1.0] + [0] * 127
+    # Full 0 vectors are not supported for cos similarity.
+    embeddings = ChunkEmbedding(
+        full_embedding=[1.0] + [0] * 127, mini_chunk_embeddings=[]
+    )
     source_document = Document(
         id=doc_id,
-        semantic_identifier="",
+        semantic_identifier="semantic identifier",
         source=DocumentSource.FILE,
         sections=[],
         metadata={},
+        title="title",
     )
     metadata_suffix_keyword = ""
     image_file_id = None
-    source_links = None
+    source_links: dict[int, str] = {0: ""}
     ancestor_hierarchy_node_ids: list[int] = []
     for i in range(chunk_count):
         result.append(
@@ -251,6 +313,7 @@ class TestDocumentIndexOld:
                 project_id=1,
                 persona_id=2,
             )
+            time.sleep(1)
             inference_chunks = document_index.id_based_retrieval(
                 chunk_requests=[chunk_request], filters=project_persona_filters
             )
@@ -276,6 +339,7 @@ class TestDocumentIndexOld:
             # Postcondition.
             filters = IndexFilters(access_control_list=None, tenant_id=tenant_id)
             # We should expect to get back all expected chunks with no filters.
+            time.sleep(1)
             inference_chunks = document_index.id_based_retrieval(
                 chunk_requests=[chunk_request], filters=filters
             )
