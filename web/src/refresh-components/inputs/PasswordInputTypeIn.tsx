@@ -227,9 +227,17 @@ export default function PasswordInputTypeIn({
         return;
       }
       setIsFocused(false);
-      onBlur?.(e as unknown as React.FocusEvent<HTMLInputElement>);
+
+      if (onBlur) {
+        const syntheticEvent = {
+          ...e,
+          target: { name: props.name ?? "" },
+          currentTarget: { name: props.name ?? "" },
+        } as unknown as React.FocusEvent<HTMLInputElement>;
+        onBlur(syntheticEvent);
+      }
     },
-    [onBlur]
+    [onBlur, props.name]
   );
 
   // Track selection before any change occurs (used by both onSelect and onKeyDown)
