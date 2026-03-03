@@ -254,9 +254,7 @@ export default function Page() {
         icon={route.icon}
         title={route.title}
         rightChildren={
-          <Button href="/admin/indexing/status">
-            See Connectors
-          </Button>
+          <Button href="/admin/indexing/status">See Connectors</Button>
         }
         separator
       />
