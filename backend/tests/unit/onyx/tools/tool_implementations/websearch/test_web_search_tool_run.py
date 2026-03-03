@@ -1,18 +1,26 @@
 """Unit tests for WebSearchTool.run(), focusing on query coercion and dispatch."""
+
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
+from unittest.mock import patch
 
 import pytest
 
 from onyx.server.query_and_chat.placement import Placement
+from onyx.tools.models import ToolCallException
 from onyx.tools.models import WebSearchToolOverrideKwargs
 from onyx.tools.tool_implementations.web_search.models import WebSearchResult
+from onyx.tools.tool_implementations.web_search.web_search_tool import (
+    _normalize_queries_input,
+)
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 
 
-def _make_result(title: str = "Title", link: str = "https://example.com") -> WebSearchResult:
+def _make_result(
+    title: str = "Title", link: str = "https://example.com"
+) -> WebSearchResult:
     return WebSearchResult(title=title, link=link, snippet="snippet")
 
 
@@ -49,7 +57,43 @@ def _run(tool: WebSearchTool, queries: Any) -> list[str]:
     placement = Placement(turn_index=0, tab_index=0)
     override_kwargs = WebSearchToolOverrideKwargs(starting_citation_num=1)
     tool.run(placement=placement, override_kwargs=override_kwargs, queries=queries)
-    return [call.args[0] for call in tool._provider.search.call_args_list]  # noqa: SLF001
+    return [
+        call.args[0] for call in tool._provider.search.call_args_list
+    ]  # noqa: SLF001
+
+
+class TestNormalizeQueriesInput:
+    """Unit tests for _normalize_queries_input (coercion + sanitization)."""
+
+    def test_bare_string_returns_single_element_list(self) -> None:
+        assert _normalize_queries_input("hello") == ["hello"]
+
+    def test_bare_string_stripped_and_sanitized(self) -> None:
+        assert _normalize_queries_input("  hello  ") == ["hello"]
+        # Control chars (e.g. null) removed; no space inserted
+        assert _normalize_queries_input("hello\x00world") == ["helloworld"]
+
+    def test_empty_string_returns_empty_list(self) -> None:
+        assert _normalize_queries_input("") == []
+        assert _normalize_queries_input("   ") == []
+
+    def test_list_of_strings_returned_sanitized(self) -> None:
+        assert _normalize_queries_input(["a", "b"]) == ["a", "b"]
+        # Leading/trailing space stripped; control chars (e.g. tab) removed
+        assert _normalize_queries_input(["  a  ", "b\tb"]) == ["a", "bb"]
+
+    def test_list_none_skipped(self) -> None:
+        assert _normalize_queries_input(["a", None, "b"]) == ["a", "b"]
+
+    def test_list_non_string_coerced(self) -> None:
+        assert _normalize_queries_input([1, "two"]) == ["1", "two"]
+
+    def test_list_whitespace_only_dropped(self) -> None:
+        assert _normalize_queries_input(["a", "", "  ", "b"]) == ["a", "b"]
+
+    def test_non_list_non_string_returns_empty_list(self) -> None:
+        assert _normalize_queries_input(42) == []
+        assert _normalize_queries_input({}) == []
 
 
 class TestWebSearchToolRunQueryCoercion:
@@ -87,4 +131,35 @@ class TestWebSearchToolRunQueryCoercion:
 
         for call in mock_provider.search.call_args_list:
             query_arg = call.args[0]
-            assert len(query_arg) > 1, f"Single-character query dispatched: {query_arg!r}"
+            assert (
+                len(query_arg) > 1
+            ), f"Single-character query dispatched: {query_arg!r}"
+
+    def test_control_characters_sanitized_before_dispatch(self) -> None:
+        """Queries with control chars have those chars removed before dispatch."""
+        mock_provider = MagicMock()
+        mock_provider.search.return_value = [_make_result()]
+        mock_provider.supports_site_filter = False
+        tool = _make_tool(mock_provider)
+
+        dispatched = _run(tool, ["foo\x00bar", "baz\tbaz"])
+
+        assert dispatched == ["foobar", "bazbaz"]
+
+    def test_all_empty_or_whitespace_raises_tool_call_exception(self) -> None:
+        """When normalization yields no valid queries, run() raises ToolCallException."""
+        mock_provider = MagicMock()
+        mock_provider.supports_site_filter = False
+        tool = _make_tool(mock_provider)
+        placement = Placement(turn_index=0, tab_index=0)
+        override_kwargs = WebSearchToolOverrideKwargs(starting_citation_num=1)
+
+        with pytest.raises(ToolCallException) as exc_info:
+            tool.run(
+                placement=placement,
+                override_kwargs=override_kwargs,
+                queries="   ",
+            )
+
+        assert "No valid" in str(exc_info.value)
+        mock_provider.search.assert_not_called()
