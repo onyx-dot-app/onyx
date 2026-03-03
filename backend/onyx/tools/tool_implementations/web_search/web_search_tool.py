@@ -1,6 +1,5 @@
 import json
 from typing import Any
-from typing import cast
 
 from sqlalchemy.orm import Session
 from typing_extensions import override
@@ -189,7 +188,12 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
                     f'like: {{"queries": ["your search query here"]}}'
                 ),
             )
-        raw_queries = cast(list[str], llm_kwargs[QUERIES_FIELD])
+        raw_queries = llm_kwargs[QUERIES_FIELD]
+        # LLMs occasionally return a bare string instead of a JSON array; coerce it.
+        if isinstance(raw_queries, str):
+            raw_queries = [raw_queries]
+        elif not isinstance(raw_queries, list):
+            raw_queries = []
 
         # Normalize queries:
         # - remove control characters (null bytes, etc.) that LLMs sometimes produce
