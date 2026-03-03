@@ -134,7 +134,7 @@ class TestCreateCustomerPortalSession:
             )
 
         assert exc_info.value.status_code == 400
-        assert "No license found" in exc_info.value.detail
+        assert exc_info.value.detail["message"] == "No license found"
 
     @pytest.mark.asyncio
     @patch("ee.onyx.server.billing.api.create_portal_service")
@@ -241,7 +241,7 @@ class TestUpdateSeats:
             await update_seats(request=request, _=MagicMock(), db_session=MagicMock())
 
         assert exc_info.value.status_code == 400
-        assert "No license found" in exc_info.value.detail
+        assert exc_info.value.detail["message"] == "No license found"
 
     @pytest.mark.asyncio
     @patch("ee.onyx.server.billing.api.get_used_seats")
@@ -344,7 +344,7 @@ class TestCircuitBreaker:
             await get_billing_information(_=MagicMock(), db_session=MagicMock())
 
         assert exc_info.value.status_code == 503
-        assert "Connect to Stripe" in exc_info.value.detail
+        assert "Connect to Stripe" in exc_info.value.detail["message"]
 
     @pytest.mark.asyncio
     @patch("ee.onyx.server.billing.api.MULTI_TENANT", False)
