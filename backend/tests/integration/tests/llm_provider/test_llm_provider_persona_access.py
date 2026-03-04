@@ -69,7 +69,7 @@ def test_unauthorized_persona_access_returns_403(
 
     # Should return 403 Forbidden
     assert response.status_code == 403
-    assert "don't have access to this assistant" in response.json()["detail"]
+    assert "don't have access to this assistant" in response.json()["message"]
 
 
 def test_authorized_persona_access_returns_filtered_providers(
@@ -245,4 +245,4 @@ def test_nonexistent_persona_returns_404(
 
     # Should return 404
     assert response.status_code == 404
-    assert "Persona not found" in response.json()["detail"]
+    assert "Persona not found" in response.json()["message"]
