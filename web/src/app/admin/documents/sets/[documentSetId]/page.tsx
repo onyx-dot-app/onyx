@@ -10,9 +10,12 @@ import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
 import CardSection from "@/components/admin/CardSection";
 import { DocumentSetCreationForm } from "../DocumentSetCreationForm";
 import { useRouter } from "next/navigation";
+import { useSettingsContext } from "@/providers/SettingsProvider";
 
 function Main({ documentSetId }: { documentSetId: number }) {
   const router = useRouter();
+  const settings = useSettingsContext();
+  const vectorDbEnabled = settings?.settings.vector_db_enabled !== false;
 
   const {
     data: documentSets,
@@ -24,12 +27,16 @@ function Main({ documentSetId }: { documentSetId: number }) {
     data: ccPairs,
     isLoading: isCCPairsLoading,
     error: ccPairsError,
-  } = useConnectorStatus();
+  } = useConnectorStatus(30000, vectorDbEnabled);
 
   // EE only
   const { data: userGroups, isLoading: userGroupsIsLoading } = useUserGroups();
 
-  if (isDocumentSetsLoading || isCCPairsLoading || userGroupsIsLoading) {
+  if (
+    isDocumentSetsLoading ||
+    (vectorDbEnabled && isCCPairsLoading) ||
+    userGroupsIsLoading
+  ) {
     return (
       <div className="flex justify-center items-center min-h-[400px]">
         <ThreeDotsLoader />
@@ -46,7 +53,7 @@ function Main({ documentSetId }: { documentSetId: number }) {
     );
   }
 
-  if (ccPairsError || !ccPairs) {
+  if (vectorDbEnabled && (ccPairsError || !ccPairs)) {
     return (
       <ErrorCallout
         errorTitle="Failed to fetch Connectors"
@@ -70,7 +77,7 @@ function Main({ documentSetId }: { documentSetId: number }) {
   return (
     <CardSection>
       <DocumentSetCreationForm
-        ccPairs={ccPairs}
+        ccPairs={ccPairs ?? []}
         userGroups={userGroups}
         onClose={() => {
           refreshDocumentSets();

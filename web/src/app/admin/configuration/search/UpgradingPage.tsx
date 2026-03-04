@@ -23,6 +23,7 @@ import { FailedReIndexAttempts } from "@/components/embedding/FailedReIndexAttem
 import { useConnectorIndexingStatusWithPagination } from "@/lib/hooks";
 import { SvgX } from "@opal/icons";
 import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
+import { useSettingsContext } from "@/providers/SettingsProvider";
 
 export default function UpgradingPage({
   futureEmbeddingModel,
@@ -30,11 +31,13 @@ export default function UpgradingPage({
   futureEmbeddingModel: CloudEmbeddingModel | HostedEmbeddingModel;
 }) {
   const [isCancelling, setIsCancelling] = useState<boolean>(false);
+  const settings = useSettingsContext();
+  const vectorDbEnabled = settings?.settings.vector_db_enabled !== false;
 
   const { data: connectors, isLoading: isLoadingConnectors } = useSWR<
     Connector<any>[]
-  >("/api/manage/connector", errorHandlingFetcher, {
-    refreshInterval: 5000, // 5 seconds
+  >(vectorDbEnabled ? "/api/manage/connector" : null, errorHandlingFetcher, {
+    refreshInterval: 5000,
   });
 
   const {
@@ -42,7 +45,8 @@ export default function UpgradingPage({
     isLoading: isLoadingOngoingReIndexingStatus,
   } = useConnectorIndexingStatusWithPagination(
     { secondary_index: true, get_all_connectors: true },
-    5000
+    5000,
+    vectorDbEnabled
   ) as {
     data: ConnectorIndexingStatusLiteResponse[];
     isLoading: boolean;
@@ -51,9 +55,11 @@ export default function UpgradingPage({
   const { data: failedIndexingStatus } = useSWR<
     FailedConnectorIndexingStatus[]
   >(
-    "/api/manage/admin/connector/failed-indexing-status?secondary_index=true",
+    vectorDbEnabled
+      ? "/api/manage/admin/connector/failed-indexing-status?secondary_index=true"
+      : null,
     errorHandlingFetcher,
-    { refreshInterval: 5000 } // 5 seconds
+    { refreshInterval: 5000 }
   );
 
   const onCancel = async () => {

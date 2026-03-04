@@ -8,10 +8,13 @@ import { useConnectorStatus } from "@/lib/hooks";
 import useUsers from "@/hooks/useUsers";
 import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { useSettingsContext } from "@/providers/SettingsProvider";
 
 const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.GROUPS]!;
 
 function Main({ groupId }: { groupId: string }) {
+  const settings = useSettingsContext();
+  const vectorDbEnabled = settings?.settings.vector_db_enabled !== false;
   const {
     userGroup,
     isLoading: userGroupIsLoading,
@@ -27,9 +30,13 @@ function Main({ groupId }: { groupId: string }) {
     data: ccPairs,
     isLoading: isCCPairsLoading,
     error: ccPairsError,
-  } = useConnectorStatus();
+  } = useConnectorStatus(30000, vectorDbEnabled);
 
-  if (userGroupIsLoading || userIsLoading || isCCPairsLoading) {
+  if (
+    userGroupIsLoading ||
+    userIsLoading ||
+    (vectorDbEnabled && isCCPairsLoading)
+  ) {
     return (
       <div className="h-full">
         <div className="my-auto">
@@ -45,7 +52,7 @@ function Main({ groupId }: { groupId: string }) {
   if (!users || usersError) {
     return <div>Error loading users</div>;
   }
-  if (!ccPairs || ccPairsError) {
+  if (vectorDbEnabled && (!ccPairs || ccPairsError)) {
     return <div>Error loading connectors</div>;
   }
 
@@ -61,7 +68,7 @@ function Main({ groupId }: { groupId: string }) {
       <SettingsLayouts.Body>
         <GroupDisplay
           users={users.accepted}
-          ccPairs={ccPairs}
+          ccPairs={ccPairs ?? []}
           userGroup={userGroup}
           refreshUserGroup={refreshUserGroup}
         />

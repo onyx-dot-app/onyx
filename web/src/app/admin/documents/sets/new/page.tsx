@@ -9,20 +9,23 @@ import { ErrorCallout } from "@/components/ErrorCallout";
 import { useRouter } from "next/navigation";
 import { refreshDocumentSets } from "../hooks";
 import CardSection from "@/components/admin/CardSection";
+import { useSettingsContext } from "@/providers/SettingsProvider";
 
 function Main() {
   const router = useRouter();
+  const settings = useSettingsContext();
+  const vectorDbEnabled = settings?.settings.vector_db_enabled !== false;
 
   const {
     data: ccPairs,
     isLoading: isCCPairsLoading,
     error: ccPairsError,
-  } = useConnectorStatus();
+  } = useConnectorStatus(30000, vectorDbEnabled);
 
   // EE only
   const { data: userGroups, isLoading: userGroupsIsLoading } = useUserGroups();
 
-  if (isCCPairsLoading || userGroupsIsLoading) {
+  if ((vectorDbEnabled && isCCPairsLoading) || userGroupsIsLoading) {
     return (
       <div className="flex justify-center items-center min-h-[400px]">
         <ThreeDotsLoader />
@@ -30,7 +33,7 @@ function Main() {
     );
   }
 
-  if (ccPairsError || !ccPairs) {
+  if (vectorDbEnabled && (ccPairsError || !ccPairs)) {
     return (
       <ErrorCallout
         errorTitle="Failed to fetch Connectors"
@@ -43,7 +46,7 @@ function Main() {
     <>
       <CardSection>
         <DocumentSetCreationForm
-          ccPairs={ccPairs}
+          ccPairs={ccPairs ?? []}
           userGroups={userGroups}
           onClose={() => {
             refreshDocumentSets();

@@ -92,7 +92,8 @@ const CONNECTOR_STATUS_URL = "/api/manage/admin/connector/status";
 
 export const useConnectorIndexingStatusWithPagination = (
   filters: Omit<IndexingStatusRequest, "source" | "source_to_page"> = {},
-  refreshInterval = 30000
+  refreshInterval = 30000,
+  enabled: boolean = true
 ) => {
   const { mutate } = useSWRConfig();
   //maintains the current page for each source
@@ -124,7 +125,9 @@ export const useConnectorIndexingStatusWithPagination = (
     [filters]
   );
 
-  const swrKey = [INDEXING_STATUS_URL, JSON.stringify(mainRequest)];
+  const swrKey = enabled
+    ? [INDEXING_STATUS_URL, JSON.stringify(mainRequest)]
+    : null;
 
   // Main data fetch with auto-refresh
   const { data, isLoading, error } = useSWR<
@@ -207,11 +210,14 @@ export const useConnectorIndexingStatusWithPagination = (
   };
 };
 
-export const useConnectorStatus = (refreshInterval = 30000) => {
+export const useConnectorStatus = (
+  refreshInterval = 30000,
+  enabled: boolean = true
+) => {
   const { mutate } = useSWRConfig();
   const url = CONNECTOR_STATUS_URL;
   const swrResponse = useSWR<ConnectorStatus<any, any>[]>(
-    url,
+    enabled ? url : null,
     errorHandlingFetcher,
     { refreshInterval: refreshInterval }
   );
