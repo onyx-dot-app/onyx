@@ -19,9 +19,10 @@ test.describe("SCIM Token Management", () => {
       .getByRole("button", { name: "Generate SCIM Token" })
       .click();
 
-    // Token modal opens
+    // Token modal opens (scoped to dialog to avoid matching hidden Radix aria element)
+    const tokenDialog = adminPage.locator('[role="dialog"]');
     await expect(
-      adminPage.getByText("Save this key before continuing")
+      tokenDialog.getByText("Save this key before continuing")
     ).toBeVisible({ timeout: 10000 });
 
     // Grab the raw token from the textarea
@@ -70,7 +71,7 @@ test.describe("SCIM Token Management", () => {
 
     // Token display modal replaces the confirmation modal
     await expect(
-      adminPage.getByText("Save this key before continuing")
+      dialog.getByText("Save this key before continuing")
     ).toBeVisible({ timeout: 10000 });
 
     const textarea = adminPage.locator("textarea");
