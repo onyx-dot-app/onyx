@@ -56,7 +56,7 @@ interface ShareAgentFormContentProps {
 }
 
 function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
-  const { values, setFieldValue, handleSubmit, dirty } =
+  const { values, setFieldValue, handleSubmit, dirty, isSubmitting } =
     useFormikContext<ShareAgentFormValues>();
   const { data: usersData } = useShareableUsers({ includeApiKeys: true });
   const { data: groupsData } = useShareableGroups();
@@ -349,12 +349,15 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
             ) : undefined
           }
           cancel={
-            <Button secondary onClick={handleClose}>
+            <Button secondary onClick={handleClose} disabled={isSubmitting}>
               Cancel
             </Button>
           }
           submit={
-            <Button onClick={() => handleSubmit()} disabled={!dirty}>
+            <Button
+              onClick={() => handleSubmit()}
+              disabled={!dirty || isSubmitting}
+            >
               Save
             </Button>
           }
@@ -381,7 +384,7 @@ export interface ShareAgentModalProps {
     isPublic: boolean,
     isFeatured: boolean,
     labelIds: number[]
-  ) => void;
+  ) => Promise<void> | void;
 }
 
 export default function ShareAgentModal({
@@ -403,8 +406,8 @@ export default function ShareAgentModal({
     labelIds: labelIds,
   };
 
-  function handleSubmit(values: ShareAgentFormValues) {
-    onShare?.(
+  async function handleSubmit(values: ShareAgentFormValues) {
+    await onShare?.(
       values.selectedUserIds,
       values.selectedGroupIds,
       values.isPublic,

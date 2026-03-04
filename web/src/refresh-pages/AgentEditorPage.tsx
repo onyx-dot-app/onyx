@@ -1050,7 +1050,7 @@ export default function AgentEditorPage({
                     isPublic={values.is_public}
                     isFeatured={values.featured}
                     labelIds={values.label_ids}
-                    onShare={(
+                    onShare={async (
                       userIds,
                       groupIds,
                       isPublic,
@@ -1068,60 +1068,54 @@ export default function AgentEditorPage({
                         return;
                       }
 
-                      void (async () => {
-                        try {
-                          const shareError = await updateAgentSharedStatus(
-                            existingAgent.id,
-                            userIds,
-                            groupIds,
-                            isPublic,
-                            isPaidEnterpriseFeaturesEnabled,
-                            labelIds
-                          );
+                      try {
+                        const shareError = await updateAgentSharedStatus(
+                          existingAgent.id,
+                          userIds,
+                          groupIds,
+                          isPublic,
+                          isPaidEnterpriseFeaturesEnabled,
+                          labelIds
+                        );
 
-                          if (shareError) {
-                            toast.error(`Failed to share agent: ${shareError}`);
+                        if (shareError) {
+                          toast.error(`Failed to share agent: ${shareError}`);
+                          return;
+                        }
+
+                        setFieldValue("shared_user_ids", userIds);
+                        setFieldValue("shared_group_ids", groupIds);
+                        setFieldValue("is_public", isPublic);
+                        setFieldValue("label_ids", labelIds);
+                        // Sharing updates are persisted independently from featured.
+                        // Refresh now so UI reflects share changes even if featured fails.
+                        await refreshAgents();
+                        refreshAgent?.();
+
+                        if (canUpdateFeaturedStatus) {
+                          const featuredError = await updateAgentFeaturedStatus(
+                            existingAgent.id,
+                            isFeatured
+                          );
+                          if (featuredError) {
+                            toast.error(
+                              `Failed to update featured status: ${featuredError}`
+                            );
                             return;
                           }
 
-                          setFieldValue("shared_user_ids", userIds);
-                          setFieldValue("shared_group_ids", groupIds);
-                          setFieldValue("is_public", isPublic);
-                          setFieldValue("label_ids", labelIds);
-                          // Sharing updates are persisted independently from featured.
-                          // Refresh now so UI reflects share changes even if featured fails.
+                          setFieldValue("featured", isFeatured);
                           await refreshAgents();
                           refreshAgent?.();
-
-                          if (canUpdateFeaturedStatus) {
-                            const featuredError =
-                              await updateAgentFeaturedStatus(
-                                existingAgent.id,
-                                isFeatured
-                              );
-                            if (featuredError) {
-                              toast.error(
-                                `Failed to update featured status: ${featuredError}`
-                              );
-                              return;
-                            }
-
-                            setFieldValue("featured", isFeatured);
-                            await refreshAgents();
-                            refreshAgent?.();
-                          }
-
-                          shareAgentModal.toggle(false);
-                        } catch (error) {
-                          console.error(
-                            "Share agent modal save failed:",
-                            error
-                          );
-                          toast.error(
-                            "An unexpected error occurred. Please try again."
-                          );
                         }
-                      })();
+
+                        shareAgentModal.toggle(false);
+                      } catch (error) {
+                        console.error("Share agent modal save failed:", error);
+                        toast.error(
+                          "An unexpected error occurred. Please try again."
+                        );
+                      }
                     }}
                   />
                 </shareAgentModal.Provider>
