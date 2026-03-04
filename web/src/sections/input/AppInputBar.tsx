@@ -406,6 +406,7 @@ const AppInputBar = React.memo(
 
     const chatControls = (
       <div
+        {...(isSearchMode ? { inert: true } : {})}
         className={cn(
           "flex justify-between items-center w-full",
           isSearchMode
@@ -590,6 +591,7 @@ const AppInputBar = React.memo(
           {/* Attached Files */}
           <div
             ref={filesWrapperRef}
+            {...(!showFiles ? { inert: true } : {})}
             className={cn(
               "transition-all duration-150",
               showFiles
