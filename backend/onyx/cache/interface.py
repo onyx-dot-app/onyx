@@ -1,8 +1,19 @@
 import abc
 from enum import Enum
 
+from redis.exceptions import RedisError
+from sqlalchemy.exc import SQLAlchemyError
+
 TTL_KEY_NOT_FOUND = -2
 TTL_NO_EXPIRY = -1
+
+CACHE_TRANSIENT_ERRORS: tuple[type[Exception], ...] = (RedisError, SQLAlchemyError)
+"""Exception types that represent transient cache connectivity / operational
+failures.  Callers that want to fail-open (or fail-closed) on cache errors
+should catch this tuple instead of bare ``Exception``.
+
+When adding a new ``CacheBackend`` implementation, add its transient error
+base class(es) here so all call-sites pick it up automatically."""
 
 
 class CacheBackendType(str, Enum):

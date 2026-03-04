@@ -120,7 +120,6 @@ from onyx.db.models import User
 from onyx.db.pat import fetch_user_for_pat
 from onyx.db.users import get_user_by_email
 from onyx.redis.redis_pool import get_async_redis_connection
-from onyx.redis.redis_pool import get_redis_client
 from onyx.server.settings.store import load_settings
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
@@ -201,13 +200,14 @@ def user_needs_to_be_verified() -> bool:
 
 
 def anonymous_user_enabled(*, tenant_id: str | None = None) -> bool:
-    redis_client = get_redis_client(tenant_id=tenant_id)
-    value = redis_client.get(OnyxRedisLocks.ANONYMOUS_USER_ENABLED)
+    from onyx.cache.factory import get_cache_backend
+
+    cache = get_cache_backend(tenant_id=tenant_id)
+    value = cache.get(OnyxRedisLocks.ANONYMOUS_USER_ENABLED)
 
     if value is None:
         return False
 
-    assert isinstance(value, bytes)
     return int(value.decode("utf-8")) == 1
 
 
