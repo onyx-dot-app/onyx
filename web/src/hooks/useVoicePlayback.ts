@@ -15,9 +15,15 @@ export function useVoicePlayback(): UseVoicePlaybackReturn {
   const [error, setError] = useState<string | null>(null);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioUrlRef = useRef<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const stop = useCallback(() => {
+    // Revoke object URL to prevent memory leak
+    if (audioUrlRef.current) {
+      URL.revokeObjectURL(audioUrlRef.current);
+      audioUrlRef.current = null;
+    }
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.src = "";
@@ -66,19 +72,26 @@ export function useVoicePlayback(): UseVoicePlaybackReturn {
 
         const audioBlob = await response.blob();
         const audioUrl = URL.createObjectURL(audioBlob);
+        audioUrlRef.current = audioUrl;
 
         const audio = new Audio(audioUrl);
         audioRef.current = audio;
 
         audio.onended = () => {
           setIsPlaying(false);
-          URL.revokeObjectURL(audioUrl);
+          if (audioUrlRef.current) {
+            URL.revokeObjectURL(audioUrlRef.current);
+            audioUrlRef.current = null;
+          }
         };
 
         audio.onerror = () => {
           setError("Audio playback failed");
           setIsPlaying(false);
-          URL.revokeObjectURL(audioUrl);
+          if (audioUrlRef.current) {
+            URL.revokeObjectURL(audioUrlRef.current);
+            audioUrlRef.current = null;
+          }
         };
 
         setIsLoading(false);

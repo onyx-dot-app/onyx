@@ -114,9 +114,17 @@ def check_router_auth(
         if is_route_in_spec_list(route, public_endpoint_specs):
             continue
 
-        # Skip WebSocket routes - they handle auth differently
+        # Skip voice WebSocket routes - they implement their own cookie-based auth
+        # via verify_websocket_auth() which validates the session token in Redis.
+        # NOTE: Any new WebSocket endpoints MUST implement their own auth check.
         if "WebSocket" in type(route).__name__:
-            continue
+            if hasattr(route, "path") and "/voice/" in route.path:
+                continue
+            # Fail for other WebSocket routes that may be missing auth
+            raise RuntimeError(
+                f"WebSocket route {route} is missing authentication. "
+                "Add authentication in the endpoint handler or update this check."
+            )
 
         # check for auth
         found_auth = False

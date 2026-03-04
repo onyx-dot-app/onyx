@@ -79,9 +79,13 @@ async def transcribe_audio(
 
 @router.post("/synthesize")
 async def synthesize_speech(
-    text: str | None = Query(default=None, description="Text to synthesize"),
+    text: str | None = Query(
+        default=None, description="Text to synthesize", max_length=4096
+    ),
     voice: str | None = Query(default=None, description="Voice ID to use"),
-    speed: float | None = Query(default=None, description="Playback speed (0.5-2.0)"),
+    speed: float | None = Query(
+        default=None, description="Playback speed (0.5-2.0)", ge=0.5, le=2.0
+    ),
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> StreamingResponse:
