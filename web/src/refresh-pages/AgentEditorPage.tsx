@@ -1069,46 +1069,58 @@ export default function AgentEditorPage({
                       }
 
                       void (async () => {
-                        const shareError = await updateAgentSharedStatus(
-                          existingAgent.id,
-                          userIds,
-                          groupIds,
-                          isPublic,
-                          isPaidEnterpriseFeaturesEnabled,
-                          labelIds
-                        );
-
-                        if (shareError) {
-                          toast.error(`Failed to share agent: ${shareError}`);
-                          return;
-                        }
-
-                        setFieldValue("shared_user_ids", userIds);
-                        setFieldValue("shared_group_ids", groupIds);
-                        setFieldValue("is_public", isPublic);
-                        setFieldValue("label_ids", labelIds);
-                        // Sharing updates are persisted independently from featured.
-                        // Refresh now so UI reflects share changes even if featured fails.
-                        await refreshAgents();
-                        refreshAgent?.();
-
-                        if (canUpdateFeaturedStatus) {
-                          const featuredError = await updateAgentFeaturedStatus(
+                        try {
+                          const shareError = await updateAgentSharedStatus(
                             existingAgent.id,
-                            isFeatured
+                            userIds,
+                            groupIds,
+                            isPublic,
+                            isPaidEnterpriseFeaturesEnabled,
+                            labelIds
                           );
-                          if (featuredError) {
-                            toast.error(
-                              `Failed to update featured status: ${featuredError}`
-                            );
+
+                          if (shareError) {
+                            toast.error(`Failed to share agent: ${shareError}`);
                             return;
                           }
-                        }
 
-                        setFieldValue("featured", isFeatured);
-                        await refreshAgents();
-                        refreshAgent?.();
-                        shareAgentModal.toggle(false);
+                          setFieldValue("shared_user_ids", userIds);
+                          setFieldValue("shared_group_ids", groupIds);
+                          setFieldValue("is_public", isPublic);
+                          setFieldValue("label_ids", labelIds);
+                          // Sharing updates are persisted independently from featured.
+                          // Refresh now so UI reflects share changes even if featured fails.
+                          await refreshAgents();
+                          refreshAgent?.();
+
+                          if (canUpdateFeaturedStatus) {
+                            const featuredError =
+                              await updateAgentFeaturedStatus(
+                                existingAgent.id,
+                                isFeatured
+                              );
+                            if (featuredError) {
+                              toast.error(
+                                `Failed to update featured status: ${featuredError}`
+                              );
+                              return;
+                            }
+
+                            setFieldValue("featured", isFeatured);
+                            await refreshAgents();
+                            refreshAgent?.();
+                          }
+
+                          shareAgentModal.toggle(false);
+                        } catch (error) {
+                          console.error(
+                            "Share agent modal save failed:",
+                            error
+                          );
+                          toast.error(
+                            "An unexpected error occurred. Please try again."
+                          );
+                        }
                       })();
                     }}
                   />
