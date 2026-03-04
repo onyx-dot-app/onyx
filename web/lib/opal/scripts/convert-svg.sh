@@ -60,10 +60,12 @@ fi
 # Resolve the template path relative to this script (not the caller's CWD)
 SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
 
-# Run the conversion
-bunx @svgr/cli "$SVG_FILE" --typescript --svgo-config "$SVGO_CONFIG" --template "${SCRIPT_DIR}/icon-template.js" > "${BASE_NAME}.tsx"
+# Run the conversion into a temp file so a failed run doesn't destroy an existing .tsx
+TMPFILE="${BASE_NAME}.tsx.tmp"
+bunx @svgr/cli "$SVG_FILE" --typescript --svgo-config "$SVGO_CONFIG" --template "${SCRIPT_DIR}/icon-template.js" > "$TMPFILE"
 
 if [ $? -eq 0 ]; then
+  mv "$TMPFILE" "${BASE_NAME}.tsx"
   # Verify the output file was created and has content
   if [ ! -s "${BASE_NAME}.tsx" ]; then
     echo "Error: Output file was not created or is empty" >&2
@@ -113,6 +115,7 @@ if [ $? -eq 0 ]; then
   rm "$SVG_FILE"
   echo "Deleted $SVG_FILE"
 else
+  rm -f "$TMPFILE"
   echo "Error: Conversion failed" >&2
   exit 1
 fi
