@@ -280,7 +280,17 @@ jobs:
           IS_TEST_RUN: ${{ needs.determine-builds.outputs.is-test-run }}
         run: |
           if [ -z "${TAURI_UPDATER_PUBLIC_KEY:-}" ]; then
-            echo "TAURI_UPDATER_PUBLIC_KEY is required for desktop release builds."
+            echo "TAURI_UPDATER_PUBLIC_KEY is required for desktop builds." >&2
+            exit 1
+          fi
+
+          if [ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
+            echo "TAURI_SIGNING_PRIVATE_KEY is required for desktop builds." >&2
+            exit 1
+          fi
+
+          if [ -z "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}" ]; then
+            echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD is required for desktop builds." >&2
             exit 1
           fi
 
@@ -313,7 +323,17 @@ jobs:
           IS_TEST_RUN: ${{ needs.determine-builds.outputs.is-test-run }}
         run: |
           if ([string]::IsNullOrWhiteSpace($env:TAURI_UPDATER_PUBLIC_KEY)) {
-            Write-Error "TAURI_UPDATER_PUBLIC_KEY is required for desktop release builds."
+            Write-Error "TAURI_UPDATER_PUBLIC_KEY is required for desktop builds."
+            exit 1
+          }
+
+          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)) {
+            Write-Error "TAURI_SIGNING_PRIVATE_KEY is required for desktop builds."
+            exit 1
+          }
+
+          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD)) {
+            Write-Error "TAURI_SIGNING_PRIVATE_KEY_PASSWORD is required for desktop builds."
             exit 1
           }
 

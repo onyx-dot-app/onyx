@@ -1030,9 +1030,15 @@ fn main() {
     // Load config at startup
     let (config, config_initialized) = load_config();
 
-    tauri::Builder::default()
+    #[cfg(not(debug_assertions))]
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_updater::Builder::new().build());
+
+    #[cfg(debug_assertions)]
+    let builder = tauri::Builder::default().plugin(tauri_plugin_shell::init());
+
+    builder
         .plugin(
             tauri::plugin::Builder::<Wry>::new("chat-external-navigation-handler")
                 .on_navigation(|webview, destination_url| {
