@@ -53,7 +53,7 @@ import {
   getConnectorOauthRedirectUrl,
   useOAuthDetails,
 } from "@/lib/connectors/oauth";
-import { CreateStdOAuthCredential } from "@/components/credentials/actions/CreateStdOAuthCredential";
+import CreateStdOAuthCredential from "@/components/credentials/actions/CreateStdOAuthCredential";
 import { Spinner } from "@/components/Spinner";
 import Button from "@/refresh-components/buttons/Button";
 import { deleteConnector } from "@/lib/connector";
