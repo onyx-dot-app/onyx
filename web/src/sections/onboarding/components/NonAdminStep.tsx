@@ -36,10 +36,11 @@ export default function NonAdminStep() {
 
   const handleSave = () => {
     updateUserPersonalization({ name })
-      .then(() => {
+      .then(async () => {
         setSavedName(name);
         setShowHeader(true);
         setIsEditing(false);
+        await refreshUser();
       })
       .catch((error) => {
         toast.error("Failed to save name. Please try again.");
