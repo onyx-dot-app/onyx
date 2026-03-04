@@ -14,7 +14,7 @@ import type {
   OnyxDisplayColumn,
   OnyxActionsColumn,
   OnyxColumnDef,
-} from "@/refresh-components/table/dataTableTypes";
+} from "@/refresh-components/table/types";
 import type { TableSize } from "@/refresh-components/table/TableSizeContext";
 import type { IconFunctionComponent } from "@opal/types";
 import type { SortDirection } from "@/refresh-components/table/TableHead";

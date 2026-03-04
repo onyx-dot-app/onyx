@@ -6,7 +6,7 @@ import { useTableSize } from "@/refresh-components/table/TableSizeContext";
 import type { TableSize } from "@/refresh-components/table/TableSizeContext";
 import { SvgUser } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
-import type { QualifierContentType } from "@/refresh-components/table/dataTableTypes";
+import type { QualifierContentType } from "@/refresh-components/table/types";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
 import Text from "@/refresh-components/texts/Text";
 
