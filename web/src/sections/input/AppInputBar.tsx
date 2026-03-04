@@ -184,7 +184,7 @@ const AppInputBar = React.memo(
 
     const combinedSettings = useContext(SettingsContext);
 
-    // TODO: Replace this useEffect with CSS `field-sizing: content` once
+    // TODO(@raunakab): Replace this useEffect with CSS `field-sizing: content` once
     // Firefox ships it unflagged (currently behind `layout.css.field-sizing.enabled`).
     // Auto-resize textarea based on content (chat mode only).
     // Reset to min-height first so scrollHeight reflects actual content size,
