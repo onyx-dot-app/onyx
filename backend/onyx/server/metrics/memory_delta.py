@@ -83,13 +83,19 @@ def add_memory_delta_middleware(app: FastAPI) -> None:
         call_next: Callable[[Request], Awaitable[Response]],
     ) -> Response:
         handler = _match_route(route_map, request.url.path) or "unmatched"
-        rss_before = _process.memory_info().rss
+        try:
+            rss_before = _process.memory_info().rss
+        except (psutil.Error, OSError):
+            return await call_next(request)
 
         response = await call_next(request)
 
-        rss_after = _process.memory_info().rss
-        delta = rss_after - rss_before
-        _RSS_DELTA.labels(handler=handler).observe(delta)
-        _PROCESS_RSS.set(rss_after)
+        try:
+            rss_after = _process.memory_info().rss
+            delta = rss_after - rss_before
+            _RSS_DELTA.labels(handler=handler).observe(delta)
+            _PROCESS_RSS.set(rss_after)
+        except (psutil.Error, OSError):
+            pass
 
         return response

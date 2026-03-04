@@ -59,6 +59,27 @@ def test_redis_pool_collector_handles_multiple_pools() -> None:
     assert metrics["onyx_redis_pool_max:replica"] == 64
 
 
+def test_redis_pool_collector_falls_back_to_zeros_on_attribute_error() -> None:
+    """Verify collector degrades gracefully when redis-py internals change."""
+    mock_pool = MagicMock(spec=[])  # empty spec — no attributes at all
+    collector = RedisPoolCollector()
+    collector.add_pool("primary", mock_pool)
+
+    families = collector.collect()
+    assert len(families) == 4
+
+    metrics: dict[str, float] = {}
+    for family in families:
+        for sample in family.samples:
+            metrics[f"{sample.name}:{sample.labels['pool']}"] = sample.value
+
+    # All metrics should fall back to zero
+    assert metrics["onyx_redis_pool_in_use:primary"] == 0
+    assert metrics["onyx_redis_pool_available:primary"] == 0
+    assert metrics["onyx_redis_pool_max:primary"] == 0
+    assert metrics["onyx_redis_pool_created:primary"] == 0
+
+
 def test_redis_pool_collector_describe_returns_empty() -> None:
     """Unchecked collector pattern — describe() returns empty."""
     collector = RedisPoolCollector()

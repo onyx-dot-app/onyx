@@ -38,14 +38,19 @@ def get_process_info() -> dict[str, Any]:
     """Return process-level resource info."""
     mem = _process.memory_info()
     uptime = round(time.monotonic() - _start_time, 1) if _start_time is not None else 0
-    return {
+    info: dict[str, Any] = {
         "rss_bytes": mem.rss,
         "vms_bytes": mem.vms,
         "cpu_percent": _process.cpu_percent(),
-        "num_fds": _process.num_fds(),
         "num_threads": _process.num_threads(),
         "uptime_seconds": uptime,
     }
+    # num_fds() is Linux-only; skip gracefully on macOS/Windows
+    try:
+        info["num_fds"] = _process.num_fds()
+    except (AttributeError, psutil.Error):
+        pass
+    return info
 
 
 @router.get("/pool-state")

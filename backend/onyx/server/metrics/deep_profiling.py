@@ -207,8 +207,11 @@ def start_deep_profiling() -> None:
     if _snapshot_task is not None:
         return
 
-    tracemalloc.start(10)
-    logger.info("tracemalloc started with 10-frame depth")
+    if not tracemalloc.is_tracing():
+        tracemalloc.start(10)
+        logger.info("tracemalloc started with 10-frame depth")
+    else:
+        logger.info("tracemalloc already active, reusing existing session")
 
     _snapshot_task = asyncio.create_task(
         _snapshot_loop(DEEP_PROFILING_SNAPSHOT_INTERVAL_SECONDS)
