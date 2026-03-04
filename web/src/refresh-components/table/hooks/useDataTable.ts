@@ -1,7 +1,7 @@
 "use client";
 "use no memo";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   useReactTable,
   getCoreRowModel,
@@ -167,6 +167,15 @@ export default function useDataTable<TData extends RowData>(
     pageIndex: 0,
     pageSize: pageSizeOption,
   });
+
+  // ---- sync pageSize prop to internal state --------------------------------
+  useEffect(() => {
+    setPagination((prev) => ({
+      ...prev,
+      pageSize: pageSizeOption,
+      pageIndex: 0,
+    }));
+  }, [pageSizeOption]);
 
   // ---- TanStack table instance --------------------------------------------
   const table = useReactTable({

@@ -108,7 +108,9 @@ export default function useDraggableRows<TData>(
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
       setActiveId(null);
-      (document.activeElement as HTMLElement)?.blur();
+      if (event.activatorEvent instanceof PointerEvent) {
+        (document.activeElement as HTMLElement)?.blur();
+      }
       const { active, over } = event;
       if (!over || active.id === over.id) return;
 
@@ -135,7 +137,6 @@ export default function useDraggableRows<TData>(
 
   const handleDragCancel = useCallback(() => {
     setActiveId(null);
-    (document.activeElement as HTMLElement)?.blur();
   }, []);
 
   return {
