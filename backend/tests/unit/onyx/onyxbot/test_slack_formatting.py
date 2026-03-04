@@ -160,7 +160,9 @@ def test_table_with_formatted_cells() -> None:
 
     formatted = format_slack_message(message)
 
+    # Bold cell should not double-wrap: *Alice* not **Alice**
     assert "*Alice*" in formatted
+    assert "**Alice**" not in formatted
     assert "<https://example.com|profile>" in formatted
 
 

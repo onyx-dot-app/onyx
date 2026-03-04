@@ -246,7 +246,11 @@ class SlackRenderer(HTMLRenderer):
         if cells:
             title = cells[0]
             if title:
-                lines.append(f"*{title}*")
+                # Avoid double-wrapping if cell already contains bold markup
+                if title.startswith("*") and title.endswith("*"):
+                    lines.append(title)
+                else:
+                    lines.append(f"*{title}*")
             for i, cell in enumerate(cells[1:], start=1):
                 if i < len(self._table_headers):
                     lines.append(f"  {self._table_headers[i]}: {cell}")
