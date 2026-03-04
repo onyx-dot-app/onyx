@@ -45,7 +45,7 @@ import { Button } from "@opal/components";
 function buildTooltipMessage(
   actionDescription: string,
   isConfigured: boolean,
-  canConfigure: boolean
+  canManageAction: boolean
 ) {
   const _CONFIGURE_MESSAGE = "Press the settings cog to enable.";
   const _USER_NOT_ADMIN_MESSAGE = "Ask an admin to configure.";
@@ -54,7 +54,7 @@ function buildTooltipMessage(
     return actionDescription;
   }
 
-  if (canConfigure) {
+  if (canManageAction) {
     return actionDescription + " " + _CONFIGURE_MESSAGE;
   }
 
@@ -73,13 +73,13 @@ const DEFAULT_TOOL_DESCRIPTION = "This action is not configured yet.";
 function getToolTooltip(
   tool: ToolSnapshot,
   isConfigured: boolean,
-  canConfigure: boolean
+  canManageAction: boolean
 ): string {
   const description =
     (tool.in_code_tool_id && TOOL_DESCRIPTIONS[tool.in_code_tool_id]) ||
     tool.description ||
     DEFAULT_TOOL_DESCRIPTION;
-  return buildTooltipMessage(description, isConfigured, canConfigure);
+  return buildTooltipMessage(description, isConfigured, canManageAction);
 }
 
 const ADMIN_CONFIG_LINKS: Record<string, { href: string; tooltip: string }> = {
