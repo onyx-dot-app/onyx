@@ -82,9 +82,20 @@ class ThreadCountCollector(Collector):
         return []
 
 
+_thread_collector: ThreadCountCollector | None = None
+
+
 def setup_threadpool_metrics() -> None:
-    """Register the process thread count collector and enable instrumentation."""
+    """Register the process thread count collector and enable instrumentation.
+
+    Idempotent — safe to call multiple times (e.g. Uvicorn hot-reload).
+    """
+    global _thread_collector
+    if _thread_collector is not None:
+        return
+
     from onyx.utils.threadpool_concurrency import enable_threadpool_instrumentation
 
     enable_threadpool_instrumentation()
-    REGISTRY.register(ThreadCountCollector())
+    _thread_collector = ThreadCountCollector()
+    REGISTRY.register(_thread_collector)

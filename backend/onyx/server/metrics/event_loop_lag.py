@@ -70,9 +70,13 @@ def start_event_loop_lag_probe() -> None:
     )
 
 
-def stop_event_loop_lag_probe() -> None:
-    """Cancel the background lag measurement task."""
+async def stop_event_loop_lag_probe() -> None:
+    """Cancel the background lag measurement task and await cleanup."""
     global _probe_task
     if _probe_task is not None:
         _probe_task.cancel()
+        try:
+            await _probe_task
+        except asyncio.CancelledError:
+            pass
         _probe_task = None

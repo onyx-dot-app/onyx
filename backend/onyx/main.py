@@ -409,12 +409,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
 
     from onyx.server.metrics.event_loop_lag import stop_event_loop_lag_probe
 
-    stop_event_loop_lag_probe()
+    await stop_event_loop_lag_probe()
 
     if ENABLE_DEEP_PROFILING:
         from onyx.server.metrics.deep_profiling import stop_deep_profiling
 
-        stop_deep_profiling()
+        await stop_deep_profiling()
 
     SqlEngine.reset_engine()
 

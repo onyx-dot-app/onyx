@@ -186,9 +186,18 @@ class DeepProfilingCollector(Collector):
         return []
 
 
+_collector: DeepProfilingCollector | None = None
+
+
 def start_deep_profiling() -> None:
-    """Start tracemalloc and the periodic snapshot task."""
-    global _snapshot_task
+    """Start tracemalloc and the periodic snapshot task.
+
+    Idempotent — safe to call multiple times (e.g. Uvicorn hot-reload).
+    """
+    global _snapshot_task, _collector
+
+    if _snapshot_task is not None:
+        return
 
     tracemalloc.start(10)
     logger.info("tracemalloc started with 10-frame depth")
@@ -196,16 +205,23 @@ def start_deep_profiling() -> None:
     _snapshot_task = asyncio.create_task(
         _snapshot_loop(DEEP_PROFILING_SNAPSHOT_INTERVAL_SECONDS)
     )
-    REGISTRY.register(DeepProfilingCollector())
+
+    if _collector is None:
+        _collector = DeepProfilingCollector()
+        REGISTRY.register(_collector)
     logger.info("Deep profiling collector registered")
 
 
-def stop_deep_profiling() -> None:
+async def stop_deep_profiling() -> None:
     """Stop tracemalloc and cancel the snapshot task."""
     global _snapshot_task
 
     if _snapshot_task is not None:
         _snapshot_task.cancel()
+        try:
+            await _snapshot_task
+        except asyncio.CancelledError:
+            pass
         _snapshot_task = None
 
     if tracemalloc.is_tracing():

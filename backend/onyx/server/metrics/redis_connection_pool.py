@@ -64,11 +64,18 @@ class RedisPoolCollector(Collector):
                 available.add_metric([label], len(pool._available_connections))
                 max_conns.add_metric([label], pool.max_connections)
                 created.add_metric([label], pool._created_connections)
-            except AttributeError:
+            except (AttributeError, TypeError):
+                # Degrade to zeros so the time series stays visible
+                # instead of disappearing when internals change.
+                in_use.add_metric([label], 0)
+                available.add_metric([label], 0)
+                max_conns.add_metric([label], 0)
+                created.add_metric([label], 0)
                 logger.warning(
-                    "Redis pool %s missing expected attributes — "
+                    "Redis pool %s: falling back to zero metrics — "
                     "redis-py internals may have changed",
                     label,
+                    exc_info=True,
                 )
 
         return [in_use, available, max_conns, created]
@@ -77,14 +84,25 @@ class RedisPoolCollector(Collector):
         return []
 
 
+_redis_collector: RedisPoolCollector | None = None
+
+
 def setup_redis_connection_pool_metrics() -> None:
-    """Register Redis pool metrics using the RedisPool singleton."""
+    """Register Redis pool metrics using the RedisPool singleton.
+
+    Idempotent — safe to call multiple times (e.g. Uvicorn hot-reload).
+    """
+    global _redis_collector
+    if _redis_collector is not None:
+        return
+
     from onyx.redis.redis_pool import RedisPool
 
     pool_instance = RedisPool()
-    collector = RedisPoolCollector()
-    collector.add_pool("primary", pool_instance._pool)
-    collector.add_pool("replica", pool_instance._replica_pool)
+    _redis_collector = RedisPoolCollector()
+    _redis_collector.add_pool("primary", pool_instance._pool)
+    if pool_instance._replica_pool is not None:
+        _redis_collector.add_pool("replica", pool_instance._replica_pool)
 
-    REGISTRY.register(collector)
+    REGISTRY.register(_redis_collector)
     logger.info("Registered Redis connection pool metrics")

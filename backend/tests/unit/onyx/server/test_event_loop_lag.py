@@ -60,7 +60,7 @@ async def test_start_stop_lifecycle() -> None:
             assert mod._probe_task is not None
             assert not mod._probe_task.cancelled()
 
-            stop_event_loop_lag_probe()
+            await stop_event_loop_lag_probe()
             assert mod._probe_task is None
     finally:
         mod._probe_task = original_task
