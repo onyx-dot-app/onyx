@@ -18,7 +18,10 @@ export const buildDefaultInitialValues = (
   existingLlmProvider?: LLMProviderView,
   modelConfigurations?: ModelConfiguration[]
 ) => {
-  const defaultModelName = modelConfigurations?.[0]?.name ?? "";
+  const defaultModelName =
+    existingLlmProvider?.model_configurations?.[0]?.name ??
+    modelConfigurations?.[0]?.name ??
+    "";
 
   // Auto mode must be explicitly enabled by the user
   // Default to false for new providers, preserve existing value when editing
