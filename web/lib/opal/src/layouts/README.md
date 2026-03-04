@@ -1,8 +1,8 @@
 # @opal/layouts
 
-**Import:** `import { Content, ContentAction } from "@opal/layouts";`
+**Import:** `import { Content, ContentAction, IllustrationContent } from "@opal/layouts";`
 
-Layout primitives for composing icon + title + description rows. These components handle sizing, font selection, icon alignment, and optional inline editing — things that are tedious to get right by hand and easy to get wrong.
+Layout primitives for composing content blocks. These components handle sizing, font selection, icon alignment, and optional inline editing — things that are tedious to get right by hand and easy to get wrong.
 
 ## Components
 
@@ -10,6 +10,7 @@ Layout primitives for composing icon + title + description rows. These component
 |---|---|---|
 | [`Content`](./Content/README.md) | Icon + title + description row. Routes to an internal layout (`ContentXl`, `ContentLg`, `ContentMd`, or `ContentSm`) based on `sizePreset` and `variant`. | [Content README](./Content/README.md) |
 | [`ContentAction`](./ContentAction/README.md) | Wraps `Content` in a flex-row with an optional `rightChildren` slot for action buttons. Adds padding alignment via the shared `SizeVariant` scale. | [ContentAction README](./ContentAction/README.md) |
+| [`IllustrationContent`](./IllustrationContent/README.md) | Center-aligned illustration + title + description stack for empty states, error pages, and placeholders. | [IllustrationContent README](./IllustrationContent/README.md) |
 
 ## Quick Start
 
@@ -49,6 +50,13 @@ import SvgSettings from "@opal/icons/settings";
     <Button icon={SvgSettings} prominence="tertiary" />
   }
 />
+
+// Empty state with illustration
+<IllustrationContent
+  illustration={SvgNoResult}
+  title="No results found"
+  description="Try adjusting your search or filters."
+/>
 ```
 
 ## Architecture
@@ -74,10 +82,12 @@ From `@opal/layouts`:
 // Components
 Content
 ContentAction
+IllustrationContent
 
 // Types
 ContentProps
 ContentActionProps
+IllustrationContentProps
 SizePreset
 ContentVariant
 ```
