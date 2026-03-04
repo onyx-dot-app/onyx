@@ -96,14 +96,12 @@ def setup_redis_connection_pool_metrics() -> None:
     if _redis_collector is not None:
         return
 
-    from onyx.configs.app_configs import REDIS_HOST
-    from onyx.configs.app_configs import REDIS_REPLICA_HOST
     from onyx.redis.redis_pool import RedisPool
 
     pool_instance = RedisPool()
     collector = RedisPoolCollector()
     collector.add_pool("primary", pool_instance._pool)
-    if REDIS_REPLICA_HOST != REDIS_HOST:
+    if pool_instance._replica_pool is not None:
         collector.add_pool("replica", pool_instance._replica_pool)
 
     REGISTRY.register(collector)

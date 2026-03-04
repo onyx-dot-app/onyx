@@ -89,14 +89,11 @@ def get_pool_state() -> dict[str, Any]:
 
         from onyx.redis.redis_pool import RedisPool
 
-        from onyx.configs.app_configs import REDIS_HOST
-        from onyx.configs.app_configs import REDIS_REPLICA_HOST
-
         pool_instance = RedisPool()
         pools: list[tuple[str, BlockingConnectionPool]] = [
             ("primary", cast(BlockingConnectionPool, pool_instance._pool)),
         ]
-        if REDIS_REPLICA_HOST != REDIS_HOST:
+        if pool_instance._replica_pool is not None:
             pools.append(
                 ("replica", cast(BlockingConnectionPool, pool_instance._replica_pool))
             )
