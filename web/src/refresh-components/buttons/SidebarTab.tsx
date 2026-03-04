@@ -6,6 +6,7 @@ import type { Route } from "next";
 import { Interactive } from "@opal/core";
 import { ContentAction } from "@opal/layouts";
 import Link from "next/link";
+import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 
 export interface SidebarTabProps {
   // Button states:
@@ -51,7 +52,7 @@ export default function SidebarTab({
     <div className="w-0 group-hover/SidebarTab:w-6" />
   );
 
-  return (
+  const content = (
     <div className="relative">
       <Interactive.Base
         variant="sidebar"
@@ -112,4 +113,9 @@ export default function SidebarTab({
       </Interactive.Base>
     </div>
   );
+
+  if (typeof children !== "string") return content;
+  if (folded)
+    return <SimpleTooltip tooltip={children}>{content}</SimpleTooltip>;
+  return content;
 }
