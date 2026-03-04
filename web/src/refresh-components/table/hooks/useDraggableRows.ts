@@ -22,7 +22,7 @@ interface UseDraggableRowsOptions<TData> {
   data: TData[];
   /** Extract a unique string ID from each row. */
   getRowId: (row: TData) => string;
-  /** Disable DnD (e.g. when column sorting is active). @default true */
+  /** Whether DnD row reordering is active (e.g. set to `false` when column sorting is active). @default true */
   enabled?: boolean;
   /** Called after a successful reorder with the new ID order and a map of changed positions. */
   onReorder?: (

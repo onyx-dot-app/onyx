@@ -150,26 +150,35 @@ function computeColumnWidths(
   const available = tableWidth - fixedTotal;
   const totalWeight = dataColumns.reduce((sum, col) => sum + col.weight, 0);
 
-  // Proportional allocation with min-width clamping
+  // Iterative proportional allocation with min-width clamping.
+  // Each pass clamps columns whose proportional share falls below their
+  // minimum, then redistributes remaining space. Repeats until stable.
   let clampedTotal = 0;
-  let unclampedWeight = 0;
   const clamped = new Set<string>();
 
-  for (const col of dataColumns) {
-    const proportional = available * (col.weight / totalWeight);
-    if (proportional < col.minWidth) {
-      result[col.id] = col.minWidth;
-      clampedTotal += col.minWidth;
-      clamped.add(col.id);
-    } else {
-      unclampedWeight += col.weight;
+  let stable = false;
+  while (!stable) {
+    stable = true;
+    const unclamped = dataColumns.filter((col) => !clamped.has(col.id));
+    const unclampedWeight = unclamped.reduce((s, c) => s + c.weight, 0);
+    const remaining = available - clampedTotal;
+
+    for (const col of unclamped) {
+      const proportional = remaining * (col.weight / unclampedWeight);
+      if (proportional < col.minWidth) {
+        result[col.id] = col.minWidth;
+        clampedTotal += col.minWidth;
+        clamped.add(col.id);
+        stable = false;
+      }
     }
   }
 
   // Distribute remaining space among unclamped columns
+  const unclampedCols = dataColumns.filter((col) => !clamped.has(col.id));
+  const unclampedWeight = unclampedCols.reduce((s, c) => s + c.weight, 0);
   const remainingSpace = available - clampedTotal;
   let assigned = 0;
-  const unclampedCols = dataColumns.filter((col) => !clamped.has(col.id));
 
   for (let i = 0; i < unclampedCols.length; i++) {
     const col = unclampedCols[i]!;

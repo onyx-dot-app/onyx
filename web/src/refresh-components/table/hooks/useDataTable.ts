@@ -237,7 +237,7 @@ export default function useDataTable<TData extends RowData>(
     currentPage,
     totalPages,
     totalItems,
-    pageSize: pageSizeOption,
+    pageSize: pagination.pageSize,
     setPage,
     isPaginated,
     selectionState,
