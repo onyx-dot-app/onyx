@@ -465,6 +465,12 @@ class VespaIndex(DocumentIndex):
         chunks: list[DocMetadataAwareIndexChunk],
         index_batch_params: IndexBatchParams,
     ) -> set[OldDocumentInsertionRecord]:
+        """
+        NOTE: Do NOT consider the secondary index here. A separate indexing
+        pipeline will be responsible for indexing to the secondary index. This
+        design is not ideal and we should reconsider this when revamping index
+        swapping.
+        """
         if len(index_batch_params.doc_id_to_previous_chunk_cnt) != len(
             index_batch_params.doc_id_to_new_chunk_cnt
         ):
@@ -659,6 +665,10 @@ class VespaIndex(DocumentIndex):
         """Note: if the document id does not exist, the update will be a no-op and the
         function will complete with no errors or exceptions.
         Handle other exceptions if you wish to implement retry behavior
+
+        NOTE: Remember to handle the secondary index here. There is no separate
+        pipeline for updating chunks in the secondary index. This design is not
+        ideal and we should reconsider this when revamping index swapping.
         """
         if fields is None and user_fields is None:
             logger.warning(
@@ -679,33 +689,38 @@ class VespaIndex(DocumentIndex):
                 f"Bug: Tenant ID mismatch. Expected {tenant_state.tenant_id}, got {tenant_id}."
             )
 
-        vespa_document_index = VespaDocumentIndex(
-            index_name=self.index_name,
-            tenant_state=tenant_state,
-            large_chunks_enabled=self.large_chunks_enabled,
-            httpx_client=self.httpx_client,
-        )
+        indices = [self.index_name]
+        if self.secondary_index_name:
+            indices.append(self.secondary_index_name)
 
-        project_ids: set[int] | None = None
-        if user_fields is not None and user_fields.user_projects is not None:
-            project_ids = set(user_fields.user_projects)
-        persona_ids: set[int] | None = None
-        if user_fields is not None and user_fields.personas is not None:
-            persona_ids = set(user_fields.personas)
-        update_request = MetadataUpdateRequest(
-            document_ids=[doc_id],
-            doc_id_to_chunk_cnt={
-                doc_id: chunk_count if chunk_count is not None else -1
-            },  # NOTE: -1 represents an unknown chunk count.
-            access=fields.access if fields is not None else None,
-            document_sets=fields.document_sets if fields is not None else None,
-            boost=fields.boost if fields is not None else None,
-            hidden=fields.hidden if fields is not None else None,
-            project_ids=project_ids,
-            persona_ids=persona_ids,
-        )
+        for index_name in indices:
+            vespa_document_index = VespaDocumentIndex(
+                index_name=index_name,
+                tenant_state=tenant_state,
+                large_chunks_enabled=self.index_to_large_chunks_enabled[index_name],
+                httpx_client=self.httpx_client,
+            )
 
-        vespa_document_index.update([update_request])
+            project_ids: set[int] | None = None
+            if user_fields is not None and user_fields.user_projects is not None:
+                project_ids = set(user_fields.user_projects)
+            persona_ids: set[int] | None = None
+            if user_fields is not None and user_fields.personas is not None:
+                persona_ids = set(user_fields.personas)
+            update_request = MetadataUpdateRequest(
+                document_ids=[doc_id],
+                doc_id_to_chunk_cnt={
+                    doc_id: chunk_count if chunk_count is not None else -1
+                },  # NOTE: -1 represents an unknown chunk count.
+                access=fields.access if fields is not None else None,
+                document_sets=fields.document_sets if fields is not None else None,
+                boost=fields.boost if fields is not None else None,
+                hidden=fields.hidden if fields is not None else None,
+                project_ids=project_ids,
+                persona_ids=persona_ids,
+            )
+
+            vespa_document_index.update([update_request])
 
     def delete_single(
         self,
@@ -714,6 +729,11 @@ class VespaIndex(DocumentIndex):
         tenant_id: str,
         chunk_count: int | None,
     ) -> int:
+        """
+        NOTE: Remember to handle the secondary index here. There is no separate
+        pipeline for deleting chunks in the secondary index. This design is not
+        ideal and we should reconsider this when revamping index swapping.
+        """
         tenant_state = TenantState(
             tenant_id=get_current_tenant_id(),
             multitenant=MULTI_TENANT,
@@ -726,13 +746,23 @@ class VespaIndex(DocumentIndex):
             raise ValueError(
                 f"Bug: Tenant ID mismatch. Expected {tenant_state.tenant_id}, got {tenant_id}."
             )
-        vespa_document_index = VespaDocumentIndex(
-            index_name=self.index_name,
-            tenant_state=tenant_state,
-            large_chunks_enabled=self.large_chunks_enabled,
-            httpx_client=self.httpx_client,
-        )
-        return vespa_document_index.delete(document_id=doc_id, chunk_count=chunk_count)
+        indices = [self.index_name]
+        if self.secondary_index_name:
+            indices.append(self.secondary_index_name)
+
+        total_chunks_deleted = 0
+        for index_name in indices:
+            vespa_document_index = VespaDocumentIndex(
+                index_name=index_name,
+                tenant_state=tenant_state,
+                large_chunks_enabled=self.index_to_large_chunks_enabled[index_name],
+                httpx_client=self.httpx_client,
+            )
+            total_chunks_deleted += vespa_document_index.delete(
+                document_id=doc_id, chunk_count=chunk_count
+            )
+
+        return total_chunks_deleted
 
     def id_based_retrieval(
         self,
