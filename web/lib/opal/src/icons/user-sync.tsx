@@ -4,15 +4,15 @@ const SvgUserSync = ({ size, ...props }: IconProps) => (
   <svg
     width={size}
     height={size}
-    viewBox="0 0 32 32"
+    viewBox="0 0 16 16"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
     stroke="currentColor"
     {...props}
   >
     <path
-      d="M2 28C2 27.3333 2 26.6667 2 26C2 22.6863 4.68632 20 8.00003 20H14M22 17L19 20L29 19.9997M26 28L29 25L19 25M17.5 9.5C17.5 12.5376 15.0376 15 12 15C8.96243 15 6.5 12.5376 6.5 9.5C6.5 6.46243 8.96243 4 12 4C15.0376 4 17.5 6.46243 17.5 9.5Z"
-      strokeWidth={2.5}
+      d="M1 14C1 13.6667 1 13.3333 1 13C1 11.3431 2.34316 10 4.00002 10H7M11 8.5L9.5 10L14.5 9.99985M13 14L14.5 12.5L9.5 12.5M8.75 4.75C8.75 6.26878 7.51878 7.5 6 7.5C4.48122 7.5 3.25 6.26878 3.25 4.75C3.25 3.23122 4.48122 2 6 2C7.51878 2 8.75 3.23122 8.75 4.75Z"
+      strokeWidth={1.5}
       strokeLinecap="round"
       strokeLinejoin="round"
     />
