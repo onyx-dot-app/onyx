@@ -16,7 +16,7 @@ import { FilterManager, LlmManager, useFederatedConnectors } from "@/lib/hooks";
 import usePromptShortcuts from "@/hooks/usePromptShortcuts";
 import useFilter from "@/hooks/useFilter";
 import useCCPairs from "@/hooks/useCCPairs";
-import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
+import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { ChatState } from "@/app/app/interfaces";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import { useAppMode } from "@/providers/AppModeProvider";
@@ -66,8 +66,6 @@ export interface AppInputBarHandle {
 }
 
 export interface AppInputBarProps {
-  removeDocs: () => void;
-  selectedDocuments: OnyxDocument[];
   initialMessage?: string;
   stopGenerating: () => void;
   onSubmit: (message: string) => void;
@@ -79,10 +77,8 @@ export interface AppInputBarProps {
   // agents
   selectedAgent: MinimalPersonaSnapshot | undefined;
 
-  toggleDocumentSidebar: () => void;
   handleFileUpload: (files: File[]) => void;
   filterManager: FilterManager;
-  retrievalEnabled: boolean;
   deepResearchEnabled: boolean;
   setPresentingDocument?: (document: MinimalOnyxDocument) => void;
   toggleDeepResearch: () => void;
@@ -403,7 +399,7 @@ const AppInputBar = React.memo(
         className={cn(
           "flex justify-between items-center w-full",
           isSearchMode
-            ? "opacity-0 p-0 h-0 pointer-events-none"
+            ? "opacity-0 p-0 h-0 overflow-hidden pointer-events-none"
             : "opacity-100 p-1 h-[2.75rem] pointer-events-auto",
           "transition-all duration-150"
         )}
@@ -586,7 +582,9 @@ const AppInputBar = React.memo(
             ref={filesWrapperRef}
             className={cn(
               "transition-all duration-150",
-              showFiles ? "opacity-100 p-1" : "opacity-0 p-0"
+              showFiles
+                ? "opacity-100 p-1"
+                : "opacity-0 p-0 overflow-hidden pointer-events-none"
             )}
           >
             <div ref={filesContentRef} className="flex flex-wrap gap-1">

@@ -485,12 +485,8 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                 ref={chatInputBarRef}
                 deepResearchEnabled={deepResearchEnabled}
                 toggleDeepResearch={toggleDeepResearch}
-                toggleDocumentSidebar={() => {}}
                 filterManager={filterManager}
                 llmManager={llmManager}
-                removeDocs={() => {}}
-                retrievalEnabled={retrievalEnabled}
-                selectedDocuments={[]}
                 initialMessage={message}
                 stopGenerating={stopGenerating}
                 onSubmit={handleChatInputSubmit}
