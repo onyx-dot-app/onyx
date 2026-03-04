@@ -400,10 +400,29 @@ fn format_utc_timestamp() -> String {
         .unwrap_or_default();
     let total_secs = now.as_secs();
     let millis = now.subsec_millis();
-    let secs = total_secs % 60;
-    let mins = (total_secs / 60) % 60;
-    let hours = (total_secs / 3600) % 24;
-    format!("{:02}:{:02}:{:02}.{:03}", hours, mins, secs, millis)
+
+    let days = total_secs / 86400;
+    let secs_of_day = total_secs % 86400;
+    let hours = secs_of_day / 3600;
+    let mins = (secs_of_day % 3600) / 60;
+    let secs = secs_of_day % 60;
+
+    // Days since Unix epoch -> Y/M/D via civil calendar arithmetic
+    let z = days as i64 + 719468;
+    let era = z / 146097;
+    let doe = z - era * 146097;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { y + 1 } else { y };
+
+    format!(
+        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:03}Z",
+        y, m, d, hours, mins, secs, millis
+    )
 }
 
 fn inject_console_capture(webview: &Webview) {
@@ -411,9 +430,16 @@ fn inject_console_capture(webview: &Webview) {
 }
 
 fn maybe_open_devtools(app: &AppHandle, window: &tauri::WebviewWindow) {
-    let state = app.state::<ConfigState>();
-    if state.debug_mode {
-        window.open_devtools();
+    #[cfg(any(debug_assertions, feature = "devtools"))]
+    {
+        let state = app.state::<ConfigState>();
+        if state.debug_mode {
+            window.open_devtools();
+        }
+    }
+    #[cfg(not(any(debug_assertions, feature = "devtools")))]
+    {
+        let _ = (app, window);
     }
 }
 
@@ -577,12 +603,21 @@ fn inject_chat_link_intercept(webview: &Webview) {
 }
 
 fn handle_toggle_devtools(app: &AppHandle) {
-    for (_, window) in app.webview_windows() {
-        if window.is_devtools_open() {
-            window.close_devtools();
-        } else {
-            window.open_devtools();
+    #[cfg(any(debug_assertions, feature = "devtools"))]
+    {
+        let windows: Vec<_> = app.webview_windows().into_values().collect();
+        let any_open = windows.iter().any(|w| w.is_devtools_open());
+        for window in &windows {
+            if any_open {
+                window.close_devtools();
+            } else {
+                window.open_devtools();
+            }
         }
+    }
+    #[cfg(not(any(debug_assertions, feature = "devtools")))]
+    {
+        let _ = app;
     }
 }
 
@@ -597,7 +632,11 @@ fn handle_open_debug_log() {
         return;
     }
 
-    let _ = open_in_default_browser(&format!("file://{}", log_path.display()));
+    let url_path = log_path.to_string_lossy().replace('\\', "/");
+    let _ = open_in_default_browser(&format!(
+        "file:///{}",
+        url_path.trim_start_matches('/')
+    ));
 }
 
 // ============================================================================
