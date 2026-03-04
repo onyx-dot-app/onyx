@@ -13,9 +13,8 @@ All scripts in this directory should be run from the **opal package root** (`web
 ```
 web/lib/opal/
 ├── scripts/                          # SVG conversion tooling (this directory)
-│   ├── convert-icon.sh               # Converts SVGs into colour-overridable icon components
-│   ├── convert-illustration.sh       # Converts SVGs into fixed-colour illustration components
-│   └── icon-template.js              # Shared SVGR template used by both scripts
+│   ├── convert-svg.sh                # Converts SVGs into React components
+│   └── icon-template.js              # Shared SVGR template
 ├── src/
 │   ├── icons/                        # Small, single-colour icons (stroke = currentColor)
 │   └── illustrations/                # Larger, multi-colour illustrations (colours preserved)
@@ -29,7 +28,7 @@ web/lib/opal/
 | **Import path** | `@opal/icons` | `@opal/illustrations` |
 | **Location** | `src/icons/` | `src/illustrations/` |
 | **Colour** | Overridable via `currentColor` | Fixed — original SVG colours preserved |
-| **Script** | `convert-icon.sh` | `convert-illustration.sh` |
+| **Script flag** | (none) | `--illustration` |
 
 ## Files in This Directory
 
@@ -41,38 +40,21 @@ A custom SVGR template that generates components with the following features:
 - Includes `width` and `height` attributes bound to the `size` prop
 - Maintains all standard SVG props (className, color, title, etc.)
 
-This template is shared by both conversion scripts.
+### `convert-svg.sh`
 
-### `convert-icon.sh`
+Converts an SVG into a React component. Behaviour depends on the mode:
 
-Converts an SVG into a **colour-overridable** icon component. It:
-- Validates the input file
-- Runs SVGR with SVGO configured to strip `stroke`, `stroke-opacity`, `width`, and `height` attributes
-- Post-processes the output to add `width={size}`, `height={size}`, and `stroke="currentColor"`
-- Automatically deletes the source SVG file after successful conversion
-- Provides error handling and user feedback
+**Icon mode** (default):
+- Strips `stroke`, `stroke-opacity`, `width`, and `height` attributes
+- Adds `width={size}`, `height={size}`, and `stroke="currentColor"`
+- Result is colour-overridable via CSS `color` property
 
-**Usage:**
-```sh
-# From web/lib/opal/
-./scripts/convert-icon.sh src/icons/my-icon.svg
-```
+**Illustration mode** (`--illustration`):
+- Strips only `width` and `height` attributes (all colours preserved)
+- Adds `width={size}` and `height={size}`
+- Does **not** add `stroke="currentColor"` — illustrations keep their original colours
 
-### `convert-illustration.sh`
-
-Converts an SVG into a **fixed-colour** illustration component. It:
-- Validates the input file
-- Runs SVGR with SVGO configured to strip only `width` and `height` attributes (all colours are preserved)
-- Post-processes the output to add `width={size}` and `height={size}`
-- Does **not** add `stroke="currentColor"` — illustrations keep their original stroke and fill colours
-- Automatically deletes the source SVG file after successful conversion
-- Provides error handling and user feedback
-
-**Usage:**
-```sh
-# From web/lib/opal/
-./scripts/convert-illustration.sh src/illustrations/my-illustration.svg
-```
+Both modes automatically delete the source SVG file after successful conversion.
 
 ## Adding New SVGs
 
@@ -80,7 +62,7 @@ Converts an SVG into a **fixed-colour** illustration component. It:
 
 ```sh
 # From web/lib/opal/
-./scripts/convert-icon.sh src/icons/my-icon.svg
+./scripts/convert-svg.sh src/icons/my-icon.svg
 ```
 
 Then add the export to `src/icons/index.ts`:
@@ -92,7 +74,7 @@ export { default as SvgMyIcon } from "@opal/icons/my-icon";
 
 ```sh
 # From web/lib/opal/
-./scripts/convert-illustration.sh src/illustrations/my-illustration.svg
+./scripts/convert-svg.sh --illustration src/illustrations/my-illustration.svg
 ```
 
 Then add the export to `src/illustrations/index.ts`:
