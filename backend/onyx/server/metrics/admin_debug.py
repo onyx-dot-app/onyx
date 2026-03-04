@@ -15,6 +15,9 @@ from fastapi import APIRouter
 from fastapi import Depends
 
 from onyx.auth.users import current_admin_user
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 router = APIRouter(
     prefix="/admin/debug",
@@ -22,7 +25,7 @@ router = APIRouter(
     dependencies=[Depends(current_admin_user)],
 )
 
-_process = psutil.Process()
+_process: psutil.Process = psutil.Process()
 _start_time: float | None = None
 
 
@@ -76,6 +79,7 @@ def get_pool_state() -> dict[str, Any]:
                     "size": pool.size(),
                 }
     except Exception:
+        logger.warning("Failed to read postgres pool state", exc_info=True)
         result["postgres"]["error"] = "unable to read pool state"
 
     # Redis pools — uses private redis-py attributes (_in_use_connections, etc.)
@@ -101,6 +105,7 @@ def get_pool_state() -> dict[str, Any]:
                 "created_connections": rpool._created_connections,
             }
     except Exception:
+        logger.warning("Failed to read redis pool state", exc_info=True)
         result["redis"]["error"] = "unable to read pool state"
 
     return result

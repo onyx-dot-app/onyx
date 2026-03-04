@@ -3,12 +3,20 @@
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
+import pytest
 from fastapi import FastAPI
 from starlette.testclient import TestClient
 
+import onyx.server.metrics.memory_delta as mod
 from onyx.server.metrics.memory_delta import _build_route_map
 from onyx.server.metrics.memory_delta import _match_route
 from onyx.server.metrics.memory_delta import add_memory_delta_middleware
+
+
+@pytest.fixture(autouse=True)
+def _reset_middleware_flag() -> None:
+    """Reset the idempotency guard between tests."""
+    mod._middleware_registered = False
 
 
 def _make_app() -> FastAPI:

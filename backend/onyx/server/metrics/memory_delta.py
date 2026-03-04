@@ -26,7 +26,9 @@ from prometheus_client import Gauge
 from prometheus_client import Histogram
 from starlette.responses import Response
 
-_RSS_DELTA = Histogram(
+_middleware_registered: bool = False
+
+_RSS_DELTA: Histogram = Histogram(
     "onyx_api_request_rss_delta_bytes",
     "RSS change in bytes during a single request",
     ["handler"],
@@ -46,12 +48,12 @@ _RSS_DELTA = Histogram(
     ),
 )
 
-_PROCESS_RSS = Gauge(
+_PROCESS_RSS: Gauge = Gauge(
     "onyx_api_process_rss_bytes",
     "Current process RSS in bytes",
 )
 
-_process = psutil.Process()
+_process: psutil.Process = psutil.Process()
 
 
 def _build_route_map(app: FastAPI) -> list[tuple[re.Pattern[str], str]]:
@@ -72,9 +74,15 @@ def _match_route(route_map: list[tuple[re.Pattern[str], str]], path: str) -> str
 def add_memory_delta_middleware(app: FastAPI) -> None:
     """Register middleware that tracks per-endpoint RSS deltas.
 
+    Idempotent — safe to call multiple times (e.g. Uvicorn hot-reload).
     Builds its own route map to avoid contextvar ordering issues
     with the endpoint context middleware.
     """
+    global _middleware_registered
+    if _middleware_registered:
+        return
+    _middleware_registered = True
+
     route_map = _build_route_map(app)
 
     @app.middleware("http")

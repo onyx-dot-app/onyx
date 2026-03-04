@@ -25,22 +25,26 @@ from prometheus_client.core import GaugeMetricFamily
 from prometheus_client.registry import Collector
 from prometheus_client.registry import REGISTRY
 
-_TASKS_SUBMITTED = Counter(
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
+
+_TASKS_SUBMITTED: Counter = Counter(
     "onyx_threadpool_tasks_submitted_total",
     "Total tasks submitted to thread pools",
 )
 
-_TASKS_ACTIVE = Gauge(
+_TASKS_ACTIVE: Gauge = Gauge(
     "onyx_threadpool_tasks_active",
     "Currently executing thread pool tasks",
 )
 
-_TASK_DURATION = Histogram(
+_TASK_DURATION: Histogram = Histogram(
     "onyx_threadpool_task_duration_seconds",
     "Thread pool task execution duration in seconds",
 )
 
-_process = psutil.Process()
+_process: psutil.Process = psutil.Process()
 
 
 class InstrumentedThreadPoolExecutor(ThreadPoolExecutor):
@@ -75,7 +79,11 @@ class ThreadCountCollector(Collector):
             "onyx_process_thread_count",
             "Total OS threads in the process",
         )
-        family.add_metric([], _process.num_threads())
+        try:
+            family.add_metric([], _process.num_threads())
+        except (psutil.Error, OSError):
+            logger.warning("Failed to read process thread count", exc_info=True)
+            family.add_metric([], 0)
         return [family]
 
     def describe(self) -> list[GaugeMetricFamily]:

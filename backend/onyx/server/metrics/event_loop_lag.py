@@ -18,12 +18,12 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-_LAG = Gauge(
+_LAG: Gauge = Gauge(
     "onyx_api_event_loop_lag_seconds",
     "Event loop scheduling lag in seconds",
 )
 
-_LAG_MAX = Gauge(
+_LAG_MAX: Gauge = Gauge(
     "onyx_api_event_loop_lag_max_seconds",
     "Maximum event loop scheduling lag observed since process start",
 )
