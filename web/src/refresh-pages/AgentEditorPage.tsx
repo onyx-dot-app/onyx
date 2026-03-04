@@ -86,7 +86,7 @@ import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationMo
 import ShareAgentModal from "@/sections/modals/ShareAgentModal";
 import AgentKnowledgePane from "@/sections/knowledge/AgentKnowledgePane";
 import { ValidSources } from "@/lib/types";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useVectorDbEnabled } from "@/providers/SettingsProvider";
 import { useUser } from "@/providers/UserProvider";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 
@@ -447,10 +447,9 @@ export default function AgentEditorPage({
   const { refresh: refreshAgents } = useAgents();
   const shareAgentModal = useCreateModal();
   const deleteAgentModal = useCreateModal();
-  const settings = useSettingsContext();
   const { isAdmin, isCurator } = useUser();
   const canUpdateFeaturedStatus = isAdmin || isCurator;
-  const vectorDbEnabled = settings?.settings.vector_db_enabled !== false;
+  const vectorDbEnabled = useVectorDbEnabled();
 
   // LLM Model Selection
   const getCurrentLlm = useCallback(

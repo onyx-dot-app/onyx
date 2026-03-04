@@ -29,7 +29,7 @@ import { SourceMetadata } from "@/lib/search/interfaces";
 import { SourceIcon } from "@/components/SourceIcon";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
 import useCCPairs from "@/hooks/useCCPairs";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useVectorDbEnabled } from "@/providers/SettingsProvider";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { useToolOAuthStatus } from "@/lib/hooks/useToolOAuthStatus";
 import LineItem from "@/refresh-components/buttons/LineItem";
@@ -298,8 +298,7 @@ export default function ActionsPopover({
   }, [selectedAgent.id, setForcedToolIds]);
 
   const { isAdmin, isCurator } = useUser();
-  const settings = useSettingsContext();
-  const vectorDbEnabled = settings?.settings.vector_db_enabled !== false;
+  const vectorDbEnabled = useVectorDbEnabled();
 
   const { tools: availableTools } = useAvailableTools();
   const { ccPairs } = useCCPairs(vectorDbEnabled);

@@ -26,7 +26,10 @@ import {
 } from "@opal/icons";
 import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
 import { Content } from "@opal/layouts";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import {
+  useSettingsContext,
+  useVectorDbEnabled,
+} from "@/providers/SettingsProvider";
 import useCCPairs from "@/hooks/useCCPairs";
 import { getSourceMetadata } from "@/lib/sources";
 import EmptyMessage from "@/refresh-components/EmptyMessage";
@@ -186,7 +189,7 @@ function ChatPreferencesForm() {
 
   // Tools availability
   const { tools: availableTools } = useAvailableTools();
-  const vectorDbEnabled = settings?.settings.vector_db_enabled !== false;
+  const vectorDbEnabled = useVectorDbEnabled();
   const searchTool = availableTools.find(
     (t) => t.in_code_tool_id === SEARCH_TOOL_ID
   );

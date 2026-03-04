@@ -25,7 +25,7 @@ import {
 import { Section } from "@/layouts/general-layouts";
 import { toast } from "@/hooks/useToast";
 import useAppFocus from "@/hooks/useAppFocus";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useVectorDbEnabled } from "@/providers/SettingsProvider";
 
 function getDisplayName(email?: string, personalName?: string): string {
   // Prioritize custom personal name if set
@@ -166,8 +166,7 @@ export default function UserAvatarPopover({
   const { user } = useUser();
   const router = useRouter();
   const appFocus = useAppFocus();
-  const settings = useSettingsContext();
-  const vectorDbEnabled = settings?.settings.vector_db_enabled !== false;
+  const vectorDbEnabled = useVectorDbEnabled();
 
   // Fetch notifications for display
   // The GET endpoint also triggers a refresh if release notes are stale

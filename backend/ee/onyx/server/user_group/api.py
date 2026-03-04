@@ -5,6 +5,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.user_group import add_users_to_user_group
+from ee.onyx.db.user_group import delete_user_group as db_delete_user_group
+from ee.onyx.db.user_group import fetch_user_group
 from ee.onyx.db.user_group import fetch_user_groups
 from ee.onyx.db.user_group import fetch_user_groups_for_user
 from ee.onyx.db.user_group import insert_user_group
@@ -20,6 +22,7 @@ from ee.onyx.server.user_group.models import UserGroupUpdate
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_user
+from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
@@ -153,3 +156,8 @@ def delete_user_group(
         prepare_user_group_for_deletion(db_session, user_group_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+    if DISABLE_VECTOR_DB:
+        user_group = fetch_user_group(db_session, user_group_id)
+        if user_group:
+            db_delete_user_group(db_session, user_group)
