@@ -455,7 +455,7 @@
 .interactive[data-interactive-base-variant="sidebar"][data-interactive-base-prominence="light"][data-selected="true"]:not(
     [data-disabled]
   ) {
-  @apply bg-background-neutral-00;
+  @apply bg-background-tint-00;
   --interactive-foreground: var(--text-03);
   --interactive-foreground-icon: var(--text-02);
 }

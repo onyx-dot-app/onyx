@@ -132,7 +132,7 @@ The foundational layer for all clickable surfaces in the design system. Defines 
 
 | | Light |
 |---|---|
-| **All states** | `background-neutral-00` |
+| **All states** | `background-tint-00` |
 | **Disabled** | `transparent` |
 
 **Foreground**
