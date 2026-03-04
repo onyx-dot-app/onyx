@@ -88,8 +88,10 @@ class LocalSandboxManager(SandboxManager):
         self._snapshot_manager = SnapshotManager(get_default_file_store())
 
         # Track ACP clients in memory - keyed by (sandbox_id, session_id) tuple
-        # Each session within a sandbox has its own ACP client
+        # Each session within a sandbox has its own ACP client.
+        # All access must hold _acp_clients_lock (shared across request and streaming threads).
         self._acp_clients: dict[tuple[UUID, UUID], ACPAgentClient] = {}
+        self._acp_clients_lock = threading.Lock()
 
         # Track Next.js processes - keyed by (sandbox_id, session_id) tuple
         # Used for clean shutdown when sessions are deleted.
@@ -356,20 +358,21 @@ class LocalSandboxManager(SandboxManager):
                 )
 
         # Stop all ACP clients for this sandbox (keyed by (sandbox_id, session_id))
-        clients_to_stop = [
-            (key, client)
-            for key, client in self._acp_clients.items()
-            if key[0] == sandbox_id
-        ]
-        for key, client in clients_to_stop:
-            try:
-                client.stop()
-                del self._acp_clients[key]
-            except Exception as e:
-                logger.warning(
-                    f"Failed to stop ACP client for sandbox {sandbox_id}, "
-                    f"session {key[1]}: {e}"
-                )
+        with self._acp_clients_lock:
+            clients_to_stop = [
+                (key, client)
+                for key, client in self._acp_clients.items()
+                if key[0] == sandbox_id
+            ]
+            for key, client in clients_to_stop:
+                try:
+                    client.stop()
+                    del self._acp_clients[key]
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to stop ACP client for sandbox {sandbox_id}, "
+                        f"session {key[1]}: {e}"
+                    )
 
         # Cleanup directory
         sandbox_path = self._get_sandbox_path(sandbox_id)
@@ -599,7 +602,8 @@ class LocalSandboxManager(SandboxManager):
 
         # Stop ACP client for this session
         client_key = (sandbox_id, session_id)
-        client = self._acp_clients.pop(client_key, None)
+        with self._acp_clients_lock:
+            client = self._acp_clients.pop(client_key, None)
         if client:
             try:
                 client.stop()
@@ -935,22 +939,23 @@ class LocalSandboxManager(SandboxManager):
 
         # Get or create ACP client for this session
         client_key = (sandbox_id, session_id)
-        client = self._acp_clients.get(client_key)
+        with self._acp_clients_lock:
+            client = self._acp_clients.get(client_key)
 
-        if client is None or not client.is_running:
-            session_path = self._get_session_path(sandbox_id, session_id)
+            if client is None or not client.is_running:
+                session_path = self._get_session_path(sandbox_id, session_id)
 
-            # Log client creation
-            packet_logger.log_acp_client_start(
-                sandbox_id, session_id, str(session_path), context="local"
-            )
-            logger.info(
-                f"Creating new ACP client for sandbox {sandbox_id}, session {session_id}"
-            )
+                # Log client creation
+                packet_logger.log_acp_client_start(
+                    sandbox_id, session_id, str(session_path), context="local"
+                )
+                logger.info(
+                    f"Creating new ACP client for sandbox {sandbox_id}, session {session_id}"
+                )
 
-            # Create and start ACP client for this session
-            client = ACPAgentClient(cwd=str(session_path))
-            self._acp_clients[client_key] = client
+                # Create and start ACP client for this session
+                client = ACPAgentClient(cwd=str(session_path))
+                self._acp_clients[client_key] = client
 
         # Log the send_message call at sandbox manager level
         packet_logger.log_session_start(session_id, sandbox_id, message)
@@ -1047,23 +1052,35 @@ class LocalSandboxManager(SandboxManager):
         if not self._is_path_allowed(session_path, target_path):
             raise ValueError("Path traversal not allowed")
 
+        # If directory doesn't exist, return empty list (no files yet)
+        if not target_path.exists():
+            return []
+
         if not target_path.is_dir():
             raise ValueError(f"Not a directory: {path}")
 
         entries = []
-        for item in target_path.iterdir():
-            stat = item.stat()
-            is_file = item.is_file()
-            mime_type = mimetypes.guess_type(str(item))[0] if is_file else None
-            entries.append(
-                FilesystemEntry(
-                    name=item.name,
-                    path=str(item.relative_to(session_path)),
-                    is_directory=item.is_dir(),
-                    size=stat.st_size if is_file else None,
-                    mime_type=mime_type,
-                )
-            )
+        try:
+            for item in target_path.iterdir():
+                try:
+                    stat = item.stat()
+                    is_file = item.is_file()
+                    mime_type = mimetypes.guess_type(str(item))[0] if is_file else None
+                    entries.append(
+                        FilesystemEntry(
+                            name=item.name,
+                            path=str(item.relative_to(session_path)),
+                            is_directory=item.is_dir(),
+                            size=stat.st_size if is_file else None,
+                            mime_type=mime_type,
+                        )
+                    )
+                except (FileNotFoundError, OSError):
+                    # Skip files that were deleted during iteration (race condition)
+                    continue
+        except FileNotFoundError:
+            # Directory was deleted during iteration
+            return []
 
         return sorted(entries, key=lambda e: (not e.is_directory, e.name.lower()))
 
@@ -1411,3 +1428,43 @@ class LocalSandboxManager(SandboxManager):
             f"sync_files called for local sandbox {sandbox_id}{source_info} - no-op"
         )
         return True
+
+    def cancel_message(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+    ) -> bool:
+        """Cancel the current message/prompt operation for a session.
+
+        Sends a session/cancel notification to the ACP agent to stop the
+        currently running operation.
+
+        Args:
+            sandbox_id: The sandbox ID
+            session_id: The session ID whose operation should be cancelled
+
+        Returns:
+            True if cancel was sent, False if no active session/client found
+        """
+        client_key = (sandbox_id, session_id)
+        with self._acp_clients_lock:
+            client = self._acp_clients.get(client_key)
+
+            if client is None or not client.is_running:
+                logger.debug(
+                    f"No active ACP client for sandbox {sandbox_id}, session {session_id}"
+                )
+                return False
+
+            try:
+                client.cancel()
+                logger.info(
+                    f"Sent cancel notification for sandbox {sandbox_id}, session {session_id}"
+                )
+                return True
+            except Exception as e:
+                logger.warning(
+                    f"Failed to cancel operation for sandbox {sandbox_id}, "
+                    f"session {session_id}: {e}"
+                )
+                return False
