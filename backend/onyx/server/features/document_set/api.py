@@ -144,9 +144,8 @@ def delete_document_set(
         raise HTTPException(status_code=400, detail=str(e))
 
     if DISABLE_VECTOR_DB:
-        document_set_row = get_document_set_by_id(db_session, document_set_id)
-        if document_set_row:
-            db_delete_document_set(document_set_row, db_session)
+        db_session.refresh(document_set)
+        db_delete_document_set(document_set, db_session)
     else:
         client_app.send_task(
             OnyxCeleryTask.CHECK_FOR_VESPA_SYNC_TASK,

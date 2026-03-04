@@ -1,35 +1,28 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, BrowserContext } from "@playwright/test";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 
 test.use({ storageState: "admin_auth.json" });
 
 test.describe("User Groups - No Vector DB @exclusive", () => {
-  let client: OnyxApiClient;
-
   test.beforeAll(async ({ browser }) => {
     const context = await browser.newContext({
       storageState: "admin_auth.json",
     });
-    client = new OnyxApiClient(context.request);
-
-    const vectorDbEnabled = await client.isVectorDbEnabled();
-    test.skip(
-      vectorDbEnabled,
-      "Skipped: vector DB is enabled in this deployment"
-    );
+    try {
+      const client = new OnyxApiClient(context.request);
+      const vectorDbEnabled = await client.isVectorDbEnabled();
+      test.skip(
+        vectorDbEnabled,
+        "Skipped: vector DB is enabled in this deployment"
+      );
+    } finally {
+      await context.close();
+    }
   });
 
   test("should show user group as synced immediately on creation", async ({
     page,
   }) => {
-    const vectorDbEnabled = await new OnyxApiClient(
-      page.request
-    ).isVectorDbEnabled();
-    test.skip(
-      vectorDbEnabled,
-      "Skipped: vector DB is enabled in this deployment"
-    );
-
     const groupName = `E2E-NoVectorDB-Group-${Date.now()}`;
     let groupId: number | undefined;
 
@@ -82,6 +75,7 @@ test.describe("User Groups - No Vector DB @exclusive", () => {
 });
 
 test.describe("User Groups - Standard Deployment @exclusive", () => {
+  let cleanupContext: BrowserContext | undefined;
   let client: OnyxApiClient;
   let ccPairId: number | undefined;
   let groupId: number | undefined;
@@ -93,29 +87,29 @@ test.describe("User Groups - Standard Deployment @exclusive", () => {
     client = new OnyxApiClient(context.request);
 
     const vectorDbEnabled = await client.isVectorDbEnabled();
-    test.skip(
-      !vectorDbEnabled,
-      "Skipped: vector DB is disabled in this deployment"
-    );
+    if (!vectorDbEnabled) {
+      await context.close();
+      test.skip(true, "Skipped: vector DB is disabled in this deployment");
+      return;
+    }
+    cleanupContext = context;
   });
 
   test.afterAll(async () => {
-    if (groupId !== undefined) {
-      await client.deleteUserGroup(groupId).catch(() => {});
-    }
-    if (ccPairId !== undefined) {
-      await client.deleteCCPair(ccPairId).catch(() => {});
+    try {
+      if (groupId !== undefined) {
+        await client.deleteUserGroup(groupId).catch(() => {});
+      }
+      if (ccPairId !== undefined) {
+        await client.deleteCCPair(ccPairId).catch(() => {});
+      }
+    } finally {
+      await cleanupContext?.close();
     }
   });
 
   test("should sync user group with connector", async ({ page }) => {
     const apiClient = new OnyxApiClient(page.request);
-    const vectorDbEnabled = await apiClient.isVectorDbEnabled();
-    test.skip(
-      !vectorDbEnabled,
-      "Skipped: vector DB is disabled in this deployment"
-    );
-
     const groupName = `E2E-Sync-Group-${Date.now()}`;
 
     ccPairId = await apiClient.createFileConnector(
