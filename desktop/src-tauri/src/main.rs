@@ -6,7 +6,9 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
-use std::sync::RwLock;
+use std::sync::{Mutex, RwLock};
+use std::io::Write as IoWrite;
+use std::time::SystemTime;
 #[cfg(target_os = "macos")]
 use std::time::Duration;
 use tauri::image::Image;
@@ -230,6 +232,63 @@ const MENU_KEY_HANDLER_SCRIPT: &str = r#"
 })();
 "#;
 
+const CONSOLE_CAPTURE_SCRIPT: &str = r#"
+(() => {
+  if (window.__ONYX_CONSOLE_CAPTURE__) return;
+  window.__ONYX_CONSOLE_CAPTURE__ = true;
+
+  const levels = ['log', 'warn', 'error', 'info', 'debug'];
+  const originals = {};
+
+  levels.forEach(level => {
+    originals[level] = console[level];
+    console[level] = function(...args) {
+      originals[level].apply(console, args);
+      try {
+        const invoke =
+          window.__TAURI__?.core?.invoke || window.__TAURI_INTERNALS__?.invoke;
+        if (typeof invoke === 'function') {
+          const message = args.map(a => {
+            try { return typeof a === 'string' ? a : JSON.stringify(a); }
+            catch { return String(a); }
+          }).join(' ');
+          invoke('log_from_frontend', { level, message });
+        }
+      } catch {}
+    };
+  });
+
+  window.addEventListener('error', (event) => {
+    try {
+      const invoke =
+        window.__TAURI__?.core?.invoke || window.__TAURI_INTERNALS__?.invoke;
+      if (typeof invoke === 'function') {
+        invoke('log_from_frontend', {
+          level: 'error',
+          message: `[uncaught] ${event.message} at ${event.filename}:${event.lineno}:${event.colno}`
+        });
+      }
+    } catch {}
+  });
+
+  window.addEventListener('unhandledrejection', (event) => {
+    try {
+      const invoke =
+        window.__TAURI__?.core?.invoke || window.__TAURI_INTERNALS__?.invoke;
+      if (typeof invoke === 'function') {
+        invoke('log_from_frontend', {
+          level: 'error',
+          message: `[unhandled rejection] ${event.reason}`
+        });
+      }
+    } catch {}
+  });
+})();
+"#;
+
+const MENU_TOGGLE_DEVTOOLS_ID: &str = "toggle_devtools";
+const MENU_OPEN_DEBUG_LOG_ID: &str = "open_debug_log";
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
     pub server_url: String,
@@ -311,12 +370,61 @@ fn save_config(config: &AppConfig) -> Result<(), String> {
     Ok(())
 }
 
+// ============================================================================
+// Debug Mode
+// ============================================================================
+
+fn is_debug_mode() -> bool {
+    std::env::args().any(|arg| arg == "--debug") || std::env::var("ONYX_DEBUG").is_ok()
+}
+
+fn get_debug_log_path() -> Option<PathBuf> {
+    get_config_dir().map(|dir| dir.join("frontend_debug.log"))
+}
+
+fn init_debug_log_file() -> Option<fs::File> {
+    let log_path = get_debug_log_path()?;
+    if let Some(parent) = log_path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_path)
+        .ok()
+}
+
+fn format_utc_timestamp() -> String {
+    let now = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap_or_default();
+    let total_secs = now.as_secs();
+    let millis = now.subsec_millis();
+    let secs = total_secs % 60;
+    let mins = (total_secs / 60) % 60;
+    let hours = (total_secs / 3600) % 24;
+    format!("{:02}:{:02}:{:02}.{:03}", hours, mins, secs, millis)
+}
+
+fn inject_console_capture(webview: &Webview) {
+    let _ = webview.eval(CONSOLE_CAPTURE_SCRIPT);
+}
+
+fn maybe_open_devtools(app: &AppHandle, window: &tauri::WebviewWindow) {
+    let state = app.state::<ConfigState>();
+    if state.debug_mode {
+        window.open_devtools();
+    }
+}
+
 // Global config state
 struct ConfigState {
     config: RwLock<AppConfig>,
     config_initialized: RwLock<bool>,
     app_base_url: RwLock<Option<Url>>,
     menu_temporarily_visible: RwLock<bool>,
+    debug_mode: bool,
+    debug_log_file: Mutex<Option<fs::File>>,
 }
 
 fn focus_main_window(app: &AppHandle) {
@@ -372,6 +480,7 @@ fn trigger_new_window(app: &AppHandle) {
             }
 
             apply_settings_to_window(&handle, &window);
+            maybe_open_devtools(&handle, &window);
             let _ = window.set_focus();
         }
     });
@@ -467,9 +576,51 @@ fn inject_chat_link_intercept(webview: &Webview) {
     let _ = webview.eval(CHAT_LINK_INTERCEPT_SCRIPT);
 }
 
+fn handle_toggle_devtools(app: &AppHandle) {
+    for (_, window) in app.webview_windows() {
+        if window.is_devtools_open() {
+            window.close_devtools();
+        } else {
+            window.open_devtools();
+        }
+    }
+}
+
+fn handle_open_debug_log() {
+    let log_path = match get_debug_log_path() {
+        Some(p) => p,
+        None => return,
+    };
+
+    if !log_path.exists() {
+        eprintln!("[ONYX DEBUG] Log file does not exist yet: {:?}", log_path);
+        return;
+    }
+
+    let _ = open_in_default_browser(&format!("file://{}", log_path.display()));
+}
+
 // ============================================================================
 // Tauri Commands
 // ============================================================================
+
+#[tauri::command]
+fn log_from_frontend(level: String, message: String, state: tauri::State<ConfigState>) {
+    if !state.debug_mode {
+        return;
+    }
+    let timestamp = format_utc_timestamp();
+    let log_line = format!("[{}] [{}] {}", timestamp, level.to_uppercase(), message);
+
+    eprintln!("{}", log_line);
+
+    if let Ok(mut guard) = state.debug_log_file.lock() {
+        if let Some(ref mut file) = *guard {
+            let _ = writeln!(file, "{}", log_line);
+            let _ = file.flush();
+        }
+    }
+}
 
 /// Get the current server URL
 #[tauri::command]
@@ -657,6 +808,7 @@ async fn new_window(app: AppHandle, state: tauri::State<'_, ConfigState>) -> Res
     }
 
     apply_settings_to_window(&app, &window);
+    maybe_open_devtools(&app, &window);
 
     Ok(())
 }
@@ -936,6 +1088,30 @@ fn setup_app_menu(app: &AppHandle) -> tauri::Result<()> {
         menu.append(&help_menu)?;
     }
 
+    let state = app.state::<ConfigState>();
+    if state.debug_mode {
+        let toggle_devtools_item = MenuItem::with_id(
+            app,
+            MENU_TOGGLE_DEVTOOLS_ID,
+            "Toggle DevTools",
+            true,
+            Some("F12"),
+        )?;
+        let open_log_item = MenuItem::with_id(
+            app,
+            MENU_OPEN_DEBUG_LOG_ID,
+            "Open Debug Log",
+            true,
+            None::<&str>,
+        )?;
+
+        let debug_menu = SubmenuBuilder::new(app, "Debug")
+            .item(&toggle_devtools_item)
+            .item(&open_log_item)
+            .build()?;
+        menu.append(&debug_menu)?;
+    }
+
     app.set_menu(menu)?;
     Ok(())
 }
@@ -1027,8 +1203,20 @@ fn setup_tray_icon(app: &AppHandle) -> tauri::Result<()> {
 // ============================================================================
 
 fn main() {
-    // Load config at startup
     let (config, config_initialized) = load_config();
+    let debug_mode = is_debug_mode();
+
+    let debug_log_file = if debug_mode {
+        eprintln!("[ONYX DEBUG] Debug mode enabled");
+        if let Some(path) = get_debug_log_path() {
+            eprintln!("[ONYX DEBUG] Frontend logs: {}", path.display());
+        }
+        eprintln!("[ONYX DEBUG] DevTools will open automatically");
+        eprintln!("[ONYX DEBUG] Capturing console.log/warn/error/info/debug from webview");
+        init_debug_log_file()
+    } else {
+        None
+    };
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -1059,6 +1247,8 @@ fn main() {
             config_initialized: RwLock::new(config_initialized),
             app_base_url: RwLock::new(None),
             menu_temporarily_visible: RwLock::new(false),
+            debug_mode,
+            debug_log_file: Mutex::new(debug_log_file),
         })
         .invoke_handler(tauri::generate_handler![
             get_server_url,
@@ -1077,7 +1267,8 @@ fn main() {
             start_drag_window,
             toggle_menu_bar,
             show_menu_bar_temporarily,
-            hide_menu_bar_temporary
+            hide_menu_bar_temporary,
+            log_from_frontend
         ])
         .on_menu_event(|app, event| match event.id().as_ref() {
             "open_docs" => open_docs(),
@@ -1086,6 +1277,8 @@ fn main() {
             "open_settings" => open_settings(app),
             "show_menu_bar" => handle_menu_bar_toggle(app),
             "hide_window_decorations" => handle_decorations_toggle(app),
+            MENU_TOGGLE_DEVTOOLS_ID => handle_toggle_devtools(app),
+            MENU_OPEN_DEBUG_LOG_ID => handle_open_debug_log(),
             _ => {}
         })
         .setup(move |app| {
@@ -1119,6 +1312,7 @@ fn main() {
                 inject_titlebar(window.clone());
 
                 apply_settings_to_window(&app_handle, &window);
+                maybe_open_devtools(&app_handle, &window);
 
                 let _ = window.set_focus();
             }
@@ -1127,6 +1321,14 @@ fn main() {
         })
         .on_page_load(|webview: &Webview, _payload: &PageLoadPayload| {
             inject_chat_link_intercept(webview);
+
+            {
+                let app = webview.app_handle();
+                let state = app.state::<ConfigState>();
+                if state.debug_mode {
+                    inject_console_capture(webview);
+                }
+            }
 
             #[cfg(not(target_os = "macos"))]
             {

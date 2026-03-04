@@ -9,7 +9,7 @@ edition = "2021"
 tauri-build = { version = "2.0", features = [] }
 
 [dependencies]
-tauri = { version = "2.0", features = ["macos-private-api", "tray-icon", "image-png"] }
+tauri = { version = "2.0", features = ["macos-private-api", "tray-icon", "image-png", "devtools"] }
 tauri-plugin-shell = "2.0"
 tauri-plugin-window-state = "2.0"
 serde = { version = "1.0", features = ["derive"] }
