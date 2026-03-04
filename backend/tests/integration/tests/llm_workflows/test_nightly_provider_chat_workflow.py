@@ -209,24 +209,23 @@ def _create_provider_payload(
     }
 
 
-def _ensure_provider_is_default(provider_id: int, admin_user: DATestUser) -> None:
+def _ensure_provider_is_default(
+    provider_id: int, model_name: str, admin_user: DATestUser
+) -> None:
     list_response = requests.get(
         f"{API_SERVER_URL}/admin/llm/provider",
         headers=admin_user.headers,
     )
     list_response.raise_for_status()
-    providers = list_response.json()
-
-    current_default = next(
-        (provider for provider in providers if provider.get("is_default_provider")),
-        None,
+    default_text = list_response.json().get("default_text")
+    assert default_text is not None, "Expected a default provider after setting default"
+    assert default_text.get("provider_id") == provider_id, (
+        f"Expected provider {provider_id} to be default, "
+        f"found {default_text.get('provider_id')}"
     )
     assert (
-        current_default is not None
-    ), "Expected a default provider after setting provider as default"
-    assert (
-        current_default["id"] == provider_id
-    ), f"Expected provider {provider_id} to be default, found {current_default['id']}"
+        default_text.get("model_name") == model_name
+    ), f"Expected default model {model_name}, found {default_text.get('model_name')}"
 
 
 def _run_chat_assertions(
@@ -327,8 +326,9 @@ def _create_and_test_provider_for_model(
 
     try:
         set_default_response = requests.post(
-            f"{API_SERVER_URL}/admin/llm/provider/{provider_id}/default",
+            f"{API_SERVER_URL}/admin/llm/default",
             headers=admin_user.headers,
+            json={"provider_id": provider_id, "model_name": model_name},
         )
         assert set_default_response.status_code == 200, (
             f"Setting default provider failed for provider={config.provider} "
@@ -336,7 +336,9 @@ def _create_and_test_provider_for_model(
             f"{set_default_response.text}"
         )
 
-        _ensure_provider_is_default(provider_id=provider_id, admin_user=admin_user)
+        _ensure_provider_is_default(
+            provider_id=provider_id, model_name=model_name, admin_user=admin_user
+        )
         _run_chat_assertions(
             admin_user=admin_user,
             search_tool_id=search_tool_id,
