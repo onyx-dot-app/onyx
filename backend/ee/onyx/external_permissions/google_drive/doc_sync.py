@@ -128,7 +128,10 @@ def get_external_access_for_raw_gdrive_file(
     # granting access to the user who found the file in their drive.
     # Note, even if other users also have access to this file,
     # they will not be granted access in Onyx.
-    if not permissions_list and not permissions and not permission_ids:
+    # We check permissions_list (the final result after all fetch attempts)
+    # rather than the raw fields, because permission_ids may be present
+    # but the actual fetch can still return empty due to a 403.
+    if not permissions_list:
         logger.info(
             f"No permission info available for file {doc_id} "
             f"(likely owned by a user outside of your organization). "
