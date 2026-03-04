@@ -373,19 +373,19 @@ def put_llm_provider(
     )
     if found_provider is not None and found_provider is not existing_provider:
         raise OnyxError(
-            OnyxErrorCode.VALIDATION_ERROR,
+            OnyxErrorCode.DUPLICATE_RESOURCE,
             f"Provider with name={llm_provider_upsert_request.name} already exists",
         )
 
     if existing_provider and is_creation:
         raise OnyxError(
-            OnyxErrorCode.VALIDATION_ERROR,
+            OnyxErrorCode.DUPLICATE_RESOURCE,
             f"LLM Provider with name {llm_provider_upsert_request.name} and "
             f"id={llm_provider_upsert_request.id} already exists",
         )
     elif not existing_provider and not is_creation:
         raise OnyxError(
-            OnyxErrorCode.VALIDATION_ERROR,
+            OnyxErrorCode.NOT_FOUND,
             f"LLM Provider with name {llm_provider_upsert_request.name} and "
             f"id={llm_provider_upsert_request.id} does not exist",
         )
@@ -852,7 +852,7 @@ def get_bedrock_available_models(
             bedrock = session.client("bedrock")
         except Exception as e:
             raise OnyxError(
-                OnyxErrorCode.VALIDATION_ERROR,
+                OnyxErrorCode.BAD_GATEWAY,
                 f"Failed to create Bedrock client: {e}. Check AWS credentials and region.",
             )
 
@@ -973,7 +973,7 @@ def get_bedrock_available_models(
 
     except (ClientError, NoCredentialsError, BotoCoreError) as e:
         raise OnyxError(
-            OnyxErrorCode.VALIDATION_ERROR,
+            OnyxErrorCode.BAD_GATEWAY,
             f"Failed to connect to AWS Bedrock: {e}",
         )
     except Exception as e:
@@ -992,7 +992,7 @@ def _get_ollama_available_model_names(api_base: str) -> set[str]:
         response_json = response.json()
     except Exception as e:
         raise OnyxError(
-            OnyxErrorCode.VALIDATION_ERROR,
+            OnyxErrorCode.BAD_GATEWAY,
             f"Failed to fetch Ollama models: {e}",
         )
 
@@ -1126,7 +1126,7 @@ def _get_openrouter_models_response(api_base: str, api_key: str) -> dict:
         return response.json()
     except Exception as e:
         raise OnyxError(
-            OnyxErrorCode.VALIDATION_ERROR,
+            OnyxErrorCode.BAD_GATEWAY,
             f"Failed to fetch OpenRouter models: {e}",
         )
 
