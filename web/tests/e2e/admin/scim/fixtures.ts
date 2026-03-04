@@ -108,6 +108,7 @@ export { expect };
 
 export async function gotoScimPage(adminPage: Page): Promise<void> {
   await adminPage.goto("/admin/scim");
-  await adminPage.waitForLoadState("networkidle");
-  await adminPage.waitForSelector("text=SCIM", { timeout: 15000 });
+  await expect(adminPage.getByText("SCIM Sync")).toBeVisible({
+    timeout: 15000,
+  });
 }
