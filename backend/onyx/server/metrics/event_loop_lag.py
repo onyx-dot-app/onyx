@@ -14,6 +14,9 @@ import asyncio
 from prometheus_client import Gauge
 
 from onyx.configs.app_configs import EVENT_LOOP_LAG_PROBE_INTERVAL_SECONDS
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 _LAG = Gauge(
     "onyx_api_event_loop_lag_seconds",
@@ -39,15 +42,21 @@ async def _probe_loop(interval: float) -> None:
         await asyncio.sleep(interval)
         after = loop.time()
 
-        lag = (after - before) - interval
-        if lag < 0:
-            lag = 0.0
+        try:
+            lag = (after - before) - interval
+            if lag < 0:
+                lag = 0.0
 
-        _current_lag = lag
-        _LAG.set(lag)
-        if lag > _max_lag:
-            _max_lag = lag
-            _LAG_MAX.set(_max_lag)
+            _current_lag = lag
+            _LAG.set(lag)
+            if lag > _max_lag:
+                _max_lag = lag
+                _LAG_MAX.set(_max_lag)
+        except Exception:
+            logger.warning(
+                "Error in event loop lag probe, skipping iteration",
+                exc_info=True,
+            )
 
 
 def get_current_lag() -> float:

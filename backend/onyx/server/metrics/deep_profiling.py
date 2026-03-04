@@ -47,6 +47,9 @@ _current_object_type_counts: list[tuple[str, int]] = []
 _previous_snapshot: tracemalloc.Snapshot | None = None
 
 
+_cwd: str = os.getcwd()
+
+
 def _strip_path(filename: str) -> str:
     """Convert absolute paths to relative for low-cardinality labels."""
     # Strip site-packages prefix
@@ -55,9 +58,8 @@ def _strip_path(filename: str) -> str:
         if idx != -1:
             return filename[idx + len(marker) :]
     # Strip cwd
-    cwd = os.getcwd()
-    if filename.startswith(cwd):
-        return filename[len(cwd) :].lstrip("/")
+    if filename.startswith(_cwd):
+        return filename[len(_cwd) :].lstrip("/")
     return filename
 
 

@@ -81,10 +81,14 @@ def get_pool_state() -> dict[str, Any]:
         from onyx.redis.redis_pool import RedisPool
 
         pool_instance = RedisPool()
-        for label, rpool in [
+        pools: list[tuple[str, BlockingConnectionPool]] = [
             ("primary", cast(BlockingConnectionPool, pool_instance._pool)),
-            ("replica", cast(BlockingConnectionPool, pool_instance._replica_pool)),
-        ]:
+        ]
+        if pool_instance._replica_pool is not None:
+            pools.append(
+                ("replica", cast(BlockingConnectionPool, pool_instance._replica_pool))
+            )
+        for label, rpool in pools:
             result["redis"][label] = {
                 "in_use": len(rpool._in_use_connections),
                 "available": len(rpool._available_connections),

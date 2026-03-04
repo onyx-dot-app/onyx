@@ -31,7 +31,7 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-_threadpool_instrumentation_enabled = False
+_threadpool_instrumentation_enabled: bool = False
 
 
 def _get_executor_class() -> type[ThreadPoolExecutor]:
