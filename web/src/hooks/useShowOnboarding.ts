@@ -65,12 +65,10 @@ function useOnboardingState(liveAgent?: MinimalPersonaSnapshot): {
         payload: { userName },
       });
     }
-    if (hasLlmProviders) {
-      dispatch({
-        type: OnboardingActionType.UPDATE_DATA,
-        payload: { llmProviders: (llmProviders ?? []).map((p) => p.provider) },
-      });
-    }
+    dispatch({
+      type: OnboardingActionType.UPDATE_DATA,
+      payload: { llmProviders: (llmProviders ?? []).map((p) => p.provider) },
+    });
 
     // Determine the earliest incomplete step
     // Name step is incomplete if userName is not set
