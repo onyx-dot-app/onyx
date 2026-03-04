@@ -6,7 +6,7 @@ import { LicenseStatus } from "@/lib/billing/interfaces";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 
 const EMPTY_STATE = {
-  data: null,
+  data: undefined,
   isLoading: false,
   error: undefined,
   refresh: () => Promise.resolve(undefined),
@@ -44,14 +44,5 @@ export function useLicense() {
     }
   );
 
-  if (!url) {
-    return EMPTY_STATE;
-  }
-
-  return {
-    data,
-    isLoading,
-    error,
-    refresh: mutate,
-  };
+  return url ? { data, isLoading, error, refresh: mutate } : EMPTY_STATE;
 }

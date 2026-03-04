@@ -47,14 +47,5 @@ export function useBillingInformation() {
     keepPreviousData: true,
   });
 
-  if (!url) {
-    return EMPTY_STATE;
-  }
-
-  return {
-    data,
-    isLoading,
-    error,
-    refresh: mutate,
-  };
+  return url ? { data, isLoading, error, refresh: mutate } : EMPTY_STATE;
 }
