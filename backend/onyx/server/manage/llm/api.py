@@ -480,16 +480,16 @@ def delete_llm_provider(
     _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
+    if not force:
+        model = fetch_default_llm_model(db_session)
+
+        if model and model.llm_provider_id == provider_id:
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR,
+                "Cannot delete the default LLM provider",
+            )
+
     try:
-        if not force:
-            model = fetch_default_llm_model(db_session)
-
-            if model and model.llm_provider_id == provider_id:
-                raise OnyxError(
-                    OnyxErrorCode.VALIDATION_ERROR,
-                    "Cannot delete the default LLM provider",
-                )
-
         remove_llm_provider(db_session, provider_id)
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e))
@@ -852,7 +852,7 @@ def get_bedrock_available_models(
             bedrock = session.client("bedrock")
         except Exception as e:
             raise OnyxError(
-                OnyxErrorCode.BAD_GATEWAY,
+                OnyxErrorCode.CREDENTIAL_INVALID,
                 f"Failed to create Bedrock client: {e}. Check AWS credentials and region.",
             )
 
@@ -973,7 +973,7 @@ def get_bedrock_available_models(
 
     except (ClientError, NoCredentialsError, BotoCoreError) as e:
         raise OnyxError(
-            OnyxErrorCode.BAD_GATEWAY,
+            OnyxErrorCode.CREDENTIAL_INVALID,
             f"Failed to connect to AWS Bedrock: {e}",
         )
     except Exception as e:
