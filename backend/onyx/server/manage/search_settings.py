@@ -1,7 +1,5 @@
 from fastapi import APIRouter
 from fastapi import Depends
-from fastapi import HTTPException
-from fastapi import status
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_admin_user
@@ -21,6 +19,8 @@ from onyx.db.search_settings import get_secondary_search_settings
 from onyx.db.search_settings import update_current_search_settings
 from onyx.db.search_settings import update_search_settings_status
 from onyx.document_index.factory import get_default_document_index
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_processing.unstructured import delete_unstructured_api_key
 from onyx.file_processing.unstructured import get_unstructured_api_key
 from onyx.file_processing.unstructured import update_unstructured_api_key
@@ -48,9 +48,9 @@ def set_new_search_settings(
     # NOTE Enable integration external dependency tests in test_search_settings.py
     # when this is reenabled. They are currently skipped
     logger.error("Setting new search settings is temporarily disabled.")
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Setting new search settings is temporarily disabled.",
+    raise OnyxError(
+        OnyxErrorCode.NOT_IMPLEMENTED,
+        "Setting new search settings is temporarily disabled.",
     )
     # if search_settings_new.index_name:
     #     logger.warning("Index name was specified by request, this is not suggested")
@@ -191,7 +191,7 @@ def delete_search_settings_endpoint(
             search_settings_id=deletion_request.search_settings_id,
         )
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
 
 
 @router.get("/get-current-search-settings")
@@ -241,9 +241,9 @@ def update_saved_search_settings(
 ) -> None:
     # Disallow contextual RAG for cloud deployments
     if MULTI_TENANT and search_settings.enable_contextual_rag:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Contextual RAG disabled in Onyx Cloud",
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Contextual RAG disabled in Onyx Cloud",
         )
 
     validate_contextual_rag_model(
@@ -297,7 +297,7 @@ def validate_contextual_rag_model(
         model_name=model_name,
         db_session=db_session,
     ):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_msg)
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, error_msg)
 
 
 def _validate_contextual_rag_model(

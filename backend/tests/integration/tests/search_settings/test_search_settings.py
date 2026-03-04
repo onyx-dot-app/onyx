@@ -300,7 +300,7 @@ def test_update_contextual_rag_nonexistent_provider(
         headers=admin_user.headers,
     )
     assert response.status_code == 400
-    assert "Provider nonexistent-provider not found" in response.json()["detail"]
+    assert "Provider nonexistent-provider not found" in response.json()["message"]
 
 
 def test_update_contextual_rag_nonexistent_model(
@@ -322,7 +322,7 @@ def test_update_contextual_rag_nonexistent_model(
     assert response.status_code == 400
     assert (
         f"Model nonexistent-model not found in provider {llm_provider.name}"
-        in response.json()["detail"]
+        in response.json()["message"]
     )
 
 
@@ -342,7 +342,7 @@ def test_update_contextual_rag_missing_provider_name(
         headers=admin_user.headers,
     )
     assert response.status_code == 400
-    assert "Provider name and model name are required" in response.json()["detail"]
+    assert "Provider name and model name are required" in response.json()["message"]
 
 
 def test_update_contextual_rag_missing_model_name(
@@ -362,7 +362,7 @@ def test_update_contextual_rag_missing_model_name(
         headers=admin_user.headers,
     )
     assert response.status_code == 400
-    assert "Provider name and model name are required" in response.json()["detail"]
+    assert "Provider name and model name are required" in response.json()["message"]
 
 
 @pytest.mark.skip(reason="Set new search settings is temporarily disabled.")
