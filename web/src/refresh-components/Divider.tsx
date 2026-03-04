@@ -140,14 +140,13 @@ export default function Divider({
       <div
         className={cn(
           "flex items-center py-1",
-          !dividerLine && (foldable ? "pl-1.5" : "px-2")
+          !dividerLine && (foldable ? "pl-1.5" : "px-2"),
+          dividerLine && !foldable && "pl-1.5"
         )}
       >
-        {/* Left divider line */}
-        {dividerLine && (
-          <div
-            className={cn("h-px bg-border-01", foldable ? "w-1.5" : "w-2")}
-          />
+        {/* Left divider line (only for foldable dividers) */}
+        {dividerLine && foldable && (
+          <div className={cn("h-px bg-border-01 w-1.5")} />
         )}
 
         {/* Content container */}
