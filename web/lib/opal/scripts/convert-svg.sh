@@ -65,12 +65,14 @@ TMPFILE="${BASE_NAME}.tsx.tmp"
 bunx @svgr/cli "$SVG_FILE" --typescript --svgo-config "$SVGO_CONFIG" --template "${SCRIPT_DIR}/icon-template.js" > "$TMPFILE"
 
 if [ $? -eq 0 ]; then
-  mv "$TMPFILE" "${BASE_NAME}.tsx"
-  # Verify the output file was created and has content
-  if [ ! -s "${BASE_NAME}.tsx" ]; then
+  # Verify the temp file has content before replacing the destination
+  if [ ! -s "$TMPFILE" ]; then
+    rm -f "$TMPFILE"
     echo "Error: Output file was not created or is empty" >&2
     exit 1
   fi
+
+  mv "$TMPFILE" "${BASE_NAME}.tsx" || { echo "Error: Failed to move temp file" >&2; exit 1; }
 
   # Post-process the file to add width and height attributes bound to the size prop
   # Using perl for cross-platform compatibility (works on macOS, Linux, Windows with WSL)
