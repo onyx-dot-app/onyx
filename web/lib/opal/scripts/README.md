@@ -14,7 +14,7 @@ All scripts in this directory should be run from the **opal package root** (`web
 web/lib/opal/
 ├── scripts/                          # SVG conversion tooling (this directory)
 │   ├── convert-svg.sh                # Converts SVGs into React components
-│   └── icon-template.js              # Shared SVGR template
+│   └── icon-template.js              # Shared SVGR template (used for both icons and illustrations)
 ├── src/
 │   ├── icons/                        # Small, single-colour icons (stroke = currentColor)
 │   └── illustrations/                # Larger, multi-colour illustrations (colours preserved)

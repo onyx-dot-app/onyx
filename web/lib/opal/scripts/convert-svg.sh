@@ -57,8 +57,11 @@ else
   SVGO_CONFIG='{"plugins":[{"name":"removeAttrs","params":{"attrs":["stroke","stroke-opacity","width","height"]}}]}'
 fi
 
+# Resolve the template path relative to this script (not the caller's CWD)
+SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
+
 # Run the conversion
-bunx @svgr/cli "$SVG_FILE" --typescript --svgo-config "$SVGO_CONFIG" --template "scripts/icon-template.js" > "${BASE_NAME}.tsx"
+bunx @svgr/cli "$SVG_FILE" --typescript --svgo-config "$SVGO_CONFIG" --template "${SCRIPT_DIR}/icon-template.js" > "${BASE_NAME}.tsx"
 
 if [ $? -eq 0 ]; then
   # Verify the output file was created and has content
