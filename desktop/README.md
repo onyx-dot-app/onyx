@@ -59,7 +59,7 @@ npm install
 npm run dev
 
 # Run in debug mode
-npm run dev -- -- -- --debug
+npm run debug
 ```
 
 ## Building
