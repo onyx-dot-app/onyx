@@ -66,7 +66,7 @@ fi
 # restarts, else the volume is deleted so the container starts fresh.
 if [[ "$KEEP_OPENSEARCH_DATA" == "false" ]]; then
     echo "Deleting opensearch-data volume..."
-    docker volume rm opensearch-data 2>/dev/null || true
+    docker volume rm onyx_opensearch-data 2>/dev/null || true
 fi
 echo "Starting OpenSearch container..."
 docker compose -f "$COMPOSE_FILE" -f "$COMPOSE_DEV_FILE" --profile opensearch-enabled up --force-recreate -d opensearch
