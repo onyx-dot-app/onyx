@@ -87,7 +87,8 @@ def test_python_tool_available_when_health_check_passes(
 
     mock_client = MagicMock()
     mock_client.health.return_value = True
-    mock_client_cls.return_value = mock_client
+    mock_client_cls.return_value.__enter__ = MagicMock(return_value=mock_client)
+    mock_client_cls.return_value.__exit__ = MagicMock(return_value=False)
 
     db_session = MagicMock(spec=Session)
     assert PythonTool.is_available(db_session) is True
@@ -109,7 +110,8 @@ def test_python_tool_unavailable_when_health_check_fails(
 
     mock_client = MagicMock()
     mock_client.health.return_value = False
-    mock_client_cls.return_value = mock_client
+    mock_client_cls.return_value.__enter__ = MagicMock(return_value=mock_client)
+    mock_client_cls.return_value.__exit__ = MagicMock(return_value=False)
 
     db_session = MagicMock(spec=Session)
     assert PythonTool.is_available(db_session) is False

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import time
 from collections.abc import Generator
@@ -86,7 +88,7 @@ class CodeInterpreterClient:
         self.session = requests.Session()
         self._closed = False
 
-    def __enter__(self) -> "CodeInterpreterClient":
+    def __enter__(self) -> CodeInterpreterClient:
         return self
 
     def __exit__(self, *args: object) -> None:
