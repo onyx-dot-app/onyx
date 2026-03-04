@@ -147,6 +147,7 @@ def baseline_search_settings(
 
 
 @patch("onyx.db.swap_index.get_all_document_indices")
+@patch("onyx.server.manage.search_settings.get_all_document_indices")
 @patch("onyx.server.manage.search_settings.get_default_document_index")
 @patch("onyx.indexing.indexing_pipeline.get_llm_for_contextual_rag")
 @patch("onyx.indexing.indexing_pipeline.index_doc_batch_with_handler")
@@ -154,6 +155,7 @@ def test_indexing_pipeline_uses_contextual_rag_settings_from_create(
     mock_index_handler: MagicMock,
     mock_get_llm: MagicMock,
     mock_get_doc_index: MagicMock,  # noqa: ARG001
+    mock_get_all_doc_indices_search_settings: MagicMock,  # noqa: ARG001
     mock_get_all_doc_indices: MagicMock,
     baseline_search_settings: None,  # noqa: ARG001
     db_session: Session,
@@ -196,6 +198,7 @@ def test_indexing_pipeline_uses_contextual_rag_settings_from_create(
 
 
 @patch("onyx.db.swap_index.get_all_document_indices")
+@patch("onyx.server.manage.search_settings.get_all_document_indices")
 @patch("onyx.server.manage.search_settings.get_default_document_index")
 @patch("onyx.indexing.indexing_pipeline.get_llm_for_contextual_rag")
 @patch("onyx.indexing.indexing_pipeline.index_doc_batch_with_handler")
@@ -203,6 +206,7 @@ def test_indexing_pipeline_uses_updated_contextual_rag_settings(
     mock_index_handler: MagicMock,
     mock_get_llm: MagicMock,
     mock_get_doc_index: MagicMock,  # noqa: ARG001
+    mock_get_all_doc_indices_search_settings: MagicMock,  # noqa: ARG001
     mock_get_all_doc_indices: MagicMock,
     baseline_search_settings: None,  # noqa: ARG001
     db_session: Session,
