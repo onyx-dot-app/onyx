@@ -59,6 +59,15 @@ else
     docker run --detach --name onyx_vespa --hostname vespa-container --publish 8081:8081 --publish 19071:19071 vespaengine/vespa:8
 fi
 
+# If OPENSEARCH_ADMIN_PASSWORD is not already set, try loading it from
+# .vscode/.env so existing dev setups that stored it there aren't silently
+# broken.
+VSCODE_ENV="$SCRIPT_DIR/../../.vscode/.env"
+if [[ -z "${OPENSEARCH_ADMIN_PASSWORD:-}" && -f "$VSCODE_ENV" ]]; then
+    # shellcheck source=/dev/null
+    source "$VSCODE_ENV"
+fi
+
 # Start the OpenSearch container using the same service from docker-compose that
 # our users use, setting OPENSEARCH_INITIAL_ADMIN_PASSWORD from the env's
 # OPENSEARCH_ADMIN_PASSWORD if it exists, else defaulting to StrongPassword123!.
