@@ -11,6 +11,7 @@ from onyx.context.search.models import SavedSearchSettings
 from onyx.context.search.models import SearchSettingsCreationRequest
 from onyx.db.enums import EmbeddingPrecision
 from onyx.db.llm import fetch_default_contextual_rag_model
+from onyx.db.llm import fetch_existing_llm_provider
 from onyx.db.llm import update_default_contextual_model
 from onyx.db.llm import upsert_llm_provider
 from onyx.db.models import IndexModelStatus
@@ -37,6 +38,8 @@ def _create_llm_provider_and_model(
     model_name: str,
 ) -> None:
     """Insert an LLM provider with a single visible model configuration."""
+    if fetch_existing_llm_provider(name=provider_name, db_session=db_session):
+        return
     upsert_llm_provider(
         LLMProviderUpsertRequest(
             name=provider_name,
@@ -268,6 +271,7 @@ def test_indexing_pipeline_uses_updated_contextual_rag_settings(
     )
 
 
+@patch("onyx.server.manage.search_settings.get_all_document_indices")
 @patch("onyx.server.manage.search_settings.get_default_document_index")
 @patch("onyx.indexing.indexing_pipeline.get_llm_for_contextual_rag")
 @patch("onyx.indexing.indexing_pipeline.index_doc_batch_with_handler")
@@ -275,6 +279,7 @@ def test_indexing_pipeline_skips_llm_when_contextual_rag_disabled(
     mock_index_handler: MagicMock,
     mock_get_llm: MagicMock,
     mock_get_doc_index: MagicMock,  # noqa: ARG001
+    mock_get_all_doc_indices_search_settings: MagicMock,  # noqa: ARG001
     baseline_search_settings: None,  # noqa: ARG001
     db_session: Session,
 ) -> None:
