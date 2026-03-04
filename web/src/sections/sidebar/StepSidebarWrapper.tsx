@@ -19,7 +19,7 @@ export default function StepSidebar({
   return (
     <SidebarWrapper>
       <div className="px-2">
-        <SidebarTab leftIcon={buttonIcon} href={buttonHref}>
+        <SidebarTab icon={buttonIcon} href={buttonHref}>
           {buttonName}
         </SidebarTab>
       </div>

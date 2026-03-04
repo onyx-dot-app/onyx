@@ -1,3 +1,5 @@
+import Link from "next/link";
+import type { Route } from "next";
 import "@opal/core/interactive/styles.css";
 import React from "react";
 import { Slot } from "@radix-ui/react-slot";
@@ -428,9 +430,9 @@ function InteractiveContainer({
   // so all styling (backgrounds, rounding, overflow) lives on one element.
   if (href) {
     return (
-      <a
+      <Link
         ref={ref as React.Ref<HTMLAnchorElement>}
-        href={href}
+        href={href as Route}
         target={target}
         rel={rel}
         {...(sharedProps as React.HTMLAttributes<HTMLAnchorElement>)}

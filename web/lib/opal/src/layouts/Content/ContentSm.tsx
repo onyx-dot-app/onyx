@@ -9,7 +9,7 @@ import { cn } from "@opal/utils";
 
 type ContentSmSizePreset = "main-content" | "main-ui" | "secondary";
 type ContentSmOrientation = "vertical" | "inline" | "reverse";
-type ContentSmProminence = "default" | "muted";
+type ContentSmProminence = "default" | "muted" | "muted-2x";
 
 interface ContentSmPresetConfig {
   /** Icon width/height (CSS value). */
@@ -82,13 +82,12 @@ function ContentSm({
   prominence = "default",
 }: ContentSmProps) {
   const config = CONTENT_SM_PRESETS[sizePreset];
-  const titleColorClass =
-    prominence === "muted" ? "text-text-03" : "text-text-04";
 
   return (
     <div
       className="opal-content-sm"
       data-orientation={orientation}
+      data-prominence={prominence}
       style={{ gap: config.gap }}
     >
       {Icon && (
@@ -100,18 +99,14 @@ function ContentSm({
           style={{ minHeight: config.lineHeight }}
         >
           <Icon
-            className="opal-content-sm-icon text-text-03"
+            className="opal-content-sm-icon"
             style={{ width: config.iconSize, height: config.iconSize }}
           />
         </div>
       )}
 
       <span
-        className={cn(
-          "opal-content-sm-title",
-          config.titleFont,
-          titleColorClass
-        )}
+        className={cn("opal-content-sm-title", config.titleFont)}
         style={{ height: config.lineHeight }}
       >
         {title}

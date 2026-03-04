@@ -365,11 +365,7 @@ const MemoizedBuildSidebarInner = memo(
 
     const newBuildButton = useMemo(
       () => (
-        <SidebarTab
-          leftIcon={SvgEditBig}
-          folded={folded}
-          onClick={handleNewBuild}
-        >
+        <SidebarTab icon={SvgEditBig} folded={folded} onClick={handleNewBuild}>
           Start Crafting
         </SidebarTab>
       ),
@@ -379,7 +375,7 @@ const MemoizedBuildSidebarInner = memo(
     const buildConfigurePanel = useMemo(
       () => (
         <SidebarTab
-          leftIcon={SvgSettings}
+          icon={SvgSettings}
           folded={folded}
           href={CRAFT_CONFIGURE_PATH}
           selected={pathname.startsWith(CRAFT_CONFIGURE_PATH)}
@@ -392,7 +388,7 @@ const MemoizedBuildSidebarInner = memo(
 
     const backToChatButton = useMemo(
       () => (
-        <SidebarTab leftIcon={SvgArrowLeft} folded={folded} href="/app">
+        <SidebarTab icon={SvgArrowLeft} folded={folded} href="/app">
           Back to Chat
         </SidebarTab>
       ),

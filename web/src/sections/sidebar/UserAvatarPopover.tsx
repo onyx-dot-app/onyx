@@ -201,7 +201,7 @@ export default function UserAvatarPopover({
       <Popover.Trigger asChild>
         <div id="onyx-user-dropdown">
           <SidebarTab
-            leftIcon={({ className }) => (
+            icon={({ className }) => (
               <InputAvatar
                 className={cn(
                   "flex items-center justify-center bg-background-neutral-inverted-00",
@@ -223,6 +223,14 @@ export default function UserAvatarPopover({
             }
             selected={!!popupState || appFocus.isUserSettings()}
             folded={folded}
+            // TODO (@raunakab)
+            //
+            // The internals of `SidebarTab` (`Interactive.Base`) was designed such that providing an `onClick` or `href` would trigger rendering a `cursor-pointer`.
+            // However, since instance is wired up as a "trigger", it doesn't have either of those explicitly specified.
+            // Therefore, the default cursor would be rendered.
+            //
+            // Specifying a dummy `onClick` handler solves that.
+            onClick={() => undefined}
           >
             {displayName}
           </SidebarTab>

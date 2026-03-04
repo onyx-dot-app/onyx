@@ -137,7 +137,7 @@ const ProjectFolderButton = memo(({ project }: ProjectFolderButtonProps) => {
       <Popover onOpenChange={setPopoverOpen}>
         <Popover.Anchor>
           <SidebarTab
-            leftIcon={() => (
+            icon={() => (
               <OpalButton
                 onMouseEnter={() => handleIconHover(true)}
                 onMouseLeave={() => handleIconHover(false)}

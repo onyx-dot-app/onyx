@@ -323,7 +323,7 @@
      reverse : flex-row-reverse — title left, icon right
 
    Icon color is always text-03. Title color varies by prominence
-   (text-04 default, text-03 muted) and is applied via Tailwind class.
+   (text-04 default, text-03 muted, text-02 muted-2x) via data-prominence.
    =========================================================================== */
 
 /* ---------------------------------------------------------------------------
@@ -331,7 +331,8 @@
    --------------------------------------------------------------------------- */
 
 .opal-content-sm {
-  @apply flex items-start;
+  /* since `ContentSm` doesn't have a description, it's possible to center-align the icon and text */
+  @apply flex items-center;
 }
 
 .opal-content-sm[data-orientation="inline"] {
@@ -356,15 +357,31 @@
   justify-content: center;
 }
 
+.opal-content-sm-icon {
+  @apply text-text-03;
+}
+
+.opal-content-sm[data-prominence="muted-2x"] .opal-content-sm-icon {
+  @apply text-text-02 stroke-text-02;
+}
+
 /* ---------------------------------------------------------------------------
    Title
    --------------------------------------------------------------------------- */
 
 .opal-content-sm-title {
-  @apply text-left overflow-hidden;
+  @apply text-left overflow-hidden text-text-04;
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 1;
   padding: 0 0.125rem;
   min-width: 0.0625rem;
+}
+
+.opal-content-sm[data-prominence="muted"] .opal-content-sm-title {
+  @apply text-text-03;
+}
+
+.opal-content-sm[data-prominence="muted-2x"] .opal-content-sm-title {
+  @apply text-text-02;
 }

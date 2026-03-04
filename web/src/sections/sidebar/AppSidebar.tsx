@@ -500,7 +500,7 @@ const MemoizedAppSidebarInner = memo(
       return (
         <div data-testid="AppSidebar/new-session">
           <SidebarTab
-            leftIcon={SvgEditBig}
+            icon={SvgEditBig}
             folded={folded}
             href={href}
             selected={activeSidebarTab.isNewSession()}
@@ -526,7 +526,7 @@ const MemoizedAppSidebarInner = memo(
       () => (
         <div data-testid="AppSidebar/build">
           <SidebarTab
-            leftIcon={SvgDevKit}
+            icon={SvgDevKit}
             folded={folded}
             href={CRAFT_PATH}
             onClick={() => posthog?.capture("clicked_craft_in_sidebar")}
@@ -542,7 +542,18 @@ const MemoizedAppSidebarInner = memo(
       () => (
         <ChatSearchCommandMenu
           trigger={
-            <SidebarTab leftIcon={SvgSearchMenu} folded={folded}>
+            <SidebarTab
+              icon={SvgSearchMenu}
+              folded={folded}
+              // TODO (@raunakab)
+              //
+              // The internals of `SidebarTab` (`Interactive.Base`) was designed such that providing an `onClick` or `href` would trigger rendering a `cursor-pointer`.
+              // However, since instance is wired up as a "trigger", it doesn't have either of those explicitly specified.
+              // Therefore, the default cursor would be rendered.
+              //
+              // Specifying a dummy `onClick` handler solves that.
+              onClick={() => undefined}
+            >
               Search Chats
             </SidebarTab>
           }
@@ -554,7 +565,7 @@ const MemoizedAppSidebarInner = memo(
       () => (
         <div data-testid="AppSidebar/more-agents">
           <SidebarTab
-            leftIcon={
+            icon={
               folded || visibleAgents.length === 0
                 ? SvgOnyxOctagon
                 : SvgMoreHorizontal
@@ -573,7 +584,7 @@ const MemoizedAppSidebarInner = memo(
     const newProjectButton = useMemo(
       () => (
         <SidebarTab
-          leftIcon={SvgFolderPlus}
+          icon={SvgFolderPlus}
           onClick={() => createProjectModal.toggle(true)}
           selected={createProjectModal.isOpen}
           folded={folded}
@@ -600,7 +611,7 @@ const MemoizedAppSidebarInner = memo(
           {(isAdmin || isCurator) && (
             <SidebarTab
               href={adminDefaultHref}
-              leftIcon={SvgSettings}
+              icon={SvgSettings}
               folded={folded}
             >
               {isAdmin ? "Admin Panel" : "Curator Panel"}
