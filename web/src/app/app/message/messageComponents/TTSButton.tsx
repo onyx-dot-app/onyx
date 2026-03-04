@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import { SvgPlayCircle, SvgPauseCircle, SvgStop } from "@opal/icons";
 import { Button } from "@opal/components";
 import { useVoicePlayback } from "@/hooks/useVoicePlayback";
@@ -30,9 +30,11 @@ function TTSButton({ text, voice, speed }: TTSButtonProps) {
     }
   }, [isPlaying, isLoading, text, voice, speed, play, pause, stop]);
 
-  if (error) {
-    toast.error(error);
-  }
+  useEffect(() => {
+    if (error) {
+      toast.error(error);
+    }
+  }, [error]);
 
   const icon = isLoading ? SimpleLoader : isPlaying ? SvgStop : SvgPlayCircle;
 
