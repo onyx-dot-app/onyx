@@ -24,7 +24,6 @@ type LLMStepProps = {
   state: OnboardingState;
   actions: OnboardingActions;
   llmDescriptors: WellKnownLLMProviderDescriptor[];
-  connectedProviders: string[];
   disabled?: boolean;
 };
 
@@ -94,7 +93,6 @@ const LLMStepInner = ({
   state: onboardingState,
   actions: onboardingActions,
   llmDescriptors,
-  connectedProviders,
   disabled,
 }: LLMStepProps) => {
   const isLoading = !llmDescriptors || llmDescriptors.length === 0;
@@ -188,7 +186,7 @@ const LLMStepInner = ({
                         subtitle={displayInfo.displayName}
                         providerName={llmDescriptor.name}
                         disabled={disabled}
-                        isConnected={connectedProviders.some(
+                        isConnected={onboardingState.data.llmProviders?.some(
                           (provider) => provider === llmDescriptor.name
                         )}
                         onClick={() =>
@@ -205,7 +203,7 @@ const LLMStepInner = ({
                     title="Custom LLM Provider"
                     subtitle="LiteLLM Compatible APIs"
                     disabled={disabled}
-                    isConnected={connectedProviders.some(
+                    isConnected={onboardingState.data.llmProviders?.some(
                       (provider) => provider === "custom"
                     )}
                     onClick={() => handleProviderClick(undefined, true)}
@@ -229,10 +227,15 @@ const LLMStepInner = ({
         aria-label="Edit LLM providers"
       >
         <div className="flex items-center gap-1">
-          <StackedProviderIcons providers={connectedProviders} />
+          <StackedProviderIcons
+            providers={onboardingState.data.llmProviders || []}
+          />
           <Text as="p" text04 mainUiAction>
-            {connectedProviders.length}{" "}
-            {connectedProviders.length === 1 ? "model" : "models"} connected
+            {onboardingState.data.llmProviders?.length || 0}{" "}
+            {(onboardingState.data.llmProviders?.length || 0) === 1
+              ? "model"
+              : "models"}{" "}
+            connected
           </Text>
         </div>
         <div className="p-1">

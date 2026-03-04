@@ -149,6 +149,14 @@ describe("onboardingReducer", () => {
       expect(result.data.userName).toBe("Alice");
     });
 
+    it("merges llmProviders into data", () => {
+      const result = onboardingReducer(initialState, {
+        type: OnboardingActionType.UPDATE_DATA,
+        payload: { llmProviders: ["openai", "anthropic"] },
+      });
+      expect(result.data.llmProviders).toEqual(["openai", "anthropic"]);
+    });
+
     it("preserves existing data fields when merging new ones", () => {
       const state: OnboardingState = {
         ...initialState,
@@ -156,10 +164,10 @@ describe("onboardingReducer", () => {
       };
       const result = onboardingReducer(state, {
         type: OnboardingActionType.UPDATE_DATA,
-        payload: { llmApiKey: "sk-test" },
+        payload: { llmProviders: ["openai"] },
       });
       expect(result.data.userName).toBe("Alice");
-      expect(result.data.llmApiKey).toBe("sk-test");
+      expect(result.data.llmProviders).toEqual(["openai"]);
     });
   });
 
@@ -213,7 +221,7 @@ describe("onboardingReducer", () => {
         currentStep: OnboardingStep.Complete,
         stepIndex: 3,
         totalSteps: 3,
-        data: { userName: "Alice" },
+        data: { userName: "Alice", llmProviders: ["openai"] },
         isButtonActive: false,
         isLoading: true,
         error: "some error",

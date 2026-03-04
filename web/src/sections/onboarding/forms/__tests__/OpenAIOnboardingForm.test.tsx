@@ -103,15 +103,6 @@ jest.mock("@/app/admin/configuration/llm/utils", () => ({
   fetchModels: (...args: any[]) => mockFetchModels(...args),
 }));
 
-// Mock ProviderContext (used by OnboardingFormWrapper)
-const mockRefreshProviderInfo = jest.fn().mockResolvedValue(undefined);
-jest.mock("@/components/chat/ProviderContext", () => ({
-  useProviderStatus: () => ({
-    hasProviders: false,
-    refreshProviderInfo: mockRefreshProviderInfo,
-  }),
-}));
-
 // Mock ProviderIcon
 jest.mock("@/app/admin/configuration/llm/ProviderIcon", () => ({
   ProviderIcon: ({ provider }: { provider: string }) => (
@@ -364,10 +355,10 @@ describe("OpenAIOnboardingForm", () => {
       });
     });
 
-    test("refreshes provider info after successful submission", async () => {
+    test("updates onboarding data with openai provider", async () => {
       const user = setupUser();
-      const setButtonActive = jest.fn();
-      const mockActions = createMockOnboardingActions({ setButtonActive });
+      const updateData = jest.fn();
+      const mockActions = createMockOnboardingActions({ updateData });
 
       mockFetch
         .mockResolvedValueOnce(mockResponses.testApiSuccess)
@@ -387,8 +378,11 @@ describe("OpenAIOnboardingForm", () => {
       await user.click(submitButton);
 
       await waitFor(() => {
-        expect(mockRefreshProviderInfo).toHaveBeenCalled();
-        expect(setButtonActive).toHaveBeenCalledWith(true);
+        expect(updateData).toHaveBeenCalledWith(
+          expect.objectContaining({
+            llmProviders: expect.arrayContaining(["openai"]),
+          })
+        );
       });
     });
   });

@@ -20,7 +20,6 @@ type OnboardingFlowProps = {
   state: OnboardingState;
   actions: OnboardingActions;
   llmDescriptors: WellKnownLLMProviderDescriptor[];
-  connectedProviders: string[];
 };
 
 const OnboardingFlowInner = ({
@@ -30,7 +29,6 @@ const OnboardingFlowInner = ({
   state: onboardingState,
   actions: onboardingActions,
   llmDescriptors,
-  connectedProviders,
 }: OnboardingFlowProps) => {
   const { user } = useUser();
   const hasStarted = onboardingState.currentStep !== OnboardingStep.Welcome;
@@ -55,7 +53,6 @@ const OnboardingFlowInner = ({
                 state={onboardingState}
                 actions={onboardingActions}
                 llmDescriptors={llmDescriptors}
-                connectedProviders={connectedProviders}
                 disabled={
                   onboardingState.currentStep !== OnboardingStep.LlmSetup
                 }

@@ -55,7 +55,7 @@ function renderUseShowOnboarding(
     liveAgent: undefined as undefined,
     isLoadingChatSessions: overrides.isLoadingChatSessions ?? false,
     chatSessionsCount: overrides.chatSessionsCount ?? 0,
-    userId: "userId" in overrides ? overrides.userId : "user-1",
+    userId: overrides.userId ?? ("user-1" as string | undefined),
   };
 
   return renderHook((props) => useShowOnboarding(props), {

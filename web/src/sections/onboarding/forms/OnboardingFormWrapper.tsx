@@ -13,7 +13,6 @@ import {
   LLM_PROVIDERS_ADMIN_URL,
 } from "@/lib/llmConfig/constants";
 import { OnboardingActions, OnboardingState } from "@/interfaces/onboarding";
-import { useProviderStatus } from "@/components/chat/ProviderContext";
 import { APIFormFieldState } from "@/refresh-components/form/types";
 import {
   testApiKeyHelper,
@@ -108,8 +107,6 @@ export function OnboardingFormWrapper<T extends Record<string, any>>({
   children,
   transformValues,
 }: OnboardingFormWrapperProps<T>) {
-  const { hasProviders, refreshProviderInfo } = useProviderStatus();
-
   // API status state
   const [apiStatus, setApiStatus] = useState<APIFormFieldState>("loading");
   const [showApiMessage, setShowApiMessage] = useState(false);
@@ -226,7 +223,10 @@ export function OnboardingFormWrapper<T extends Record<string, any>>({
     }
 
     // If this is the first LLM provider, set it as the default
-    if (!hasProviders) {
+    if (
+      onboardingState?.data?.llmProviders == null ||
+      onboardingState.data.llmProviders.length === 0
+    ) {
       try {
         const newLlmProvider = await response.json();
         if (newLlmProvider?.id != null) {
@@ -264,8 +264,13 @@ export function OnboardingFormWrapper<T extends Record<string, any>>({
       }
     }
 
-    // Refresh provider data so context picks up the new provider
-    await refreshProviderInfo();
+    // Update onboarding state
+    onboardingActions?.updateData({
+      llmProviders: [
+        ...(onboardingState?.data.llmProviders ?? []),
+        isCustomProvider ? "custom" : llmDescriptor?.name ?? "",
+      ],
+    });
     onboardingActions?.setButtonActive(true);
 
     setIsSubmitting(false);

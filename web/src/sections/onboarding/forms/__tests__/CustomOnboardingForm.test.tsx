@@ -58,15 +58,6 @@ jest.mock("@/app/admin/configuration/llm/utils", () => ({
   }),
 }));
 
-// Mock ProviderContext (used by OnboardingFormWrapper)
-const mockRefreshProviderInfo = jest.fn().mockResolvedValue(undefined);
-jest.mock("@/components/chat/ProviderContext", () => ({
-  useProviderStatus: () => ({
-    hasProviders: false,
-    refreshProviderInfo: mockRefreshProviderInfo,
-  }),
-}));
-
 describe("CustomOnboardingForm", () => {
   const mockOnboardingState = createMockOnboardingState();
   const mockOnboardingActions = createMockOnboardingActions();
@@ -251,10 +242,10 @@ describe("CustomOnboardingForm", () => {
       });
     });
 
-    test("refreshes provider info after successful submission", async () => {
+    test("updates onboarding data with custom provider", async () => {
       const user = setupUser();
-      const setButtonActive = jest.fn();
-      const mockActions = createMockOnboardingActions({ setButtonActive });
+      const updateData = jest.fn();
+      const mockActions = createMockOnboardingActions({ updateData });
 
       mockFetch
         .mockResolvedValueOnce(mockResponses.testApiSuccess)
@@ -274,8 +265,11 @@ describe("CustomOnboardingForm", () => {
       await user.click(submitButton);
 
       await waitFor(() => {
-        expect(mockRefreshProviderInfo).toHaveBeenCalled();
-        expect(setButtonActive).toHaveBeenCalledWith(true);
+        expect(updateData).toHaveBeenCalledWith(
+          expect.objectContaining({
+            llmProviders: expect.arrayContaining(["custom"]),
+          })
+        );
       });
     });
   });
