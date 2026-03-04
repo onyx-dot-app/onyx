@@ -59,6 +59,7 @@ from onyx.db.engine.async_sql_engine import get_sqlalchemy_async_engine
 from onyx.db.engine.connection_warmup import warm_up_connections
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.sql_engine import SqlEngine
+from onyx.error_handling.exceptions import register_onyx_exception_handlers
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.api_key.api import router as api_key_router
 from onyx.server.auth_check import check_router_auth
@@ -443,6 +444,8 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     application.add_exception_handler(
         status.HTTP_500_INTERNAL_SERVER_ERROR, log_http_error
     )
+
+    register_onyx_exception_handlers(application)
 
     include_router_with_global_prefix_prepended(application, password_router)
     include_router_with_global_prefix_prepended(application, chat_router)
