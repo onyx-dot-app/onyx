@@ -1,5 +1,7 @@
 """CRUD operations for HierarchyNode."""
 
+from collections import defaultdict
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -549,17 +551,20 @@ def update_document_parent_hierarchy_nodes(
     doc_ids = list(doc_parent_map.keys())
     existing = get_document_parent_hierarchy_node_ids(db_session, doc_ids)
 
-    updated = 0
+    by_parent: dict[int | None, list[str]] = defaultdict(list)
     for doc_id, desired_parent_id in doc_parent_map.items():
         current = existing.get(doc_id)
-        if current == desired_parent_id:
+        if current == desired_parent_id or doc_id not in existing:
             continue
-        if doc_id not in existing:
-            continue
-        db_session.query(Document).filter(Document.id == doc_id).update(
-            {Document.parent_hierarchy_node_id: desired_parent_id}
+        by_parent[desired_parent_id].append(doc_id)
+
+    updated = 0
+    for desired_parent_id, ids in by_parent.items():
+        db_session.query(Document).filter(Document.id.in_(ids)).update(
+            {Document.parent_hierarchy_node_id: desired_parent_id},
+            synchronize_session=False,
         )
-        updated += 1
+        updated += len(ids)
 
     if commit:
         db_session.commit()
