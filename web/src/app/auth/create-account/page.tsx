@@ -22,7 +22,6 @@ export default function Page() {
           <li>Create a new Onyx team</li>
         </ul>
         <div className="flex justify-center">
-          {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
           <Button
             href={`${REGISTRATION_URL}/register`}
             width="full"
