@@ -64,7 +64,7 @@ def _strip_path(filename: str) -> str:
 async def _snapshot_loop(interval: float) -> None:
     """Periodically take tracemalloc snapshots and compute diffs."""
     global _previous_snapshot, _current_top_stats, _current_delta_stats
-    global _current_total_bytes
+    global _current_total_bytes, _current_object_type_counts
 
     while True:
         await asyncio.sleep(interval)
@@ -97,7 +97,6 @@ async def _snapshot_loop(interval: float) -> None:
         # Object type counting — done here (amortized by snapshot interval)
         # instead of on every /metrics scrape, since gc.get_objects() is O(n)
         # over all live objects and holds the GIL.
-        global _current_object_type_counts
         counts: Counter[str] = Counter()
         for obj in gc.get_objects():
             counts[type(obj).__name__] += 1

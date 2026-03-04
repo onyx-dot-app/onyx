@@ -25,7 +25,20 @@ _RSS_DELTA = Histogram(
     "onyx_api_request_rss_delta_bytes",
     "RSS change in bytes during a single request",
     ["handler"],
-    buckets=(0, 1024, 4096, 16384, 65536, 262144, 1048576, 4194304, 16777216),
+    buckets=(
+        -16777216,
+        -1048576,
+        -65536,
+        0,
+        1024,
+        4096,
+        16384,
+        65536,
+        262144,
+        1048576,
+        4194304,
+        16777216,
+    ),
 )
 
 _PROCESS_RSS = Gauge(

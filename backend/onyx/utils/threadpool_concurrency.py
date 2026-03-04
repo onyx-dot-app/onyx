@@ -32,10 +32,18 @@ logger = setup_logger()
 
 
 def _get_executor_class() -> type[ThreadPoolExecutor]:
-    """Return InstrumentedThreadPoolExecutor for Prometheus metrics."""
-    from onyx.server.metrics.threadpool import InstrumentedThreadPoolExecutor
+    """Return InstrumentedThreadPoolExecutor when running in the API server.
 
-    return InstrumentedThreadPoolExecutor
+    Non-server contexts (Celery workers, CLI scripts) get vanilla
+    ThreadPoolExecutor since setup_threadpool_metrics() is never called there.
+    """
+    from onyx.server.metrics.threadpool import _instrumentation_enabled
+
+    if _instrumentation_enabled:
+        from onyx.server.metrics.threadpool import InstrumentedThreadPoolExecutor
+
+        return InstrumentedThreadPoolExecutor
+    return ThreadPoolExecutor
 
 
 R = TypeVar("R")

@@ -42,6 +42,11 @@ _TASK_DURATION = Histogram(
 
 _process = psutil.Process()
 
+# Set to True when setup_threadpool_metrics() is called (API server only).
+# Non-server contexts (Celery workers, CLI scripts) never call setup,
+# so _get_executor_class() falls back to vanilla ThreadPoolExecutor.
+_instrumentation_enabled = False
+
 
 class InstrumentedThreadPoolExecutor(ThreadPoolExecutor):
     """ThreadPoolExecutor subclass that records Prometheus metrics."""
@@ -83,5 +88,7 @@ class ThreadCountCollector(Collector):
 
 
 def setup_threadpool_metrics() -> None:
-    """Register the process thread count collector."""
+    """Register the process thread count collector and enable instrumentation."""
+    global _instrumentation_enabled
+    _instrumentation_enabled = True
     REGISTRY.register(ThreadCountCollector())
