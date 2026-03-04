@@ -101,8 +101,10 @@ def setup_redis_connection_pool_metrics() -> None:
     pool_instance = RedisPool()
     collector = RedisPoolCollector()
     collector.add_pool("primary", pool_instance._pool)
-    if pool_instance._replica_pool is not None:
-        collector.add_pool("replica", pool_instance._replica_pool)
+    # Replica pool always exists (defaults to same host as primary when
+    # REDIS_REPLICA_HOST is not set). Still worth monitoring separately
+    # since it maintains an independent connection pool.
+    collector.add_pool("replica", pool_instance._replica_pool)
 
     REGISTRY.register(collector)
     _redis_collector = collector
