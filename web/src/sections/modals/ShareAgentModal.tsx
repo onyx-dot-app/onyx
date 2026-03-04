@@ -352,7 +352,11 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
             ) : undefined
           }
           cancel={
-            <Button prominence="secondary" onClick={handleClose} disabled={isSubmitting}>
+            <Button
+              prominence="secondary"
+              onClick={handleClose}
+              disabled={isSubmitting}
+            >
               Cancel
             </Button>
           }
