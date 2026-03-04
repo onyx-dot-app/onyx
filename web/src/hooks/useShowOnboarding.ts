@@ -48,17 +48,21 @@ function useOnboardingState(liveAgent?: MinimalPersonaSnapshot): {
   const nameUpdateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
   );
-  const hasInitializedRef = useRef(false);
+  const hasInitializedForUserRef = useRef<string | undefined>(undefined);
 
-  // Initialize onboarding to the earliest incomplete step — runs once after
-  // both user data and provider data have loaded.  After initialization, user
-  // actions (Next / Prev / goToStep) drive navigation; the effect never
+  // Initialize onboarding to the earliest incomplete step — runs once per user
+  // after both user data and provider data have loaded.  After initialization,
+  // user actions (Next / Prev / goToStep) drive navigation; the effect never
   // re-runs so it cannot override user-driven state (e.g. button active).
   useEffect(() => {
-    if (isLoadingProviders || !user || hasInitializedRef.current) {
+    if (
+      isLoadingProviders ||
+      !user ||
+      hasInitializedForUserRef.current === user.id
+    ) {
       return;
     }
-    hasInitializedRef.current = true;
+    hasInitializedForUserRef.current = user.id;
 
     // Pre-populate state with existing data
     if (userName) {
