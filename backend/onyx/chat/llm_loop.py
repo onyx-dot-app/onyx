@@ -52,6 +52,7 @@ from onyx.tools.built_in_tools import STOPPING_TOOLS_NAMES
 from onyx.tools.interface import Tool
 from onyx.tools.models import ChatFile
 from onyx.tools.models import MemoryToolResponseSnapshot
+from onyx.tools.models import PythonToolRichResponse
 from onyx.tools.models import ToolCallInfo
 from onyx.tools.models import ToolCallKickoff
 from onyx.tools.models import ToolResponse
@@ -966,6 +967,13 @@ def run_llm_loop(
                 ):
                     generated_images = tool_response.rich_response.generated_images
 
+                # Extract generated_files if this is a code interpreter response
+                generated_files = None
+                if isinstance(tool_response.rich_response, PythonToolRichResponse):
+                    generated_files = (
+                        tool_response.rich_response.generated_files or None
+                    )
+
                 # Persist memory if this is a memory tool response
                 memory_snapshot: MemoryToolResponseSnapshot | None = None
                 if isinstance(tool_response.rich_response, MemoryToolResponse):
@@ -1017,6 +1025,7 @@ def run_llm_loop(
                     tool_call_response=saved_response,
                     search_docs=displayed_docs or search_docs,
                     generated_images=generated_images,
+                    generated_files=generated_files,
                 )
                 # Add to state container for partial save support
                 state_container.add_tool_call(tool_call_info)
