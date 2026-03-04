@@ -117,6 +117,8 @@ async def create_customer_portal_session(
     try:
         portal_url = fetch_customer_portal_session(tenant_id, return_url)
         return {"stripe_customer_portal_url": portal_url}
+    except OnyxError:
+        raise
     except Exception:
         logger.exception("Failed to create customer portal session")
         raise OnyxError(
@@ -138,6 +140,8 @@ async def create_checkout_session(
     try:
         checkout_url = fetch_stripe_checkout_session(tenant_id, billing_period, seats)
         return {"stripe_checkout_url": checkout_url}
+    except OnyxError:
+        raise
     except Exception:
         logger.exception("Failed to create checkout session")
         raise OnyxError(
