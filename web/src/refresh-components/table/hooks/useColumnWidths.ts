@@ -148,7 +148,6 @@ function computeColumnWidths(
   }
 
   const available = tableWidth - fixedTotal;
-  const totalWeight = dataColumns.reduce((sum, col) => sum + col.weight, 0);
 
   // Iterative proportional allocation with min-width clamping.
   // Each pass clamps columns whose proportional share falls below their
