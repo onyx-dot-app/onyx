@@ -222,7 +222,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
     }
   };
 
-  const showEmpty = !error && paginatedResults.length === 0;
+  const showEmpty = !error && results.length === 0;
 
   return (
     <>
