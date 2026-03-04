@@ -42,6 +42,43 @@ class NightlyProviderConfig(BaseModel):
     strict: bool
 
 
+def _stringify_custom_config_value(value: object) -> str:
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (dict, list)):
+        return json.dumps(value)
+    return str(value)
+
+
+def _normalize_custom_config(
+    provider: str, raw_custom_config: dict[object, object]
+) -> dict[str, str]:
+    normalized: dict[str, str] = {}
+    for raw_key, raw_value in raw_custom_config.items():
+        key = str(raw_key).strip()
+        key_lower = key.lower()
+
+        if provider == "vertex_ai":
+            if key_lower in {
+                "vertex_credentials",
+                "credentials_file",
+                "vertex_credentials_file",
+                "google_application_credentials",
+            }:
+                key = "vertex_credentials"
+            elif key_lower in {
+                "vertex_location",
+                "location",
+                "vertex_region",
+                "region",
+            }:
+                key = "vertex_location"
+
+        normalized[key] = _stringify_custom_config_value(raw_value)
+
+    return normalized
+
+
 def _env_true(env_var: str, default: bool = False) -> bool:
     value = os.environ.get(env_var)
     if value is None:
@@ -80,7 +117,9 @@ def _load_provider_config() -> NightlyProviderConfig:
         parsed = json.loads(custom_config_json)
         if not isinstance(parsed, dict):
             raise ValueError(f"{_ENV_CUSTOM_CONFIG_JSON} must be a JSON object")
-        custom_config = {str(key): str(value) for key, value in parsed.items()}
+        custom_config = _normalize_custom_config(
+            provider=provider, raw_custom_config=parsed
+        )
 
     if provider == "ollama_chat" and api_key and not custom_config:
         custom_config = {"OLLAMA_API_KEY": api_key}
@@ -145,6 +184,19 @@ def _validate_provider_config(config: NightlyProviderConfig) -> None:
                 strict=config.strict,
                 message=(
                     f"{_ENV_API_VERSION} is required for provider '{config.provider}'"
+                ),
+            )
+
+    if config.provider == "vertex_ai":
+        has_vertex_credentials = bool(
+            config.custom_config and config.custom_config.get("vertex_credentials")
+        )
+        if not has_vertex_credentials:
+            _skip_or_fail(
+                strict=config.strict,
+                message=(
+                    f"{_ENV_CUSTOM_CONFIG_JSON} must include 'vertex_credentials' "
+                    f"for provider '{config.provider}'"
                 ),
             )
 
