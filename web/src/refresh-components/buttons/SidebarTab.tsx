@@ -5,9 +5,9 @@ import type { IconFunctionComponent, IconProps } from "@opal/types";
 import type { Route } from "next";
 import { Interactive } from "@opal/core";
 import { Button } from "@opal/components";
-import { ContentAction } from "@opal/layouts";
+import { Content, ContentAction } from "@opal/layouts";
 import Link from "next/link";
-import { cn } from "@/lib/utils";
+import { cn, noProp } from "@/lib/utils";
 
 export interface SidebarTabProps {
   // Button states:
@@ -60,33 +60,27 @@ export default function SidebarTab({
   }
 
   return (
-    <div
-      className={cn(
-        "relative flex flex-row justify-start items-start w-full gap-1",
-        !selected && "pointer-events-none"
-      )}
-    >
+    <div className="relative">
       <Interactive.Base
         variant="sidebar"
         selected={selected}
         onClick={onClick}
-        // href={href as Route}
+        group="group/SidebarTab"
+        href={href as Route}
       >
         <Interactive.Container
           roundingVariant="compact"
           heightVariant="lg"
           widthVariant="full"
         >
-          {href && (
-            <Link
-              href={href as Route}
-              scroll={false}
-              className="absolute inset-0 rounded-08 pointer-events-auto"
-              tabIndex={-1}
-            />
+          {rightChildren && (
+            <div className="absolute right-1.5 top-0 bottom-0 pointer-events-auto flex flex-col justify-center items-center">
+              {rightChildren}
+            </div>
           )}
+
           {typeof children === "string" ? (
-            <ContentAction
+            <Content
               icon={Icon ?? undefined}
               title={children}
               sizePreset="main-ui"
@@ -94,14 +88,7 @@ export default function SidebarTab({
               prominence={
                 lowlight ? "muted-2x" : selected ? "default" : "muted"
               }
-              paddingVariant="fit"
-              rightChildren={
-                rightChildren && (
-                  <div className="relative flex items-center pointer-events-auto dbg-red w-full">
-                    {rightChildren}
-                  </div>
-                )
-              }
+              widthVariant="full"
             />
           ) : (
             <div className="flex flex-row items-center gap-2 flex-1">
@@ -111,11 +98,11 @@ export default function SidebarTab({
                 </div>
               )}
               {children}
-              {rightChildren && (
-                <div className="relative flex items-center shrink-0 pointer-events-auto">
+              {/*{rightChildren && (
+                <div className="absolute flex items-center shrink-0 pointer-events-auto">
                   {rightChildren}
                 </div>
-              )}
+              )}*/}
             </div>
           )}
         </Interactive.Container>
