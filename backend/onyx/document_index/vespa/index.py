@@ -697,7 +697,9 @@ class VespaIndex(DocumentIndex):
             vespa_document_index = VespaDocumentIndex(
                 index_name=index_name,
                 tenant_state=tenant_state,
-                large_chunks_enabled=self.index_to_large_chunks_enabled[index_name],
+                large_chunks_enabled=self.index_to_large_chunks_enabled.get(
+                    index_name, False
+                ),
                 httpx_client=self.httpx_client,
             )
 
@@ -755,7 +757,9 @@ class VespaIndex(DocumentIndex):
             vespa_document_index = VespaDocumentIndex(
                 index_name=index_name,
                 tenant_state=tenant_state,
-                large_chunks_enabled=self.index_to_large_chunks_enabled[index_name],
+                large_chunks_enabled=self.index_to_large_chunks_enabled.get(
+                    index_name, False
+                ),
                 httpx_client=self.httpx_client,
             )
             total_chunks_deleted += vespa_document_index.delete(

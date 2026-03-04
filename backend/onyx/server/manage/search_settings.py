@@ -122,9 +122,7 @@ def set_new_search_settings(
     )
 
     # Ensure the document indices have the new index immediately.
-    document_indices = get_all_document_indices(
-        search_settings, new_search_settings, db_session
-    )
+    document_indices = get_all_document_indices(search_settings, new_search_settings)
     for document_index in document_indices:
         document_index.ensure_indices_exist(
             primary_embedding_dim=search_settings.final_embedding_dim,
