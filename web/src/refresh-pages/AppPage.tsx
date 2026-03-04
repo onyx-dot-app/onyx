@@ -232,8 +232,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     hideOnboarding,
   } = useShowOnboarding({
     liveAgent,
-    isLoadingProviders: llmManager.isLoadingProviders,
-    hasAnyProvider: llmManager.hasAnyProvider,
     isLoadingChatSessions,
     chatSessionsCount: chatSessions.length,
     userId: user?.id,

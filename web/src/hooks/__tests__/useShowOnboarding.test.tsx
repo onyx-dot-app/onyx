@@ -12,14 +12,17 @@ jest.mock("@/providers/UserProvider", () => ({
   }),
 }));
 
+// Configurable mock for useProviderStatus
+const mockProviderStatus = {
+  llmProviders: [] as unknown[],
+  isLoadingProviders: false,
+  hasProviders: false,
+  providerOptions: [],
+  refreshProviderInfo: jest.fn(),
+};
+
 jest.mock("@/components/chat/ProviderContext", () => ({
-  useProviderStatus: () => ({
-    llmProviders: [],
-    isLoadingProviders: false,
-    hasProviders: false,
-    providerOptions: [],
-    refreshProviderInfo: jest.fn(),
-  }),
+  useProviderStatus: () => mockProviderStatus,
 }));
 
 jest.mock("@/hooks/useLLMProviders", () => ({
@@ -41,14 +44,18 @@ function renderUseShowOnboarding(
     userId?: string;
   } = {}
 ) {
+  // Configure the provider mock based on overrides
+  mockProviderStatus.isLoadingProviders = overrides.isLoadingProviders ?? false;
+  mockProviderStatus.hasProviders = overrides.hasAnyProvider ?? false;
+  mockProviderStatus.llmProviders = overrides.hasAnyProvider
+    ? [{ provider: "openai" }]
+    : [];
+
   const defaultParams = {
-    liveAgent: undefined,
-    isLoadingProviders: false,
-    hasAnyProvider: false,
-    isLoadingChatSessions: false,
-    chatSessionsCount: 0,
-    userId: "user-1",
-    ...overrides,
+    liveAgent: undefined as undefined,
+    isLoadingChatSessions: overrides.isLoadingChatSessions ?? false,
+    chatSessionsCount: overrides.chatSessionsCount ?? 0,
+    userId: overrides.userId ?? ("user-1" as string | undefined),
   };
 
   return renderHook((props) => useShowOnboarding(props), {
@@ -60,6 +67,11 @@ describe("useShowOnboarding", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     localStorage.clear();
+    // Reset mock to defaults
+    mockProviderStatus.llmProviders = [];
+    mockProviderStatus.isLoadingProviders = false;
+    mockProviderStatus.hasProviders = false;
+    mockProviderStatus.providerOptions = [];
   });
 
   it("returns showOnboarding=false while providers are loading", () => {
@@ -115,11 +127,12 @@ describe("useShowOnboarding", () => {
     });
     expect(result.current.showOnboarding).toBe(true);
 
-    // Re-render with same userId but provider data now available
+    // Simulate providers arriving — update the mock
+    mockProviderStatus.hasProviders = true;
+    mockProviderStatus.llmProviders = [{ provider: "openai" }];
+
     rerender({
       liveAgent: undefined,
-      isLoadingProviders: false,
-      hasAnyProvider: true,
       isLoadingChatSessions: false,
       chatSessionsCount: 0,
       userId: "user-1",
@@ -137,11 +150,12 @@ describe("useShowOnboarding", () => {
     });
     expect(result.current.showOnboarding).toBe(true);
 
-    // Change to a new userId with providers available
+    // Change to a new userId with providers available — update the mock
+    mockProviderStatus.hasProviders = true;
+    mockProviderStatus.llmProviders = [{ provider: "openai" }];
+
     rerender({
       liveAgent: undefined,
-      isLoadingProviders: false,
-      hasAnyProvider: true,
       isLoadingChatSessions: false,
       chatSessionsCount: 0,
       userId: "user-2",

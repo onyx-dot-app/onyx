@@ -25,6 +25,7 @@ function useOnboardingState(liveAgent?: MinimalPersonaSnapshot): {
   llmDescriptors: WellKnownLLMProviderDescriptor[];
   actions: OnboardingActions;
   isLoading: boolean;
+  hasProviders: boolean;
 } {
   const [state, dispatch] = useReducer(onboardingReducer, initialState);
   const { user, refreshUser } = useUser();
@@ -242,13 +243,12 @@ function useOnboardingState(liveAgent?: MinimalPersonaSnapshot): {
       reset,
     },
     isLoading: isLoadingProviders,
+    hasProviders: hasLlmProviders,
   };
 }
 
 interface UseShowOnboardingParams {
   liveAgent: MinimalPersonaSnapshot | undefined;
-  isLoadingProviders: boolean;
-  hasAnyProvider: boolean | undefined;
   isLoadingChatSessions: boolean;
   chatSessionsCount: number;
   userId: string | undefined;
@@ -256,8 +256,6 @@ interface UseShowOnboardingParams {
 
 export function useShowOnboarding({
   liveAgent,
-  isLoadingProviders,
-  hasAnyProvider,
   isLoadingChatSessions,
   chatSessionsCount,
   userId,
@@ -273,13 +271,16 @@ export function useShowOnboarding({
     setOnboardingDismissed(dismissed);
   }, [userId]);
 
-  // Initialize onboarding state
+  // Initialize onboarding state — single source of truth for provider data
   const {
     state: onboardingState,
     actions: onboardingActions,
     llmDescriptors,
     isLoading: isLoadingOnboarding,
+    hasProviders: hasAnyProvider,
   } = useOnboardingState(liveAgent);
+
+  const isLoadingProviders = isLoadingOnboarding;
 
   // Track which user we've already evaluated onboarding for.
   // Re-check when userId changes (logout/login, account switching without full reload).
