@@ -214,7 +214,7 @@ export default function AdminSidebar({
         scrollKey="admin-sidebar"
         actionButtons={
           <SidebarTab
-            leftIcon={({ className }) => (
+            icon={({ className }) => (
               <CgArrowsExpandUpLeft className={className} size={16} />
             )}
             href="/app"
@@ -240,8 +240,8 @@ export default function AdminSidebar({
                 <SidebarTab
                   key={index}
                   href={link}
-                  transient={pathname.startsWith(link)}
-                  leftIcon={({ className }) => (
+                  selected={pathname.startsWith(link)}
+                  icon={({ className }) => (
                     <Icon className={className} size={16} />
                   )}
                 >

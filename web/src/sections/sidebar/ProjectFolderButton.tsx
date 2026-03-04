@@ -137,7 +137,7 @@ const ProjectFolderButton = memo(({ project }: ProjectFolderButtonProps) => {
       <Popover onOpenChange={setPopoverOpen}>
         <Popover.Anchor>
           <SidebarTab
-            leftIcon={() => (
+            icon={() => (
               <OpalButton
                 onMouseEnter={() => handleIconHover(true)}
                 onMouseLeave={() => handleIconHover(false)}
@@ -147,12 +147,11 @@ const ProjectFolderButton = memo(({ project }: ProjectFolderButtonProps) => {
                 onClick={noProp(handleIconClick)}
               />
             )}
-            transient={
+            selected={
               activeSidebar.isProject() &&
               activeSidebar.getId() === String(project.id)
             }
             onClick={noProp(handleTextClick)}
-            focused={isEditing}
             rightChildren={
               <>
                 <Popover.Trigger asChild onClick={noProp()}>

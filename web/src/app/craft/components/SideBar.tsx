@@ -224,9 +224,8 @@ function BuildSessionButton({
         <Popover.Anchor>
           <SidebarTab
             onClick={onLoad}
-            transient={isActive}
+            selected={isActive}
             rightChildren={rightMenu}
-            focused={renaming}
           >
             {renaming ? (
               <ButtonRenaming
@@ -366,11 +365,7 @@ const MemoizedBuildSidebarInner = memo(
 
     const newBuildButton = useMemo(
       () => (
-        <SidebarTab
-          leftIcon={SvgEditBig}
-          folded={folded}
-          onClick={handleNewBuild}
-        >
+        <SidebarTab icon={SvgEditBig} folded={folded} onClick={handleNewBuild}>
           Start Crafting
         </SidebarTab>
       ),
@@ -380,10 +375,10 @@ const MemoizedBuildSidebarInner = memo(
     const buildConfigurePanel = useMemo(
       () => (
         <SidebarTab
-          leftIcon={SvgSettings}
+          icon={SvgSettings}
           folded={folded}
           href={CRAFT_CONFIGURE_PATH}
-          transient={pathname.startsWith(CRAFT_CONFIGURE_PATH)}
+          selected={pathname.startsWith(CRAFT_CONFIGURE_PATH)}
         >
           Configure
         </SidebarTab>
@@ -393,7 +388,7 @@ const MemoizedBuildSidebarInner = memo(
 
     const backToChatButton = useMemo(
       () => (
-        <SidebarTab leftIcon={SvgArrowLeft} folded={folded} href="/app">
+        <SidebarTab icon={SvgArrowLeft} folded={folded} href="/app">
           Back to Chat
         </SidebarTab>
       ),
