@@ -32,7 +32,7 @@ export default function SignInButton({
   authorizeUrl,
   authType,
 }: SignInButtonProps) {
-  let button: React.ReactNode;
+  let button: string | undefined;
   let icon: React.FunctionComponent<IconProps> | undefined;
 
   if (authType === AuthType.GOOGLE_OAUTH || authType === AuthType.CLOUD) {
@@ -59,7 +59,7 @@ export default function SignInButton({
       icon={icon}
       href={authorizeUrl}
     >
-      button
+      {button}
     </Button>
   );
 }
