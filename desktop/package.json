@@ -6,7 +6,8 @@
     "dev": "tauri dev",
     "build": "tauri build",
     "build:dmg": "tauri build --target universal-apple-darwin",
-    "build:linux": "tauri build --bundles deb,rpm"
+    "build:linux": "tauri build --bundles deb,rpm",
+    "build:linux:debug": "tauri build --bundles deb,rpm --features devtools"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.0.0"
