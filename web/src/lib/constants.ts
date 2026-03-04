@@ -51,7 +51,7 @@ export const SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED =
   process.env.ENABLE_PAID_ENTERPRISE_EDITION_FEATURES?.toLowerCase() ===
     "true" ||
   (process.env.LICENSE_ENFORCEMENT_ENABLED !== undefined &&
-    process.env.LICENSE_ENFORCEMENT_ENABLED?.toLowerCase() !== "false");
+    process.env.LICENSE_ENFORCEMENT_ENABLED.toLowerCase() !== "false");
 // NOTE: since this is a `NEXT_PUBLIC_` variable, it will be set at
 // build-time
 // TODO: consider moving this to an API call so that the api_server
