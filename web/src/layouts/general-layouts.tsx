@@ -35,7 +35,7 @@ export const widthClassmap: Record<Length, string> = {
 export const heightClassmap: Record<Length, string> = {
   auto: "h-auto",
   fit: "h-fit",
-  full: "h-full",
+  full: "h-full min-h-0",
 };
 
 /**
