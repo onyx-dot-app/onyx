@@ -111,8 +111,8 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
         if not server.server_enabled:
             return False
 
-        client = CodeInterpreterClient()
-        return client.health(use_cache=True)
+        with CodeInterpreterClient() as client:
+            return client.health(use_cache=True)
 
     def tool_definition(self) -> dict:
         return {
@@ -176,196 +176,203 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
             )
         )
 
-        # Create Code Interpreter client
-        client = CodeInterpreterClient()
+        # Create Code Interpreter client — context manager ensures
+        # session.close() is called on every exit path.
+        with CodeInterpreterClient() as client:
+            # Stage chat files for execution
+            files_to_stage: list[FileInput] = []
+            for ind, chat_file in enumerate(chat_files):
+                file_name = chat_file.filename or f"file_{ind}"
+                try:
+                    # Upload to Code Interpreter
+                    ci_file_id = client.upload_file(chat_file.content, file_name)
 
-        # Stage chat files for execution
-        files_to_stage: list[FileInput] = []
-        for ind, chat_file in enumerate(chat_files):
-            file_name = chat_file.filename or f"file_{ind}"
+                    # Stage for execution
+                    files_to_stage.append({"path": file_name, "file_id": ci_file_id})
+
+                    logger.info(f"Staged file for Python execution: {file_name}")
+
+                except Exception as e:
+                    logger.warning(f"Failed to stage file {file_name}: {e}")
+
             try:
-                # Upload to Code Interpreter
-                ci_file_id = client.upload_file(chat_file.content, file_name)
+                logger.debug(f"Executing code: {code}")
 
-                # Stage for execution
-                files_to_stage.append({"path": file_name, "file_id": ci_file_id})
+                # Execute code with streaming (falls back to batch if unavailable)
+                stdout_parts: list[str] = []
+                stderr_parts: list[str] = []
+                result_event: StreamResultEvent | None = None
 
-                logger.info(f"Staged file for Python execution: {file_name}")
+                for event in client.execute_streaming(
+                    code=code,
+                    timeout_ms=CODE_INTERPRETER_DEFAULT_TIMEOUT_MS,
+                    files=files_to_stage or None,
+                ):
+                    if isinstance(event, StreamOutputEvent):
+                        if event.stream == "stdout":
+                            stdout_parts.append(event.data)
+                        else:
+                            stderr_parts.append(event.data)
+                        # Emit incremental delta to frontend
+                        self.emitter.emit(
+                            Packet(
+                                placement=placement,
+                                obj=PythonToolDelta(
+                                    stdout=(
+                                        event.data if event.stream == "stdout" else ""
+                                    ),
+                                    stderr=(
+                                        event.data if event.stream == "stderr" else ""
+                                    ),
+                                ),
+                            )
+                        )
+                    elif isinstance(event, StreamResultEvent):
+                        result_event = event
+                    elif isinstance(event, StreamErrorEvent):
+                        raise RuntimeError(f"Code interpreter error: {event.message}")
 
-            except Exception as e:
-                logger.warning(f"Failed to stage file {file_name}: {e}")
+                if result_event is None:
+                    raise RuntimeError(
+                        "Code interpreter stream ended without a result event"
+                    )
 
-        try:
-            logger.debug(f"Executing code: {code}")
+                full_stdout = "".join(stdout_parts)
+                full_stderr = "".join(stderr_parts)
 
-            # Execute code with streaming (falls back to batch if unavailable)
-            stdout_parts: list[str] = []
-            stderr_parts: list[str] = []
-            result_event: StreamResultEvent | None = None
+                # Truncate output for LLM consumption
+                truncated_stdout = _truncate_output(
+                    full_stdout, CODE_INTERPRETER_MAX_OUTPUT_LENGTH, "stdout"
+                )
+                truncated_stderr = _truncate_output(
+                    full_stderr, CODE_INTERPRETER_MAX_OUTPUT_LENGTH, "stderr"
+                )
 
-            for event in client.execute_streaming(
-                code=code,
-                timeout_ms=CODE_INTERPRETER_DEFAULT_TIMEOUT_MS,
-                files=files_to_stage or None,
-            ):
-                if isinstance(event, StreamOutputEvent):
-                    if event.stream == "stdout":
-                        stdout_parts.append(event.data)
-                    else:
-                        stderr_parts.append(event.data)
-                    # Emit incremental delta to frontend
+                # Handle generated files
+                generated_files: list[PythonExecutionFile] = []
+                generated_file_ids: list[str] = []
+                file_ids_to_cleanup: list[str] = []
+                file_store = get_default_file_store()
+
+                for workspace_file in result_event.files:
+                    if workspace_file.kind != "file" or not workspace_file.file_id:
+                        continue
+
+                    try:
+                        # Download file from Code Interpreter
+                        file_content = client.download_file(workspace_file.file_id)
+
+                        # Determine MIME type from file extension
+                        filename = workspace_file.path.split("/")[-1]
+                        mime_type, _ = mimetypes.guess_type(filename)
+                        # Default to binary if we can't determine the type
+                        mime_type = mime_type or "application/octet-stream"
+
+                        # Save to Onyx file store
+                        onyx_file_id = file_store.save_file(
+                            content=BytesIO(file_content),
+                            display_name=filename,
+                            file_origin=FileOrigin.CHAT_UPLOAD,
+                            file_type=mime_type,
+                        )
+
+                        generated_files.append(
+                            PythonExecutionFile(
+                                filename=filename,
+                                file_link=build_full_frontend_file_url(onyx_file_id),
+                            )
+                        )
+                        generated_file_ids.append(onyx_file_id)
+
+                        # Mark for cleanup
+                        file_ids_to_cleanup.append(workspace_file.file_id)
+
+                    except Exception as e:
+                        logger.error(
+                            f"Failed to handle generated file "
+                            f"{workspace_file.path}: {e}"
+                        )
+
+                # Cleanup Code Interpreter files (generated files)
+                for ci_file_id in file_ids_to_cleanup:
+                    try:
+                        client.delete_file(ci_file_id)
+                    except Exception as e:
+                        logger.error(
+                            f"Failed to delete Code Interpreter generated "
+                            f"file {ci_file_id}: {e}"
+                        )
+
+                # Cleanup staged input files
+                for file_mapping in files_to_stage:
+                    try:
+                        client.delete_file(file_mapping["file_id"])
+                    except Exception as e:
+                        logger.error(
+                            f"Failed to delete Code Interpreter staged "
+                            f"file {file_mapping['file_id']}: {e}"
+                        )
+
+                # Emit file_ids once files are processed
+                if generated_file_ids:
                     self.emitter.emit(
                         Packet(
                             placement=placement,
-                            obj=PythonToolDelta(
-                                stdout=event.data if event.stream == "stdout" else "",
-                                stderr=event.data if event.stream == "stderr" else "",
-                            ),
+                            obj=PythonToolDelta(file_ids=generated_file_ids),
                         )
                     )
-                elif isinstance(event, StreamResultEvent):
-                    result_event = event
-                elif isinstance(event, StreamErrorEvent):
-                    raise RuntimeError(f"Code interpreter error: {event.message}")
 
-            if result_event is None:
-                raise RuntimeError(
-                    "Code interpreter stream ended without a result event"
+                # Build result
+                result = LlmPythonExecutionResult(
+                    stdout=truncated_stdout,
+                    stderr=truncated_stderr,
+                    exit_code=result_event.exit_code,
+                    timed_out=result_event.timed_out,
+                    generated_files=generated_files,
+                    error=(None if result_event.exit_code == 0 else truncated_stderr),
                 )
 
-            full_stdout = "".join(stdout_parts)
-            full_stderr = "".join(stderr_parts)
+                # Serialize result for LLM
+                adapter = TypeAdapter(LlmPythonExecutionResult)
+                llm_response = adapter.dump_json(result).decode()
 
-            # Truncate output for LLM consumption
-            truncated_stdout = _truncate_output(
-                full_stdout, CODE_INTERPRETER_MAX_OUTPUT_LENGTH, "stdout"
-            )
-            truncated_stderr = _truncate_output(
-                full_stderr, CODE_INTERPRETER_MAX_OUTPUT_LENGTH, "stderr"
-            )
+                return ToolResponse(
+                    rich_response=PythonToolRichResponse(
+                        generated_files=generated_files,
+                    ),
+                    llm_facing_response=llm_response,
+                )
 
-            # Handle generated files
-            generated_files: list[PythonExecutionFile] = []
-            generated_file_ids: list[str] = []
-            file_ids_to_cleanup: list[str] = []
-            file_store = get_default_file_store()
+            except Exception as e:
+                logger.error(f"Python execution failed: {e}")
+                error_msg = str(e)
 
-            for workspace_file in result_event.files:
-                if workspace_file.kind != "file" or not workspace_file.file_id:
-                    continue
-
-                try:
-                    # Download file from Code Interpreter
-                    file_content = client.download_file(workspace_file.file_id)
-
-                    # Determine MIME type from file extension
-                    filename = workspace_file.path.split("/")[-1]
-                    mime_type, _ = mimetypes.guess_type(filename)
-                    # Default to binary if we can't determine the type
-                    mime_type = mime_type or "application/octet-stream"
-
-                    # Save to Onyx file store
-                    onyx_file_id = file_store.save_file(
-                        content=BytesIO(file_content),
-                        display_name=filename,
-                        file_origin=FileOrigin.CHAT_UPLOAD,
-                        file_type=mime_type,
-                    )
-
-                    generated_files.append(
-                        PythonExecutionFile(
-                            filename=filename,
-                            file_link=build_full_frontend_file_url(onyx_file_id),
-                        )
-                    )
-                    generated_file_ids.append(onyx_file_id)
-
-                    # Mark for cleanup
-                    file_ids_to_cleanup.append(workspace_file.file_id)
-
-                except Exception as e:
-                    logger.error(
-                        f"Failed to handle generated file {workspace_file.path}: {e}"
-                    )
-
-            # Cleanup Code Interpreter files (generated files)
-            for ci_file_id in file_ids_to_cleanup:
-                try:
-                    client.delete_file(ci_file_id)
-                except Exception as e:
-                    logger.error(
-                        f"Failed to delete Code Interpreter generated file {ci_file_id}: {e}"
-                    )
-
-            # Cleanup staged input files
-            for file_mapping in files_to_stage:
-                try:
-                    client.delete_file(file_mapping["file_id"])
-                except Exception as e:
-                    logger.error(
-                        f"Failed to delete Code Interpreter staged file {file_mapping['file_id']}: {e}"
-                    )
-
-            # Emit file_ids once files are processed
-            if generated_file_ids:
+                # Emit error delta
                 self.emitter.emit(
                     Packet(
                         placement=placement,
-                        obj=PythonToolDelta(file_ids=generated_file_ids),
+                        obj=PythonToolDelta(
+                            stdout="",
+                            stderr=error_msg,
+                            file_ids=[],
+                        ),
                     )
                 )
 
-            # Build result
-            result = LlmPythonExecutionResult(
-                stdout=truncated_stdout,
-                stderr=truncated_stderr,
-                exit_code=result_event.exit_code,
-                timed_out=result_event.timed_out,
-                generated_files=generated_files,
-                error=None if result_event.exit_code == 0 else truncated_stderr,
-            )
-
-            # Serialize result for LLM
-            adapter = TypeAdapter(LlmPythonExecutionResult)
-            llm_response = adapter.dump_json(result).decode()
-
-            return ToolResponse(
-                rich_response=PythonToolRichResponse(
-                    generated_files=generated_files,
-                ),
-                llm_facing_response=llm_response,
-            )
-
-        except Exception as e:
-            logger.error(f"Python execution failed: {e}")
-            error_msg = str(e)
-
-            # Emit error delta
-            self.emitter.emit(
-                Packet(
-                    placement=placement,
-                    obj=PythonToolDelta(
-                        stdout="",
-                        stderr=error_msg,
-                        file_ids=[],
-                    ),
+                # Return error result
+                result = LlmPythonExecutionResult(
+                    stdout="",
+                    stderr=error_msg,
+                    exit_code=-1,
+                    timed_out=False,
+                    generated_files=[],
+                    error=error_msg,
                 )
-            )
 
-            # Return error result
-            result = LlmPythonExecutionResult(
-                stdout="",
-                stderr=error_msg,
-                exit_code=-1,
-                timed_out=False,
-                generated_files=[],
-                error=error_msg,
-            )
+                adapter = TypeAdapter(LlmPythonExecutionResult)
+                llm_response = adapter.dump_json(result).decode()
 
-            adapter = TypeAdapter(LlmPythonExecutionResult)
-            llm_response = adapter.dump_json(result).decode()
-
-            return ToolResponse(
-                rich_response=None,
-                llm_facing_response=llm_response,
-            )
+                return ToolResponse(
+                    rich_response=None,
+                    llm_facing_response=llm_response,
+                )

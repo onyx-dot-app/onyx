@@ -819,7 +819,10 @@ def fetch_chat_file(
         # Check if a converted text file exists for .docx files
         txt_file_name = docx_to_txt_filename(original_file_name)
         txt_file_id = os.path.join(os.path.dirname(file_id), txt_file_name)
-        txt_file_record = file_store.read_file_record(txt_file_id)
+        try:
+            txt_file_record = file_store.read_file_record(txt_file_id)
+        except RuntimeError:
+            txt_file_record = None
         if txt_file_record:
             file_record = txt_file_record
             file_id = txt_file_id
