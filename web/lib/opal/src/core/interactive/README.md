@@ -104,6 +104,46 @@ The foundational layer for all clickable surfaces in the design system. Defines 
 | **Active** | `action-link-05` | `action-link-05` |
 | **Disabled** | `action-link-03` | `action-link-03` |
 
+### Sidebar (unselected)
+
+**Background**
+
+| | Light |
+|---|---|
+| **Rest** | `transparent` |
+| **Hover / Transient** | `background-tint-03` |
+| **Active** | `background-tint-00` |
+| **Disabled** | `transparent` |
+
+**Foreground**
+
+| | Light |
+|---|---|
+| **Rest** | `text-03` |
+| **Hover / Transient** | `text-04` |
+| **Active** | `text-04` |
+| **Disabled** | `text-01` |
+
+### Sidebar (selected)
+
+**Background**
+
+| | Light |
+|---|---|
+| **Rest** | `background-neutral-00` |
+| **Hover / Transient** | `background-tint-03` |
+| **Active** | `background-tint-00` |
+| **Disabled** | `transparent` |
+
+**Foreground**
+
+| | Light |
+|---|---|
+| **Rest** | `text-03` (icon: `text-02`) |
+| **Hover / Transient** | `text-04` |
+| **Active** | `text-04` |
+| **Disabled** | `text-01` |
+
 ## Sub-components
 
 | Sub-component | Role |

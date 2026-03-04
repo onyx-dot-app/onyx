@@ -26,18 +26,28 @@ type InteractiveBaseSelectVariantProps = {
   selected?: boolean;
 };
 
+type InteractiveBaseSidebarProminenceTypes = "light";
+type InteractiveBaseSidebarVariantProps = {
+  variant: "sidebar";
+  prominence?: InteractiveBaseSidebarProminenceTypes;
+  selected?: boolean;
+};
+
 /**
  * Discriminated union tying `variant` to `prominence`.
  *
  * - `"none"` accepts no prominence (`prominence` must not be provided)
  * - `"select"` accepts an optional prominence (defaults to `"light"`) and
  *   an optional `selected` boolean that switches foreground to action-link colours
+ * - `"sidebar"` accepts an optional prominence (defaults to `"primary"`) and
+ *   an optional `selected` boolean for the focused/active-item state
  * - `"default"`, `"action"`, and `"danger"` accept an optional prominence
  *   (defaults to `"primary"`)
  */
 type InteractiveBaseVariantProps =
   | { variant?: "none"; prominence?: never; selected?: never }
   | InteractiveBaseSelectVariantProps
+  | InteractiveBaseSidebarVariantProps
   | {
       variant?: InteractiveBaseVariantTypes;
       prominence?: InteractiveBaseProminenceTypes;
@@ -218,7 +228,8 @@ function InteractiveBase({
   ...props
 }: InteractiveBaseProps) {
   const effectiveProminence =
-    prominence ?? (variant === "select" ? "light" : "primary");
+    prominence ??
+    (variant === "select" || variant === "sidebar" ? "light" : "primary");
   const classes = cn(
     "interactive",
     !props.onClick && !href && "!cursor-default !select-auto",
@@ -482,6 +493,8 @@ export {
   type InteractiveBaseProps,
   type InteractiveBaseVariantProps,
   type InteractiveBaseSelectVariantProps,
+  type InteractiveBaseSidebarVariantProps,
+  type InteractiveBaseSidebarProminenceTypes,
   type InteractiveContainerProps,
   type InteractiveContainerRoundingVariant,
 };

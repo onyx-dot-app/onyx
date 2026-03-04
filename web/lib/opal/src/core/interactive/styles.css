@@ -419,3 +419,52 @@
   ) {
   @apply bg-background-tint-00;
 }
+
+/* ---------------------------------------------------------------------------
+   Sidebar + Light
+
+   Designed for sidebar navigation items. Transparent at rest, subtle tint
+   on hover, with an optional `selected` state that shows a neutral
+   background and dimmer icon colour.
+
+   `data-transient` forces the hover background (same as all other variants).
+   `data-selected` switches to the focused/active-item visual treatment.
+   --------------------------------------------------------------------------- */
+.interactive[data-interactive-base-variant="sidebar"][data-interactive-base-prominence="light"] {
+  @apply bg-transparent;
+  --interactive-foreground: var(--text-03);
+}
+.interactive[data-interactive-base-variant="sidebar"][data-interactive-base-prominence="light"]:hover:not(
+    [data-disabled]
+  ),
+.interactive[data-interactive-base-variant="sidebar"][data-interactive-base-prominence="light"][data-transient="true"]:not(
+    [data-disabled]
+  ) {
+  @apply bg-background-tint-03;
+  --interactive-foreground: var(--text-04);
+}
+.interactive[data-interactive-base-variant="sidebar"][data-interactive-base-prominence="light"]:active:not(
+    [data-disabled]
+  ) {
+  @apply bg-background-tint-00;
+  --interactive-foreground: var(--text-04);
+}
+.interactive[data-interactive-base-variant="sidebar"][data-interactive-base-prominence="light"][data-disabled] {
+  @apply bg-transparent;
+  --interactive-foreground: var(--text-01);
+}
+
+/* Selected — neutral background with dimmer icon.
+   Uses a negated selector so hover/transient/active rules (equal specificity,
+   later in source order) naturally override this when those states are active. */
+.interactive[data-interactive-base-variant="sidebar"][data-interactive-base-prominence="light"][data-selected="true"]:not(
+    [data-disabled]
+  ):not(:hover):not([data-transient="true"]):not(:active) {
+  @apply bg-background-neutral-00;
+  --interactive-foreground: var(--text-03);
+  --interactive-foreground-icon: var(--text-02);
+}
+.interactive[data-interactive-base-variant="sidebar"][data-interactive-base-prominence="light"][data-selected="true"][data-disabled] {
+  @apply bg-transparent;
+  --interactive-foreground: var(--text-01);
+}
