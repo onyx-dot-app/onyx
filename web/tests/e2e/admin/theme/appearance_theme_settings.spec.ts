@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "@tests/e2e/fixtures/eeFeatures";
 import { loginAs } from "@tests/e2e/utils/auth";
 
 test.describe("Appearance Theme Settings @exclusive", () => {
@@ -12,21 +12,21 @@ test.describe("Appearance Theme Settings @exclusive", () => {
     consentPrompt: "I agree to the terms",
   };
 
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async ({ page, eeEnabled }) => {
+    test.skip(
+      !eeEnabled,
+      "Enterprise license not active — skipping theme tests"
+    );
+
+    // Fresh session — the eeEnabled fixture already logged in to check the
+    // setting, so clear cookies and re-login for a clean test state.
     await page.context().clearCookies();
     await loginAs(page, "admin");
 
-    // Navigate first so localStorage is accessible (API-based login
-    // doesn't navigate, leaving the page on about:blank).
     await page.goto("/admin/theme");
-    await page.waitForLoadState("networkidle");
-
-    // Skip the entire test when Enterprise features are not licensed.
-    // The /admin/theme page is gated behind ee_features_enabled and
-    // redirects to /chat instead of rendering the settings form.
-    if (page.url().includes("/chat")) {
-      test.skip(true, "Enterprise license not active — skipping theme tests");
-    }
+    await expect(
+      page.locator('[data-label="application-name-input"]')
+    ).toBeVisible({ timeout: 10_000 });
 
     // Clear localStorage to ensure consent modal shows
     await page.evaluate(() => {
