@@ -349,7 +349,7 @@ def create_config(
     except OnyxError:
         raise
     except Exception as e:
-        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, str(e))
 
 
 @admin_router.get("/config")
@@ -476,7 +476,7 @@ def update_config(
     except OnyxError:
         raise
     except Exception as e:
-        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, str(e))
 
 
 @admin_router.delete("/config/{image_provider_id}")
