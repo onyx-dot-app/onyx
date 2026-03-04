@@ -43,12 +43,6 @@ export class HTTPStreamingTTSPlayer {
     voice?: string,
     speed: number = 1.0
   ): Promise<void> {
-    console.log("[StreamingTTS] speak() called:", {
-      text: text.substring(0, 50),
-      voice,
-      speed,
-    });
-
     // Cleanup any previous playback
     this.cleanup();
 
@@ -62,17 +56,12 @@ export class HTTPStreamingTTSPlayer {
     params.set("speed", speed.toString());
 
     const url = `${this.getAPIUrl()}?${params}`;
-    console.log("[StreamingTTS] Fetching from URL:", url);
 
     // Check if MediaSource is supported
     if (!window.MediaSource || !MediaSource.isTypeSupported("audio/mpeg")) {
-      console.log("[StreamingTTS] MediaSource not supported, using fallback");
       // Fallback to simple buffered playback
       return this.fallbackSpeak(url);
     }
-    console.log(
-      "[StreamingTTS] MediaSource is supported, using streaming playback"
-    );
 
     // Create MediaSource and audio element
     this.mediaSource = new MediaSource();
@@ -132,22 +121,14 @@ export class HTTPStreamingTTSPlayer {
 
     // Start fetching and streaming audio
     try {
-      console.log("[StreamingTTS] Starting fetch request...");
       const response = await fetch(url, {
         method: "POST",
         signal: this.abortController.signal,
         credentials: "include", // Include cookies for authentication
       });
 
-      console.log("[StreamingTTS] Response status:", response.status);
-
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(
-          "[StreamingTTS] TTS request failed:",
-          response.status,
-          errorText
-        );
         throw new Error(
           `TTS request failed: ${response.status} - ${errorText}`
         );
@@ -160,16 +141,11 @@ export class HTTPStreamingTTSPlayer {
 
       // Start playback as soon as we have some data
       let firstChunk = true;
-      let totalBytesReceived = 0;
 
       while (true) {
         const { done, value } = await reader.read();
 
         if (done) {
-          console.log(
-            "[StreamingTTS] Stream complete, total bytes:",
-            totalBytesReceived
-          );
           this.streamComplete = true;
           // End the stream when all chunks are appended
           this.finalizeStream();
@@ -177,42 +153,25 @@ export class HTTPStreamingTTSPlayer {
         }
 
         if (value) {
-          totalBytesReceived += value.length;
-          console.log(
-            "[StreamingTTS] Received chunk:",
-            value.length,
-            "bytes, total:",
-            totalBytesReceived
-          );
           this.pendingChunks.push(value);
           this.processNextChunk();
 
           // Start playback after first chunk
           if (firstChunk && this.audioElement) {
             firstChunk = false;
-            console.log("[StreamingTTS] Starting audio playback...");
             // Small delay to buffer a bit before starting
             setTimeout(() => {
-              this.audioElement
-                ?.play()
-                .then(() => {
-                  console.log(
-                    "[StreamingTTS] Audio playback started successfully"
-                  );
-                })
-                .catch((err) => {
-                  console.error("[StreamingTTS] Playback start error:", err);
-                });
+              this.audioElement?.play().catch(() => {
+                // Ignore playback start errors
+              });
             }, 100);
           }
         }
       }
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") {
-        console.log("[StreamingTTS] Request was aborted");
         return;
       }
-      console.error("[StreamingTTS] Error during streaming:", err);
       this.onError?.(err instanceof Error ? err.message : "TTS error");
       throw err;
     }
@@ -241,8 +200,7 @@ export class HTTPStreamingTTSPlayer {
           chunk.byteOffset + chunk.byteLength
         ) as ArrayBuffer;
         this.sourceBuffer.appendBuffer(buffer);
-      } catch (err) {
-        console.error("Error appending buffer:", err);
+      } catch {
         this.isAppending = false;
         // Try next chunk
         this.processNextChunk();
@@ -279,32 +237,18 @@ export class HTTPStreamingTTSPlayer {
    * Buffers all audio before playing.
    */
   private async fallbackSpeak(url: string): Promise<void> {
-    console.log("[StreamingTTS] Using fallback playback for URL:", url);
-
     const response = await fetch(url, {
       method: "POST",
       signal: this.abortController?.signal,
       credentials: "include", // Include cookies for authentication
     });
 
-    console.log("[StreamingTTS Fallback] Response status:", response.status);
-
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(
-        "[StreamingTTS Fallback] Request failed:",
-        response.status,
-        errorText
-      );
       throw new Error(`TTS request failed: ${response.status} - ${errorText}`);
     }
 
     const audioData = await response.arrayBuffer();
-    console.log(
-      "[StreamingTTS Fallback] Received audio data:",
-      audioData.byteLength,
-      "bytes"
-    );
 
     const blob = new Blob([audioData], { type: "audio/mpeg" });
     const audioUrl = URL.createObjectURL(blob);
@@ -312,25 +256,21 @@ export class HTTPStreamingTTSPlayer {
     this.audioElement = new Audio(audioUrl);
 
     this.audioElement.onplay = () => {
-      console.log("[StreamingTTS Fallback] Audio started playing");
       this.isPlaying = true;
       this.onPlayingChange?.(true);
     };
 
     this.audioElement.onended = () => {
-      console.log("[StreamingTTS Fallback] Audio ended");
       this.isPlaying = false;
       this.onPlayingChange?.(false);
       URL.revokeObjectURL(audioUrl);
     };
 
-    this.audioElement.onerror = (e) => {
-      console.error("[StreamingTTS Fallback] Audio element error:", e);
+    this.audioElement.onerror = () => {
+      this.onError?.("Audio playback error");
     };
 
-    console.log("[StreamingTTS Fallback] Starting playback...");
     await this.audioElement.play();
-    console.log("[StreamingTTS Fallback] play() resolved");
   }
 
   /**
@@ -496,7 +436,9 @@ export class WebSocketStreamingTTSPlayer {
           if (!this.hasStartedPlayback && this.audioElement) {
             this.hasStartedPlayback = true;
             setTimeout(() => {
-              this.audioElement?.play().catch(console.error);
+              this.audioElement?.play().catch(() => {
+                // Ignore playback errors
+              });
             }, 100);
           }
         } else {
@@ -540,8 +482,7 @@ export class WebSocketStreamingTTSPlayer {
           chunk.byteOffset + chunk.byteLength
         ) as ArrayBuffer;
         this.sourceBuffer.appendBuffer(buffer);
-      } catch (err) {
-        console.error("Error appending buffer:", err);
+      } catch {
         this.isAppending = false;
         this.processNextChunk();
       }

@@ -115,6 +115,7 @@ def delete_voice_provider_endpoint(
 ) -> Response:
     """Delete a voice provider."""
     delete_voice_provider(db_session, provider_id)
+    db_session.commit()
     return Response(status_code=204)
 
 

@@ -10,9 +10,11 @@ from fastapi import WebSocket
 from fastapi import WebSocketDisconnect
 from sqlalchemy.orm import Session
 
+from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.db.engine.sql_engine import get_sqlalchemy_engine
 from onyx.db.voice import fetch_default_stt_provider
 from onyx.db.voice import fetch_default_tts_provider
+from onyx.redis.redis_pool import retrieve_auth_token_data_from_redis
 from onyx.utils.logger import setup_logger
 from onyx.voice.factory import get_voice_provider
 from onyx.voice.interface import StreamingSynthesizerProtocol
@@ -22,6 +24,30 @@ from onyx.voice.interface import TranscriptResult
 logger = setup_logger()
 
 router = APIRouter(prefix="/voice")
+
+
+async def verify_websocket_auth(websocket: WebSocket) -> bool:
+    """
+    Verify WebSocket authentication using cookie-based auth.
+    Returns True if authenticated, False otherwise.
+    """
+    # Check for auth cookie
+    auth_token = websocket.cookies.get(FASTAPI_USERS_AUTH_COOKIE_NAME)
+    if not auth_token:
+        logger.warning("WebSocket auth: no auth cookie found")
+        return False
+
+    # Verify token in Redis
+    try:
+        token_data = await retrieve_auth_token_data_from_redis(websocket)
+        if token_data is None:
+            logger.warning("WebSocket auth: invalid or expired token")
+            return False
+        return True
+    except Exception as e:
+        logger.error(f"WebSocket auth: error verifying token: {e}")
+        return False
+
 
 # Transcribe every ~0.5 seconds of audio (webm/opus is ~2-4KB/s, so ~1-2KB per 0.5s)
 MIN_CHUNK_BYTES = 1500
@@ -277,6 +303,18 @@ async def websocket_transcribe(websocket: WebSocket) -> None:
         logger.error(f"WebSocket transcribe: failed to accept connection: {e}")
         return
 
+    # Verify authentication
+    if not await verify_websocket_auth(websocket):
+        logger.warning("WebSocket transcribe: authentication failed")
+        try:
+            await websocket.send_json(
+                {"type": "error", "message": "Authentication required"}
+            )
+            await websocket.close(code=4401)
+        except Exception:
+            pass
+        return
+
     streaming_transcriber = None
     provider = None
 
@@ -472,6 +510,18 @@ async def websocket_synthesize(websocket: WebSocket) -> None:
         logger.info("WebSocket synthesize: connection accepted")
     except Exception as e:
         logger.error(f"WebSocket synthesize: failed to accept connection: {e}")
+        return
+
+    # Verify authentication
+    if not await verify_websocket_auth(websocket):
+        logger.warning("WebSocket synthesize: authentication failed")
+        try:
+            await websocket.send_json(
+                {"type": "error", "message": "Authentication required"}
+            )
+            await websocket.close(code=4401)
+        except Exception:
+            pass
         return
 
     streaming_synthesizer: StreamingSynthesizerProtocol | None = None

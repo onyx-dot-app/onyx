@@ -54,23 +54,10 @@ function MicrophoneButton({
   // Handler for VAD-triggered auto-send (when server detects silence)
   const handleFinalTranscript = useCallback(
     (text: string) => {
-      console.log(
-        "MicrophoneButton: VAD triggered final transcript:",
-        text,
-        "chatState:",
-        chatState
-      );
       onTranscription(text);
       // Only auto-send if chat is ready for input (not streaming)
       if (autoSend && onAutoSend && chatState === "input") {
-        console.log("MicrophoneButton: VAD auto-sending");
         onAutoSend(text);
-      } else if (chatState !== "input") {
-        console.log(
-          "MicrophoneButton: skipping auto-send, chat is not ready (state:",
-          chatState,
-          ")"
-        );
       }
     },
     [onTranscription, autoSend, onAutoSend, chatState]
@@ -99,23 +86,12 @@ function MicrophoneButton({
 
   // Update input with live transcript as user speaks
   useEffect(() => {
-    console.log(
-      "MicrophoneButton: liveTranscript effect - isRecording:",
-      isRecording,
-      "liveTranscript:",
-      liveTranscript
-    );
     if (isRecording && liveTranscript) {
-      console.log(
-        "MicrophoneButton: calling onTranscription with:",
-        liveTranscript
-      );
       onTranscription(liveTranscript);
     }
   }, [isRecording, liveTranscript, onTranscription]);
 
   const handleClick = useCallback(async () => {
-    console.log("MicrophoneButton handleClick: isRecording =", isRecording);
     if (isRecording) {
       // When recording, clicking the mic button stops recording
       await stopRecording();
@@ -132,18 +108,6 @@ function MicrophoneButton({
 
   // Auto-start listening when TTS finishes (only if autoListen is enabled)
   useEffect(() => {
-    console.log(
-      "MicrophoneButton: autoListen effect - wasTTSPlaying:",
-      wasTTSPlayingRef.current,
-      "isTTSPlaying:",
-      isTTSPlaying,
-      "isTTSLoading:",
-      isTTSLoading,
-      "autoListen:",
-      autoListen,
-      "disabled:",
-      disabled
-    );
     if (
       wasTTSPlayingRef.current &&
       !isTTSPlaying &&
@@ -151,14 +115,9 @@ function MicrophoneButton({
       autoListen &&
       !disabled
     ) {
-      console.log("MicrophoneButton: TTS finished, auto-starting recording");
-      startRecording()
-        .then(() =>
-          console.log("MicrophoneButton: auto-start recording succeeded")
-        )
-        .catch((e) =>
-          console.error("MicrophoneButton: auto-start recording failed:", e)
-        );
+      startRecording().catch(() => {
+        // Silently ignore auto-start failures
+      });
     }
     wasTTSPlayingRef.current = isTTSPlaying || isTTSLoading;
   }, [isTTSPlaying, isTTSLoading, autoListen, disabled, startRecording]);
@@ -168,21 +127,6 @@ function MicrophoneButton({
   useEffect(() => {
     const wasStreaming = prevChatStateRef.current === "streaming";
     const nowInput = chatState === "input";
-
-    console.log(
-      "MicrophoneButton: chatState effect - prev:",
-      prevChatStateRef.current,
-      "current:",
-      chatState,
-      "autoListen:",
-      autoListen,
-      "disabled:",
-      disabled,
-      "isTTSPlaying:",
-      isTTSPlaying,
-      "isTTSLoading:",
-      isTTSLoading
-    );
 
     // Only auto-start if:
     // 1. Chat just finished streaming (was streaming, now input)
@@ -197,19 +141,9 @@ function MicrophoneButton({
       !isTTSPlaying &&
       !isTTSLoading
     ) {
-      console.log(
-        "MicrophoneButton: chat response finished, auto-starting recording"
-      );
-      startRecording()
-        .then(() =>
-          console.log("MicrophoneButton: auto-start after response succeeded")
-        )
-        .catch((e) =>
-          console.error(
-            "MicrophoneButton: auto-start after response failed:",
-            e
-          )
-        );
+      startRecording().catch(() => {
+        // Silently ignore auto-start failures
+      });
     }
 
     prevChatStateRef.current = chatState;
@@ -236,15 +170,6 @@ function MicrophoneButton({
 
   // Recording = darkened (primary), not recording = light (tertiary)
   const prominence = isRecording ? "primary" : "tertiary";
-
-  console.log(
-    "MicrophoneButton render: isRecording:",
-    isRecording,
-    "isProcessing:",
-    isProcessing,
-    "isDisabled:",
-    isDisabled
-  );
 
   return (
     <Button

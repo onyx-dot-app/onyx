@@ -48,13 +48,15 @@ export function useVoicePlayback(): UseVoicePlaybackReturn {
       try {
         abortControllerRef.current = new AbortController();
 
-        const response = await fetch("/api/voice/synthesize", {
+        const params = new URLSearchParams();
+        params.set("text", text);
+        if (voice) params.set("voice", voice);
+        if (speed !== undefined) params.set("speed", speed.toString());
+
+        const response = await fetch(`/api/voice/synthesize?${params}`, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ text, voice, speed }),
           signal: abortControllerRef.current.signal,
+          credentials: "include",
         });
 
         if (!response.ok) {

@@ -1,6 +1,7 @@
 import asyncio
 from collections.abc import AsyncIterator
 from typing import Any
+from xml.sax.saxutils import escape
 
 import aiohttp
 
@@ -267,10 +268,11 @@ class AzureVoiceProvider(VoiceProviderInterface):
         speed = max(0.5, min(2.0, speed))
         rate = f"{int((speed - 1) * 100):+d}%"  # e.g., 1.0 -> "+0%", 1.5 -> "+50%"
 
-        # Build SSML
+        # Build SSML with escaped text to prevent injection
+        escaped_text = escape(text)
         ssml = f"""<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='en-US'>
             <voice name='{voice_name}'>
-                <prosody rate='{rate}'>{text}</prosody>
+                <prosody rate='{rate}'>{escaped_text}</prosody>
             </voice>
         </speak>"""
 
@@ -309,7 +311,9 @@ class AzureVoiceProvider(VoiceProviderInterface):
         ]
 
     def supports_streaming_stt(self) -> bool:
-        return True
+        # Disabled: Azure STT requires 16kHz audio but client sends 24kHz.
+        # Re-enable after implementing audio resampling.
+        return False
 
     def supports_streaming_tts(self) -> bool:
         """Azure supports real-time streaming TTS via Speech SDK."""

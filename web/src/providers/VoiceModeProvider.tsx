@@ -95,6 +95,7 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
   const mediaSourceRef = useRef<MediaSource | null>(null);
   const sourceBufferRef = useRef<SourceBuffer | null>(null);
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
+  const audioUrlRef = useRef<string | null>(null);
   const pendingChunksRef = useRef<Uint8Array[]>([]);
   const isAppendingRef = useRef(false);
   const isPlayingRef = useRef(false);
@@ -130,8 +131,7 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
           chunk.byteOffset + chunk.byteLength
         ) as ArrayBuffer;
         sourceBufferRef.current.appendBuffer(buffer);
-      } catch (err) {
-        console.error("[TTS] Error appending buffer:", err);
+      } catch {
         isAppendingRef.current = false;
         processNextChunk();
       }
@@ -163,14 +163,14 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
   const initMediaSource = useCallback(async () => {
     // Check if MediaSource is supported
     if (!window.MediaSource || !MediaSource.isTypeSupported("audio/mpeg")) {
-      console.error("[TTS] MediaSource not supported");
       return false;
     }
 
     // Create MediaSource and audio element
     mediaSourceRef.current = new MediaSource();
     audioElementRef.current = new Audio();
-    audioElementRef.current.src = URL.createObjectURL(mediaSourceRef.current);
+    audioUrlRef.current = URL.createObjectURL(mediaSourceRef.current);
+    audioElementRef.current.src = audioUrlRef.current;
 
     audioElementRef.current.onplay = () => {
       if (!isPlayingRef.current) {
@@ -185,7 +185,6 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
     };
 
     audioElementRef.current.onerror = () => {
-      console.error("[TTS] Audio playback error");
       isPlayingRef.current = false;
       setIsTTSPlaying(false);
     };
@@ -235,8 +234,8 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
         hasStartedPlaybackRef.current = true;
         // Small delay to buffer a bit before starting
         setTimeout(() => {
-          audioElementRef.current?.play().catch((err) => {
-            console.error("[TTS] Playback start error:", err);
+          audioElementRef.current?.play().catch(() => {
+            // Ignore playback errors
           });
         }, 100);
       }
@@ -268,17 +267,14 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
     // Initialize MediaSource first
     const initialized = await initMediaSource();
     if (!initialized) {
-      console.error("[TTS] Failed to initialize MediaSource");
       return;
     }
 
     const wsUrl = getWebSocketUrl();
 
-    console.log("[TTS] Connecting to WebSocket:", wsUrl);
     const ws = new WebSocket(wsUrl);
 
     ws.onopen = () => {
-      console.log("[TTS] WebSocket connected");
       // Send initial config
       ws.send(
         JSON.stringify({
@@ -303,11 +299,8 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
         try {
           const msg = JSON.parse(event.data);
           if (msg.type === "audio_done") {
-            console.log("[TTS] Audio generation complete");
             setIsTTSLoading(false);
             finalizeStream();
-          } else if (msg.type === "error") {
-            console.error("[TTS] WebSocket error:", msg.message);
           }
         } catch {
           // Ignore parse errors
@@ -315,12 +308,11 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
       }
     };
 
-    ws.onerror = (err) => {
-      console.error("[TTS] WebSocket error:", err);
+    ws.onerror = () => {
+      // WebSocket error handled by onclose
     };
 
     ws.onclose = () => {
-      console.log("[TTS] WebSocket closed");
       wsRef.current = null;
       finalizeStream();
     };
@@ -340,10 +332,6 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
     (text: string) => {
       if (!text.trim()) return;
 
-      console.log(
-        "[TTS] Sending:",
-        text.substring(0, 50) + (text.length > 50 ? "..." : "")
-      );
       setIsTTSLoading(true);
       setSpokenText((prev) => (prev ? prev + " " + text : text));
 
@@ -437,7 +425,6 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
 
             const chunk = nowUncommitted.slice(0, breakPoint).trim();
             if (chunk.length > 0) {
-              console.log("[TTS] Fast start:", chunk.substring(0, 40));
               sendTextToTTS(chunk);
               committedPositionRef.current += breakPoint;
               hasSpokenFirstChunkRef.current = true;
@@ -478,6 +465,12 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
     if (fastStartTimerRef.current) {
       clearTimeout(fastStartTimerRef.current);
       fastStartTimerRef.current = null;
+    }
+
+    // Revoke blob URL to prevent memory leak
+    if (audioUrlRef.current) {
+      URL.revokeObjectURL(audioUrlRef.current);
+      audioUrlRef.current = null;
     }
 
     // Stop audio element
@@ -538,6 +531,9 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
     return () => {
       if (flushTimerRef.current) clearTimeout(flushTimerRef.current);
       if (fastStartTimerRef.current) clearTimeout(fastStartTimerRef.current);
+      if (audioUrlRef.current) {
+        URL.revokeObjectURL(audioUrlRef.current);
+      }
       if (wsRef.current) {
         try {
           wsRef.current.close();

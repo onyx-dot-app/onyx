@@ -104,7 +104,7 @@ def delete_voice_provider(db_session: Session, provider_id: int) -> None:
     provider = fetch_voice_provider_by_id(db_session, provider_id)
     if provider:
         db_session.delete(provider)
-        db_session.commit()
+        db_session.flush()
 
 
 def set_default_stt_provider(*, db_session: Session, provider_id: int) -> VoiceProvider:
