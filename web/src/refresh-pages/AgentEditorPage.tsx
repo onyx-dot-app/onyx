@@ -1083,14 +1083,12 @@ export default function AgentEditorPage({
                           return;
                         }
 
-                        setFieldValue("shared_user_ids", userIds);
-                        setFieldValue("shared_group_ids", groupIds);
-                        setFieldValue("is_public", isPublic);
-                        setFieldValue("label_ids", labelIds);
-                        // Sharing updates are persisted independently from featured.
-                        // Refresh now so UI reflects share changes even if featured fails.
-                        await refreshAgents();
-                        refreshAgent?.();
+                        const applySharingFields = () => {
+                          setFieldValue("shared_user_ids", userIds);
+                          setFieldValue("shared_group_ids", groupIds);
+                          setFieldValue("is_public", isPublic);
+                          setFieldValue("label_ids", labelIds);
+                        };
 
                         if (canUpdateFeaturedStatus) {
                           const featuredError = await updateAgentFeaturedStatus(
@@ -1098,17 +1096,27 @@ export default function AgentEditorPage({
                             isFeatured
                           );
                           if (featuredError) {
+                            // Share succeeded, featured failed: persist/share state in local form and UI.
+                            applySharingFields();
+                            await refreshAgents();
+                            refreshAgent?.();
                             toast.error(
                               `Failed to update featured status: ${featuredError}`
                             );
                             return;
                           }
 
+                          applySharingFields();
                           setFieldValue("featured", isFeatured);
                           await refreshAgents();
                           refreshAgent?.();
+                          shareAgentModal.toggle(false);
+                          return;
                         }
 
+                        applySharingFields();
+                        await refreshAgents();
+                        refreshAgent?.();
                         shareAgentModal.toggle(false);
                       } catch (error) {
                         console.error("Share agent modal save failed:", error);
