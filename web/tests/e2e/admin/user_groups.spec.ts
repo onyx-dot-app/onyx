@@ -61,10 +61,10 @@ test.describe("User Groups - No Vector DB @lite", () => {
 
       await expect(page.getByText("Up to date")).toBeVisible({ timeout: 5000 });
 
-      const addMembersButton = page.getByRole("button", {
-        name: "Add Members",
+      const addUsersButton = page.getByRole("button", {
+        name: "Add Users",
       });
-      await expect(addMembersButton).toBeEnabled();
+      await expect(addUsersButton).toBeEnabled();
     } finally {
       if (groupId !== undefined) {
         const apiClient = new OnyxApiClient(page.request);
