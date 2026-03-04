@@ -150,8 +150,8 @@ export const ADMIN_ROUTE_CONFIG: Record<string, AdminRouteConfig> = {
   },
   [ADMIN_PATHS.LLM_MODELS]: {
     icon: SvgCpu,
-    title: "LLM Models",
-    sidebarLabel: "LLM Models",
+    title: "Language Models",
+    sidebarLabel: "Language Models",
   },
   [ADMIN_PATHS.WEB_SEARCH]: {
     icon: SvgGlobe,
