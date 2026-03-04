@@ -23,20 +23,28 @@ router = APIRouter(
 )
 
 _process = psutil.Process()
-_start_time = time.monotonic()
+_start_time: float | None = None
+
+
+def set_start_time() -> None:
+    """Capture server startup time. Called from lifespan()."""
+    global _start_time
+    if _start_time is None:
+        _start_time = time.monotonic()
 
 
 @router.get("/process-info")
 def get_process_info() -> dict[str, Any]:
     """Return process-level resource info."""
     mem = _process.memory_info()
+    uptime = round(time.monotonic() - _start_time, 1) if _start_time is not None else 0
     return {
         "rss_bytes": mem.rss,
         "vms_bytes": mem.vms,
         "cpu_percent": _process.cpu_percent(),
         "num_fds": _process.num_fds(),
         "num_threads": _process.num_threads(),
-        "uptime_seconds": round(time.monotonic() - _start_time, 1),
+        "uptime_seconds": uptime,
     }
 
 

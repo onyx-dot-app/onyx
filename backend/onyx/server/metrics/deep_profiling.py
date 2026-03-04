@@ -68,38 +68,44 @@ async def _snapshot_loop(interval: float) -> None:
 
     while True:
         await asyncio.sleep(interval)
-        if not tracemalloc.is_tracing():
-            continue
+        try:
+            if not tracemalloc.is_tracing():
+                continue
 
-        snapshot = tracemalloc.take_snapshot()
-        snapshot = snapshot.filter_traces(
-            (
-                tracemalloc.Filter(False, "<frozen importlib._bootstrap>"),
-                tracemalloc.Filter(False, "<frozen importlib._bootstrap_external>"),
-                tracemalloc.Filter(False, tracemalloc.__file__),
+            snapshot = tracemalloc.take_snapshot()
+            snapshot = snapshot.filter_traces(
+                (
+                    tracemalloc.Filter(False, "<frozen importlib._bootstrap>"),
+                    tracemalloc.Filter(False, "<frozen importlib._bootstrap_external>"),
+                    tracemalloc.Filter(False, tracemalloc.__file__),
+                )
             )
-        )
 
-        all_stats = snapshot.statistics("lineno")
-        _current_top_stats = all_stats[:DEEP_PROFILING_TOP_N_ALLOCATIONS]
+            all_stats = snapshot.statistics("lineno")
+            _current_top_stats = all_stats[:DEEP_PROFILING_TOP_N_ALLOCATIONS]
 
-        if _previous_snapshot is not None:
-            _current_delta_stats = snapshot.compare_to(_previous_snapshot, "lineno")[
-                :DEEP_PROFILING_TOP_N_ALLOCATIONS
-            ]
-        else:
-            _current_delta_stats = []
+            if _previous_snapshot is not None:
+                _current_delta_stats = snapshot.compare_to(
+                    _previous_snapshot, "lineno"
+                )[:DEEP_PROFILING_TOP_N_ALLOCATIONS]
+            else:
+                _current_delta_stats = []
 
-        _current_total_bytes = sum(stat.size for stat in all_stats)
-        _previous_snapshot = snapshot
+            _current_total_bytes = sum(stat.size for stat in all_stats)
+            _previous_snapshot = snapshot
 
-        # Object type counting — done here (amortized by snapshot interval)
-        # instead of on every /metrics scrape, since gc.get_objects() is O(n)
-        # over all live objects and holds the GIL.
-        counts: Counter[str] = Counter()
-        for obj in gc.get_objects():
-            counts[type(obj).__name__] += 1
-        _current_object_type_counts = counts.most_common(DEEP_PROFILING_TOP_N_TYPES)
+            # Object type counting — done here (amortized by snapshot interval)
+            # instead of on every /metrics scrape, since gc.get_objects() is O(n)
+            # over all live objects and holds the GIL.
+            counts: Counter[str] = Counter()
+            for obj in gc.get_objects():
+                counts[type(obj).__name__] += 1
+            _current_object_type_counts = counts.most_common(DEEP_PROFILING_TOP_N_TYPES)
+        except Exception:
+            logger.warning(
+                "Error in deep profiling snapshot loop, skipping iteration",
+                exc_info=True,
+            )
 
 
 class DeepProfilingCollector(Collector):
@@ -207,8 +213,9 @@ def start_deep_profiling() -> None:
     )
 
     if _collector is None:
-        _collector = DeepProfilingCollector()
-        REGISTRY.register(_collector)
+        collector = DeepProfilingCollector()
+        REGISTRY.register(collector)
+        _collector = collector
     logger.info("Deep profiling collector registered")
 
 

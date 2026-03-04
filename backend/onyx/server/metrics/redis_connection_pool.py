@@ -99,10 +99,11 @@ def setup_redis_connection_pool_metrics() -> None:
     from onyx.redis.redis_pool import RedisPool
 
     pool_instance = RedisPool()
-    _redis_collector = RedisPoolCollector()
-    _redis_collector.add_pool("primary", pool_instance._pool)
+    collector = RedisPoolCollector()
+    collector.add_pool("primary", pool_instance._pool)
     if pool_instance._replica_pool is not None:
-        _redis_collector.add_pool("replica", pool_instance._replica_pool)
+        collector.add_pool("replica", pool_instance._replica_pool)
 
-    REGISTRY.register(_redis_collector)
+    REGISTRY.register(collector)
+    _redis_collector = collector
     logger.info("Registered Redis connection pool metrics")

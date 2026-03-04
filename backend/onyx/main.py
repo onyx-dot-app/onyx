@@ -348,6 +348,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
 
     start_event_loop_lag_probe()
 
+    if ENABLE_ADMIN_DEBUG_ENDPOINTS:
+        from onyx.server.metrics.admin_debug import set_start_time
+
+        set_start_time()
+
     # --- Deep profiling (opt-in, ~10-20% alloc overhead) ---
     if ENABLE_DEEP_PROFILING:
         from onyx.server.metrics.deep_profiling import start_deep_profiling

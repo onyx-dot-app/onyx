@@ -97,5 +97,6 @@ def setup_threadpool_metrics() -> None:
     from onyx.utils.threadpool_concurrency import enable_threadpool_instrumentation
 
     enable_threadpool_instrumentation()
-    _thread_collector = ThreadCountCollector()
-    REGISTRY.register(_thread_collector)
+    collector = ThreadCountCollector()
+    REGISTRY.register(collector)
+    _thread_collector = collector
