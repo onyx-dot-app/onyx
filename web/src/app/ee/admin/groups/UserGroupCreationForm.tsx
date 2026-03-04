@@ -11,7 +11,7 @@ import Button from "@/refresh-components/buttons/Button";
 import Separator from "@/refresh-components/Separator";
 import Text from "@/refresh-components/texts/Text";
 import { SvgUsers } from "@opal/icons";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useVectorDbEnabled } from "@/providers/SettingsProvider";
 export interface UserGroupCreationFormProps {
   onClose: () => void;
   users: User[];
@@ -26,8 +26,7 @@ export default function UserGroupCreationForm({
   existingUserGroup,
 }: UserGroupCreationFormProps) {
   const isUpdate = existingUserGroup !== undefined;
-  const settings = useSettingsContext();
-  const vectorDbEnabled = settings?.settings.vector_db_enabled !== false;
+  const vectorDbEnabled = useVectorDbEnabled();
 
   const privateCcPairs = ccPairs.filter(
     (ccPair) => ccPair.access_type === "private"

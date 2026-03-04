@@ -224,7 +224,7 @@ export const useConnectorStatus = (
 
   return {
     ...swrResponse,
-    refreshIndexingStatus: () => mutate(enabled ? url : null),
+    refreshIndexingStatus: enabled ? () => mutate(url) : () => {},
   };
 };
 
@@ -236,7 +236,7 @@ export const useBasicConnectorStatus = (enabled: boolean = true) => {
   );
   return {
     ...swrResponse,
-    refreshIndexingStatus: () => mutate(enabled ? url : null),
+    refreshIndexingStatus: enabled ? () => mutate(url) : () => {},
   };
 };
 

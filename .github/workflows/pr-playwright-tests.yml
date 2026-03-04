@@ -271,8 +271,6 @@ jobs:
         uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # ratchet:actions/setup-node@v4
         with:
           node-version: 22
-          cache: "npm"
-          cache-dependency-path: ./web/package-lock.json
 
       - name: Install node dependencies
         working-directory: ./web
@@ -611,8 +609,6 @@ jobs:
         uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # ratchet:actions/setup-node@v4
         with:
           node-version: 22
-          cache: "npm"
-          cache-dependency-path: ./web/package-lock.json
 
       - name: Install node dependencies
         working-directory: ./web
@@ -662,60 +658,6 @@ jobs:
           cd deployment/docker_compose
           docker compose -f docker-compose.yml -f docker-compose.onyx-lite.yml -f docker-compose.dev.yml up -d
         id: start_docker
-
-      - name: Wait for API server to be ready
-        run: |
-          echo "Waiting for API server..."
-          start_time=$(date +%s)
-          timeout=300
-
-          while true; do
-            current_time=$(date +%s)
-            elapsed_time=$((current_time - start_time))
-
-            if [ $elapsed_time -ge $timeout ]; then
-              echo "Timeout reached. Service did not become ready in 5 minutes."
-              exit 1
-            fi
-
-            response=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/health || echo "curl_error")
-
-            if [ "$response" = "200" ]; then
-              echo "API server is ready!"
-              break
-            elif [ "$response" = "curl_error" ]; then
-              echo "Curl encountered an error. Continuing to retry..."
-            else
-              echo "Service not ready yet (HTTP status $response). Retrying in 5 seconds..."
-            fi
-
-            sleep 5
-          done
-
-      - name: Wait for web server to be ready
-        run: |
-          echo "Waiting for web server on port 3000..."
-          start_time=$(date +%s)
-          timeout=120
-
-          while true; do
-            current_time=$(date +%s)
-            elapsed_time=$((current_time - start_time))
-
-            if [ $elapsed_time -ge $timeout ]; then
-              echo "Timeout reached. Web server did not become ready in ${timeout}s."
-              exit 1
-            fi
-
-            if curl -sf "http://localhost:3000/api/health" > /dev/null 2>&1 || \
-               curl -sf "http://localhost:3000/" > /dev/null 2>&1; then
-              echo "Web server is ready!"
-              break
-            fi
-
-            echo "Web server not ready yet. Retrying in 3 seconds..."
-            sleep 3
-          done
 
       - name: Run Playwright tests (lite)
         working-directory: ./web

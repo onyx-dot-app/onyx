@@ -9,7 +9,7 @@ import Text from "@/components/ui/text";
 import { useConnectorIndexingStatusWithPagination } from "@/lib/hooks";
 import { useToastFromQuery } from "@/hooks/useToast";
 import Button from "@/refresh-components/buttons/Button";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useVectorDbEnabled } from "@/providers/SettingsProvider";
 import { useState, useRef, useMemo, RefObject } from "react";
 import { FilterOptions } from "./FilterComponent";
 import { ValidSources } from "@/lib/types";
@@ -19,8 +19,7 @@ import { ConnectorStaggeredSkeleton } from "./ConnectorRowSkeleton";
 import { IndexingStatusRequest } from "@/lib/types";
 
 function Main() {
-  const settings = useSettingsContext();
-  const vectorDbEnabled = settings?.settings.vector_db_enabled !== false;
+  const vectorDbEnabled = useVectorDbEnabled();
 
   // State for filter management
   const [filterOptions, setFilterOptions] = useState<FilterOptions>({

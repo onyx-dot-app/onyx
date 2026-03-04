@@ -23,7 +23,7 @@ import { FailedReIndexAttempts } from "@/components/embedding/FailedReIndexAttem
 import { useConnectorIndexingStatusWithPagination } from "@/lib/hooks";
 import { SvgX } from "@opal/icons";
 import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useVectorDbEnabled } from "@/providers/SettingsProvider";
 
 export default function UpgradingPage({
   futureEmbeddingModel,
@@ -31,8 +31,7 @@ export default function UpgradingPage({
   futureEmbeddingModel: CloudEmbeddingModel | HostedEmbeddingModel;
 }) {
   const [isCancelling, setIsCancelling] = useState<boolean>(false);
-  const settings = useSettingsContext();
-  const vectorDbEnabled = settings?.settings.vector_db_enabled !== false;
+  const vectorDbEnabled = useVectorDbEnabled();
 
   const { data: connectors, isLoading: isLoadingConnectors } = useSWR<
     Connector<any>[]

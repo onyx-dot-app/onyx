@@ -88,6 +88,7 @@ test.describe("User Groups - Standard Deployment @exclusive", () => {
       client = new OnyxApiClient(context.request);
       const vectorDbEnabled = await client.isVectorDbEnabled();
       if (!vectorDbEnabled) {
+        await context.close();
         test.skip(true, "Skipped: vector DB is disabled in this deployment");
         return;
       }

@@ -8,13 +8,12 @@ import { useConnectorStatus } from "@/lib/hooks";
 import useUsers from "@/hooks/useUsers";
 import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useVectorDbEnabled } from "@/providers/SettingsProvider";
 
 const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.GROUPS]!;
 
 function Main({ groupId }: { groupId: string }) {
-  const settings = useSettingsContext();
-  const vectorDbEnabled = settings?.settings.vector_db_enabled !== false;
+  const vectorDbEnabled = useVectorDbEnabled();
   const {
     userGroup,
     isLoading: userGroupIsLoading,

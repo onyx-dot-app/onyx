@@ -10,14 +10,13 @@ import { useUser } from "@/providers/UserProvider";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useVectorDbEnabled } from "@/providers/SettingsProvider";
 
 const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.GROUPS]!;
 
 function Main() {
   const [showForm, setShowForm] = useState(false);
-  const settings = useSettingsContext();
-  const vectorDbEnabled = settings?.settings.vector_db_enabled !== false;
+  const vectorDbEnabled = useVectorDbEnabled();
 
   const { data, isLoading, error, refreshUserGroups } = useUserGroups();
 
