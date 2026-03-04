@@ -61,6 +61,7 @@ async def _get_tenant_id_from_request(
 
     try:
         # Look up token data in Redis
+
         token_data = await retrieve_auth_token_data_from_redis(request)
 
         if token_data:
@@ -76,9 +77,6 @@ async def _get_tenant_id_from_request(
 
             if tenant_id and not is_valid_schema_name(tenant_id):
                 raise HTTPException(status_code=400, detail="Invalid tenant ID format")
-
-            if tenant_id:
-                return tenant_id
 
         # Check for anonymous user cookie
         anonymous_user_cookie = request.cookies.get(ANONYMOUS_USER_COOKIE_NAME)
@@ -98,23 +96,31 @@ async def _get_tenant_id_from_request(
 
                 return tenant_id
 
-            except HTTPException:
-                raise
             except Exception as e:
                 logger.error(f"Error decoding anonymous user cookie: {str(e)}")
+                # Continue and attempt to authenticate
 
-    except HTTPException:
-        raise
+        logger.debug(
+            "Token data not found or expired in Redis, defaulting to POSTGRES_DEFAULT_SCHEMA"
+        )
+
+        # Return POSTGRES_DEFAULT_SCHEMA, so non-authenticated requests are sent to the default schema
+        # The CURRENT_TENANT_ID_CONTEXTVAR is initialized with POSTGRES_DEFAULT_SCHEMA,
+        # so we maintain consistency by returning it here when no valid tenant is found.
+        return POSTGRES_DEFAULT_SCHEMA
+
     except Exception as e:
         logger.error(f"Unexpected error in _get_tenant_id_from_request: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
-    # Fallback: check for explicit tenant_id cookie
-    tenant_id_cookie = request.cookies.get(TENANT_ID_COOKIE_NAME)
-    if tenant_id_cookie and is_valid_schema_name(tenant_id_cookie):
-        return tenant_id_cookie
+    finally:
+        if tenant_id:
+            return tenant_id
 
-    logger.debug(
-        "Token data not found or expired in Redis, defaulting to POSTGRES_DEFAULT_SCHEMA"
-    )
-    return POSTGRES_DEFAULT_SCHEMA
+        # As a final step, check for explicit tenant_id cookie
+        tenant_id_cookie = request.cookies.get(TENANT_ID_COOKIE_NAME)
+        if tenant_id_cookie and is_valid_schema_name(tenant_id_cookie):
+            return tenant_id_cookie
+
+        # If we've reached this point, return the default schema
+        return POSTGRES_DEFAULT_SCHEMA
