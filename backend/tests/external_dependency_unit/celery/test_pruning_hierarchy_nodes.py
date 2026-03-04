@@ -435,8 +435,9 @@ def test_update_document_parent_hierarchy_nodes(db_session: Session) -> None:
     # Verify each document now points to the correct hierarchy node
     db_session.expire_all()
     for doc_id, raw_parent in DOC_PARENT_MAP.items():
-        doc = db_session.get(DbDocument, doc_id)
-        assert doc is not None
+        tmp_doc = db_session.get(DbDocument, doc_id)
+        assert tmp_doc is not None
+        doc = tmp_doc
         expected_node_id = node_id_by_raw[raw_parent]
         assert (
             doc.parent_hierarchy_node_id == expected_node_id
