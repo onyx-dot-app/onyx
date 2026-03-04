@@ -68,9 +68,13 @@ export default function ScimModal({
             <Modal.Body>
               <Interactive.Base
                 group="group/token"
-                onClick={() => {
-                  navigator.clipboard.writeText(view.rawToken);
-                  toast.success("Token copied to clipboard");
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(view.rawToken);
+                    toast.success("Token copied to clipboard");
+                  } catch {
+                    toast.error("Failed to copy token");
+                  }
                 }}
               >
                 <InputTextArea
@@ -110,9 +114,13 @@ export default function ScimModal({
                   <Button
                     autoFocus
                     primary
-                    onClick={() => {
-                      navigator.clipboard.writeText(view.rawToken);
-                      toast.success("Token copied to clipboard");
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(view.rawToken);
+                        toast.success("Token copied to clipboard");
+                      } catch {
+                        toast.error("Failed to copy token");
+                      }
                     }}
                   >
                     Copy Token

@@ -80,9 +80,8 @@ function ScimContent() {
       }
       const created: ScimTokenCreatedResponse = await response.json();
       await mutate();
-      if (hasToken) toast.success("Token regenerated");
-      // Show token display modal
       openModal({ kind: "token", rawToken: created.raw_token });
+      if (hasToken) toast.success("Token regenerated");
     } catch {
       toast.error("Something went wrong. Please try again.");
     } finally {

@@ -87,7 +87,7 @@ export default function ScimSyncCard({
             </Section>
 
             <Section alignItems="end" gap={0} width="fit">
-              {isConnected && lastUsedAt ? (
+              {isConnected ? (
                 <>
                   {idpDomain && (
                     <Text as="p" secondaryAction text03>
