@@ -216,7 +216,7 @@ export default function useDataTable<TData extends RowData>(
   const totalPages = Math.max(1, table.getPageCount());
   const currentPage = pagination.pageIndex + 1;
   const totalItems = data.length;
-  const isPaginated = isFinite(pageSizeOption);
+  const isPaginated = isFinite(pagination.pageSize);
 
   // ---- actions ------------------------------------------------------------
   const setPage = (page: number) => {
