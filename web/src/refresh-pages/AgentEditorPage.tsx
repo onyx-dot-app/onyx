@@ -1126,6 +1126,9 @@ export default function AgentEditorPage({
                             "Featured mutation failed unexpectedly:",
                             error
                           );
+                          // Share succeeded; sync form and UI before returning.
+                          applySharingFields();
+                          await refreshSharedUi();
                           toast.error(
                             "Failed to update featured status. Please try again."
                           );
