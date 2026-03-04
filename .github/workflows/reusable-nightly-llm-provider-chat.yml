@@ -285,14 +285,43 @@ jobs:
             OLLAMA_API_KEY, test/ollama-api-key
             OPENROUTER_API_KEY, test/openrouter-api-key
 
+      - name: Resolve nightly provider inputs
+        id: resolve-nightly-inputs
+        shell: bash
+        env:
+          PROVIDER: ${{ matrix.provider }}
+          MODELS_INPUT: ${{ matrix.models }}
+          AZURE_API_BASE_INPUT: ${{ matrix.api_base }}
+        run: |
+          models="$MODELS_INPUT"
+          if [ -z "$models" ]; then
+            case "$PROVIDER" in
+              openai) models="${NIGHTLY_LLM_OPENAI_MODELS:-}" ;;
+              anthropic) models="${NIGHTLY_LLM_ANTHROPIC_MODELS:-}" ;;
+              bedrock) models="${NIGHTLY_LLM_BEDROCK_MODELS:-}" ;;
+              vertex_ai) models="${NIGHTLY_LLM_VERTEX_AI_MODELS:-}" ;;
+              azure) models="${NIGHTLY_LLM_AZURE_MODELS:-}" ;;
+              ollama_chat) models="${NIGHTLY_LLM_OLLAMA_MODELS:-}" ;;
+              openrouter) models="${NIGHTLY_LLM_OPENROUTER_MODELS:-}" ;;
+            esac
+          fi
+
+          api_base="$AZURE_API_BASE_INPUT"
+          if [ -z "$api_base" ] && [ "$PROVIDER" = "azure" ]; then
+            api_base="${NIGHTLY_LLM_AZURE_API_BASE:-}"
+          fi
+
+          echo "models=$models" >> "$GITHUB_OUTPUT"
+          echo "api_base=$api_base" >> "$GITHUB_OUTPUT"
+
       - name: Run nightly provider chat test
         uses: ./.github/actions/run-nightly-provider-chat-test
         with:
           provider: ${{ matrix.provider }}
-          models: ${{ matrix.models }}
+          models: ${{ steps.resolve-nightly-inputs.outputs.models }}
           provider-api-key: ${{ matrix.api_key_env && env[matrix.api_key_env] || '' }}
           strict: ${{ inputs.strict && 'true' || 'false' }}
-          api-base: ${{ matrix.api_base }}
+          api-base: ${{ steps.resolve-nightly-inputs.outputs.api_base }}
           api-version: ${{ matrix.api_version }}
           deployment-name: ${{ matrix.deployment_name }}
           custom-config-json: ${{ matrix.custom_config_env && env[matrix.custom_config_env] || '' }}
