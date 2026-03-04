@@ -370,7 +370,7 @@
    --------------------------------------------------------------------------- */
 
 .opal-content-sm-title {
-  @apply text-left overflow-hidden text-text-04;
+  @apply text-left overflow-hidden text-text-04 truncate;
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 1;

@@ -5,9 +5,8 @@ import type { IconFunctionComponent, IconProps } from "@opal/types";
 import type { Route } from "next";
 import { Interactive } from "@opal/core";
 import { Button } from "@opal/components";
-import { Content, ContentAction } from "@opal/layouts";
+import { Content } from "@opal/layouts";
 import Link from "next/link";
-import { cn, noProp } from "@/lib/utils";
 
 export interface SidebarTabProps {
   // Button states:
@@ -66,15 +65,23 @@ export default function SidebarTab({
         selected={selected}
         onClick={onClick}
         group="group/SidebarTab"
-        href={href as Route}
       >
         <Interactive.Container
           roundingVariant="compact"
           heightVariant="lg"
           widthVariant="full"
         >
+          {href && (
+            <Link
+              href={href as Route}
+              scroll={false}
+              className="absolute inset-0 rounded-08"
+              tabIndex={-1}
+            />
+          )}
+
           {rightChildren && (
-            <div className="absolute right-1.5 top-0 bottom-0 pointer-events-auto flex flex-col justify-center items-center">
+            <div className="absolute right-1.5 top-0 bottom-0 flex flex-col justify-center items-center">
               {rightChildren}
             </div>
           )}
@@ -98,11 +105,6 @@ export default function SidebarTab({
                 </div>
               )}
               {children}
-              {/*{rightChildren && (
-                <div className="absolute flex items-center shrink-0 pointer-events-auto">
-                  {rightChildren}
-                </div>
-              )}*/}
             </div>
           )}
         </Interactive.Container>
