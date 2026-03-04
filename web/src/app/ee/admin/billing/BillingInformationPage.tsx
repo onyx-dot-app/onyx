@@ -15,7 +15,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { SubscriptionSummary } from "./SubscriptionSummary";
 import { BillingAlerts } from "./BillingAlerts";
 import { SvgClipboard, SvgWallet } from "@opal/icons";
@@ -95,11 +95,10 @@ export default function BillingInformationPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
           <Button
             onClick={handleManageSubscription}
-            className="w-full"
-            leftIcon={SvgClipboard}
+            width="full"
+            icon={SvgClipboard}
           >
             Manage Subscription
           </Button>

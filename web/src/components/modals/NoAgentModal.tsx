@@ -1,7 +1,7 @@
 "use client";
 
 import Modal from "@/refresh-components/Modal";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { useUser } from "@/providers/UserProvider";
 import { SvgUser } from "@opal/icons";
@@ -24,8 +24,7 @@ export default function NoAgentModal() {
                 As an administrator, you can create a new agent by visiting the
                 admin panel.
               </Text>
-              {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
-              <Button className="w-full" href="/admin/agents">
+              <Button width="full" href="/admin/agents">
                 Go to Admin Panel
               </Button>
             </>

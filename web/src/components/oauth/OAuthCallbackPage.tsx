@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
 import { CheckmarkIcon, TriangleAlertIcon } from "@/components/icons/icons";
 import CardSection from "@/components/admin/CardSection";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 
 interface OAuthCallbackConfig {
   // UI customization
@@ -259,14 +259,13 @@ export default function OAuthCallbackPage({ config }: OAuthCallbackPageProps) {
             <div className="flex flex-col space-y-3">
               {isError && (
                 <div className="flex flex-col space-y-2">
-                  {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
                   <Button
                     onClick={() => {
                       const target =
                         redirectPath || config.defaultRedirectPath || "/app";
                       router.push(target as Route);
                     }}
-                    className="w-full"
+                    width="full"
                   >
                     {config.backButtonText || "Back to Chat"}
                   </Button>
