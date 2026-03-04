@@ -4,8 +4,7 @@ import React from "react";
 import type { IconFunctionComponent, IconProps } from "@opal/types";
 import type { Route } from "next";
 import { Interactive } from "@opal/core";
-import { Button } from "@opal/components";
-import { Content } from "@opal/layouts";
+import { ContentAction } from "@opal/layouts";
 import Link from "next/link";
 
 export interface SidebarTabProps {
@@ -43,20 +42,14 @@ export default function SidebarTab({
         )) as IconFunctionComponent)
       : null);
 
-  if (folded) {
-    if (!Icon) throw "Folded and nested sidebar-tab buttons are not allowed";
-    return (
-      <Button
-        icon={Icon}
-        variant="sidebar"
-        selected={selected}
-        onClick={onClick}
-        href={href}
-        tooltip={typeof children === "string" ? children : undefined}
-        tooltipSide="right"
-      />
-    );
-  }
+  // NOTE (@raunakab)
+  //
+  // The `rightChildren` node NEEDS to be absolutely positioned since it needs to live on top of the absolutely positioned `Link`.
+  // However, having the `rightChildren` be absolutely positioned means that it cannot appropriately truncate the title.
+  // Therefore, we add a dummy node solely for the truncation effects that we obtain.
+  const truncationSpacer = rightChildren && (
+    <div className="w-0 group-hover/SidebarTab:w-6" />
+  );
 
   return (
     <div className="relative">
@@ -75,27 +68,29 @@ export default function SidebarTab({
             <Link
               href={href as Route}
               scroll={false}
-              className="absolute inset-0 rounded-08"
+              className="absolute z-[99] inset-0 rounded-08"
               tabIndex={-1}
             />
           )}
 
-          {rightChildren && (
-            <div className="absolute right-1.5 top-0 bottom-0 flex flex-col justify-center items-center">
+          {!folded && rightChildren && (
+            <div className="absolute z-[100] right-1.5 top-0 bottom-0 flex flex-col justify-center items-center pointer-events-auto">
               {rightChildren}
             </div>
           )}
 
           {typeof children === "string" ? (
-            <Content
+            <ContentAction
               icon={Icon ?? undefined}
-              title={children}
+              title={folded ? "" : children}
               sizePreset="main-ui"
               variant="body"
               prominence={
                 lowlight ? "muted-2x" : selected ? "default" : "muted"
               }
               widthVariant="full"
+              paddingVariant="fit"
+              rightChildren={truncationSpacer}
             />
           ) : (
             <div className="flex flex-row items-center gap-2 flex-1">
@@ -105,6 +100,12 @@ export default function SidebarTab({
                 </div>
               )}
               {children}
+              {
+                // NOTE (@raunakab)
+                //
+                // Adding the `truncationSpacer` here for the same reason as above.
+                truncationSpacer
+              }
             </div>
           )}
         </Interactive.Container>

@@ -704,7 +704,7 @@ const MemoizedAppSidebarInner = memo(
             scrollKey="app-sidebar"
             footer={settingsButton}
             actionButtons={
-              <div className="flex flex-col gap-0.5">
+              <div className="flex flex-col">
                 {newSessionButton}
                 {searchChatsButton}
                 {isOnyxCraftEnabled && buildButton}
