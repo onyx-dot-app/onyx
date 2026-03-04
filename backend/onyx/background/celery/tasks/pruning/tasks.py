@@ -572,7 +572,7 @@ def connector_pruning_generator_task(
             extraction_result = extract_ids_from_runnable_connector(
                 runnable_connector, callback
             )
-            all_connector_doc_ids = extraction_result.doc_ids
+            all_connector_doc_ids = extraction_result.raw_id_to_parent
 
             # Process hierarchy nodes (same as docfetching):
             # upsert to Postgres and cache in Redis
@@ -607,6 +607,7 @@ def connector_pruning_generator_task(
                     f"hierarchy nodes for cc_pair={cc_pair_id}"
                 )
 
+            ensure_source_node_exists(redis_client, db_session, source)
             # Resolve parent_hierarchy_raw_node_id → parent_hierarchy_node_id
             # and bulk-update documents, mirroring the docfetching resolution
             _resolve_and_update_document_parents(

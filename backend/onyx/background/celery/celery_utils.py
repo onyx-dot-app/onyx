@@ -45,7 +45,7 @@ class SlimConnectorExtractionResult(BaseModel):
     Use doc_ids.keys() wherever the old set of IDs was needed.
     """
 
-    doc_ids: dict[str, str | None]
+    raw_id_to_parent: dict[str, str | None]
     hierarchy_nodes: list[HierarchyNode]
 
 
@@ -97,9 +97,14 @@ def _get_failure_id(failure: ConnectorFailure) -> str | None:
     return None
 
 
+class BatchResult(BaseModel):
+    raw_id_to_parent: dict[str, str | None]
+    hierarchy_nodes: list[HierarchyNode]
+
+
 def _extract_from_batch(
     doc_list: Sequence[Document | SlimDocument | HierarchyNode | ConnectorFailure],
-) -> tuple[dict[str, str | None], list[HierarchyNode]]:
+) -> BatchResult:
     """Separate a batch into document IDs (with parent mapping) and hierarchy nodes.
 
     ConnectorFailure items have their failed document/entity IDs added to the
@@ -121,7 +126,7 @@ def _extract_from_batch(
         else:
             parent_raw = getattr(item, "parent_hierarchy_raw_node_id", None)
             ids[item.id] = parent_raw
-    return ids, hierarchy_nodes
+    return BatchResult(raw_id_to_parent=ids, hierarchy_nodes=hierarchy_nodes)
 
 
 def extract_ids_from_runnable_connector(
@@ -137,7 +142,7 @@ def extract_ids_from_runnable_connector(
 
     Optionally, a callback can be passed to handle the length of each document batch.
     """
-    all_connector_doc_ids: dict[str, str | None] = {}
+    all_raw_id_to_parent: dict[str, str | None] = {}
     all_hierarchy_nodes: list[HierarchyNode] = []
 
     # Sequence (covariant) lets all the specific list[...] iterator types unify here
@@ -182,16 +187,18 @@ def extract_ids_from_runnable_connector(
                 "extract_ids_from_runnable_connector: Stop signal detected"
             )
 
-        batch_ids, batch_nodes = _extract_from_batch(doc_list)
+        batch_result = _extract_from_batch(doc_list)
+        batch_ids = batch_result.raw_id_to_parent
+        batch_nodes = batch_result.hierarchy_nodes
         doc_batch_processing_func(batch_ids)
-        all_connector_doc_ids.update(batch_ids)
+        all_raw_id_to_parent.update(batch_ids)
         all_hierarchy_nodes.extend(batch_nodes)
 
         if callback:
             callback.progress("extract_ids_from_runnable_connector", len(batch_ids))
 
     return SlimConnectorExtractionResult(
-        doc_ids=all_connector_doc_ids,
+        raw_id_to_parent=all_raw_id_to_parent,
         hierarchy_nodes=all_hierarchy_nodes,
     )
 

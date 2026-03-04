@@ -187,7 +187,7 @@ def test_pruning_extracts_hierarchy_nodes(db_session: Session) -> None:  # noqa:
         CHANNEL_C_ID,
         *SLIM_DOC_IDS,
     }
-    assert result.doc_ids.keys() == expected_ids
+    assert result.raw_id_to_parent.keys() == expected_ids
 
     # Hierarchy nodes should be the 3 channels
     assert len(result.hierarchy_nodes) == 3
@@ -392,12 +392,12 @@ def test_extraction_preserves_parent_hierarchy_raw_node_id(
 
     for doc_id, expected_parent in DOC_PARENT_MAP.items():
         assert (
-            result.doc_ids[doc_id] == expected_parent
+            result.raw_id_to_parent[doc_id] == expected_parent
         ), f"doc_ids[{doc_id}] should be {expected_parent}"
 
     # Hierarchy node entries have None parent (they aren't documents)
     for channel_id in [CHANNEL_A_ID, CHANNEL_B_ID, CHANNEL_C_ID]:
-        assert result.doc_ids[channel_id] is None
+        assert result.raw_id_to_parent[channel_id] is None
 
 
 def test_update_document_parent_hierarchy_nodes(db_session: Session) -> None:
