@@ -132,7 +132,9 @@ const AppInputBar = React.memo(
       },
     }));
 
-    // Sync prop changes to internal state (e.g. NRFPage reads URL params after mount)
+    // Sync non-empty prop changes to internal state (e.g. NRFPage reads URL params
+    // after mount). Intentionally skips empty strings — clearing is handled via the
+    // imperative ref.reset() method, not by passing initialMessage="".
     useEffect(() => {
       if (initialMessage) {
         setMessage(initialMessage);
