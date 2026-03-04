@@ -42,10 +42,6 @@ from onyx.configs.app_configs import CACHE_BACKEND
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.app_configs import ENABLE_ADMIN_DEBUG_ENDPOINTS
 from onyx.configs.app_configs import ENABLE_DEEP_PROFILING
-from onyx.configs.app_configs import ENABLE_EVENT_LOOP_LAG_PROBE
-from onyx.configs.app_configs import ENABLE_MEMORY_DELTA_METRICS
-from onyx.configs.app_configs import ENABLE_REDIS_POOL_METRICS
-from onyx.configs.app_configs import ENABLE_THREADPOOL_METRICS
 from onyx.configs.app_configs import LOG_ENDPOINT_LATENCY
 from onyx.configs.app_configs import OAUTH_CLIENT_ID
 from onyx.configs.app_configs import OAUTH_CLIENT_SECRET
@@ -132,6 +128,9 @@ from onyx.server.metrics.postgres_connection_pool import (
     setup_postgres_connection_pool_metrics,
 )
 from onyx.server.metrics.prometheus_setup import setup_prometheus_metrics
+from onyx.server.metrics.redis_connection_pool import (
+    setup_redis_connection_pool_metrics,
+)
 from onyx.server.metrics.threadpool import setup_threadpool_metrics
 from onyx.server.middleware.latency_logging import add_latency_logging_middleware
 from onyx.server.middleware.rate_limiting import close_auth_limiter
@@ -341,22 +340,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
         },
     )
 
-    # --- Observability hooks (after engines are ready) ---
-    if ENABLE_REDIS_POOL_METRICS:
-        from onyx.server.metrics.redis_connection_pool import (
-            setup_redis_connection_pool_metrics,
-        )
+    # --- Observability (always-on, cheap) ---
+    setup_redis_connection_pool_metrics()
+    setup_threadpool_metrics()
 
-        setup_redis_connection_pool_metrics()
+    from onyx.server.metrics.event_loop_lag import start_event_loop_lag_probe
 
-    if ENABLE_THREADPOOL_METRICS:
-        setup_threadpool_metrics()
+    start_event_loop_lag_probe()
 
-    if ENABLE_EVENT_LOOP_LAG_PROBE:
-        from onyx.server.metrics.event_loop_lag import start_event_loop_lag_probe
-
-        start_event_loop_lag_probe()
-
+    # --- Deep profiling (opt-in, ~10-20% alloc overhead) ---
     if ENABLE_DEEP_PROFILING:
         from onyx.server.metrics.deep_profiling import start_deep_profiling
 
@@ -415,10 +407,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
 
         stop_periodic_poller()
 
-    if ENABLE_EVENT_LOOP_LAG_PROBE:
-        from onyx.server.metrics.event_loop_lag import stop_event_loop_lag_probe
+    from onyx.server.metrics.event_loop_lag import stop_event_loop_lag_probe
 
-        stop_event_loop_lag_probe()
+    stop_event_loop_lag_probe()
 
     if ENABLE_DEEP_PROFILING:
         from onyx.server.metrics.deep_profiling import stop_deep_profiling
@@ -678,10 +669,9 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    if ENABLE_MEMORY_DELTA_METRICS:
-        from onyx.server.metrics.memory_delta import add_memory_delta_middleware
+    from onyx.server.metrics.memory_delta import add_memory_delta_middleware
 
-        add_memory_delta_middleware(application)
+    add_memory_delta_middleware(application)
 
     if ENABLE_ADMIN_DEBUG_ENDPOINTS:
         from onyx.server.metrics.admin_debug import router as debug_router

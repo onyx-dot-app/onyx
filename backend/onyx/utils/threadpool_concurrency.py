@@ -32,14 +32,10 @@ logger = setup_logger()
 
 
 def _get_executor_class() -> type[ThreadPoolExecutor]:
-    """Return InstrumentedThreadPoolExecutor when metrics are enabled."""
-    from onyx.configs.app_configs import ENABLE_THREADPOOL_METRICS
+    """Return InstrumentedThreadPoolExecutor for Prometheus metrics."""
+    from onyx.server.metrics.threadpool import InstrumentedThreadPoolExecutor
 
-    if ENABLE_THREADPOOL_METRICS:
-        from onyx.server.metrics.threadpool import InstrumentedThreadPoolExecutor
-
-        return InstrumentedThreadPoolExecutor
-    return ThreadPoolExecutor
+    return InstrumentedThreadPoolExecutor
 
 
 R = TypeVar("R")

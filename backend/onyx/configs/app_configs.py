@@ -848,18 +848,7 @@ LOG_POSTGRES_LATENCY = os.environ.get("LOG_POSTGRES_LATENCY", "").lower() == "tr
 #####
 # Observability / Prometheus Metrics
 #####
-ENABLE_MEMORY_DELTA_METRICS = (
-    os.environ.get("ENABLE_MEMORY_DELTA_METRICS", "true").lower() == "true"
-)
-ENABLE_EVENT_LOOP_LAG_PROBE = (
-    os.environ.get("ENABLE_EVENT_LOOP_LAG_PROBE", "true").lower() == "true"
-)
-ENABLE_REDIS_POOL_METRICS = (
-    os.environ.get("ENABLE_REDIS_POOL_METRICS", "true").lower() == "true"
-)
-ENABLE_THREADPOOL_METRICS = (
-    os.environ.get("ENABLE_THREADPOOL_METRICS", "true").lower() == "true"
-)
+# Deep profiling is opt-in (~10-20% alloc overhead from tracemalloc)
 ENABLE_DEEP_PROFILING = os.environ.get("ENABLE_DEEP_PROFILING", "").lower() == "true"
 DEEP_PROFILING_SNAPSHOT_INTERVAL_SECONDS = float(
     os.environ.get("DEEP_PROFILING_SNAPSHOT_INTERVAL_SECONDS", "60.0")
@@ -868,6 +857,7 @@ DEEP_PROFILING_TOP_N_ALLOCATIONS = int(
     os.environ.get("DEEP_PROFILING_TOP_N_ALLOCATIONS", "20")
 )
 DEEP_PROFILING_TOP_N_TYPES = int(os.environ.get("DEEP_PROFILING_TOP_N_TYPES", "30"))
+# Admin debug endpoints are opt-in (security — exposes process internals)
 ENABLE_ADMIN_DEBUG_ENDPOINTS = (
     os.environ.get("ENABLE_ADMIN_DEBUG_ENDPOINTS", "").lower() == "true"
 )

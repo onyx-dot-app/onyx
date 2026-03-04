@@ -258,3 +258,111 @@ histogram_quantile(0.99, sum by (handler, le) (rate(onyx_db_connection_hold_seco
 # Checkouts per second by engine
 sum by (engine) (rate(onyx_db_pool_checkout_total[5m]))
 ```
+
+## Memory Metrics
+
+Always-on, sub-microsecond overhead per request (single `psutil` syscall).
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `onyx_api_request_rss_delta_bytes` | Histogram | `handler` | RSS change in bytes during a request |
+| `onyx_api_process_rss_bytes` | Gauge | — | Current process RSS |
+
+```promql
+# Top 5 endpoints by average memory delta per request
+topk(5, avg by (handler)(
+  rate(onyx_api_request_rss_delta_bytes_sum[5m])
+  / rate(onyx_api_request_rss_delta_bytes_count[5m])
+))
+```
+
+## Event Loop Metrics
+
+Always-on background asyncio task. Detects blocked event loops.
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `onyx_api_event_loop_lag_seconds` | Gauge | — | Current scheduling lag |
+| `onyx_api_event_loop_lag_max_seconds` | Gauge | — | Max lag since process start |
+
+Configurable via `EVENT_LOOP_LAG_PROBE_INTERVAL_SECONDS` (default `2.0`).
+
+```promql
+# Alert if event loop is blocked > 100ms
+onyx_api_event_loop_lag_seconds > 0.1
+```
+
+## Redis Pool Metrics
+
+Always-on, read from `BlockingConnectionPool` internals on each `/metrics` scrape.
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `onyx_redis_pool_in_use` | Gauge | `pool` | Checked-out connections |
+| `onyx_redis_pool_available` | Gauge | `pool` | Idle connections |
+| `onyx_redis_pool_max` | Gauge | `pool` | Configured max |
+| `onyx_redis_pool_created` | Gauge | `pool` | Lifetime connections created |
+
+Pool label values: `primary`, `replica`.
+
+```promql
+# Redis pool utilization (alert if > 80%)
+onyx_redis_pool_in_use{pool="primary"} / onyx_redis_pool_max{pool="primary"}
+```
+
+## Thread Pool Metrics
+
+Always-on via `InstrumentedThreadPoolExecutor` (wraps all `ThreadPoolExecutor` usage).
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `onyx_threadpool_tasks_submitted_total` | Counter | — | Total tasks submitted |
+| `onyx_threadpool_tasks_active` | Gauge | — | Currently executing tasks |
+| `onyx_threadpool_task_duration_seconds` | Histogram | — | Task execution duration |
+| `onyx_process_thread_count` | Gauge | — | OS threads in the process |
+
+```promql
+# Rising thread count = potential leak
+onyx_process_thread_count
+```
+
+## Deep Profiling Metrics (opt-in)
+
+Requires `ENABLE_DEEP_PROFILING=true`. Adds ~10-20% allocation overhead.
+
+| Env Var | Default | Description |
+|---------|---------|-------------|
+| `ENABLE_DEEP_PROFILING` | `false` | Enable tracemalloc + GC + object counting |
+| `DEEP_PROFILING_SNAPSHOT_INTERVAL_SECONDS` | `60.0` | Interval between snapshots |
+| `DEEP_PROFILING_TOP_N_ALLOCATIONS` | `20` | Top allocation sites to export |
+| `DEEP_PROFILING_TOP_N_TYPES` | `30` | Top object types to export |
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `onyx_tracemalloc_top_bytes` | Gauge | `source` | Bytes by top allocation sites |
+| `onyx_tracemalloc_top_count` | Gauge | `source` | Allocation count by source |
+| `onyx_tracemalloc_delta_bytes` | Gauge | `source` | Growth since previous snapshot |
+| `onyx_tracemalloc_total_bytes` | Gauge | — | Total traced memory |
+| `onyx_gc_collections_total` | Counter | `generation` | GC runs per generation |
+| `onyx_gc_collected_total` | Counter | `generation` | Objects collected |
+| `onyx_gc_uncollectable_total` | Counter | `generation` | Uncollectable objects |
+| `onyx_object_type_count` | Gauge | `type` | Live objects by type (top N) |
+
+```promql
+# Top leaking code locations
+topk(10, onyx_tracemalloc_delta_bytes > 0)
+
+# GC uncollectable (true leaks)
+rate(onyx_gc_uncollectable_total[5m])
+```
+
+## Admin Debug Endpoints (opt-in)
+
+Requires `ENABLE_ADMIN_DEBUG_ENDPOINTS=true`. All require admin auth.
+
+| Endpoint | Method | Returns |
+|----------|--------|---------|
+| `/admin/debug/process-info` | GET | RSS, VMS, CPU%, FD count, threads, uptime |
+| `/admin/debug/pool-state` | GET | Postgres + Redis pool state as JSON |
+| `/admin/debug/threads` | GET | All threads (name, daemon, ident) |
+| `/admin/debug/event-loop-lag` | GET | Current + max event loop lag |
