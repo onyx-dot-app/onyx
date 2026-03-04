@@ -9,7 +9,6 @@ export enum OnboardingStep {
 
 export interface OnboardingData {
   userName?: string;
-  llmProviders?: string[];
   llmApiKey?: string;
 }
 
@@ -58,7 +57,6 @@ export type OnboardingActions = {
   goToStep: (step: OnboardingStep) => void;
   setButtonActive: (active: boolean) => void;
   updateName: (name: string) => void;
-  updateData: (data: Partial<OnboardingData>) => void;
   setLoading: (isLoading: boolean) => void;
   setError: (error: string | undefined) => void;
   reset: () => void;

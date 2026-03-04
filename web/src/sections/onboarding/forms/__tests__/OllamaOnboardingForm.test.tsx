@@ -65,6 +65,15 @@ jest.mock("@/app/admin/configuration/llm/utils", () => ({
   fetchModels: (...args: any[]) => mockFetchModels(...args),
 }));
 
+// Mock ProviderContext (used by OnboardingFormWrapper)
+const mockRefreshProviderInfo = jest.fn().mockResolvedValue(undefined);
+jest.mock("@/components/chat/ProviderContext", () => ({
+  useProviderStatus: () => ({
+    hasProviders: false,
+    refreshProviderInfo: mockRefreshProviderInfo,
+  }),
+}));
+
 // Mock ProviderIcon
 jest.mock("@/app/admin/configuration/llm/ProviderIcon", () => ({
   ProviderIcon: ({ provider }: { provider: string }) => (
@@ -312,10 +321,10 @@ describe("OllamaOnboardingForm", () => {
   });
 
   describe("Provider Updates", () => {
-    test("updates onboarding data with ollama_chat provider", async () => {
+    test("refreshes provider info after successful submission", async () => {
       const user = setupUser();
-      const updateData = jest.fn();
-      const mockActions = createMockOnboardingActions({ updateData });
+      const setButtonActive = jest.fn();
+      const mockActions = createMockOnboardingActions({ setButtonActive });
 
       mockFetch
         .mockResolvedValueOnce(mockResponses.testApiSuccess)
@@ -342,11 +351,8 @@ describe("OllamaOnboardingForm", () => {
       await user.click(submitButton);
 
       await waitFor(() => {
-        expect(updateData).toHaveBeenCalledWith(
-          expect.objectContaining({
-            llmProviders: expect.arrayContaining(["ollama_chat"]),
-          })
-        );
+        expect(mockRefreshProviderInfo).toHaveBeenCalled();
+        expect(setButtonActive).toHaveBeenCalledWith(true);
       });
     });
   });

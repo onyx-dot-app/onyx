@@ -60,7 +60,6 @@ export function createMockOnboardingState(
     totalSteps: 4,
     data: {
       userName: "Test User",
-      llmProviders: [],
     },
     isButtonActive: false,
     isLoading: false,
@@ -81,7 +80,6 @@ export function createMockOnboardingActions(
     goToStep: jest.fn(),
     setButtonActive: jest.fn(),
     updateName: jest.fn(),
-    updateData: jest.fn(),
     setLoading: jest.fn(),
     setError: jest.fn(),
     reset: jest.fn(),

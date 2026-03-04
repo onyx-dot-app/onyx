@@ -230,6 +230,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     isLoadingOnboarding,
     finishOnboarding,
     hideOnboarding,
+    connectedProviders,
   } = useShowOnboarding({
     liveAgent,
     isLoadingChatSessions,
@@ -795,6 +796,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                           state={onboardingState}
                           actions={onboardingActions}
                           llmDescriptors={llmDescriptors}
+                          connectedProviders={connectedProviders}
                         />
                       )}
 

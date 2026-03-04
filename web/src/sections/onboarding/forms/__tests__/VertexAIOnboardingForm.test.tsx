@@ -80,6 +80,15 @@ jest.mock("@/app/admin/configuration/llm/utils", () => ({
   }),
 }));
 
+// Mock ProviderContext (used by OnboardingFormWrapper)
+const mockRefreshProviderInfo = jest.fn().mockResolvedValue(undefined);
+jest.mock("@/components/chat/ProviderContext", () => ({
+  useProviderStatus: () => ({
+    hasProviders: false,
+    refreshProviderInfo: mockRefreshProviderInfo,
+  }),
+}));
+
 // Mock ProviderIcon
 jest.mock("@/app/admin/configuration/llm/ProviderIcon", () => ({
   ProviderIcon: ({ provider }: { provider: string }) => (
@@ -250,10 +259,10 @@ describe("VertexAIOnboardingForm", () => {
       // This test verifies the basic structure is correct
     });
 
-    test("updates onboarding data with vertex_ai provider", async () => {
+    test("refreshes provider info after successful submission", async () => {
       const user = setupUser();
-      const updateData = jest.fn();
-      const mockActions = createMockOnboardingActions({ updateData });
+      const setButtonActive = jest.fn();
+      const mockActions = createMockOnboardingActions({ setButtonActive });
 
       mockFetch
         .mockResolvedValueOnce(mockResponses.testApiSuccess)

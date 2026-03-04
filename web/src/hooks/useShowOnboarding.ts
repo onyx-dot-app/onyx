@@ -5,7 +5,6 @@ import { onboardingReducer, initialState } from "@/sections/onboarding/reducer";
 import {
   OnboardingActions,
   OnboardingActionType,
-  OnboardingData,
   OnboardingState,
   OnboardingStep,
 } from "@/interfaces/onboarding";
@@ -26,6 +25,7 @@ function useOnboardingState(liveAgent?: MinimalPersonaSnapshot): {
   actions: OnboardingActions;
   isLoading: boolean;
   hasProviders: boolean;
+  connectedProviders: string[];
 } {
   const [state, dispatch] = useReducer(onboardingReducer, initialState);
   const { user, refreshUser } = useUser();
@@ -45,41 +45,37 @@ function useOnboardingState(liveAgent?: MinimalPersonaSnapshot): {
   const userName = user?.personalization?.name;
   const llmDescriptors = providerOptions;
 
+  // Derive connected provider names from context data
+  const connectedProviders = (llmProviders ?? []).map((p) => p.provider);
+
   const nameUpdateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
   );
 
-  // Navigate to the earliest incomplete step in the onboarding flow.
-  // Step order: Welcome -> Name -> LlmSetup -> Complete
-  // We check steps in order and stop at the first incomplete one.
+  // One-time initialization: pre-populate userName and navigate to the
+  // earliest incomplete step. Runs once after provider data loads.
+  // After this, user actions (Next/Prev/goToStep) drive navigation.
+  const hasInitializedRef = useRef(false);
   useEffect(() => {
-    // Don't run logic until data has loaded
-    if (isLoadingProviders) {
+    if (isLoadingProviders || hasInitializedRef.current) {
       return;
     }
+    hasInitializedRef.current = true;
 
-    // Pre-populate state with existing data
+    // Pre-populate userName from server data (resume scenario)
     if (userName) {
       dispatch({
         type: OnboardingActionType.UPDATE_DATA,
         payload: { userName },
       });
     }
-    if (hasLlmProviders) {
-      dispatch({
-        type: OnboardingActionType.UPDATE_DATA,
-        payload: { llmProviders: (llmProviders ?? []).map((p) => p.provider) },
-      });
-    }
 
     // Determine the earliest incomplete step
-    // Name step is incomplete if userName is not set
     if (!userName) {
-      // Stay at Welcome/Name step (no dispatch needed, this is the initial state)
+      // Stay at Welcome/Name step (initial state)
       return;
     }
 
-    // LlmSetup step is incomplete if no LLM providers are configured
     if (!hasLlmProviders) {
       dispatch({
         type: OnboardingActionType.SET_BUTTON_ACTIVE,
@@ -92,7 +88,7 @@ function useOnboardingState(liveAgent?: MinimalPersonaSnapshot): {
       return;
     }
 
-    // All steps complete - go to Complete step
+    // All steps complete
     dispatch({
       type: OnboardingActionType.SET_BUTTON_ACTIVE,
       isButtonActive: true,
@@ -101,7 +97,7 @@ function useOnboardingState(liveAgent?: MinimalPersonaSnapshot): {
       type: OnboardingActionType.GO_TO_STEP,
       step: OnboardingStep.Complete,
     });
-  }, [llmProviders, isLoadingProviders, userName, hasLlmProviders]);
+  }, [isLoadingProviders, userName, hasLlmProviders]);
 
   const nextStep = useCallback(() => {
     dispatch({
@@ -110,18 +106,10 @@ function useOnboardingState(liveAgent?: MinimalPersonaSnapshot): {
     });
 
     if (state.currentStep === OnboardingStep.Name) {
-      const hasProviders = (state.data.llmProviders?.length ?? 0) > 0;
-      if (hasProviders) {
-        dispatch({
-          type: OnboardingActionType.SET_BUTTON_ACTIVE,
-          isButtonActive: true,
-        });
-      } else {
-        dispatch({
-          type: OnboardingActionType.SET_BUTTON_ACTIVE,
-          isButtonActive: false,
-        });
-      }
+      dispatch({
+        type: OnboardingActionType.SET_BUTTON_ACTIVE,
+        isButtonActive: hasLlmProviders,
+      });
     }
 
     if (state.currentStep === OnboardingStep.LlmSetup) {
@@ -131,7 +119,13 @@ function useOnboardingState(liveAgent?: MinimalPersonaSnapshot): {
       }
     }
     dispatch({ type: OnboardingActionType.NEXT_STEP });
-  }, [state, refreshProviderInfo, refreshPersonaProviders, liveAgent]);
+  }, [
+    state.currentStep,
+    hasLlmProviders,
+    refreshProviderInfo,
+    refreshPersonaProviders,
+    liveAgent,
+  ]);
 
   const prevStep = useCallback(() => {
     dispatch({ type: OnboardingActionType.PREV_STEP });
@@ -139,21 +133,15 @@ function useOnboardingState(liveAgent?: MinimalPersonaSnapshot): {
 
   const goToStep = useCallback(
     (step: OnboardingStep) => {
-      const hasProviders = (state.data.llmProviders?.length ?? 0) > 0;
-      if (step === OnboardingStep.LlmSetup && hasProviders) {
+      if (step === OnboardingStep.LlmSetup) {
         dispatch({
           type: OnboardingActionType.SET_BUTTON_ACTIVE,
-          isButtonActive: true,
-        });
-      } else if (step === OnboardingStep.LlmSetup) {
-        dispatch({
-          type: OnboardingActionType.SET_BUTTON_ACTIVE,
-          isButtonActive: false,
+          isButtonActive: hasLlmProviders,
         });
       }
       dispatch({ type: OnboardingActionType.GO_TO_STEP, step });
     },
-    [state]
+    [hasLlmProviders]
   );
 
   const updateName = useCallback(
@@ -197,10 +185,6 @@ function useOnboardingState(liveAgent?: MinimalPersonaSnapshot): {
     [refreshUser]
   );
 
-  const updateData = useCallback((data: Partial<OnboardingData>) => {
-    dispatch({ type: OnboardingActionType.UPDATE_DATA, payload: data });
-  }, []);
-
   const setLoading = useCallback((isLoading: boolean) => {
     dispatch({ type: OnboardingActionType.SET_LOADING, isLoading });
   }, []);
@@ -237,13 +221,13 @@ function useOnboardingState(liveAgent?: MinimalPersonaSnapshot): {
       goToStep,
       setButtonActive,
       updateName,
-      updateData,
       setLoading,
       setError,
       reset,
     },
     isLoading: isLoadingProviders,
     hasProviders: hasLlmProviders,
+    connectedProviders,
   };
 }
 
@@ -278,6 +262,7 @@ export function useShowOnboarding({
     llmDescriptors,
     isLoading: isLoadingOnboarding,
     hasProviders: hasAnyProvider,
+    connectedProviders,
   } = useOnboardingState(liveAgent);
 
   const isLoadingProviders = isLoadingOnboarding;
@@ -349,5 +334,6 @@ export function useShowOnboarding({
     isLoadingOnboarding,
     hideOnboarding,
     finishOnboarding,
+    connectedProviders,
   };
 }

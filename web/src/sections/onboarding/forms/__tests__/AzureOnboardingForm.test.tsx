@@ -59,6 +59,15 @@ jest.mock("@/app/admin/configuration/llm/utils", () => ({
   }),
 }));
 
+// Mock ProviderContext (used by OnboardingFormWrapper)
+const mockRefreshProviderInfo = jest.fn().mockResolvedValue(undefined);
+jest.mock("@/components/chat/ProviderContext", () => ({
+  useProviderStatus: () => ({
+    hasProviders: false,
+    refreshProviderInfo: mockRefreshProviderInfo,
+  }),
+}));
+
 // Mock ProviderIcon
 jest.mock("@/app/admin/configuration/llm/ProviderIcon", () => ({
   ProviderIcon: ({ provider }: { provider: string }) => (
@@ -306,10 +315,10 @@ describe("AzureOnboardingForm", () => {
       });
     });
 
-    test("updates onboarding data with azure provider", async () => {
+    test("refreshes provider info after successful submission", async () => {
       const user = setupUser();
-      const updateData = jest.fn();
-      const mockActions = createMockOnboardingActions({ updateData });
+      const setButtonActive = jest.fn();
+      const mockActions = createMockOnboardingActions({ setButtonActive });
 
       mockFetch
         .mockResolvedValueOnce(mockResponses.testApiSuccess)
@@ -338,11 +347,8 @@ describe("AzureOnboardingForm", () => {
       await user.click(submitButton);
 
       await waitFor(() => {
-        expect(updateData).toHaveBeenCalledWith(
-          expect.objectContaining({
-            llmProviders: expect.arrayContaining(["azure"]),
-          })
-        );
+        expect(mockRefreshProviderInfo).toHaveBeenCalled();
+        expect(setButtonActive).toHaveBeenCalledWith(true);
       });
     });
   });
