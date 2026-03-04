@@ -1068,8 +1068,31 @@ export default function AgentEditorPage({
                         return;
                       }
 
+                      const applySharingFields = () => {
+                        setFieldValue("shared_user_ids", userIds);
+                        setFieldValue("shared_group_ids", groupIds);
+                        setFieldValue("is_public", isPublic);
+                        setFieldValue("label_ids", labelIds);
+                      };
+
+                      const refreshSharedUi = async () => {
+                        try {
+                          await refreshAgents();
+                          refreshAgent?.();
+                        } catch (error) {
+                          console.error(
+                            "Refresh failed after successful share:",
+                            error
+                          );
+                          toast.error(
+                            "Agent sharing was saved, but failed to refresh. Please reload."
+                          );
+                        }
+                      };
+
+                      let shareError: string | null;
                       try {
-                        const shareError = await updateAgentSharedStatus(
+                        shareError = await updateAgentSharedStatus(
                           existingAgent.id,
                           userIds,
                           groupIds,
@@ -1077,53 +1100,58 @@ export default function AgentEditorPage({
                           isPaidEnterpriseFeaturesEnabled,
                           labelIds
                         );
+                      } catch (error) {
+                        console.error(
+                          "Share agent mutation failed unexpectedly:",
+                          error
+                        );
+                        toast.error("Failed to share agent. Please try again.");
+                        return;
+                      }
 
-                        if (shareError) {
-                          toast.error(`Failed to share agent: ${shareError}`);
-                          return;
-                        }
+                      if (shareError) {
+                        toast.error(`Failed to share agent: ${shareError}`);
+                        return;
+                      }
 
-                        const applySharingFields = () => {
-                          setFieldValue("shared_user_ids", userIds);
-                          setFieldValue("shared_group_ids", groupIds);
-                          setFieldValue("is_public", isPublic);
-                          setFieldValue("label_ids", labelIds);
-                        };
-
-                        if (canUpdateFeaturedStatus) {
-                          const featuredError = await updateAgentFeaturedStatus(
+                      if (canUpdateFeaturedStatus) {
+                        let featuredError: string | null;
+                        try {
+                          featuredError = await updateAgentFeaturedStatus(
                             existingAgent.id,
                             isFeatured
                           );
-                          if (featuredError) {
-                            // Share succeeded, featured failed: persist/share state in local form and UI.
-                            applySharingFields();
-                            await refreshAgents();
-                            refreshAgent?.();
-                            toast.error(
-                              `Failed to update featured status: ${featuredError}`
-                            );
-                            return;
-                          }
+                        } catch (error) {
+                          console.error(
+                            "Featured mutation failed unexpectedly:",
+                            error
+                          );
+                          toast.error(
+                            "Failed to update featured status. Please try again."
+                          );
+                          return;
+                        }
 
+                        if (featuredError) {
+                          // Share succeeded, featured failed: keep modal open for retry.
                           applySharingFields();
-                          setFieldValue("featured", isFeatured);
-                          await refreshAgents();
-                          refreshAgent?.();
-                          shareAgentModal.toggle(false);
+                          await refreshSharedUi();
+                          toast.error(
+                            `Failed to update featured status: ${featuredError}`
+                          );
                           return;
                         }
 
                         applySharingFields();
-                        await refreshAgents();
-                        refreshAgent?.();
+                        setFieldValue("featured", isFeatured);
                         shareAgentModal.toggle(false);
-                      } catch (error) {
-                        console.error("Share agent modal save failed:", error);
-                        toast.error(
-                          "An unexpected error occurred. Please try again."
-                        );
+                        await refreshSharedUi();
+                        return;
                       }
+
+                      applySharingFields();
+                      shareAgentModal.toggle(false);
+                      await refreshSharedUi();
                     }}
                   />
                 </shareAgentModal.Provider>

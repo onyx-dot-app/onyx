@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
 import Button from "@/refresh-components/buttons/Button";
 import {
@@ -398,13 +398,28 @@ export default function ShareAgentModal({
 }: ShareAgentModalProps) {
   const shareAgentModal = useModal();
 
-  const initialValues: ShareAgentFormValues = {
-    selectedUserIds: userIds,
-    selectedGroupIds: groupIds,
-    isPublic: isPublic,
-    isFeatured: isFeatured,
-    labelIds: labelIds,
-  };
+  const initialValues = useMemo(
+    (): ShareAgentFormValues => ({
+      selectedUserIds: userIds,
+      selectedGroupIds: groupIds,
+      isPublic: isPublic,
+      isFeatured: isFeatured,
+      labelIds: labelIds,
+    }),
+    [userIds, groupIds, isPublic, isFeatured, labelIds]
+  );
+  const [modalInitialValues, setModalInitialValues] =
+    useState<ShareAgentFormValues>(initialValues);
+  const wasOpenRef = useRef(false);
+
+  useEffect(() => {
+    // Capture fresh props exactly when the modal opens, then keep them stable
+    // while open so in-flight parent updates don't reset form state.
+    if (shareAgentModal.isOpen && !wasOpenRef.current) {
+      setModalInitialValues(initialValues);
+    }
+    wasOpenRef.current = shareAgentModal.isOpen;
+  }, [shareAgentModal.isOpen, initialValues]);
 
   async function handleSubmit(values: ShareAgentFormValues) {
     await onShare?.(
@@ -419,7 +434,7 @@ export default function ShareAgentModal({
   return (
     <Modal open={shareAgentModal.isOpen} onOpenChange={shareAgentModal.toggle}>
       <Formik
-        initialValues={initialValues}
+        initialValues={modalInitialValues}
         onSubmit={handleSubmit}
         enableReinitialize
       >
