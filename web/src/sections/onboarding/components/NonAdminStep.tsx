@@ -1,9 +1,12 @@
+"use client";
+
 import React, { useRef, useState, useEffect } from "react";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import Button from "@/refresh-components/buttons/Button";
 import { updateUserPersonalization } from "@/lib/userSettings";
 import { useUser } from "@/providers/UserProvider";
+import { toast } from "@/hooks/useToast";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { Button as OpalButton } from "@opal/components";
 import InputAvatar from "@/refresh-components/inputs/InputAvatar";
@@ -37,8 +40,13 @@ export default function NonAdminStep() {
         setSavedName(name);
         setShowHeader(true);
         setIsEditing(false);
+        // Don't call refreshUser() here — it would cause OnboardingFlow to
+        // unmount this component (since user.personalization.name becomes set),
+        // hiding the confirmation banner before the user sees it.
+        // refreshUser() is called in handleDismissConfirmation instead.
       })
       .catch((error) => {
+        toast.error("Failed to save name. Please try again.");
         console.error(error);
       });
   };

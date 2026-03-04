@@ -1,19 +1,21 @@
-import React, { useMemo } from "react";
+"use client";
+
+import { useMemo } from "react";
 import * as Yup from "yup";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import { FormField } from "@/refresh-components/form/FormField";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox";
 import Separator from "@/refresh-components/Separator";
-import {
-  ModelConfiguration,
-  WellKnownLLMProviderDescriptor,
-} from "@/interfaces/llm";
+import { Button } from "@opal/components";
+import { cn, noProp } from "@/lib/utils";
+import { SvgRefreshCw } from "@opal/icons";
+import { WellKnownLLMProviderDescriptor } from "@/interfaces/llm";
 import {
   OnboardingFormWrapper,
   OnboardingFormChildProps,
 } from "./OnboardingFormWrapper";
-import { OnboardingActions, OnboardingState } from "../types";
+import { OnboardingActions, OnboardingState } from "@/interfaces/onboarding";
 import { buildInitialValues } from "../components/llmConnectionHelpers";
 import ConnectionProviderIcon from "@/refresh-components/ConnectionProviderIcon";
 import InlineExternalLink from "@/refresh-components/InlineExternalLink";
@@ -23,9 +25,7 @@ import { ProviderIcon } from "@/app/admin/configuration/llm/ProviderIcon";
 const FIELD_API_KEY = "api_key";
 const FIELD_DEFAULT_MODEL_NAME = "default_model_name";
 
-const DEFAULT_DEFAULT_MODEL_NAME = "claude-sonnet-4-5";
-
-interface AnthropicOnboardingFormProps {
+interface OpenRouterOnboardingFormProps {
   llmDescriptor: WellKnownLLMProviderDescriptor;
   onboardingState: OnboardingState;
   onboardingActions: OnboardingActions;
@@ -33,10 +33,11 @@ interface AnthropicOnboardingFormProps {
   onOpenChange: (open: boolean) => void;
 }
 
-interface AnthropicFormValues {
+interface OpenRouterFormValues {
   name: string;
   provider: string;
   api_key: string;
+  api_base: string;
   api_key_changed: boolean;
   default_model_name: string;
   model_configurations: any[];
@@ -44,11 +45,28 @@ interface AnthropicFormValues {
   is_public: boolean;
 }
 
-function AnthropicFormFields(
-  props: OnboardingFormChildProps<AnthropicFormValues>
+function OpenRouterFormFields(
+  props: OnboardingFormChildProps<OpenRouterFormValues>
 ) {
-  const { apiStatus, showApiMessage, errorMessage, modelOptions, disabled } =
-    props;
+  const {
+    formikProps,
+    apiStatus,
+    showApiMessage,
+    errorMessage,
+    modelOptions,
+    isFetchingModels,
+    handleFetchModels,
+    modelsApiStatus,
+    modelsErrorMessage,
+    showModelsApiErrorMessage,
+    disabled,
+  } = props;
+
+  const handleApiKeyInteraction = () => {
+    if (formikProps.values.api_key) {
+      handleFetchModels();
+    }
+  };
 
   return (
     <>
@@ -64,6 +82,10 @@ function AnthropicFormFields(
                 error={apiStatus === "error"}
                 showClearButton={false}
                 disabled={disabled}
+                onBlur={(e) => {
+                  field.onBlur(e);
+                  handleApiKeyInteraction();
+                }}
               />
             </FormField.Control>
             {!showApiMessage && (
@@ -72,10 +94,10 @@ function AnthropicFormFields(
                   idle: (
                     <>
                       {"Paste your "}
-                      <InlineExternalLink href="https://console.anthropic.com/dashboard">
+                      <InlineExternalLink href="https://openrouter.ai/settings/keys">
                         API key
                       </InlineExternalLink>
-                      {" from Anthropic to access your models."}
+                      {" from OpenRouter to access your models."}
                     </>
                   ),
                   error: meta.error,
@@ -86,8 +108,8 @@ function AnthropicFormFields(
               <FormField.APIMessage
                 state={apiStatus}
                 messages={{
-                  loading: "Checking API key with Anthropic...",
-                  success: "API key valid.",
+                  loading: "Checking API key with OpenRouter...",
+                  success: "API key valid. Your available models updated.",
                   error: errorMessage || "Invalid API key",
                 }}
               />
@@ -113,17 +135,51 @@ function AnthropicFormFields(
                 onValueChange={(value) => helper.setValue(value)}
                 onChange={(e) => helper.setValue(e.target.value)}
                 options={modelOptions}
-                disabled={disabled || modelOptions.length === 0}
+                disabled={
+                  disabled || isFetchingModels || modelOptions.length === 0
+                }
+                rightSection={
+                  <Button
+                    prominence="tertiary"
+                    size="sm"
+                    icon={({ className }) => (
+                      <SvgRefreshCw
+                        className={cn(
+                          className,
+                          isFetchingModels && "animate-spin"
+                        )}
+                      />
+                    )}
+                    onClick={noProp((e) => {
+                      e.preventDefault();
+                      handleFetchModels();
+                    })}
+                    tooltip="Fetch available models"
+                    disabled={disabled || isFetchingModels}
+                  />
+                }
                 onBlur={field.onBlur}
                 placeholder="Select a model"
               />
             </FormField.Control>
-            <FormField.Message
-              messages={{
-                idle: "This model will be used by Onyx by default.",
-                error: meta.error,
-              }}
-            />
+            {!showModelsApiErrorMessage && (
+              <FormField.Message
+                messages={{
+                  idle: "This model will be used by Onyx by default.",
+                  error: meta.error,
+                }}
+              />
+            )}
+            {showModelsApiErrorMessage && (
+              <FormField.APIMessage
+                state={modelsApiStatus}
+                messages={{
+                  loading: "Fetching models...",
+                  success: "Models fetched successfully.",
+                  error: modelsErrorMessage || "Failed to fetch models",
+                }}
+              />
+            )}
           </FormField>
         )}
       />
@@ -131,19 +187,19 @@ function AnthropicFormFields(
   );
 }
 
-export function AnthropicOnboardingForm({
+export function OpenRouterOnboardingForm({
   llmDescriptor,
   onboardingState,
   onboardingActions,
   open,
   onOpenChange,
-}: AnthropicOnboardingFormProps) {
+}: OpenRouterOnboardingFormProps) {
   const initialValues = useMemo(
-    (): AnthropicFormValues => ({
+    (): OpenRouterFormValues => ({
       ...buildInitialValues(),
       name: llmDescriptor.name,
       provider: llmDescriptor.name,
-      default_model_name: DEFAULT_DEFAULT_MODEL_NAME,
+      api_base: "https://openrouter.ai/api/v1",
     }),
     [llmDescriptor.name]
   );
@@ -159,21 +215,11 @@ export function AnthropicOnboardingForm({
     />
   );
 
-  // Enable auto mode if user keeps the recommended default model
-  const transformValues = (
-    values: AnthropicFormValues,
-    modelConfigurations: ModelConfiguration[]
-  ) => ({
-    ...values,
-    model_configurations: modelConfigurations,
-    is_auto_mode: values.default_model_name === DEFAULT_DEFAULT_MODEL_NAME,
-  });
-
   return (
-    <OnboardingFormWrapper<AnthropicFormValues>
+    <OnboardingFormWrapper<OpenRouterFormValues>
       icon={icon}
-      title="Set up Claude"
-      description="Connect to Anthropic and set up your Claude models."
+      title="Set up OpenRouter"
+      description="Connect to OpenRouter and set up your OpenRouter models."
       llmDescriptor={llmDescriptor}
       onboardingState={onboardingState}
       onboardingActions={onboardingActions}
@@ -181,9 +227,8 @@ export function AnthropicOnboardingForm({
       onOpenChange={onOpenChange}
       initialValues={initialValues}
       validationSchema={validationSchema}
-      transformValues={transformValues}
     >
-      {(props) => <AnthropicFormFields {...props} />}
+      {(props) => <OpenRouterFormFields {...props} />}
     </OnboardingFormWrapper>
   );
 }

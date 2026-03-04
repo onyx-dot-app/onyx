@@ -1,4 +1,6 @@
-import React, { memo, useCallback, useState } from "react";
+"use client";
+
+import { memo, useCallback, useState } from "react";
 import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
 import IconButton from "@/refresh-components/buttons/IconButton";
