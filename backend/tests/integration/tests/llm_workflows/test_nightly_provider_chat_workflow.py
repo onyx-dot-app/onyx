@@ -193,6 +193,7 @@ def _create_provider_payload(
     return {
         "name": provider_name,
         "provider": provider,
+        "model": model_name,
         "api_key": api_key,
         "api_base": api_base,
         "api_version": api_version,
