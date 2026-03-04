@@ -188,10 +188,9 @@ class CodeInterpreterClient:
 
         try:
             response.raise_for_status()
-        except Exception:
+            yield from self._parse_sse(response)
+        finally:
             response.close()
-            raise
-        yield from self._parse_sse(response)
 
     def _parse_sse(
         self, response: requests.Response
@@ -202,41 +201,35 @@ class CodeInterpreterClient:
             event: <type>
             data: <json>
             <blank line>
-
-        The response is always closed when this generator finishes or is
-        abandoned (e.g. the caller raises mid-iteration).
         """
         event_type: str | None = None
         data_lines: list[str] = []
 
-        try:
-            for line in response.iter_lines(decode_unicode=True):
-                if line is None:
-                    continue
+        for line in response.iter_lines(decode_unicode=True):
+            if line is None:
+                continue
 
-                if line == "":
-                    # Blank line marks end of an SSE event
-                    if event_type is not None and data_lines:
-                        data = "\n".join(data_lines)
-                        model_cls = _SSE_EVENT_MAP.get(event_type)
-                        if model_cls is not None:
-                            yield model_cls(**json.loads(data))
-                        else:
-                            logger.warning(f"Unknown SSE event type: {event_type}")
-                    event_type = None
-                    data_lines = []
-                elif line.startswith("event:"):
-                    event_type = line[len("event:") :].strip()
-                elif line.startswith("data:"):
-                    data_lines.append(line[len("data:") :].strip())
+            if line == "":
+                # Blank line marks end of an SSE event
+                if event_type is not None and data_lines:
+                    data = "\n".join(data_lines)
+                    model_cls = _SSE_EVENT_MAP.get(event_type)
+                    if model_cls is not None:
+                        yield model_cls(**json.loads(data))
+                    else:
+                        logger.warning(f"Unknown SSE event type: {event_type}")
+                event_type = None
+                data_lines = []
+            elif line.startswith("event:"):
+                event_type = line[len("event:") :].strip()
+            elif line.startswith("data:"):
+                data_lines.append(line[len("data:") :].strip())
 
-            if event_type is not None or data_lines:
-                logger.warning(
-                    f"SSE stream ended with incomplete event: "
-                    f"event_type={event_type}, data_lines={data_lines}"
-                )
-        finally:
-            response.close()
+        if event_type is not None or data_lines:
+            logger.warning(
+                f"SSE stream ended with incomplete event: "
+                f"event_type={event_type}, data_lines={data_lines}"
+            )
 
     def _batch_as_stream(
         self,
