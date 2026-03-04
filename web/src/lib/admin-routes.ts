@@ -27,6 +27,7 @@ import {
   SvgThumbsUp,
   SvgUploadCloud,
   SvgUser,
+  SvgUserSync,
   SvgUsers,
   SvgWallet,
   SvgZoomIn,
@@ -65,6 +66,7 @@ export const ADMIN_PATHS = {
   THEME: "/admin/theme",
   BILLING: "/admin/billing",
   INDEX_MIGRATION: "/admin/document-index-migration",
+  SCIM: "/admin/scim",
   DEBUG: "/admin/debug",
   // Prefix-only entries (used in SETTINGS_LAYOUT_PREFIXES but have no
   // single page header of their own)
@@ -227,6 +229,11 @@ export const ADMIN_ROUTE_CONFIG: Record<string, AdminRouteConfig> = {
     icon: SvgArrowExchange,
     title: "Document Index Migration",
     sidebarLabel: "Document Index Migration",
+  },
+  [ADMIN_PATHS.SCIM]: {
+    icon: SvgUserSync,
+    title: "SCIM",
+    sidebarLabel: "SCIM",
   },
   [ADMIN_PATHS.DEBUG]: {
     icon: SvgDownload,
