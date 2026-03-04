@@ -30,6 +30,18 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+
+def _get_executor_class() -> type[ThreadPoolExecutor]:
+    """Return InstrumentedThreadPoolExecutor when metrics are enabled."""
+    from onyx.configs.app_configs import ENABLE_THREADPOOL_METRICS
+
+    if ENABLE_THREADPOOL_METRICS:
+        from onyx.server.metrics.threadpool import InstrumentedThreadPoolExecutor
+
+        return InstrumentedThreadPoolExecutor
+    return ThreadPoolExecutor
+
+
 R = TypeVar("R")
 KT = TypeVar("KT")  # Key type
 VT = TypeVar("VT")  # Value type
@@ -323,7 +335,8 @@ def run_functions_tuples_in_parallel(
         return []
 
     results: list[tuple[int, Any]] = []
-    executor = ThreadPoolExecutor(max_workers=workers)
+    ExecutorClass = _get_executor_class()
+    executor = ExecutorClass(max_workers=workers)
 
     try:
         # The primary reason for propagating contextvars is to allow acquiring a db session
@@ -421,7 +434,8 @@ def run_functions_in_parallel(
     if len(function_calls) == 0:
         return results
 
-    with ThreadPoolExecutor(max_workers=len(function_calls)) as executor:
+    ExecutorClass = _get_executor_class()
+    with ExecutorClass(max_workers=len(function_calls)) as executor:
         future_to_id = {
             executor.submit(
                 contextvars.copy_context().run, func_call.execute
@@ -543,7 +557,8 @@ def parallel_yield(gens: list[Iterator[R]], max_workers: int = 10) -> Iterator[R
     if you are consuming all elements from the generators OR it is acceptable
     for some extra generator code to run and not have the result(s) yielded.
     """
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+    ExecutorClass = _get_executor_class()
+    with ExecutorClass(max_workers=max_workers) as executor:
         future_to_index: dict[Future[tuple[int, R | None]], int] = {
             executor.submit(_next_or_none, ind, gen): ind
             for ind, gen in enumerate(gens)
