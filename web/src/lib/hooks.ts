@@ -190,7 +190,7 @@ export const useConnectorIndexingStatusWithPagination = (
 
   // Function to refresh all data (maintains current pagination)
   const refreshAllData = useCallback(() => {
-    mutate(swrKey);
+    if (swrKey) mutate(swrKey);
   }, [mutate, swrKey]);
 
   // Reset pagination when filters change (but not search)
