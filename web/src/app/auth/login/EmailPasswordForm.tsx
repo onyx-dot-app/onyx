@@ -240,7 +240,7 @@ export default function EmailPasswordForm({
                 )}
               />
 
-              <Spacer rem={1} />
+              <Spacer rem={0.25} />
               <Button
                 type="submit"
                 width="full"

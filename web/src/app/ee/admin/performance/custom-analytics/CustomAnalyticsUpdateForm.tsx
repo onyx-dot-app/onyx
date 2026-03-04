@@ -95,7 +95,7 @@ export function CustomAnalyticsUpdateForm() {
           value={secretKey}
           onChange={(e) => setSecretKey(e.target.value)}
         />
-        <Spacer rem={4} />
+        <Spacer rem={1} />
         <Button type="submit">Update</Button>
       </form>
     </div>

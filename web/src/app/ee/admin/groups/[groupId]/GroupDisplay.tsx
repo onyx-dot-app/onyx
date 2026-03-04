@@ -469,7 +469,7 @@ export const GroupDisplay = ({
 
       {isAdmin && (
         <>
-          <Spacer rem={3} />
+          <Spacer rem={0.75} />
           <Button onClick={() => setAddRateLimitFormVisible(true)}>
             Create a Token Rate Limit
           </Button>
