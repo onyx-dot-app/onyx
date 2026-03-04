@@ -66,3 +66,8 @@ export function useSettingsContext() {
   }
   return context;
 }
+
+export function useVectorDbEnabled(): boolean {
+  const settings = useSettingsContext();
+  return settings.settings.vector_db_enabled !== false;
+}

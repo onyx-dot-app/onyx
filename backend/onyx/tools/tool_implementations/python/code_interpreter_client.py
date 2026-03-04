@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import time
 from collections.abc import Generator
@@ -84,6 +86,19 @@ class CodeInterpreterClient:
             raise ValueError("CODE_INTERPRETER_BASE_URL not configured")
         self.base_url = base_url.rstrip("/")
         self.session = requests.Session()
+        self._closed = False
+
+    def __enter__(self) -> CodeInterpreterClient:
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        self.close()
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self.session.close()
+        self._closed = True
 
     def _build_payload(
         self,
@@ -177,8 +192,11 @@ class CodeInterpreterClient:
             yield from self._batch_as_stream(code, stdin, timeout_ms, files)
             return
 
-        response.raise_for_status()
-        yield from self._parse_sse(response)
+        try:
+            response.raise_for_status()
+            yield from self._parse_sse(response)
+        finally:
+            response.close()
 
     def _parse_sse(
         self, response: requests.Response

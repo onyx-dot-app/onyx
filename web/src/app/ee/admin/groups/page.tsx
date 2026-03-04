@@ -10,11 +10,13 @@ import { useUser } from "@/providers/UserProvider";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { useVectorDbEnabled } from "@/providers/SettingsProvider";
 
 const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.GROUPS]!;
 
 function Main() {
   const [showForm, setShowForm] = useState(false);
+  const vectorDbEnabled = useVectorDbEnabled();
 
   const { data, isLoading, error, refreshUserGroups } = useUserGroups();
 
@@ -22,7 +24,7 @@ function Main() {
     data: ccPairs,
     isLoading: isCCPairsLoading,
     error: ccPairsError,
-  } = useConnectorStatus();
+  } = useConnectorStatus(30000, vectorDbEnabled);
 
   const {
     data: users,
@@ -32,7 +34,7 @@ function Main() {
 
   const { isAdmin } = useUser();
 
-  if (isLoading || isCCPairsLoading || userIsLoading) {
+  if (isLoading || (vectorDbEnabled && isCCPairsLoading) || userIsLoading) {
     return <ThreeDotsLoader />;
   }
 
@@ -40,7 +42,7 @@ function Main() {
     return <div className="text-red-600">Error loading users</div>;
   }
 
-  if (ccPairsError || !ccPairs) {
+  if (vectorDbEnabled && (ccPairsError || !ccPairs)) {
     return <div className="text-red-600">Error loading connectors</div>;
   }
 
@@ -67,7 +69,7 @@ function Main() {
             setShowForm(false);
           }}
           users={users.accepted}
-          ccPairs={ccPairs}
+          ccPairs={ccPairs ?? []}
         />
       )}
     </>

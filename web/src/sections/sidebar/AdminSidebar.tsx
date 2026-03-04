@@ -130,6 +130,14 @@ const collections = (
           ...(enableEnterprise
             ? [
                 {
+                  name: "Permissions",
+                  items: [sidebarItem(ADMIN_PATHS.SCIM)],
+                },
+              ]
+            : []),
+          ...(enableEnterprise
+            ? [
+                {
                   name: "Performance",
                   items: [
                     sidebarItem(ADMIN_PATHS.USAGE),

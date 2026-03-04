@@ -12,7 +12,10 @@ import { useFederatedConnectors, useFilters, useLlmManager } from "@/lib/hooks";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import {
+  useSettingsContext,
+  useVectorDbEnabled,
+} from "@/providers/SettingsProvider";
 import Dropzone from "react-dropzone";
 import AppInputBar, { AppInputBarHandle } from "@/sections/input/AppInputBar";
 import useChatSessions from "@/hooks/useChatSessions";
@@ -142,7 +145,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   // settings are passed in via Context and therefore aren't
   // available in server-side components
   const settings = useSettingsContext();
-  const vectorDbEnabled = settings?.settings.vector_db_enabled !== false;
+  const vectorDbEnabled = useVectorDbEnabled();
   const { ccPairs } = useCCPairs(vectorDbEnabled);
   const { tags } = useTags();
   const { documentSets } = useDocumentSets();
