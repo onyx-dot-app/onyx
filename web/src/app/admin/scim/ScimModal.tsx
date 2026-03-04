@@ -39,6 +39,7 @@ export default function ScimModal({
         <ConfirmationModalLayout
           icon={SvgRefreshCw}
           title="Regenerate SCIM Token"
+          onClose={onClose}
           submit={
             <Button danger onClick={onRegenerate} disabled={isSubmitting}>
               Regenerate Token

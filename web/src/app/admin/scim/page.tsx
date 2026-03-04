@@ -10,7 +10,7 @@ import * as SettingsLayouts from "@/layouts/settings-layouts";
 import Text from "@/refresh-components/texts/Text";
 import { ThreeDotsLoader } from "@/components/Loading";
 
-import { ScimTokenCreatedResponse, ScimModalView } from "./interfaces";
+import type { ScimTokenCreatedResponse, ScimModalView } from "./interfaces";
 import { generateScimToken } from "./svc";
 import ScimSyncCard from "./ScimSyncCard";
 import ScimModal from "./ScimModal";
@@ -70,7 +70,7 @@ function ScimContent() {
       if (!response.ok) {
         let detail: string;
         try {
-          const body = await response.json();
+          const body = await response.clone().json();
           detail = body.detail ?? JSON.stringify(body);
         } catch {
           detail = await response.text();
