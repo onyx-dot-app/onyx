@@ -172,3 +172,30 @@ def test_table_with_alignment_specifiers() -> None:
     formatted = format_slack_message(message)
 
     assert "*a*\n  Center: b\n  Right: c" in formatted
+
+
+def test_two_tables_in_same_message_use_independent_headers() -> None:
+    message = (
+        "| A | B |\n"
+        "|---|---|\n"
+        "| 1 | 2 |\n"
+        "\n"
+        "| X | Y | Z |\n"
+        "|---|---|---|\n"
+        "| p | q | r |\n"
+    )
+
+    formatted = format_slack_message(message)
+
+    assert "*1*\n  B: 2" in formatted
+    assert "*p*\n  Y: q\n  Z: r" in formatted
+
+
+def test_table_empty_first_column_no_bare_asterisks() -> None:
+    message = "| Name | Status |\n" "|------|--------|\n" "| | Done |\n"
+
+    formatted = format_slack_message(message)
+
+    # Empty title should not produce "**" (bare asterisks)
+    assert "**" not in formatted
+    assert "  Status: Done" in formatted

@@ -245,7 +245,8 @@ class SlackRenderer(HTMLRenderer):
         lines: list[str] = []
         if cells:
             title = cells[0]
-            lines.append(f"*{title}*")
+            if title:
+                lines.append(f"*{title}*")
             for i, cell in enumerate(cells[1:], start=1):
                 if i < len(self._table_headers):
                     lines.append(f"  {self._table_headers[i]}: {cell}")
