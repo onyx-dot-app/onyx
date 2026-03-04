@@ -268,20 +268,25 @@ jobs:
           persist-credentials: false
 
       - name: Setup node
+        # zizmor: ignore[cache-poisoning] ephemeral runners; no release artifacts
         uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # ratchet:actions/setup-node@v4
         with:
           node-version: 22
-          check-latest: true
+          cache: "npm"
+          cache-dependency-path: ./web/package-lock.json
 
       - name: Install node dependencies
         working-directory: ./web
         run: npm ci
 
       - name: Cache playwright cache
+        # zizmor: ignore[cache-poisoning] ephemeral runners; no release artifacts
         uses: runs-on/cache@50350ad4242587b6c8c2baa2e740b1bc11285ff4 # ratchet:runs-on/cache@v4
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-npm-${{ hashFiles('web/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-npm-
 
       - name: Install playwright browsers
         working-directory: ./web
@@ -605,20 +610,25 @@ jobs:
           persist-credentials: false
 
       - name: Setup node
+        # zizmor: ignore[cache-poisoning] ephemeral runners; no release artifacts
         uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # ratchet:actions/setup-node@v4
         with:
           node-version: 22
-          check-latest: true
+          cache: "npm"
+          cache-dependency-path: ./web/package-lock.json
 
       - name: Install node dependencies
         working-directory: ./web
         run: npm ci
 
       - name: Cache playwright cache
+        # zizmor: ignore[cache-poisoning] ephemeral runners; no release artifacts
         uses: runs-on/cache@50350ad4242587b6c8c2baa2e740b1bc11285ff4 # ratchet:runs-on/cache@v4
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-npm-${{ hashFiles('web/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-npm-
 
       - name: Install playwright browsers
         working-directory: ./web
