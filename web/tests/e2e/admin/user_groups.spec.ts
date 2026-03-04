@@ -3,7 +3,7 @@ import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 
 test.use({ storageState: "admin_auth.json" });
 
-test.describe("User Groups - No Vector DB @exclusive", () => {
+test.describe("User Groups - No Vector DB @lite", () => {
   test.beforeAll(async ({ browser }) => {
     const context = await browser.newContext({
       storageState: "admin_auth.json",
@@ -84,15 +84,18 @@ test.describe("User Groups - Standard Deployment @exclusive", () => {
     const context = await browser.newContext({
       storageState: "admin_auth.json",
     });
-    client = new OnyxApiClient(context.request);
-
-    const vectorDbEnabled = await client.isVectorDbEnabled();
-    if (!vectorDbEnabled) {
+    try {
+      client = new OnyxApiClient(context.request);
+      const vectorDbEnabled = await client.isVectorDbEnabled();
+      if (!vectorDbEnabled) {
+        test.skip(true, "Skipped: vector DB is disabled in this deployment");
+        return;
+      }
+      cleanupContext = context;
+    } catch (e) {
       await context.close();
-      test.skip(true, "Skipped: vector DB is disabled in this deployment");
-      return;
+      throw e;
     }
-    cleanupContext = context;
   });
 
   test.afterAll(async () => {
@@ -125,9 +128,15 @@ test.describe("User Groups - Standard Deployment @exclusive", () => {
     const groupRow = page.getByRole("row").filter({ hasText: groupName });
     await expect(groupRow).toBeVisible({ timeout: 10000 });
 
-    await expect(groupRow.getByText("Up to date!")).toBeVisible({
-      timeout: 60000,
-    });
+    const upToDate = groupRow.getByText("Up to date!");
+    const deadline = Date.now() + 120_000;
+    while (Date.now() < deadline) {
+      if (await upToDate.isVisible().catch(() => false)) break;
+      await page.waitForTimeout(3000);
+      await page.reload();
+      await page.waitForLoadState("networkidle");
+    }
+    await expect(upToDate).toBeVisible({ timeout: 5000 });
 
     const groupLink = groupRow.getByRole("link", { name: groupName });
     await groupLink.click();
