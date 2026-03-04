@@ -10,6 +10,8 @@ import SearchCard from "@/ee/sections/SearchCard";
 import Pagination from "@/refresh-components/Pagination";
 import Separator from "@/refresh-components/Separator";
 import EmptyMessage from "@/refresh-components/EmptyMessage";
+import { IllustrationContent } from "@opal/layouts";
+import SvgNoResult from "@opal/illustrations/no-result";
 import { getSourceMetadata } from "@/lib/sources";
 import { Tag, ValidSources } from "@/lib/types";
 import { getTimeFilterDate, TimeFilter } from "@/lib/time";
@@ -329,9 +331,10 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
               ))}
             </>
           ) : (
-            <EmptyMessage
-              title="No documents found"
-              description="Try searching for something else"
+            <IllustrationContent
+              illustration={SvgNoResult}
+              title="No results found"
+              description="Check your connectors/filters or try a different search term."
             />
           )}
         </div>
