@@ -169,6 +169,7 @@ export { default as SvgUploadCloud } from "@opal/icons/upload-cloud";
 export { default as SvgUser } from "@opal/icons/user";
 export { default as SvgUserManage } from "@opal/icons/user-manage";
 export { default as SvgUserPlus } from "@opal/icons/user-plus";
+export { default as SvgUserSync } from "@opal/icons/user-sync";
 export { default as SvgUsers } from "@opal/icons/users";
 export { default as SvgWallet } from "@opal/icons/wallet";
 export { default as SvgWorkflow } from "@opal/icons/workflow";

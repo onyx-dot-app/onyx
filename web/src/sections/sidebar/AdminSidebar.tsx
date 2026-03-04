@@ -45,6 +45,7 @@ import {
   SvgThumbsUp,
   SvgUploadCloud,
   SvgUser,
+  SvgUserSync,
   SvgUsers,
   SvgZoomIn,
   SvgPaintBrush,
@@ -265,6 +266,20 @@ const collections = (
               },
             ],
           },
+          ...(enableEnterprise
+            ? [
+                {
+                  name: "Permissions",
+                  items: [
+                    {
+                      name: "SCIM",
+                      icon: SvgUserSync,
+                      link: "/admin/scim",
+                    },
+                  ],
+                },
+              ]
+            : []),
           ...(enableEnterprise
             ? [
                 {

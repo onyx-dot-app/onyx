@@ -28,6 +28,7 @@ const SETTINGS_LAYOUT_PREFIXES = [
   "/admin/discord-bot",
   "/admin/theme",
   "/admin/configuration/llm",
+  "/admin/scim",
 ];
 
 export function ClientLayout({

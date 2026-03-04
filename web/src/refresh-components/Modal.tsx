@@ -79,7 +79,7 @@ const widthClasses = {
   lg: "w-[80dvw]",
   md: "w-[60rem]",
   "md-sm": "w-[50rem]",
-  sm: "w-[32rem]",
+  sm: "w-[30rem]",
 };
 
 const heightClasses = {
