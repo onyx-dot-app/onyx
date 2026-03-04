@@ -62,7 +62,8 @@ type ManagedKeys =
   | "getSortedRowModel"
   | "getPaginationRowModel"
   | "columnResizeMode"
-  | "enableRowSelection";
+  | "enableRowSelection"
+  | "enableColumnResizing";
 
 /**
  * Options accepted by {@link useDataTable}.
@@ -203,7 +204,7 @@ export default function useDataTable<TData extends RowData>(
       : "none";
 
   const selectedCount = Object.keys(rowSelection).length;
-  const totalPages = table.getPageCount();
+  const totalPages = Math.max(1, table.getPageCount());
   const currentPage = pagination.pageIndex + 1;
   const totalItems = data.length;
   const isPaginated = isFinite(pageSizeOption);

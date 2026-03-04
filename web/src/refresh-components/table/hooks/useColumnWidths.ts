@@ -1,3 +1,5 @@
+"use client";
+
 /**
  * useColumnWidths — Proportional column widths with splitter resize.
  *
@@ -38,7 +40,7 @@
  */
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { ColumnDef, Header } from "@tanstack/react-table";
+import { Header } from "@tanstack/react-table";
 
 // ---------------------------------------------------------------------------
 // Types

@@ -13,7 +13,6 @@ import type {
   OnyxDataColumn,
   OnyxDisplayColumn,
   OnyxActionsColumn,
-  OnyxColumnDef,
 } from "@/refresh-components/table/types";
 import type { TableSize } from "@/refresh-components/table/TableSizeContext";
 import type { IconFunctionComponent } from "@opal/types";
