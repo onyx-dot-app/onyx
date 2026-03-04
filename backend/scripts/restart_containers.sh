@@ -1,27 +1,33 @@
 #!/bin/bash
 set -e
 
+# Source .env for OPENSEARCH_ADMIN_PASSWORD if available (used by OpenSearch container)
+if [[ -f "$(dirname "$0")/../../.vscode/.env" ]]; then
+    source "$(dirname "$0")/../../.vscode/.env"
+fi
+
 cleanup() {
   echo "Error occurred. Cleaning up..."
-  docker stop onyx_postgres onyx_vespa onyx_redis onyx_minio onyx_code_interpreter 2>/dev/null || true
-  docker rm onyx_postgres onyx_vespa onyx_redis onyx_minio onyx_code_interpreter 2>/dev/null || true
+  docker stop onyx_postgres onyx_vespa onyx_redis onyx_minio onyx_code_interpreter onyx_opensearch 2>/dev/null || true
+  docker rm onyx_postgres onyx_vespa onyx_redis onyx_minio onyx_code_interpreter onyx_opensearch 2>/dev/null || true
 }
 
 # Trap errors and output a message, then cleanup
 trap 'echo "Error occurred on line $LINENO. Exiting script." >&2; cleanup' ERR
 
 # Usage of the script with optional volume arguments
-# ./restart_containers.sh [vespa_volume] [postgres_volume] [redis_volume]
+# ./restart_containers.sh [vespa_volume] [postgres_volume] [redis_volume] [minio_volume] [opensearch_volume]
 
 VESPA_VOLUME=${1:-""}  # Default is empty if not provided
 POSTGRES_VOLUME=${2:-""}  # Default is empty if not provided
 REDIS_VOLUME=${3:-""}  # Default is empty if not provided
 MINIO_VOLUME=${4:-""}  # Default is empty if not provided
+OPENSEARCH_VOLUME=${5:-""}  # Default is empty if not provided
 
 # Stop and remove the existing containers
 echo "Stopping and removing existing containers..."
-docker stop onyx_postgres onyx_vespa onyx_redis onyx_minio onyx_code_interpreter 2>/dev/null || true
-docker rm onyx_postgres onyx_vespa onyx_redis onyx_minio onyx_code_interpreter 2>/dev/null || true
+docker stop onyx_postgres onyx_vespa onyx_redis onyx_minio onyx_code_interpreter onyx_opensearch 2>/dev/null || true
+docker rm onyx_postgres onyx_vespa onyx_redis onyx_minio onyx_code_interpreter onyx_opensearch 2>/dev/null || true
 
 # Start the PostgreSQL container with optional volume
 echo "Starting PostgreSQL container..."
@@ -37,6 +43,29 @@ if [[ -n "$VESPA_VOLUME" ]]; then
     docker run --detach --name onyx_vespa --hostname vespa-container --publish 8081:8081 --publish 19071:19071 -v $VESPA_VOLUME:/opt/vespa/var vespaengine/vespa:8
 else
     docker run --detach --name onyx_vespa --hostname vespa-container --publish 8081:8081 --publish 19071:19071 vespaengine/vespa:8
+fi
+
+# Start the OpenSearch container with optional volume
+echo "Starting OpenSearch container..."
+if [[ -n "$OPENSEARCH_VOLUME" ]]; then
+    docker run --detach --name onyx_opensearch --publish 9200:9200 \
+        -e discovery.type=single-node \
+        -e OPENSEARCH_INITIAL_ADMIN_PASSWORD=${OPENSEARCH_ADMIN_PASSWORD:-StrongPassword123!} \
+        -e bootstrap.memory_lock=true \
+        -e "OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g" \
+        --ulimit memlock=-1:-1 \
+        --ulimit nofile=65536:65536 \
+        -v $OPENSEARCH_VOLUME:/usr/share/opensearch/data \
+        opensearchproject/opensearch:3.4.0
+else
+    docker run --detach --name onyx_opensearch --publish 9200:9200 \
+        -e discovery.type=single-node \
+        -e OPENSEARCH_INITIAL_ADMIN_PASSWORD=${OPENSEARCH_ADMIN_PASSWORD:-StrongPassword123!} \
+        -e bootstrap.memory_lock=true \
+        -e "OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g" \
+        --ulimit memlock=-1:-1 \
+        --ulimit nofile=65536:65536 \
+        opensearchproject/opensearch:3.4.0
 fi
 
 # Start the Redis container with optional volume
