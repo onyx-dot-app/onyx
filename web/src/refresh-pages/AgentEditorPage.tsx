@@ -1087,6 +1087,10 @@ export default function AgentEditorPage({
                         setFieldValue("shared_group_ids", groupIds);
                         setFieldValue("is_public", isPublic);
                         setFieldValue("label_ids", labelIds);
+                        // Sharing updates are persisted independently from featured.
+                        // Refresh now so UI reflects share changes even if featured fails.
+                        await refreshAgents();
+                        refreshAgent?.();
 
                         if (canUpdateFeaturedStatus) {
                           const featuredError = await updateAgentFeaturedStatus(
