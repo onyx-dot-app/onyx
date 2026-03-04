@@ -37,7 +37,6 @@ interface IllustrationContentProps {
  * │     └───────────────────┘       │
  * │         (0.75rem gap)           │
  * │          title (center)         │
- * │         (0.75rem gap)           │
  * │      description (center)       │
  * │          (1.25rem pad)          │
  * └─────────────────────────────────┘
@@ -68,10 +67,12 @@ function IllustrationContent({
           className="shrink-0 w-[7.5rem] h-[7.5rem]"
         />
       )}
-      <p className="font-main-content-emphasis text-text-04">{title}</p>
-      {description && (
-        <p className="font-secondary-body text-text-03">{description}</p>
-      )}
+      <div className="flex flex-col items-center text-center">
+        <p className="font-main-content-emphasis text-text-04">{title}</p>
+        {description && (
+          <p className="font-secondary-body text-text-03">{description}</p>
+        )}
+      </div>
     </div>
   );
 }

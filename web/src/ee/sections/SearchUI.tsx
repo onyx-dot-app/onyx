@@ -194,12 +194,14 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
     }
   };
 
+  const showEmpty = !error && paginatedResults.length === 0;
+
   return (
     <>
       <div
         className="flex-1 min-h-0 w-full grid gap-x-4"
         style={{
-          gridTemplateColumns: "3fr 1fr",
+          gridTemplateColumns: showEmpty ? "1fr" : "3fr 1fr",
           gridTemplateRows: "auto 1fr auto",
         }}
       >
@@ -305,15 +307,17 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
         </div>
 
         {/* Top-right: Number of results */}
-        <div className="row-start-1 col-start-2 flex flex-col justify-end gap-3">
-          <Section alignItems="start">
-            <Text text03 mainUiMuted>
-              {results.length} Results
-            </Text>
-          </Section>
+        {!showEmpty && (
+          <div className="row-start-1 col-start-2 flex flex-col justify-end gap-3">
+            <Section alignItems="start">
+              <Text text03 mainUiMuted>
+                {results.length} Results
+              </Text>
+            </Section>
 
-          <Separator noPadding />
-        </div>
+            <Separator noPadding />
+          </div>
+        )}
 
         {/* Bottom-left: Search results */}
         <div className="row-start-2 col-start-1 min-h-0 overflow-y-scroll py-3 flex flex-col gap-2">
@@ -349,28 +353,30 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
         </div>
 
         {/* Bottom-right: Source filter */}
-        <div className="row-start-2 col-start-2 min-h-0 overflow-y-auto flex flex-col gap-4 px-1 py-3">
-          <Section gap={0.25} height="fit">
-            {sourcesWithMeta.map(({ source, meta, count }) => (
-              <LineItem
-                key={source}
-                icon={(props) => (
-                  <SourceIcon
-                    sourceType={source as ValidSources}
-                    iconSize={16}
-                    {...props}
-                  />
-                )}
-                onClick={() => handleSourceToggle(source)}
-                selected={selectedSources.includes(source)}
-                emphasized
-                rightChildren={<Text text03>{count}</Text>}
-              >
-                {meta.displayName}
-              </LineItem>
-            ))}
-          </Section>
-        </div>
+        {!showEmpty && (
+          <div className="row-start-2 col-start-2 min-h-0 overflow-y-auto flex flex-col gap-4 px-1 py-3">
+            <Section gap={0.25} height="fit">
+              {sourcesWithMeta.map(({ source, meta, count }) => (
+                <LineItem
+                  key={source}
+                  icon={(props) => (
+                    <SourceIcon
+                      sourceType={source as ValidSources}
+                      iconSize={16}
+                      {...props}
+                    />
+                  )}
+                  onClick={() => handleSourceToggle(source)}
+                  selected={selectedSources.includes(source)}
+                  emphasized
+                  rightChildren={<Text text03>{count}</Text>}
+                >
+                  {meta.displayName}
+                </LineItem>
+              ))}
+            </Section>
+          </div>
+        )}
       </div>
     </>
   );
