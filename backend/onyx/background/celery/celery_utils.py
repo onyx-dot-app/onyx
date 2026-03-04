@@ -39,9 +39,13 @@ CT = TypeVar("CT", bound=ConnectorCheckpoint)
 
 
 class SlimConnectorExtractionResult(BaseModel):
-    """Result of extracting document IDs and hierarchy nodes from a connector."""
+    """Result of extracting document IDs and hierarchy nodes from a connector.
 
-    doc_ids: set[str]
+    doc_ids maps document ID → parent_hierarchy_raw_node_id (or None).
+    Use doc_ids.keys() wherever the old set of IDs was needed.
+    """
+
+    doc_ids: dict[str, str | None]
     hierarchy_nodes: list[HierarchyNode]
 
 
@@ -95,27 +99,28 @@ def _get_failure_id(failure: ConnectorFailure) -> str | None:
 
 def _extract_from_batch(
     doc_list: Sequence[Document | SlimDocument | HierarchyNode | ConnectorFailure],
-) -> tuple[set[str], list[HierarchyNode]]:
-    """Separate a batch into document IDs and hierarchy nodes.
+) -> tuple[dict[str, str | None], list[HierarchyNode]]:
+    """Separate a batch into document IDs (with parent mapping) and hierarchy nodes.
 
     ConnectorFailure items have their failed document/entity IDs added to the
-    ID set so that failed-to-retrieve documents are not accidentally pruned.
+    ID dict so that failed-to-retrieve documents are not accidentally pruned.
     """
-    ids: set[str] = set()
+    ids: dict[str, str | None] = {}
     hierarchy_nodes: list[HierarchyNode] = []
     for item in doc_list:
         if isinstance(item, HierarchyNode):
             hierarchy_nodes.append(item)
-            ids.add(item.raw_node_id)
+            ids[item.raw_node_id] = None
         elif isinstance(item, ConnectorFailure):
             failed_id = _get_failure_id(item)
             if failed_id:
-                ids.add(failed_id)
+                ids[failed_id] = None
             logger.warning(
                 f"Failed to retrieve document {failed_id}: " f"{item.failure_message}"
             )
         else:
-            ids.add(item.id)
+            parent_raw = getattr(item, "parent_hierarchy_raw_node_id", None)
+            ids[item.id] = parent_raw
     return ids, hierarchy_nodes
 
 
@@ -132,7 +137,7 @@ def extract_ids_from_runnable_connector(
 
     Optionally, a callback can be passed to handle the length of each document batch.
     """
-    all_connector_doc_ids: set[str] = set()
+    all_connector_doc_ids: dict[str, str | None] = {}
     all_hierarchy_nodes: list[HierarchyNode] = []
 
     # Sequence (covariant) lets all the specific list[...] iterator types unify here
@@ -178,7 +183,8 @@ def extract_ids_from_runnable_connector(
             )
 
         batch_ids, batch_nodes = _extract_from_batch(doc_list)
-        all_connector_doc_ids.update(doc_batch_processing_func(batch_ids))
+        doc_batch_processing_func(batch_ids)
+        all_connector_doc_ids.update(batch_ids)
         all_hierarchy_nodes.extend(batch_nodes)
 
         if callback:

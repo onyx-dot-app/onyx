@@ -385,6 +385,7 @@ class IndexingDocument(Document):
 class SlimDocument(BaseModel):
     id: str
     external_access: ExternalAccess | None = None
+    parent_hierarchy_raw_node_id: str | None = None
 
 
 class HierarchyNode(BaseModel):

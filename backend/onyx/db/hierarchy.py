@@ -525,6 +525,50 @@ def get_document_parent_hierarchy_node_ids(
     return {doc_id: parent_id for doc_id, parent_id in results}
 
 
+def update_document_parent_hierarchy_nodes(
+    db_session: Session,
+    doc_parent_map: dict[str, int | None],
+    commit: bool = True,
+) -> int:
+    """Bulk-update Document.parent_hierarchy_node_id for multiple documents.
+
+    Only updates rows whose current value differs from the desired value to
+    avoid unnecessary writes.
+
+    Args:
+        db_session: SQLAlchemy session
+        doc_parent_map: Mapping of document_id → desired parent_hierarchy_node_id
+        commit: Whether to commit the transaction
+
+    Returns:
+        Number of documents actually updated
+    """
+    if not doc_parent_map:
+        return 0
+
+    doc_ids = list(doc_parent_map.keys())
+    existing = get_document_parent_hierarchy_node_ids(db_session, doc_ids)
+
+    updated = 0
+    for doc_id, desired_parent_id in doc_parent_map.items():
+        current = existing.get(doc_id)
+        if current == desired_parent_id:
+            continue
+        if doc_id not in existing:
+            continue
+        db_session.query(Document).filter(Document.id == doc_id).update(
+            {Document.parent_hierarchy_node_id: desired_parent_id}
+        )
+        updated += 1
+
+    if commit:
+        db_session.commit()
+    elif updated:
+        db_session.flush()
+
+    return updated
+
+
 def update_hierarchy_node_permissions(
     db_session: Session,
     raw_node_id: str,
