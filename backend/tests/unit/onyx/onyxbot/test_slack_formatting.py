@@ -119,12 +119,8 @@ def test_table_renders_as_vertical_cards() -> None:
 
     formatted = format_slack_message(message)
 
-    assert "*Auth*" in formatted
-    assert "  Status: Done" in formatted
-    assert "  Owner: Alice" in formatted
-    assert "*Search*" in formatted
-    assert "  Status: In Progress" in formatted
-    assert "  Owner: Bob" in formatted
+    assert "*Auth*\n  Status: Done\n  Owner: Alice" in formatted
+    assert "*Search*\n  Status: In Progress\n  Owner: Bob" in formatted
     # No raw pipe-and-dash table syntax
     assert "---|" not in formatted
 
@@ -151,8 +147,7 @@ def test_table_embedded_in_text() -> None:
     formatted = format_slack_message(message)
 
     assert "Here are the results:" in formatted
-    assert "*Apples*" in formatted
-    assert "  Count: 5" in formatted
+    assert "*Apples*\n  Count: 5" in formatted
     assert "That's all." in formatted
 
 
@@ -176,6 +171,4 @@ def test_table_with_alignment_specifiers() -> None:
 
     formatted = format_slack_message(message)
 
-    assert "*a*" in formatted
-    assert "  Center: b" in formatted
-    assert "  Right: c" in formatted
+    assert "*a*\n  Center: b\n  Right: c" in formatted

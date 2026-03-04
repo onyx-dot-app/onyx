@@ -228,11 +228,13 @@ class SlackRenderer(HTMLRenderer):
     def table_cell(
         self, text: str, align: str | None = None, head: bool = False  # noqa: ARG002
     ) -> str:
-        self._current_row_cells.append(text.strip())
+        if head:
+            self._table_headers.append(text.strip())
+        else:
+            self._current_row_cells.append(text.strip())
         return ""
 
     def table_head(self, text: str) -> str:  # noqa: ARG002
-        self._table_headers = list(self._current_row_cells)
         self._current_row_cells = []
         return ""
 
