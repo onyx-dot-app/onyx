@@ -265,9 +265,7 @@ export function OnboardingFormWrapper<T extends Record<string, any>>({
     }
 
     // Refresh provider data so context picks up the new provider
-    await refreshProviderInfo().catch((_e) => {
-      console.error("Failed to refresh provider info after creation", _e);
-    });
+    await refreshProviderInfo();
     onboardingActions?.setButtonActive(true);
 
     setIsSubmitting(false);
