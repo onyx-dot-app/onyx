@@ -63,7 +63,10 @@ function IllustrationContent({
   return (
     <div className="flex flex-col items-center gap-3 p-5 text-center">
       {Illustration && (
-        <Illustration className="shrink-0 w-[7.5rem] h-[7.5rem]" />
+        <Illustration
+          aria-hidden="true"
+          className="shrink-0 w-[7.5rem] h-[7.5rem]"
+        />
       )}
       <p className="font-main-content-emphasis text-text-04">{title}</p>
       {description && (
