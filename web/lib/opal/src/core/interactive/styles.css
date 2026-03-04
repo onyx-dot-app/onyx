@@ -456,12 +456,10 @@
     [data-disabled]
   ) {
   @apply bg-background-neutral-00;
-  border: 2px solid var(--background-tint-04);
   --interactive-foreground: var(--text-03);
   --interactive-foreground-icon: var(--text-02);
 }
 .interactive[data-interactive-base-variant="sidebar"][data-interactive-base-prominence="light"][data-selected="true"][data-disabled] {
   @apply bg-transparent;
-  border: none;
   --interactive-foreground: var(--text-01);
 }
