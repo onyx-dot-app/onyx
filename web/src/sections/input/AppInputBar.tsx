@@ -637,6 +637,7 @@ const AppInputBar = React.memo(
                     onKeyDown={(event) => {
                       if (
                         event.key === "Enter" &&
+                        !showPrompts &&
                         !event.shiftKey &&
                         !(event.nativeEvent as any).isComposing
                       ) {
