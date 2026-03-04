@@ -10,7 +10,7 @@ import { test, expect, gotoScimPage } from "./fixtures";
 test.describe("SCIM Token Management", () => {
   test("generate token, copy, and download", async ({
     adminPage,
-    mockTokenEndpoint,
+    mockTokenEndpoint: _mockTokenEndpoint,
   }) => {
     await gotoScimPage(adminPage);
 
@@ -35,7 +35,9 @@ test.describe("SCIM Token Management", () => {
       .context()
       .grantPermissions(["clipboard-read", "clipboard-write"]);
     await adminPage.getByRole("button", { name: "Copy Token" }).click();
-    await adminPage.waitForTimeout(500);
+    await expect(adminPage.getByText("Token copied to clipboard")).toBeVisible({
+      timeout: 5000,
+    });
     const clipboardText = await adminPage.evaluate(() =>
       navigator.clipboard.readText()
     );

@@ -81,7 +81,10 @@ export default function ScimModal({
                   rows={2}
                   className="font-main-ui-mono break-all cursor-pointer [&_textarea]:cursor-pointer"
                   rightSection={
-                    <div className="opacity-0 group-hover/token:opacity-100 transition-opacity">
+                    <div
+                      className="opacity-0 group-hover/token:opacity-100 transition-opacity"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       <CopyIconButton getCopyText={() => view.rawToken} />
                     </div>
                   }

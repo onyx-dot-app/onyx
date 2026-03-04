@@ -9,20 +9,7 @@
 
 import { test as base, expect, Page } from "@playwright/test";
 import { loginAs } from "@tests/e2e/utils/auth";
-
-// ---------------------------------------------------------------------------
-// Types (mirrors backend response schemas)
-// ---------------------------------------------------------------------------
-
-interface ScimTokenResponse {
-  id: number;
-  name: string;
-  token_display: string;
-  is_active: boolean;
-  created_at: string;
-  last_used_at: string | null;
-  idp_domain: string | null;
-}
+import type { ScimTokenResponse } from "@/app/admin/scim/interfaces";
 
 // ---------------------------------------------------------------------------
 // Fixture control interface

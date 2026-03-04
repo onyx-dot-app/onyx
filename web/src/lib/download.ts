@@ -23,7 +23,7 @@ export function downloadFile(
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 0);
   } else {
     a.href = opts.url;
     a.download = filename;

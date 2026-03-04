@@ -224,7 +224,7 @@ def get_active_scim_token(
     if not token:
         raise HTTPException(status_code=404, detail="No active SCIM token")
 
-    # Derive the IdP domain from synced user emails (most common domain).
+    # Derive the IdP domain from the first synced user as a heuristic.
     idp_domain: str | None = None
     mappings, _total = dal.list_user_mappings(start_index=1, count=1)
     if mappings:

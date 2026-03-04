@@ -68,7 +68,13 @@ function ScimContent() {
     try {
       const response = await generateScimToken("default");
       if (!response.ok) {
-        const detail = await response.text();
+        let detail: string;
+        try {
+          const body = await response.json();
+          detail = body.detail ?? JSON.stringify(body);
+        } catch {
+          detail = await response.text();
+        }
         toast.error(`Failed to generate token: ${detail}`);
         return;
       }
@@ -77,6 +83,8 @@ function ScimContent() {
       if (hasToken) toast.success("Token regenerated");
       // Show token display modal
       openModal({ kind: "token", rawToken: created.raw_token });
+    } catch {
+      toast.error("Something went wrong. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
