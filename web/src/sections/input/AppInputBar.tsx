@@ -131,6 +131,14 @@ const AppInputBar = React.memo(
         textAreaRef.current?.focus();
       },
     }));
+
+    // Sync prop changes to internal state (e.g. NRFPage reads URL params after mount)
+    useEffect(() => {
+      if (initialMessage) {
+        setMessage(initialMessage);
+      }
+    }, [initialMessage]);
+
     const { appMode } = useAppMode();
     const appFocus = useAppFocus();
     const isSearchMode =
