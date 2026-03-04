@@ -12,6 +12,7 @@ from onyx.server.settings.models import Settings
 # Fields we assert on across all tests
 _ASSERT_FIELDS = {
     "application_status",
+    "running_ee_backend",
     "ee_features_enabled",
     "seat_count",
     "used_seats",
@@ -47,6 +48,7 @@ class TestApplyLicenseStatusToSettings:
         result = apply_license_status_to_settings(base_settings)
         assert _pick(result) == {
             "application_status": ApplicationStatus.ACTIVE,
+            "running_ee_backend": True,
             "ee_features_enabled": True,
             "seat_count": None,
             "used_seats": None,
@@ -61,6 +63,7 @@ class TestApplyLicenseStatusToSettings:
         result = apply_license_status_to_settings(base_settings)
         assert _pick(result) == {
             "application_status": ApplicationStatus.ACTIVE,
+            "running_ee_backend": True,
             "ee_features_enabled": True,
             "seat_count": None,
             "used_seats": None,
@@ -75,6 +78,7 @@ class TestApplyLicenseStatusToSettings:
                 10,
                 {
                     "application_status": ApplicationStatus.GATED_ACCESS,
+                    "running_ee_backend": True,
                     "ee_features_enabled": False,
                     "seat_count": None,
                     "used_seats": None,
@@ -86,6 +90,7 @@ class TestApplyLicenseStatusToSettings:
                 10,
                 {
                     "application_status": ApplicationStatus.ACTIVE,
+                    "running_ee_backend": True,
                     "ee_features_enabled": True,
                     "seat_count": None,
                     "used_seats": None,
@@ -97,6 +102,7 @@ class TestApplyLicenseStatusToSettings:
                 10,
                 {
                     "application_status": ApplicationStatus.ACTIVE,
+                    "running_ee_backend": True,
                     "ee_features_enabled": True,
                     "seat_count": None,
                     "used_seats": None,
@@ -108,6 +114,7 @@ class TestApplyLicenseStatusToSettings:
                 10,
                 {
                     "application_status": ApplicationStatus.ACTIVE,
+                    "running_ee_backend": True,
                     "ee_features_enabled": True,
                     "seat_count": None,
                     "used_seats": None,
@@ -165,6 +172,7 @@ class TestApplyLicenseStatusToSettings:
         result = apply_license_status_to_settings(base_settings)
         assert _pick(result) == {
             "application_status": ApplicationStatus.SEAT_LIMIT_EXCEEDED,
+            "running_ee_backend": True,
             "ee_features_enabled": True,
             "seat_count": 10,
             "used_seats": 15,
@@ -193,6 +201,7 @@ class TestApplyLicenseStatusToSettings:
         result = apply_license_status_to_settings(base_settings)
         assert _pick(result) == {
             "application_status": ApplicationStatus.GATED_ACCESS,
+            "running_ee_backend": True,
             "ee_features_enabled": False,
             "seat_count": None,
             "used_seats": None,
@@ -222,6 +231,7 @@ class TestApplyLicenseStatusToSettings:
         result = apply_license_status_to_settings(base_settings)
         assert _pick(result) == {
             "application_status": ApplicationStatus.GATED_ACCESS,
+            "running_ee_backend": True,
             "ee_features_enabled": False,
             "seat_count": None,
             "used_seats": None,
@@ -251,6 +261,7 @@ class TestApplyLicenseStatusToSettings:
         result = apply_license_status_to_settings(base_settings)
         assert _pick(result) == {
             "application_status": ApplicationStatus.ACTIVE,
+            "running_ee_backend": True,
             "ee_features_enabled": False,
             "seat_count": None,
             "used_seats": None,
@@ -275,15 +286,22 @@ class TestApplyLicenseStatusToSettings:
         result = apply_license_status_to_settings(base_settings)
         assert _pick(result) == {
             "application_status": ApplicationStatus.ACTIVE,
+            "running_ee_backend": True,
             "ee_features_enabled": False,
             "seat_count": None,
             "used_seats": None,
         }
 
 
-class TestSettingsDefaultEEDisabled:
-    """Verify the Settings model defaults ee_features_enabled to False."""
+class TestSettingsDefaults:
+    """Verify Settings model defaults for CE deployments."""
+
+    def test_default_running_ee_backend_false(self) -> None:
+        """CE default: running_ee_backend is False."""
+        settings = Settings()
+        assert settings.running_ee_backend is False
 
     def test_default_ee_features_disabled(self) -> None:
+        """CE default: ee_features_enabled is False."""
         settings = Settings()
         assert settings.ee_features_enabled is False

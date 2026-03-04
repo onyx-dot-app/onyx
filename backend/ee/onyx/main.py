@@ -4,7 +4,6 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from httpx_oauth.clients.google import GoogleOAuth2
 
-from ee.onyx.configs.app_configs import LICENSE_ENFORCEMENT_ENABLED
 from ee.onyx.server.analytics.api import router as analytics_router
 from ee.onyx.server.auth_check import check_ee_router_auth
 from ee.onyx.server.billing.api import router as billing_router
@@ -153,12 +152,12 @@ def get_application() -> FastAPI:
     # License management
     include_router_with_global_prefix_prepended(application, license_router)
 
-    # Unified billing API - available when license system is enabled
-    # Works for both self-hosted and cloud deployments
-    # TODO(ENG-3533): Once frontend migrates to /admin/billing/*, this becomes the
-    # primary billing API and /tenants/* billing endpoints can be removed
-    if LICENSE_ENFORCEMENT_ENABLED:
-        include_router_with_global_prefix_prepended(application, billing_router)
+    # Unified billing API - always registered in EE.
+    # Access control is handled by the license enforcement middleware;
+    # no need for a second gate at the router level.
+    # The /api/settings features.billing flag tells the frontend whether
+    # to call these endpoints (avoids 404s when billing isn't configured).
+    include_router_with_global_prefix_prepended(application, billing_router)
 
     if MULTI_TENANT:
         # Tenant management

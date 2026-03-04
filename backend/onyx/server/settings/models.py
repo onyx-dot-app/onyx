@@ -60,9 +60,21 @@ class Settings(BaseModel):
     deep_research_enabled: bool | None = None
     search_ui_enabled: bool | None = None
 
-    # Enterprise features flag - set by license enforcement at runtime
-    # When LICENSE_ENFORCEMENT_ENABLED=true, this reflects license status
-    # When LICENSE_ENFORCEMENT_ENABLED=false, defaults to False
+    # Whether the backend is running Enterprise Edition code.
+    # This is a deployment fact — it tells the frontend that EE-only API routes
+    # (e.g. /license, /admin/billing, /manage/admin/user-group) are registered
+    # and safe to call (won't 404). It does NOT mean features are unlocked —
+    # see ee_features_enabled for that.
+    # CE always returns False. EE unconditionally sets True.
+    running_ee_backend: bool = False
+
+    # Whether EE features are unlocked for use.
+    # Depends on license status: True when the user has a valid license
+    # (ACTIVE, GRACE_PERIOD, PAYMENT_REMINDER), False when there's no license
+    # or the license is expired (GATED_ACCESS).
+    # This controls UI visibility of EE features (user groups, analytics, RBAC, etc.).
+    # Note: running_ee_backend can be True while this is False — that means EE
+    # routes exist but features are locked until a license is obtained.
     ee_features_enabled: bool = False
 
     temperature_override_enabled: bool | None = False

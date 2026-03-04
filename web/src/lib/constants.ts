@@ -42,8 +42,13 @@ export const NEXT_PUBLIC_CUSTOM_REFRESH_URL =
 
 // NOTE: this should ONLY be used on the server-side. If used client side,
 // it will not be accurate (will always be false).
+// Mirrors backend logic in set_is_ee_based_on_env_variable(): EE is enabled
+// if EITHER the legacy flag OR license enforcement is active.
+// LICENSE_ENFORCEMENT_ENABLED defaults to "true" when unset, matching the backend.
 export const SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED =
-  process.env.ENABLE_PAID_ENTERPRISE_EDITION_FEATURES?.toLowerCase() === "true";
+  process.env.ENABLE_PAID_ENTERPRISE_EDITION_FEATURES?.toLowerCase() ===
+    "true" ||
+  process.env.LICENSE_ENFORCEMENT_ENABLED?.toLowerCase() !== "false";
 // NOTE: since this is a `NEXT_PUBLIC_` variable, it will be set at
 // build-time
 // TODO: consider moving this to an API call so that the api_server

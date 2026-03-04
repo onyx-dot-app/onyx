@@ -3,28 +3,34 @@ import useSWR from "swr";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { LicenseStatus } from "@/lib/billing/interfaces";
+import { useSettingsContext } from "@/providers/SettingsProvider";
+
+const EMPTY_STATE = {
+  data: null,
+  isLoading: false,
+  error: undefined,
+  refresh: () => Promise.resolve(undefined),
+};
 
 /**
  * Hook to fetch license status for self-hosted deployments.
  *
- * Returns license information including seats, expiry, and status.
- * Only fetches for self-hosted deployments (cloud uses tenant auth instead).
+ * Skips the fetch when:
+ * - Cloud deployment (uses tenant auth instead)
+ * - Backend is not running EE (CE has no /license route)
  *
- * @example
- * ```tsx
- * const { data, isLoading, error, refresh } = useLicense();
- *
- * if (isLoading) return <Loading />;
- * if (error) return <Error />;
- * if (!data?.has_license) return <NoLicense />;
- *
- * return <LicenseDetails license={data} />;
- * ```
+ * Uses `running_ee_backend` from settings to determine if the /license
+ * endpoint exists. This prevents 404s on CE deployments.
  */
 export function useLicense() {
-  // Only fetch license for self-hosted deployments
-  // Cloud deployments use tenant-based auth, not license files
-  const url = NEXT_PUBLIC_CLOUD_ENABLED ? null : "/api/license";
+  const { settings } = useSettingsContext();
+
+  // running_ee_backend tells us if EE API routes are registered.
+  // Only fetch when: not cloud AND backend has the /license endpoint.
+  const url =
+    NEXT_PUBLIC_CLOUD_ENABLED || !settings.running_ee_backend
+      ? null
+      : "/api/license";
 
   const { data, error, mutate, isLoading } = useSWR<LicenseStatus>(
     url,
@@ -38,14 +44,8 @@ export function useLicense() {
     }
   );
 
-  // Return empty state for cloud deployments
-  if (NEXT_PUBLIC_CLOUD_ENABLED) {
-    return {
-      data: null,
-      isLoading: false,
-      error: undefined,
-      refresh: () => Promise.resolve(undefined),
-    };
+  if (!url) {
+    return EMPTY_STATE;
   }
 
   return {

@@ -6,31 +6,36 @@ import {
   BillingInformation,
   SubscriptionStatus,
 } from "@/lib/billing/interfaces";
+import { useSettingsContext } from "@/providers/SettingsProvider";
+
+const EMPTY_STATE = {
+  data: undefined,
+  isLoading: false,
+  error: undefined,
+  refresh: () => Promise.resolve(undefined),
+};
 
 /**
  * Hook to fetch billing information from Stripe.
  *
  * Works for both cloud and self-hosted deployments:
- * - Cloud: fetches from /api/tenants/billing-information (legacy endpoint)
- * - Self-hosted: fetches from /api/admin/billing/billing-information
+ * - Cloud: always fetches from /api/tenants/billing-information
+ * - Self-hosted EE: fetches from /api/admin/billing/billing-information
+ * - Self-hosted CE: skips fetch entirely (route doesn't exist)
  *
- * Returns subscription status, seats, billing period, etc.
- *
- * @example
- * ```tsx
- * const { data, isLoading, error, refresh } = useBillingInformation();
- *
- * if (isLoading) return <Loading />;
- * if (error) return <Error />;
- * if (!data || !hasActiveSubscription(data)) return <NoSubscription />;
- *
- * return <BillingDetails billing={data} />;
- * ```
+ * Uses `running_ee_backend` from settings to determine if the billing
+ * endpoint exists. This prevents 404s on CE deployments.
  */
 export function useBillingInformation() {
+  const { settings } = useSettingsContext();
+
+  // running_ee_backend tells us if EE API routes are registered.
+  // Cloud always has billing; self-hosted only when backend is EE.
   const url = NEXT_PUBLIC_CLOUD_ENABLED
     ? "/api/tenants/billing-information"
-    : "/api/admin/billing/billing-information";
+    : settings.running_ee_backend
+      ? "/api/admin/billing/billing-information"
+      : null;
 
   const { data, error, mutate, isLoading } = useSWR<
     BillingInformation | SubscriptionStatus
@@ -38,11 +43,13 @@ export function useBillingInformation() {
     revalidateOnFocus: false,
     revalidateOnReconnect: false,
     dedupingInterval: 30000,
-    // Don't auto-retry on errors (circuit breaker will block requests anyway)
     shouldRetryOnError: false,
-    // Keep previous data while revalidating to prevent UI flashing
     keepPreviousData: true,
   });
+
+  if (!url) {
+    return EMPTY_STATE;
+  }
 
   return {
     data,
