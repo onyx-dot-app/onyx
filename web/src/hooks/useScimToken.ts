@@ -1,7 +1,7 @@
 import useSWR from "swr";
 
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { ScimTokenResponse } from "@/app/admin/scim/interfaces";
+import type { ScimTokenResponse } from "@/app/admin/scim/interfaces";
 
 const TOKEN_URL = "/api/admin/enterprise-settings/scim/token";
 

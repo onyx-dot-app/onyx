@@ -10,7 +10,7 @@ import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationMo
 import { toast } from "@/hooks/useToast";
 import { downloadFile } from "@/lib/download";
 
-import { ScimModalView } from "./interfaces";
+import type { ScimModalView } from "./interfaces";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -21,6 +21,19 @@ interface ScimModalProps {
   isSubmitting: boolean;
   onRegenerate: () => void;
   onClose: () => void;
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+async function copyToClipboard(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast.success("Token copied to clipboard");
+  } catch {
+    toast.error("Failed to copy token");
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -69,14 +82,7 @@ export default function ScimModal({
             <Modal.Body>
               <Interactive.Base
                 group="group/token"
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard.writeText(view.rawToken);
-                    toast.success("Token copied to clipboard");
-                  } catch {
-                    toast.error("Failed to copy token");
-                  }
-                }}
+                onClick={() => copyToClipboard(view.rawToken)}
               >
                 <InputTextArea
                   value={view.rawToken}
@@ -115,14 +121,7 @@ export default function ScimModal({
                   <Button
                     autoFocus
                     primary
-                    onClick={async () => {
-                      try {
-                        await navigator.clipboard.writeText(view.rawToken);
-                        toast.success("Token copied to clipboard");
-                      } catch {
-                        toast.error("Failed to copy token");
-                      }
-                    }}
+                    onClick={() => copyToClipboard(view.rawToken)}
                   >
                     Copy Token
                   </Button>
