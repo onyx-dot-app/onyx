@@ -93,7 +93,7 @@ function useElementWidth(): [React.RefObject<HTMLDivElement | null>, number] {
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    setWidth(el.getBoundingClientRect().width);
+    setWidth(el.clientWidth);
     const ro = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (entry) setWidth(entry.contentRect.width);
@@ -248,6 +248,7 @@ function createSplitterResizeHandler(
       document.removeEventListener("mouseup", onUp);
       document.removeEventListener("touchmove", onMove);
       document.removeEventListener("touchend", onUp);
+      document.removeEventListener("touchcancel", onUp);
       document.body.style.userSelect = "";
       document.body.style.cursor = "";
       isDraggingRef.current = false;
@@ -259,6 +260,7 @@ function createSplitterResizeHandler(
     document.addEventListener("mouseup", onUp);
     document.addEventListener("touchmove", onMove);
     document.addEventListener("touchend", onUp);
+    document.addEventListener("touchcancel", onUp);
   };
 }
 
