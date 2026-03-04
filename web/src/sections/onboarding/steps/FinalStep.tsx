@@ -1,7 +1,7 @@
 import React from "react";
 import Link from "next/link";
 import type { Route } from "next";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { FINAL_SETUP_CONFIG } from "@/sections/onboarding/constants";
 import { FinalStepItemProps } from "@/interfaces/onboarding";
 import { SvgExternalLink } from "@opal/icons";
@@ -33,7 +33,7 @@ const FinalStepItem = React.memo(
           paddingVariant="sm"
           rightChildren={
             <Link href={buttonHref as Route} {...linkProps}>
-              <Button tertiary rightIcon={SvgExternalLink}>
+              <Button prominence="tertiary" rightIcon={SvgExternalLink}>
                 {buttonText}
               </Button>
             </Link>

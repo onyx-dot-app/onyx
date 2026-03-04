@@ -11,7 +11,7 @@ import {
   TextArrayField,
   TextFormField,
 } from "@/components/Field";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
 import DocumentSetCard from "@/sections/cards/DocumentSetCard";
 import CollapsibleSection from "@/app/admin/agents/CollapsibleSection";
@@ -598,7 +598,7 @@ export function SlackChannelConfigFormFields({
           </TooltipProvider>
         )}
         <Button type="submit">{isUpdate ? "Update" : "Create"}</Button>
-        <Button secondary onClick={() => router.back()}>
+        <Button prominence="secondary" onClick={() => router.back()}>
           Cancel
         </Button>
       </div>

@@ -2,7 +2,7 @@
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { SourceCategory, SourceMetadata } from "@/lib/search/interfaces";
 import { listSourceMetadata } from "@/lib/sources";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import {
   useCallback,
   useContext,
@@ -254,9 +254,7 @@ export default function Page() {
         icon={route.icon}
         title={route.title}
         rightChildren={
-          <Button href="/admin/indexing/status" primary>
-            See Connectors
-          </Button>
+          <Button href="/admin/indexing/status">See Connectors</Button>
         }
         separator
       />

@@ -5,9 +5,8 @@ import Modal from "@/refresh-components/Modal";
 import { Section } from "@/layouts/general-layouts";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import Text from "@/refresh-components/texts/Text";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import CharacterCount from "@/refresh-components/CharacterCount";
 import Separator from "@/refresh-components/Separator";
 import TextSeparator from "@/refresh-components/TextSeparator";
@@ -102,10 +101,10 @@ function MemoryItem({
             resizable={false}
             className={cn(!isFocused && "bg-transparent")}
           />
-          <IconButton
+          <Button
+            prominence="tertiary"
             icon={SvgMinusCircle}
             onClick={() => void onRemove(originalIndex)}
-            tertiary
             disabled={!memory.content.trim() && memory.isNew}
             aria-label="Remove Line"
             tooltip="Remove Line"
@@ -242,8 +241,8 @@ export default function MemoriesModal({
               className="w-full !bg-transparent !border-transparent [&:is(:hover,:active,:focus,:focus-within)]:!bg-background-neutral-00 [&:is(:hover)]:!border-border-01 [&:is(:focus,:focus-within)]:!shadow-none"
             />
             <Button
+              prominence="tertiary"
               onClick={onAddLine}
-              tertiary
               rightIcon={SvgPlusCircle}
               disabled={!canAddMemory}
               title={

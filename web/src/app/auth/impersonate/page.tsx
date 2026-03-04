@@ -9,7 +9,7 @@ import { Formik, Form, FormikHelpers } from "formik";
 import * as Yup from "yup";
 import { toast } from "@/hooks/useToast";
 import { TextFormField } from "@/components/Field";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 
 const ImpersonateSchema = Yup.object().shape({
@@ -89,7 +89,7 @@ export default function ImpersonatePage() {
                 placeholder="Enter API Key"
               />
 
-              <Button type="submit" className="w-full" disabled={isSubmitting}>
+              <Button type="submit" width="full" disabled={isSubmitting}>
                 Impersonate User
               </Button>
             </Form>

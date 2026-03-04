@@ -130,6 +130,7 @@ export default function ActionLineItem({
               )}
 
               {!isSearchToolWithNoConnectors && !isUnavailable && (
+                // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
                 <IconButton
                   icon={SvgSlash}
                   onClick={noProp(onToggle)}

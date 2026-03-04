@@ -93,6 +93,7 @@ const NameStep = React.memo(
           </Text>
         </div>
         <div className="p-1 flex items-center gap-1">
+          {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
           <IconButton
             internal
             icon={SvgEdit}

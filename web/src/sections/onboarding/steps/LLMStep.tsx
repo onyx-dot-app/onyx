@@ -2,7 +2,7 @@
 
 import { memo, useState, useCallback } from "react";
 import Text from "@/refresh-components/texts/Text";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import Separator from "@/refresh-components/Separator";
 import LLMProviderCard from "../components/LLMProviderCard";
 import {
@@ -138,7 +138,7 @@ const LLMStepInner = ({
             paddingVariant="lg"
             rightChildren={
               <Button
-                tertiary
+                prominence="tertiary"
                 rightIcon={SvgExternalLink}
                 disabled={disabled}
                 href="/admin/configuration/llm"

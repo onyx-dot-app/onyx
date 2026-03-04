@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AdminPageTitle } from "@/components/admin/Title";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { getSourceMetadata, isValidSource } from "@/lib/sources";
 import { ConfluenceAccessibleResource, ValidSources } from "@/lib/types";
 import CardSection from "@/components/admin/CardSection";

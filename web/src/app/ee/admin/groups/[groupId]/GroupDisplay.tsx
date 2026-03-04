@@ -26,7 +26,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { DeleteButton } from "@/components/DeleteButton";
 import { Bubble } from "@/components/Bubble";
 import { BookmarkIcon, RobotIcon } from "@/components/icons/icons";
@@ -34,6 +34,7 @@ import { AddTokenRateLimitForm } from "./AddTokenRateLimitForm";
 import { GenericTokenRateLimitTable } from "@/app/admin/token-rate-limits/TokenRateLimitTables";
 import { useUser } from "@/providers/UserProvider";
 import GenericConfirmModal from "@/components/modals/GenericConfirmModal";
+import Spacer from "@/refresh-components/Spacer";
 
 interface GroupDisplayProps {
   users: User[];
@@ -467,12 +468,12 @@ export const GroupDisplay = ({
       />
 
       {isAdmin && (
-        <Button
-          className="mt-3"
-          onClick={() => setAddRateLimitFormVisible(true)}
-        >
-          Create a Token Rate Limit
-        </Button>
+        <>
+          <Spacer rem={0.75} />
+          <Button onClick={() => setAddRateLimitFormVisible(true)}>
+            Create a Token Rate Limit
+          </Button>
+        </>
       )}
     </div>
   );

@@ -3,12 +3,11 @@
 import React, { useRef, useState, useEffect } from "react";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import Button from "@/refresh-components/buttons/Button";
 import { updateUserPersonalization } from "@/lib/userSettings";
 import { useUser } from "@/providers/UserProvider";
 import { toast } from "@/hooks/useToast";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import { Button as OpalButton } from "@opal/components";
+import { Button } from "@opal/components";
 import InputAvatar from "@/refresh-components/inputs/InputAvatar";
 import { cn } from "@/lib/utils";
 import { SvgCheckCircle, SvgEdit, SvgUser, SvgX } from "@opal/icons";
@@ -76,7 +75,7 @@ export default function NonAdminStep() {
             prominence="muted"
             paddingVariant="fit"
             rightChildren={
-              <OpalButton
+              <Button
                 prominence="tertiary"
                 size="sm"
                 icon={SvgX}
@@ -151,6 +150,7 @@ export default function NonAdminStep() {
             </Text>
           </div>
           <div className="p-1 flex items-center gap-1">
+            {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
             <IconButton
               internal
               icon={SvgEdit}

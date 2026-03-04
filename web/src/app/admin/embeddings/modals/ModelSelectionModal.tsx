@@ -1,7 +1,7 @@
 import Modal from "@/refresh-components/Modal";
 import Text from "@/refresh-components/texts/Text";
 import { Callout } from "@/components/ui/callout";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { HostedEmbeddingModel } from "@/components/embedding/interfaces";
 import { SvgServer } from "@opal/icons";
 
@@ -57,7 +57,7 @@ export default function ModelSelectionConfirmationModal({
         </Modal.Body>
         <Modal.Footer>
           <Button onClick={onConfirm}>Confirm</Button>
-          <Button secondary onClick={onCancel}>
+          <Button prominence="secondary" onClick={onCancel}>
             Cancel
           </Button>
         </Modal.Footer>

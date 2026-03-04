@@ -3,7 +3,7 @@
 import React from "react";
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import {
   SvgDownloadCloud,
   SvgLoader,
@@ -154,9 +154,9 @@ export default function UrlBar({
         {/* Export button — shown for downloadable file previews (e.g. markdown → docx) */}
         {onDownload && (
           <Button
-            action
-            tertiary
-            leftIcon={isDownloading ? SpinningLoader : SvgExternalLink}
+            variant="action"
+            prominence="tertiary"
+            icon={isDownloading ? SpinningLoader : SvgExternalLink}
             disabled={isDownloading}
             onClick={onDownload}
           >

@@ -2,7 +2,7 @@
 
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import { REGISTRATION_URL } from "@/lib/constants";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import Link from "next/link";
 import { SvgImport } from "@opal/icons";
 
@@ -24,8 +24,8 @@ export default function Page() {
         <div className="flex justify-center">
           <Button
             href={`${REGISTRATION_URL}/register`}
-            className="w-full"
-            leftIcon={SvgImport}
+            width="full"
+            icon={SvgImport}
           >
             Create New Organization
           </Button>

@@ -8,7 +8,7 @@ import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
 import Text from "@/components/ui/text";
 import { useConnectorIndexingStatusWithPagination } from "@/lib/hooks";
 import { useToastFromQuery } from "@/hooks/useToast";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { useVectorDbEnabled } from "@/providers/SettingsProvider";
 import { useState, useRef, useMemo, RefObject } from "react";
 import { FilterOptions } from "./FilterComponent";

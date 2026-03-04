@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { DeleteButton } from "@/components/DeleteButton";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import Switch from "@/refresh-components/inputs/Switch";
 import { SvgEdit, SvgServer } from "@opal/icons";
 import EmptyMessage from "@/refresh-components/EmptyMessage";
@@ -116,10 +116,10 @@ export function DiscordGuildsTable({ guilds, onRefresh }: Props) {
             <TableRow key={guild.id}>
               <TableCell>
                 <Button
-                  internal
+                  prominence="internal"
                   disabled={!guild.guild_id}
                   onClick={() => router.push(`/admin/discord-bot/${guild.id}`)}
-                  leftIcon={SvgEdit}
+                  icon={SvgEdit}
                 >
                   {guild.guild_name || `Server #${guild.id}`}
                 </Button>

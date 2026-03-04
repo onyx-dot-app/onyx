@@ -91,6 +91,7 @@ function HoverIconButton({
 }: HoverIconButtonProps) {
   return (
     <div onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
+      {/* TODO(@raunakab): migrate to opal Button once HoverIconButtonProps typing is resolved */}
       <Button {...buttonProps} rightIcon={isHovered ? SvgX : SvgCheckSquare}>
         {children}
       </Button>
@@ -1010,9 +1011,8 @@ export default function Page() {
                             {buttonState.label}
                           </HoverIconButton>
                         ) : (
-                          <Button
-                            action={false}
-                            tertiary
+                          <OpalButton
+                            prominence="tertiary"
                             disabled={
                               buttonState.disabled || !buttonState.onClick
                             }
@@ -1029,7 +1029,7 @@ export default function Page() {
                             }
                           >
                             {buttonState.label}
-                          </Button>
+                          </OpalButton>
                         )}
                       </div>
                     </div>
@@ -1202,9 +1202,8 @@ export default function Page() {
                           {buttonState.label}
                         </HoverIconButton>
                       ) : (
-                        <Button
-                          action={false}
-                          tertiary
+                        <OpalButton
+                          prominence="tertiary"
                           disabled={
                             buttonState.disabled || !buttonState.onClick
                           }
@@ -1221,7 +1220,7 @@ export default function Page() {
                           }
                         >
                           {buttonState.label}
-                        </Button>
+                        </OpalButton>
                       )}
                     </div>
                   </div>

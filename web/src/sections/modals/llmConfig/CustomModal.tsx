@@ -281,6 +281,7 @@ export function CustomModal({
                                   </div>
                                 </div>
                                 <div className="my-auto">
+                                  {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
                                   <IconButton
                                     icon={SvgX}
                                     className="my-auto"

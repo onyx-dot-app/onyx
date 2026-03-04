@@ -5,9 +5,8 @@ import { useSearchParams } from "next/navigation";
 import { useUser } from "@/providers/UserProvider";
 import { toast } from "@/hooks/useToast";
 import { AuthType } from "@/lib/constants";
-import Button from "@/refresh-components/buttons/Button";
 import AppInputBar, { AppInputBarHandle } from "@/sections/input/AppInputBar";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button } from "@opal/components";
 import Modal from "@/refresh-components/Modal";
 import { useFilters, useLlmManager } from "@/lib/hooks";
 import Dropzone from "react-dropzone";
@@ -418,10 +417,10 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       {/* Settings button */}
       {!isSidePanel && (
         <div className="absolute top-0 right-0 p-4 z-10">
-          <IconButton
+          <Button
+            prominence="secondary"
             icon={SvgMenu}
             onClick={toggleSettings}
-            secondary
             tooltip="Open settings"
           />
         </div>
@@ -566,10 +565,13 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                 onClose={() => setShowTurnOffModal(false)}
               />
               <Modal.Footer>
-                <Button secondary onClick={() => setShowTurnOffModal(false)}>
+                <Button
+                  prominence="secondary"
+                  onClick={() => setShowTurnOffModal(false)}
+                >
                   Cancel
                 </Button>
-                <Button danger onClick={confirmTurnOff}>
+                <Button variant="danger" onClick={confirmTurnOff}>
                   Turn off
                 </Button>
               </Modal.Footer>
@@ -592,8 +594,8 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
               ) : (
                 <div className="flex flex-col items-center">
                   <Button
-                    className="w-full"
-                    secondary
+                    width="full"
+                    prominence="secondary"
                     onClick={() => {
                       if (window.top) {
                         window.top.location.href = "/auth/login";
@@ -613,8 +615,8 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
       {user && !llmManager.isLoadingProviders && !llmManager.hasAnyProvider && (
         <Button
-          className="w-full"
-          secondary
+          width="full"
+          prominence="secondary"
           onClick={() => {
             window.location.href = "/admin/configuration/llm";
           }}

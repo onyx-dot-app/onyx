@@ -1,4 +1,4 @@
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import Text from "@/components/ui/text";
 
 import { FaNewspaper, FaTrash } from "react-icons/fa";
@@ -93,15 +93,10 @@ export default function EditCredential({
               )
             )}
             <div className="flex justify-between w-full">
-              <Button onClick={() => resetForm()} leftIcon={SvgTrash}>
+              <Button onClick={() => resetForm()} icon={SvgTrash}>
                 Reset Changes
               </Button>
-              <Button
-                type="submit"
-                disabled={isSubmitting}
-                className="bg-indigo-500 hover:bg-indigo-400"
-                leftIcon={FaNewspaper}
-              >
+              <Button type="submit" disabled={isSubmitting} icon={FaNewspaper}>
                 Update
               </Button>
             </div>
