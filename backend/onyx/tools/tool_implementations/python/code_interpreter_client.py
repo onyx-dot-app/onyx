@@ -103,7 +103,13 @@ class CodeInterpreterClient:
         return payload
 
     def health(self, use_cache: bool = False) -> bool:
-        """Check if the Code Interpreter service is healthy"""
+        """Check if the Code Interpreter service is healthy
+
+        Args:
+            use_cache: When True, return a cached result if available and
+                       within the TTL window. The cache is always populated
+                       after a live request regardless of this flag.
+        """
         if use_cache:
             cached = _health_cache.get(self.base_url)
             if cached is not None:
