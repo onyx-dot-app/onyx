@@ -81,7 +81,7 @@ def run_jobs() -> None:
         "--loglevel=INFO",
         "--hostname=heavy@%n",
         "-Q",
-        "connector_pruning,sandbox",
+        "connector_pruning,connector_doc_permissions_sync,connector_external_group_sync,csv_generation,sandbox",
     ]
 
     cmd_worker_monitoring = [
@@ -109,7 +109,7 @@ def run_jobs() -> None:
         "--loglevel=INFO",
         "--hostname=user_file_processing@%n",
         "-Q",
-        "user_file_processing,user_file_project_sync,connector_doc_permissions_sync,connector_external_group_sync,csv_generation,user_file_delete",
+        "user_file_processing,user_file_project_sync,user_file_delete",
     ]
 
     cmd_beat = [
