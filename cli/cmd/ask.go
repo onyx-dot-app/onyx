@@ -48,7 +48,14 @@ func newAskCmd() *cobra.Command {
 			gotStop := false
 			for event := range ch {
 				if askJSON {
-					data, err := json.Marshal(event)
+					wrapped := struct {
+						Type  string             `json:"type"`
+						Event models.StreamEvent `json:"event"`
+					}{
+						Type:  event.EventType(),
+						Event: event,
+					}
+					data, err := json.Marshal(wrapped)
 					if err != nil {
 						return fmt.Errorf("error marshaling event: %w", err)
 					}

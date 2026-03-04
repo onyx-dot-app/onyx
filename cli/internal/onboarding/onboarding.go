@@ -53,6 +53,10 @@ func Run(existing *config.OnyxCliConfig) *config.OnyxCliConfig {
 	if serverURL == "" {
 		return nil
 	}
+	if !strings.HasPrefix(serverURL, "http://") && !strings.HasPrefix(serverURL, "https://") {
+		fmt.Println("  " + redStyle.Render("Server URL must start with http:// or https://"))
+		return nil
+	}
 
 	// API Key
 	fmt.Println()
