@@ -39,7 +39,13 @@
  * are still respected in the render loop.
  */
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import {
+  useState,
+  useRef,
+  useEffect,
+  useLayoutEffect,
+  useCallback,
+} from "react";
 import { Header } from "@tanstack/react-table";
 
 // ---------------------------------------------------------------------------
@@ -84,9 +90,10 @@ interface UseColumnWidthsReturn {
 function useElementWidth(): [React.RefObject<HTMLDivElement | null>, number] {
   const ref = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
+    setWidth(el.getBoundingClientRect().width);
     const ro = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (entry) setWidth(entry.contentRect.width);
@@ -199,11 +206,14 @@ function createSplitterResizeHandler(
   startNeighborWeight: number,
   columnMinWidth: number,
   neighborMinWidth: number,
-  setter: (value: React.SetStateAction<Record<string, number>>) => void
+  setter: (value: React.SetStateAction<Record<string, number>>) => void,
+  isDraggingRef: React.MutableRefObject<boolean>
 ): (event: React.MouseEvent | React.TouchEvent) => void {
   return (event: React.MouseEvent | React.TouchEvent) => {
     const startX =
       "touches" in event ? event.touches[0]!.clientX : event.clientX;
+
+    isDraggingRef.current = true;
 
     const onMove = (e: MouseEvent | TouchEvent) => {
       const currentX =
@@ -232,6 +242,7 @@ function createSplitterResizeHandler(
       document.removeEventListener("touchend", onUp);
       document.body.style.userSelect = "";
       document.body.style.cursor = "";
+      isDraggingRef.current = false;
     };
 
     document.body.style.userSelect = "none";
@@ -270,6 +281,16 @@ export default function useColumnWidths({
   const [customWeights, setCustomWeights] = useState<Record<string, number>>(
     {}
   );
+  const isDraggingRef = useRef(false);
+
+  useEffect(() => {
+    return () => {
+      if (isDraggingRef.current) {
+        document.body.style.userSelect = "";
+        document.body.style.cursor = "";
+      }
+    };
+  }, []);
 
   const columnWidths = computeColumnWidths(
     containerWidth,
@@ -300,7 +321,8 @@ export default function useColumnWidths({
           20,
         columnMinWidths[columnId] ?? 50,
         columnMinWidths[neighborId] ?? 50,
-        setCustomWeights
+        setCustomWeights,
+        isDraggingRef
       );
     },
     [headers, columnWidths, customWeights, columnWeights, columnMinWidths]
