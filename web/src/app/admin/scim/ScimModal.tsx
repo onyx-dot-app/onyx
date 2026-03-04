@@ -1,8 +1,8 @@
 import { SvgDownload, SvgKey, SvgRefreshCw } from "@opal/icons";
 import { Interactive } from "@opal/core";
 import { Section } from "@/layouts/general-layouts";
+import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
-import Button from "@/refresh-components/buttons/Button";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
@@ -54,7 +54,11 @@ export default function ScimModal({
           title="Regenerate SCIM Token"
           onClose={onClose}
           submit={
-            <Button danger onClick={onRegenerate} disabled={isSubmitting}>
+            <Button
+              variant="danger"
+              onClick={onRegenerate}
+              disabled={isSubmitting}
+            >
               Regenerate Token
             </Button>
           }
@@ -106,8 +110,8 @@ export default function ScimModal({
               <BasicModalFooter
                 left={
                   <Button
-                    secondary
-                    leftIcon={SvgDownload}
+                    prominence="secondary"
+                    icon={SvgDownload}
                     onClick={() =>
                       downloadFile(`onyx-scim-token-${Date.now()}.txt`, {
                         content: view.rawToken,
@@ -120,7 +124,6 @@ export default function ScimModal({
                 submit={
                   <Button
                     autoFocus
-                    primary
                     onClick={() => copyToClipboard(view.rawToken)}
                   >
                     Copy Token

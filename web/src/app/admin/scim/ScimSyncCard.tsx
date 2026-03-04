@@ -2,8 +2,8 @@ import { SvgCheckCircle, SvgClock, SvgKey, SvgRefreshCw } from "@opal/icons";
 import { ContentAction } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import Card from "@/refresh-components/cards/Card";
+import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
-import Button from "@/refresh-components/buttons/Button";
 import Separator from "@/refresh-components/Separator";
 import { timeAgo } from "@/lib/time";
 
@@ -45,16 +45,15 @@ export default function ScimSyncCard({
         rightChildren={
           hasToken ? (
             <Button
-              danger
-              secondary
+              variant="danger"
+              prominence="secondary"
               onClick={onRegenerate}
-              leftIcon={SvgRefreshCw}
+              icon={SvgRefreshCw}
             >
               Regenerate Token
             </Button>
           ) : (
             <Button
-              primary
               rightIcon={SvgKey}
               onClick={onGenerate}
               disabled={isSubmitting}
