@@ -240,7 +240,7 @@ export default function AdminSidebar({
                 <SidebarTab
                   key={index}
                   href={link}
-                  transient={pathname.startsWith(link)}
+                  selected={pathname.startsWith(link)}
                   leftIcon={({ className }) => (
                     <Icon className={className} size={16} />
                   )}

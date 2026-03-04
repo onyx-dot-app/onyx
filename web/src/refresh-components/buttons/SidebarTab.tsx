@@ -6,21 +6,19 @@ import { cn } from "@/lib/utils";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import Link from "next/link";
 import type { Route } from "next";
-import Truncated from "@/refresh-components/texts/Truncated";
 import { Interactive } from "@opal/core";
+import { ContentAction } from "@opal/layouts";
 
 export interface SidebarTabProps {
   // Button states:
   folded?: boolean;
-  transient?: boolean;
-  focused?: boolean;
+  selected?: boolean;
   lowlight?: boolean;
   nested?: boolean;
 
   // Button properties:
   onClick?: React.MouseEventHandler<HTMLElement>;
   href?: string;
-  className?: string;
   leftIcon?: React.FunctionComponent<IconProps>;
   rightChildren?: React.ReactNode;
   children?: React.ReactNode;
@@ -28,88 +26,92 @@ export interface SidebarTabProps {
 
 export default function SidebarTab({
   folded,
-  transient,
-  focused,
+  selected,
   lowlight,
   nested,
 
   onClick,
   href,
-  className,
   leftIcon: LeftIcon,
   rightChildren,
   children,
 }: SidebarTabProps) {
+  const isStringChildren = typeof children === "string";
+
+  const innerContent = folded ? (
+    LeftIcon && (
+      <div className="flex items-center justify-center p-0.5">
+        <LeftIcon className="h-[1rem] w-[1rem] text-text-03" />
+      </div>
+    )
+  ) : isStringChildren ? (
+    <ContentAction
+      icon={LeftIcon}
+      title={children}
+      sizePreset="main-ui"
+      variant="body"
+      prominence={lowlight ? "muted" : "default"}
+      paddingVariant="fit"
+      rightChildren={
+        rightChildren && (
+          <div className="relative flex items-center pointer-events-auto">
+            {rightChildren}
+          </div>
+        )
+      }
+    />
+  ) : (
+    <div className="flex flex-row items-center gap-2 flex-1">
+      {LeftIcon && (
+        <div className="flex items-center justify-center p-0.5">
+          <LeftIcon className="h-[1rem] w-[1rem] text-text-03" />
+        </div>
+      )}
+      {children}
+      {rightChildren && (
+        <div className="relative flex items-center shrink-0 pointer-events-auto">
+          {rightChildren}
+        </div>
+      )}
+    </div>
+  );
+
   const content = (
     <Interactive.Base
       variant="sidebar"
-      selected={focused}
-      transient={transient}
+      selected={selected}
       onClick={onClick}
       group="group/SidebarTab"
     >
       <Interactive.Container
         roundingVariant="compact"
-        heightVariant="fit"
+        heightVariant="lg"
         widthVariant="full"
       >
         <div
           className={cn(
-            "relative flex flex-row justify-start items-start w-full p-1.5 gap-1",
-            className
+            "relative flex flex-row justify-start items-start w-full gap-1",
+            !selected && "pointer-events-none"
           )}
         >
           {href && (
             <Link
               href={href as Route}
               scroll={false}
-              className="absolute inset-0 rounded-08"
+              className="absolute inset-0 rounded-08 pointer-events-auto"
               tabIndex={-1}
             />
           )}
-          <div
-            className={cn(
-              "relative flex-1 h-[1.5rem] flex flex-row items-center px-1 py-0.5 gap-2 justify-start",
-              !focused && "pointer-events-none"
-            )}
-          >
-            {nested && !LeftIcon && (
-              <div className="w-4 shrink-0" aria-hidden="true" />
-            )}
-            {LeftIcon && (
-              <div
-                className={cn(
-                  "w-[1rem] flex items-center justify-center",
-                  !folded && "pointer-events-auto"
-                )}
-              >
-                <LeftIcon className="h-[1rem] w-[1rem] interactive-foreground-icon" />
-              </div>
-            )}
-            {!folded &&
-              (typeof children === "string" ? (
-                <Truncated
-                  className="interactive-foreground"
-                  side="right"
-                  sideOffset={40}
-                >
-                  {children}
-                </Truncated>
-              ) : (
-                children
-              ))}
-          </div>
-          {!folded && (
-            <div className="relative h-[1.5rem] flex items-center">
-              {rightChildren}
-            </div>
+          {nested && !LeftIcon && !folded && (
+            <div className="w-4 shrink-0" aria-hidden="true" />
           )}
+          {innerContent}
         </div>
       </Interactive.Container>
     </Interactive.Base>
   );
 
-  if (typeof children !== "string") return content;
+  if (!isStringChildren) return content;
   if (folded)
     return <SimpleTooltip tooltip={children}>{content}</SimpleTooltip>;
   return content;

@@ -503,7 +503,7 @@ const MemoizedAppSidebarInner = memo(
             leftIcon={SvgEditBig}
             folded={folded}
             href={href}
-            transient={activeSidebarTab.isNewSession()}
+            selected={activeSidebarTab.isNewSession()}
             onClick={() => {
               if (!activeSidebarTab.isNewSession()) return;
               setAppMode(defaultAppMode);
@@ -561,7 +561,7 @@ const MemoizedAppSidebarInner = memo(
             }
             href="/app/agents"
             folded={folded}
-            transient={activeSidebarTab.isMoreAgents()}
+            selected={activeSidebarTab.isMoreAgents()}
             lowlight={!folded}
           >
             {visibleAgents.length === 0 ? "Explore Agents" : "More Agents"}
@@ -575,7 +575,7 @@ const MemoizedAppSidebarInner = memo(
         <SidebarTab
           leftIcon={SvgFolderPlus}
           onClick={() => createProjectModal.toggle(true)}
-          transient={createProjectModal.isOpen}
+          selected={createProjectModal.isOpen}
           folded={folded}
           lowlight={!folded}
         >

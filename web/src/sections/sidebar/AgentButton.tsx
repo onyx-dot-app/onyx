@@ -66,7 +66,7 @@ const AgentButton = memo(({ agent }: AgentButtonProps) => {
           leftIcon={() => <AgentAvatar agent={agent} />}
           href={`/app?agentId=${agent.id}`}
           onClick={handleClick}
-          transient={isCurrentAgent}
+          selected={isCurrentAgent}
           rightChildren={
             // Hide unpin button for current agent since auto-pin would immediately re-pin
             isCurrentAgent ? null : (

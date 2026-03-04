@@ -221,7 +221,7 @@ export default function UserAvatarPopover({
                 </Section>
               ) : undefined
             }
-            transient={!!popupState || appFocus.isUserSettings()}
+            selected={!!popupState || appFocus.isUserSettings()}
             folded={folded}
           >
             {displayName}

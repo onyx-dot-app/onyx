@@ -19,11 +19,7 @@ export default function StepSidebar({
   return (
     <SidebarWrapper>
       <div className="px-2">
-        <SidebarTab
-          leftIcon={buttonIcon}
-          className="bg-background-tint-00"
-          href={buttonHref}
-        >
+        <SidebarTab leftIcon={buttonIcon} href={buttonHref}>
           {buttonName}
         </SidebarTab>
       </div>
