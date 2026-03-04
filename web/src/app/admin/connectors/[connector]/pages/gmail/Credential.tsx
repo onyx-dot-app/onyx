@@ -7,10 +7,7 @@ import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { adminDeleteCredential } from "@/lib/credential";
 import { setupGmailOAuth } from "@/lib/gmail";
-import {
-  DOCS_ADMINS_PATH,
-  GMAIL_AUTH_IS_ADMIN_COOKIE_NAME,
-} from "@/lib/constants";
+import { DOCS_ADMINS_PATH } from "@/lib/constants";
 import { CRAFT_OAUTH_COOKIE_NAME } from "@/app/craft/v1/constants";
 import Cookies from "js-cookie";
 import { TextFormField, SectionHeader } from "@/components/Field";
@@ -602,9 +599,6 @@ export const GmailAuthSection = ({
           onClick={async () => {
             setIsAuthenticating(true);
             try {
-              Cookies.set(GMAIL_AUTH_IS_ADMIN_COOKIE_NAME, "true", {
-                path: "/",
-              });
               if (buildMode) {
                 Cookies.set(CRAFT_OAUTH_COOKIE_NAME, "true", {
                   path: "/",

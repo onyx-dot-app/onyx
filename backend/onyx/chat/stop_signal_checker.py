@@ -1,65 +1,58 @@
 from uuid import UUID
 
-from redis.client import Redis
+from onyx.cache.interface import CacheBackend
 
-# Redis key prefixes for chat session stop signals
 PREFIX = "chatsessionstop"
 FENCE_PREFIX = f"{PREFIX}_fence"
-FENCE_TTL = 10 * 60  # 10 minutes - defensive TTL to prevent memory leaks
+FENCE_TTL = 10 * 60  # 10 minutes
 
 
 def _get_fence_key(chat_session_id: UUID) -> str:
-    """
-    Generate the Redis key for a chat session stop signal fence.
+    """Generate the cache key for a chat session stop signal fence.
 
     Args:
         chat_session_id: The UUID of the chat session
 
     Returns:
-        The fence key string (tenant_id is automatically added by the Redis client)
+        The fence key string. Tenant isolation is handled automatically
+        by the cache backend (Redis key-prefixing or Postgres schema routing).
     """
     return f"{FENCE_PREFIX}_{chat_session_id}"
 
 
-def set_fence(chat_session_id: UUID, redis_client: Redis, value: bool) -> None:
-    """
-    Set or clear the stop signal fence for a chat session.
+def set_fence(chat_session_id: UUID, cache: CacheBackend, value: bool) -> None:
+    """Set or clear the stop signal fence for a chat session.
 
     Args:
         chat_session_id: The UUID of the chat session
-        redis_client: Redis client to use (tenant-aware client that auto-prefixes keys)
+        cache: Tenant-aware cache backend
         value: True to set the fence (stop signal), False to clear it
     """
     fence_key = _get_fence_key(chat_session_id)
     if not value:
-        redis_client.delete(fence_key)
+        cache.delete(fence_key)
         return
+    cache.set(fence_key, 0, ex=FENCE_TTL)
 
-    redis_client.set(fence_key, 0, ex=FENCE_TTL)
 
-
-def is_connected(chat_session_id: UUID, redis_client: Redis) -> bool:
-    """
-    Check if the chat session should continue (not stopped).
+def is_connected(chat_session_id: UUID, cache: CacheBackend) -> bool:
+    """Check if the chat session should continue (not stopped).
 
     Args:
         chat_session_id: The UUID of the chat session to check
-        redis_client: Redis client to use for checking the stop signal (tenant-aware client that auto-prefixes keys)
+        cache: Tenant-aware cache backend
 
     Returns:
         True if the session should continue, False if it should stop
     """
-    fence_key = _get_fence_key(chat_session_id)
-    return not bool(redis_client.exists(fence_key))
+    return not cache.exists(_get_fence_key(chat_session_id))
 
 
-def reset_cancel_status(chat_session_id: UUID, redis_client: Redis) -> None:
-    """
-    Clear the stop signal for a chat session.
+def reset_cancel_status(chat_session_id: UUID, cache: CacheBackend) -> None:
+    """Clear the stop signal for a chat session.
 
     Args:
         chat_session_id: The UUID of the chat session
-        redis_client: Redis client to use (tenant-aware client that auto-prefixes keys)
+        cache: Tenant-aware cache backend
     """
-    fence_key = _get_fence_key(chat_session_id)
-    redis_client.delete(fence_key)
+    cache.delete(_get_fence_key(chat_session_id))

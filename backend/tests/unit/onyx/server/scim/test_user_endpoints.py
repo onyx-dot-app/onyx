@@ -215,7 +215,7 @@ class TestCreateUser:
         mock_dal.commit.assert_called_once()
 
     @patch("ee.onyx.server.scim.api._check_seat_availability", return_value=None)
-    def test_missing_external_id_creates_user_without_mapping(
+    def test_missing_external_id_still_creates_mapping(
         self,
         mock_seats: MagicMock,  # noqa: ARG002
         mock_db_session: MagicMock,
@@ -223,6 +223,7 @@ class TestCreateUser:
         mock_dal: MagicMock,
         provider: ScimProvider,
     ) -> None:
+        """Mapping is always created to mark user as SCIM-managed."""
         mock_dal.get_user_by_email.return_value = None
         resource = make_scim_user(externalId=None)
 
@@ -236,11 +237,11 @@ class TestCreateUser:
         parsed = parse_scim_user(result, status=201)
         assert parsed.userName is not None
         mock_dal.add_user.assert_called_once()
-        mock_dal.create_user_mapping.assert_not_called()
+        mock_dal.create_user_mapping.assert_called_once()
         mock_dal.commit.assert_called_once()
 
     @patch("ee.onyx.server.scim.api._check_seat_availability", return_value=None)
-    def test_duplicate_email_returns_409(
+    def test_duplicate_scim_managed_email_returns_409(
         self,
         mock_seats: MagicMock,  # noqa: ARG002
         mock_db_session: MagicMock,
@@ -248,7 +249,12 @@ class TestCreateUser:
         mock_dal: MagicMock,
         provider: ScimProvider,
     ) -> None:
-        mock_dal.get_user_by_email.return_value = make_db_user()
+        """409 only when the existing user already has a SCIM mapping."""
+        existing = make_db_user()
+        mock_dal.get_user_by_email.return_value = existing
+        mock_dal.get_user_mapping_by_user_id.return_value = make_user_mapping(
+            user_id=existing.id
+        )
         resource = make_scim_user()
 
         result = create_user(
@@ -259,6 +265,40 @@ class TestCreateUser:
         )
 
         assert_scim_error(result, 409)
+
+    @patch("ee.onyx.server.scim.api._check_seat_availability", return_value=None)
+    def test_existing_user_without_mapping_gets_linked(
+        self,
+        mock_seats: MagicMock,  # noqa: ARG002
+        mock_db_session: MagicMock,
+        mock_token: MagicMock,
+        mock_dal: MagicMock,
+        provider: ScimProvider,
+    ) -> None:
+        """Pre-existing user without SCIM mapping gets adopted (linked)."""
+        existing = make_db_user(email="admin@example.com", personal_name=None)
+        mock_dal.get_user_by_email.return_value = existing
+        mock_dal.get_user_mapping_by_user_id.return_value = None
+        resource = make_scim_user(userName="admin@example.com", externalId="ext-admin")
+
+        result = create_user(
+            user_resource=resource,
+            _token=mock_token,
+            provider=provider,
+            db_session=mock_db_session,
+        )
+
+        parsed = parse_scim_user(result, status=201)
+        assert parsed.userName == "admin@example.com"
+        # Should NOT create a new user — reuse existing
+        mock_dal.add_user.assert_not_called()
+        # Should sync is_active and personal_name from the SCIM request
+        mock_dal.update_user.assert_called_once_with(
+            existing, is_active=True, personal_name="Test User"
+        )
+        # Should create a SCIM mapping for the existing user
+        mock_dal.create_user_mapping.assert_called_once()
+        mock_dal.commit.assert_called_once()
 
     @patch("ee.onyx.server.scim.api._check_seat_availability", return_value=None)
     def test_integrity_error_returns_409(

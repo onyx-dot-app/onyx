@@ -819,7 +819,9 @@ RERANK_COUNT = int(os.environ.get("RERANK_COUNT") or 1000)
 # Tool Configs
 #####
 # Code Interpreter Service Configuration
-CODE_INTERPRETER_BASE_URL = os.environ.get("CODE_INTERPRETER_BASE_URL")
+CODE_INTERPRETER_BASE_URL = os.environ.get(
+    "CODE_INTERPRETER_BASE_URL", "http://localhost:8000"
+)
 
 CODE_INTERPRETER_DEFAULT_TIMEOUT_MS = int(
     os.environ.get("CODE_INTERPRETER_DEFAULT_TIMEOUT_MS") or 60_000
@@ -900,6 +902,9 @@ CUSTOM_ANSWER_VALIDITY_CONDITIONS = json.loads(
 )
 
 VESPA_REQUEST_TIMEOUT = int(os.environ.get("VESPA_REQUEST_TIMEOUT") or "15")
+VESPA_MIGRATION_REQUEST_TIMEOUT_S = int(
+    os.environ.get("VESPA_MIGRATION_REQUEST_TIMEOUT_S") or "120"
+)
 
 SYSTEM_RECURSION_LIMIT = int(os.environ.get("SYSTEM_RECURSION_LIMIT") or "1000")
 

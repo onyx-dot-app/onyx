@@ -11,8 +11,9 @@ import { ThreeDotsLoader } from "@/components/Loading";
 import { Content, ContentAction } from "@opal/layouts";
 import { Button } from "@opal/components";
 import { Hoverable } from "@opal/core";
-import { SvgCpu, SvgArrowExchange, SvgSettings, SvgTrash } from "@opal/icons";
+import { SvgArrowExchange, SvgSettings, SvgTrash } from "@opal/icons";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import {
   getProviderDisplayName,
@@ -43,6 +44,8 @@ import { VertexAIModal } from "@/sections/modals/llmConfig/VertexAIModal";
 import { OpenRouterModal } from "@/sections/modals/llmConfig/OpenRouterModal";
 import { CustomModal } from "@/sections/modals/llmConfig/CustomModal";
 import { Section } from "@/layouts/general-layouts";
+
+const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.LLM_MODELS]!;
 
 // ============================================================================
 // Provider form mapping (keyed by provider name from the API)
@@ -344,7 +347,7 @@ export default function LLMConfigurationPage() {
 
   return (
     <SettingsLayouts.Root>
-      <SettingsLayouts.Header icon={SvgCpu} title="LLM Models" separator />
+      <SettingsLayouts.Header icon={route.icon} title={route.title} separator />
 
       <SettingsLayouts.Body>
         {hasProviders ? (

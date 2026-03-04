@@ -1,3 +1,5 @@
+"use client";
+
 import { memo, useState, useCallback } from "react";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
@@ -12,6 +14,7 @@ import {
 import { Disabled } from "@/refresh-components/Disabled";
 import { ProviderIcon } from "@/app/admin/configuration/llm/ProviderIcon";
 import { SvgCheckCircle, SvgCpu, SvgExternalLink } from "@opal/icons";
+import { ContentAction } from "@opal/layouts";
 
 type LLMStepProps = {
   state: OnboardingState;
@@ -122,21 +125,14 @@ const LLMStepInner = ({
           className="flex flex-col items-center justify-between w-full p-1 rounded-16 border border-border-01 bg-background-tint-00"
           aria-label="onboarding-llm-step"
         >
-          <div className="flex gap-2 justify-between h-full w-full">
-            <div className="flex mx-2 mt-2 gap-1">
-              <div className="h-full p-0.5">
-                <SvgCpu className="w-4 h-4 stroke-text-03" />
-              </div>
-              <div>
-                <Text as="p" text04 mainUiAction>
-                  Connect your LLM models
-                </Text>
-                <Text as="p" text03 secondaryBody>
-                  Onyx supports both self-hosted models and popular providers.
-                </Text>
-              </div>
-            </div>
-            <div className="p-0.5">
+          <ContentAction
+            icon={SvgCpu}
+            title="Connect your LLM models"
+            description="Onyx supports both self-hosted models and popular providers."
+            sizePreset="main-ui"
+            variant="section"
+            paddingVariant="lg"
+            rightChildren={
               <Button
                 tertiary
                 rightIcon={SvgExternalLink}
@@ -145,8 +141,8 @@ const LLMStepInner = ({
               >
                 View in Admin Panel
               </Button>
-            </div>
-          </div>
+            }
+          />
           <Separator />
           <div className="flex flex-wrap gap-1 [&>*:last-child:nth-child(odd)]:basis-full">
             {isLoading ? (

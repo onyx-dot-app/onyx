@@ -11,6 +11,7 @@ import {
   SvgUnplug,
   SvgXOctagon,
 } from "@opal/icons";
+import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
 import { Section } from "@/layouts/general-layouts";
 import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
@@ -20,6 +21,8 @@ import useCodeInterpreter from "@/hooks/useCodeInterpreter";
 import { updateCodeInterpreter } from "@/lib/admin/code-interpreter/svc";
 import { ContentAction } from "@opal/layouts";
 import { toast } from "@/hooks/useToast";
+
+const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.CODE_INTERPRETER]!;
 
 interface CodeInterpreterCardProps {
   variant?: CardProps["variant"];
@@ -161,8 +164,8 @@ export default function CodeInterpreterPage() {
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
-        icon={SvgTerminal}
-        title="Code Interpreter"
+        icon={route.icon}
+        title={route.title}
         description="Safe and sandboxed Python runtime available to your LLM. See docs for more details."
         separator
       />

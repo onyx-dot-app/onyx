@@ -1,5 +1,5 @@
 // ExpandableContentWrapper
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { SvgDownloadCloud, SvgFold, SvgMaximize2, SvgX } from "@opal/icons";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@opal/components";
@@ -17,8 +17,6 @@ export interface ExpandableContentWrapperProps {
 
 export interface ContentComponentProps {
   fileDescriptor: FileDescriptor;
-  isLoading: boolean;
-  fadeIn: boolean;
   expanded?: boolean;
 }
 
@@ -28,23 +26,8 @@ export default function ExpandableContentWrapper({
   ContentComponent,
 }: ExpandableContentWrapperProps) {
   const [expanded, setExpanded] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [fadeIn, setFadeIn] = useState(false);
 
   const toggleExpand = () => setExpanded((prev) => !prev);
-
-  // Prevent a jarring fade in
-  useEffect(() => {
-    setTimeout(() => setIsLoading(false), 300);
-  }, []);
-
-  useEffect(() => {
-    if (!isLoading) {
-      setTimeout(() => setFadeIn(true), 50);
-    } else {
-      setFadeIn(false);
-    }
-  }, [isLoading]);
 
   const downloadFile = () => {
     const a = document.createElement("a");
@@ -103,8 +86,6 @@ export default function ExpandableContentWrapper({
           {!expanded && (
             <ContentComponent
               fileDescriptor={fileDescriptor}
-              isLoading={isLoading}
-              fadeIn={fadeIn}
               expanded={expanded}
             />
           )}

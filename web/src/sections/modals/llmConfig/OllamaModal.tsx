@@ -23,8 +23,9 @@ import {
 } from "./formUtils";
 import { AdvancedOptions } from "./components/AdvancedOptions";
 import { DisplayModels } from "./components/DisplayModels";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchOllamaModels } from "@/app/admin/configuration/llm/utils";
+import debounce from "lodash/debounce";
 
 export const OLLAMA_PROVIDER_NAME = "ollama_chat";
 const DEFAULT_API_BASE = "http://127.0.0.1:11434";
@@ -61,14 +62,16 @@ function OllamaModalContent({
 }: OllamaModalContentProps) {
   const [isLoadingModels, setIsLoadingModels] = useState(true);
 
-  useEffect(() => {
-    if (formikProps.values.api_base) {
+  const fetchModels = useCallback(
+    (apiBase: string, signal: AbortSignal) => {
       setIsLoadingModels(true);
       fetchOllamaModels({
-        api_base: formikProps.values.api_base,
+        api_base: apiBase,
         provider_name: existingLlmProvider?.name,
+        signal,
       })
         .then((data) => {
+          if (signal.aborted) return;
           if (data.error) {
             console.error("Error fetching models:", data.error);
             setFetchedModels([]);
@@ -77,14 +80,32 @@ function OllamaModalContent({
           setFetchedModels(data.models);
         })
         .finally(() => {
-          setIsLoadingModels(false);
+          if (!signal.aborted) {
+            setIsLoadingModels(false);
+          }
         });
+    },
+    [existingLlmProvider?.name, setFetchedModels]
+  );
+
+  const debouncedFetchModels = useMemo(
+    () => debounce(fetchModels, 500),
+    [fetchModels]
+  );
+
+  useEffect(() => {
+    if (formikProps.values.api_base) {
+      const controller = new AbortController();
+      debouncedFetchModels(formikProps.values.api_base, controller.signal);
+      return () => {
+        debouncedFetchModels.cancel();
+        controller.abort();
+      };
+    } else {
+      setIsLoadingModels(false);
+      setFetchedModels([]);
     }
-  }, [
-    formikProps.values.api_base,
-    existingLlmProvider?.name,
-    setFetchedModels,
-  ]);
+  }, [formikProps.values.api_base, debouncedFetchModels, setFetchedModels]);
 
   const currentModels =
     fetchedModels.length > 0

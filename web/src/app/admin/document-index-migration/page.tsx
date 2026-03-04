@@ -2,8 +2,11 @@
 
 import { useState } from "react";
 import useSWR from "swr";
-import { SvgArrowExchange } from "@opal/icons";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
+
+const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.INDEX_MIGRATION]!;
+
 import Card from "@/refresh-components/cards/Card";
 import { Content, ContentAction } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
@@ -213,8 +216,8 @@ export default function Page() {
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
-        icon={SvgArrowExchange}
-        title="Document Index Migration"
+        icon={route.icon}
+        title={route.title}
         description="Monitor the migration from Vespa to OpenSearch and control the active retrieval source."
         separator
       />

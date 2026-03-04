@@ -1,0 +1,72 @@
+{
+    "labels": [],
+    "comment": "",
+    "fixWithAI": true,
+    "hideFooter": false,
+    "strictness": 2,
+    "statusCheck": true,
+    "commentTypes": [
+      "logic",
+      "syntax",
+      "style"
+    ],
+    "instructions": "",
+    "disabledLabels": [],
+    "excludeAuthors": [
+      "dependabot[bot]",
+      "renovate[bot]"
+    ],
+    "ignoreKeywords": "",
+    "ignorePatterns": "greptile.json\n",
+    "includeAuthors": [],
+    "summarySection": {
+      "included": true,
+      "collapsible": false,
+      "defaultOpen": false
+    },
+    "excludeBranches": [],
+    "fileChangeLimit": 300,
+    "includeBranches": [],
+    "includeKeywords": "",
+    "triggerOnUpdates": true,
+    "updateExistingSummaryComment": true,
+    "updateSummaryOnly": false,
+    "issuesTableSection": {
+      "included": true,
+      "collapsible": false,
+      "defaultOpen": false
+    },
+    "statusCommentsEnabled": true,
+    "confidenceScoreSection": {
+      "included": true,
+      "collapsible": false
+    },
+    "sequenceDiagramSection": {
+      "included": true,
+      "collapsible": false,
+      "defaultOpen": false
+    },
+    "shouldUpdateDescription": false,
+    "customContext": {
+      "other": [
+        {
+          "scope": [],
+          "content": ""
+        }
+      ],
+      "rules": [
+        {
+          "scope": [],
+          "rule": ""
+        }
+      ],
+      "files": [
+        {
+          "scope": [],
+          "path": "",
+          "description": ""
+        }
+      ]
+    }
+  }
+  

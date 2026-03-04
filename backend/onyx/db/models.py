@@ -4926,7 +4926,9 @@ class ScimUserMapping(Base):
     __tablename__ = "scim_user_mapping"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    external_id: Mapped[str] = mapped_column(String, unique=True, index=True)
+    external_id: Mapped[str | None] = mapped_column(
+        String, unique=True, index=True, nullable=True
+    )
     user_id: Mapped[UUID] = mapped_column(
         ForeignKey("user.id", ondelete="CASCADE"), unique=True, nullable=False
     )
@@ -4983,3 +4985,25 @@ class CodeInterpreterServer(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     server_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+
+class CacheStore(Base):
+    """Key-value cache table used by ``PostgresCacheBackend``.
+
+    Replaces Redis for simple KV caching, locks, and list operations
+    when ``CACHE_BACKEND=postgres`` (NO_VECTOR_DB deployments).
+
+    Intentionally separate from ``KVStore``:
+    - Stores raw bytes (LargeBinary) vs JSONB, matching Redis semantics.
+    - Has ``expires_at`` for TTL; rows are periodically garbage-collected.
+    - Holds ephemeral data (tokens, stop signals, lock state) not
+      persistent application config, so cleanup can be aggressive.
+    """
+
+    __tablename__ = "cache_store"
+
+    key: Mapped[str] = mapped_column(String, primary_key=True)
+    value: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    expires_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )

@@ -6,6 +6,7 @@ import { useSettingsContext } from "@/providers/SettingsProvider";
 import { ApplicationStatus } from "@/interfaces/settings";
 import Button from "@/refresh-components/buttons/Button";
 import { cn } from "@/lib/utils";
+import { ADMIN_PATHS } from "@/lib/admin-routes";
 
 export interface ClientLayoutProps {
   children: React.ReactNode;
@@ -18,17 +19,33 @@ export interface ClientLayoutProps {
 // the `py-10 px-4 md:px-12` padding below can be removed entirely and
 // this prefix list can be deleted.
 const SETTINGS_LAYOUT_PREFIXES = [
-  "/admin/configuration/chat-preferences",
-  "/admin/configuration/image-generation",
-  "/admin/configuration/web-search",
-  "/admin/actions/mcp",
-  "/admin/actions/open-api",
-  "/admin/billing",
-  "/admin/document-index-migration",
-  "/admin/discord-bot",
-  "/admin/theme",
-  "/admin/configuration/llm",
-  "/admin/scim",
+  ADMIN_PATHS.CHAT_PREFERENCES,
+  ADMIN_PATHS.IMAGE_GENERATION,
+  ADMIN_PATHS.WEB_SEARCH,
+  ADMIN_PATHS.MCP_ACTIONS,
+  ADMIN_PATHS.OPENAPI_ACTIONS,
+  ADMIN_PATHS.BILLING,
+  ADMIN_PATHS.INDEX_MIGRATION,
+  ADMIN_PATHS.DISCORD_BOTS,
+  ADMIN_PATHS.THEME,
+  ADMIN_PATHS.LLM_MODELS,
+  ADMIN_PATHS.AGENTS,
+  ADMIN_PATHS.USERS,
+  ADMIN_PATHS.TOKEN_RATE_LIMITS,
+  ADMIN_PATHS.SEARCH_SETTINGS,
+  ADMIN_PATHS.DOCUMENT_PROCESSING,
+  ADMIN_PATHS.CODE_INTERPRETER,
+  ADMIN_PATHS.API_KEYS,
+  ADMIN_PATHS.ADD_CONNECTOR,
+  ADMIN_PATHS.INDEXING_STATUS,
+  ADMIN_PATHS.DOCUMENTS,
+  ADMIN_PATHS.DEBUG,
+  ADMIN_PATHS.KNOWLEDGE_GRAPH,
+  ADMIN_PATHS.SLACK_BOTS,
+  ADMIN_PATHS.STANDARD_ANSWERS,
+  ADMIN_PATHS.GROUPS,
+  ADMIN_PATHS.PERFORMANCE,
+  ADMIN_PATHS.SCIM,
 ];
 
 export function ClientLayout({

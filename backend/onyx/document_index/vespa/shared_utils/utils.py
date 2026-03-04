@@ -52,7 +52,9 @@ def replace_invalid_doc_id_characters(text: str) -> str:
     return text.replace("'", "_")
 
 
-def get_vespa_http_client(no_timeout: bool = False, http2: bool = True) -> httpx.Client:
+def get_vespa_http_client(
+    no_timeout: bool = False, http2: bool = True, timeout: int | None = None
+) -> httpx.Client:
     """
     Configures and returns an HTTP client for communicating with Vespa,
     including authentication if needed.
@@ -64,7 +66,7 @@ def get_vespa_http_client(no_timeout: bool = False, http2: bool = True) -> httpx
             else None
         ),
         verify=False if not MANAGED_VESPA else True,
-        timeout=None if no_timeout else VESPA_REQUEST_TIMEOUT,
+        timeout=None if no_timeout else (timeout or VESPA_REQUEST_TIMEOUT),
         http2=http2,
     )
 
