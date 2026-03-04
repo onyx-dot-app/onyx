@@ -138,7 +138,6 @@ services:
       - indexing_model_server
     restart: unless-stopped
     environment:
-      - USE_LIGHTWEIGHT_BACKGROUND_WORKER=${USE_LIGHTWEIGHT_BACKGROUND_WORKER:-true}
       - ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
       - MULTI_TENANT=true
       - LOG_LEVEL=DEBUG
