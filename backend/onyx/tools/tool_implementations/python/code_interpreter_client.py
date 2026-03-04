@@ -97,8 +97,8 @@ class CodeInterpreterClient:
     def close(self) -> None:
         if self._closed:
             return
-        self._closed = True
         self.session.close()
+        self._closed = True
 
     def _build_payload(
         self,
