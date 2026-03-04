@@ -48,15 +48,17 @@ function useOnboardingState(liveAgent?: MinimalPersonaSnapshot): {
   const nameUpdateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
   );
+  const hasInitializedRef = useRef(false);
 
-  // Navigate to the earliest incomplete step in the onboarding flow.
-  // Step order: Welcome -> Name -> LlmSetup -> Complete
-  // We check steps in order and stop at the first incomplete one.
+  // Initialize onboarding to the earliest incomplete step — runs once after
+  // both user data and provider data have loaded.  After initialization, user
+  // actions (Next / Prev / goToStep) drive navigation; the effect never
+  // re-runs so it cannot override user-driven state (e.g. button active).
   useEffect(() => {
-    // Don't run logic until data has loaded
-    if (isLoadingProviders) {
+    if (isLoadingProviders || !user || hasInitializedRef.current) {
       return;
     }
+    hasInitializedRef.current = true;
 
     // Pre-populate state with existing data
     if (userName) {
@@ -99,7 +101,8 @@ function useOnboardingState(liveAgent?: MinimalPersonaSnapshot): {
       type: OnboardingActionType.GO_TO_STEP,
       step: OnboardingStep.Complete,
     });
-  }, [llmProviders, isLoadingProviders, userName, hasLlmProviders]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [llmProviders, isLoadingProviders, userName, hasLlmProviders, user]);
 
   const nextStep = useCallback(() => {
     dispatch({

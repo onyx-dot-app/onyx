@@ -36,11 +36,14 @@ export default function NonAdminStep() {
 
   const handleSave = () => {
     updateUserPersonalization({ name })
-      .then(async () => {
+      .then(() => {
         setSavedName(name);
         setShowHeader(true);
         setIsEditing(false);
-        await refreshUser();
+        // Don't call refreshUser() here — it would cause OnboardingFlow to
+        // unmount this component (since user.personalization.name becomes set),
+        // hiding the confirmation banner before the user sees it.
+        // refreshUser() is called in handleDismissConfirmation instead.
       })
       .catch((error) => {
         toast.error("Failed to save name. Please try again.");
