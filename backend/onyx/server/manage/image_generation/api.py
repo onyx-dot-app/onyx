@@ -348,8 +348,8 @@ def create_config(
         return ImageGenerationConfigView.from_model(config)
     except OnyxError:
         raise
-    except Exception as e:
-        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
+    except Exception:
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR)
 
 
 @admin_router.get("/config")
@@ -475,8 +475,8 @@ def update_config(
 
     except OnyxError:
         raise
-    except Exception as e:
-        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
+    except Exception:
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR)
 
 
 @admin_router.delete("/config/{image_provider_id}")
