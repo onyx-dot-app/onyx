@@ -115,10 +115,8 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
     };
   };
 
-  // Reset source filter, owner filter, and pagination when results change
+  // Reset pagination when results change
   useEffect(() => {
-    setSelectedSources([]);
-    setSelectedOwners(new Set());
     setCurrentPage(1);
   }, [results]);
 
