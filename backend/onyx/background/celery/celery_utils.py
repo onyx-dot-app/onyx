@@ -115,7 +115,8 @@ def _extract_from_batch(
     for item in doc_list:
         if isinstance(item, HierarchyNode):
             hierarchy_nodes.append(item)
-            ids[item.raw_node_id] = None
+            if item.raw_node_id not in ids:
+                ids[item.raw_node_id] = None
         elif isinstance(item, ConnectorFailure):
             failed_id = _get_failure_id(item)
             if failed_id:
@@ -191,7 +192,9 @@ def extract_ids_from_runnable_connector(
         batch_ids = batch_result.raw_id_to_parent
         batch_nodes = batch_result.hierarchy_nodes
         doc_batch_processing_func(batch_ids)
-        all_raw_id_to_parent.update(batch_ids)
+        for k, v in batch_ids.items():
+            if v is not None or k not in all_raw_id_to_parent:
+                all_raw_id_to_parent[k] = v
         all_hierarchy_nodes.extend(batch_nodes)
 
         if callback:
