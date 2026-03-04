@@ -241,7 +241,7 @@ class SlackRenderer(HTMLRenderer):
     def table_row(self, text: str) -> str:  # noqa: ARG002
         cells = self._current_row_cells
         self._current_row_cells = []
-        # First column becomes the bold title, remaining columns are key-value lines
+        # First column becomes the bold title, remaining columns are bulleted fields
         lines: list[str] = []
         if cells:
             title = cells[0]
@@ -253,10 +253,10 @@ class SlackRenderer(HTMLRenderer):
                     lines.append(f"*{title}*")
             for i, cell in enumerate(cells[1:], start=1):
                 if i < len(self._table_headers):
-                    lines.append(f"  {self._table_headers[i]}: {cell}")
+                    lines.append(f"  • {self._table_headers[i]}: {cell}")
                 else:
-                    lines.append(f"  {cell}")
-        return "\n".join(lines) + "\n"
+                    lines.append(f"  • {cell}")
+        return "\n".join(lines) + "\n\n"
 
     def table_body(self, text: str) -> str:
         return text

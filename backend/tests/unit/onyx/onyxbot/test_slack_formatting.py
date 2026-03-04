@@ -119,8 +119,10 @@ def test_table_renders_as_vertical_cards() -> None:
 
     formatted = format_slack_message(message)
 
-    assert "*Auth*\n  Status: Done\n  Owner: Alice" in formatted
-    assert "*Search*\n  Status: In Progress\n  Owner: Bob" in formatted
+    assert "*Auth*\n  • Status: Done\n  • Owner: Alice" in formatted
+    assert "*Search*\n  • Status: In Progress\n  • Owner: Bob" in formatted
+    # Cards separated by blank line
+    assert "Owner: Alice\n\n*Search*" in formatted
     # No raw pipe-and-dash table syntax
     assert "---|" not in formatted
 
@@ -147,7 +149,7 @@ def test_table_embedded_in_text() -> None:
     formatted = format_slack_message(message)
 
     assert "Here are the results:" in formatted
-    assert "*Apples*\n  Count: 5" in formatted
+    assert "*Apples*\n  • Count: 5" in formatted
     assert "That's all." in formatted
 
 
@@ -173,7 +175,7 @@ def test_table_with_alignment_specifiers() -> None:
 
     formatted = format_slack_message(message)
 
-    assert "*a*\n  Center: b\n  Right: c" in formatted
+    assert "*a*\n  • Center: b\n  • Right: c" in formatted
 
 
 def test_two_tables_in_same_message_use_independent_headers() -> None:
@@ -189,8 +191,8 @@ def test_two_tables_in_same_message_use_independent_headers() -> None:
 
     formatted = format_slack_message(message)
 
-    assert "*1*\n  B: 2" in formatted
-    assert "*p*\n  Y: q\n  Z: r" in formatted
+    assert "*1*\n  • B: 2" in formatted
+    assert "*p*\n  • Y: q\n  • Z: r" in formatted
 
 
 def test_table_empty_first_column_no_bare_asterisks() -> None:
@@ -200,4 +202,4 @@ def test_table_empty_first_column_no_bare_asterisks() -> None:
 
     # Empty title should not produce "**" (bare asterisks)
     assert "**" not in formatted
-    assert "  Status: Done" in formatted
+    assert "  • Status: Done" in formatted
