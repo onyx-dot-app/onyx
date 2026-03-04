@@ -61,19 +61,13 @@ function IllustrationContent({
   description,
 }: IllustrationContentProps) {
   return (
-    <div
-      className="flex flex-col items-center text-center"
-      style={{ padding: "1.25rem", gap: "0.75rem" }}
-    >
+    <div className="flex flex-col items-center gap-3 p-5 text-center">
       {Illustration && (
-        <Illustration
-          className="shrink-0"
-          style={{ width: "7.5rem", height: "7.5rem" }}
-        />
+        <Illustration className="shrink-0 w-[7.5rem] h-[7.5rem]" />
       )}
-      <div className="font-main-content-emphasis text-text-04">{title}</div>
+      <p className="font-main-content-emphasis text-text-04">{title}</p>
       {description && (
-        <div className="font-secondary-body text-text-03">{description}</div>
+        <p className="font-secondary-body text-text-03">{description}</p>
       )}
     </div>
   );

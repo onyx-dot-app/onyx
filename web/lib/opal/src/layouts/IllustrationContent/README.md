@@ -25,11 +25,10 @@ Empty states and placeholder screens share a recurring pattern: a large illustra
 └─────────────────────────────────┘
 ```
 
-- Outer container: `flex flex-col items-center text-center` with `1.25rem` padding.
-- Gap between all children: `0.75rem`.
-- Illustration: rendered at `7.5rem × 7.5rem` (120px), no extra padding.
-- Title: `font-main-content-emphasis text-text-04`.
-- Description: `font-secondary-body text-text-03`.
+- Outer container: `flex flex-col items-center gap-3 p-5 text-center`.
+- Illustration: `w-[7.5rem] h-[7.5rem]` (120px), no extra padding.
+- Title: `<p>` with `font-main-content-emphasis text-text-04`.
+- Description: `<p>` with `font-secondary-body text-text-03`.
 
 ## Props
 

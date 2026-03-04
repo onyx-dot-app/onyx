@@ -15,9 +15,10 @@ Layout primitives for composing content blocks. These components handle sizing, 
 ## Quick Start
 
 ```tsx
-import { Content, ContentAction } from "@opal/layouts";
+import { Content, ContentAction, IllustrationContent } from "@opal/layouts";
 import { Button } from "@opal/components";
 import SvgSettings from "@opal/icons/settings";
+import SvgNoResult from "@opal/illustrations/no-result";
 
 // Simple heading
 <Content
