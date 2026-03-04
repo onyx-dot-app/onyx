@@ -41,7 +41,7 @@ type InteractiveBaseSidebarVariantProps = {
  * - `"none"` accepts no prominence (`prominence` must not be provided)
  * - `"select"` accepts an optional prominence (defaults to `"light"`) and
  *   an optional `selected` boolean that switches foreground to action-link colours
- * - `"sidebar"` accepts an optional prominence (defaults to `"primary"`) and
+ * - `"sidebar"` accepts an optional prominence (defaults to `"light"`) and
  *   an optional `selected` boolean for the focused/active-item state
  * - `"default"`, `"action"`, and `"danger"` accept an optional prominence
  *   (defaults to `"primary"`)
