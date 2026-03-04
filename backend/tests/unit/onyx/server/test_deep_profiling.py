@@ -108,16 +108,27 @@ def test_collector_exports_gc_stats() -> None:
 
 
 def test_collector_exports_object_type_counts() -> None:
-    """Verify object type counts are exported."""
-    collector = DeepProfilingCollector()
-    families = collector.collect()
+    """Verify object type counts are exported from cached snapshot data."""
+    import onyx.server.metrics.deep_profiling as mod
 
-    type_count = next(f for f in families if f.name == "onyx_object_type_count")
-    # Should have samples (the exact types depend on runtime state)
-    assert len(type_count.samples) > 0
-    # Common types like 'dict', 'list', 'tuple' should appear
-    type_names = {s.labels["type"] for s in type_count.samples}
-    assert "dict" in type_names or "list" in type_names
+    original = mod._current_object_type_counts
+    try:
+        mod._current_object_type_counts = [
+            ("dict", 5000),
+            ("list", 3000),
+            ("tuple", 2000),
+        ]
+
+        collector = DeepProfilingCollector()
+        families = collector.collect()
+
+        type_count = next(f for f in families if f.name == "onyx_object_type_count")
+        assert len(type_count.samples) == 3
+        values = {s.labels["type"]: s.value for s in type_count.samples}
+        assert values["dict"] == 5000
+        assert values["list"] == 3000
+    finally:
+        mod._current_object_type_counts = original
 
 
 def test_collector_describe_returns_empty() -> None:

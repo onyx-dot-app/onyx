@@ -26,11 +26,12 @@ _LAG_MAX = Gauge(
 )
 
 _probe_task: asyncio.Task[None] | None = None
+_current_lag: float = 0.0
 _max_lag: float = 0.0
 
 
 async def _probe_loop(interval: float) -> None:
-    global _max_lag
+    global _current_lag, _max_lag
     loop = asyncio.get_running_loop()
 
     while True:
@@ -42,6 +43,7 @@ async def _probe_loop(interval: float) -> None:
         if lag < 0:
             lag = 0.0
 
+        _current_lag = lag
         _LAG.set(lag)
         if lag > _max_lag:
             _max_lag = lag
@@ -50,8 +52,7 @@ async def _probe_loop(interval: float) -> None:
 
 def get_current_lag() -> float:
     """Return the last measured lag value."""
-    # Reading from the gauge's internal value
-    return _LAG._value.get()  # type: ignore[union-attr]
+    return _current_lag
 
 
 def get_max_lag() -> float:

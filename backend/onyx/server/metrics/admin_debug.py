@@ -8,6 +8,7 @@ Requires admin authentication.
 import threading
 import time
 from typing import Any
+from typing import cast
 
 import psutil
 from fastapi import APIRouter
@@ -72,10 +73,9 @@ def get_pool_state() -> dict[str, Any]:
 
         pool_instance = RedisPool()
         for label, rpool in [
-            ("primary", pool_instance._pool),
-            ("replica", pool_instance._replica_pool),
+            ("primary", cast(BlockingConnectionPool, pool_instance._pool)),
+            ("replica", cast(BlockingConnectionPool, pool_instance._replica_pool)),
         ]:
-            assert isinstance(rpool, BlockingConnectionPool)
             result["redis"][label] = {
                 "in_use": len(rpool._in_use_connections),
                 "available": len(rpool._available_connections),

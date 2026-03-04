@@ -43,11 +43,8 @@ _snapshot_task: asyncio.Task[None] | None = None
 _current_top_stats: list[tracemalloc.Statistic] = []
 _current_delta_stats: list[tracemalloc.StatisticDiff] = []
 _current_total_bytes: int = 0
+_current_object_type_counts: list[tuple[str, int]] = []
 _previous_snapshot: tracemalloc.Snapshot | None = None
-
-# Cumulative GC counters — we track deltas ourselves since gc.get_stats()
-# returns totals since interpreter start
-_gc_prev: list[dict[str, int]] = []
 
 
 def _strip_path(filename: str) -> str:
@@ -96,6 +93,15 @@ async def _snapshot_loop(interval: float) -> None:
 
         _current_total_bytes = sum(stat.size for stat in snapshot.statistics("lineno"))
         _previous_snapshot = snapshot
+
+        # Object type counting — done here (amortized by snapshot interval)
+        # instead of on every /metrics scrape, since gc.get_objects() is O(n)
+        # over all live objects and holds the GIL.
+        global _current_object_type_counts
+        counts: Counter[str] = Counter()
+        for obj in gc.get_objects():
+            counts[type(obj).__name__] += 1
+        _current_object_type_counts = counts.most_common(DEEP_PROFILING_TOP_N_TYPES)
 
 
 class DeepProfilingCollector(Collector):
@@ -166,16 +172,13 @@ class DeepProfilingCollector(Collector):
             gc_uncollectable.add_metric([gen], stats["uncollectable"])
         families.extend([gc_collections, gc_collected, gc_uncollectable])
 
-        # --- Object type counts ---
+        # --- Object type counts (cached from snapshot loop) ---
         type_count = GaugeMetricFamily(
             "onyx_object_type_count",
             "Live object count by type",
             labels=["type"],
         )
-        counts: Counter[str] = Counter()
-        for obj in gc.get_objects():
-            counts[type(obj).__name__] += 1
-        for type_name, count in counts.most_common(DEEP_PROFILING_TOP_N_TYPES):
+        for type_name, count in _current_object_type_counts:
             type_count.add_metric([type_name], count)
         families.append(type_count)
 

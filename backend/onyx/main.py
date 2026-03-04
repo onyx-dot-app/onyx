@@ -669,14 +669,16 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    from onyx.server.metrics.memory_delta import add_memory_delta_middleware
-
-    add_memory_delta_middleware(application)
-
     if ENABLE_ADMIN_DEBUG_ENDPOINTS:
         from onyx.server.metrics.admin_debug import router as debug_router
 
         include_router_with_global_prefix_prepended(application, debug_router)
+
+    # Memory delta middleware builds its route map at registration time,
+    # so it must be added after all routers (including conditional ones).
+    from onyx.server.metrics.memory_delta import add_memory_delta_middleware
+
+    add_memory_delta_middleware(application)
 
     if LOG_ENDPOINT_LATENCY:
         add_latency_logging_middleware(application, logger)

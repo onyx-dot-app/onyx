@@ -54,10 +54,10 @@ class InstrumentedThreadPoolExecutor(ThreadPoolExecutor):
         **kwargs: Any,
     ) -> Future[Any]:
         _TASKS_SUBMITTED.inc()
-        _TASKS_ACTIVE.inc()
-        start = time.monotonic()
 
         def _wrapped() -> Any:
+            _TASKS_ACTIVE.inc()
+            start = time.monotonic()
             try:
                 return fn(*args, **kwargs)
             finally:
