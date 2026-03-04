@@ -279,6 +279,11 @@ jobs:
           SHORT_SHA: ${{ needs.determine-builds.outputs.short-sha }}
           IS_TEST_RUN: ${{ needs.determine-builds.outputs.is-test-run }}
         run: |
+          if [ -z "${TAURI_UPDATER_PUBLIC_KEY:-}" ]; then
+            echo "TAURI_UPDATER_PUBLIC_KEY is required for desktop release builds."
+            exit 1
+          fi
+
           if [ "${IS_TEST_RUN}" == "true" ]; then
             VERSION="0.0.0-dev+${SHORT_SHA}"
           else
@@ -307,6 +312,11 @@ jobs:
         env:
           IS_TEST_RUN: ${{ needs.determine-builds.outputs.is-test-run }}
         run: |
+          if ([string]::IsNullOrWhiteSpace($env:TAURI_UPDATER_PUBLIC_KEY)) {
+            Write-Error "TAURI_UPDATER_PUBLIC_KEY is required for desktop release builds."
+            exit 1
+          }
+
           # Windows MSI requires numeric-only build metadata, so we skip the SHA suffix
           if ($env:IS_TEST_RUN -eq "true") {
             $VERSION = "0.0.0"

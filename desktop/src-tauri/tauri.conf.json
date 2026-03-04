@@ -70,7 +70,7 @@
       "endpoints": [
         "https://github.com/onyx-dot-app/onyx/releases/latest/download/latest.json"
       ],
-      "pubkey": ""
+      "pubkey": "REPLACED_BY_CI_TAURI_UPDATER_PUBLIC_KEY"
     }
   }
 }
