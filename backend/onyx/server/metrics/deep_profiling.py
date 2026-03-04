@@ -80,9 +80,8 @@ async def _snapshot_loop(interval: float) -> None:
             )
         )
 
-        _current_top_stats = snapshot.statistics("lineno")[
-            :DEEP_PROFILING_TOP_N_ALLOCATIONS
-        ]
+        all_stats = snapshot.statistics("lineno")
+        _current_top_stats = all_stats[:DEEP_PROFILING_TOP_N_ALLOCATIONS]
 
         if _previous_snapshot is not None:
             _current_delta_stats = snapshot.compare_to(_previous_snapshot, "lineno")[
@@ -91,7 +90,7 @@ async def _snapshot_loop(interval: float) -> None:
         else:
             _current_delta_stats = []
 
-        _current_total_bytes = sum(stat.size for stat in snapshot.statistics("lineno"))
+        _current_total_bytes = sum(stat.size for stat in all_stats)
         _previous_snapshot = snapshot
 
         # Object type counting — done here (amortized by snapshot interval)

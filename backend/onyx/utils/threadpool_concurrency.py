@@ -31,19 +31,29 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
+_threadpool_instrumentation_enabled = False
+
+
 def _get_executor_class() -> type[ThreadPoolExecutor]:
     """Return InstrumentedThreadPoolExecutor when running in the API server.
 
     Non-server contexts (Celery workers, CLI scripts) get vanilla
-    ThreadPoolExecutor since setup_threadpool_metrics() is never called there.
+    ThreadPoolExecutor because enable_threadpool_instrumentation() is
+    never called there. The flag lives here (not in the metrics module)
+    to avoid importing prometheus_client as a side effect of every
+    parallel operation.
     """
-    from onyx.server.metrics.threadpool import _instrumentation_enabled
-
-    if _instrumentation_enabled:
+    if _threadpool_instrumentation_enabled:
         from onyx.server.metrics.threadpool import InstrumentedThreadPoolExecutor
 
         return InstrumentedThreadPoolExecutor
     return ThreadPoolExecutor
+
+
+def enable_threadpool_instrumentation() -> None:
+    """Called by setup_threadpool_metrics() during API server startup."""
+    global _threadpool_instrumentation_enabled
+    _threadpool_instrumentation_enabled = True
 
 
 R = TypeVar("R")

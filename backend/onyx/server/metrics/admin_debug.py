@@ -65,7 +65,8 @@ def get_pool_state() -> dict[str, Any]:
     except Exception:
         result["postgres"]["error"] = "unable to read pool state"
 
-    # Redis pools
+    # Redis pools — uses private redis-py attributes (_in_use_connections, etc.)
+    # because there is no public API for pool statistics.
     try:
         from redis import BlockingConnectionPool
 

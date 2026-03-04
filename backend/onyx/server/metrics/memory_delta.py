@@ -4,6 +4,11 @@ Measures RSS change before and after each HTTP request, attributing
 memory growth to specific route handlers. Uses psutil for a single
 syscall per request (sub-microsecond overhead).
 
+Note: RSS is process-wide, so on a server handling concurrent requests
+the delta for one request may include allocations from other requests.
+This is inherent to the approach — the metric is most useful for
+identifying endpoints that *consistently* cause large deltas.
+
 Metrics:
 - onyx_api_request_rss_delta_bytes: Histogram of RSS change per request
 - onyx_api_process_rss_bytes: Gauge of current process RSS

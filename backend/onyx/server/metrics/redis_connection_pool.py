@@ -21,7 +21,14 @@ logger = setup_logger()
 
 
 class RedisPoolCollector(Collector):
-    """Custom collector that reads BlockingConnectionPool internals on scrape."""
+    """Custom collector that reads BlockingConnectionPool internals on scrape.
+
+    NOTE: Uses private redis-py attributes (_in_use_connections,
+    _available_connections, _created_connections) because there is no
+    public API for pool statistics. Wrapped in try/except so a redis-py
+    upgrade changing internals degrades gracefully (metrics go to 0)
+    instead of crashing every scrape.
+    """
 
     def __init__(self) -> None:
         self._pools: list[tuple[str, BlockingConnectionPool]] = []
@@ -52,10 +59,17 @@ class RedisPoolCollector(Collector):
         )
 
         for label, pool in self._pools:
-            in_use.add_metric([label], len(pool._in_use_connections))
-            available.add_metric([label], len(pool._available_connections))
-            max_conns.add_metric([label], pool.max_connections)
-            created.add_metric([label], pool._created_connections)
+            try:
+                in_use.add_metric([label], len(pool._in_use_connections))
+                available.add_metric([label], len(pool._available_connections))
+                max_conns.add_metric([label], pool.max_connections)
+                created.add_metric([label], pool._created_connections)
+            except AttributeError:
+                logger.warning(
+                    "Redis pool %s missing expected attributes — "
+                    "redis-py internals may have changed",
+                    label,
+                )
 
         return [in_use, available, max_conns, created]
 
