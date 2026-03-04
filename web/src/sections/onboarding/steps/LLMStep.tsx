@@ -141,7 +141,7 @@ const LLMStepInner = ({
                 tertiary
                 rightIcon={SvgExternalLink}
                 disabled={disabled}
-                href="admin/configuration/llm"
+                href="/admin/configuration/llm"
               >
                 View in Admin Panel
               </Button>

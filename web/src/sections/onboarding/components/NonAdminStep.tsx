@@ -6,6 +6,7 @@ import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import Button from "@/refresh-components/buttons/Button";
 import { updateUserPersonalization } from "@/lib/userSettings";
 import { useUser } from "@/providers/UserProvider";
+import { toast } from "@/hooks/useToast";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { Button as OpalButton } from "@opal/components";
 import InputAvatar from "@/refresh-components/inputs/InputAvatar";
@@ -41,6 +42,7 @@ export default function NonAdminStep() {
         setIsEditing(false);
       })
       .catch((error) => {
+        toast.error("Failed to save name. Please try again.");
         console.error(error);
       });
   };
