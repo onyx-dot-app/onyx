@@ -247,7 +247,7 @@ class SlackRenderer(HTMLRenderer):
             title = cells[0]
             if title:
                 # Avoid double-wrapping if cell already contains bold markup
-                if title.startswith("*") and title.endswith("*"):
+                if title.startswith("*") and title.endswith("*") and len(title) > 1:
                     lines.append(title)
                 else:
                     lines.append(f"*{title}*")
