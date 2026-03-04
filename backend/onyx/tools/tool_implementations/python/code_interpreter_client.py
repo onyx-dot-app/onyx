@@ -186,7 +186,11 @@ class CodeInterpreterClient:
             yield from self._batch_as_stream(code, stdin, timeout_ms, files)
             return
 
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except Exception:
+            response.close()
+            raise
         yield from self._parse_sse(response)
 
     def _parse_sse(
