@@ -259,15 +259,9 @@ describe("VertexAIOnboardingForm", () => {
       // This test verifies the basic structure is correct
     });
 
-    test("refreshes provider info after successful submission", async () => {
-      const user = setupUser();
+    test("renders form with mock actions (file upload submission requires different approach)", async () => {
       const setButtonActive = jest.fn();
       const mockActions = createMockOnboardingActions({ setButtonActive });
-
-      mockFetch
-        .mockResolvedValueOnce(mockResponses.testApiSuccess)
-        .mockResolvedValueOnce(mockResponses.createProviderSuccess(1))
-        .mockResolvedValueOnce(mockResponses.setDefaultSuccess);
 
       render(
         <VertexAIOnboardingForm
@@ -276,7 +270,9 @@ describe("VertexAIOnboardingForm", () => {
         />
       );
 
-      // Basic structure test - file upload testing requires different approach
+      // Full submission test skipped — Vertex AI requires file upload which
+      // needs a different testing approach than text-input-based providers.
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
     });
   });
 

@@ -56,8 +56,9 @@ function useOnboardingState(liveAgent?: MinimalPersonaSnapshot): {
   // earliest incomplete step. Runs once after provider data loads.
   // After this, user actions (Next/Prev/goToStep) drive navigation.
   const hasInitializedRef = useRef(false);
+  const isUserLoaded = user !== null && user !== undefined;
   useEffect(() => {
-    if (isLoadingProviders || hasInitializedRef.current) {
+    if (isLoadingProviders || !isUserLoaded || hasInitializedRef.current) {
       return;
     }
     hasInitializedRef.current = true;
@@ -97,7 +98,7 @@ function useOnboardingState(liveAgent?: MinimalPersonaSnapshot): {
       type: OnboardingActionType.GO_TO_STEP,
       step: OnboardingStep.Complete,
     });
-  }, [isLoadingProviders, userName, hasLlmProviders]);
+  }, [isLoadingProviders, isUserLoaded, userName, hasLlmProviders]);
 
   const nextStep = useCallback(() => {
     dispatch({
