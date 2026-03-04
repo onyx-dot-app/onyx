@@ -180,7 +180,7 @@ def test_pruning_extracts_hierarchy_nodes(db_session: Session) -> None:  # noqa:
     result = extract_ids_from_runnable_connector(connector, callback=None)
 
     # Doc IDs should include both slim doc IDs and hierarchy node raw_node_ids
-    # (hierarchy node IDs are added to doc_ids so they aren't pruned)
+    # (hierarchy node IDs are added to raw_id_to_parent so they aren't pruned)
     expected_ids = {
         CHANNEL_A_ID,
         CHANNEL_B_ID,
@@ -386,14 +386,14 @@ def test_extraction_preserves_parent_hierarchy_raw_node_id(
     db_session: Session,  # noqa: ARG001
 ) -> None:
     """extract_ids_from_runnable_connector should carry the
-    parent_hierarchy_raw_node_id from SlimDocument into the doc_ids dict."""
+    parent_hierarchy_raw_node_id from SlimDocument into the raw_id_to_parent dict."""
     connector = MockSlimConnectorWithPermSync()
     result = extract_ids_from_runnable_connector(connector, callback=None)
 
     for doc_id, expected_parent in DOC_PARENT_MAP.items():
         assert (
             result.raw_id_to_parent[doc_id] == expected_parent
-        ), f"doc_ids[{doc_id}] should be {expected_parent}"
+        ), f"raw_id_to_parent[{doc_id}] should be {expected_parent}"
 
     # Hierarchy node entries have None parent (they aren't documents)
     for channel_id in [CHANNEL_A_ID, CHANNEL_B_ID, CHANNEL_C_ID]:

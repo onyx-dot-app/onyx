@@ -41,8 +41,8 @@ CT = TypeVar("CT", bound=ConnectorCheckpoint)
 class SlimConnectorExtractionResult(BaseModel):
     """Result of extracting document IDs and hierarchy nodes from a connector.
 
-    doc_ids maps document ID → parent_hierarchy_raw_node_id (or None).
-    Use doc_ids.keys() wherever the old set of IDs was needed.
+    raw_id_to_parent maps document ID → parent_hierarchy_raw_node_id (or None).
+    Use raw_id_to_parent.keys() wherever the old set of IDs was needed.
     """
 
     raw_id_to_parent: dict[str, str | None]

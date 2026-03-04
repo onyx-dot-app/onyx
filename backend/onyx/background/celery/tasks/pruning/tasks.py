@@ -122,7 +122,7 @@ def _resolve_and_update_document_parents(
     db_session: Session,
     redis_client: Redis,
     source: DocumentSource,
-    doc_ids: dict[str, str | None],
+    raw_id_to_parent: dict[str, str | None],
 ) -> None:
     """Resolve parent_hierarchy_raw_node_id → parent_hierarchy_node_id for
     each document and bulk-update the DB. Mirrors the resolution logic in
@@ -130,7 +130,7 @@ def _resolve_and_update_document_parents(
     source_node_id = get_source_node_id_from_cache(redis_client, db_session, source)
 
     resolved: dict[str, int | None] = {}
-    for doc_id, raw_parent_id in doc_ids.items():
+    for doc_id, raw_parent_id in raw_id_to_parent.items():
         if raw_parent_id is None:
             continue
         node_id, found = get_node_id_from_raw_id(redis_client, source, raw_parent_id)
@@ -614,7 +614,7 @@ def connector_pruning_generator_task(
                 db_session=db_session,
                 redis_client=redis_client,
                 source=source,
-                doc_ids=all_connector_doc_ids,
+                raw_id_to_parent=all_connector_doc_ids,
             )
 
             # Link hierarchy nodes to documents for sources where pages can be
