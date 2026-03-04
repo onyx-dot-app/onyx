@@ -81,7 +81,11 @@ import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import useFilter from "@/hooks/useFilter";
 import EnabledCount from "@/refresh-components/EnabledCount";
 import { useAppRouter } from "@/hooks/appNavigation";
-import { deleteAgent } from "@/lib/agents";
+import {
+  deleteAgent,
+  updateAgentFeaturedStatus,
+  updateAgentSharedStatus,
+} from "@/lib/agents";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import ShareAgentModal from "@/sections/modals/ShareAgentModal";
 import AgentKnowledgePane from "@/sections/knowledge/AgentKnowledgePane";
@@ -89,6 +93,7 @@ import { ValidSources } from "@/lib/types";
 import { useVectorDbEnabled } from "@/providers/SettingsProvider";
 import { useUser } from "@/providers/UserProvider";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
+import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 
 interface AgentIconEditorProps {
   existingAgent?: FullPersona | null;
@@ -450,6 +455,7 @@ export default function AgentEditorPage({
   const { isAdmin, isCurator } = useUser();
   const canUpdateFeaturedStatus = isAdmin || isCurator;
   const vectorDbEnabled = useVectorDbEnabled();
+  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
 
   // LLM Model Selection
   const getCurrentLlm = useCallback(
@@ -1051,12 +1057,55 @@ export default function AgentEditorPage({
                       isFeatured,
                       labelIds
                     ) => {
-                      setFieldValue("shared_user_ids", userIds);
-                      setFieldValue("shared_group_ids", groupIds);
-                      setFieldValue("is_public", isPublic);
-                      setFieldValue("featured", isFeatured);
-                      setFieldValue("label_ids", labelIds);
-                      shareAgentModal.toggle(false);
+                      if (!existingAgent) {
+                        // New agents are not persisted until the main Create action.
+                        setFieldValue("shared_user_ids", userIds);
+                        setFieldValue("shared_group_ids", groupIds);
+                        setFieldValue("is_public", isPublic);
+                        setFieldValue("featured", isFeatured);
+                        setFieldValue("label_ids", labelIds);
+                        shareAgentModal.toggle(false);
+                        return;
+                      }
+
+                      void (async () => {
+                        const shareError = await updateAgentSharedStatus(
+                          existingAgent.id,
+                          userIds,
+                          groupIds,
+                          isPublic,
+                          isPaidEnterpriseFeaturesEnabled,
+                          labelIds
+                        );
+
+                        if (shareError) {
+                          toast.error(`Failed to share agent: ${shareError}`);
+                          return;
+                        }
+
+                        setFieldValue("shared_user_ids", userIds);
+                        setFieldValue("shared_group_ids", groupIds);
+                        setFieldValue("is_public", isPublic);
+                        setFieldValue("label_ids", labelIds);
+
+                        if (canUpdateFeaturedStatus) {
+                          const featuredError = await updateAgentFeaturedStatus(
+                            existingAgent.id,
+                            isFeatured
+                          );
+                          if (featuredError) {
+                            toast.error(
+                              `Failed to update featured status: ${featuredError}`
+                            );
+                            return;
+                          }
+                        }
+
+                        setFieldValue("featured", isFeatured);
+                        await refreshAgents();
+                        refreshAgent?.();
+                        shareAgentModal.toggle(false);
+                      })();
                     }}
                   />
                 </shareAgentModal.Provider>
