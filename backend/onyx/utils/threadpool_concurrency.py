@@ -349,8 +349,8 @@ def run_functions_tuples_in_parallel(
         return []
 
     results: list[tuple[int, Any]] = []
-    ExecutorClass = _get_executor_class()
-    executor = ExecutorClass(max_workers=workers)
+    executor_cls = _get_executor_class()
+    executor = executor_cls(max_workers=workers)
 
     try:
         # The primary reason for propagating contextvars is to allow acquiring a db session
@@ -448,8 +448,8 @@ def run_functions_in_parallel(
     if len(function_calls) == 0:
         return results
 
-    ExecutorClass = _get_executor_class()
-    with ExecutorClass(max_workers=len(function_calls)) as executor:
+    executor_cls = _get_executor_class()
+    with executor_cls(max_workers=len(function_calls)) as executor:
         future_to_id = {
             executor.submit(
                 contextvars.copy_context().run, func_call.execute
@@ -571,8 +571,8 @@ def parallel_yield(gens: list[Iterator[R]], max_workers: int = 10) -> Iterator[R
     if you are consuming all elements from the generators OR it is acceptable
     for some extra generator code to run and not have the result(s) yielded.
     """
-    ExecutorClass = _get_executor_class()
-    with ExecutorClass(max_workers=max_workers) as executor:
+    executor_cls = _get_executor_class()
+    with executor_cls(max_workers=max_workers) as executor:
         future_to_index: dict[Future[tuple[int, R | None]], int] = {
             executor.submit(_next_or_none, ind, gen): ind
             for ind, gen in enumerate(gens)
