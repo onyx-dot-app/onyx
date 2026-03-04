@@ -106,13 +106,14 @@ The foundational layer for all clickable surfaces in the design system. Defines 
 
 ### Sidebar (unselected)
 
+> No CSS `:active` state — only hover/transient and selected.
+
 **Background**
 
 | | Light |
 |---|---|
 | **Rest** | `transparent` |
 | **Hover / Transient** | `background-tint-03` |
-| **Active** | `background-tint-00` |
 | **Disabled** | `transparent` |
 
 **Foreground**
@@ -121,7 +122,6 @@ The foundational layer for all clickable surfaces in the design system. Defines 
 |---|---|
 | **Rest** | `text-03` |
 | **Hover / Transient** | `text-04` |
-| **Active** | `text-04` |
 | **Disabled** | `text-01` |
 
 ### Sidebar (selected)
@@ -132,7 +132,6 @@ The foundational layer for all clickable surfaces in the design system. Defines 
 |---|---|
 | **Rest** | `background-neutral-00` |
 | **Hover / Transient** | `background-tint-03` |
-| **Active** | `background-tint-00` |
 | **Disabled** | `transparent` |
 
 **Foreground**
@@ -141,7 +140,6 @@ The foundational layer for all clickable surfaces in the design system. Defines 
 |---|---|
 | **Rest** | `text-03` (icon: `text-02`) |
 | **Hover / Transient** | `text-04` |
-| **Active** | `text-04` |
 | **Disabled** | `text-01` |
 
 ## Sub-components
