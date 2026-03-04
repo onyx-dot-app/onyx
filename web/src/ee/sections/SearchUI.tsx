@@ -26,6 +26,7 @@ import FilterButton from "@/refresh-components/buttons/FilterButton";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import useFilter from "@/hooks/useFilter";
 import { useQueryController } from "@/providers/QueryControllerProvider";
+import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/useToast";
 
 // ============================================================================
@@ -320,7 +321,12 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
         )}
 
         {/* Bottom-left: Search results */}
-        <div className="row-start-2 col-start-1 min-h-0 overflow-y-scroll py-3 flex flex-col gap-2">
+        <div
+          className={cn(
+            "row-start-2 col-start-1 min-h-0 overflow-y-scroll py-3 flex flex-col gap-2",
+            showEmpty && "justify-center"
+          )}
+        >
           {error ? (
             <EmptyMessage title="Search failed" description={error} />
           ) : paginatedResults.length > 0 ? (
@@ -344,13 +350,15 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
         </div>
 
         {/* Pagination */}
-        <div className="row-start-3 col-start-1 col-span-2 pt-3">
-          <Pagination
-            currentPage={currentPage}
-            totalPages={totalPages}
-            onPageChange={setCurrentPage}
-          />
-        </div>
+        {!showEmpty && (
+          <div className="row-start-3 col-start-1 col-span-2 pt-3">
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+            />
+          </div>
+        )}
 
         {/* Bottom-right: Source filter */}
         {!showEmpty && (
