@@ -449,17 +449,19 @@
   --interactive-foreground: var(--text-01);
 }
 
-/* Selected — neutral background with dimmer icon.
-   Uses a negated selector so hover/transient rules (equal specificity,
-   later in source order) naturally override this when those states are active. */
+/* Selected — completely static (no hover/transient override).
+   Placed AFTER hover/transient so equal-specificity rules resolve by
+   source order in favour of the selected appearance. */
 .interactive[data-interactive-base-variant="sidebar"][data-interactive-base-prominence="light"][data-selected="true"]:not(
     [data-disabled]
-  ):not(:hover):not([data-transient="true"]) {
+  ) {
   @apply bg-background-neutral-00;
+  border: 2px solid var(--background-tint-04);
   --interactive-foreground: var(--text-03);
   --interactive-foreground-icon: var(--text-02);
 }
 .interactive[data-interactive-base-variant="sidebar"][data-interactive-base-prominence="light"][data-selected="true"][data-disabled] {
   @apply bg-transparent;
+  border: none;
   --interactive-foreground: var(--text-01);
 }

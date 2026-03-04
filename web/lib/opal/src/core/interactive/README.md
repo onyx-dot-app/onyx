@@ -126,20 +126,20 @@ The foundational layer for all clickable surfaces in the design system. Defines 
 
 ### Sidebar (selected)
 
+> Completely static — hover and transient have no effect. Adds a 2px `background-tint-04` border.
+
 **Background**
 
 | | Light |
 |---|---|
-| **Rest** | `background-neutral-00` |
-| **Hover / Transient** | `background-tint-03` |
-| **Disabled** | `transparent` |
+| **All states** | `background-neutral-00` |
+| **Disabled** | `transparent` (no border) |
 
 **Foreground**
 
 | | Light |
 |---|---|
-| **Rest** | `text-03` (icon: `text-02`) |
-| **Hover / Transient** | `text-04` |
+| **All states** | `text-03` (icon: `text-02`) |
 | **Disabled** | `text-01` |
 
 ## Sub-components
