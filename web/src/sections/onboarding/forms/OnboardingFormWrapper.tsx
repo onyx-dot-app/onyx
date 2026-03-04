@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useState, useMemo, ReactNode } from "react";
 import { Form, Formik, FormikProps } from "formik";
 import * as Yup from "yup";
@@ -10,7 +12,7 @@ import {
   LLM_ADMIN_URL,
   LLM_PROVIDERS_ADMIN_URL,
 } from "@/lib/llmConfig/constants";
-import { OnboardingActions, OnboardingState } from "../types";
+import { OnboardingActions, OnboardingState } from "@/interfaces/onboarding";
 import { APIFormFieldState } from "@/refresh-components/form/types";
 import {
   testApiKeyHelper,

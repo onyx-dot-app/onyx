@@ -3,7 +3,7 @@ import {
   OnboardingActionType,
   OnboardingStep,
   OnboardingState,
-} from "../types";
+} from "@/interfaces/onboarding";
 
 describe("onboardingReducer", () => {
   describe("initial state", () => {

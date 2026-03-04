@@ -1,10 +1,10 @@
 import React from "react";
-import { STEP_CONFIG } from "@/refresh-components/onboarding/constants";
+import { STEP_CONFIG } from "@/sections/onboarding/constants";
 import {
   OnboardingActions,
   OnboardingState,
   OnboardingStep,
-} from "@/refresh-components/onboarding/types";
+} from "@/interfaces/onboarding";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
 import { Button as OpalButton } from "@opal/components";

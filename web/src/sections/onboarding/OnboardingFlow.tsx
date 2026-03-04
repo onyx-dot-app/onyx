@@ -1,9 +1,15 @@
+"use client";
+
 import { memo } from "react";
 import OnboardingHeader from "./components/OnboardingHeader";
 import NameStep from "./steps/NameStep";
 import LLMStep from "./steps/LLMStep";
 import FinalStep from "./steps/FinalStep";
-import { OnboardingActions, OnboardingState, OnboardingStep } from "./types";
+import {
+  OnboardingActions,
+  OnboardingState,
+  OnboardingStep,
+} from "@/interfaces/onboarding";
 import { WellKnownLLMProviderDescriptor } from "@/interfaces/llm";
 import { useUser } from "@/providers/UserProvider";
 import { UserRole } from "@/lib/types";
@@ -27,9 +33,12 @@ const OnboardingFlowInner = ({
   llmDescriptors,
 }: OnboardingFlowProps) => {
   const { user } = useUser();
+
+  if (!user) return null;
+
   const hasStarted = onboardingState.currentStep !== OnboardingStep.Welcome;
 
-  return user?.role === UserRole.ADMIN ? (
+  return user.role === UserRole.ADMIN ? (
     showOnboarding ? (
       <div
         className="flex flex-col items-center justify-center w-full max-w-[var(--app-page-main-content-width)] gap-2 mb-4"
@@ -74,7 +83,7 @@ const OnboardingFlowInner = ({
       // if the admin hasn't set their name.
       <NonAdminStep />
     )
-  ) : !user?.personalization?.name ? (
+  ) : !user.personalization?.name ? (
     <NonAdminStep />
   ) : null;
 };

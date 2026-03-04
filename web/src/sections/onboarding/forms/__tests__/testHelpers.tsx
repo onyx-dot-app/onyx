@@ -14,7 +14,7 @@ import {
   OnboardingState,
   OnboardingActions,
   OnboardingStep,
-} from "../../types";
+} from "@/interfaces/onboarding";
 
 /**
  * Creates a mock WellKnownLLMProviderDescriptor for testing

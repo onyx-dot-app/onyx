@@ -60,8 +60,8 @@ import {
 import ProjectChatSessionList from "@/app/app/components/projects/ProjectChatSessionList";
 import { cn } from "@/lib/utils";
 import Suggestions from "@/sections/Suggestions";
-import OnboardingFlow from "@/refresh-components/onboarding/OnboardingFlow";
-import { OnboardingStep } from "@/refresh-components/onboarding/types";
+import OnboardingFlow from "@/sections/onboarding/OnboardingFlow";
+import { OnboardingStep } from "@/interfaces/onboarding";
 import { useShowOnboarding } from "@/hooks/useShowOnboarding";
 import * as AppLayouts from "@/layouts/app-layouts";
 import { SvgChevronDown, SvgFileText } from "@opal/icons";
@@ -232,8 +232,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     hideOnboarding,
   } = useShowOnboarding({
     liveAgent,
-    isLoadingProviders: llmManager.isLoadingProviders,
-    hasAnyProvider: llmManager.hasAnyProvider,
     isLoadingChatSessions,
     chatSessionsCount: chatSessions.length,
     userId: user?.id,
