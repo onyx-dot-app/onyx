@@ -24,7 +24,10 @@ import useAppFocus from "@/hooks/useAppFocus";
 import { cn, isImageFile } from "@/lib/utils";
 import { Disabled } from "@/refresh-components/Disabled";
 import { useUser } from "@/providers/UserProvider";
-import { SettingsContext } from "@/providers/SettingsProvider";
+import {
+  SettingsContext,
+  useVectorDbEnabled,
+} from "@/providers/SettingsProvider";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import { FileCard } from "@/sections/cards/FileCard";
 import {
@@ -241,7 +244,8 @@ const AppInputBar = React.memo(
     );
 
     const { activePromptShortcuts } = usePromptShortcuts();
-    const { ccPairs, isLoading: ccPairsLoading } = useCCPairs();
+    const vectorDbEnabled = useVectorDbEnabled();
+    const { ccPairs, isLoading: ccPairsLoading } = useCCPairs(vectorDbEnabled);
     const { data: federatedConnectorsData, isLoading: federatedLoading } =
       useFederatedConnectors();
 
