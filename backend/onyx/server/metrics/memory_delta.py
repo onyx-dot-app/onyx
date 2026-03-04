@@ -26,8 +26,6 @@ from prometheus_client import Gauge
 from prometheus_client import Histogram
 from starlette.responses import Response
 
-_middleware_registered: bool = False
-
 _RSS_DELTA: Histogram = Histogram(
     "onyx_api_request_rss_delta_bytes",
     "RSS change in bytes during a single request",
@@ -78,10 +76,9 @@ def add_memory_delta_middleware(app: FastAPI) -> None:
     Builds its own route map to avoid contextvar ordering issues
     with the endpoint context middleware.
     """
-    global _middleware_registered
-    if _middleware_registered:
+    if getattr(app.state, "_memory_delta_registered", False):
         return
-    _middleware_registered = True
+    app.state._memory_delta_registered = True
 
     route_map = _build_route_map(app)
 
