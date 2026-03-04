@@ -52,9 +52,6 @@ def set_new_search_settings(
     """
     Creates a new SearchSettings row and cancels the previous secondary indexing
     if any exists.
-
-    Returns an error if the same model name is used as the current or secondary
-    index
     """
     if search_settings_new.index_name:
         logger.warning("Index name was specified by request, this is not suggested")
