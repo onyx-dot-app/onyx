@@ -9,8 +9,79 @@ from onyx.connectors.models import IndexAttemptMetadata
 from onyx.connectors.models import TextSection
 from onyx.db.enums import HierarchyNodeType
 from onyx.indexing import indexing_pipeline
-from onyx.indexing.postgres_sanitization import sanitize_document_for_postgres
-from onyx.indexing.postgres_sanitization import sanitize_hierarchy_node_for_postgres
+from onyx.utils.postgres_sanitization import sanitize_document_for_postgres
+from onyx.utils.postgres_sanitization import sanitize_hierarchy_node_for_postgres
+from onyx.utils.postgres_sanitization import sanitize_json_like
+from onyx.utils.postgres_sanitization import sanitize_string
+
+
+# ---- sanitize_string tests ----
+
+
+def test_sanitize_string_strips_nul_bytes() -> None:
+    assert sanitize_string("hello\x00world") == "helloworld"
+    assert sanitize_string("\x00\x00\x00") == ""
+    assert sanitize_string("clean") == "clean"
+
+
+def test_sanitize_string_strips_high_surrogates() -> None:
+    assert sanitize_string("before\ud800after") == "beforeafter"
+    assert sanitize_string("a\udbffb") == "ab"
+
+
+def test_sanitize_string_strips_low_surrogates() -> None:
+    assert sanitize_string("before\udc00after") == "beforeafter"
+    assert sanitize_string("a\udfffb") == "ab"
+
+
+def test_sanitize_string_strips_nul_and_surrogates_together() -> None:
+    assert sanitize_string("he\x00llo\ud800 wo\udfffrld\x00") == "hello world"
+
+
+def test_sanitize_string_preserves_valid_unicode() -> None:
+    assert sanitize_string("café ☕ 日本語 😀") == "café ☕ 日本語 😀"
+
+
+def test_sanitize_string_empty_input() -> None:
+    assert sanitize_string("") == ""
+
+
+# ---- sanitize_json_like tests ----
+
+
+def test_sanitize_json_like_handles_plain_string() -> None:
+    assert sanitize_json_like("he\x00llo\ud800") == "hello"
+
+
+def test_sanitize_json_like_handles_nested_dict() -> None:
+    dirty = {
+        "ke\x00y": "va\ud800lue",
+        "nested": {"inne\x00r": "de\udfffep"},
+    }
+    assert sanitize_json_like(dirty) == {
+        "key": "value",
+        "nested": {"inner": "deep"},
+    }
+
+
+def test_sanitize_json_like_handles_list_with_surrogates() -> None:
+    dirty = ["a\x00", "b\ud800", {"c\udc00": "d\udfff"}]
+    assert sanitize_json_like(dirty) == ["a", "b", {"c": "d"}]
+
+
+def test_sanitize_json_like_handles_tuple() -> None:
+    dirty = ("a\x00", "b\ud800")
+    assert sanitize_json_like(dirty) == ("a", "b")
+
+
+def test_sanitize_json_like_passes_through_non_strings() -> None:
+    assert sanitize_json_like(42) == 42
+    assert sanitize_json_like(3.14) == 3.14
+    assert sanitize_json_like(True) is True
+    assert sanitize_json_like(None) is None
+
+
+# ---- sanitize_document_for_postgres tests ----
 
 
 def test_sanitize_document_for_postgres_removes_nul_bytes() -> None:

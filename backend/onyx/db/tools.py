@@ -19,6 +19,8 @@ from onyx.server.features.tool.models import Header
 from onyx.tools.built_in_tools import BUILT_IN_TOOL_TYPES
 from onyx.utils.headers import HeaderItemDict
 from onyx.utils.logger import setup_logger
+from onyx.utils.postgres_sanitization import sanitize_json_like
+from onyx.utils.postgres_sanitization import sanitize_string
 
 if TYPE_CHECKING:
     pass
@@ -256,11 +258,13 @@ def create_tool_call_no_commit(
         tab_index=tab_index,
         tool_id=tool_id,
         tool_call_id=tool_call_id,
-        reasoning_tokens=reasoning_tokens,
-        tool_call_arguments=tool_call_arguments,
-        tool_call_response=tool_call_response,
+        reasoning_tokens=(
+            sanitize_string(reasoning_tokens) if reasoning_tokens else reasoning_tokens
+        ),
+        tool_call_arguments=sanitize_json_like(tool_call_arguments),
+        tool_call_response=sanitize_json_like(tool_call_response),
         tool_call_tokens=tool_call_tokens,
-        generated_images=generated_images,
+        generated_images=sanitize_json_like(generated_images),
     )
 
     db_session.add(tool_call)
