@@ -42,10 +42,13 @@ function HighlightedPythonCode({ code }: { code: string }) {
 function constructCurrentPythonState(packets: PythonToolPacket[]) {
   // Accumulate streaming code from argument deltas (arrives before PythonToolStart)
   const streamingCode = packets
-    .filter((packet) => packet.obj.type === PacketType.TOOL_CALL_ARGUMENT_DELTA)
-    .map(
+    .filter(
       (packet) =>
-        (packet.obj as ToolCallArgumentDelta).argument_deltas?.code || ""
+        packet.obj.type === PacketType.TOOL_CALL_ARGUMENT_DELTA &&
+        (packet.obj as ToolCallArgumentDelta).tool_type === "python"
+    )
+    .map((packet) =>
+      String((packet.obj as ToolCallArgumentDelta).argument_deltas.code ?? "")
     )
     .join("");
 

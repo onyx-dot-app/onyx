@@ -156,7 +156,7 @@ export interface ToolCallArgumentDelta extends BaseObj {
   type: "tool_call_argument_delta";
   tool_type: string;
   tool_id: string;
-  argument_deltas: Record<string, string>;
+  argument_deltas: Record<string, unknown>;
 }
 
 export interface FetchToolStart extends BaseObj {
