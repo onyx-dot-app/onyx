@@ -9,5 +9,5 @@ export * from "./interfaces";
 export * from "./svc";
 
 // Hooks
-export { useBillingInformation } from "@/hooks/useBillingInformation";
-export { useLicense } from "@/hooks/useLicense";
+export { useBillingInformation } from "@/app/ee/hooks/useBillingInformation";
+export { useLicense } from "@/app/ee/hooks/useLicense";

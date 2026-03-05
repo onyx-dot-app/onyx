@@ -8,8 +8,8 @@ import InputFile from "@/refresh-components/inputs/InputFile";
 import { Section } from "@/layouts/general-layouts";
 import * as InputLayouts from "@/layouts/input-layouts";
 import { SvgXCircle, SvgCheckCircle, SvgXOctagon } from "@opal/icons";
-import { uploadLicense } from "@/lib/billing/svc";
-import { LicenseStatus } from "@/lib/billing/interfaces";
+import { uploadLicense } from "@/lib/ee/billing/svc";
+import { LicenseStatus } from "@/lib/ee/billing/interfaces";
 import { formatDateShort } from "@/lib/dateUtils";
 
 const BILLING_HELP_URL = "https://docs.onyx.app/more/billing";

@@ -61,7 +61,7 @@ import { Interactive } from "@opal/core";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
-import { useCloudSubscription } from "@/hooks/useCloudSubscription";
+import { useCloudSubscription } from "@/app/ee/hooks/useCloudSubscription";
 
 interface PAT {
   id: number;

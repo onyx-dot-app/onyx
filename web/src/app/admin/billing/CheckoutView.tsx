@@ -8,10 +8,10 @@ import Text from "@/refresh-components/texts/Text";
 import Card from "@/refresh-components/cards/Card";
 import Separator from "@/refresh-components/Separator";
 import { SvgUsers, SvgCheck } from "@opal/icons";
-import { createCheckoutSession } from "@/lib/billing/svc";
+import { createCheckoutSession } from "@/lib/ee/billing/svc";
 import { useUser } from "@/providers/UserProvider";
 import { formatDateShort } from "@/lib/dateUtils";
-import type { PlanType } from "@/lib/billing/interfaces";
+import type { PlanType } from "@/lib/ee/billing/interfaces";
 import InputNumber from "@/refresh-components/inputs/InputNumber";
 import useUsers from "@/hooks/useUsers";
 

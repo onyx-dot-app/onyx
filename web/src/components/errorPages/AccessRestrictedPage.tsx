@@ -8,7 +8,7 @@ import InlineExternalLink from "@/refresh-components/InlineExternalLink";
 import { logout } from "@/lib/user";
 import { loadStripe } from "@stripe/stripe-js";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
-import { useLicense } from "@/hooks/useLicense";
+import { useLicense } from "@/app/ee/hooks/useLicense";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import { ApplicationStatus } from "@/interfaces/settings";
 import Text from "@/refresh-components/texts/Text";

@@ -22,7 +22,7 @@ import {
   CreateCustomerPortalSessionResponse,
   SeatUpdateRequest,
   SeatUpdateResponse,
-} from "@/lib/billing/interfaces";
+} from "@/lib/ee/billing/interfaces";
 
 function getBillingBaseUrl(): string {
   return NEXT_PUBLIC_CLOUD_ENABLED ? "/api/tenants" : "/api/admin/billing";

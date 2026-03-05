@@ -1,7 +1,7 @@
 import React from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { CircleAlert, Info } from "lucide-react";
-import { BillingInformation, BillingStatus } from "@/lib/billing/interfaces";
+import { BillingInformation, BillingStatus } from "@/lib/ee/billing/interfaces";
 
 export function BillingAlerts({
   billingInformation,
