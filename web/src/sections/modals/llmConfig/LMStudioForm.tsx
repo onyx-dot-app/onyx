@@ -28,7 +28,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchModels } from "@/app/admin/configuration/llm/utils";
 import debounce from "lodash/debounce";
 
-export const LM_STUDIO_PROVIDER_NAME = "lm_studio";
 const DEFAULT_API_BASE = "http://localhost:1234";
 
 interface LMStudioFormValues extends BaseLLMFormValues {
@@ -89,6 +88,7 @@ function LMStudioFormContent({
           if (signal.aborted) return;
           if (data.error) {
             setFetchError(data.error);
+            setHasFetched(false);
             setFetchedModels([]);
             return;
           }
@@ -245,7 +245,7 @@ export function LMStudioForm({
               };
 
               await submitLLMProvider({
-                providerName: LM_STUDIO_PROVIDER_NAME,
+                providerName: LLMProviderName.LM_STUDIO,
                 values: submitValues,
                 initialValues,
                 modelConfigurations: hasFetched
