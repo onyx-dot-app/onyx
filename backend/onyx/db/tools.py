@@ -160,10 +160,25 @@ def update_tool(
         ]
     if passthrough_auth is not None:
         tool.passthrough_auth = passthrough_auth
+    old_oauth_config_id = tool.oauth_config_id
     if not isinstance(oauth_config_id, UnsetType):
         tool.oauth_config_id = oauth_config_id
-    db_session.commit()
 
+    # Clean up orphaned OAuthConfig if the oauth_config_id was changed
+    if (
+        old_oauth_config_id is not None
+        and not isinstance(oauth_config_id, UnsetType)
+        and old_oauth_config_id != oauth_config_id
+    ):
+        other_tools = db_session.scalars(
+            select(Tool).where(Tool.oauth_config_id == old_oauth_config_id)
+        ).all()
+        if not other_tools:
+            oauth_config = db_session.get(OAuthConfig, old_oauth_config_id)
+            if oauth_config:
+                db_session.delete(oauth_config)
+
+    db_session.commit()
     return tool
 
 
