@@ -1598,19 +1598,13 @@ async def current_user_from_websocket(
     """
     from onyx.redis.redis_pool import retrieve_ws_token_data
 
-    logger.info(
-        f"WS auth: validating token (length={len(token)}, prefix={token[:8]}...)"
-    )
-
     # Validate WS token in Redis (single-use, deleted after retrieval)
     try:
         token_data = await retrieve_ws_token_data(token)
         if token_data is None:
-            logger.warning(f"WS auth: token not found in Redis (token={token[:8]}...)")
             raise BasicAuthenticationError(
                 detail="Access denied. Invalid or expired authentication token."
             )
-        logger.info(f"WS auth: token validated, user_id={token_data.get('sub')}")
     except BasicAuthenticationError:
         raise
     except Exception as e:

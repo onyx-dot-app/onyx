@@ -467,14 +467,10 @@ async def store_ws_token(token: str, user_id: str) -> None:
         token: The generated WS token.
         user_id: The user ID to associate with this token.
     """
-    logger.info(f"WS token store: storing token={token[:8]}... for user_id={user_id}")
     redis = await get_async_redis_connection()
     redis_key = REDIS_WS_TOKEN_PREFIX + token
     token_data = json.dumps({"sub": user_id})
     await redis.set(redis_key, token_data, ex=WS_TOKEN_TTL_SECONDS)
-    logger.info(
-        f"WS token store: stored with key={redis_key[:20]}..., TTL={WS_TOKEN_TTL_SECONDS}s"
-    )
 
 
 async def retrieve_ws_token_data(token: str) -> dict | None:
@@ -487,26 +483,17 @@ async def retrieve_ws_token_data(token: str) -> dict | None:
         Token data dict with 'sub' (user ID) if valid, None if invalid/expired.
     """
     try:
-        logger.info(f"WS token lookup: starting for token={token[:8]}...")
         redis = await get_async_redis_connection()
         redis_key = REDIS_WS_TOKEN_PREFIX + token
-        logger.info(f"WS token lookup: redis_key={redis_key[:20]}...")
         token_data_str = await redis.get(redis_key)
-        logger.info(f"WS token lookup: got result, found={token_data_str is not None}")
 
         if not token_data_str:
-            logger.warning(
-                f"WS token {redis_key[:20]}... not found or expired in Redis"
-            )
             return None
 
         # Delete the token after retrieval (single-use)
         await redis.delete(redis_key)
-        logger.info("WS token lookup: token deleted (single-use)")
 
-        result = json.loads(token_data_str)
-        logger.info(f"WS token lookup: parsed data, user_id={result.get('sub')}")
-        return result
+        return json.loads(token_data_str)
     except json.JSONDecodeError:
         logger.error("Error decoding WS token data from Redis")
         return None

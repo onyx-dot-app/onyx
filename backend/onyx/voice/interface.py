@@ -88,7 +88,7 @@ class VoiceProviderInterface(ABC):
 
     @abstractmethod
     async def synthesize_stream(
-        self, text: str, voice: str, speed: float = 1.0
+        self, text: str, voice: str | None = None, speed: float = 1.0
     ) -> AsyncIterator[bytes]:
         """
         Convert text to audio stream (Text-to-Speech).
@@ -97,7 +97,7 @@ class VoiceProviderInterface(ABC):
 
         Args:
             text: Text to convert to speech
-            voice: Voice identifier (e.g., "alloy", "echo")
+            voice: Voice identifier (e.g., "alloy", "echo"), or None for default
             speed: Playback speed multiplier (0.25 to 4.0)
 
         Yields:

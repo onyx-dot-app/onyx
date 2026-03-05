@@ -27,7 +27,12 @@ AZURE_VOICES = [
 
 
 class AzureStreamingTranscriber(StreamingTranscriberProtocol):
-    """Streaming transcription using Azure Speech SDK."""
+    """Streaming transcription using Azure Speech SDK.
+
+    Note: Currently disabled (supports_streaming_stt returns False) because
+    Azure STT requires 16kHz audio but clients send 24kHz. Needs audio
+    resampling implementation before enabling.
+    """
 
     def __init__(self, api_key: str, region: str):
         self.api_key = api_key
@@ -43,17 +48,13 @@ class AzureStreamingTranscriber(StreamingTranscriberProtocol):
         """Initialize Azure Speech recognizer with push stream."""
         import azure.cognitiveservices.speech as speechsdk
 
-        # Store the event loop for thread-safe queue operations
         self._loop = asyncio.get_running_loop()
 
-        # Create speech config
         speech_config = speechsdk.SpeechConfig(
             subscription=self.api_key,
             region=self.region,
         )
 
-        # Create push stream for audio input
-        # Using 16kHz, 16-bit mono PCM format
         audio_format = speechsdk.audio.AudioStreamFormat(
             samples_per_second=16000,
             bits_per_sample=16,
@@ -62,20 +63,15 @@ class AzureStreamingTranscriber(StreamingTranscriberProtocol):
         self._audio_stream = speechsdk.audio.PushAudioInputStream(audio_format)
         audio_config = speechsdk.audio.AudioConfig(stream=self._audio_stream)
 
-        # Create recognizer
         self._recognizer = speechsdk.SpeechRecognizer(
             speech_config=speech_config,
             audio_config=audio_config,
         )
 
-        # Store reference to self for closures
         transcriber = self
 
-        # Set up event handlers
         def on_recognizing(evt: Any) -> None:
-            """Handle partial recognition results (runs in Azure SDK thread)."""
             if evt.result.text and transcriber._loop and not transcriber._closed:
-                # Show accumulated + current partial
                 full_text = transcriber._accumulated_transcript
                 if full_text:
                     full_text += " " + evt.result.text
@@ -87,9 +83,7 @@ class AzureStreamingTranscriber(StreamingTranscriberProtocol):
                 )
 
         def on_recognized(evt: Any) -> None:
-            """Handle final recognition results (runs in Azure SDK thread)."""
             if evt.result.text and transcriber._loop and not transcriber._closed:
-                # Accumulate this utterance
                 if transcriber._accumulated_transcript:
                     transcriber._accumulated_transcript += " " + evt.result.text
                 else:
@@ -103,15 +97,11 @@ class AzureStreamingTranscriber(StreamingTranscriberProtocol):
 
         self._recognizer.recognizing.connect(on_recognizing)
         self._recognizer.recognized.connect(on_recognized)
-
-        # Start continuous recognition
         self._recognizer.start_continuous_recognition_async()
 
     async def send_audio(self, chunk: bytes) -> None:
         """Send audio chunk to Azure."""
         if self._audio_stream and not self._closed:
-            # Azure expects raw PCM audio, but we might receive webm
-            # For now, just write the bytes - proper format conversion may be needed
             self._audio_stream.write(chunk)
 
     async def receive_transcript(self) -> TranscriptResult | None:
@@ -119,7 +109,7 @@ class AzureStreamingTranscriber(StreamingTranscriberProtocol):
         try:
             return await asyncio.wait_for(self._transcript_queue.get(), timeout=0.1)
         except asyncio.TimeoutError:
-            return TranscriptResult(text="", is_vad_end=False)  # No transcript yet
+            return TranscriptResult(text="", is_vad_end=False)
 
     async def close(self) -> str:
         """Stop recognition and return final transcript."""
@@ -132,7 +122,7 @@ class AzureStreamingTranscriber(StreamingTranscriberProtocol):
         return self._accumulated_transcript
 
     def reset_transcript(self) -> None:
-        """Reset accumulated transcript. Call after auto-send to start fresh."""
+        """Reset accumulated transcript."""
         self._accumulated_transcript = ""
 
 
@@ -311,8 +301,7 @@ class AzureVoiceProvider(VoiceProviderInterface):
         ]
 
     def supports_streaming_stt(self) -> bool:
-        # Disabled: Azure STT requires 16kHz audio but client sends 24kHz.
-        # Re-enable after implementing audio resampling.
+        """Disabled until audio resampling is implemented (24kHz -> 16kHz)."""
         return False
 
     def supports_streaming_tts(self) -> bool:

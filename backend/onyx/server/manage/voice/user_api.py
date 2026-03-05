@@ -202,11 +202,5 @@ async def get_ws_token(
     The token expires after 60 seconds and is single-use.
     """
     token = secrets.token_urlsafe(32)
-    logger.info(
-        f"WS token endpoint: generating token for user {user.email} (id={user.id})"
-    )
     await store_ws_token(token, str(user.id))
-    logger.info(
-        f"WS token endpoint: token generated successfully, token={token[:8]}..."
-    )
     return WSTokenResponse(token=token)

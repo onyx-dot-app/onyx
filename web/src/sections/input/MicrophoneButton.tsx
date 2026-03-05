@@ -157,23 +157,6 @@ function MicrophoneButton({
   // Disable when processing or TTS is playing (don't want to pick up TTS audio)
   const isDisabled = disabled || isProcessing || isTTSPlaying || isTTSLoading;
 
-  // Debug logging for disabled state
-  useEffect(() => {
-    console.log(
-      `[MicrophoneButton] isDisabled=${isDisabled}: ` +
-        `disabled=${disabled}, isProcessing=${isProcessing}, ` +
-        `isTTSPlaying=${isTTSPlaying}, isTTSLoading=${isTTSLoading}, ` +
-        `isRecording=${isRecording}`
-    );
-  }, [
-    disabled,
-    isProcessing,
-    isTTSPlaying,
-    isTTSLoading,
-    isRecording,
-    isDisabled,
-  ]);
-
   // Recording = darkened (primary), not recording = light (tertiary)
   const prominence = isRecording ? "primary" : "tertiary";
 

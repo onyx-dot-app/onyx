@@ -88,26 +88,10 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
   const playbackSpeed = user?.preferences?.voice_playback_speed ?? 1.0;
   const preferredVoice = user?.preferences?.preferred_voice;
 
-  // Debug log preferences on mount and when they change
-  useEffect(() => {
-    console.log(
-      `[VoiceMode] Preferences: autoPlayback=${autoPlayback}, ` +
-        `playbackSpeed=${playbackSpeed}, preferredVoice=${preferredVoice}, ` +
-        `userLoaded=${!!user}`
-    );
-  }, [autoPlayback, playbackSpeed, preferredVoice, user]);
-
   const [isTTSPlaying, setIsTTSPlaying] = useState(false);
   const [isTTSLoading, setIsTTSLoading] = useState(false);
   const [spokenText, setSpokenText] = useState("");
   const [manualStopCount, setManualStopCount] = useState(0);
-
-  // Debug log state changes
-  useEffect(() => {
-    console.log(
-      `[VoiceMode] State: isTTSPlaying=${isTTSPlaying}, isTTSLoading=${isTTSLoading}`
-    );
-  }, [isTTSPlaying, isTTSLoading]);
 
   // WebSocket and audio state
   const wsRef = useRef<WebSocket | null>(null);
@@ -184,7 +168,6 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
     // reset the playing state to prevent mic button from being stuck disabled
     setTimeout(() => {
       if (isPlayingRef.current) {
-        console.warn("VoiceMode: audio playback timeout, resetting state");
         isPlayingRef.current = false;
         setIsTTSPlaying(false);
       }
@@ -358,8 +341,6 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
           try {
             const msg = JSON.parse(event.data);
             if (msg.type === "audio_done") {
-              console.log("[VoiceMode] Received audio_done");
-              // Clear loading timeout since we got a proper completion
               if (loadingTimeoutRef.current) {
                 clearTimeout(loadingTimeoutRef.current);
                 loadingTimeoutRef.current = null;
@@ -374,18 +355,13 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
       };
 
       ws.onerror = () => {
-        console.log("[VoiceMode] WebSocket error");
         isConnectingRef.current = false;
-        // Reset loading state on error to prevent stuck state
         setIsTTSLoading(false);
       };
 
       ws.onclose = () => {
-        console.log("[VoiceMode] WebSocket closed");
         wsRef.current = null;
         isConnectingRef.current = false;
-        // Reset loading state when WebSocket closes to prevent stuck state
-        // If audio_done wasn't received, this ensures we don't stay stuck
         setIsTTSLoading(false);
         finalizeStream();
       };
@@ -408,34 +384,22 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
     (text: string) => {
       if (!text.trim()) return;
 
-      console.log(
-        `[VoiceMode] sendTextToTTS: "${text.slice(0, 50)}...", ` +
-          `wsState=${wsRef.current?.readyState ?? "null"}`
-      );
-
       setIsTTSLoading(true);
       setSpokenText((prev) => (prev ? prev + " " + text : text));
 
       // Set a timeout to reset loading state if TTS doesn't complete
-      // This prevents the mic from getting stuck disabled
       if (loadingTimeoutRef.current) {
         clearTimeout(loadingTimeoutRef.current);
       }
       loadingTimeoutRef.current = setTimeout(() => {
-        console.log("[VoiceMode] Loading timeout - resetting stuck state");
         setIsTTSLoading(false);
         setIsTTSPlaying(false);
-      }, 60000); // 60 second timeout
+      }, 60000);
 
       if (wsRef.current?.readyState === WebSocket.OPEN) {
         wsRef.current.send(JSON.stringify({ type: "synthesize", text }));
-        console.log("[VoiceMode] sendTextToTTS: sent via WebSocket");
       } else {
-        // Queue and connect
         pendingTextRef.current.push(text);
-        console.log(
-          `[VoiceMode] sendTextToTTS: queued, pending=${pendingTextRef.current.length}`
-        );
         connectWebSocket();
       }
     },
@@ -444,14 +408,7 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
 
   const streamTTS = useCallback(
     (text: string, isComplete: boolean = false) => {
-      // Debug logging
-      console.log(
-        `[VoiceMode] streamTTS called: autoPlayback=${autoPlayback}, ` +
-          `textLen=${text.length}, isComplete=${isComplete}`
-      );
-
       if (!autoPlayback) {
-        console.log("[VoiceMode] streamTTS: autoPlayback is false, skipping");
         return;
       }
 
@@ -478,34 +435,19 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
       if (uncommittedText.length === 0) {
         if (isComplete && !hasSignaledEndRef.current) {
           hasSignaledEndRef.current = true;
-          console.log(
-            `[VoiceMode] streamTTS: isComplete=true (no new text), wsState=${wsRef.current?.readyState}, ` +
-              `pendingText=${pendingTextRef.current.length}`
-          );
 
           if (wsRef.current?.readyState === WebSocket.OPEN) {
-            console.log("[VoiceMode] streamTTS: sending 'end' signal");
             wsRef.current.send(JSON.stringify({ type: "end" }));
           } else {
-            console.log(
-              "[VoiceMode] streamTTS: WebSocket not open, will send 'end' after connect and pending text"
-            );
             const sendEnd = () => {
               if (wsRef.current?.readyState === WebSocket.OPEN) {
                 if (pendingTextRef.current.length === 0) {
-                  console.log(
-                    "[VoiceMode] streamTTS: sending delayed 'end' signal"
-                  );
                   wsRef.current.send(JSON.stringify({ type: "end" }));
                 } else {
                   setTimeout(sendEnd, 100);
                 }
               } else if (wsRef.current?.readyState === WebSocket.CONNECTING) {
                 setTimeout(sendEnd, 100);
-              } else {
-                console.log(
-                  "[VoiceMode] streamTTS: WebSocket closed, cannot send 'end'"
-                );
               }
             };
             setTimeout(sendEnd, 100);
@@ -546,41 +488,19 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
       // When streaming is complete, signal end to flush remaining audio
       if (isComplete && !hasSignaledEndRef.current) {
         hasSignaledEndRef.current = true;
-        console.log(
-          `[VoiceMode] streamTTS: isComplete=true, wsState=${wsRef.current?.readyState}, ` +
-            `pendingText=${pendingTextRef.current.length}`
-        );
 
         if (wsRef.current?.readyState === WebSocket.OPEN) {
-          console.log("[VoiceMode] streamTTS: sending 'end' signal");
           wsRef.current.send(JSON.stringify({ type: "end" }));
         } else {
-          // WebSocket not ready - wait for connection and pending text to be sent first
-          console.log(
-            "[VoiceMode] streamTTS: WebSocket not open, will send 'end' after connect and pending text"
-          );
           const sendEnd = () => {
-            // Wait for WebSocket to be open AND all pending text to be sent
             if (wsRef.current?.readyState === WebSocket.OPEN) {
               if (pendingTextRef.current.length === 0) {
-                // All pending text has been sent, now safe to send "end"
-                console.log(
-                  "[VoiceMode] streamTTS: sending delayed 'end' signal"
-                );
                 wsRef.current.send(JSON.stringify({ type: "end" }));
               } else {
-                // Still have pending text, wait longer
-                console.log(
-                  `[VoiceMode] streamTTS: waiting for ${pendingTextRef.current.length} pending texts`
-                );
                 setTimeout(sendEnd, 100);
               }
             } else if (wsRef.current?.readyState === WebSocket.CONNECTING) {
               setTimeout(sendEnd, 100);
-            } else {
-              console.log(
-                "[VoiceMode] streamTTS: WebSocket closed, cannot send 'end'"
-              );
             }
           };
           setTimeout(sendEnd, 100);
