@@ -167,6 +167,8 @@ def maybe_emit_argument_delta(
 ) -> Generator[Packet, None, None]:
     """Emit decoded tool-call argument deltas to the frontend.
 
+    NOTE: Currently skips over arguments with non-string arguments
+
     Stateless: derives what's new by comparing ``accumulated_args``
     against the state before the current fragment was appended.
     """
