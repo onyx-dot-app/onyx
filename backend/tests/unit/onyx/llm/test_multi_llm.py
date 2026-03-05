@@ -1386,3 +1386,46 @@ def test_strip_tool_content_handles_list_content_blocks() -> None:
     assert "result A" in result[1]["content"]
     assert "result B" in result[1]["content"]
     assert isinstance(result[1]["content"], str)
+
+
+def test_strip_tool_content_merges_consecutive_tool_results() -> None:
+    """Bedrock requires strict user/assistant alternation. Multiple parallel
+    tool results must be merged into a single user message."""
+    from onyx.llm.multi_llm import _strip_tool_content_from_messages
+
+    messages: list[dict[str, Any]] = [
+        {"role": "user", "content": "weather and news?"},
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "tc_1",
+                    "type": "function",
+                    "function": {"name": "search_weather", "arguments": "{}"},
+                },
+                {
+                    "id": "tc_2",
+                    "type": "function",
+                    "function": {"name": "search_news", "arguments": "{}"},
+                },
+            ],
+        },
+        {"role": "tool", "content": "sunny 72F", "tool_call_id": "tc_1"},
+        {"role": "tool", "content": "headline news", "tool_call_id": "tc_2"},
+        {"role": "assistant", "content": "Here are the results."},
+    ]
+
+    result = _strip_tool_content_from_messages(messages)
+
+    # user, assistant (flattened), user (merged tool results), assistant
+    assert len(result) == 4
+    roles = [m["role"] for m in result]
+    assert roles == ["user", "assistant", "user", "assistant"]
+
+    # Both tool results merged into one user message
+    merged = result[2]["content"]
+    assert "tc_1" in merged
+    assert "sunny 72F" in merged
+    assert "tc_2" in merged
+    assert "headline news" in merged

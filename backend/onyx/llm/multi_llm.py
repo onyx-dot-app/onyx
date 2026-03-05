@@ -155,11 +155,18 @@ def _strip_tool_content_from_messages(
             # Convert tool response to user message with text content
             tool_call_id = msg.get("tool_call_id", "")
             content = _normalize_content(msg.get("content"))
-            new_msg = {
-                "role": "user",
-                "content": f"[Tool Result] id={tool_call_id}\n{content}",
-            }
-            result.append(new_msg)
+            tool_result_text = f"[Tool Result] id={tool_call_id}\n{content}"
+            # Merge into previous user message if it is also a converted
+            # tool result to avoid consecutive user messages (Bedrock requires
+            # strict user/assistant alternation).
+            if (
+                result
+                and result[-1]["role"] == "user"
+                and "[Tool Result]" in result[-1].get("content", "")
+            ):
+                result[-1]["content"] += "\n\n" + tool_result_text
+            else:
+                result.append({"role": "user", "content": tool_result_text})
 
         else:
             result.append(msg)
