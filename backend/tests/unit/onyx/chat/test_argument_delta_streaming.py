@@ -74,7 +74,9 @@ def _stream_fragments(
         tc_map[0]["arguments"] += frag
         delta = _make_tool_call_delta(arguments=frag)
         for packet in maybe_emit_argument_delta(tc_map, delta, pl):
-            for value in packet.obj.argument_deltas.values():
+            obj = packet.obj
+            assert isinstance(obj, ToolCallArgumentDelta)
+            for value in obj.argument_deltas.values():
                 emitted.append(value)
     return emitted
 

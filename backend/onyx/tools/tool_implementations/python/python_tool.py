@@ -378,5 +378,5 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
                 )
 
     @classmethod
-    def do_emit_argument_deltas(cls):
+    def do_emit_argument_deltas(cls) -> bool:
         return True
