@@ -53,7 +53,6 @@ class OnyxError(Exception):
         self.error_code = error_code
         self.message = resolved_message
         self._status_code_override = status_code_override
-        self._status_code_override = status_code_override
 
     @property
     def status_code(self) -> int:
