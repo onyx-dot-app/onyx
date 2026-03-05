@@ -154,9 +154,10 @@ class TestApplyLicenseStatusToSettings:
         assert result.ee_features_enabled is False
 
 
-class TestSettingsDefaultEEDisabled:
-    """Verify the Settings model defaults ee_features_enabled to False."""
+class TestSettingsDefaults:
+    """Verify Settings model defaults for CE deployments."""
 
     def test_default_ee_features_disabled(self) -> None:
+        """CE default: ee_features_enabled is False."""
         settings = Settings()
         assert settings.ee_features_enabled is False
