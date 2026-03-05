@@ -66,6 +66,32 @@ def _parse_json_string(text: str, pos: int) -> _Token:
     return _Token(text[pos + 1 :], pos + 1, len(text), complete=False)
 
 
+def _skip_json_value(text: str, pos: int) -> int:
+    """Skip past a non-string JSON value (number, bool, null, array, object).
+
+    Tracks ``[]`` / ``{}`` nesting depth and skips over embedded strings so
+    that internal commas and braces don't terminate the scan early.  Stops
+    at the next top-level ``,`` or ``}`` (not consumed).
+    """
+    depth = 0
+    while pos < len(text):
+        ch = text[pos]
+        if ch == '"':
+            tok = _parse_json_string(text, pos)
+            pos = tok.end + 1 if tok.complete else tok.end
+            continue
+        if ch in ("{", "["):
+            depth += 1
+        elif ch in ("}", "]"):
+            if depth == 0:
+                break
+            depth -= 1
+        elif ch == "," and depth == 0:
+            break
+        pos += 1
+    return pos
+
+
 def _skip(text: str, pos: int, chars: str = " \t\n\r,") -> int:
     """Advance ``pos`` past any characters in ``chars``."""
     while pos < len(text) and text[pos] in chars:
@@ -135,9 +161,9 @@ def _extract_delta_args(pre: str, delta: str) -> dict[str, str]:
         if pos >= len(full):
             break
         if full[pos] != '"':
-            # Non-string value (number, boolean, null): skip to next entry
-            while pos < len(full) and full[pos] not in (",", "}"):
-                pos += 1
+            # Non-string value (number, boolean, null, array, object):
+            # skip to the next top-level comma or closing brace.
+            pos = _skip_json_value(full, pos)
             continue
         val = _parse_json_string(full, pos)
 
