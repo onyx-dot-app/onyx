@@ -186,6 +186,26 @@ class TestMaybeEmitArgumentDeltaBasic:
         assert packets_2[0].obj.argument_deltas == {"output": "hello"}
 
     @patch("onyx.chat.tool_call_args_streaming._get_tool_class")
+    def test_delta_spans_key_boundary(self, mock_get_tool: MagicMock) -> None:
+        """A single delta contains the end of one value and the start of the next key."""
+        mock_get_tool.return_value = _mock_tool_class()
+
+        tc_map: dict[int, dict[str, Any]] = {
+            0: {"id": "tc_1", "name": "python", "arguments": '{"code": "x'}
+        }
+
+        packets_1 = _collect(tc_map, _make_tool_call_delta(arguments="x"))
+        assert packets_1[0].obj.argument_deltas == {"code": "x"}
+
+        # Delta carries closing of "code" value + opening of "lang" key + start of value
+        tc_map[0]["arguments"] = '{"code": "xy", "lang": "py'
+        packets_2 = _collect(tc_map, _make_tool_call_delta(arguments='y", "lang": "py'))
+        # First packet: tail of the previous key, second: new key's value
+        assert len(packets_2) == 2
+        assert packets_2[0].obj.argument_deltas == {"code": "y"}
+        assert packets_2[1].obj.argument_deltas == {"lang": "py"}
+
+    @patch("onyx.chat.tool_call_args_streaming._get_tool_class")
     def test_empty_value_emits_nothing(self, mock_get_tool: MagicMock) -> None:
         """An empty string value has nothing to emit."""
         mock_get_tool.return_value = _mock_tool_class()
@@ -496,6 +516,42 @@ class TestMaybeEmitArgumentDeltaEdgeCases:
         assert len(packets_1) == 1
         assert packets_1[0].obj.tool_id == "tc_2"
         assert packets_1[0].obj.argument_deltas == {"code": "bbb"}
+
+    @patch("onyx.chat.tool_call_args_streaming._get_tool_class")
+    def test_delta_with_four_arguments(self, mock_get_tool: MagicMock) -> None:
+        """A single delta contains four complete key-value pairs."""
+        mock_get_tool.return_value = _mock_tool_class()
+
+        accumulated = '{"a": "one", "b": "two", "c": "three", "d": "four'
+        tc_map: dict[int, dict[str, Any]] = {
+            0: {"id": "tc_1", "name": "python", "arguments": accumulated}
+        }
+        packets = _collect(tc_map, _make_tool_call_delta(arguments=accumulated))
+
+        assert len(packets) == 4
+        assert packets[0].obj.argument_deltas == {"a": "one"}
+        assert packets[1].obj.argument_deltas == {"b": "two"}
+        assert packets[2].obj.argument_deltas == {"c": "three"}
+        assert packets[3].obj.argument_deltas == {"d": "four"}
+
+    @patch("onyx.chat.tool_call_args_streaming._get_tool_class")
+    def test_delta_on_second_arg_after_first_complete(
+        self, mock_get_tool: MagicMock
+    ) -> None:
+        """First argument is fully complete; delta only adds to the second."""
+        mock_get_tool.return_value = _mock_tool_class()
+
+        tc_map: dict[int, dict[str, Any]] = {
+            0: {
+                "id": "tc_1",
+                "name": "python",
+                "arguments": '{"code": "print(1)", "lang": "py',
+            }
+        }
+        packets = _collect(tc_map, _make_tool_call_delta(arguments="py"))
+
+        assert len(packets) == 1
+        assert packets[0].obj.argument_deltas == {"lang": "py"}
 
     @patch("onyx.chat.tool_call_args_streaming._get_tool_class")
     def test_non_string_json_value_emits_nothing(

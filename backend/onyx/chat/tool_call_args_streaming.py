@@ -1,9 +1,9 @@
 import functools
 import json
-import re
 from collections.abc import Generator
 from collections.abc import Mapping
 from typing import Any
+from typing import NamedTuple
 from typing import Type
 
 from onyx.server.query_and_chat.placement import Placement
@@ -34,100 +34,50 @@ def _get_tool_class(
     tool_calls_in_progress: Mapping[int, Mapping[str, Any]],
     tool_call_delta: Any,
 ) -> Type[Tool] | None:
-    """Look up the Tool subclass for a streaming tool call delta.
-
-    Returns the Tool subclass if it's a known built-in tool, or None
-    for custom/MCP tools whose names are only known at runtime.
-    """
+    """Look up the Tool subclass for a streaming tool call delta."""
     tool_name = tool_calls_in_progress.get(tool_call_delta.index, {}).get("name")
     if not tool_name:
         return None
-
     return _get_tool_name_to_class().get(tool_name)
 
 
-# Matches all JSON object keys in a partial JSON string, e.g. `"code":` or `"key"  :`
-# Captures the key name (group 1), handling escaped characters within keys.
-_JSON_KEY_PATTERN = re.compile(r'"([^"\\]*(?:\\.[^"\\]*)*)"\s*:')
+class _Token(NamedTuple):
+    """A parsed JSON string with position info."""
+
+    value: str  # raw content between the quotes
+    start: int  # index of first char inside the quotes
+    end: int  # index of closing quote, or len(text) if incomplete
+    complete: bool  # whether the closing quote was found
 
 
-def _find_active_json_key(partial_json: str) -> str | None:
-    """Find the JSON key whose string value is currently being streamed.
-
-    LLM tool calls stream arguments as incremental JSON fragments, e.g.:
-        ``{"code": "print('hello')\\n...``
-
-    This function finds all ``"key":`` patterns in the accumulated JSON and
-    returns the *last* key whose value has begun arriving (i.e. there is
-    content after the colon). Returns ``None`` if no value has started yet.
-    """
-    all_keys = _JSON_KEY_PATTERN.findall(partial_json)
-    if not all_keys:
-        return None
-
-    last_key = all_keys[-1]
-
-    # Verify this key's value has actually started (there's content after "key":)
-    key_pos = partial_json.rfind(f'"{last_key}"')
-    search_from = key_pos + len(last_key) + 2  # past the closing quote
-    colon_pos = partial_json.find(":", search_from)
-    after_colon = partial_json[colon_pos + 1 :].lstrip() if colon_pos != -1 else ""
-    if after_colon:
-        return last_key
-
-    return None
-
-
-def _extract_raw_json_string_value(partial_json: str, key: str) -> str | None:
-    """Extract the raw (still-escaped) string value for a given key.
-
-    Given partial JSON like ``{"code": "line1\\nline2"}``, returns ``line1\\nline2``
-    (the content between the opening and closing quotes of the value).
-
-    If the closing quote hasn't arrived yet, returns everything after the
-    opening quote. Returns ``None`` if the key's value hasn't started.
-    """
-    # Match the last occurrence of `"key": "` to find where the value starts
-    value_opener = re.compile(r'"' + re.escape(key) + r'"\s*:\s*"')
-    last_match = None
-    for m in value_opener.finditer(partial_json):
-        last_match = m
-    if not last_match:
-        return None
-
-    value_start = last_match.end()
-
-    # Walk forward, skipping escaped characters, to find the closing quote
-    pos = value_start
-    while pos < len(partial_json):
-        char = partial_json[pos]
-        if char == "\\":
-            pos += 2  # skip the escape sequence (e.g. \n, \", \\)
-        elif char == '"':
-            return partial_json[value_start:pos]
+def _parse_json_string(text: str, pos: int) -> _Token:
+    """Parse a JSON string starting at the opening quote at ``pos``."""
+    i = pos + 1
+    while i < len(text):
+        if text[i] == "\\":
+            i += 2
+        elif text[i] == '"':
+            return _Token(text[pos + 1 : i], pos + 1, i, complete=True)
         else:
-            pos += 1
-
-    # Closing quote hasn't arrived yet — return what we have so far
-    return partial_json[value_start:]
+            i += 1
+    return _Token(text[pos + 1 :], pos + 1, len(text), complete=False)
 
 
-def _decode_partial_json_string(raw_escaped: str) -> str:
-    """Decode JSON escape sequences (e.g. ``\\n`` → newline) from a
-    potentially incomplete string value.
+def _skip(text: str, pos: int, chars: str = " \t\n\r,") -> int:
+    """Advance ``pos`` past any characters in ``chars``."""
+    while pos < len(text) and text[pos] in chars:
+        pos += 1
+    return pos
 
-    Wraps the raw content in quotes and uses ``json.loads`` for correct
-    decoding. If the string ends mid-escape-sequence (e.g. the fragment
-    ends with ``\\``), trims up to 6 trailing characters until decoding
-    succeeds. The max trim of 6 covers the longest JSON escape: ``\\uXXXX``.
+
+def _decode_partial_json_string(raw: str) -> str:
+    """Decode JSON escapes (``\\n`` → newline) from a possibly incomplete value.
+
+    Progressively trims up to 6 trailing chars to handle partial escape
+    sequences (the longest JSON escape is ``\\uXXXX``).
     """
-    # Try decoding as-is first, then progressively trim trailing chars
-    for chars_to_trim in range(min(7, len(raw_escaped) + 1)):
-        candidate = (
-            raw_escaped[: len(raw_escaped) - chars_to_trim]
-            if chars_to_trim
-            else raw_escaped
-        )
+    for trim in range(min(7, len(raw) + 1)):
+        candidate = raw[: len(raw) - trim] if trim else raw
         try:
             return json.loads('"' + candidate + '"')
         except (json.JSONDecodeError, ValueError):
@@ -135,15 +85,79 @@ def _decode_partial_json_string(raw_escaped: str) -> str:
     return ""
 
 
+def _extract_delta_args(pre: str, delta: str) -> dict[str, str]:
+    """Extract decoded argument values contributed by ``delta``.
+
+    Walks ``pre + delta`` as a partial JSON object (``{"k": "v", ...}``),
+    and for each string value returns only the decoded content that falls
+    within the ``delta`` portion. Escape sequences that straddle the
+    boundary are handled correctly.
+    """
+    full = pre + delta
+    delta_start = len(pre)
+    delta_end = len(full)
+
+    result: dict[str, str] = {}
+
+    # Advance to opening brace
+    pos = full.find("{")
+    if pos == -1:
+        return result
+    pos += 1
+
+    while pos < len(full):
+        pos = _skip(full, pos)
+        if pos >= len(full) or full[pos] == "}":
+            break
+
+        # Key
+        if full[pos] != '"':
+            break
+        key = _parse_json_string(full, pos)
+        if not key.complete:
+            break
+        pos = key.end + 1
+
+        # Colon
+        pos = _skip(full, pos, " \t\n\r")
+        if pos >= len(full) or full[pos] != ":":
+            break
+        pos += 1
+
+        # Value
+        pos = _skip(full, pos, " \t\n\r")
+        if pos >= len(full) or full[pos] != '"':
+            break
+        val = _parse_json_string(full, pos)
+
+        # Only include the portion of this value that overlaps with delta
+        lo = max(val.start, delta_start)
+        hi = min(val.end, delta_end)
+        if lo < hi:
+            # Decode from value start through both boundaries so escape
+            # sequences straddling the delta edge are handled correctly.
+            decoded_before = _decode_partial_json_string(full[val.start : lo])
+            decoded_through = _decode_partial_json_string(full[val.start : hi])
+            new_content = decoded_through[len(decoded_before) :]
+            if new_content:
+                result[key.value] = new_content
+
+        if not val.complete:
+            break
+        pos = val.end + 1
+
+    return result
+
+
 def maybe_emit_argument_delta(
     tool_calls_in_progress: Mapping[int, Mapping[str, Any]],
     tool_call_delta: Any,
     placement: Placement,
 ) -> Generator[Packet, None, None]:
-    """Emit decoded tool call argument content to the frontend.
+    """Emit decoded tool-call argument deltas to the frontend.
 
-    Stateless: derives the delta by comparing the accumulated arguments
-    against their state before the current fragment was appended.
+    Stateless: derives what's new by comparing ``accumulated_args``
+    against the state before the current fragment was appended.
     """
     tool_cls = _get_tool_class(tool_calls_in_progress, tool_call_delta)
     if not tool_cls or not tool_cls.do_emit_argument_deltas():
@@ -157,33 +171,17 @@ def maybe_emit_argument_delta(
 
     tc_data = tool_calls_in_progress[tool_call_delta.index]
     accumulated_args = tc_data["arguments"]
-
-    # Step 1: Find which key is actively being streamed
-    active_key = _find_active_json_key(accumulated_args)
-    if not active_key:
-        return
-
-    # Step 2: Extract the raw (still-escaped) string value for that key
-    current_raw = _extract_raw_json_string_value(accumulated_args, active_key)
-    if current_raw is None:
-        return
-
-    # Step 3: Derive the new portion by comparing against pre-delta state
     prev_args = accumulated_args[: -len(delta_fragment)]
-    prev_raw = _extract_raw_json_string_value(prev_args, active_key)
 
-    decoded_current = _decode_partial_json_string(current_raw)
-    decoded_prev = _decode_partial_json_string(prev_raw) if prev_raw is not None else ""
+    tool_type = tc_data.get("name", "")
+    tool_id = tc_data.get("id", "")
 
-    new_content = decoded_current[len(decoded_prev) :]
-    if not new_content:
-        return
-
-    yield Packet(
-        placement=placement,
-        obj=ToolCallArgumentDelta(
-            tool_type=tc_data.get("name", ""),
-            tool_id=tc_data.get("id", ""),
-            argument_deltas={active_key: new_content},
-        ),
-    )
+    for arg_name, arg_delta in _extract_delta_args(prev_args, delta_fragment).items():
+        yield Packet(
+            placement=placement,
+            obj=ToolCallArgumentDelta(
+                tool_type=tool_type,
+                tool_id=tool_id,
+                argument_deltas={arg_name: arg_delta},
+            ),
+        )
