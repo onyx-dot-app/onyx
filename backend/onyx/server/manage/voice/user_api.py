@@ -1,4 +1,5 @@
 import secrets
+from collections.abc import AsyncIterator
 
 from fastapi import APIRouter
 from fastapi import Depends
@@ -139,7 +140,7 @@ async def synthesize_speech(
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     # Session is now closed - streaming response won't hold DB connection
-    async def audio_stream():
+    async def audio_stream() -> AsyncIterator[bytes]:
         try:
             chunk_count = 0
             async for chunk in provider.synthesize_stream(

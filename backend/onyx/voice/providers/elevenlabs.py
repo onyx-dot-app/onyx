@@ -124,7 +124,7 @@ class ElevenLabsStreamingTranscriber(StreamingTranscriberProtocol):
                         continue
 
                     # ElevenLabs uses message_type field
-                    msg_type = data.get("message_type", data.get("type", ""))
+                    msg_type = data.get("message_type", data.get("type", ""))  # type: ignore[possibly-undefined]
                     self._logger.info(
                         f"ElevenLabsStreamingTranscriber: received message_type: '{msg_type}', data keys: {list(data.keys())}"
                     )

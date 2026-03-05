@@ -195,7 +195,7 @@ def update_user_voice_auto_send(
 ) -> None:
     """Update user's voice auto-send setting."""
     db_session.execute(
-        update(User).where(User.id == user_id).values(voice_auto_send=auto_send)
+        update(User).where(User.id == user_id).values(voice_auto_send=auto_send)  # type: ignore[arg-type]
     )
     db_session.commit()
 
@@ -205,7 +205,7 @@ def update_user_voice_auto_playback(
 ) -> None:
     """Update user's voice auto-playback setting."""
     db_session.execute(
-        update(User).where(User.id == user_id).values(voice_auto_playback=auto_playback)
+        update(User).where(User.id == user_id).values(voice_auto_playback=auto_playback)  # type: ignore[arg-type]
     )
     db_session.commit()
 
@@ -217,7 +217,7 @@ def update_user_voice_playback_speed(
     # Clamp to valid range
     speed = max(0.5, min(2.0, speed))
     db_session.execute(
-        update(User).where(User.id == user_id).values(voice_playback_speed=speed)
+        update(User).where(User.id == user_id).values(voice_playback_speed=speed)  # type: ignore[arg-type]
     )
     db_session.commit()
 
@@ -227,7 +227,7 @@ def update_user_preferred_voice(
 ) -> None:
     """Update user's preferred voice setting."""
     db_session.execute(
-        update(User).where(User.id == user_id).values(preferred_voice=voice)
+        update(User).where(User.id == user_id).values(preferred_voice=voice)  # type: ignore[arg-type]
     )
     db_session.commit()
 
@@ -253,5 +253,5 @@ def update_user_voice_settings(
         values["preferred_voice"] = preferred_voice
 
     if values:
-        db_session.execute(update(User).where(User.id == user_id).values(**values))
+        db_session.execute(update(User).where(User.id == user_id).values(**values))  # type: ignore[arg-type]
         db_session.commit()

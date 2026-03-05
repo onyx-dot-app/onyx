@@ -458,7 +458,7 @@ async def handle_streaming_synthesis(
                     break
                 raise
 
-            msg_type = message.get("type", "unknown")
+            msg_type = message.get("type", "unknown")  # type: ignore[possibly-undefined]
 
             if msg_type == "websocket.disconnect":
                 logger.info("Streaming synthesis: client disconnected")
@@ -573,7 +573,7 @@ async def handle_chunked_synthesis(websocket: WebSocket, provider: Any) -> None:
                 )
                 continue
 
-            msg_data_type = data.get("type")
+            msg_data_type = data.get("type")  # type: ignore[possibly-undefined]
             if msg_data_type == "synthesize":
                 text = data.get("text", "")
                 if not text:

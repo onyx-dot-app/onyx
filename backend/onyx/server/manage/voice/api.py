@@ -29,7 +29,7 @@ logger = setup_logger()
 admin_router = APIRouter(prefix="/admin/voice")
 
 
-def _provider_to_view(provider) -> VoiceProviderView:
+def _provider_to_view(provider: VoiceProvider) -> VoiceProviderView:
     """Convert a VoiceProvider model to a VoiceProviderView."""
     return VoiceProviderView(
         id=provider.id,
