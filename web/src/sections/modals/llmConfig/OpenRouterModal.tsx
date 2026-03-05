@@ -19,11 +19,14 @@ import {
   buildDefaultValidationSchema,
   buildAvailableModelConfigurations,
   submitLLMProvider,
+  submitOnboardingProvider,
+  buildOnboardingInitialValues,
   BaseLLMFormValues,
   LLM_FORM_CLASS_NAME,
 } from "./formUtils";
 import { AdvancedOptions } from "./components/AdvancedOptions";
 import { DisplayModels } from "./components/DisplayModels";
+import { SingleDefaultModelField } from "./components/SingleDefaultModelField";
 import { FetchModelsButton } from "./components/FetchModelsButton";
 import { useState } from "react";
 
@@ -92,12 +95,17 @@ async function fetchOpenRouterModels(params: {
 }
 
 export function OpenRouterModal({
+  variant = "llm-configuration",
   existingLlmProvider,
   shouldMarkAsDefault,
   open,
   onOpenChange,
+  onboardingState,
+  onboardingActions,
+  llmDescriptor,
 }: LLMProviderFormProps) {
   const [fetchedModels, setFetchedModels] = useState<ModelConfiguration[]>([]);
+  const isOnboarding = variant === "onboarding";
 
   return (
     <ProviderFormEntrypointWrapper
@@ -106,6 +114,9 @@ export function OpenRouterModal({
       existingLlmProvider={existingLlmProvider}
       open={open}
       onOpenChange={onOpenChange}
+      variant={variant}
+      onboardingState={onboardingState}
+      onboardingActions={onboardingActions}
     >
       {({
         onClose,
@@ -115,24 +126,44 @@ export function OpenRouterModal({
         testError,
         setTestError,
         wellKnownLLMProvider,
+        onboardingState: ctxOnboardingState,
+        onboardingActions: ctxOnboardingActions,
       }: ProviderFormContext) => {
         const modelConfigurations = buildAvailableModelConfigurations(
           existingLlmProvider,
-          wellKnownLLMProvider
+          wellKnownLLMProvider ?? llmDescriptor
         );
-        const initialValues: OpenRouterModalValues = {
-          ...buildDefaultInitialValues(
-            existingLlmProvider,
-            modelConfigurations
-          ),
-          api_key: existingLlmProvider?.api_key ?? "",
-          api_base: existingLlmProvider?.api_base ?? DEFAULT_API_BASE,
-        };
 
-        const validationSchema = buildDefaultValidationSchema().shape({
-          api_key: Yup.string().required("API Key is required"),
-          api_base: Yup.string().required("API Base URL is required"),
-        });
+        const initialValues: OpenRouterModalValues = isOnboarding
+          ? ({
+              ...buildOnboardingInitialValues(),
+              name: OPENROUTER_PROVIDER_NAME,
+              provider: OPENROUTER_PROVIDER_NAME,
+              api_key: "",
+              api_base: DEFAULT_API_BASE,
+              default_model_name: "",
+            } as OpenRouterModalValues)
+          : {
+              ...buildDefaultInitialValues(
+                existingLlmProvider,
+                modelConfigurations
+              ),
+              api_key: existingLlmProvider?.api_key ?? "",
+              api_base: existingLlmProvider?.api_base ?? DEFAULT_API_BASE,
+            };
+
+        const validationSchema = isOnboarding
+          ? Yup.object().shape({
+              api_key: Yup.string().required("API Key is required"),
+              api_base: Yup.string().required("API Base URL is required"),
+              default_model_name: Yup.string().required(
+                "Model name is required"
+              ),
+            })
+          : buildDefaultValidationSchema().shape({
+              api_key: Yup.string().required("API Key is required"),
+              api_base: Yup.string().required("API Base URL is required"),
+            });
 
         return (
           <Formik
@@ -140,22 +171,43 @@ export function OpenRouterModal({
             validationSchema={validationSchema}
             validateOnMount={true}
             onSubmit={async (values, { setSubmitting }) => {
-              await submitLLMProvider({
-                providerName: OPENROUTER_PROVIDER_NAME,
-                values,
-                initialValues,
-                modelConfigurations:
-                  fetchedModels.length > 0
-                    ? fetchedModels
-                    : modelConfigurations,
-                existingLlmProvider,
-                shouldMarkAsDefault,
-                setIsTesting,
-                setTestError,
-                mutate,
-                onClose,
-                setSubmitting,
-              });
+              if (isOnboarding && ctxOnboardingState && ctxOnboardingActions) {
+                const modelConfigsToUse =
+                  fetchedModels.length > 0 ? fetchedModels : [];
+
+                await submitOnboardingProvider({
+                  providerName: OPENROUTER_PROVIDER_NAME,
+                  payload: {
+                    ...values,
+                    model_configurations: modelConfigsToUse,
+                  },
+                  onboardingState: ctxOnboardingState,
+                  onboardingActions: ctxOnboardingActions,
+                  isCustomProvider: false,
+                  onClose,
+                  setIsSubmitting: setSubmitting,
+                  setApiStatus: () => {},
+                  setShowApiMessage: () => {},
+                  setErrorMessage: (msg) => setTestError(msg),
+                });
+              } else {
+                await submitLLMProvider({
+                  providerName: OPENROUTER_PROVIDER_NAME,
+                  values,
+                  initialValues,
+                  modelConfigurations:
+                    fetchedModels.length > 0
+                      ? fetchedModels
+                      : modelConfigurations,
+                  existingLlmProvider,
+                  shouldMarkAsDefault,
+                  setIsTesting,
+                  setTestError,
+                  mutate,
+                  onClose,
+                  setSubmitting,
+                });
+              }
             }}
           >
             {(formikProps) => {
@@ -170,7 +222,9 @@ export function OpenRouterModal({
 
               return (
                 <Form className={LLM_FORM_CLASS_NAME}>
-                  <DisplayNameField disabled={!!existingLlmProvider} />
+                  {!isOnboarding && (
+                    <DisplayNameField disabled={!!existingLlmProvider} />
+                  )}
 
                   <PasswordInputTypeInField name="api_key" label="API Key" />
 
@@ -203,23 +257,31 @@ export function OpenRouterModal({
 
                   <Separator />
 
-                  <DisplayModels
-                    modelConfigurations={currentModels}
-                    formikProps={formikProps}
-                    noModelConfigurationsMessage={
-                      "Fetch available models first, then you'll be able to select " +
-                      "the models you want to make available in Onyx."
-                    }
-                    recommendedDefaultModel={null}
-                    shouldShowAutoUpdateToggle={false}
-                  />
+                  {isOnboarding ? (
+                    <SingleDefaultModelField placeholder="E.g. openai/gpt-4o" />
+                  ) : (
+                    <DisplayModels
+                      modelConfigurations={currentModels}
+                      formikProps={formikProps}
+                      noModelConfigurationsMessage={
+                        "Fetch available models first, then you'll be able to select " +
+                        "the models you want to make available in Onyx."
+                      }
+                      recommendedDefaultModel={null}
+                      shouldShowAutoUpdateToggle={false}
+                    />
+                  )}
 
-                  <AdvancedOptions formikProps={formikProps} />
+                  {!isOnboarding && (
+                    <AdvancedOptions formikProps={formikProps} />
+                  )}
 
                   <FormActionButtons
                     isTesting={isTesting}
                     testError={testError}
-                    existingLlmProvider={existingLlmProvider}
+                    existingLlmProvider={
+                      isOnboarding ? undefined : existingLlmProvider
+                    }
                     mutate={mutate}
                     onClose={onClose}
                     isFormValid={formikProps.isValid}

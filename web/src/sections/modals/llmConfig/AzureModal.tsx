@@ -14,6 +14,8 @@ import {
   buildDefaultValidationSchema,
   buildAvailableModelConfigurations,
   submitLLMProvider,
+  submitOnboardingProvider,
+  buildOnboardingInitialValues,
   BaseLLMFormValues,
   LLM_FORM_CLASS_NAME,
 } from "./formUtils";
@@ -36,7 +38,6 @@ interface AzureModalValues extends BaseLLMFormValues {
   deployment_name?: string;
 }
 
-// Build the target_uri from existing provider data
 const buildTargetUri = (existingLlmProvider?: LLMProviderView): string => {
   if (!existingLlmProvider?.api_base || !existingLlmProvider?.api_version) {
     return "";
@@ -48,11 +49,17 @@ const buildTargetUri = (existingLlmProvider?: LLMProviderView): string => {
 };
 
 export function AzureModal({
+  variant = "llm-configuration",
   existingLlmProvider,
   shouldMarkAsDefault,
   open,
   onOpenChange,
+  onboardingState,
+  onboardingActions,
+  llmDescriptor,
 }: LLMProviderFormProps) {
+  const isOnboarding = variant === "onboarding";
+
   return (
     <ProviderFormEntrypointWrapper
       providerName={AZURE_DISPLAY_NAME}
@@ -60,6 +67,9 @@ export function AzureModal({
       existingLlmProvider={existingLlmProvider}
       open={open}
       onOpenChange={onOpenChange}
+      variant={variant}
+      onboardingState={onboardingState}
+      onboardingActions={onboardingActions}
     >
       {({
         onClose,
@@ -69,30 +79,78 @@ export function AzureModal({
         testError,
         setTestError,
         wellKnownLLMProvider,
+        onboardingState: ctxOnboardingState,
+        onboardingActions: ctxOnboardingActions,
       }: ProviderFormContext) => {
         const modelConfigurations = buildAvailableModelConfigurations(
           existingLlmProvider,
-          wellKnownLLMProvider
+          wellKnownLLMProvider ?? llmDescriptor
         );
-        const initialValues: AzureModalValues = {
-          ...buildDefaultInitialValues(
-            existingLlmProvider,
-            modelConfigurations
-          ),
-          api_key: existingLlmProvider?.api_key ?? "",
-          target_uri: buildTargetUri(existingLlmProvider),
-        };
 
-        const validationSchema = buildDefaultValidationSchema().shape({
-          api_key: Yup.string().required("API Key is required"),
-          target_uri: Yup.string()
-            .required("Target URI is required")
-            .test(
-              "valid-target-uri",
-              "Target URI must be a valid URL with api-version query parameter and either a deployment name in the path or /openai/responses",
-              (value) => (value ? isValidAzureTargetUri(value) : false)
-            ),
-        });
+        const initialValues: AzureModalValues = isOnboarding
+          ? ({
+              ...buildOnboardingInitialValues(),
+              name: AZURE_PROVIDER_NAME,
+              provider: AZURE_PROVIDER_NAME,
+              api_key: "",
+              target_uri: "",
+              default_model_name: "",
+            } as AzureModalValues)
+          : {
+              ...buildDefaultInitialValues(
+                existingLlmProvider,
+                modelConfigurations
+              ),
+              api_key: existingLlmProvider?.api_key ?? "",
+              target_uri: buildTargetUri(existingLlmProvider),
+            };
+
+        const validationSchema = isOnboarding
+          ? Yup.object().shape({
+              api_key: Yup.string().required("API Key is required"),
+              target_uri: Yup.string()
+                .required("Target URI is required")
+                .test(
+                  "valid-target-uri",
+                  "Target URI must be a valid URL with api-version query parameter and either a deployment name in the path or /openai/responses",
+                  (value) => (value ? isValidAzureTargetUri(value) : false)
+                ),
+              default_model_name: Yup.string().required(
+                "Model name is required"
+              ),
+            })
+          : buildDefaultValidationSchema().shape({
+              api_key: Yup.string().required("API Key is required"),
+              target_uri: Yup.string()
+                .required("Target URI is required")
+                .test(
+                  "valid-target-uri",
+                  "Target URI must be a valid URL with api-version query parameter and either a deployment name in the path or /openai/responses",
+                  (value) => (value ? isValidAzureTargetUri(value) : false)
+                ),
+            });
+
+        // Parse target_uri to extract api_base, api_version, deployment_name
+        const processValues = (values: AzureModalValues): AzureModalValues => {
+          let processedValues = { ...values };
+          if (values.target_uri) {
+            try {
+              const { url, apiVersion, deploymentName } = parseAzureTargetUri(
+                values.target_uri
+              );
+              processedValues = {
+                ...processedValues,
+                api_base: url.origin,
+                api_version: apiVersion,
+                deployment_name:
+                  deploymentName || processedValues.deployment_name,
+              };
+            } catch (error) {
+              console.error("Failed to parse target_uri:", error);
+            }
+          }
+          return processedValues;
+        };
 
         return (
           <Formik
@@ -100,44 +158,50 @@ export function AzureModal({
             validationSchema={validationSchema}
             validateOnMount={true}
             onSubmit={async (values, { setSubmitting }) => {
-              // Parse target_uri to extract api_base, api_version, and deployment_name
-              let processedValues: AzureModalValues = { ...values };
+              const processedValues = processValues(values);
 
-              if (values.target_uri) {
-                try {
-                  const { url, apiVersion, deploymentName } =
-                    parseAzureTargetUri(values.target_uri);
-                  processedValues = {
+              if (isOnboarding && ctxOnboardingState && ctxOnboardingActions) {
+                const modelConfigsToUse =
+                  (wellKnownLLMProvider ?? llmDescriptor)?.known_models ?? [];
+
+                await submitOnboardingProvider({
+                  providerName: AZURE_PROVIDER_NAME,
+                  payload: {
                     ...processedValues,
-                    api_base: url.origin,
-                    api_version: apiVersion,
-                    deployment_name:
-                      deploymentName || processedValues.deployment_name,
-                  };
-                } catch (error) {
-                  console.error("Failed to parse target_uri:", error);
-                }
+                    model_configurations: modelConfigsToUse,
+                  },
+                  onboardingState: ctxOnboardingState,
+                  onboardingActions: ctxOnboardingActions,
+                  isCustomProvider: false,
+                  onClose,
+                  setIsSubmitting: setSubmitting,
+                  setApiStatus: () => {},
+                  setShowApiMessage: () => {},
+                  setErrorMessage: (msg) => setTestError(msg),
+                });
+              } else {
+                await submitLLMProvider({
+                  providerName: AZURE_PROVIDER_NAME,
+                  values: processedValues,
+                  initialValues,
+                  modelConfigurations,
+                  existingLlmProvider,
+                  shouldMarkAsDefault,
+                  setIsTesting,
+                  setTestError,
+                  mutate,
+                  onClose,
+                  setSubmitting,
+                });
               }
-
-              await submitLLMProvider({
-                providerName: AZURE_PROVIDER_NAME,
-                values: processedValues,
-                initialValues,
-                modelConfigurations,
-                existingLlmProvider,
-                shouldMarkAsDefault,
-                setIsTesting,
-                setTestError,
-                mutate,
-                onClose,
-                setSubmitting,
-              });
             }}
           >
             {(formikProps) => {
               return (
                 <Form className={LLM_FORM_CLASS_NAME}>
-                  <DisplayNameField disabled={!!existingLlmProvider} />
+                  {!isOnboarding && (
+                    <DisplayNameField disabled={!!existingLlmProvider} />
+                  )}
 
                   <PasswordInputTypeInField name="api_key" label="API Key" />
 
@@ -152,12 +216,16 @@ export function AzureModal({
                   <SingleDefaultModelField placeholder="E.g. gpt-4o" />
                   <Separator />
 
-                  <AdvancedOptions formikProps={formikProps} />
+                  {!isOnboarding && (
+                    <AdvancedOptions formikProps={formikProps} />
+                  )}
 
                   <FormActionButtons
                     isTesting={isTesting}
                     testError={testError}
-                    existingLlmProvider={existingLlmProvider}
+                    existingLlmProvider={
+                      isOnboarding ? undefined : existingLlmProvider
+                    }
                     mutate={mutate}
                     onClose={onClose}
                     isFormValid={formikProps.isValid}

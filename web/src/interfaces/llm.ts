@@ -99,11 +99,19 @@ export interface LLMProviderResponse<T> {
   default_vision: DefaultModel | null;
 }
 
+export type LLMModalVariant = "onboarding" | "llm-configuration";
+
 export interface LLMProviderFormProps {
+  variant?: LLMModalVariant;
   existingLlmProvider?: LLMProviderView;
   shouldMarkAsDefault?: boolean;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+
+  // Onboarding-specific (only when variant === "onboarding")
+  onboardingState?: import("@/interfaces/onboarding").OnboardingState;
+  onboardingActions?: import("@/interfaces/onboarding").OnboardingActions;
+  llmDescriptor?: WellKnownLLMProviderDescriptor;
 }
 
 // Param types for model fetching functions - use snake_case to match API structure

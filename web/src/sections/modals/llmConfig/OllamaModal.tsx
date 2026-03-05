@@ -18,11 +18,14 @@ import {
   buildDefaultValidationSchema,
   buildAvailableModelConfigurations,
   submitLLMProvider,
+  submitOnboardingProvider,
+  buildOnboardingInitialValues,
   BaseLLMFormValues,
   LLM_FORM_CLASS_NAME,
 } from "./formUtils";
 import { AdvancedOptions } from "./components/AdvancedOptions";
 import { DisplayModels } from "./components/DisplayModels";
+import { SingleDefaultModelField } from "./components/SingleDefaultModelField";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchOllamaModels } from "@/app/admin/configuration/llm/utils";
 import debounce from "lodash/debounce";
@@ -47,6 +50,7 @@ interface OllamaModalContentProps {
   mutate: () => void;
   onClose: () => void;
   isFormValid: boolean;
+  isOnboarding: boolean;
 }
 
 function OllamaModalContent({
@@ -59,6 +63,7 @@ function OllamaModalContent({
   mutate,
   onClose,
   isFormValid,
+  isOnboarding,
 }: OllamaModalContentProps) {
   const [isLoadingModels, setIsLoadingModels] = useState(true);
 
@@ -114,7 +119,7 @@ function OllamaModalContent({
 
   return (
     <Form className={LLM_FORM_CLASS_NAME}>
-      <DisplayNameField disabled={!!existingLlmProvider} />
+      {!isOnboarding && <DisplayNameField disabled={!!existingLlmProvider} />}
 
       <TextFormField
         name="api_base"
@@ -129,21 +134,25 @@ function OllamaModalContent({
         subtext="Optional API key for Ollama Cloud (https://ollama.com). Leave blank for local instances."
       />
 
-      <DisplayModels
-        modelConfigurations={currentModels}
-        formikProps={formikProps}
-        noModelConfigurationsMessage="No models found. Please provide a valid API base URL."
-        isLoading={isLoadingModels}
-        recommendedDefaultModel={null}
-        shouldShowAutoUpdateToggle={false}
-      />
+      {isOnboarding ? (
+        <SingleDefaultModelField placeholder="E.g. llama3.1" />
+      ) : (
+        <DisplayModels
+          modelConfigurations={currentModels}
+          formikProps={formikProps}
+          noModelConfigurationsMessage="No models found. Please provide a valid API base URL."
+          isLoading={isLoadingModels}
+          recommendedDefaultModel={null}
+          shouldShowAutoUpdateToggle={false}
+        />
+      )}
 
-      <AdvancedOptions formikProps={formikProps} />
+      {!isOnboarding && <AdvancedOptions formikProps={formikProps} />}
 
       <FormActionButtons
         isTesting={isTesting}
         testError={testError}
-        existingLlmProvider={existingLlmProvider}
+        existingLlmProvider={isOnboarding ? undefined : existingLlmProvider}
         mutate={mutate}
         onClose={onClose}
         isFormValid={isFormValid}
@@ -153,12 +162,17 @@ function OllamaModalContent({
 }
 
 export function OllamaModal({
+  variant = "llm-configuration",
   existingLlmProvider,
   shouldMarkAsDefault,
   open,
   onOpenChange,
+  onboardingState,
+  onboardingActions,
+  llmDescriptor,
 }: LLMProviderFormProps) {
   const [fetchedModels, setFetchedModels] = useState<ModelConfiguration[]>([]);
+  const isOnboarding = variant === "onboarding";
 
   return (
     <ProviderFormEntrypointWrapper
@@ -166,6 +180,9 @@ export function OllamaModal({
       existingLlmProvider={existingLlmProvider}
       open={open}
       onOpenChange={onOpenChange}
+      variant={variant}
+      onboardingState={onboardingState}
+      onboardingActions={onboardingActions}
     >
       {({
         onClose,
@@ -175,27 +192,48 @@ export function OllamaModal({
         testError,
         setTestError,
         wellKnownLLMProvider,
+        onboardingState: ctxOnboardingState,
+        onboardingActions: ctxOnboardingActions,
       }: ProviderFormContext) => {
         const modelConfigurations = buildAvailableModelConfigurations(
           existingLlmProvider,
-          wellKnownLLMProvider
+          wellKnownLLMProvider ?? llmDescriptor
         );
-        const initialValues: OllamaModalValues = {
-          ...buildDefaultInitialValues(
-            existingLlmProvider,
-            modelConfigurations
-          ),
-          api_base: existingLlmProvider?.api_base ?? DEFAULT_API_BASE,
-          custom_config: {
-            OLLAMA_API_KEY:
-              (existingLlmProvider?.custom_config?.OLLAMA_API_KEY as string) ??
-              "",
-          },
-        };
 
-        const validationSchema = buildDefaultValidationSchema().shape({
-          api_base: Yup.string().required("API Base URL is required"),
-        });
+        const initialValues: OllamaModalValues = isOnboarding
+          ? ({
+              ...buildOnboardingInitialValues(),
+              name: OLLAMA_PROVIDER_NAME,
+              provider: OLLAMA_PROVIDER_NAME,
+              api_base: DEFAULT_API_BASE,
+              default_model_name: "",
+              custom_config: {
+                OLLAMA_API_KEY: "",
+              },
+            } as OllamaModalValues)
+          : {
+              ...buildDefaultInitialValues(
+                existingLlmProvider,
+                modelConfigurations
+              ),
+              api_base: existingLlmProvider?.api_base ?? DEFAULT_API_BASE,
+              custom_config: {
+                OLLAMA_API_KEY:
+                  (existingLlmProvider?.custom_config
+                    ?.OLLAMA_API_KEY as string) ?? "",
+              },
+            };
+
+        const validationSchema = isOnboarding
+          ? Yup.object().shape({
+              api_base: Yup.string().required("API Base URL is required"),
+              default_model_name: Yup.string().required(
+                "Model name is required"
+              ),
+            })
+          : buildDefaultValidationSchema().shape({
+              api_base: Yup.string().required("API Base URL is required"),
+            });
 
         return (
           <Formik
@@ -203,7 +241,6 @@ export function OllamaModal({
             validationSchema={validationSchema}
             validateOnMount={true}
             onSubmit={async (values, { setSubmitting }) => {
-              // Filter out empty custom_config values
               const filteredCustomConfig = Object.fromEntries(
                 Object.entries(values.custom_config || {}).filter(
                   ([, v]) => v !== ""
@@ -218,22 +255,43 @@ export function OllamaModal({
                     : undefined,
               };
 
-              await submitLLMProvider({
-                providerName: OLLAMA_PROVIDER_NAME,
-                values: submitValues,
-                initialValues,
-                modelConfigurations:
-                  fetchedModels.length > 0
-                    ? fetchedModels
-                    : modelConfigurations,
-                existingLlmProvider,
-                shouldMarkAsDefault,
-                setIsTesting,
-                setTestError,
-                mutate,
-                onClose,
-                setSubmitting,
-              });
+              if (isOnboarding && ctxOnboardingState && ctxOnboardingActions) {
+                const modelConfigsToUse =
+                  fetchedModels.length > 0 ? fetchedModels : [];
+
+                await submitOnboardingProvider({
+                  providerName: OLLAMA_PROVIDER_NAME,
+                  payload: {
+                    ...submitValues,
+                    model_configurations: modelConfigsToUse,
+                  },
+                  onboardingState: ctxOnboardingState,
+                  onboardingActions: ctxOnboardingActions,
+                  isCustomProvider: false,
+                  onClose,
+                  setIsSubmitting: setSubmitting,
+                  setApiStatus: () => {},
+                  setShowApiMessage: () => {},
+                  setErrorMessage: (msg) => setTestError(msg),
+                });
+              } else {
+                await submitLLMProvider({
+                  providerName: OLLAMA_PROVIDER_NAME,
+                  values: submitValues,
+                  initialValues,
+                  modelConfigurations:
+                    fetchedModels.length > 0
+                      ? fetchedModels
+                      : modelConfigurations,
+                  existingLlmProvider,
+                  shouldMarkAsDefault,
+                  setIsTesting,
+                  setTestError,
+                  mutate,
+                  onClose,
+                  setSubmitting,
+                });
+              }
             }}
           >
             {(formikProps) => (
@@ -247,6 +305,7 @@ export function OllamaModal({
                 mutate={mutate}
                 onClose={onClose}
                 isFormValid={formikProps.isValid}
+                isOnboarding={isOnboarding}
               />
             )}
           </Formik>

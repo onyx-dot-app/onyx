@@ -7,7 +7,7 @@ import {
   Formik,
   ErrorMessage,
 } from "formik";
-import { LLMProviderFormProps, LLMProviderView } from "@/interfaces/llm";
+import { LLMProviderFormProps } from "@/interfaces/llm";
 import * as Yup from "yup";
 import { ProviderFormEntrypointWrapper } from "./components/FormWrapper";
 import { DisplayNameField } from "./components/DisplayNameField";
@@ -15,8 +15,10 @@ import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTyp
 import { FormActionButtons } from "./components/FormActionButtons";
 import {
   submitLLMProvider,
+  submitOnboardingProvider,
   buildDefaultInitialValues,
   buildDefaultValidationSchema,
+  buildOnboardingInitialValues,
   LLM_FORM_CLASS_NAME,
 } from "./formUtils";
 import { AdvancedOptions } from "./components/AdvancedOptions";
@@ -39,19 +41,27 @@ function customConfigProcessing(customConfigsList: [string, string][]) {
 }
 
 export function CustomModal({
+  variant = "llm-configuration",
   existingLlmProvider,
   shouldMarkAsDefault,
   open,
   onOpenChange,
+  onboardingState,
+  onboardingActions,
 }: LLMProviderFormProps) {
+  const isOnboarding = variant === "onboarding";
+
   return (
     <ProviderFormEntrypointWrapper
       providerName="Custom LLM"
       existingLlmProvider={existingLlmProvider}
-      buttonMode={!existingLlmProvider}
+      buttonMode={!existingLlmProvider && !isOnboarding}
       buttonText="Add Custom LLM Provider"
       open={open}
       onOpenChange={onOpenChange}
+      variant={variant}
+      onboardingState={onboardingState}
+      onboardingActions={onboardingActions}
     >
       {({
         onClose,
@@ -60,9 +70,12 @@ export function CustomModal({
         setIsTesting,
         testError,
         setTestError,
+        onboardingState: ctxOnboardingState,
+        onboardingActions: ctxOnboardingActions,
       }) => {
         const initialValues = {
           ...buildDefaultInitialValues(existingLlmProvider),
+          ...(isOnboarding ? buildOnboardingInitialValues() : {}),
           provider: existingLlmProvider?.provider ?? "",
           api_key: existingLlmProvider?.api_key ?? "",
           api_base: existingLlmProvider?.api_base ?? "",
@@ -87,28 +100,49 @@ export function CustomModal({
           deployment_name: existingLlmProvider?.deployment_name ?? null,
         };
 
-        const validationSchema = buildDefaultValidationSchema().shape({
-          provider: Yup.string().required("Provider Name is required"),
-          api_key: Yup.string(),
-          api_base: Yup.string(),
-          api_version: Yup.string(),
-          model_configurations: Yup.array(
-            Yup.object({
-              name: Yup.string().required("Model name is required"),
-              is_visible: Yup.boolean().required("Visibility is required"),
-              max_input_tokens: Yup.number()
-                .transform((value, originalValue) =>
-                  originalValue === "" || originalValue === undefined
-                    ? null
-                    : value
-                )
-                .nullable()
-                .optional(),
+        const validationSchema = isOnboarding
+          ? Yup.object().shape({
+              provider: Yup.string().required("Provider Name is required"),
+              model_configurations: Yup.array(
+                Yup.object({
+                  name: Yup.string().required("Model name is required"),
+                  is_visible: Yup.boolean().required("Visibility is required"),
+                  max_input_tokens: Yup.number()
+                    .transform((value, originalValue) =>
+                      originalValue === "" || originalValue === undefined
+                        ? null
+                        : value
+                    )
+                    .nullable()
+                    .optional(),
+                })
+              ),
+              default_model_name: Yup.string().required(
+                "Default model is required"
+              ),
             })
-          ),
-          custom_config_list: Yup.array(),
-          deployment_name: Yup.string().nullable(),
-        });
+          : buildDefaultValidationSchema().shape({
+              provider: Yup.string().required("Provider Name is required"),
+              api_key: Yup.string(),
+              api_base: Yup.string(),
+              api_version: Yup.string(),
+              model_configurations: Yup.array(
+                Yup.object({
+                  name: Yup.string().required("Model name is required"),
+                  is_visible: Yup.boolean().required("Visibility is required"),
+                  max_input_tokens: Yup.number()
+                    .transform((value, originalValue) =>
+                      originalValue === "" || originalValue === undefined
+                        ? null
+                        : value
+                    )
+                    .nullable()
+                    .optional(),
+                })
+              ),
+              custom_config_list: Yup.array(),
+              deployment_name: Yup.string().nullable(),
+            });
 
         return (
           <Formik
@@ -118,7 +152,6 @@ export function CustomModal({
             onSubmit={async (values, { setSubmitting }) => {
               setSubmitting(true);
 
-              // Build model configurations from the form
               const modelConfigurations = values.model_configurations
                 .map((mc) => ({
                   name: mc.name,
@@ -137,40 +170,63 @@ export function CustomModal({
                 return;
               }
 
-              const selectedModelNames = modelConfigurations.map(
-                (config) => config.name
-              );
+              if (isOnboarding && ctxOnboardingState && ctxOnboardingActions) {
+                await submitOnboardingProvider({
+                  providerName: values.provider,
+                  payload: {
+                    ...values,
+                    model_configurations: modelConfigurations,
+                    custom_config: customConfigProcessing(
+                      values.custom_config_list
+                    ),
+                  },
+                  onboardingState: ctxOnboardingState,
+                  onboardingActions: ctxOnboardingActions,
+                  isCustomProvider: true,
+                  onClose,
+                  setIsSubmitting: setSubmitting,
+                  setApiStatus: () => {},
+                  setShowApiMessage: () => {},
+                  setErrorMessage: (msg) => setTestError(msg),
+                });
+              } else {
+                const selectedModelNames = modelConfigurations.map(
+                  (config) => config.name
+                );
 
-              await submitLLMProvider({
-                providerName: values.provider,
-                values: {
-                  ...values,
-                  selected_model_names: selectedModelNames,
-                  custom_config: customConfigProcessing(
-                    values.custom_config_list
-                  ),
-                },
-                initialValues: {
-                  ...initialValues,
-                  custom_config: customConfigProcessing(
-                    initialValues.custom_config_list
-                  ),
-                },
-                modelConfigurations,
-                existingLlmProvider,
-                shouldMarkAsDefault,
-                setIsTesting,
-                setTestError,
-                mutate,
-                onClose,
-                setSubmitting,
-              });
+                await submitLLMProvider({
+                  providerName: values.provider,
+                  values: {
+                    ...values,
+                    selected_model_names: selectedModelNames,
+                    custom_config: customConfigProcessing(
+                      values.custom_config_list
+                    ),
+                  },
+                  initialValues: {
+                    ...initialValues,
+                    custom_config: customConfigProcessing(
+                      initialValues.custom_config_list
+                    ),
+                  },
+                  modelConfigurations,
+                  existingLlmProvider,
+                  shouldMarkAsDefault,
+                  setIsTesting,
+                  setTestError,
+                  mutate,
+                  onClose,
+                  setSubmitting,
+                });
+              }
             }}
           >
             {(formikProps) => {
               return (
                 <Form className={LLM_FORM_CLASS_NAME}>
-                  <DisplayNameField disabled={!!existingLlmProvider} />
+                  {!isOnboarding && (
+                    <DisplayNameField disabled={!!existingLlmProvider} />
+                  )}
 
                   <TextFormField
                     name="provider"
@@ -320,12 +376,16 @@ export function CustomModal({
                     placeholder="e.g. gpt-4"
                   />
 
-                  <AdvancedOptions formikProps={formikProps} />
+                  {!isOnboarding && (
+                    <AdvancedOptions formikProps={formikProps} />
+                  )}
 
                   <FormActionButtons
                     isTesting={isTesting}
                     testError={testError}
-                    existingLlmProvider={existingLlmProvider}
+                    existingLlmProvider={
+                      isOnboarding ? undefined : existingLlmProvider
+                    }
                     mutate={mutate}
                     onClose={onClose}
                     isFormValid={formikProps.isValid}

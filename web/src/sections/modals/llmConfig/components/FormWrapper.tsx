@@ -4,9 +4,11 @@ import { useState, ReactNode } from "react";
 import useSWR, { useSWRConfig, KeyedMutator } from "swr";
 import { toast } from "@/hooks/useToast";
 import {
+  LLMModalVariant,
   LLMProviderView,
   WellKnownLLMProviderDescriptor,
 } from "@/interfaces/llm";
+import { OnboardingActions, OnboardingState } from "@/interfaces/onboarding";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import Modal from "@/refresh-components/Modal";
 import Text from "@/refresh-components/texts/Text";
@@ -18,6 +20,7 @@ import { LLM_PROVIDERS_ADMIN_URL } from "@/lib/llmConfig/constants";
 import { setDefaultLlmModel } from "@/lib/llmConfig/svc";
 
 export interface ProviderFormContext {
+  variant: LLMModalVariant;
   onClose: () => void;
   mutate: KeyedMutator<any>;
   isTesting: boolean;
@@ -25,6 +28,9 @@ export interface ProviderFormContext {
   testError: string;
   setTestError: (error: string) => void;
   wellKnownLLMProvider: WellKnownLLMProviderDescriptor | undefined;
+  // Onboarding-specific context
+  onboardingState?: OnboardingState;
+  onboardingActions?: OnboardingActions;
 }
 
 interface ProviderFormEntrypointWrapperProps {
@@ -40,6 +46,12 @@ interface ProviderFormEntrypointWrapperProps {
   open?: boolean;
   /** Callback when controlled modal requests close */
   onOpenChange?: (open: boolean) => void;
+  /** Variant: "onboarding" hides card/button UI and passes onboarding context */
+  variant?: LLMModalVariant;
+  /** Onboarding state (only when variant === "onboarding") */
+  onboardingState?: OnboardingState;
+  /** Onboarding actions (only when variant === "onboarding") */
+  onboardingActions?: OnboardingActions;
 }
 
 export function ProviderFormEntrypointWrapper({
@@ -51,9 +63,13 @@ export function ProviderFormEntrypointWrapper({
   buttonText,
   open,
   onOpenChange,
+  variant = "llm-configuration",
+  onboardingState,
+  onboardingActions,
 }: ProviderFormEntrypointWrapperProps) {
   const [formIsVisible, setFormIsVisible] = useState(false);
   const isControlled = open !== undefined;
+  const isOnboarding = variant === "onboarding";
 
   // Shared hooks
   const { mutate } = useSWRConfig();
@@ -104,6 +120,7 @@ export function ProviderFormEntrypointWrapper({
   }
 
   const context: ProviderFormContext = {
+    variant,
     onClose,
     mutate,
     isTesting,
@@ -111,6 +128,8 @@ export function ProviderFormEntrypointWrapper({
     testError,
     setTestError,
     wellKnownLLMProvider,
+    onboardingState,
+    onboardingActions,
   };
 
   const defaultTitle = `${existingLlmProvider ? "Configure" : "Setup"} ${
@@ -133,9 +152,9 @@ export function ProviderFormEntrypointWrapper({
     );
   }
 
-  // Controlled mode: render nothing when closed, render only modal when open
-  if (isControlled) {
-    return renderModal(!!open);
+  // Controlled mode (includes onboarding): render nothing when closed, render only modal when open
+  if (isControlled || isOnboarding) {
+    return renderModal(isControlled ? !!open : formIsVisible);
   }
 
   // Button mode: simple button that opens a modal

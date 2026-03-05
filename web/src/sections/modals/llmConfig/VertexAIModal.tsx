@@ -13,11 +13,14 @@ import {
   buildDefaultValidationSchema,
   buildAvailableModelConfigurations,
   submitLLMProvider,
+  submitOnboardingProvider,
+  buildOnboardingInitialValues,
   BaseLLMFormValues,
   LLM_FORM_CLASS_NAME,
 } from "./formUtils";
 import { AdvancedOptions } from "./components/AdvancedOptions";
 import { DisplayModels } from "./components/DisplayModels";
+import { SingleDefaultModelField } from "./components/SingleDefaultModelField";
 import Separator from "@/refresh-components/Separator";
 
 export const VERTEXAI_PROVIDER_NAME = "vertex_ai";
@@ -33,11 +36,17 @@ interface VertexAIModalValues extends BaseLLMFormValues {
 }
 
 export function VertexAIModal({
+  variant = "llm-configuration",
   existingLlmProvider,
   shouldMarkAsDefault,
   open,
   onOpenChange,
+  onboardingState,
+  onboardingActions,
+  llmDescriptor,
 }: LLMProviderFormProps) {
+  const isOnboarding = variant === "onboarding";
+
   return (
     <ProviderFormEntrypointWrapper
       providerName={VERTEXAI_DISPLAY_NAME}
@@ -45,6 +54,9 @@ export function VertexAIModal({
       existingLlmProvider={existingLlmProvider}
       open={open}
       onOpenChange={onOpenChange}
+      variant={variant}
+      onboardingState={onboardingState}
+      onboardingActions={onboardingActions}
     >
       {({
         onClose,
@@ -54,39 +66,64 @@ export function VertexAIModal({
         testError,
         setTestError,
         wellKnownLLMProvider,
+        onboardingState: ctxOnboardingState,
+        onboardingActions: ctxOnboardingActions,
       }: ProviderFormContext) => {
         const modelConfigurations = buildAvailableModelConfigurations(
           existingLlmProvider,
-          wellKnownLLMProvider
+          wellKnownLLMProvider ?? llmDescriptor
         );
-        const initialValues: VertexAIModalValues = {
-          ...buildDefaultInitialValues(
-            existingLlmProvider,
-            modelConfigurations
-          ),
-          default_model_name:
-            wellKnownLLMProvider?.recommended_default_model?.name ??
-            VERTEXAI_DEFAULT_MODEL,
-          // Default to auto mode for new Vertex AI providers
-          is_auto_mode: existingLlmProvider?.is_auto_mode ?? true,
-          custom_config: {
-            vertex_credentials:
-              (existingLlmProvider?.custom_config
-                ?.vertex_credentials as string) ?? "",
-            vertex_location:
-              (existingLlmProvider?.custom_config?.vertex_location as string) ??
-              VERTEXAI_DEFAULT_LOCATION,
-          },
-        };
 
-        const validationSchema = buildDefaultValidationSchema().shape({
-          custom_config: Yup.object({
-            vertex_credentials: Yup.string().required(
-              "Credentials file is required"
-            ),
-            vertex_location: Yup.string(),
-          }),
-        });
+        const initialValues: VertexAIModalValues = isOnboarding
+          ? ({
+              ...buildOnboardingInitialValues(),
+              name: VERTEXAI_PROVIDER_NAME,
+              provider: VERTEXAI_PROVIDER_NAME,
+              default_model_name: VERTEXAI_DEFAULT_MODEL,
+              custom_config: {
+                vertex_credentials: "",
+                vertex_location: VERTEXAI_DEFAULT_LOCATION,
+              },
+            } as VertexAIModalValues)
+          : {
+              ...buildDefaultInitialValues(
+                existingLlmProvider,
+                modelConfigurations
+              ),
+              default_model_name:
+                wellKnownLLMProvider?.recommended_default_model?.name ??
+                VERTEXAI_DEFAULT_MODEL,
+              is_auto_mode: existingLlmProvider?.is_auto_mode ?? true,
+              custom_config: {
+                vertex_credentials:
+                  (existingLlmProvider?.custom_config
+                    ?.vertex_credentials as string) ?? "",
+                vertex_location:
+                  (existingLlmProvider?.custom_config
+                    ?.vertex_location as string) ?? VERTEXAI_DEFAULT_LOCATION,
+              },
+            };
+
+        const validationSchema = isOnboarding
+          ? Yup.object().shape({
+              default_model_name: Yup.string().required(
+                "Model name is required"
+              ),
+              custom_config: Yup.object({
+                vertex_credentials: Yup.string().required(
+                  "Credentials file is required"
+                ),
+                vertex_location: Yup.string(),
+              }),
+            })
+          : buildDefaultValidationSchema().shape({
+              custom_config: Yup.object({
+                vertex_credentials: Yup.string().required(
+                  "Credentials file is required"
+                ),
+                vertex_location: Yup.string(),
+              }),
+            });
 
         return (
           <Formik
@@ -94,7 +131,6 @@ export function VertexAIModal({
             validationSchema={validationSchema}
             validateOnMount={true}
             onSubmit={async (values, { setSubmitting }) => {
-              // Filter out empty custom_config values except for required ones
               const filteredCustomConfig = Object.fromEntries(
                 Object.entries(values.custom_config || {}).filter(
                   ([key, v]) => key === "vertex_credentials" || v !== ""
@@ -109,25 +145,50 @@ export function VertexAIModal({
                     : undefined,
               };
 
-              await submitLLMProvider({
-                providerName: VERTEXAI_PROVIDER_NAME,
-                values: submitValues,
-                initialValues,
-                modelConfigurations,
-                existingLlmProvider,
-                shouldMarkAsDefault,
-                setIsTesting,
-                setTestError,
-                mutate,
-                onClose,
-                setSubmitting,
-              });
+              if (isOnboarding && ctxOnboardingState && ctxOnboardingActions) {
+                const modelConfigsToUse =
+                  (wellKnownLLMProvider ?? llmDescriptor)?.known_models ?? [];
+
+                await submitOnboardingProvider({
+                  providerName: VERTEXAI_PROVIDER_NAME,
+                  payload: {
+                    ...submitValues,
+                    model_configurations: modelConfigsToUse,
+                    is_auto_mode:
+                      values.default_model_name === VERTEXAI_DEFAULT_MODEL,
+                  },
+                  onboardingState: ctxOnboardingState,
+                  onboardingActions: ctxOnboardingActions,
+                  isCustomProvider: false,
+                  onClose,
+                  setIsSubmitting: setSubmitting,
+                  setApiStatus: () => {},
+                  setShowApiMessage: () => {},
+                  setErrorMessage: (msg) => setTestError(msg),
+                });
+              } else {
+                await submitLLMProvider({
+                  providerName: VERTEXAI_PROVIDER_NAME,
+                  values: submitValues,
+                  initialValues,
+                  modelConfigurations,
+                  existingLlmProvider,
+                  shouldMarkAsDefault,
+                  setIsTesting,
+                  setTestError,
+                  mutate,
+                  onClose,
+                  setSubmitting,
+                });
+              }
             }}
           >
             {(formikProps) => {
               return (
                 <Form className={LLM_FORM_CLASS_NAME}>
-                  <DisplayNameField disabled={!!existingLlmProvider} />
+                  {!isOnboarding && (
+                    <DisplayNameField disabled={!!existingLlmProvider} />
+                  )}
 
                   <FileUploadFormField
                     name="custom_config.vertex_credentials"
@@ -145,21 +206,29 @@ export function VertexAIModal({
 
                   <Separator />
 
-                  <DisplayModels
-                    modelConfigurations={modelConfigurations}
-                    formikProps={formikProps}
-                    recommendedDefaultModel={
-                      wellKnownLLMProvider?.recommended_default_model ?? null
-                    }
-                    shouldShowAutoUpdateToggle={true}
-                  />
+                  {isOnboarding ? (
+                    <SingleDefaultModelField placeholder="E.g. gemini-2.5-pro" />
+                  ) : (
+                    <DisplayModels
+                      modelConfigurations={modelConfigurations}
+                      formikProps={formikProps}
+                      recommendedDefaultModel={
+                        wellKnownLLMProvider?.recommended_default_model ?? null
+                      }
+                      shouldShowAutoUpdateToggle={true}
+                    />
+                  )}
 
-                  <AdvancedOptions formikProps={formikProps} />
+                  {!isOnboarding && (
+                    <AdvancedOptions formikProps={formikProps} />
+                  )}
 
                   <FormActionButtons
                     isTesting={isTesting}
                     testError={testError}
-                    existingLlmProvider={existingLlmProvider}
+                    existingLlmProvider={
+                      isOnboarding ? undefined : existingLlmProvider
+                    }
                     mutate={mutate}
                     onClose={onClose}
                     isFormValid={formikProps.isValid}
