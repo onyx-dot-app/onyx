@@ -10,6 +10,9 @@ from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import ToolCallArgumentDelta
 from onyx.tools.interface import Tool
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 
 @functools.cache
@@ -20,8 +23,8 @@ def _get_tool_name_to_class() -> dict[str, Type[Tool]]:
     result: dict[str, Type[Tool]] = {}
     for cls in BUILT_IN_TOOL_MAP.values():
         name_attr = cls.__dict__.get("name")
-        if isinstance(name_attr, property):
-            tool_name = name_attr.fget(cls)  # type: ignore[arg-type]
+        if isinstance(name_attr, property) and name_attr.fget is not None:
+            tool_name = name_attr.fget(cls)
         elif isinstance(name_attr, str):
             tool_name = name_attr
         else:
@@ -82,6 +85,9 @@ def _decode_partial_json_string(raw: str) -> str:
             return json.loads('"' + candidate + '"')
         except (json.JSONDecodeError, ValueError):
             continue
+    logger.warning(
+        "Failed to decode partial JSON string value; dropping %d chars", len(raw)
+    )
     return ""
 
 
@@ -126,8 +132,13 @@ def _extract_delta_args(pre: str, delta: str) -> dict[str, str]:
 
         # Value
         pos = _skip(full, pos, " \t\n\r")
-        if pos >= len(full) or full[pos] != '"':
+        if pos >= len(full):
             break
+        if full[pos] != '"':
+            # Non-string value (number, boolean, null): skip to next entry
+            while pos < len(full) and full[pos] not in (",", "}"):
+                pos += 1
+            continue
         val = _parse_json_string(full, pos)
 
         # Only include the portion of this value that overlaps with delta

@@ -569,3 +569,22 @@ class TestMaybeEmitArgumentDeltaEdgeCases:
             }
         }
         assert _collect(tc_map, _make_tool_call_delta(arguments="0")) == []
+
+    @patch("onyx.chat.tool_call_args_streaming._get_tool_class")
+    def test_string_arg_after_non_string_still_streamed(
+        self, mock_get_tool: MagicMock
+    ) -> None:
+        """A string argument following a non-string value is still emitted."""
+        mock_get_tool.return_value = _mock_tool_class()
+
+        tc_map: dict[int, dict[str, Any]] = {
+            0: {
+                "id": "tc_1",
+                "name": "python",
+                "arguments": '{"timeout": 30, "code": "hello',
+            }
+        }
+        packets = _collect(tc_map, _make_tool_call_delta(arguments="hello"))
+
+        assert len(packets) == 1
+        assert packets[0].obj.argument_deltas == {"code": "hello"}
