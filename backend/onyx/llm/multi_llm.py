@@ -92,6 +92,73 @@ def _prompt_to_dicts(prompt: LanguageModelInput) -> list[dict[str, Any]]:
     return [prompt.model_dump(exclude_none=True)]
 
 
+def _strip_tool_content_from_messages(
+    messages: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Convert tool-related messages to plain text.
+
+    Bedrock's Converse API requires toolConfig when messages contain
+    toolUse/toolResult content blocks. When no tools are provided for the
+    current request, we must convert any tool-related history into plain text
+    to avoid the "toolConfig field must be defined" error.
+
+    This is the same approach used by _OllamaHistoryMessageFormatter.
+    """
+    result: list[dict[str, Any]] = []
+    for msg in messages:
+        role = msg.get("role")
+        tool_calls = msg.get("tool_calls")
+
+        if role == "assistant" and tool_calls:
+            # Convert structured tool calls to text representation
+            tool_call_lines = []
+            for tc in tool_calls:
+                func = tc.get("function", {})
+                name = func.get("name", "unknown")
+                args = func.get("arguments", "{}")
+                tc_id = tc.get("id", "")
+                tool_call_lines.append(
+                    f"[Tool Call] name={name} id={tc_id} args={args}"
+                )
+
+            existing_content = msg.get("content") or ""
+            parts = (
+                [existing_content] + tool_call_lines
+                if existing_content
+                else tool_call_lines
+            )
+            new_msg = {
+                "role": "assistant",
+                "content": "\n".join(parts),
+            }
+            result.append(new_msg)
+
+        elif role == "tool":
+            # Convert tool response to user message with text content
+            tool_call_id = msg.get("tool_call_id", "")
+            content = msg.get("content", "")
+            new_msg = {
+                "role": "user",
+                "content": f"[Tool Result] id={tool_call_id}\n{content}",
+            }
+            result.append(new_msg)
+
+        else:
+            result.append(msg)
+
+    return result
+
+
+def _messages_contain_tool_content(messages: list[dict[str, Any]]) -> bool:
+    """Check if any messages contain tool-related content blocks."""
+    for msg in messages:
+        if msg.get("role") == "tool":
+            return True
+        if msg.get("role") == "assistant" and msg.get("tool_calls"):
+            return True
+    return False
+
+
 def _is_vertex_model_rejecting_output_config(model_name: str) -> bool:
     normalized_model_name = model_name.lower()
     return any(
@@ -404,13 +471,30 @@ class LitellmLLM(LLM):
                 else nullcontext()
             )
             with env_ctx:
+                messages = _prompt_to_dicts(prompt)
+
+                # Bedrock's Converse API requires toolConfig when messages
+                # contain toolUse/toolResult content blocks. When no tools are
+                # provided for this request but the history contains tool
+                # content from previous turns, strip it to plain text.
+                is_bedrock = self._model_provider in {
+                    LlmProviderNames.BEDROCK,
+                    LlmProviderNames.BEDROCK_CONVERSE,
+                }
+                if (
+                    is_bedrock
+                    and not tools
+                    and _messages_contain_tool_content(messages)
+                ):
+                    messages = _strip_tool_content_from_messages(messages)
+
                 response = litellm.completion(
                     mock_response=get_llm_mock_response() or MOCK_LLM_RESPONSE,
                     model=model,
                     base_url=self._api_base or None,
                     api_version=self._api_version or None,
                     custom_llm_provider=self._custom_llm_provider or None,
-                    messages=_prompt_to_dicts(prompt),
+                    messages=messages,
                     tools=tools,
                     tool_choice=tool_choice,
                     stream=stream,
