@@ -131,7 +131,11 @@ const collections = (
             ? [
                 {
                   name: "Permissions",
-                  items: [sidebarItem(ADMIN_PATHS.SCIM)],
+                  items: [
+                    // TODO: Uncomment once Users v2 page is complete
+                    // sidebarItem(ADMIN_PATHS.USERS_V2),
+                    sidebarItem(ADMIN_PATHS.SCIM),
+                  ],
                 },
               ]
             : []),
