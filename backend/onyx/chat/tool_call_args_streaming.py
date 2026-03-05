@@ -174,7 +174,8 @@ def _extract_delta_args(pre: str, delta: str) -> dict[str, str]:
             val_start = pos
             pos = _skip_json_value(full, pos)
             # Only emit once the value is complete (delimiter found)
-            if pos < len(full):
+            # and the delimiter falls within the delta region
+            if pos < len(full) and pos >= delta_start:
                 raw_val = full[val_start:pos].strip()
                 if raw_val:
                     result[key.value] = raw_val
