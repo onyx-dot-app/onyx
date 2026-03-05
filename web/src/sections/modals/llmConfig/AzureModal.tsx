@@ -1,3 +1,5 @@
+"use client";
+
 import { useState } from "react";
 import { useSWRConfig } from "swr";
 import { Formik } from "formik";
@@ -6,7 +8,6 @@ import * as InputLayouts from "@/layouts/input-layouts";
 import { LLMProviderFormProps, LLMProviderView } from "@/interfaces/llm";
 import * as Yup from "yup";
 import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
-import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import { LLMConfigurationModalWrapper } from "./LLMConfigurationModalWrapper";
 import {
   buildDefaultInitialValues,
@@ -19,6 +20,7 @@ import {
 } from "./formUtils";
 import {
   AdvancedOptions,
+  APIKeyField,
   DisplayNameField,
   SingleDefaultModelField,
 } from "./shared";
@@ -186,7 +188,7 @@ export function AzureModal({
             <DisplayNameField disabled={!!existingLlmProvider} />
           )}
 
-          <PasswordInputTypeInField name="api_key" label="API Key" />
+          <APIKeyField providerName="Azure" />
 
           <InputLayouts.Vertical
             name="target_uri"

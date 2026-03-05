@@ -1,10 +1,11 @@
+"use client";
+
 import { useState } from "react";
 import { useSWRConfig } from "swr";
 import Separator from "@/refresh-components/Separator";
 import { ArrayHelpers, Field, FieldArray, Formik, ErrorMessage } from "formik";
 import { LLMProviderFormProps } from "@/interfaces/llm";
 import * as Yup from "yup";
-import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import { LLMConfigurationModalWrapper } from "./LLMConfigurationModalWrapper";
 import {
   submitLLMProvider,
@@ -13,7 +14,7 @@ import {
   buildDefaultValidationSchema,
   buildOnboardingInitialValues,
 } from "./formUtils";
-import { AdvancedOptions, DisplayNameField } from "./shared";
+import { AdvancedOptions, APIKeyField, DisplayNameField } from "./shared";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import * as InputLayouts from "@/layouts/input-layouts";
 import { ModelConfigurationField } from "@/app/admin/configuration/llm/ModelConfigurationField";
@@ -222,7 +223,7 @@ export function CustomModal({
             required.
           </Text>
 
-          <PasswordInputTypeInField name="api_key" label="[Optional] API Key" />
+          <APIKeyField optional />
 
           <InputLayouts.Vertical name="api_base" title="API Base" optional>
             <InputTypeInField name="api_base" placeholder="API Base URL" />

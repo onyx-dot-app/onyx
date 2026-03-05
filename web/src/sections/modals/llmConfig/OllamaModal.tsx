@@ -1,3 +1,5 @@
+"use client";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSWRConfig } from "swr";
 import { Formik, FormikProps } from "formik";
@@ -131,11 +133,17 @@ function OllamaModalContent({
         <InputTypeInField name="api_base" placeholder={DEFAULT_API_BASE} />
       </InputLayouts.Vertical>
 
-      <PasswordInputTypeInField
+      <InputLayouts.Vertical
         name="custom_config.OLLAMA_API_KEY"
-        label="API Key (Optional)"
-        subtext="Optional API key for Ollama Cloud (https://ollama.com). Leave blank for local instances."
-      />
+        title="API Key"
+        description="Optional API key for Ollama Cloud (https://ollama.com). Leave blank for local instances."
+        optional
+      >
+        <PasswordInputTypeInField
+          name="custom_config.OLLAMA_API_KEY"
+          placeholder="API Key"
+        />
+      </InputLayouts.Vertical>
 
       {isOnboarding ? (
         <SingleDefaultModelField placeholder="E.g. llama3.1" />

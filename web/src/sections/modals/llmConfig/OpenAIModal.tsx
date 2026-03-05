@@ -1,10 +1,12 @@
+"use client";
+
 import { useState } from "react";
 import { useSWRConfig } from "swr";
 import { Formik } from "formik";
 import { LLMProviderFormProps } from "@/interfaces/llm";
+import Spacer from "@/refresh-components/Spacer";
 import * as Yup from "yup";
 import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
-import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import { LLMConfigurationModalWrapper } from "./LLMConfigurationModalWrapper";
 import {
   buildDefaultInitialValues,
@@ -16,10 +18,12 @@ import {
 } from "./formUtils";
 import {
   AdvancedOptions,
+  APIKeyField,
   DisplayModels,
   DisplayNameField,
   SingleDefaultModelField,
 } from "./shared";
+import Separator from "@/refresh-components/Separator";
 
 export const OPENAI_PROVIDER_NAME = "openai";
 const DEFAULT_DEFAULT_MODEL_NAME = "gpt-5.2";
@@ -125,11 +129,14 @@ export function OpenAIModal({
           isFormValid={formikProps.isValid}
           isTesting={isTesting}
         >
-          {!isOnboarding && (
-            <DisplayNameField disabled={!!existingLlmProvider} />
-          )}
+          <APIKeyField providerName="OpenAI" />
 
-          <PasswordInputTypeInField name="api_key" label="API Key" />
+          {!isOnboarding && (
+            <>
+              <Separator noPadding />
+              <DisplayNameField disabled={!!existingLlmProvider} />
+            </>
+          )}
 
           {isOnboarding ? (
             <SingleDefaultModelField placeholder="E.g. gpt-5.2" />

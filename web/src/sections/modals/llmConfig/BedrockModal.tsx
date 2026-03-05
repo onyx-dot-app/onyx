@@ -187,21 +187,29 @@ function BedrockModalInternals({
                   placeholder="AKIAIOSFODNN7EXAMPLE"
                 />
               </InputLayouts.Vertical>
-              <PasswordInputTypeInField
+              <InputLayouts.Vertical
                 name={FIELD_AWS_SECRET_ACCESS_KEY}
-                label="AWS Secret Access Key"
-                placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
-              />
+                title="AWS Secret Access Key"
+              >
+                <PasswordInputTypeInField
+                  name={FIELD_AWS_SECRET_ACCESS_KEY}
+                  placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+                />
+              </InputLayouts.Vertical>
             </div>
           </Tabs.Content>
 
           <Tabs.Content value={AUTH_METHOD_LONG_TERM_API_KEY}>
             <div className="flex flex-col gap-4 w-full">
-              <PasswordInputTypeInField
+              <InputLayouts.Vertical
                 name={FIELD_AWS_BEARER_TOKEN_BEDROCK}
-                label="AWS Bedrock Long-term API Key"
-                placeholder="Your long-term API key"
-              />
+                title="AWS Bedrock Long-term API Key"
+              >
+                <PasswordInputTypeInField
+                  name={FIELD_AWS_BEARER_TOKEN_BEDROCK}
+                  placeholder="Your long-term API key"
+                />
+              </InputLayouts.Vertical>
             </div>
           </Tabs.Content>
         </Tabs>

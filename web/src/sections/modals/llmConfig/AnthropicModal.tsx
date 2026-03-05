@@ -1,10 +1,12 @@
+"use client";
+
 import { useState } from "react";
 import { useSWRConfig } from "swr";
 import { Formik } from "formik";
 import { LLMProviderFormProps } from "@/interfaces/llm";
+import Spacer from "@/refresh-components/Spacer";
 import * as Yup from "yup";
 import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
-import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import { LLMConfigurationModalWrapper } from "./LLMConfigurationModalWrapper";
 import {
   buildDefaultInitialValues,
@@ -16,6 +18,7 @@ import {
 } from "./formUtils";
 import {
   AdvancedOptions,
+  APIKeyField,
   DisplayModels,
   DisplayNameField,
   SingleDefaultModelField,
@@ -127,11 +130,14 @@ export function AnthropicModal({
           isFormValid={formikProps.isValid}
           isTesting={isTesting}
         >
-          {!isOnboarding && (
-            <DisplayNameField disabled={!!existingLlmProvider} />
-          )}
+          <APIKeyField providerName="Anthropic" />
 
-          <PasswordInputTypeInField name="api_key" label="API Key" />
+          {!isOnboarding && (
+            <>
+              <Spacer />
+              <DisplayNameField disabled={!!existingLlmProvider} />
+            </>
+          )}
 
           {isOnboarding ? (
             <SingleDefaultModelField placeholder="E.g. claude-sonnet-4-5" />

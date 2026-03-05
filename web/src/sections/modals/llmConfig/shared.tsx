@@ -5,7 +5,6 @@ import { FormikProps } from "formik";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import { IsPublicGroupSelector } from "@/components/IsPublicGroupSelector";
 import { AgentsMultiSelect } from "@/components/AgentsMultiSelect";
-import { FieldLabel } from "@/components/Field";
 import { useAgents } from "@/hooks/useAgents";
 import { ModelConfiguration, SimpleKnownModel } from "@/interfaces/llm";
 import { Section } from "@/layouts/general-layouts";
@@ -14,6 +13,7 @@ import { cn } from "@/lib/utils";
 import Button from "@/refresh-components/buttons/Button";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
+import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import Switch from "@/refresh-components/inputs/Switch";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import Text from "@/refresh-components/texts/Text";
@@ -31,7 +31,7 @@ export function DisplayNameField({ disabled = false }: DisplayNameFieldProps) {
     <InputLayouts.Vertical
       name="name"
       title="Display Name"
-      subDescription="Used to identify this provider in the app"
+      subDescription="Used to identify this provider in the app."
       optional
     >
       <InputTypeInField
@@ -39,6 +39,33 @@ export function DisplayNameField({ disabled = false }: DisplayNameFieldProps) {
         placeholder="Display Name"
         variant={disabled ? "disabled" : undefined}
       />
+    </InputLayouts.Vertical>
+  );
+}
+
+// ─── APIKeyField ─────────────────────────────────────────────────────────────
+
+interface APIKeyFieldProps {
+  optional?: boolean;
+  providerName?: string;
+}
+
+export function APIKeyField({
+  optional = false,
+  providerName,
+}: APIKeyFieldProps) {
+  return (
+    <InputLayouts.Vertical
+      name="api_key"
+      title="API Key"
+      subDescription={
+        providerName
+          ? `Paste your API key from ${providerName} to access your models.`
+          : "Paste your API key to access your models."
+      }
+      optional={optional}
+    >
+      <PasswordInputTypeInField name="api_key" />
     </InputLayouts.Vertical>
   );
 }
@@ -212,14 +239,13 @@ function AutoModeToggle({ isAutoMode, onToggle }: AutoModeToggleProps) {
 function DisplayModelHeader({ alternativeText }: { alternativeText?: string }) {
   return (
     <div>
-      <FieldLabel
-        label="Available Models"
-        subtext={
-          alternativeText ??
-          "Select which models to make available for this provider."
-        }
-        name="_available-models"
-      />
+      <Text as="p" mainUiAction>
+        Available Models
+      </Text>
+      <Text as="p" secondaryBody text03>
+        {alternativeText ??
+          "Select which models to make available for this provider."}
+      </Text>
     </div>
   );
 }

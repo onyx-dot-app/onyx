@@ -1,3 +1,5 @@
+"use client";
+
 import { useState } from "react";
 import { useSWRConfig } from "swr";
 import Separator from "@/refresh-components/Separator";
@@ -11,7 +13,6 @@ import {
 } from "@/interfaces/llm";
 import * as Yup from "yup";
 import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
-import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import { LLMConfigurationModalWrapper } from "./LLMConfigurationModalWrapper";
 import {
   buildDefaultInitialValues,
@@ -24,6 +25,7 @@ import {
 } from "./formUtils";
 import {
   AdvancedOptions,
+  APIKeyField,
   DisplayModels,
   DisplayNameField,
   FetchModelsButton,
@@ -210,7 +212,7 @@ export function OpenRouterModal({
               <DisplayNameField disabled={!!existingLlmProvider} />
             )}
 
-            <PasswordInputTypeInField name="api_key" label="API Key" />
+            <APIKeyField providerName="OpenRouter" />
 
             <InputLayouts.Vertical
               name="api_base"
