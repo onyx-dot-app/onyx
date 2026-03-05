@@ -1,6 +1,6 @@
 {
   "version": "1.1",
-  "updated_at": "2026-02-05T00:00:00Z",
+  "updated_at": "2026-03-05T00:00:00Z",
   "providers": {
     "openai": {
       "default_model": { "name": "gpt-5.4" },
