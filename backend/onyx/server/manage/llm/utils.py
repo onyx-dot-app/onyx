@@ -12,6 +12,7 @@ from typing import TypedDict
 
 from onyx.llm.constants import BEDROCK_MODEL_NAME_MAPPINGS
 from onyx.llm.constants import LlmProviderNames
+from onyx.llm.constants import MODEL_PREFIX_TO_VENDOR
 from onyx.llm.constants import OLLAMA_MODEL_NAME_MAPPINGS
 from onyx.llm.constants import OLLAMA_MODEL_TO_VENDOR
 from onyx.llm.constants import PROVIDER_DISPLAY_NAMES
@@ -352,7 +353,6 @@ def extract_vendor_from_model_name(model_name: str, provider: str) -> str | None
     elif provider == LlmProviderNames.LM_STUDIO:
         # LM Studio model IDs can be paths like "publisher/model-name"
         # or simple names. Use MODEL_PREFIX_TO_VENDOR for matching.
-        from onyx.llm.constants import MODEL_PREFIX_TO_VENDOR
 
         model_lower = model_name.lower()
         # Check for slash-separated vendor prefix first

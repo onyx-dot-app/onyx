@@ -43,6 +43,8 @@ interface LMStudioFormContentProps {
   existingLlmProvider?: LLMProviderView;
   fetchedModels: ModelConfiguration[];
   setFetchedModels: (models: ModelConfiguration[]) => void;
+  hasFetched: boolean;
+  setHasFetched: (value: boolean) => void;
   isTesting: boolean;
   testError: string;
   mutate: () => void;
@@ -55,6 +57,8 @@ function LMStudioFormContent({
   existingLlmProvider,
   fetchedModels,
   setFetchedModels,
+  hasFetched,
+  setHasFetched,
   isTesting,
   testError,
   mutate,
@@ -63,6 +67,9 @@ function LMStudioFormContent({
 }: LMStudioFormContentProps) {
   const [isLoadingModels, setIsLoadingModels] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
+
+  const initialApiKey =
+    (existingLlmProvider?.custom_config?.LM_STUDIO_API_KEY as string) ?? "";
 
   const doFetchModels = useCallback(
     (apiBase: string, apiKey: string | undefined, signal: AbortSignal) => {
@@ -73,6 +80,7 @@ function LMStudioFormContent({
         {
           api_base: apiBase,
           custom_config: apiKey ? { LM_STUDIO_API_KEY: apiKey } : {},
+          api_key_changed: apiKey !== initialApiKey,
           name: existingLlmProvider?.name,
         },
         signal
@@ -84,6 +92,7 @@ function LMStudioFormContent({
             setFetchedModels([]);
             return;
           }
+          setHasFetched(true);
           setFetchedModels(data.models);
         })
         .finally(() => {
@@ -92,7 +101,7 @@ function LMStudioFormContent({
           }
         });
     },
-    [existingLlmProvider?.name, setFetchedModels]
+    [existingLlmProvider?.name, initialApiKey, setFetchedModels]
   );
 
   const debouncedFetchModels = useMemo(
@@ -118,10 +127,9 @@ function LMStudioFormContent({
     }
   }, [apiBase, apiKey, debouncedFetchModels, setFetchedModels]);
 
-  const currentModels =
-    fetchedModels.length > 0
-      ? fetchedModels
-      : existingLlmProvider?.model_configurations || [];
+  const currentModels = hasFetched
+    ? fetchedModels
+    : existingLlmProvider?.model_configurations || [];
 
   return (
     <Form className={LLM_FORM_CLASS_NAME}>
@@ -139,6 +147,10 @@ function LMStudioFormContent({
         label="API Key (Optional)"
         subtext="Optional API key if your LM Studio server requires authentication."
       />
+
+      {fetchError && currentModels.length > 0 && (
+        <p className="text-sm text-status-error-05">{fetchError}</p>
+      )}
 
       <DisplayModels
         modelConfigurations={currentModels}
@@ -172,6 +184,7 @@ export function LMStudioForm({
   onOpenChange,
 }: LLMProviderFormProps) {
   const [fetchedModels, setFetchedModels] = useState<ModelConfiguration[]>([]);
+  const [hasFetched, setHasFetched] = useState(false);
 
   return (
     <ProviderFormEntrypointWrapper
@@ -235,10 +248,9 @@ export function LMStudioForm({
                 providerName: LM_STUDIO_PROVIDER_NAME,
                 values: submitValues,
                 initialValues,
-                modelConfigurations:
-                  fetchedModels.length > 0
-                    ? fetchedModels
-                    : modelConfigurations,
+                modelConfigurations: hasFetched
+                  ? fetchedModels
+                  : modelConfigurations,
                 existingLlmProvider,
                 shouldMarkAsDefault,
                 setIsTesting,
@@ -255,6 +267,8 @@ export function LMStudioForm({
                 existingLlmProvider={existingLlmProvider}
                 fetchedModels={fetchedModels}
                 setFetchedModels={setFetchedModels}
+                hasFetched={hasFetched}
+                setHasFetched={setHasFetched}
                 isTesting={isTesting}
                 testError={testError}
                 mutate={mutate}

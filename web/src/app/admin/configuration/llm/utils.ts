@@ -347,6 +347,7 @@ export const fetchModels = async (
   formValues: {
     api_base?: string;
     api_key?: string;
+    api_key_changed?: boolean;
     name?: string;
     custom_config?: Record<string, string>;
     model_configurations?: ModelConfiguration[];
@@ -374,7 +375,7 @@ export const fetchModels = async (
       return fetchLMStudioModels({
         api_base: formValues.api_base,
         api_key: formValues.custom_config?.LM_STUDIO_API_KEY,
-        api_key_changed: !!formValues.custom_config?.LM_STUDIO_API_KEY,
+        api_key_changed: formValues.api_key_changed ?? false,
         provider_name: formValues.name,
         signal,
       });
