@@ -466,8 +466,8 @@ func isPRNumber(arg string) bool {
 	if len(arg) == 0 || len(arg) >= 6 {
 		return false
 	}
-	_, err := strconv.Atoi(arg)
-	return err == nil
+	n, err := strconv.Atoi(arg)
+	return err == nil && n > 0
 }
 
 // resolveArgs resolves arguments that may be PR numbers into commit SHAs.
