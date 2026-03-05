@@ -190,6 +190,17 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
         "Drag-and-drop reordering is not supported with server-side pagination."
     );
   }
+  if (
+    process.env.NODE_ENV !== "production" &&
+    serverSide &&
+    footer?.mode === "selection" &&
+    footer?.showView
+  ) {
+    console.warn(
+      "DataTable: `showView` is ignored when `serverSide` is enabled. " +
+        "View mode requires client-side filtering."
+    );
+  }
   const effectiveDraggable = serverSide ? undefined : draggable;
   const draggableReturn = useDraggableRows({
     data,

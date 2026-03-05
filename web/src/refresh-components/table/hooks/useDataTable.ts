@@ -380,7 +380,13 @@ export default function useDataTable<TData extends RowData>(
   const isPaginated = isFinite(pagination.pageSize);
 
   // ---- selection change callback ------------------------------------------
+  const isFirstRenderRef = useRef(true);
+
   useEffect(() => {
+    if (isFirstRenderRef.current) {
+      isFirstRenderRef.current = false;
+      return;
+    }
     onSelectionChange?.(selectedRowIds);
   }, [selectedRowIds, onSelectionChange]);
 
@@ -402,6 +408,7 @@ export default function useDataTable<TData extends RowData>(
   const isViewingSelected = globalFilter.selectedIds != null;
 
   const enterViewMode = () => {
+    if (isServerSide) return;
     if (selectedRowIds.length > 0) {
       setGlobalFilter((prev) => ({
         ...prev,
@@ -412,6 +419,7 @@ export default function useDataTable<TData extends RowData>(
   };
 
   const exitViewMode = () => {
+    if (isServerSide) return;
     setGlobalFilter((prev) => ({ ...prev, selectedIds: null }));
     setPagination((prev) => ({ ...prev, pageIndex: 0 }));
   };

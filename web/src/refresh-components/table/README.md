@@ -229,9 +229,9 @@ The callbacks fire in a predictable order:
 
 - **Sort change** — `onSortingChange` fires first, then the page resets to 0 and `onPaginationChange(0, pageSize)` fires.
 - **Page navigation** — only `onPaginationChange` fires.
-- **Search change** — `onSearchTermChange` fires first, then the page resets to 0 and `onPaginationChange(0, pageSize)` fires.
+- **Search change** — `onSearchTermChange` fires, and the page resets to 0. `onPaginationChange` only fires if the page was actually on a non-zero page. When already on page 0, `searchTerm` drives the re-fetch independently (e.g. via your SWR key) — no `onPaginationChange` is needed.
 
-This means your data-fetching layer can key off `onPaginationChange` as the single trigger to re-fetch, since it always fires last.
+Your data-fetching layer should include `searchTerm` in its fetch dependencies (e.g. SWR key) so that search changes trigger re-fetches regardless of pagination state.
 
 ### Full example
 
