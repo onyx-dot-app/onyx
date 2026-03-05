@@ -245,6 +245,10 @@ export default function useDataTable<TData extends RowData>(
     }
 
     setGlobalFilter((prev) => ({ ...prev, searchTerm: term }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Intentionally
+    // omits `globalFilter` and `pagination.pageIndex`: we only read snapshot
+    // values to detect the search enter/clear transition, not to react to
+    // every filter or page change.
   }, [searchTerm, isServerSide]);
 
   // ---- server-side: 3 separate callbacks -----------------------------------
@@ -365,15 +369,14 @@ export default function useDataTable<TData extends RowData>(
   const selectedCount = selectedRowIds.length;
   const totalPages = Math.max(1, table.getPageCount());
   const currentPage = pagination.pageIndex + 1;
+  const hasActiveFilter =
+    !isServerSide &&
+    (globalFilter.selectedIds != null || !!globalFilter.searchTerm);
   const totalItems = isServerSide
     ? serverSide!.totalItems
-    : (() => {
-        const hasActiveFilter =
-          globalFilter.selectedIds != null || !!globalFilter.searchTerm;
-        return hasActiveFilter
-          ? table.getPrePaginationRowModel().rows.length
-          : data.length;
-      })();
+    : hasActiveFilter
+      ? table.getPrePaginationRowModel().rows.length
+      : data.length;
   const isPaginated = isFinite(pagination.pageSize);
 
   // ---- selection change callback ------------------------------------------

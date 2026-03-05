@@ -164,7 +164,7 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
     pageSize: effectivePageSize,
     initialSorting,
     initialColumnVisibility,
-    getRowId: (row: TData) => getRowId(row),
+    getRowId,
     onSelectionChange,
     searchTerm,
     serverSide: serverSide
@@ -184,6 +184,12 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
   });
 
   // 4. Call useDraggableRows (conditional — disabled in server-side mode)
+  if (process.env.NODE_ENV !== "production" && serverSide && draggable) {
+    console.warn(
+      "DataTable: `draggable` is ignored when `serverSide` is enabled. " +
+        "Drag-and-drop reordering is not supported with server-side pagination."
+    );
+  }
   const effectiveDraggable = serverSide ? undefined : draggable;
   const draggableReturn = useDraggableRows({
     data,
@@ -204,8 +210,63 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
 
   const isServerLoading = !!serverSide?.isLoading;
 
-  function renderContent() {
+  function renderFooter(footerConfig: DataTableFooterConfig) {
+    if (footerConfig.mode === "selection") {
+      return (
+        <Footer
+          mode="selection"
+          multiSelect={footerConfig.multiSelect !== false}
+          selectionState={selectionState}
+          selectedCount={selectedCount}
+          onClear={
+            footerConfig.onClear ??
+            (() => {
+              if (isViewingSelected) exitViewMode();
+              clearSelection();
+            })
+          }
+          onView={
+            footerConfig.showView
+              ? isViewingSelected
+                ? exitViewMode
+                : enterViewMode
+              : undefined
+          }
+          pageSize={resolvedPageSize}
+          totalItems={totalItems}
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={setPage}
+        />
+      );
+    }
+
+    // Summary mode
+    const rangeStart =
+      totalItems === 0
+        ? 0
+        : !isFinite(resolvedPageSize)
+          ? 1
+          : (currentPage - 1) * resolvedPageSize + 1;
+    const rangeEnd = !isFinite(resolvedPageSize)
+      ? totalItems
+      : Math.min(currentPage * resolvedPageSize, totalItems);
+
     return (
+      <Footer
+        mode="summary"
+        rangeStart={rangeStart}
+        rangeEnd={rangeEnd}
+        totalItems={totalItems}
+        currentPage={currentPage}
+        totalPages={totalPages}
+        onPageChange={setPage}
+      />
+    );
+  }
+
+  return (
+    <TableSizeProvider size={size}>
       <div>
         <div
           className={cn(
@@ -444,63 +505,6 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
 
         {footer && renderFooter(footer)}
       </div>
-    );
-  }
-
-  function renderFooter(footerConfig: DataTableFooterConfig) {
-    if (footerConfig.mode === "selection") {
-      return (
-        <Footer
-          mode="selection"
-          multiSelect={footerConfig.multiSelect !== false}
-          selectionState={selectionState}
-          selectedCount={selectedCount}
-          onClear={
-            footerConfig.onClear ??
-            (() => {
-              if (isViewingSelected) exitViewMode();
-              clearSelection();
-            })
-          }
-          onView={
-            footerConfig.showView
-              ? isViewingSelected
-                ? exitViewMode
-                : enterViewMode
-              : undefined
-          }
-          pageSize={resolvedPageSize}
-          totalItems={totalItems}
-          currentPage={currentPage}
-          totalPages={totalPages}
-          onPageChange={setPage}
-        />
-      );
-    }
-
-    // Summary mode
-    const rangeStart =
-      totalItems === 0
-        ? 0
-        : !isFinite(resolvedPageSize)
-          ? 1
-          : (currentPage - 1) * resolvedPageSize + 1;
-    const rangeEnd = !isFinite(resolvedPageSize)
-      ? totalItems
-      : Math.min(currentPage * resolvedPageSize, totalItems);
-
-    return (
-      <Footer
-        mode="summary"
-        rangeStart={rangeStart}
-        rangeEnd={rangeEnd}
-        totalItems={totalItems}
-        currentPage={currentPage}
-        totalPages={totalPages}
-        onPageChange={setPage}
-      />
-    );
-  }
-
-  return <TableSizeProvider size={size}>{renderContent()}</TableSizeProvider>;
+    </TableSizeProvider>
+  );
 }
