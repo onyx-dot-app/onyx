@@ -2,9 +2,10 @@ import base64
 from enum import Enum
 from typing import Protocol
 
-from fastapi import HTTPException
 from fastapi import UploadFile
 
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.documents.document_utils import validate_pkcs12_content
 
 
@@ -31,8 +32,9 @@ def process_sharepoint_private_key_file(file: UploadFile) -> str:
     """
     # First check file extension (basic filter)
     if not (file.filename and file.filename.lower().endswith(".pfx")):
-        raise HTTPException(
-            status_code=400, detail="Invalid file type. Only .pfx files are supported."
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Invalid file type. Only .pfx files are supported.",
         )
 
     # Read file content for validation and processing
@@ -40,9 +42,9 @@ def process_sharepoint_private_key_file(file: UploadFile) -> str:
 
     # Validate file content to prevent extension spoofing attacks
     if not validate_pkcs12_content(private_key_bytes):
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid file content. The uploaded file does not appear to be a valid PKCS#12 (.pfx) file.",
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Invalid file content. The uploaded file does not appear to be a valid PKCS#12 (.pfx) file.",
         )
 
     # Convert to base64 if validation passes
