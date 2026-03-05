@@ -32,7 +32,6 @@ export default function useBrowserInfo(): BrowserInfo {
   useEffect(() => {
     const userAgent = window.navigator.userAgent;
 
-    const userAgent = window.navigator.userAgent;
     const isEdge = /Edg/i.test(userAgent);
     const isOpera = /OPR|Opera/i.test(userAgent);
     const isFirefox = /Firefox|FxiOS/i.test(userAgent);
