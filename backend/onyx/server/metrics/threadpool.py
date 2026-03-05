@@ -58,6 +58,9 @@ class InstrumentedThreadPoolExecutor(ThreadPoolExecutor):
         **kwargs: Any,
     ) -> Future[Any]:
         def _wrapped() -> Any:
+            # _wrapped runs inside the thread pool worker, so both the
+            # active gauge and the duration timer reflect *execution* time
+            # only — queue wait time is excluded.
             _TASKS_ACTIVE.inc()
             start = time.monotonic()
             try:

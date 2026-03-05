@@ -350,7 +350,7 @@ Requires `ENABLE_DEEP_PROFILING=true`. Adds ~10-20% allocation overhead.
 
 ```promql
 # Top leaking code locations
-topk(10, onyx_tracemalloc_delta_bytes > 0)
+topk(10, onyx_tracemalloc_delta_bytes)
 
 # GC uncollectable (true leaks)
 rate(onyx_gc_uncollectable_total[5m])
