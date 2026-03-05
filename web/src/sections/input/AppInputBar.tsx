@@ -118,9 +118,11 @@ const AppInputBar = React.memo(
     // Internal message state - kept local to avoid parent re-renders on every keystroke
     const [message, setMessage] = useState(initialMessage);
     const [isRecording, setIsRecording] = useState(false);
+    const [isMuted, setIsMuted] = useState(false);
     const stopRecordingRef = useRef<(() => Promise<string | null>) | null>(
       null
     );
+    const setMutedRef = useRef<((muted: boolean) => void) | null>(null);
     const textAreaRef = useRef<HTMLTextAreaElement>(null);
     const textAreaWrapperRef = useRef<HTMLDivElement>(null);
     const filesWrapperRef = useRef<HTMLDivElement>(null);
@@ -560,18 +562,20 @@ const AppInputBar = React.memo(
               disabled={disabled}
             />
           </div>
-          <MicrophoneButton                                              
-             onTranscription={(text) => setMessage(text)}                 
-             disabled={disabled || chatState === "streaming"}             
-             autoSend={user?.preferences?.voice_auto_send ?? false}       
-             autoListen={user?.preferences?.voice_auto_playback ?? false} 
-             chatState={chatState}                                        
-             onRecordingChange={setIsRecording}                           
-             stopRecordingRef={stopRecordingRef}                          
-             onRecordingStart={() => setMessage("")}                      
-             onAutoSend={(text) => {                                      
-               handleSubmit(text);                                        
-             }}                                                           
+          <MicrophoneButton
+            onTranscription={(text) => setMessage(text)}
+            disabled={disabled || chatState === "streaming"}
+            autoSend={user?.preferences?.voice_auto_send ?? false}
+            autoListen={user?.preferences?.voice_auto_playback ?? false}
+            chatState={chatState}
+            onRecordingChange={setIsRecording}
+            stopRecordingRef={stopRecordingRef}
+            onRecordingStart={() => setMessage("")}
+            onAutoSend={(text) => {
+              handleSubmit(text);
+            }}
+            onMuteChange={setIsMuted}
+            setMutedRef={setMutedRef}
           />
           <Button
             id="onyx-chat-input-send-button"
@@ -649,56 +653,55 @@ const AppInputBar = React.memo(
               onOpenChange={setShowPrompts}
             >
               <Popover.Anchor asChild>
-                <div                                                     
-                    ref={textAreaWrapperRef}                               
-                    className="px-3 py-2 flex-1 flex h-[2.75rem]"          
-                  >                                                        
-                    <textarea                                              
-                      id="onyx-chat-input-textarea"                        
-                      role="textarea"                                      
-                      ref={textAreaRef}                                    
-                      onPaste={handlePaste}                                
-                      onKeyDownCapture={handleKeyDownForPromptShortcuts}   
-                      onChange={handleInputChange}                         
-                      className={cn(                                       
-                        "p-[2px] w-full h-full outline-none bg-transparent 
-  resize-none placeholder:text-text-03 whitespace-pre-wrap break-words",   
-                        "overflow-y-auto"                                  
-                      )}                                                   
-                      autoFocus                                            
-                      rows={1}                                             
-                      style={{ scrollbarWidth: "thin" }}                   
-                      aria-multiline={true}                                
-                      placeholder={                                        
-                        isRecording                                        
-                          ? "Listening..."                                 
-                          : isSearchMode                                   
-                            ? "Search connected sources"                   
-                            : "How can I help you today?"                  
-                      }                                                    
-                      value={message}                                      
-                      onKeyDown={(event) => {                              
-                        if (                                               
-                          event.key === "Enter" &&                         
-                          !showPrompts &&                                  
-                          !event.shiftKey &&                               
-                          !(event.nativeEvent as any).isComposing          
-                        ) {                                                
-                          event.preventDefault();                          
-                          if (                                             
-                            message &&                                     
-                            !disabled &&                                   
-                            !isClassifying &&                              
-                            !hasUploadingFiles                             
-                          ) {                                              
-                            handleSubmit(message);                         
-                          }                                                
-                        }                                                  
-                      }}                                                   
-                      suppressContentEditableWarning={true}                
-                      disabled={disabled}                                  
-                    />                                                     
-                  </div>              
+                <div
+                  ref={textAreaWrapperRef}
+                  className="px-3 py-2 flex-1 flex h-[2.75rem]"
+                >
+                  <textarea
+                    id="onyx-chat-input-textarea"
+                    role="textarea"
+                    ref={textAreaRef}
+                    onPaste={handlePaste}
+                    onKeyDownCapture={handleKeyDownForPromptShortcuts}
+                    onChange={handleInputChange}
+                    className={cn(
+                      "p-[2px] w-full h-full outline-none bg-transparent resize-none placeholder:text-text-03 whitespace-pre-wrap break-words",
+                      "overflow-y-auto"
+                    )}
+                    autoFocus
+                    rows={1}
+                    style={{ scrollbarWidth: "thin" }}
+                    aria-multiline={true}
+                    placeholder={
+                      isRecording
+                        ? "Listening..."
+                        : isSearchMode
+                          ? "Search connected sources"
+                          : "How can I help you today?"
+                    }
+                    value={message}
+                    onKeyDown={(event) => {
+                      if (
+                        event.key === "Enter" &&
+                        !showPrompts &&
+                        !event.shiftKey &&
+                        !(event.nativeEvent as any).isComposing
+                      ) {
+                        event.preventDefault();
+                        if (
+                          message &&
+                          !disabled &&
+                          !isClassifying &&
+                          !hasUploadingFiles
+                        ) {
+                          handleSubmit(message);
+                        }
+                      }
+                    }}
+                    suppressContentEditableWarning={true}
+                    disabled={disabled}
+                  />
+                </div>
               </Popover.Anchor>
 
               <Popover.Content
@@ -765,14 +768,20 @@ const AppInputBar = React.memo(
             )}
           </div>
 
-          {chatControls}                                              
-                                                                           
-           {/* Recording waveform - shown below input when recording */}  
-           {isRecording && (                                              
-             <div className="absolute left-0 right-0 -bottom-12 px-1">    
-               <RecordingWaveform isRecording={isRecording} />            
-             </div>                                                       
-           )}  
+          {chatControls}
+
+          {/* Recording waveform - shown below input when recording */}
+          {isRecording && (
+            <div className="absolute left-0 right-0 -bottom-12 px-1">
+              <RecordingWaveform
+                isRecording={isRecording}
+                isMuted={isMuted}
+                onMuteToggle={() => {
+                  setMutedRef.current?.(!isMuted);
+                }}
+              />
+            </div>
+          )}
         </div>
       </Disabled>
     );

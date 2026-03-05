@@ -315,6 +315,7 @@ class OpenAIStreamingSynthesizer(StreamingSynthesizerProtocol):
         self._text_queue: asyncio.Queue[str | None] = asyncio.Queue()
         self._synthesis_task: asyncio.Task | None = None
         self._closed = False
+        self._flushed = False
 
     async def connect(self) -> None:
         """Initialize HTTP session for TTS requests."""
@@ -390,24 +391,44 @@ class OpenAIStreamingSynthesizer(StreamingSynthesizerProtocol):
             return b""  # No audio yet, but not done
 
     async def flush(self) -> None:
-        """Signal end of text input - wait for queue to drain."""
-        # Wait for text queue to be processed
-        while not self._text_queue.empty():
-            await asyncio.sleep(0.05)
+        """Signal end of text input - wait for synthesis to complete."""
+        if self._flushed:
+            return
+        self._flushed = True
+
+        # Signal end of text input
+        await self._text_queue.put(None)
+
+        # Wait for synthesis task to complete processing all text
+        if self._synthesis_task and not self._synthesis_task.done():
+            try:
+                await asyncio.wait_for(self._synthesis_task, timeout=60.0)
+            except asyncio.TimeoutError:
+                self._logger.warning("OpenAIStreamingSynthesizer: flush timeout")
+            except asyncio.CancelledError:
+                pass
+
+        # Signal end of audio stream
+        await self._audio_queue.put(None)
 
     async def close(self) -> None:
         """Close the session."""
+        if self._closed:
+            return
         self._closed = True
-        # Signal end of text queue
-        await self._text_queue.put(None)
+
+        # Signal end of queues only if flush wasn't already called
+        if not self._flushed:
+            await self._text_queue.put(None)
+            await self._audio_queue.put(None)
+
         if self._synthesis_task and not self._synthesis_task.done():
             self._synthesis_task.cancel()
             try:
                 await self._synthesis_task
             except asyncio.CancelledError:
                 pass
-        # Signal end of audio stream
-        await self._audio_queue.put(None)
+
         if self._session:
             await self._session.close()
 

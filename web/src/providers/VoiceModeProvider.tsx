@@ -114,8 +114,10 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
   const flushTimerRef = useRef<NodeJS.Timeout | null>(null);
   const fastStartTimerRef = useRef<NodeJS.Timeout | null>(null);
   const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const endCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const hasSpokenFirstChunkRef = useRef(false);
   const hasSignaledEndRef = useRef(false);
+  const streamEndedRef = useRef(false);
 
   // Process next chunk from the pending queue
   const processNextChunk = useCallback(() => {
@@ -151,6 +153,8 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    streamEndedRef.current = true;
+
     if (
       mediaSourceRef.current &&
       mediaSourceRef.current.readyState === "open" &&
@@ -164,14 +168,56 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    // Fallback: if audio doesn't finish playing within 30s after stream ends,
+    // Clear any existing end check interval
+    if (endCheckIntervalRef.current) {
+      clearInterval(endCheckIntervalRef.current);
+      endCheckIntervalRef.current = null;
+    }
+
+    // More aggressive end detection: check every 200ms if audio has ended
+    // This handles cases where onended event doesn't fire with MediaSource
+    endCheckIntervalRef.current = setInterval(() => {
+      const audioEl = audioElementRef.current;
+
+      // If audio element is gone or stream was reset, clean up
+      if (!audioEl || !streamEndedRef.current) {
+        if (endCheckIntervalRef.current) {
+          clearInterval(endCheckIntervalRef.current);
+          endCheckIntervalRef.current = null;
+        }
+        return;
+      }
+
+      // Check if audio has ended (either via ended property or by reaching duration)
+      const hasEnded =
+        audioEl.ended ||
+        audioEl.paused ||
+        (audioEl.duration > 0 &&
+          audioEl.currentTime >= audioEl.duration - 0.1) ||
+        audioEl.readyState === 0;
+
+      if (hasEnded && isPlayingRef.current) {
+        isPlayingRef.current = false;
+        setIsTTSPlaying(false);
+        if (endCheckIntervalRef.current) {
+          clearInterval(endCheckIntervalRef.current);
+          endCheckIntervalRef.current = null;
+        }
+      }
+    }, 200);
+
+    // Fallback: if audio doesn't finish playing within 10s after stream ends,
     // reset the playing state to prevent mic button from being stuck disabled
     setTimeout(() => {
+      if (endCheckIntervalRef.current) {
+        clearInterval(endCheckIntervalRef.current);
+        endCheckIntervalRef.current = null;
+      }
       if (isPlayingRef.current) {
         isPlayingRef.current = false;
         setIsTTSPlaying(false);
       }
-    }, 30000);
+    }, 10000);
   }, []);
 
   // Initialize MediaSource for streaming audio
@@ -578,6 +624,10 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
       clearTimeout(loadingTimeoutRef.current);
       loadingTimeoutRef.current = null;
     }
+    if (endCheckIntervalRef.current) {
+      clearInterval(endCheckIntervalRef.current);
+      endCheckIntervalRef.current = null;
+    }
 
     // Revoke blob URL to prevent memory leak
     if (audioUrlRef.current) {
@@ -616,6 +666,7 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
     isPlayingRef.current = false;
     hasSignaledEndRef.current = false;
     isConnectingRef.current = false;
+    streamEndedRef.current = false;
 
     // Close WebSocket
     if (wsRef.current) {
@@ -661,6 +712,8 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
       if (flushTimerRef.current) clearTimeout(flushTimerRef.current);
       if (fastStartTimerRef.current) clearTimeout(fastStartTimerRef.current);
       if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
+      if (endCheckIntervalRef.current)
+        clearInterval(endCheckIntervalRef.current);
       if (audioUrlRef.current) {
         URL.revokeObjectURL(audioUrlRef.current);
       }

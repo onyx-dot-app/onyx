@@ -48,7 +48,6 @@ import {
   SvgAudio,
 } from "@opal/icons";
 import SvgMcp from "@opal/icons/mcp";
-import { SvgArrowUpCircle } from "@opal/icons";
 import { ADMIN_PATHS, sidebarItem } from "@/lib/admin-routes";
 import UserAvatarPopover from "@/sections/sidebar/UserAvatarPopover";
 
@@ -134,11 +133,11 @@ const collections = (
               sidebarItem(ADMIN_PATHS.LLM_MODELS),
               sidebarItem(ADMIN_PATHS.WEB_SEARCH),
               sidebarItem(ADMIN_PATHS.IMAGE_GENERATION),
-              {                                                          
-                  name: "Voice",                                           
-                  icon: SvgAudio,                                          
-                  link: "/admin/configuration/voice",                      
-              }, 
+              {
+                name: "Voice",
+                icon: SvgAudio,
+                link: "/admin/configuration/voice",
+              },
               sidebarItem(ADMIN_PATHS.CODE_INTERPRETER),
               ...(!enableCloud && vectorDbEnabled
                 ? [

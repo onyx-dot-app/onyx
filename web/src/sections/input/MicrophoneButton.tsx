@@ -32,6 +32,10 @@ interface MicrophoneButtonProps {
   >;
   /** Called when recording starts to clear input */
   onRecordingStart?: () => void;
+  /** Called when mute state changes */
+  onMuteChange?: (isMuted: boolean) => void;
+  /** Ref to expose setMuted function to parent */
+  setMutedRef?: React.MutableRefObject<((muted: boolean) => void) | null>;
 }
 
 function MicrophoneButton({
@@ -44,6 +48,8 @@ function MicrophoneButton({
   onRecordingChange,
   stopRecordingRef,
   onRecordingStart,
+  onMuteChange,
+  setMutedRef,
 }: MicrophoneButtonProps) {
   const { isTTSPlaying, isTTSLoading, manualStopCount } = useVoiceMode();
 
@@ -69,10 +75,12 @@ function MicrophoneButton({
   const {
     isRecording,
     isProcessing,
+    isMuted,
     error,
     liveTranscript,
     startRecording,
     stopRecording,
+    setMuted,
   } = useVoiceRecorder({ onFinalTranscript: handleFinalTranscript });
 
   // Expose stopRecording to parent
@@ -81,6 +89,18 @@ function MicrophoneButton({
       stopRecordingRef.current = stopRecording;
     }
   }, [stopRecording, stopRecordingRef]);
+
+  // Expose setMuted to parent
+  useEffect(() => {
+    if (setMutedRef) {
+      setMutedRef.current = setMuted;
+    }
+  }, [setMuted, setMutedRef]);
+
+  // Notify parent when mute state changes
+  useEffect(() => {
+    onMuteChange?.(isMuted);
+  }, [isMuted, onMuteChange]);
 
   // Notify parent when recording state changes
   useEffect(() => {

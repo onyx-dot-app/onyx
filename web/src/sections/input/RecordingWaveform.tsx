@@ -2,15 +2,19 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { cn } from "@/lib/utils";
+import { Button } from "@opal/components";
+import { SvgMicrophone, SvgMicrophoneOff } from "@opal/icons";
 
 interface RecordingWaveformProps {
   isRecording: boolean;
   isMuted?: boolean;
+  onMuteToggle?: () => void;
 }
 
 function RecordingWaveform({
   isRecording,
   isMuted = false,
+  onMuteToggle,
 }: RecordingWaveformProps) {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
@@ -75,6 +79,17 @@ function RecordingWaveform({
       <span className="font-mono text-xs text-text-03 tabular-nums shrink-0">
         {formattedTime}
       </span>
+
+      {/* Mute button */}
+      {onMuteToggle && (
+        <Button
+          icon={isMuted ? SvgMicrophoneOff : SvgMicrophone}
+          onClick={onMuteToggle}
+          prominence="tertiary"
+          size="sm"
+          aria-label={isMuted ? "Unmute microphone" : "Mute microphone"}
+        />
+      )}
     </div>
   );
 }

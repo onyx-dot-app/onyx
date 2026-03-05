@@ -22,10 +22,12 @@ export interface UseVoiceRecorderOptions {
 export interface UseVoiceRecorderReturn {
   isRecording: boolean;
   isProcessing: boolean;
+  isMuted: boolean;
   error: string | null;
   liveTranscript: string;
   startRecording: () => Promise<void>;
   stopRecording: () => Promise<string | null>;
+  setMuted: (muted: boolean) => void;
 }
 
 /**
@@ -78,6 +80,14 @@ class VoiceRecorderSession {
 
   get currentTranscript(): string {
     return this.transcript;
+  }
+
+  setMuted(muted: boolean): void {
+    if (this.mediaStream) {
+      this.mediaStream.getAudioTracks().forEach((track) => {
+        track.enabled = !muted;
+      });
+    }
   }
 
   async start(): Promise<void> {
@@ -363,6 +373,7 @@ export function useVoiceRecorder(
 ): UseVoiceRecorderReturn {
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isMuted, setIsMutedState] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [liveTranscript, setLiveTranscript] = useState("");
 
@@ -429,15 +440,23 @@ export function useVoiceRecorder(
     } finally {
       setIsRecording(false);
       setIsProcessing(false);
+      setIsMutedState(false); // Reset mute state when recording stops
     }
+  }, []);
+
+  const setMuted = useCallback((muted: boolean) => {
+    setIsMutedState(muted);
+    sessionRef.current?.setMuted(muted);
   }, []);
 
   return {
     isRecording,
     isProcessing,
+    isMuted,
     error,
     liveTranscript,
     startRecording,
     stopRecording,
+    setMuted,
   };
 }

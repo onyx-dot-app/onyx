@@ -936,7 +936,12 @@ function ChatPreferencesSettings() {
       </Section>
 
       <Section gap={0.75}>
-        <InputLayouts.Title title="Voice" />
+        <Content
+          title="Voice"
+          sizePreset="main-content"
+          variant="section"
+          widthVariant="full"
+        />
         <Card>
           <InputLayouts.Horizontal
             title="Auto-Send"
