@@ -20,7 +20,7 @@ import { WithoutStyles } from "@opal/types";
 import Separator from "@/refresh-components/Separator";
 import { Section } from "@/layouts/general-layouts";
 import { Hoverable } from "@opal/core";
-import { SvgCheck } from "@opal/icons";
+import { SvgRefreshCw } from "@opal/icons";
 
 export function FieldSeparator() {
   return <Separator noPadding className="px-2" />;
@@ -80,7 +80,7 @@ export function APIKeyField({
         }
         optional={optional}
       >
-        <PasswordInputTypeInField name="api_key" />
+        <PasswordInputTypeInField name="api_key" placeholder="API Key" />
       </InputLayouts.Vertical>
     </FieldWrapper>
   );
@@ -237,6 +237,8 @@ export interface DisplayModelsFieldProps<T> {
   isLoading?: boolean;
   recommendedDefaultModel: SimpleKnownModel | null;
   shouldShowAutoUpdateToggle: boolean;
+  /** Called when the user clicks the refresh button to re-fetch models. */
+  onRefetch?: () => void;
 }
 
 export function DisplayModelsField<T extends BaseLLMFormValues>({
@@ -246,6 +248,7 @@ export function DisplayModelsField<T extends BaseLLMFormValues>({
   isLoading,
   recommendedDefaultModel,
   shouldShowAutoUpdateToggle,
+  onRefetch,
 }: DisplayModelsFieldProps<T>) {
   const isAutoMode = formikProps.values.is_auto_mode;
   const selectedModels = formikProps.values.selected_model_names ?? [];
@@ -291,6 +294,14 @@ export function DisplayModelsField<T extends BaseLLMFormValues>({
     );
   }
 
+  function handleSelectAll() {
+    const allNames = modelConfigurations.map((m) => m.name);
+    formikProps.setFieldValue("selected_model_names", allNames);
+    if (!formikProps.values.default_model_name && allNames.length > 0) {
+      formikProps.setFieldValue("default_model_name", allNames[0]);
+    }
+  }
+
   const visibleModels = modelConfigurations.filter((m) => m.is_visible);
 
   return (
@@ -299,7 +310,26 @@ export function DisplayModelsField<T extends BaseLLMFormValues>({
         <InputLayouts.Horizontal
           title="Models"
           description="Select models to make available for this provider."
-        />
+          nonInteractive
+        >
+          <Section flexDirection="row" gap={0}>
+            <OpalButton
+              prominence="tertiary"
+              size="md"
+              disabled={isAutoMode}
+              onClick={handleSelectAll}
+            >
+              Select All
+            </OpalButton>
+            {onRefetch && (
+              <OpalButton
+                prominence="tertiary"
+                icon={SvgRefreshCw}
+                onClick={onRefetch}
+              />
+            )}
+          </Section>
+        </InputLayouts.Horizontal>
 
         <Section gap={0.25}>
           {isAutoMode
