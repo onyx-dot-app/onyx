@@ -334,12 +334,9 @@ func cherryPickToRelease(commitSHAs, commitMessages []string, branchSuffix, vers
 	// Check if hotfix branch already exists
 	branchExists := git.BranchExists(hotfixBranch)
 	if branchExists {
-		currentBranch, _ := git.GetCurrentBranch()
-		if currentBranch != hotfixBranch {
-			log.Infof("Hotfix branch %s already exists, switching", hotfixBranch)
-			if err := git.RunCommand("switch", "--quiet", hotfixBranch); err != nil {
-				return "", fmt.Errorf("failed to checkout existing hotfix branch: %w", err)
-			}
+		log.Infof("Hotfix branch %s already exists, switching", hotfixBranch)
+		if err := git.RunCommand("switch", "--quiet", hotfixBranch); err != nil {
+			return "", fmt.Errorf("failed to checkout existing hotfix branch: %w", err)
 		}
 
 		// Only rebase when the branch has no unique commits (pure fast-forward).
@@ -396,11 +393,10 @@ func cherryPickToRelease(commitSHAs, commitMessages []string, branchSuffix, vers
 		return "", nil
 	}
 
-	// Push the hotfix branch (use --force-with-lease since rebase may have rewritten history)
 	log.Infof("Pushing hotfix branch: %s", hotfixBranch)
-	pushArgs := []string{"push", "--force-with-lease", "-u", "origin", hotfixBranch}
+	pushArgs := []string{"push", "-u", "origin", hotfixBranch}
 	if noVerify {
-		pushArgs = []string{"push", "--force-with-lease", "--no-verify", "-u", "origin", hotfixBranch}
+		pushArgs = []string{"push", "--no-verify", "-u", "origin", hotfixBranch}
 	}
 	if err := git.RunCommandVerboseOnError(pushArgs...); err != nil {
 		return "", fmt.Errorf("failed to push hotfix branch: %w", err)
