@@ -86,7 +86,7 @@ function SettingsRoot({ width = "md", ...props }: SettingsRootProps) {
   return (
     <div
       id="page-wrapper-scroll-container"
-      className="w-full h-full flex flex-col items-center overflow-y-auto"
+      className="w-full h-full flex flex-col items-center overflow-y-auto pt-10"
     >
       {/* WARNING: The id="page-wrapper-scroll-container" above is used by SettingsHeader
           to detect scroll position and show/hide the scroll shadow.
