@@ -1,15 +1,23 @@
 """Prometheus metrics setup for the Onyx API server.
 
-Orchestrates HTTP request instrumentation via ``prometheus-fastapi-instrumentator``:
-- Request count, latency histograms, in-progress gauges
-- Pool checkout timeout exception handler
-- Custom metric callbacks (e.g. slow request counting)
+Central orchestration point for ALL metrics and observability.
+
+Functions:
+- ``setup_prometheus_metrics(app)`` — HTTP request instrumentation (middleware).
+  Called from ``get_application()``.
+- ``setup_app_observability(app)`` — app-scoped observability (middleware that
+  must be registered after all routers). Called from ``get_application()``.
+- ``start_observability()`` — lifespan-scoped observability (collectors and
+  probes). Called from ``lifespan()``.
+- ``stop_observability()`` — async shutdown for lifespan-scoped probes.
+  Called from ``lifespan()`` after yield.
 
 SQLAlchemy connection pool metrics are registered separately via
 ``setup_postgres_connection_pool_metrics`` during application lifespan
-(after engines are created).
+(after engines are created, before ``start_observability``).
 """
 
+from fastapi import FastAPI
 from prometheus_fastapi_instrumentator import Instrumentator
 from prometheus_fastapi_instrumentator.metrics import default as default_metrics
 from sqlalchemy.exc import TimeoutError as SATimeoutError
@@ -73,3 +81,17 @@ def setup_prometheus_metrics(app: Starlette) -> None:
     instrumentator.add(per_tenant_request_callback)
 
     instrumentator.instrument(app, latency_lowr_buckets=_LATENCY_BUCKETS).expose(app)
+
+
+def setup_app_observability(app: FastAPI) -> None:
+    """Register app-scoped observability components.
+
+    Must be called in ``get_application()`` AFTER all routers are registered
+    (memory delta middleware builds its route map at registration time).
+
+    Args:
+        app: The FastAPI application.
+    """
+    from onyx.server.metrics.memory_delta import add_memory_delta_middleware
+
+    add_memory_delta_middleware(app)

@@ -57,9 +57,16 @@ from onyx.server.metrics.my_metric import my_metric_callback
 instrumentator.add(my_metric_callback)
 ```
 
-### 4. Wire it into setup_prometheus_metrics (if infrastructure-scoped)
+### 4. Wire it into the orchestration layer (if infrastructure-scoped)
 
-For metrics that attach to engines, pools, or background systems, add a setup function and call it from `setup_prometheus_metrics()` in `metrics/prometheus_setup.py`:
+For metrics that attach to engines, pools, or background systems, add a setup function and call it from the appropriate orchestration function in `metrics/prometheus_setup.py`:
+
+| Function | Called from | Purpose |
+|----------|-------------|---------|
+| `setup_prometheus_metrics(app)` | `get_application()` | HTTP request instrumentation (middleware) |
+| `setup_app_observability(app)` | `get_application()` | App-scoped components (middleware registered after routers) |
+| `start_observability()` | `lifespan()` startup | Lifespan-scoped probes and collectors |
+| `stop_observability()` | `lifespan()` shutdown | Async cleanup for probes |
 
 ```python
 # metrics/my_metric.py
@@ -69,15 +76,15 @@ def setup_my_metrics(resource: SomeResource) -> None:
 ```
 
 ```python
-# metrics/prometheus_setup.py — inside setup_prometheus_metrics()
+# metrics/prometheus_setup.py — inside start_observability()
 from onyx.server.metrics.my_metric import setup_my_metrics
 
-def setup_prometheus_metrics(app, engines=None) -> None:
+def start_observability() -> None:
     setup_my_metrics(resource)  # Add your call here
     ...
 ```
 
-All metrics initialization is funneled through the single `setup_prometheus_metrics()` call in `onyx/main.py:lifespan()`. Do not add separate setup calls to `main.py`.
+All metrics initialization is funneled through `metrics/prometheus_setup.py`. Do not add separate setup calls to `main.py`.
 
 ### 5. Write tests
 
@@ -168,6 +175,23 @@ These metrics provide visibility into SQLAlchemy connection pool state across al
 Engine label values: `sync` (main read-write), `async` (async sessions), `readonly` (read-only user).
 
 Connections from background tasks (Celery) or boot-time warmup appear as `handler="unknown"`.
+
+## Memory Metrics
+
+Always-on, sub-microsecond overhead per request (single `psutil` syscall).
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `onyx_api_request_rss_delta_bytes` | Histogram | `handler` | RSS change in bytes during a request |
+| `onyx_api_process_rss_bytes` | Gauge | — | Current process RSS |
+
+```promql
+# Top 5 endpoints by average memory delta per request
+topk(5, avg by (handler)(
+  rate(onyx_api_request_rss_delta_bytes_sum[5m])
+  / rate(onyx_api_request_rss_delta_bytes_count[5m])
+))
+```
 
 ## Example PromQL Queries
 
