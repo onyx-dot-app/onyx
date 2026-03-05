@@ -246,7 +246,11 @@ async def get_billing_information(
         )
     except OnyxError as e:
         # Open circuit breaker on connection failures (self-hosted only)
-        if e.status_code in (502, 503, 504):
+        if e.status_code in (
+            OnyxErrorCode.BAD_GATEWAY.status_code,
+            OnyxErrorCode.SERVICE_UNAVAILABLE.status_code,
+            OnyxErrorCode.GATEWAY_TIMEOUT.status_code,
+        ):
             _open_billing_circuit()
         raise
 
