@@ -182,7 +182,7 @@ class AzureStreamingSynthesizer(StreamingSynthesizerProtocol):
     async def connect(self) -> None:
         """Initialize Azure Speech synthesizer with push stream."""
         try:
-            import azure.cognitiveservices.speech as speechsdk  # type: ignore[import-not-found]
+            import azure.cognitiveservices.speech as speechsdk
         except ImportError as e:
             raise RuntimeError(
                 "Azure Speech SDK is required for streaming TTS. "
