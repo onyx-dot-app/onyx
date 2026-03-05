@@ -430,7 +430,6 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
     return (
       <Footer
         mode="summary"
-        pageSize={resolvedPageSize}
         rangeStart={rangeStart}
         rangeEnd={rangeEnd}
         totalItems={totalItems}
