@@ -41,6 +41,8 @@ interface HoverableRootProps
   group: string;
   /** Width preset. @default "auto" */
   widthVariant?: WidthVariant;
+  /** Ref forwarded to the root `<div>`. */
+  ref?: React.Ref<HTMLDivElement>;
 }
 
 type HoverableItemVariant = "opacity-on-hover";
@@ -50,6 +52,8 @@ interface HoverableItemProps
   children: React.ReactNode;
   group?: string;
   variant?: HoverableItemVariant;
+  /** Ref forwarded to the item `<div>`. */
+  ref?: React.Ref<HTMLDivElement>;
 }
 
 // ---------------------------------------------------------------------------
@@ -81,6 +85,7 @@ function HoverableRoot({
   group,
   children,
   widthVariant = "auto",
+  ref,
   onMouseEnter: consumerMouseEnter,
   onMouseLeave: consumerMouseLeave,
   ...props
@@ -109,6 +114,7 @@ function HoverableRoot({
     <GroupContext.Provider value={hovered}>
       <div
         {...props}
+        ref={ref}
         className={cn(widthVariants[widthVariant])}
         onMouseEnter={onMouseEnter}
         onMouseLeave={onMouseLeave}
@@ -156,6 +162,7 @@ function HoverableItem({
   group,
   variant = "opacity-on-hover",
   children,
+  ref,
   ...props
 }: HoverableItemProps) {
   const contextValue = useContext(
@@ -174,6 +181,7 @@ function HoverableItem({
   return (
     <div
       {...props}
+      ref={ref}
       className={cn("hoverable-item")}
       data-hoverable-variant={variant}
       data-hoverable-active={

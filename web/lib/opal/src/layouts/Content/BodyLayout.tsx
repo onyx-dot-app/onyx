@@ -40,6 +40,9 @@ interface BodyLayoutProps {
 
   /** Title prominence. Default: `"default"`. */
   prominence?: BodyProminence;
+
+  /** Ref forwarded to the root `<div>`. */
+  ref?: React.Ref<HTMLDivElement>;
 }
 
 // ---------------------------------------------------------------------------
@@ -80,6 +83,7 @@ function BodyLayout({
   sizePreset = "main-ui",
   orientation = "inline",
   prominence = "default",
+  ref,
 }: BodyLayoutProps) {
   const config = BODY_PRESETS[sizePreset];
   const titleColorClass =
@@ -87,6 +91,7 @@ function BodyLayout({
 
   return (
     <div
+      ref={ref}
       className="opal-content-body"
       data-orientation={orientation}
       style={{ gap: config.gap }}

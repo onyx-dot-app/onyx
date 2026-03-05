@@ -64,6 +64,9 @@ interface ContentMdProps {
 
   /** When `true`, the title color hooks into `Interactive.Base`'s `--interactive-foreground` variable. */
   withInteractive?: boolean;
+
+  /** Ref forwarded to the root `<div>`. */
+  ref?: React.Ref<HTMLDivElement>;
 }
 
 // ---------------------------------------------------------------------------
@@ -134,6 +137,7 @@ function ContentMd({
   tag,
   sizePreset = "main-ui",
   withInteractive,
+  ref,
 }: ContentMdProps) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(title);
@@ -154,6 +158,7 @@ function ContentMd({
 
   return (
     <div
+      ref={ref}
       className="opal-content-md"
       data-interactive={withInteractive || undefined}
       style={{ gap: config.gap }}

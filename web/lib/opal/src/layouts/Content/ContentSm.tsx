@@ -43,6 +43,9 @@ interface ContentSmProps {
 
   /** When `true`, the title color hooks into `Interactive.Base`'s `--interactive-foreground` variable. */
   withInteractive?: boolean;
+
+  /** Ref forwarded to the root `<div>`. */
+  ref?: React.Ref<HTMLDivElement>;
 }
 
 // ---------------------------------------------------------------------------
@@ -84,11 +87,13 @@ function ContentSm({
   orientation = "inline",
   prominence = "default",
   withInteractive,
+  ref,
 }: ContentSmProps) {
   const config = CONTENT_SM_PRESETS[sizePreset];
 
   return (
     <div
+      ref={ref}
       className="opal-content-sm"
       data-orientation={orientation}
       data-prominence={prominence}

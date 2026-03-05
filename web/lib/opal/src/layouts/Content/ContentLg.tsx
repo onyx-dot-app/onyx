@@ -51,6 +51,9 @@ interface ContentLgProps {
 
   /** When `true`, the title color hooks into `Interactive.Base`'s `--interactive-foreground` variable. */
   withInteractive?: boolean;
+
+  /** Ref forwarded to the root `<div>`. */
+  ref?: React.Ref<HTMLDivElement>;
 }
 
 // ---------------------------------------------------------------------------
@@ -90,6 +93,7 @@ function ContentLg({
   editable,
   onTitleChange,
   withInteractive,
+  ref,
 }: ContentLgProps) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(title);
@@ -109,6 +113,7 @@ function ContentLg({
 
   return (
     <div
+      ref={ref}
       className="opal-content-lg"
       data-interactive={withInteractive || undefined}
       style={{ gap: config.gap }}

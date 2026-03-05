@@ -18,6 +18,9 @@ type ContentActionProps = ContentProps & {
    * @see {@link SizeVariant} for the full list of presets.
    */
   paddingVariant?: SizeVariant;
+
+  /** Ref forwarded to the root `<div>`. */
+  ref?: React.Ref<HTMLDivElement>;
 };
 
 // ---------------------------------------------------------------------------
@@ -52,12 +55,13 @@ type ContentActionProps = ContentProps & {
 function ContentAction({
   rightChildren,
   paddingVariant = "lg",
+  ref,
   ...contentProps
 }: ContentActionProps) {
   const { padding } = sizeVariants[paddingVariant];
 
   return (
-    <div className="flex flex-row items-stretch w-full">
+    <div ref={ref} className="flex flex-row items-stretch w-full">
       <div className={cn("flex-1 min-w-0 self-center", padding)}>
         <Content {...contentProps} />
       </div>

@@ -18,6 +18,9 @@ interface TagProps {
 
   /** Color variant. Default: `"gray"`. */
   color?: TagColor;
+
+  /** Ref forwarded to the root `<div>`. */
+  ref?: React.Ref<HTMLDivElement>;
 }
 
 // ---------------------------------------------------------------------------
@@ -36,11 +39,11 @@ const COLOR_CONFIG: Record<TagColor, { bg: string; text: string }> = {
 // Tag
 // ---------------------------------------------------------------------------
 
-function Tag({ icon: Icon, title, color = "gray" }: TagProps) {
+function Tag({ icon: Icon, title, color = "gray", ref }: TagProps) {
   const config = COLOR_CONFIG[color];
 
   return (
-    <div className={cn("opal-auxiliary-tag", config.bg)}>
+    <div ref={ref} className={cn("opal-auxiliary-tag", config.bg)}>
       {Icon && (
         <div className="opal-auxiliary-tag-icon-container">
           <Icon className={cn("opal-auxiliary-tag-icon", config.text)} />

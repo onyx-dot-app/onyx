@@ -12,7 +12,7 @@ import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 
 type ContentPassthroughProps = Omit<
   ContentActionProps,
-  "paddingVariant" | "widthVariant"
+  "paddingVariant" | "widthVariant" | "ref"
 >;
 
 interface LineItemButtonProps extends ContentPassthroughProps {

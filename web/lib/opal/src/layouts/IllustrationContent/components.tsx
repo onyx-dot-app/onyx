@@ -13,6 +13,9 @@ interface IllustrationContentProps {
 
   /** Optional description below the title, center-aligned. Uses `font-secondary-body`. */
   description?: string;
+
+  /** Ref forwarded to the root `<div>`. */
+  ref?: React.Ref<HTMLDivElement>;
 }
 
 // ---------------------------------------------------------------------------
@@ -58,9 +61,10 @@ function IllustrationContent({
   illustration: Illustration,
   title,
   description,
+  ref,
 }: IllustrationContentProps) {
   return (
-    <div className="flex flex-col items-center gap-3 p-5 text-center">
+    <div ref={ref} className="flex flex-col items-center gap-3 p-5 text-center">
       {Illustration && (
         <Illustration
           aria-hidden="true"

@@ -63,6 +63,9 @@ interface ContentXlProps {
 
   /** When `true`, the title color hooks into `Interactive.Base`'s `--interactive-foreground` variable. */
   withInteractive?: boolean;
+
+  /** Ref forwarded to the root `<div>`. */
+  ref?: React.Ref<HTMLDivElement>;
 }
 
 // ---------------------------------------------------------------------------
@@ -110,6 +113,7 @@ function ContentXl({
   moreIcon1: MoreIcon1,
   moreIcon2: MoreIcon2,
   withInteractive,
+  ref,
 }: ContentXlProps) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(title);
@@ -129,6 +133,7 @@ function ContentXl({
 
   return (
     <div
+      ref={ref}
       className="opal-content-xl"
       data-interactive={withInteractive || undefined}
     >
