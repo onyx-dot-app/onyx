@@ -334,10 +334,10 @@ func cherryPickToRelease(commitSHAs, commitMessages []string, branchSuffix, vers
 			return "", fmt.Errorf("failed to checkout existing hotfix branch: %w", err)
 		}
 
-		// Pull latest changes from the release branch so the hotfix branch is up to date
-		log.Infof("Merging latest %s into %s", releaseBranch, hotfixBranch)
-		if err := git.RunCommand("merge", "--quiet", fmt.Sprintf("origin/%s", releaseBranch)); err != nil {
-			return "", fmt.Errorf("failed to merge %s into hotfix branch: %w", releaseBranch, err)
+		// Rebase onto the latest release branch so cherry-picked commits sit on top cleanly
+		log.Infof("Rebasing %s onto %s", hotfixBranch, releaseBranch)
+		if err := git.RunCommand("rebase", "--quiet", fmt.Sprintf("origin/%s", releaseBranch)); err != nil {
+			return "", fmt.Errorf("failed to rebase hotfix branch onto %s: %w", releaseBranch, err)
 		}
 
 		// Check which commits need to be cherry-picked
