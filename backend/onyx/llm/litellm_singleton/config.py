@@ -104,8 +104,14 @@ def register_ollama_models() -> None:
             # GLM
             "ollama_chat/glm-4.6:latest": {"supports_function_calling": True},
             "ollama_chat/glm-4.6:cloud": {"supports_function_calling": True},
+            "ollama_chat/glm-4.7:cloud": {"supports_function_calling": True},
+            "ollama_chat/glm-4.7-flash:latest": {"supports_function_calling": True},
+            "ollama_chat/glm-5:cloud": {"supports_function_calling": True},
             "ollama/glm-4.6:latest": {"supports_function_calling": True},
             "ollama/glm-4.6:cloud": {"supports_function_calling": True},
+            "ollama/glm-4.7:cloud": {"supports_function_calling": True},
+            "ollama/glm-4.7-flash:latest": {"supports_function_calling": True},
+            "ollama/glm-5:cloud": {"supports_function_calling": True},
         }
     )
 
