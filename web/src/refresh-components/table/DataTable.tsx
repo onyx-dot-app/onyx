@@ -1,7 +1,7 @@
 "use client";
 "use no memo";
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { flexRender } from "@tanstack/react-table";
 import useDataTable, {
   toOnyxSortDirection,
@@ -184,23 +184,24 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
   });
 
   // 4. Call useDraggableRows (conditional — disabled in server-side mode)
-  if (process.env.NODE_ENV !== "production" && serverSide && draggable) {
-    console.warn(
-      "DataTable: `draggable` is ignored when `serverSide` is enabled. " +
-        "Drag-and-drop reordering is not supported with server-side pagination."
-    );
-  }
-  if (
-    process.env.NODE_ENV !== "production" &&
-    serverSide &&
-    footer?.mode === "selection" &&
-    footer?.showView
-  ) {
-    console.warn(
-      "DataTable: `showView` is ignored when `serverSide` is enabled. " +
-        "View mode requires client-side filtering."
-    );
-  }
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "production" && serverSide && draggable) {
+      console.warn(
+        "DataTable: `draggable` is ignored when `serverSide` is enabled. " +
+          "Drag-and-drop reordering is not supported with server-side pagination."
+      );
+    }
+  }, [!!serverSide, !!draggable]); // eslint-disable-line react-hooks/exhaustive-deps
+  const footerShowView =
+    footer?.mode === "selection" ? footer.showView : undefined;
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "production" && serverSide && footerShowView) {
+      console.warn(
+        "DataTable: `showView` is ignored when `serverSide` is enabled. " +
+          "View mode requires client-side filtering."
+      );
+    }
+  }, [!!serverSide, !!footerShowView]); // eslint-disable-line react-hooks/exhaustive-deps
   const effectiveDraggable = serverSide ? undefined : draggable;
   const draggableReturn = useDraggableRows({
     data,

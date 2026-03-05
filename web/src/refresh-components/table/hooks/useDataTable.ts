@@ -341,9 +341,8 @@ export default function useDataTable<TData extends RowData>(
         const term = filterValue.searchTerm.toLowerCase();
         return row.getAllCells().some((cell) => {
           const value = cell.getValue();
-          return (
-            typeof value === "string" && value.toLowerCase().includes(term)
-          );
+          if (value == null) return false;
+          return String(value).toLowerCase().includes(term);
         });
       }
       return true;
@@ -381,14 +380,16 @@ export default function useDataTable<TData extends RowData>(
 
   // ---- selection change callback ------------------------------------------
   const isFirstRenderRef = useRef(true);
+  const onSelectionChangeRef = useRef(onSelectionChange);
+  onSelectionChangeRef.current = onSelectionChange;
 
   useEffect(() => {
     if (isFirstRenderRef.current) {
       isFirstRenderRef.current = false;
       return;
     }
-    onSelectionChange?.(selectedRowIds);
-  }, [selectedRowIds, onSelectionChange]);
+    onSelectionChangeRef.current?.(selectedRowIds);
+  }, [selectedRowIds]);
 
   // ---- actions ------------------------------------------------------------
   const setPage = (page: number) => {
