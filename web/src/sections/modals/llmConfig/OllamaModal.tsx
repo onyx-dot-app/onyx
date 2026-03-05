@@ -1,4 +1,4 @@
-import { Form, Formik, FormikProps } from "formik";
+import { Formik, FormikProps } from "formik";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import * as InputLayouts from "@/layouts/input-layouts";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
@@ -13,7 +13,7 @@ import {
   ProviderFormContext,
 } from "./components/FormWrapper";
 import { DisplayNameField } from "./components/DisplayNameField";
-import { ModalFormFooter } from "./components/ModalFormFooter";
+import { LLMConfigurationModalWrapper } from "./shared";
 import {
   buildDefaultInitialValues,
   buildDefaultValidationSchema,
@@ -22,7 +22,6 @@ import {
   submitOnboardingProvider,
   buildOnboardingInitialValues,
   BaseLLMFormValues,
-  LLM_FORM_CLASS_NAME,
 } from "./formUtils";
 import { AdvancedOptions } from "./components/AdvancedOptions";
 import { DisplayModels } from "./components/DisplayModels";
@@ -48,7 +47,6 @@ interface OllamaModalContentProps {
   setFetchedModels: (models: ModelConfiguration[]) => void;
   isTesting: boolean;
   testError: string;
-  mutate: () => void;
   onClose: () => void;
   isFormValid: boolean;
   isOnboarding: boolean;
@@ -61,7 +59,6 @@ function OllamaModalContent({
   setFetchedModels,
   isTesting,
   testError,
-  mutate,
   onClose,
   isFormValid,
   isOnboarding,
@@ -119,7 +116,14 @@ function OllamaModalContent({
       : existingLlmProvider?.model_configurations || [];
 
   return (
-    <Form className={LLM_FORM_CLASS_NAME}>
+    <LLMConfigurationModalWrapper
+      providerEndpoint={OLLAMA_PROVIDER_NAME}
+      existingProviderName={existingLlmProvider?.name}
+      onClose={onClose}
+      isFormValid={isFormValid}
+      isTesting={isTesting}
+      testError={testError}
+    >
       {!isOnboarding && <DisplayNameField disabled={!!existingLlmProvider} />}
 
       <InputLayouts.Vertical
@@ -150,14 +154,7 @@ function OllamaModalContent({
       )}
 
       {!isOnboarding && <AdvancedOptions formikProps={formikProps} />}
-
-      <ModalFormFooter
-        onClose={onClose}
-        isFormValid={isFormValid}
-        isTesting={isTesting}
-        testError={testError}
-      />
-    </Form>
+    </LLMConfigurationModalWrapper>
   );
 }
 
@@ -303,7 +300,6 @@ export function OllamaModal({
                 setFetchedModels={setFetchedModels}
                 isTesting={isTesting}
                 testError={testError}
-                mutate={mutate}
                 onClose={onClose}
                 isFormValid={formikProps.isValid}
                 isOnboarding={isOnboarding}

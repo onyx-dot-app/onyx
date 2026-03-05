@@ -1,4 +1,4 @@
-import { Form, Formik } from "formik";
+import { Formik } from "formik";
 import { LLMProviderFormProps } from "@/interfaces/llm";
 import * as Yup from "yup";
 import {
@@ -7,7 +7,7 @@ import {
 } from "./components/FormWrapper";
 import { DisplayNameField } from "./components/DisplayNameField";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
-import { ModalFormFooter } from "./components/ModalFormFooter";
+import { LLMConfigurationModalWrapper } from "./shared";
 import {
   buildDefaultInitialValues,
   buildDefaultValidationSchema,
@@ -15,7 +15,6 @@ import {
   submitLLMProvider,
   submitOnboardingProvider,
   buildOnboardingInitialValues,
-  LLM_FORM_CLASS_NAME,
 } from "./formUtils";
 import { AdvancedOptions } from "./components/AdvancedOptions";
 import { DisplayModels } from "./components/DisplayModels";
@@ -139,41 +138,37 @@ export function AnthropicModal({
               }
             }}
           >
-            {(formikProps) => {
-              return (
-                <Form className={LLM_FORM_CLASS_NAME}>
-                  {!isOnboarding && (
-                    <DisplayNameField disabled={!!existingLlmProvider} />
-                  )}
+            {(formikProps) => (
+              <LLMConfigurationModalWrapper
+                providerEndpoint={ANTHROPIC_PROVIDER_NAME}
+                existingProviderName={existingLlmProvider?.name}
+                onClose={onClose}
+                isFormValid={formikProps.isValid}
+                isTesting={isTesting}
+                testError={testError}
+              >
+                {!isOnboarding && (
+                  <DisplayNameField disabled={!!existingLlmProvider} />
+                )}
 
-                  <PasswordInputTypeInField name="api_key" label="API Key" />
+                <PasswordInputTypeInField name="api_key" label="API Key" />
 
-                  {isOnboarding ? (
-                    <SingleDefaultModelField placeholder="E.g. claude-sonnet-4-5" />
-                  ) : (
-                    <DisplayModels
-                      modelConfigurations={modelConfigurations}
-                      formikProps={formikProps}
-                      recommendedDefaultModel={
-                        wellKnownLLMProvider?.recommended_default_model ?? null
-                      }
-                      shouldShowAutoUpdateToggle={true}
-                    />
-                  )}
-
-                  {!isOnboarding && (
-                    <AdvancedOptions formikProps={formikProps} />
-                  )}
-
-                  <ModalFormFooter
-                    onClose={onClose}
-                    isFormValid={formikProps.isValid}
-                    isTesting={isTesting}
-                    testError={testError}
+                {isOnboarding ? (
+                  <SingleDefaultModelField placeholder="E.g. claude-sonnet-4-5" />
+                ) : (
+                  <DisplayModels
+                    modelConfigurations={modelConfigurations}
+                    formikProps={formikProps}
+                    recommendedDefaultModel={
+                      wellKnownLLMProvider?.recommended_default_model ?? null
+                    }
+                    shouldShowAutoUpdateToggle={true}
                   />
-                </Form>
-              );
-            }}
+                )}
+
+                {!isOnboarding && <AdvancedOptions formikProps={formikProps} />}
+              </LLMConfigurationModalWrapper>
+            )}
           </Formik>
         );
       }}

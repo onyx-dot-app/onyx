@@ -22,6 +22,7 @@
 
 .opal-content-xl-icon-row {
   @apply flex flex-row items-center;
+  gap: 0.25rem;
 }
 
 /* ---------------------------------------------------------------------------

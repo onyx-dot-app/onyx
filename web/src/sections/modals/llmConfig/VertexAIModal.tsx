@@ -1,4 +1,4 @@
-import { Form, Formik } from "formik";
+import { Formik } from "formik";
 import { FileUploadFormField } from "@/components/Field";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import * as InputLayouts from "@/layouts/input-layouts";
@@ -9,7 +9,7 @@ import {
   ProviderFormContext,
 } from "./components/FormWrapper";
 import { DisplayNameField } from "./components/DisplayNameField";
-import { ModalFormFooter } from "./components/ModalFormFooter";
+import { LLMConfigurationModalWrapper } from "./shared";
 import {
   buildDefaultInitialValues,
   buildDefaultValidationSchema,
@@ -18,7 +18,6 @@ import {
   submitOnboardingProvider,
   buildOnboardingInitialValues,
   BaseLLMFormValues,
-  LLM_FORM_CLASS_NAME,
 } from "./formUtils";
 import { AdvancedOptions } from "./components/AdvancedOptions";
 import { DisplayModels } from "./components/DisplayModels";
@@ -185,59 +184,55 @@ export function VertexAIModal({
               }
             }}
           >
-            {(formikProps) => {
-              return (
-                <Form className={LLM_FORM_CLASS_NAME}>
-                  {!isOnboarding && (
-                    <DisplayNameField disabled={!!existingLlmProvider} />
-                  )}
+            {(formikProps) => (
+              <LLMConfigurationModalWrapper
+                providerEndpoint={VERTEXAI_PROVIDER_NAME}
+                existingProviderName={existingLlmProvider?.name}
+                onClose={onClose}
+                isFormValid={formikProps.isValid}
+                isTesting={isTesting}
+                testError={testError}
+              >
+                {!isOnboarding && (
+                  <DisplayNameField disabled={!!existingLlmProvider} />
+                )}
 
-                  <FileUploadFormField
-                    name="custom_config.vertex_credentials"
-                    label="Credentials File"
-                    subtext="Upload your Google Cloud service account JSON credentials file."
-                  />
+                <FileUploadFormField
+                  name="custom_config.vertex_credentials"
+                  label="Credentials File"
+                  subtext="Upload your Google Cloud service account JSON credentials file."
+                />
 
-                  <InputLayouts.Vertical
+                <InputLayouts.Vertical
+                  name="custom_config.vertex_location"
+                  title="Location"
+                  description="The Google Cloud region for your Vertex AI models (e.g., global, us-east1, us-central1, europe-west1)."
+                  optional
+                >
+                  <InputTypeInField
                     name="custom_config.vertex_location"
-                    title="Location"
-                    description="The Google Cloud region for your Vertex AI models (e.g., global, us-east1, us-central1, europe-west1)."
-                    optional
-                  >
-                    <InputTypeInField
-                      name="custom_config.vertex_location"
-                      placeholder={VERTEXAI_DEFAULT_LOCATION}
-                    />
-                  </InputLayouts.Vertical>
-
-                  <Separator />
-
-                  {isOnboarding ? (
-                    <SingleDefaultModelField placeholder="E.g. gemini-2.5-pro" />
-                  ) : (
-                    <DisplayModels
-                      modelConfigurations={modelConfigurations}
-                      formikProps={formikProps}
-                      recommendedDefaultModel={
-                        wellKnownLLMProvider?.recommended_default_model ?? null
-                      }
-                      shouldShowAutoUpdateToggle={true}
-                    />
-                  )}
-
-                  {!isOnboarding && (
-                    <AdvancedOptions formikProps={formikProps} />
-                  )}
-
-                  <ModalFormFooter
-                    onClose={onClose}
-                    isFormValid={formikProps.isValid}
-                    isTesting={isTesting}
-                    testError={testError}
+                    placeholder={VERTEXAI_DEFAULT_LOCATION}
                   />
-                </Form>
-              );
-            }}
+                </InputLayouts.Vertical>
+
+                <Separator />
+
+                {isOnboarding ? (
+                  <SingleDefaultModelField placeholder="E.g. gemini-2.5-pro" />
+                ) : (
+                  <DisplayModels
+                    modelConfigurations={modelConfigurations}
+                    formikProps={formikProps}
+                    recommendedDefaultModel={
+                      wellKnownLLMProvider?.recommended_default_model ?? null
+                    }
+                    shouldShowAutoUpdateToggle={true}
+                  />
+                )}
+
+                {!isOnboarding && <AdvancedOptions formikProps={formikProps} />}
+              </LLMConfigurationModalWrapper>
+            )}
           </Formik>
         );
       }}

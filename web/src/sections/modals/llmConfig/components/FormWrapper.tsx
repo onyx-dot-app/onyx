@@ -13,16 +13,10 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import Modal from "@/refresh-components/Modal";
 import Text from "@/refresh-components/texts/Text";
 import { Button } from "@opal/components";
-import { SvgSettings, SvgArrowExchange, SvgOnyxOctagon } from "@opal/icons";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { LLM_PROVIDERS_ADMIN_URL } from "@/lib/llmConfig/constants";
 import { setDefaultLlmModel } from "@/lib/llmConfig/svc";
-import {
-  getProviderIcon,
-  getProviderDisplayName,
-  getProviderProductName,
-} from "@/lib/llmConfig/providers";
 
 export interface ProviderFormContext {
   variant: LLMModalVariant;
@@ -137,37 +131,11 @@ export function ProviderFormEntrypointWrapper({
     onboardingActions,
   };
 
-  const resolvedEndpoint = providerEndpoint ?? "";
-  const providerIcon = resolvedEndpoint
-    ? getProviderIcon(resolvedEndpoint)
-    : SvgSettings;
-  const providerDisplayName = resolvedEndpoint
-    ? getProviderDisplayName(resolvedEndpoint)
-    : providerName;
-  const providerProductName = resolvedEndpoint
-    ? getProviderProductName(resolvedEndpoint)
-    : providerName;
-
-  const defaultTitle = existingLlmProvider?.name
-    ? `Configure "${existingLlmProvider.name}"`
-    : `Set up ${providerDisplayName}`;
-  const defaultDescription = `Connect to ${providerDisplayName} and set up your ${providerProductName} models.`;
-
-  function renderModal(isVisible: boolean, title?: string) {
+  function renderModal(isVisible: boolean) {
     if (!isVisible) return null;
     return (
       <Modal open onOpenChange={onClose}>
-        <Modal.Content>
-          <Modal.Header
-            icon={providerIcon}
-            moreIcon1={SvgArrowExchange}
-            moreIcon2={SvgOnyxOctagon}
-            title={title ?? defaultTitle}
-            description={defaultDescription}
-            onClose={onClose}
-          />
-          <Modal.Body>{children(context)}</Modal.Body>
-        </Modal.Content>
+        <Modal.Content>{children(context)}</Modal.Content>
       </Modal>
     );
   }

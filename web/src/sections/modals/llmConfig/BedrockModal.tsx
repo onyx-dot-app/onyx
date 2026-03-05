@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Form, Formik, FormikProps } from "formik";
+import { Formik, FormikProps } from "formik";
 import { SelectorFormField } from "@/components/Field";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import * as InputLayouts from "@/layouts/input-layouts";
@@ -17,7 +17,7 @@ import {
   ProviderFormContext,
 } from "./components/FormWrapper";
 import { DisplayNameField } from "./components/DisplayNameField";
-import { ModalFormFooter } from "./components/ModalFormFooter";
+import { LLMConfigurationModalWrapper } from "./shared";
 import { FetchModelsButton } from "./components/FetchModelsButton";
 import {
   buildDefaultInitialValues,
@@ -27,7 +27,6 @@ import {
   submitOnboardingProvider,
   buildOnboardingInitialValues,
   BaseLLMFormValues,
-  LLM_FORM_CLASS_NAME,
 } from "./formUtils";
 import { AdvancedOptions } from "./components/AdvancedOptions";
 import { DisplayModels } from "./components/DisplayModels";
@@ -36,8 +35,6 @@ import { fetchBedrockModels } from "@/app/admin/configuration/llm/utils";
 import Separator from "@/refresh-components/Separator";
 import Text from "@/refresh-components/texts/Text";
 import Tabs from "@/refresh-components/Tabs";
-import { cn } from "@/lib/utils";
-import { OnboardingActions, OnboardingState } from "@/interfaces/onboarding";
 
 export const BEDROCK_PROVIDER_NAME = "bedrock";
 const BEDROCK_DISPLAY_NAME = "AWS Bedrock";
@@ -86,7 +83,6 @@ interface BedrockModalInternalsProps {
   modelConfigurations: ModelConfiguration[];
   isTesting: boolean;
   testError: string;
-  mutate: (key: string) => void;
   onClose: () => void;
   isOnboarding: boolean;
 }
@@ -99,7 +95,6 @@ function BedrockModalInternals({
   modelConfigurations,
   isTesting,
   testError,
-  mutate,
   onClose,
   isOnboarding,
 }: BedrockModalInternalsProps) {
@@ -136,7 +131,14 @@ function BedrockModalInternals({
     !formikProps.values.custom_config?.AWS_REGION_NAME || !isAuthComplete;
 
   return (
-    <Form className={cn(LLM_FORM_CLASS_NAME, "w-full")}>
+    <LLMConfigurationModalWrapper
+      providerEndpoint={BEDROCK_PROVIDER_NAME}
+      existingProviderName={existingLlmProvider?.name}
+      onClose={onClose}
+      isFormValid={formikProps.isValid}
+      isTesting={isTesting}
+      testError={testError}
+    >
       {!isOnboarding && <DisplayNameField disabled={!!existingLlmProvider} />}
 
       <SelectorFormField
@@ -256,14 +258,7 @@ function BedrockModalInternals({
           <AdvancedOptions formikProps={formikProps} />
         </>
       )}
-
-      <ModalFormFooter
-        onClose={onClose}
-        isFormValid={formikProps.isValid}
-        isTesting={isTesting}
-        testError={testError}
-      />
-    </Form>
+    </LLMConfigurationModalWrapper>
   );
 }
 
@@ -432,7 +427,6 @@ export function BedrockModal({
                 modelConfigurations={modelConfigurations}
                 isTesting={isTesting}
                 testError={testError}
-                mutate={mutate}
                 onClose={onClose}
                 isOnboarding={isOnboarding}
               />

@@ -1,5 +1,5 @@
 import Separator from "@/refresh-components/Separator";
-import { Form, Formik } from "formik";
+import { Formik } from "formik";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import * as InputLayouts from "@/layouts/input-layouts";
 import {
@@ -14,7 +14,7 @@ import {
 } from "./components/FormWrapper";
 import { DisplayNameField } from "./components/DisplayNameField";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
-import { ModalFormFooter } from "./components/ModalFormFooter";
+import { LLMConfigurationModalWrapper } from "./shared";
 import {
   buildDefaultInitialValues,
   buildDefaultValidationSchema,
@@ -23,7 +23,6 @@ import {
   submitOnboardingProvider,
   buildOnboardingInitialValues,
   BaseLLMFormValues,
-  LLM_FORM_CLASS_NAME,
 } from "./formUtils";
 import { AdvancedOptions } from "./components/AdvancedOptions";
 import { DisplayModels } from "./components/DisplayModels";
@@ -222,7 +221,14 @@ export function OpenRouterModal({
                 !formikProps.values.api_base || !formikProps.values.api_key;
 
               return (
-                <Form className={LLM_FORM_CLASS_NAME}>
+                <LLMConfigurationModalWrapper
+                  providerEndpoint={OPENROUTER_PROVIDER_NAME}
+                  existingProviderName={existingLlmProvider?.name}
+                  onClose={onClose}
+                  isFormValid={formikProps.isValid}
+                  isTesting={isTesting}
+                  testError={testError}
+                >
                   {!isOnboarding && (
                     <DisplayNameField disabled={!!existingLlmProvider} />
                   )}
@@ -280,14 +286,7 @@ export function OpenRouterModal({
                   {!isOnboarding && (
                     <AdvancedOptions formikProps={formikProps} />
                   )}
-
-                  <ModalFormFooter
-                    onClose={onClose}
-                    isFormValid={formikProps.isValid}
-                    isTesting={isTesting}
-                    testError={testError}
-                  />
-                </Form>
+                </LLMConfigurationModalWrapper>
               );
             }}
           </Formik>
