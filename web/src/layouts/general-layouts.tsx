@@ -197,7 +197,7 @@ function AttachmentItemLayout({
         alignItems="center"
         gap={1.5}
       >
-        <div data-testid={titleTestId}>
+        <div data-testid={titleTestId} className="min-w-0">
           <Content
             title={title}
             description={description}

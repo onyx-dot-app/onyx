@@ -9,6 +9,7 @@ import { SvgFileText, SvgX } from "@opal/icons";
 import { Interactive } from "@opal/core";
 import { AttachmentItemLayout } from "@/layouts/general-layouts";
 import Spacer from "@/refresh-components/Spacer";
+import { FILE_CARD_TEST_IDS } from "@/sections/cards/fileCardTestIds";
 
 interface RemovableProps {
   onRemove?: () => void;
@@ -185,8 +186,8 @@ export function FileCard({
                   : "Processing..."
                 : typeLabel
             }
-            titleTestId="file-card-title"
-            iconWrapperTestId="file-icon-wrapper"
+            titleTestId={FILE_CARD_TEST_IDS.title}
+            iconWrapperTestId={FILE_CARD_TEST_IDS.iconWrapper}
           />
           <Spacer horizontal rem={0.5} />
         </Interactive.Container>

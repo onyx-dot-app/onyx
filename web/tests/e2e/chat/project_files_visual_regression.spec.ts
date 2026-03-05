@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { FILE_CARD_TEST_IDS } from "@/sections/cards/fileCardTestIds";
 import { loginAsWorkerUser } from "@tests/e2e/utils/auth";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
@@ -148,13 +149,22 @@ test.describe("Project Files visual regression", () => {
     await expect(filesSection).toBeVisible();
 
     const fileTitle = filesSection
-      .locator('[data-testid="file-card-title"]')
+      .locator(`[data-testid="${FILE_CARD_TEST_IDS.title}"]`)
       .filter({ hasText: LONG_FILE_NAME })
       .first();
     await expect(fileTitle).toBeVisible();
 
+    // Wait for deterministic post-processing state before geometry checks/screenshot.
+    await expect(fileTitle).not.toContainText("Processing...", {
+      timeout: 30_000,
+    });
+    await expect(fileTitle).not.toContainText("Uploading...", {
+      timeout: 30_000,
+    });
+    await expect(fileTitle).toContainText("TXT", { timeout: 30_000 });
+
     const iconWrapper = filesSection
-      .locator('[data-testid="file-icon-wrapper"]')
+      .locator(`[data-testid="${FILE_CARD_TEST_IDS.iconWrapper}"]`)
       .first();
     await expect(iconWrapper).toBeVisible();
 
