@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
-import { FullPersona } from "@/app/admin/assistants/interfaces";
+import { FullPersona } from "@/app/admin/agents/interfaces";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import Modal from "@/refresh-components/Modal";
 import { Section } from "@/layouts/general-layouts";
@@ -29,7 +29,7 @@ import { MCPServer, ToolSnapshot } from "@/lib/tools/interfaces";
 import EmptyMessage from "@/refresh-components/EmptyMessage";
 import { Horizontal } from "@/layouts/input-layouts";
 import Switch from "@/refresh-components/inputs/Switch";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import AppInputBar from "@/sections/input/AppInputBar";
 import { useFilters, useLlmManager } from "@/lib/hooks";
@@ -66,7 +66,7 @@ function ViewerMCPServerCard({ server, tools }: ViewerMCPServerCardProps) {
             variant="section"
             rightChildren={
               <Button
-                internal
+                prominence="internal"
                 rightIcon={folded ? SvgExpand : SvgFold}
                 onClick={() => setFolded((prev) => !prev)}
               >
@@ -116,8 +116,6 @@ function ViewerOpenApiToolCard({ tool }: { tool: ToolSnapshot }) {
   );
 }
 
-const EMPTY_DOCS: [] = [];
-
 /**
  * Floating ChatInputBar below the AgentViewerModal.
  * On submit, navigates to the agent's chat with the message pre-filled.
@@ -136,15 +134,11 @@ function AgentChatInput({ agent, onSubmit }: AgentChatInputProps) {
       llmManager={llmManager}
       chatState="input"
       filterManager={filterManager}
-      selectedAssistant={agent}
-      selectedDocuments={EMPTY_DOCS}
-      removeDocs={() => {}}
+      selectedAgent={agent}
       stopGenerating={() => {}}
       handleFileUpload={() => {}}
-      toggleDocumentSidebar={() => {}}
       currentSessionFileTokenCount={0}
       availableContextTokens={Infinity}
-      retrievalEnabled={false}
       deepResearchEnabled={false}
       toggleDeepResearch={() => {}}
       disabled={false}
@@ -256,7 +250,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
         <Modal.Body>
           {/* Metadata */}
           <Section flexDirection="row" justifyContent="start">
-            {!agent.is_default_persona && (
+            {agent.featured && (
               <Content
                 icon={SvgStar}
                 title="Featured"

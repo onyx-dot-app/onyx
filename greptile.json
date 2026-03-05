@@ -1,0 +1,93 @@
+{
+    "labels": [],
+    "comment": "",
+    "fixWithAI": true,
+    "hideFooter": false,
+    "strictness": 2,
+    "statusCheck": true,
+    "commentTypes": [
+      "logic",
+      "syntax",
+      "style"
+    ],
+    "instructions": "",
+    "disabledLabels": [],
+    "excludeAuthors": [
+      "dependabot[bot]",
+      "renovate[bot]"
+    ],
+    "ignoreKeywords": "",
+    "ignorePatterns": "greptile.json\n",
+    "includeAuthors": [],
+    "summarySection": {
+      "included": true,
+      "collapsible": false,
+      "defaultOpen": false
+    },
+    "excludeBranches": [],
+    "fileChangeLimit": 300,
+    "includeBranches": [],
+    "includeKeywords": "",
+    "triggerOnUpdates": true,
+    "updateExistingSummaryComment": true,
+    "updateSummaryOnly": false,
+    "issuesTableSection": {
+      "included": true,
+      "collapsible": false,
+      "defaultOpen": false
+    },
+    "statusCommentsEnabled": true,
+    "confidenceScoreSection": {
+      "included": true,
+      "collapsible": false
+    },
+    "sequenceDiagramSection": {
+      "included": true,
+      "collapsible": false,
+      "defaultOpen": false
+    },
+    "shouldUpdateDescription": false,
+    "customContext": {
+      "other": [
+        {
+          "scope": [],
+          "content": "Use explicit type annotations for variables to enhance code clarity, especially when moving type hints around in the code."
+        }
+      ],
+      "rules": [
+        {
+          "scope": [],
+          "rule": "Whenever a TODO is added, there must always be an associated name or ticket with that TODO in the style of TODO(name): ... or TODO(1234): ..."
+        },
+        {
+          "scope": ["web/**"],
+          "rule": "For frontend changes (changes that touch the /web directory), make sure to enforce all standards described in the web/STANDARDS.md file."
+        },
+        {
+          "scope": [],
+          "rule": "Remove temporary debugging code before merging to production, especially tenant-specific debugging logs."
+        },
+        {
+          "scope": [],
+          "rule": "When hardcoding a boolean variable to a constant value, remove the variable entirely and clean up all places where it's used rather than just setting it to a constant."
+        },
+        {
+          "scope": ["backend/**/*.py"],
+          "rule": "Never raise HTTPException directly in business code. Use `raise OnyxError(OnyxErrorCode.XXX, \"message\")` from `onyx.error_handling.exceptions`. A global FastAPI exception handler converts OnyxError into structured JSON responses with {\"error_code\": \"...\", \"message\": \"...\"}. Error codes are defined in `onyx.error_handling.error_codes.OnyxErrorCode`. For upstream errors with dynamic HTTP status codes, use `status_code_override`: `raise OnyxError(OnyxErrorCode.BAD_GATEWAY, detail, status_code_override=upstream_status)`."
+        }
+      ],
+      "files": [
+        {
+          "scope": [],
+          "path": "contributing_guides/best_practices.md",
+          "description": "Best practices for contributing to the codebase"
+        },
+        {
+          "scope": [],
+          "path": "CLAUDE.md",
+          "description": "Project instructions and coding standards"
+        }
+      ]
+    }
+  }
+  

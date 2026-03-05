@@ -55,7 +55,7 @@ import {
 } from "@/lib/connectors/oauth";
 import { CreateStdOAuthCredential } from "@/components/credentials/actions/CreateStdOAuthCredential";
 import { Spinner } from "@/components/Spinner";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { deleteConnector } from "@/lib/connector";
 import ConnectorDocsLink from "@/components/admin/connectors/ConnectorDocsLink";
 import Text from "@/refresh-components/texts/Text";
@@ -580,7 +580,7 @@ export default function AddConnector({
                       {oauthSupportedSources.includes(connector) &&
                         (NEXT_PUBLIC_CLOUD_ENABLED || NEXT_PUBLIC_TEST_ENV) && (
                           <Button
-                            action
+                            variant="action"
                             onClick={handleAuthorize}
                             disabled={isAuthorizing}
                             hidden={!isAuthorizeVisible}

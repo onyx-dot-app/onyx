@@ -162,7 +162,7 @@ export interface SuggestionBubble {
 export async function generateFollowupSuggestions(
   sessionId: string,
   userMessage: string,
-  assistantMessage: string
+  agentMessage: string
 ): Promise<SuggestionBubble[]> {
   const res = await fetch(
     `${API_BASE}/sessions/${sessionId}/generate-suggestions`,
@@ -171,7 +171,7 @@ export async function generateFollowupSuggestions(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         user_message: userMessage,
-        assistant_message: assistantMessage,
+        assistant_message: agentMessage,
       }),
     }
   );

@@ -1,15 +1,15 @@
-import { Persona } from "@/app/admin/assistants/interfaces";
+import { Persona } from "@/app/admin/agents/interfaces";
 import { Credential } from "./connectors/credentials";
 import { Connector } from "./connectors/connectors";
 import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
 
-export interface UserSpecificAssistantPreference {
+export interface UserSpecificAgentPreference {
   disabled_tool_ids?: number[];
 }
 
-export type UserSpecificAssistantPreferences = Record<
+export type UserSpecificAgentPreferences = Record<
   number,
-  UserSpecificAssistantPreference
+  UserSpecificAgentPreference
 >;
 
 export enum ThemePreference {
@@ -19,6 +19,7 @@ export enum ThemePreference {
 }
 
 interface UserPreferences {
+  // TODO: rename to agent — https://linear.app/onyx-app/issue/ENG-3766
   chosen_assistants: number[] | null;
   visible_assistants: number[];
   hidden_assistants: number[];

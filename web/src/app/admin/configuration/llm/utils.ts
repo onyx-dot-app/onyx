@@ -187,6 +187,7 @@ export const fetchOllamaModels = async (
         api_base: apiBase,
         provider_name: params.provider_name,
       }),
+      signal: params.signal,
     });
 
     if (!response.ok) {

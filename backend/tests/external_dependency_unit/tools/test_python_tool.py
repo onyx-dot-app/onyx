@@ -933,6 +933,7 @@ from unittest.mock import patch
 
 import pytest
 from fastapi import UploadFile
+from fastapi.background import BackgroundTasks
 from sqlalchemy.orm import Session
 from starlette.datastructures import Headers
 
@@ -1026,6 +1027,13 @@ class _MockCIHandler(BaseHTTPRequestHandler):
         else:
             self._respond_json(404, {"error": "not found"})
 
+    def do_GET(self) -> None:
+        self._capture("GET", b"")
+        if self.path == "/health":
+            self._respond_json(200, {"status": "ok"})
+        else:
+            self._respond_json(404, {"error": "not found"})
+
     def do_DELETE(self) -> None:
         self._capture("DELETE", b"")
         self.send_response(200)
@@ -1106,6 +1114,14 @@ def mock_ci_server() -> Generator[MockCodeInterpreterServer, None, None]:
     server.shutdown()
 
 
+@pytest.fixture(autouse=True)
+def _clear_health_cache() -> None:
+    """Reset the health check cache before every test."""
+    import onyx.tools.tool_implementations.python.code_interpreter_client as mod
+
+    mod._health_cache = {}
+
+
 @pytest.fixture()
 def _attach_python_tool_to_default_persona(db_session: Session) -> None:
     """Ensure the default persona (id=0) has the PythonTool attached."""
@@ -1139,6 +1155,7 @@ def test_code_interpreter_receives_chat_files(
     # Upload a test CSV
     csv_content = b"name,age,city\nAlice,30,NYC\nBob,25,SF\n"
     result = upload_user_files(
+        bg_tasks=BackgroundTasks(),
         files=[
             UploadFile(
                 file=io.BytesIO(csv_content),

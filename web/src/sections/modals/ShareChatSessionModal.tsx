@@ -8,7 +8,7 @@ import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { copyAll } from "@/app/app/message/copyingUtils";
 import { Section } from "@/layouts/general-layouts";
 import Modal from "@/refresh-components/Modal";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import Text from "@/refresh-components/texts/Text";
@@ -188,62 +188,58 @@ export default function ShareChatSessionModal({
           <Section
             justifyContent="start"
             alignItems="stretch"
-            gap={1}
             height="auto"
+            gap={0.12}
           >
-            <Section
-              justifyContent="start"
-              alignItems="stretch"
-              height="auto"
-              gap={0.12}
-            >
-              <PrivacyOption
-                icon={SvgLock}
-                title="Private"
-                description="Only you have access to this chat."
-                selected={selectedPrivacy === "private"}
-                onClick={() => setSelectedPrivacy("private")}
-                ariaLabel="share-modal-option-private"
-              />
-              <PrivacyOption
-                icon={SvgUsers}
-                title="Your Organization"
-                description="Anyone in your organization can view this chat."
-                selected={selectedPrivacy === "public"}
-                onClick={() => setSelectedPrivacy("public")}
-                ariaLabel="share-modal-option-public"
-              />
-            </Section>
-
-            {isShared && (
-              <div aria-label="share-modal-link-input">
-                <InputTypeIn
-                  readOnly
-                  value={shareLink}
-                  rightSection={
-                    <CopyIconButton
-                      getCopyText={() => shareLink}
-                      tooltip="Copy link"
-                      size="sm"
-                      aria-label="share-modal-copy-link"
-                    />
-                  }
-                />
-              </div>
-            )}
+            <PrivacyOption
+              icon={SvgLock}
+              title="Private"
+              description="Only you have access to this chat."
+              selected={selectedPrivacy === "private"}
+              onClick={() => setSelectedPrivacy("private")}
+              ariaLabel="share-modal-option-private"
+            />
+            <PrivacyOption
+              icon={SvgUsers}
+              title="Your Organization"
+              description="Anyone in your organization can view this chat."
+              selected={selectedPrivacy === "public"}
+              onClick={() => setSelectedPrivacy("public")}
+              ariaLabel="share-modal-option-public"
+            />
           </Section>
+
+          {isShared && (
+            <InputTypeIn
+              aria-label="share-modal-link-input"
+              readOnly
+              value={shareLink}
+              rightSection={
+                <CopyIconButton
+                  getCopyText={() => shareLink}
+                  tooltip="Copy link"
+                  size="sm"
+                  aria-label="share-modal-copy-link"
+                />
+              }
+            />
+          )}
         </Modal.Body>
         <Modal.Footer>
           {!isShared && (
-            <Button secondary onClick={onClose} aria-label="share-modal-cancel">
+            <Button
+              prominence="secondary"
+              onClick={onClose}
+              aria-label="share-modal-cancel"
+            >
               Cancel
             </Button>
           )}
           <Button
             onClick={handleSubmit}
             disabled={isLoading}
-            leftIcon={isShared ? SvgLink : undefined}
-            className={isShared ? "w-full" : undefined}
+            icon={isShared ? SvgLink : undefined}
+            width={isShared ? "full" : undefined}
             aria-label="share-modal-submit"
           >
             {submitButtonText}

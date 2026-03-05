@@ -1,3 +1,5 @@
+import Link from "next/link";
+import type { Route } from "next";
 import "@opal/core/interactive/styles.css";
 import React from "react";
 import { Slot } from "@radix-ui/react-slot";
@@ -26,18 +28,28 @@ type InteractiveBaseSelectVariantProps = {
   selected?: boolean;
 };
 
+type InteractiveBaseSidebarProminenceTypes = "light";
+type InteractiveBaseSidebarVariantProps = {
+  variant: "sidebar";
+  prominence?: InteractiveBaseSidebarProminenceTypes;
+  selected?: boolean;
+};
+
 /**
  * Discriminated union tying `variant` to `prominence`.
  *
  * - `"none"` accepts no prominence (`prominence` must not be provided)
  * - `"select"` accepts an optional prominence (defaults to `"light"`) and
  *   an optional `selected` boolean that switches foreground to action-link colours
+ * - `"sidebar"` accepts an optional prominence (defaults to `"light"`) and
+ *   an optional `selected` boolean for the focused/active-item state
  * - `"default"`, `"action"`, and `"danger"` accept an optional prominence
  *   (defaults to `"primary"`)
  */
 type InteractiveBaseVariantProps =
   | { variant?: "none"; prominence?: never; selected?: never }
   | InteractiveBaseSelectVariantProps
+  | InteractiveBaseSidebarVariantProps
   | {
       variant?: InteractiveBaseVariantTypes;
       prominence?: InteractiveBaseProminenceTypes;
@@ -218,7 +230,8 @@ function InteractiveBase({
   ...props
 }: InteractiveBaseProps) {
   const effectiveProminence =
-    prominence ?? (variant === "select" ? "light" : "primary");
+    prominence ??
+    (variant === "select" || variant === "sidebar" ? "light" : "primary");
   const classes = cn(
     "interactive",
     !props.onClick && !href && "!cursor-default !select-auto",
@@ -417,9 +430,9 @@ function InteractiveContainer({
   // so all styling (backgrounds, rounding, overflow) lives on one element.
   if (href) {
     return (
-      <a
+      <Link
         ref={ref as React.Ref<HTMLAnchorElement>}
-        href={href}
+        href={href as Route}
         target={target}
         rel={rel}
         {...(sharedProps as React.HTMLAttributes<HTMLAnchorElement>)}
@@ -482,6 +495,8 @@ export {
   type InteractiveBaseProps,
   type InteractiveBaseVariantProps,
   type InteractiveBaseSelectVariantProps,
+  type InteractiveBaseSidebarVariantProps,
+  type InteractiveBaseSidebarProminenceTypes,
   type InteractiveContainerProps,
   type InteractiveContainerRoundingVariant,
 };

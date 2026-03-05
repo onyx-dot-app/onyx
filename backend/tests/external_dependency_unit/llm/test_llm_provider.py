@@ -11,7 +11,6 @@ from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
-from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import LLMModelFlowType
@@ -20,6 +19,8 @@ from onyx.db.llm import remove_llm_provider
 from onyx.db.llm import update_default_provider
 from onyx.db.llm import upsert_llm_provider
 from onyx.db.models import UserRole
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLM
 from onyx.server.manage.llm.api import (
@@ -122,16 +123,16 @@ class TestLLMConfigurationEndpoint:
         finally:
             db_session.rollback()
 
-    def test_failed_llm_test_raises_http_exception(
+    def test_failed_llm_test_raises_onyx_error(
         self,
         db_session: Session,
         provider_name: str,  # noqa: ARG002
     ) -> None:
         """
-        Test that a failed LLM test raises an HTTPException with status 400.
+        Test that a failed LLM test raises an OnyxError with VALIDATION_ERROR.
 
         When test_llm returns an error message, the endpoint should raise
-        an HTTPException with the error details.
+        an OnyxError with the error details.
         """
         error_message = "Invalid API key: Authentication failed"
 
@@ -143,7 +144,7 @@ class TestLLMConfigurationEndpoint:
             with patch(
                 "onyx.server.manage.llm.api.test_llm", side_effect=mock_test_llm_failure
             ):
-                with pytest.raises(HTTPException) as exc_info:
+                with pytest.raises(OnyxError) as exc_info:
                     run_test_llm_configuration(
                         test_llm_request=LLMTestRequest(
                             provider=LlmProviderNames.OPENAI,
@@ -156,9 +157,8 @@ class TestLLMConfigurationEndpoint:
                         db_session=db_session,
                     )
 
-                # Verify the exception details
-                assert exc_info.value.status_code == 400
-                assert exc_info.value.detail == error_message
+                assert exc_info.value.error_code == OnyxErrorCode.VALIDATION_ERROR
+                assert exc_info.value.message == error_message
 
         finally:
             db_session.rollback()
@@ -536,11 +536,11 @@ class TestDefaultProviderEndpoint:
                 remove_llm_provider(db_session, provider.id)
 
             # Now run_test_default_provider should fail
-            with pytest.raises(HTTPException) as exc_info:
+            with pytest.raises(OnyxError) as exc_info:
                 run_test_default_provider(_=_create_mock_admin())
 
-            assert exc_info.value.status_code == 400
-            assert "No LLM Provider setup" in exc_info.value.detail
+            assert exc_info.value.error_code == OnyxErrorCode.VALIDATION_ERROR
+            assert "No LLM Provider setup" in exc_info.value.message
 
         finally:
             db_session.rollback()
@@ -581,11 +581,11 @@ class TestDefaultProviderEndpoint:
             with patch(
                 "onyx.server.manage.llm.api.test_llm", side_effect=mock_test_llm_failure
             ):
-                with pytest.raises(HTTPException) as exc_info:
+                with pytest.raises(OnyxError) as exc_info:
                     run_test_default_provider(_=_create_mock_admin())
 
-                assert exc_info.value.status_code == 400
-                assert exc_info.value.detail == error_message
+                assert exc_info.value.error_code == OnyxErrorCode.VALIDATION_ERROR
+                assert exc_info.value.message == error_message
 
         finally:
             db_session.rollback()

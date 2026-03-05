@@ -365,6 +365,7 @@ class ScimTokenResponse(BaseModel):
     is_active: bool
     created_at: datetime
     last_used_at: datetime | None = None
+    idp_domain: str | None = None
 
 
 class ScimTokenCreatedResponse(ScimTokenResponse):

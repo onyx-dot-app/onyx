@@ -4,6 +4,7 @@
   "description": "Lightweight desktop app for Onyx Cloud",
   "scripts": {
     "dev": "tauri dev",
+    "debug": "tauri dev -- -- --debug",
     "build": "tauri build",
     "build:dmg": "tauri build --target universal-apple-darwin",
     "build:linux": "tauri build --bundles deb,rpm"

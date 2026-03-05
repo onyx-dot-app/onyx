@@ -42,7 +42,7 @@ import SvgStar from "@opal/icons/star";
 
 ## Usage inside Content
 
-Tag can be rendered as an accessory inside `Content`'s LabelLayout via the `tag` prop:
+Tag can be rendered as an accessory inside `Content`'s ContentMd via the `tag` prop:
 
 ```tsx
 import { Content } from "@opal/layouts";

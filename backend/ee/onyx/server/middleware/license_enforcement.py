@@ -46,7 +46,6 @@ from fastapi import FastAPI
 from fastapi import Request
 from fastapi import Response
 from fastapi.responses import JSONResponse
-from redis.exceptions import RedisError
 from sqlalchemy.exc import SQLAlchemyError
 
 from ee.onyx.configs.app_configs import LICENSE_ENFORCEMENT_ENABLED
@@ -56,6 +55,7 @@ from ee.onyx.configs.license_enforcement_config import (
 )
 from ee.onyx.db.license import get_cached_license_metadata
 from ee.onyx.db.license import refresh_license_cache
+from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.server.settings.models import ApplicationStatus
 from shared_configs.contextvars import get_current_tenant_id
@@ -164,9 +164,9 @@ def add_license_enforcement_middleware(
                     "[license_enforcement] No license, allowing community features"
                 )
                 is_gated = False
-        except RedisError as e:
+        except CACHE_TRANSIENT_ERRORS as e:
             logger.warning(f"Failed to check license metadata: {e}")
-            # Fail open - don't block users due to Redis connectivity issues
+            # Fail open - don't block users due to cache connectivity issues
             is_gated = False
 
         if is_gated:

@@ -181,8 +181,18 @@ test.describe("File preview modal from chat file links", () => {
     await expect(modal.getByText("app.py")).toBeVisible();
 
     // Verify the header description shows language and line info
-    await expect(modal.getByText(/python/i)).toBeVisible();
-    await expect(modal.getByText("2 lines", { exact: true })).toBeVisible();
+    await expect(
+      modal
+        .locator("div")
+        .filter({ hasText: /python/i })
+        .first()
+    ).toBeVisible();
+    await expect(
+      modal
+        .locator("div")
+        .filter({ hasText: /2 lines/ })
+        .first()
+    ).toBeVisible();
 
     // Verify the code content is rendered
     await expect(modal.getByText("Hello, world!")).toBeVisible();

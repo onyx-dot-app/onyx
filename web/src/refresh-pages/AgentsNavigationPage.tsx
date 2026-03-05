@@ -3,9 +3,9 @@
 import { useMemo, useState, useRef, useEffect } from "react";
 import AgentCard from "@/sections/cards/AgentCard";
 import { useUser } from "@/providers/UserProvider";
-import { checkUserOwnsAssistant as checkUserOwnsAgent } from "@/lib/agents";
+import { checkUserOwnsAgent as checkUserOwnsAgent } from "@/lib/agents";
 import { useAgents } from "@/hooks/useAgents";
-import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
+import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
@@ -361,12 +361,10 @@ export default function AgentsNavigationPage() {
   ]);
 
   const featuredAgents = [
-    ...memoizedCurrentlyVisibleAgents.filter(
-      (agent) => agent.is_default_persona
-    ),
+    ...memoizedCurrentlyVisibleAgents.filter((agent) => agent.featured),
   ];
   const allAgents = memoizedCurrentlyVisibleAgents.filter(
-    (agent) => !agent.is_default_persona
+    (agent) => !agent.featured
   );
 
   const agentCount = featuredAgents.length + allAgents.length;

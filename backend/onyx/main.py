@@ -32,11 +32,14 @@ from onyx.auth.schemas import UserUpdate
 from onyx.auth.users import auth_backend
 from onyx.auth.users import create_onyx_oauth_router
 from onyx.auth.users import fastapi_users
+from onyx.cache.interface import CacheBackendType
 from onyx.configs.app_configs import APP_API_PREFIX
 from onyx.configs.app_configs import APP_HOST
 from onyx.configs.app_configs import APP_PORT
 from onyx.configs.app_configs import AUTH_RATE_LIMITING_ENABLED
 from onyx.configs.app_configs import AUTH_TYPE
+from onyx.configs.app_configs import CACHE_BACKEND
+from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.app_configs import LOG_ENDPOINT_LATENCY
 from onyx.configs.app_configs import OAUTH_CLIENT_ID
 from onyx.configs.app_configs import OAUTH_CLIENT_SECRET
@@ -56,6 +59,7 @@ from onyx.db.engine.async_sql_engine import get_sqlalchemy_async_engine
 from onyx.db.engine.connection_warmup import warm_up_connections
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.sql_engine import SqlEngine
+from onyx.error_handling.exceptions import register_onyx_exception_handlers
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.api_key.api import router as api_key_router
 from onyx.server.auth_check import check_router_auth
@@ -254,8 +258,53 @@ def include_auth_router_with_prefix(
     )
 
 
+def validate_cache_backend_settings() -> None:
+    """Validate that CACHE_BACKEND=postgres is only used with DISABLE_VECTOR_DB.
+
+    The Postgres cache backend eliminates the Redis dependency, but only works
+    when Celery is not running (which requires DISABLE_VECTOR_DB=true).
+    """
+    if CACHE_BACKEND == CacheBackendType.POSTGRES and not DISABLE_VECTOR_DB:
+        raise RuntimeError(
+            "CACHE_BACKEND=postgres requires DISABLE_VECTOR_DB=true. "
+            "The Postgres cache backend is only supported in no-vector-DB "
+            "deployments where Celery is replaced by the in-process task runner."
+        )
+
+
+def validate_no_vector_db_settings() -> None:
+    """Validate that DISABLE_VECTOR_DB is not combined with incompatible settings.
+
+    Raises RuntimeError if DISABLE_VECTOR_DB is set alongside MULTI_TENANT or ENABLE_CRAFT,
+    since these modes require infrastructure that is removed in no-vector-DB deployments.
+    """
+    if not DISABLE_VECTOR_DB:
+        return
+
+    if MULTI_TENANT:
+        raise RuntimeError(
+            "DISABLE_VECTOR_DB cannot be used with MULTI_TENANT. "
+            "Multi-tenant deployments require the vector database for "
+            "per-tenant document indexing and search. Run in single-tenant "
+            "mode when disabling the vector database."
+        )
+
+    from onyx.server.features.build.configs import ENABLE_CRAFT
+
+    if ENABLE_CRAFT:
+        raise RuntimeError(
+            "DISABLE_VECTOR_DB cannot be used with ENABLE_CRAFT. "
+            "Onyx Craft requires background workers for sandbox lifecycle "
+            "management, which are removed in no-vector-DB deployments. "
+            "Disable Craft (ENABLE_CRAFT=false) when disabling the vector database."
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
+    validate_no_vector_db_settings()
+    validate_cache_backend_settings()
+
     # Set recursion limit
     if SYSTEM_RECURSION_LIMIT is not None:
         sys.setrecursionlimit(SYSTEM_RECURSION_LIMIT)
@@ -324,7 +373,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
     if AUTH_RATE_LIMITING_ENABLED:
         await setup_auth_limiter()
 
+    if DISABLE_VECTOR_DB:
+        from onyx.background.periodic_poller import recover_stuck_user_files
+        from onyx.background.periodic_poller import start_periodic_poller
+
+        recover_stuck_user_files(POSTGRES_DEFAULT_SCHEMA)
+        start_periodic_poller(POSTGRES_DEFAULT_SCHEMA)
+
     yield
+
+    if DISABLE_VECTOR_DB:
+        from onyx.background.periodic_poller import stop_periodic_poller
+
+        stop_periodic_poller()
 
     SqlEngine.reset_engine()
 
@@ -383,6 +444,8 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     application.add_exception_handler(
         status.HTTP_500_INTERNAL_SERVER_ERROR, log_http_error
     )
+
+    register_onyx_exception_handlers(application)
 
     include_router_with_global_prefix_prepended(application, password_router)
     include_router_with_global_prefix_prepended(application, chat_router)

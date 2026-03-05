@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { FileDescriptor } from "@/app/app/interfaces";
 import "katex/dist/katex.min.css";
 import MessageSwitcher from "@/app/app/message/MessageSwitcher";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
+import useScreenSize from "@/hooks/useScreenSize";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import { Button } from "@opal/components";
 import { SvgEdit } from "@opal/icons";
@@ -137,6 +138,7 @@ const HumanMessage = React.memo(function HumanMessage({
   const [content, setContent] = useState(initialContent);
 
   const [isEditing, setIsEditing] = useState(false);
+  const { isMobile } = useScreenSize();
 
   // Use nodeId for switching (finding position in siblings)
   const indexInSiblings = otherMessagesCanSwitchTo?.indexOf(nodeId);
@@ -168,119 +170,104 @@ const HumanMessage = React.memo(function HumanMessage({
     return undefined;
   };
 
+  const copyEditButton = useMemo(
+    () => (
+      <div className="flex flex-row flex-shrink px-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <CopyIconButton
+          getCopyText={() => content}
+          prominence="tertiary"
+          data-testid="HumanMessage/copy-button"
+        />
+        <Button
+          icon={SvgEdit}
+          prominence="tertiary"
+          tooltip="Edit"
+          onClick={() => setIsEditing(true)}
+          data-testid="HumanMessage/edit-button"
+        />
+      </div>
+    ),
+    [content]
+  );
+
   return (
     <div
       id="onyx-human-message"
       className="group flex flex-col justify-end w-full relative"
     >
       <FileDisplay alignBubble files={files || []} />
-      <div className="md:flex md:flex-wrap relative justify-end break-words">
-        {isEditing ? (
-          <MessageEditing
-            content={content}
-            onSubmitEdit={(editedContent) => {
-              // Don't update UI for edits that can't be persisted
-              if (messageId === undefined || messageId === null) {
-                setIsEditing(false);
-                return;
-              }
-              onEdit?.(editedContent, messageId);
-              setContent(editedContent);
+      {isEditing ? (
+        <MessageEditing
+          content={content}
+          onSubmitEdit={(editedContent) => {
+            // Don't update UI for edits that can't be persisted
+            if (messageId === undefined || messageId === null) {
               setIsEditing(false);
-            }}
-            onCancelEdit={() => setIsEditing(false)}
-          />
-        ) : typeof content === "string" ? (
-          <>
-            <div className="md:max-w-[37.5rem] flex basis-[100%] md:basis-auto justify-end md:order-1">
-              <div
-                className={
-                  "max-w-[30rem] md:max-w-[37.5rem] whitespace-break-spaces rounded-t-16 rounded-bl-16 bg-background-tint-02 py-2 px-3"
-                }
-                onCopy={(e) => {
-                  const selection = window.getSelection();
-                  if (selection) {
-                    e.preventDefault();
-                    const text = selection
-                      .toString()
-                      .replace(/\n{2,}/g, "\n")
-                      .trim();
-                    e.clipboardData.setData("text/plain", text);
-                  }
-                }}
-              >
-                <Text
-                  as="p"
-                  className="inline-block align-middle"
-                  mainContentBody
-                >
-                  {content}
-                </Text>
-              </div>
-            </div>
-            {onEdit && !isEditing && (
-              <div className="absolute md:relative right-0 z-content flex flex-row p-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <CopyIconButton
-                  getCopyText={() => content}
-                  prominence="tertiary"
-                  data-testid="HumanMessage/copy-button"
-                />
-                <Button
-                  icon={SvgEdit}
-                  prominence="tertiary"
-                  tooltip="Edit"
-                  onClick={() => setIsEditing(true)}
-                  data-testid="HumanMessage/edit-button"
-                />
-              </div>
-            )}
-          </>
-        ) : (
-          <>
+              return;
+            }
+            onEdit?.(editedContent, messageId);
+            setContent(editedContent);
+            setIsEditing(false);
+          }}
+          onCancelEdit={() => setIsEditing(false)}
+        />
+      ) : (
+        <div className="flex justify-end">
+          {onEdit && !isMobile && copyEditButton}
+          <div className="md:max-w-[37.5rem]">
             <div
-              className={cn(
-                "my-auto",
-                onEdit && !isEditing
-                  ? "opacity-0 group-hover:opacity-100 transition-opacity"
-                  : "invisible"
-              )}
+              className={
+                "max-w-[30rem] md:max-w-[37.5rem] whitespace-break-spaces break-anywhere rounded-t-16 rounded-bl-16 bg-background-tint-02 py-2 px-3"
+              }
+              onCopy={(e) => {
+                const selection = window.getSelection();
+                if (selection) {
+                  e.preventDefault();
+                  const text = selection
+                    .toString()
+                    .replace(/\n{2,}/g, "\n")
+                    .trim();
+                  e.clipboardData.setData("text/plain", text);
+                }
+              }}
             >
-              <Button
-                icon={SvgEdit}
-                onClick={() => setIsEditing(true)}
-                prominence="tertiary"
-                tooltip="Edit"
-              />
+              <Text
+                as="p"
+                className="inline-block align-middle"
+                mainContentBody
+              >
+                {content}
+              </Text>
             </div>
-            <div className="ml-auto rounded-lg p-1">{content}</div>
-          </>
-        )}
-        <div className="md:min-w-[100%] flex justify-end order-1 mt-1">
-          {currentMessageInd !== undefined &&
-            onMessageSelection &&
-            otherMessagesCanSwitchTo &&
-            otherMessagesCanSwitchTo.length > 1 && (
-              <MessageSwitcher
-                disableForStreaming={disableSwitchingForStreaming}
-                currentPage={currentMessageInd + 1}
-                totalPages={otherMessagesCanSwitchTo.length}
-                handlePrevious={() => {
-                  stopGenerating();
-                  const prevMessage = getPreviousMessage();
-                  if (prevMessage !== undefined) {
-                    onMessageSelection(prevMessage);
-                  }
-                }}
-                handleNext={() => {
-                  stopGenerating();
-                  const nextMessage = getNextMessage();
-                  if (nextMessage !== undefined) {
-                    onMessageSelection(nextMessage);
-                  }
-                }}
-              />
-            )}
+          </div>
         </div>
+      )}
+      <div className="flex justify-end pt-1">
+        {!isEditing && onEdit && isMobile && copyEditButton}
+        {currentMessageInd !== undefined &&
+          onMessageSelection &&
+          otherMessagesCanSwitchTo &&
+          otherMessagesCanSwitchTo.length > 1 && (
+            <MessageSwitcher
+              disableForStreaming={disableSwitchingForStreaming}
+              currentPage={currentMessageInd + 1}
+              totalPages={otherMessagesCanSwitchTo.length}
+              handlePrevious={() => {
+                stopGenerating();
+                const prevMessage = getPreviousMessage();
+                if (prevMessage !== undefined) {
+                  onMessageSelection(prevMessage);
+                }
+              }}
+              handleNext={() => {
+                stopGenerating();
+                const nextMessage = getNextMessage();
+                if (nextMessage !== undefined) {
+                  onMessageSelection(nextMessage);
+                }
+              }}
+            />
+          )}
       </div>
     </div>
   );

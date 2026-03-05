@@ -3,7 +3,7 @@
 import { format } from "date-fns";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 
-import { FiDownload, FiDownloadCloud } from "react-icons/fi";
+import { FiDownload } from "react-icons/fi";
 import {
   Table,
   TableBody,
@@ -15,6 +15,7 @@ import {
 import Text from "@/components/ui/text";
 import Title from "@/components/ui/title";
 import Button from "@/refresh-components/buttons/Button";
+import { Button as OpalButton } from "@opal/components";
 import useSWR from "swr";
 import React, { useState } from "react";
 import { UsageReport } from "./types";
@@ -29,7 +30,7 @@ import Popover from "@/refresh-components/Popover";
 import Calendar from "@/refresh-components/Calendar";
 import { cn } from "@/lib/utils";
 import { Spinner } from "@/components/Spinner";
-import { SvgCalendar } from "@opal/icons";
+import { SvgCalendar, SvgDownloadCloud } from "@opal/icons";
 
 function GenerateReportInput({
   onReportGenerated,
@@ -102,6 +103,7 @@ function GenerateReportInput({
       <div className="grid gap-2 mb-3">
         <Popover>
           <Popover.Trigger asChild>
+            {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
             <Button
               secondary
               className={cn(
@@ -142,9 +144,9 @@ function GenerateReportInput({
               disabled={(date) => date > new Date()}
             />
             <div className="border-t p-3">
-              <Button
-                tertiary
-                className="w-full justify-start"
+              <OpalButton
+                prominence="tertiary"
+                width="full"
                 onClick={() => {
                   setDateRange({
                     from: lastWeek,
@@ -154,10 +156,10 @@ function GenerateReportInput({
                 }}
               >
                 Last 7 days
-              </Button>
-              <Button
-                tertiary
-                className="w-full justify-start"
+              </OpalButton>
+              <OpalButton
+                prominence="tertiary"
+                width="full"
                 onClick={() => {
                   setDateRange({
                     from: lastMonth,
@@ -167,10 +169,10 @@ function GenerateReportInput({
                 }}
               >
                 Last 30 days
-              </Button>
-              <Button
-                tertiary
-                className="w-full justify-start"
+              </OpalButton>
+              <OpalButton
+                prominence="tertiary"
+                width="full"
                 onClick={() => {
                   setDateRange({
                     from: lastYear,
@@ -180,10 +182,10 @@ function GenerateReportInput({
                 }}
               >
                 Last year
-              </Button>
-              <Button
-                tertiary
-                className="w-full justify-start"
+              </OpalButton>
+              <OpalButton
+                prominence="tertiary"
+                width="full"
                 onClick={() => {
                   setDateRange({
                     from: new Date(1970, 0, 1),
@@ -193,19 +195,19 @@ function GenerateReportInput({
                 }}
               >
                 All time
-              </Button>
+              </OpalButton>
             </div>
           </Popover.Content>
         </Popover>
       </div>
-      <Button
+      <OpalButton
         color={"blue"}
-        leftIcon={FiDownloadCloud}
+        icon={SvgDownloadCloud}
         disabled={isLoading || isWaitingForReport}
         onClick={() => requestReport()}
       >
         {isWaitingForReport ? "Generating..." : "Generate Report"}
-      </Button>
+      </OpalButton>
       <p className="mt-1 text-xs">
         {isWaitingForReport
           ? "A report is currently being generated. Please wait..."

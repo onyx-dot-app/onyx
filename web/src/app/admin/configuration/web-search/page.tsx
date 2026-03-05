@@ -22,7 +22,10 @@ import {
   SvgOnyxLogo,
   SvgX,
 } from "@opal/icons";
+import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
 import { WebProviderSetupModal } from "@/app/admin/configuration/web-search/WebProviderSetupModal";
+
+const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.WEB_SEARCH]!;
 import {
   SEARCH_PROVIDERS_URL,
   SEARCH_PROVIDER_DETAILS,
@@ -88,6 +91,7 @@ function HoverIconButton({
 }: HoverIconButtonProps) {
   return (
     <div onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
+      {/* TODO(@raunakab): migrate to opal Button once HoverIconButtonProps typing is resolved */}
       <Button {...buttonProps} rightIcon={isHovered ? SvgX : SvgCheckSquare}>
         {children}
       </Button>
@@ -403,8 +407,8 @@ export default function Page() {
     return (
       <SettingsLayouts.Root>
         <SettingsLayouts.Header
-          icon={SvgGlobe}
-          title="Web Search"
+          icon={route.icon}
+          title={route.title}
           description="Search settings for external search across the internet."
           separator
         />
@@ -426,8 +430,8 @@ export default function Page() {
     return (
       <SettingsLayouts.Root>
         <SettingsLayouts.Header
-          icon={SvgGlobe}
-          title="Web Search"
+          icon={route.icon}
+          title={route.title}
           description="Search settings for external search across the internet."
           separator
         />
@@ -832,8 +836,8 @@ export default function Page() {
     <>
       <SettingsLayouts.Root>
         <SettingsLayouts.Header
-          icon={SvgGlobe}
-          title="Web Search"
+          icon={route.icon}
+          title={route.title}
           description="Search settings for external search across the internet."
           separator
         />
@@ -1007,9 +1011,8 @@ export default function Page() {
                             {buttonState.label}
                           </HoverIconButton>
                         ) : (
-                          <Button
-                            action={false}
-                            tertiary
+                          <OpalButton
+                            prominence="tertiary"
                             disabled={
                               buttonState.disabled || !buttonState.onClick
                             }
@@ -1026,7 +1029,7 @@ export default function Page() {
                             }
                           >
                             {buttonState.label}
-                          </Button>
+                          </OpalButton>
                         )}
                       </div>
                     </div>
@@ -1199,9 +1202,8 @@ export default function Page() {
                           {buttonState.label}
                         </HoverIconButton>
                       ) : (
-                        <Button
-                          action={false}
-                          tertiary
+                        <OpalButton
+                          prominence="tertiary"
                           disabled={
                             buttonState.disabled || !buttonState.onClick
                           }
@@ -1218,7 +1220,7 @@ export default function Page() {
                           }
                         >
                           {buttonState.label}
-                        </Button>
+                        </OpalButton>
                       )}
                     </div>
                   </div>

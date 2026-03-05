@@ -4,7 +4,6 @@ import pytest
 import requests
 from sqlalchemy.orm import Session
 
-from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.llm import can_user_access_llm_provider
 from onyx.db.llm import fetch_user_group_ids
@@ -78,12 +77,6 @@ def _create_persona(
     persona = Persona(
         name=name,
         description=f"{name} description",
-        num_chunks=5,
-        chunks_above=2,
-        chunks_below=2,
-        llm_relevance_filter=True,
-        llm_filter_extraction=True,
-        recency_bias=RecencyBiasSetting.AUTO,
         llm_model_provider_override=provider_name,
         llm_model_version_override="gpt-4o-mini",
         system_prompt="System prompt",
@@ -247,6 +240,116 @@ def test_can_user_access_llm_provider_or_logic(
             restricted_provider,
             basic_group_ids,
             blocked_persona,
+        )
+
+
+def test_public_provider_with_persona_restrictions(
+    users: tuple[DATestUser, DATestUser],
+) -> None:
+    """Public providers should still enforce persona restrictions.
+
+    Regression test for the bug where is_public=True caused
+    can_user_access_llm_provider() to return True immediately,
+    bypassing persona whitelist checks entirely.
+    """
+    admin_user, _basic_user = users
+
+    with get_session_with_current_tenant() as db_session:
+        # Public provider with persona restrictions
+        public_restricted = _create_llm_provider(
+            db_session,
+            name="public-persona-restricted",
+            default_model_name="gpt-4o",
+            is_public=True,
+            is_default=True,
+        )
+
+        whitelisted_persona = _create_persona(
+            db_session,
+            name="whitelisted-persona",
+            provider_name=public_restricted.name,
+        )
+        non_whitelisted_persona = _create_persona(
+            db_session,
+            name="non-whitelisted-persona",
+            provider_name=public_restricted.name,
+        )
+
+        # Only whitelist one persona
+        db_session.add(
+            LLMProvider__Persona(
+                llm_provider_id=public_restricted.id,
+                persona_id=whitelisted_persona.id,
+            )
+        )
+        db_session.flush()
+        db_session.refresh(public_restricted)
+
+        admin_model = db_session.get(User, admin_user.id)
+        assert admin_model is not None
+        admin_group_ids = fetch_user_group_ids(db_session, admin_model)
+
+        # Whitelisted persona — should be allowed
+        assert can_user_access_llm_provider(
+            public_restricted,
+            admin_group_ids,
+            whitelisted_persona,
+        )
+
+        # Non-whitelisted persona — should be denied despite is_public=True
+        assert not can_user_access_llm_provider(
+            public_restricted,
+            admin_group_ids,
+            non_whitelisted_persona,
+        )
+
+        # No persona context (e.g. global provider list) — should be denied
+        # because provider has persona restrictions set
+        assert not can_user_access_llm_provider(
+            public_restricted,
+            admin_group_ids,
+            persona=None,
+        )
+
+
+def test_public_provider_without_persona_restrictions(
+    users: tuple[DATestUser, DATestUser],
+) -> None:
+    """Public providers with no persona restrictions remain accessible to all."""
+    admin_user, basic_user = users
+
+    with get_session_with_current_tenant() as db_session:
+        public_unrestricted = _create_llm_provider(
+            db_session,
+            name="public-unrestricted",
+            default_model_name="gpt-4o",
+            is_public=True,
+            is_default=True,
+        )
+
+        any_persona = _create_persona(
+            db_session,
+            name="any-persona",
+            provider_name=public_unrestricted.name,
+        )
+
+        admin_model = db_session.get(User, admin_user.id)
+        basic_model = db_session.get(User, basic_user.id)
+        assert admin_model is not None
+        assert basic_model is not None
+
+        admin_group_ids = fetch_user_group_ids(db_session, admin_model)
+        basic_group_ids = fetch_user_group_ids(db_session, basic_model)
+
+        # Any user, any persona — all allowed
+        assert can_user_access_llm_provider(
+            public_unrestricted, admin_group_ids, any_persona
+        )
+        assert can_user_access_llm_provider(
+            public_unrestricted, basic_group_ids, any_persona
+        )
+        assert can_user_access_llm_provider(
+            public_unrestricted, admin_group_ids, persona=None
         )
 
 
