@@ -1,5 +1,7 @@
 import { Form, Formik } from "formik";
-import { TextFormField, FileUploadFormField } from "@/components/Field";
+import { FileUploadFormField } from "@/components/Field";
+import InputTypeInField from "@/refresh-components/form/InputTypeInField";
+import * as InputLayouts from "@/layouts/input-layouts";
 import { LLMProviderFormProps } from "@/interfaces/llm";
 import * as Yup from "yup";
 import {
@@ -7,7 +9,7 @@ import {
   ProviderFormContext,
 } from "./components/FormWrapper";
 import { DisplayNameField } from "./components/DisplayNameField";
-import { FormActionButtons } from "./components/FormActionButtons";
+import { ModalFormFooter } from "./components/ModalFormFooter";
 import {
   buildDefaultInitialValues,
   buildDefaultValidationSchema,
@@ -196,13 +198,17 @@ export function VertexAIModal({
                     subtext="Upload your Google Cloud service account JSON credentials file."
                   />
 
-                  <TextFormField
+                  <InputLayouts.Vertical
                     name="custom_config.vertex_location"
-                    label="Location"
-                    placeholder={VERTEXAI_DEFAULT_LOCATION}
-                    subtext="The Google Cloud region for your Vertex AI models (e.g., global, us-east1, us-central1, europe-west1). See [Google's documentation](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/locations#google_model_endpoint_locations) to find the appropriate region for your model."
+                    title="Location"
+                    description="The Google Cloud region for your Vertex AI models (e.g., global, us-east1, us-central1, europe-west1)."
                     optional
-                  />
+                  >
+                    <InputTypeInField
+                      name="custom_config.vertex_location"
+                      placeholder={VERTEXAI_DEFAULT_LOCATION}
+                    />
+                  </InputLayouts.Vertical>
 
                   <Separator />
 
@@ -223,15 +229,11 @@ export function VertexAIModal({
                     <AdvancedOptions formikProps={formikProps} />
                   )}
 
-                  <FormActionButtons
-                    isTesting={isTesting}
-                    testError={testError}
-                    existingLlmProvider={
-                      isOnboarding ? undefined : existingLlmProvider
-                    }
-                    mutate={mutate}
+                  <ModalFormFooter
                     onClose={onClose}
                     isFormValid={formikProps.isValid}
+                    isTesting={isTesting}
+                    testError={testError}
                   />
                 </Form>
               );

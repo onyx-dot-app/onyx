@@ -1,6 +1,7 @@
 import Separator from "@/refresh-components/Separator";
 import { Form, Formik } from "formik";
-import { TextFormField } from "@/components/Field";
+import InputTypeInField from "@/refresh-components/form/InputTypeInField";
+import * as InputLayouts from "@/layouts/input-layouts";
 import {
   LLMProviderFormProps,
   ModelConfiguration,
@@ -13,7 +14,7 @@ import {
 } from "./components/FormWrapper";
 import { DisplayNameField } from "./components/DisplayNameField";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
-import { FormActionButtons } from "./components/FormActionButtons";
+import { ModalFormFooter } from "./components/ModalFormFooter";
 import {
   buildDefaultInitialValues,
   buildDefaultValidationSchema,
@@ -228,12 +229,16 @@ export function OpenRouterModal({
 
                   <PasswordInputTypeInField name="api_key" label="API Key" />
 
-                  <TextFormField
+                  <InputLayouts.Vertical
                     name="api_base"
-                    label="API Base URL"
-                    subtext="The base URL for OpenRouter API."
-                    placeholder={DEFAULT_API_BASE}
-                  />
+                    title="API Base URL"
+                    description="The base URL for OpenRouter API."
+                  >
+                    <InputTypeInField
+                      name="api_base"
+                      placeholder={DEFAULT_API_BASE}
+                    />
+                  </InputLayouts.Vertical>
 
                   <FetchModelsButton
                     onFetch={() =>
@@ -276,15 +281,11 @@ export function OpenRouterModal({
                     <AdvancedOptions formikProps={formikProps} />
                   )}
 
-                  <FormActionButtons
-                    isTesting={isTesting}
-                    testError={testError}
-                    existingLlmProvider={
-                      isOnboarding ? undefined : existingLlmProvider
-                    }
-                    mutate={mutate}
+                  <ModalFormFooter
                     onClose={onClose}
                     isFormValid={formikProps.isValid}
+                    isTesting={isTesting}
+                    testError={testError}
                   />
                 </Form>
               );

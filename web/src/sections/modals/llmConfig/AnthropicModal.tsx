@@ -7,7 +7,7 @@ import {
 } from "./components/FormWrapper";
 import { DisplayNameField } from "./components/DisplayNameField";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
-import { FormActionButtons } from "./components/FormActionButtons";
+import { ModalFormFooter } from "./components/ModalFormFooter";
 import {
   buildDefaultInitialValues,
   buildDefaultValidationSchema,
@@ -165,15 +165,11 @@ export function AnthropicModal({
                     <AdvancedOptions formikProps={formikProps} />
                   )}
 
-                  <FormActionButtons
-                    isTesting={isTesting}
-                    testError={testError}
-                    existingLlmProvider={
-                      isOnboarding ? undefined : existingLlmProvider
-                    }
-                    mutate={mutate}
+                  <ModalFormFooter
                     onClose={onClose}
                     isFormValid={formikProps.isValid}
+                    isTesting={isTesting}
+                    testError={testError}
                   />
                 </Form>
               );

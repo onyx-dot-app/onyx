@@ -1,5 +1,6 @@
 import { Form, Formik, FormikProps } from "formik";
-import { TextFormField } from "@/components/Field";
+import InputTypeInField from "@/refresh-components/form/InputTypeInField";
+import * as InputLayouts from "@/layouts/input-layouts";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import {
   LLMProviderFormProps,
@@ -12,7 +13,7 @@ import {
   ProviderFormContext,
 } from "./components/FormWrapper";
 import { DisplayNameField } from "./components/DisplayNameField";
-import { FormActionButtons } from "./components/FormActionButtons";
+import { ModalFormFooter } from "./components/ModalFormFooter";
 import {
   buildDefaultInitialValues,
   buildDefaultValidationSchema,
@@ -121,12 +122,13 @@ function OllamaModalContent({
     <Form className={LLM_FORM_CLASS_NAME}>
       {!isOnboarding && <DisplayNameField disabled={!!existingLlmProvider} />}
 
-      <TextFormField
+      <InputLayouts.Vertical
         name="api_base"
-        label="API Base URL"
-        subtext="The base URL for your Ollama instance (e.g., http://127.0.0.1:11434)"
-        placeholder={DEFAULT_API_BASE}
-      />
+        title="API Base URL"
+        description="The base URL for your Ollama instance (e.g., http://127.0.0.1:11434)"
+      >
+        <InputTypeInField name="api_base" placeholder={DEFAULT_API_BASE} />
+      </InputLayouts.Vertical>
 
       <PasswordInputTypeInField
         name="custom_config.OLLAMA_API_KEY"
@@ -149,13 +151,11 @@ function OllamaModalContent({
 
       {!isOnboarding && <AdvancedOptions formikProps={formikProps} />}
 
-      <FormActionButtons
-        isTesting={isTesting}
-        testError={testError}
-        existingLlmProvider={isOnboarding ? undefined : existingLlmProvider}
-        mutate={mutate}
+      <ModalFormFooter
         onClose={onClose}
         isFormValid={isFormValid}
+        isTesting={isTesting}
+        testError={testError}
       />
     </Form>
   );
@@ -177,6 +177,7 @@ export function OllamaModal({
   return (
     <ProviderFormEntrypointWrapper
       providerName="Ollama"
+      providerEndpoint={OLLAMA_PROVIDER_NAME}
       existingLlmProvider={existingLlmProvider}
       open={open}
       onOpenChange={onOpenChange}

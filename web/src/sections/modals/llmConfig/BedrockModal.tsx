@@ -2,7 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { Form, Formik, FormikProps } from "formik";
-import { SelectorFormField, TextFormField } from "@/components/Field";
+import { SelectorFormField } from "@/components/Field";
+import InputTypeInField from "@/refresh-components/form/InputTypeInField";
+import * as InputLayouts from "@/layouts/input-layouts";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import {
   LLMProviderFormProps,
@@ -15,7 +17,7 @@ import {
   ProviderFormContext,
 } from "./components/FormWrapper";
 import { DisplayNameField } from "./components/DisplayNameField";
-import { FormActionButtons } from "./components/FormActionButtons";
+import { ModalFormFooter } from "./components/ModalFormFooter";
 import { FetchModelsButton } from "./components/FetchModelsButton";
 import {
   buildDefaultInitialValues,
@@ -176,11 +178,15 @@ function BedrockModalInternals({
 
           <Tabs.Content value={AUTH_METHOD_ACCESS_KEY}>
             <div className="flex flex-col gap-4 w-full">
-              <TextFormField
+              <InputLayouts.Vertical
                 name={FIELD_AWS_ACCESS_KEY_ID}
-                label="AWS Access Key ID"
-                placeholder="AKIAIOSFODNN7EXAMPLE"
-              />
+                title="AWS Access Key ID"
+              >
+                <InputTypeInField
+                  name={FIELD_AWS_ACCESS_KEY_ID}
+                  placeholder="AKIAIOSFODNN7EXAMPLE"
+                />
+              </InputLayouts.Vertical>
               <PasswordInputTypeInField
                 name={FIELD_AWS_SECRET_ACCESS_KEY}
                 label="AWS Secret Access Key"
@@ -251,13 +257,11 @@ function BedrockModalInternals({
         </>
       )}
 
-      <FormActionButtons
-        isTesting={isTesting}
-        testError={testError}
-        existingLlmProvider={isOnboarding ? undefined : existingLlmProvider}
-        mutate={mutate}
+      <ModalFormFooter
         onClose={onClose}
         isFormValid={formikProps.isValid}
+        isTesting={isTesting}
+        testError={testError}
       />
     </Form>
   );
@@ -279,6 +283,7 @@ export function BedrockModal({
   return (
     <ProviderFormEntrypointWrapper
       providerName={BEDROCK_DISPLAY_NAME}
+      providerEndpoint={BEDROCK_PROVIDER_NAME}
       existingLlmProvider={existingLlmProvider}
       open={open}
       onOpenChange={onOpenChange}

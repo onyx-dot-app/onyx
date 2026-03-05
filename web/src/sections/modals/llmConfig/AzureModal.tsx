@@ -1,5 +1,6 @@
 import { Form, Formik } from "formik";
-import { TextFormField } from "@/components/Field";
+import InputTypeInField from "@/refresh-components/form/InputTypeInField";
+import * as InputLayouts from "@/layouts/input-layouts";
 import { LLMProviderFormProps, LLMProviderView } from "@/interfaces/llm";
 import * as Yup from "yup";
 import {
@@ -8,7 +9,7 @@ import {
 } from "./components/FormWrapper";
 import { DisplayNameField } from "./components/DisplayNameField";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
-import { FormActionButtons } from "./components/FormActionButtons";
+import { ModalFormFooter } from "./components/ModalFormFooter";
 import {
   buildDefaultInitialValues,
   buildDefaultValidationSchema,
@@ -205,12 +206,16 @@ export function AzureModal({
 
                   <PasswordInputTypeInField name="api_key" label="API Key" />
 
-                  <TextFormField
+                  <InputLayouts.Vertical
                     name="target_uri"
-                    label="Target URI"
-                    placeholder="https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/chat/completions?api-version=2025-01-01-preview"
-                    subtext="The complete target URI for your deployment from the Azure AI portal."
-                  />
+                    title="Target URI"
+                    description="The complete target URI for your deployment from the Azure AI portal."
+                  >
+                    <InputTypeInField
+                      name="target_uri"
+                      placeholder="https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/chat/completions?api-version=2025-01-01-preview"
+                    />
+                  </InputLayouts.Vertical>
 
                   <Separator />
                   <SingleDefaultModelField placeholder="E.g. gpt-4o" />
@@ -220,15 +225,11 @@ export function AzureModal({
                     <AdvancedOptions formikProps={formikProps} />
                   )}
 
-                  <FormActionButtons
-                    isTesting={isTesting}
-                    testError={testError}
-                    existingLlmProvider={
-                      isOnboarding ? undefined : existingLlmProvider
-                    }
-                    mutate={mutate}
+                  <ModalFormFooter
                     onClose={onClose}
                     isFormValid={formikProps.isValid}
+                    isTesting={isTesting}
+                    testError={testError}
                   />
                 </Form>
               );

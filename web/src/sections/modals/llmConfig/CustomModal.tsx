@@ -12,7 +12,7 @@ import * as Yup from "yup";
 import { ProviderFormEntrypointWrapper } from "./components/FormWrapper";
 import { DisplayNameField } from "./components/DisplayNameField";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
-import { FormActionButtons } from "./components/FormActionButtons";
+import { ModalFormFooter } from "./components/ModalFormFooter";
 import {
   submitLLMProvider,
   submitOnboardingProvider,
@@ -22,7 +22,8 @@ import {
   LLM_FORM_CLASS_NAME,
 } from "./formUtils";
 import { AdvancedOptions } from "./components/AdvancedOptions";
-import { TextFormField } from "@/components/Field";
+import InputTypeInField from "@/refresh-components/form/InputTypeInField";
+import * as InputLayouts from "@/layouts/input-layouts";
 import { ModelConfigurationField } from "@/app/admin/configuration/llm/ModelConfigurationField";
 import Text from "@/refresh-components/texts/Text";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
@@ -54,6 +55,7 @@ export function CustomModal({
   return (
     <ProviderFormEntrypointWrapper
       providerName="Custom LLM"
+      providerEndpoint="custom"
       existingLlmProvider={existingLlmProvider}
       buttonMode={!existingLlmProvider && !isOnboarding}
       buttonText="Add Custom LLM Provider"
@@ -228,25 +230,16 @@ export function CustomModal({
                     <DisplayNameField disabled={!!existingLlmProvider} />
                   )}
 
-                  <TextFormField
+                  <InputLayouts.Vertical
                     name="provider"
-                    label="Provider Name"
-                    subtext={
-                      <>
-                        Should be one of the providers listed at{" "}
-                        <a
-                          target="_blank"
-                          href="https://docs.litellm.ai/docs/providers"
-                          className="text-link"
-                          rel="noreferrer"
-                        >
-                          https://docs.litellm.ai/docs/providers
-                        </a>
-                        .
-                      </>
-                    }
-                    placeholder="Name of the custom provider"
-                  />
+                    title="Provider Name"
+                    description="Should be one of the providers listed at https://docs.litellm.ai/docs/providers."
+                  >
+                    <InputTypeInField
+                      name="provider"
+                      placeholder="Name of the custom provider"
+                    />
+                  </InputLayouts.Vertical>
 
                   <Separator />
 
@@ -261,17 +254,27 @@ export function CustomModal({
                     label="[Optional] API Key"
                   />
 
-                  <TextFormField
+                  <InputLayouts.Vertical
                     name="api_base"
-                    label="[Optional] API Base"
-                    placeholder="API Base URL"
-                  />
+                    title="API Base"
+                    optional
+                  >
+                    <InputTypeInField
+                      name="api_base"
+                      placeholder="API Base URL"
+                    />
+                  </InputLayouts.Vertical>
 
-                  <TextFormField
+                  <InputLayouts.Vertical
                     name="api_version"
-                    label="[Optional] API Version"
-                    placeholder="API Version"
-                  />
+                    title="API Version"
+                    optional
+                  >
+                    <InputTypeInField
+                      name="api_version"
+                      placeholder="API Version"
+                    />
+                  </InputLayouts.Vertical>
 
                   <Separator />
 
@@ -369,26 +372,26 @@ export function CustomModal({
 
                   <Separator />
 
-                  <TextFormField
+                  <InputLayouts.Vertical
                     name="default_model_name"
-                    label="Default Model"
-                    subtext="The model to use by default for this provider. Must be one of the models listed above."
-                    placeholder="e.g. gpt-4"
-                  />
+                    title="Default Model"
+                    description="The model to use by default for this provider. Must be one of the models listed above."
+                  >
+                    <InputTypeInField
+                      name="default_model_name"
+                      placeholder="e.g. gpt-4"
+                    />
+                  </InputLayouts.Vertical>
 
                   {!isOnboarding && (
                     <AdvancedOptions formikProps={formikProps} />
                   )}
 
-                  <FormActionButtons
-                    isTesting={isTesting}
-                    testError={testError}
-                    existingLlmProvider={
-                      isOnboarding ? undefined : existingLlmProvider
-                    }
-                    mutate={mutate}
+                  <ModalFormFooter
                     onClose={onClose}
                     isFormValid={formikProps.isValid}
+                    isTesting={isTesting}
+                    testError={testError}
                   />
                 </Form>
               );

@@ -1,4 +1,5 @@
-import { TextFormField } from "@/components/Field";
+import InputTypeInField from "@/refresh-components/form/InputTypeInField";
+import * as InputLayouts from "@/layouts/input-layouts";
 
 interface DisplayNameFieldProps {
   disabled?: boolean;
@@ -6,12 +7,16 @@ interface DisplayNameFieldProps {
 
 export function DisplayNameField({ disabled = false }: DisplayNameFieldProps) {
   return (
-    <TextFormField
+    <InputLayouts.Vertical
       name="name"
-      label="Display Name"
-      subtext="A name which you can use to identify this provider when selecting it in the UI."
-      placeholder="Display Name"
-      disabled={disabled}
-    />
+      title="Display Name"
+      description="A name which you can use to identify this provider when selecting it in the UI."
+    >
+      <InputTypeInField
+        name="name"
+        placeholder="Display Name"
+        variant={disabled ? "disabled" : undefined}
+      />
+    </InputLayouts.Vertical>
   );
 }
