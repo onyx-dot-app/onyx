@@ -205,7 +205,7 @@ The `size` prop (`"regular"` or `"small"`) affects:
 Column widths can be responsive to size using a function:
 
 ```ts
-// In dataTableTypes.ts, width accepts:
+// In types.ts, width accepts:
 width: ColumnWidth | ((size: TableSize) => ColumnWidth)
 
 // Example (this is what qualifier/actions use internally):
@@ -309,7 +309,7 @@ tc.qualifier({
 |---|---|
 | `DataTable.tsx` | Main component |
 | `columns.ts` | `createTableColumns` builder |
-| `dataTableTypes.ts` | All TypeScript interfaces |
+| `types.ts` | All TypeScript interfaces |
 | `hooks/useDataTable.ts` | TanStack table wrapper hook |
 | `hooks/useColumnWidths.ts` | Weight-based width system |
 | `hooks/useDraggableRows.ts` | DnD hook (`@dnd-kit`) |

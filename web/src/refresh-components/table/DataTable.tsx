@@ -34,6 +34,8 @@ import type {
 } from "@/refresh-components/table/types";
 import type { TableSize } from "@/refresh-components/table/TableSizeContext";
 
+const noopGetRowId = () => "";
+
 // ---------------------------------------------------------------------------
 // Internal: resolve size-dependent widths and build TanStack columns
 // ---------------------------------------------------------------------------
@@ -165,7 +167,7 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
   // 4. Call useDraggableRows (conditional)
   const draggableReturn = useDraggableRows({
     data,
-    getRowId: draggable?.getRowId ?? (() => ""),
+    getRowId: draggable?.getRowId ?? noopGetRowId,
     enabled: !!draggable && table.getState().sorting.length === 0,
     onReorder: draggable?.onReorder,
   });
@@ -173,7 +175,8 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
   const hasDraggable = !!draggable;
   const rowVariant = hasDraggable ? "table" : "list";
 
-  const isSelectable = qualifierColumn?.selectable !== false;
+  const isSelectable =
+    qualifierColumn != null && qualifierColumn.selectable !== false;
 
   // ---------------------------------------------------------------------------
   // Render
@@ -424,7 +427,8 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
     }
 
     // Summary mode
-    const rangeStart = (currentPage - 1) * resolvedPageSize + 1;
+    const rangeStart =
+      totalItems === 0 ? 0 : (currentPage - 1) * resolvedPageSize + 1;
     const rangeEnd = Math.min(currentPage * resolvedPageSize, totalItems);
 
     return (
