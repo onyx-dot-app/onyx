@@ -20,22 +20,22 @@ from onyx.server.query_and_chat.streaming_models import ToolCallArgumentDelta
 from onyx.tools.interface import Tool
 
 
-# =============================================================================
-# Tool class lookup
-# =============================================================================
-
-
 @functools.cache
 def _get_tool_name_to_class() -> dict[str, Type[Tool]]:
     """Build a mapping from tool name (as sent to the LLM) to tool class."""
     from onyx.tools.built_in_tools import BUILT_IN_TOOL_MAP
 
-    return {
-        # All built-in tool classes expose their LLM-facing name via a
-        # class-level constant (NAME or _NAME) returned by the name property.
-        cls.name.fget(cls): cls  # type: ignore[union-attr]
-        for cls in BUILT_IN_TOOL_MAP.values()
-    }
+    result: dict[str, Type[Tool]] = {}
+    for cls in BUILT_IN_TOOL_MAP.values():
+        name_attr = cls.__dict__.get("name")
+        if isinstance(name_attr, property):
+            tool_name = name_attr.fget(cls)  # type: ignore[arg-type]
+        elif isinstance(name_attr, str):
+            tool_name = name_attr
+        else:
+            continue
+        result[tool_name] = cls
+    return result
 
 
 def _get_tool_class(
@@ -53,10 +53,6 @@ def _get_tool_class(
 
     return _get_tool_name_to_class().get(tool_name)
 
-
-# =============================================================================
-# Partial JSON parsing helpers
-# =============================================================================
 
 # Matches all JSON object keys in a partial JSON string, e.g. `"code":` or `"key"  :`
 # Captures the key name (group 1), handling escaped characters within keys.
@@ -81,7 +77,8 @@ def _find_active_json_key(partial_json: str) -> str | None:
 
     # Verify this key's value has actually started (there's content after "key":)
     key_pos = partial_json.rfind(f'"{last_key}"')
-    colon_pos = partial_json.find(":", key_pos)
+    search_from = key_pos + len(last_key) + 2  # past the closing quote
+    colon_pos = partial_json.find(":", search_from)
     after_colon = partial_json[colon_pos + 1 :].lstrip() if colon_pos != -1 else ""
     if after_colon:
         return last_key
@@ -144,11 +141,6 @@ def _decode_partial_json_string(raw_escaped: str) -> str:
         except (json.JSONDecodeError, ValueError):
             continue
     return ""
-
-
-# =============================================================================
-# Public API
-# =============================================================================
 
 
 def maybe_emit_argument_delta(
