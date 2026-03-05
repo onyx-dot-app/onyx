@@ -227,6 +227,22 @@ Configurable via `EVENT_LOOP_LAG_PROBE_INTERVAL_SECONDS` (default `2.0`).
 onyx_api_event_loop_lag_seconds > 0.1
 ```
 
+## Thread Pool Metrics
+
+Always-on via `InstrumentedThreadPoolExecutor` (wraps all `ThreadPoolExecutor` usage).
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `onyx_threadpool_tasks_submitted_total` | Counter | — | Total tasks submitted |
+| `onyx_threadpool_tasks_active` | Gauge | — | Currently executing tasks |
+| `onyx_threadpool_task_duration_seconds` | Histogram | — | Task execution duration |
+| `onyx_process_thread_count` | Gauge | — | OS threads in the process |
+
+```promql
+# Rising thread count = potential leak
+onyx_process_thread_count
+```
+
 ## Example PromQL Queries
 
 ### Which endpoints are saturated right now?

@@ -106,8 +106,10 @@ def start_observability() -> None:
     from onyx.server.metrics.redis_connection_pool import (
         setup_redis_connection_pool_metrics,
     )
+    from onyx.server.metrics.threadpool import setup_threadpool_metrics
 
     setup_redis_connection_pool_metrics()
+    setup_threadpool_metrics()
     start_event_loop_lag_probe()
 
 
