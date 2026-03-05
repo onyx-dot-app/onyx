@@ -781,4 +781,5 @@ def build_slim_document(
     return SlimDocument(
         id=onyx_document_id_from_drive_file(file),
         external_access=external_access,
+        parent_hierarchy_raw_node_id=(file.get("parents") or [None])[0],
     )
