@@ -37,6 +37,7 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": false,
     "targets": "all",
     "icon": [
       "icons/32x32.png",
@@ -64,6 +65,12 @@
   "plugins": {
     "shell": {
       "open": true
+    },
+    "updater": {
+      "endpoints": [
+        "https://github.com/onyx-dot-app/onyx/releases/latest/download/latest.json"
+      ],
+      "pubkey": "REPLACED_BY_CI_TAURI_UPDATER_PUBLIC_KEY"
     }
   }
 }
