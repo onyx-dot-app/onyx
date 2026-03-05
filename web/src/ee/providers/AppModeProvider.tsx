@@ -23,8 +23,7 @@ export interface AppModeProviderProps {
 export function AppModeProvider({ children }: AppModeProviderProps) {
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
   const { user } = useUser();
-  const settings = useSettingsContext();
-  const { isSearchModeAvailable } = settings;
+  const { isSearchModeAvailable } = useSettingsContext();
 
   const persistedMode = user?.preferences?.default_app_mode;
   const [appMode, setAppModeState] = useState<AppMode>("chat");

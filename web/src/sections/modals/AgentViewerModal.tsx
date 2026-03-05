@@ -116,8 +116,6 @@ function ViewerOpenApiToolCard({ tool }: { tool: ToolSnapshot }) {
   );
 }
 
-const EMPTY_DOCS: [] = [];
-
 /**
  * Floating ChatInputBar below the AgentViewerModal.
  * On submit, navigates to the agent's chat with the message pre-filled.
@@ -137,14 +135,10 @@ function AgentChatInput({ agent, onSubmit }: AgentChatInputProps) {
       chatState="input"
       filterManager={filterManager}
       selectedAgent={agent}
-      selectedDocuments={EMPTY_DOCS}
-      removeDocs={() => {}}
       stopGenerating={() => {}}
       handleFileUpload={() => {}}
-      toggleDocumentSidebar={() => {}}
       currentSessionFileTokenCount={0}
       availableContextTokens={Infinity}
-      retrievalEnabled={false}
       deepResearchEnabled={false}
       toggleDeepResearch={() => {}}
       disabled={false}

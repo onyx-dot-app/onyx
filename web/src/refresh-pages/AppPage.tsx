@@ -830,12 +830,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         ref={chatInputBarRef}
                         deepResearchEnabled={deepResearchEnabled}
                         toggleDeepResearch={toggleDeepResearch}
-                        toggleDocumentSidebar={toggleDocumentSidebar}
                         filterManager={filterManager}
                         llmManager={llmManager}
-                        removeDocs={() => setSelectedDocuments([])}
-                        retrievalEnabled={retrievalEnabled}
-                        selectedDocuments={selectedDocuments}
                         initialMessage={
                           searchParams?.get(SEARCH_PARAM_NAMES.USER_PROMPT) ||
                           ""
