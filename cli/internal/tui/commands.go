@@ -79,6 +79,9 @@ func handleSlashCommand(m Model, text string) (Model, tea.Cmd) {
 }
 
 func cmdNew(m Model) (Model, tea.Cmd) {
+	if m.isStreaming {
+		m, _ = m.cancelStream()
+	}
 	m.chatSessionID = nil
 	parentID := -1
 	m.parentMessageID = &parentID
