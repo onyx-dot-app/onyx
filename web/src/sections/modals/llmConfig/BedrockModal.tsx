@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSWRConfig } from "swr";
 import { Formik, FormikProps } from "formik";
 import { SelectorFormField } from "@/components/Field";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
@@ -12,13 +13,8 @@ import {
   ModelConfiguration,
 } from "@/interfaces/llm";
 import * as Yup from "yup";
-import {
-  ProviderFormEntrypointWrapper,
-  ProviderFormContext,
-} from "./components/FormWrapper";
-import { DisplayNameField } from "./components/DisplayNameField";
-import { LLMConfigurationModalWrapper } from "./shared";
-import { FetchModelsButton } from "./components/FetchModelsButton";
+import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
+import { LLMConfigurationModalWrapper } from "./LLMConfigurationModalWrapper";
 import {
   buildDefaultInitialValues,
   buildDefaultValidationSchema,
@@ -28,9 +24,13 @@ import {
   buildOnboardingInitialValues,
   BaseLLMFormValues,
 } from "./formUtils";
-import { AdvancedOptions } from "./components/AdvancedOptions";
-import { DisplayModels } from "./components/DisplayModels";
-import { SingleDefaultModelField } from "./components/SingleDefaultModelField";
+import {
+  AdvancedOptions,
+  DisplayModels,
+  DisplayNameField,
+  FetchModelsButton,
+  SingleDefaultModelField,
+} from "./shared";
 import { fetchBedrockModels } from "@/app/admin/configuration/llm/utils";
 import Separator from "@/refresh-components/Separator";
 import Text from "@/refresh-components/texts/Text";
@@ -82,7 +82,6 @@ interface BedrockModalInternalsProps {
   setFetchedModels: (models: ModelConfiguration[]) => void;
   modelConfigurations: ModelConfiguration[];
   isTesting: boolean;
-  testError: string;
   onClose: () => void;
   isOnboarding: boolean;
 }
@@ -94,7 +93,6 @@ function BedrockModalInternals({
   setFetchedModels,
   modelConfigurations,
   isTesting,
-  testError,
   onClose,
   isOnboarding,
 }: BedrockModalInternalsProps) {
@@ -133,11 +131,11 @@ function BedrockModalInternals({
   return (
     <LLMConfigurationModalWrapper
       providerEndpoint={BEDROCK_PROVIDER_NAME}
+      providerName={BEDROCK_DISPLAY_NAME}
       existingProviderName={existingLlmProvider?.name}
       onClose={onClose}
       isFormValid={formikProps.isValid}
       isTesting={isTesting}
-      testError={testError}
     >
       {!isOnboarding && <DisplayNameField disabled={!!existingLlmProvider} />}
 
@@ -273,167 +271,135 @@ export function BedrockModal({
   llmDescriptor,
 }: LLMProviderFormProps) {
   const [fetchedModels, setFetchedModels] = useState<ModelConfiguration[]>([]);
+  const [isTesting, setIsTesting] = useState(false);
   const isOnboarding = variant === "onboarding";
+  const { mutate } = useSWRConfig();
+  const { wellKnownLLMProvider } = useWellKnownLLMProvider(
+    BEDROCK_PROVIDER_NAME
+  );
+
+  if (open === false) return null;
+
+  const onClose = () => onOpenChange?.(false);
+
+  const modelConfigurations = buildAvailableModelConfigurations(
+    existingLlmProvider,
+    wellKnownLLMProvider ?? llmDescriptor
+  );
+
+  const initialValues: BedrockModalValues = isOnboarding
+    ? ({
+        ...buildOnboardingInitialValues(),
+        name: BEDROCK_PROVIDER_NAME,
+        provider: BEDROCK_PROVIDER_NAME,
+        default_model_name: "",
+        custom_config: {
+          AWS_REGION_NAME: "",
+          BEDROCK_AUTH_METHOD: "access_key",
+          AWS_ACCESS_KEY_ID: "",
+          AWS_SECRET_ACCESS_KEY: "",
+          AWS_BEARER_TOKEN_BEDROCK: "",
+        },
+      } as BedrockModalValues)
+    : {
+        ...buildDefaultInitialValues(existingLlmProvider, modelConfigurations),
+        custom_config: {
+          AWS_REGION_NAME:
+            (existingLlmProvider?.custom_config?.AWS_REGION_NAME as string) ??
+            "",
+          BEDROCK_AUTH_METHOD:
+            (existingLlmProvider?.custom_config
+              ?.BEDROCK_AUTH_METHOD as string) ?? "access_key",
+          AWS_ACCESS_KEY_ID:
+            (existingLlmProvider?.custom_config?.AWS_ACCESS_KEY_ID as string) ??
+            "",
+          AWS_SECRET_ACCESS_KEY:
+            (existingLlmProvider?.custom_config
+              ?.AWS_SECRET_ACCESS_KEY as string) ?? "",
+          AWS_BEARER_TOKEN_BEDROCK:
+            (existingLlmProvider?.custom_config
+              ?.AWS_BEARER_TOKEN_BEDROCK as string) ?? "",
+        },
+      };
+
+  const validationSchema = isOnboarding
+    ? Yup.object().shape({
+        default_model_name: Yup.string().required("Model name is required"),
+        custom_config: Yup.object({
+          AWS_REGION_NAME: Yup.string().required("AWS Region is required"),
+        }),
+      })
+    : buildDefaultValidationSchema().shape({
+        custom_config: Yup.object({
+          AWS_REGION_NAME: Yup.string().required("AWS Region is required"),
+        }),
+      });
 
   return (
-    <ProviderFormEntrypointWrapper
-      providerName={BEDROCK_DISPLAY_NAME}
-      providerEndpoint={BEDROCK_PROVIDER_NAME}
-      existingLlmProvider={existingLlmProvider}
-      open={open}
-      onOpenChange={onOpenChange}
-      variant={variant}
-      onboardingState={onboardingState}
-      onboardingActions={onboardingActions}
-    >
-      {({
-        onClose,
-        mutate,
-        isTesting,
-        setIsTesting,
-        testError,
-        setTestError,
-        wellKnownLLMProvider,
-        onboardingState: ctxOnboardingState,
-        onboardingActions: ctxOnboardingActions,
-      }: ProviderFormContext) => {
-        const modelConfigurations = buildAvailableModelConfigurations(
-          existingLlmProvider,
-          wellKnownLLMProvider ?? llmDescriptor
+    <Formik
+      initialValues={initialValues}
+      validationSchema={validationSchema}
+      validateOnMount={true}
+      onSubmit={async (values, { setSubmitting }) => {
+        const filteredCustomConfig = Object.fromEntries(
+          Object.entries(values.custom_config || {}).filter(([, v]) => v !== "")
         );
 
-        const initialValues: BedrockModalValues = isOnboarding
-          ? ({
-              ...buildOnboardingInitialValues(),
-              name: BEDROCK_PROVIDER_NAME,
-              provider: BEDROCK_PROVIDER_NAME,
-              default_model_name: "",
-              custom_config: {
-                AWS_REGION_NAME: "",
-                BEDROCK_AUTH_METHOD: "access_key",
-                AWS_ACCESS_KEY_ID: "",
-                AWS_SECRET_ACCESS_KEY: "",
-                AWS_BEARER_TOKEN_BEDROCK: "",
-              },
-            } as BedrockModalValues)
-          : {
-              ...buildDefaultInitialValues(
-                existingLlmProvider,
-                modelConfigurations
-              ),
-              custom_config: {
-                AWS_REGION_NAME:
-                  (existingLlmProvider?.custom_config
-                    ?.AWS_REGION_NAME as string) ?? "",
-                BEDROCK_AUTH_METHOD:
-                  (existingLlmProvider?.custom_config
-                    ?.BEDROCK_AUTH_METHOD as string) ?? "access_key",
-                AWS_ACCESS_KEY_ID:
-                  (existingLlmProvider?.custom_config
-                    ?.AWS_ACCESS_KEY_ID as string) ?? "",
-                AWS_SECRET_ACCESS_KEY:
-                  (existingLlmProvider?.custom_config
-                    ?.AWS_SECRET_ACCESS_KEY as string) ?? "",
-                AWS_BEARER_TOKEN_BEDROCK:
-                  (existingLlmProvider?.custom_config
-                    ?.AWS_BEARER_TOKEN_BEDROCK as string) ?? "",
-              },
-            };
+        const submitValues = {
+          ...values,
+          custom_config:
+            Object.keys(filteredCustomConfig).length > 0
+              ? filteredCustomConfig
+              : undefined,
+        };
 
-        const validationSchema = isOnboarding
-          ? Yup.object().shape({
-              default_model_name: Yup.string().required(
-                "Model name is required"
-              ),
-              custom_config: Yup.object({
-                AWS_REGION_NAME: Yup.string().required(
-                  "AWS Region is required"
-                ),
-              }),
-            })
-          : buildDefaultValidationSchema().shape({
-              custom_config: Yup.object({
-                AWS_REGION_NAME: Yup.string().required(
-                  "AWS Region is required"
-                ),
-              }),
-            });
+        if (isOnboarding && onboardingState && onboardingActions) {
+          const modelConfigsToUse =
+            fetchedModels.length > 0 ? fetchedModels : [];
 
-        return (
-          <Formik
-            initialValues={initialValues}
-            validationSchema={validationSchema}
-            validateOnMount={true}
-            onSubmit={async (values, { setSubmitting }) => {
-              const filteredCustomConfig = Object.fromEntries(
-                Object.entries(values.custom_config || {}).filter(
-                  ([, v]) => v !== ""
-                )
-              );
-
-              const submitValues = {
-                ...values,
-                custom_config:
-                  Object.keys(filteredCustomConfig).length > 0
-                    ? filteredCustomConfig
-                    : undefined,
-              };
-
-              if (isOnboarding && ctxOnboardingState && ctxOnboardingActions) {
-                const modelConfigsToUse =
-                  fetchedModels.length > 0 ? fetchedModels : [];
-
-                await submitOnboardingProvider({
-                  providerName: BEDROCK_PROVIDER_NAME,
-                  payload: {
-                    ...submitValues,
-                    model_configurations: modelConfigsToUse,
-                  },
-                  onboardingState: ctxOnboardingState,
-                  onboardingActions: ctxOnboardingActions,
-                  isCustomProvider: false,
-                  onClose,
-                  setIsSubmitting: setSubmitting,
-                  setApiStatus: () => {},
-                  setShowApiMessage: () => {},
-                  setErrorMessage: (msg) => setTestError(msg),
-                });
-              } else {
-                await submitLLMProvider({
-                  providerName: BEDROCK_PROVIDER_NAME,
-                  values: submitValues,
-                  initialValues,
-                  modelConfigurations:
-                    fetchedModels.length > 0
-                      ? fetchedModels
-                      : modelConfigurations,
-                  existingLlmProvider,
-                  shouldMarkAsDefault,
-                  setIsTesting,
-                  setTestError,
-                  mutate,
-                  onClose,
-                  setSubmitting,
-                });
-              }
-            }}
-          >
-            {(formikProps) => (
-              <BedrockModalInternals
-                formikProps={formikProps}
-                existingLlmProvider={existingLlmProvider}
-                fetchedModels={fetchedModels}
-                setFetchedModels={setFetchedModels}
-                modelConfigurations={modelConfigurations}
-                isTesting={isTesting}
-                testError={testError}
-                onClose={onClose}
-                isOnboarding={isOnboarding}
-              />
-            )}
-          </Formik>
-        );
+          await submitOnboardingProvider({
+            providerName: BEDROCK_PROVIDER_NAME,
+            payload: {
+              ...submitValues,
+              model_configurations: modelConfigsToUse,
+            },
+            onboardingState,
+            onboardingActions,
+            isCustomProvider: false,
+            onClose,
+            setIsSubmitting: setSubmitting,
+            setApiStatus: () => {},
+            setShowApiMessage: () => {},
+          });
+        } else {
+          await submitLLMProvider({
+            providerName: BEDROCK_PROVIDER_NAME,
+            values: submitValues,
+            initialValues,
+            modelConfigurations:
+              fetchedModels.length > 0 ? fetchedModels : modelConfigurations,
+            existingLlmProvider,
+            shouldMarkAsDefault,
+            setIsTesting,
+            mutate,
+            onClose,
+            setSubmitting,
+          });
+        }
       }}
-    </ProviderFormEntrypointWrapper>
+    >
+      {(formikProps) => (
+        <BedrockModalInternals
+          formikProps={formikProps}
+          existingLlmProvider={existingLlmProvider}
+          fetchedModels={fetchedModels}
+          setFetchedModels={setFetchedModels}
+          modelConfigurations={modelConfigurations}
+          isTesting={isTesting}
+          onClose={onClose}
+          isOnboarding={isOnboarding}
+        />
+      )}
+    </Formik>
   );
 }

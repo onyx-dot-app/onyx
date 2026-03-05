@@ -13,9 +13,6 @@ import isEqual from "lodash/isEqual";
 import { OnboardingActions, OnboardingState } from "@/interfaces/onboarding";
 import { parseAzureTargetUri } from "@/lib/azureTargetUri";
 
-// Common class names for the Form component across all LLM provider forms
-export const LLM_FORM_CLASS_NAME = "flex flex-col gap-y-4 items-stretch mt-6";
-
 export const buildDefaultInitialValues = (
   existingLlmProvider?: LLMProviderView,
   modelConfigurations?: ModelConfiguration[]
@@ -106,7 +103,6 @@ export interface SubmitLLMProviderParams<
   shouldMarkAsDefault?: boolean;
   hideSuccess?: boolean;
   setIsTesting: (testing: boolean) => void;
-  setTestError: (error: string) => void;
   mutate: (key: string) => void;
   onClose: () => void;
   setSubmitting: (submitting: boolean) => void;
@@ -162,7 +158,6 @@ export const submitLLMProvider = async <T extends BaseLLMFormValues>({
   shouldMarkAsDefault,
   hideSuccess,
   setIsTesting,
-  setTestError,
   mutate,
   onClose,
   setSubmitting,
@@ -238,7 +233,7 @@ export const submitLLMProvider = async <T extends BaseLLMFormValues>({
 
     if (!response.ok) {
       const errorMsg = (await response.json()).detail;
-      setTestError(errorMsg);
+      toast.error(errorMsg);
       setSubmitting(false);
       return;
     }
@@ -426,7 +421,6 @@ export interface SubmitOnboardingProviderParams {
   setIsSubmitting: (submitting: boolean) => void;
   setApiStatus: (status: string) => void;
   setShowApiMessage: (show: boolean) => void;
-  setErrorMessage: (msg: string) => void;
 }
 
 /**
@@ -446,7 +440,6 @@ export const submitOnboardingProvider = async ({
   setIsSubmitting,
   setApiStatus,
   setShowApiMessage,
-  setErrorMessage,
 }: SubmitOnboardingProviderParams): Promise<void> => {
   setIsSubmitting(true);
   setApiStatus("loading");
@@ -461,7 +454,7 @@ export const submitOnboardingProvider = async ({
   }
 
   if (!result.ok) {
-    setErrorMessage(result.errorMessage);
+    toast.error(result.errorMessage);
     setApiStatus("error");
     setIsSubmitting(false);
     return;
@@ -478,7 +471,7 @@ export const submitOnboardingProvider = async ({
   if (!response.ok) {
     const errorMsg = (await response.json()).detail;
     console.error("Failed to create LLM provider", errorMsg);
-    setErrorMessage(errorMsg);
+    toast.error(errorMsg);
     setApiStatus("error");
     setIsSubmitting(false);
     return;
@@ -509,7 +502,7 @@ export const submitOnboardingProvider = async ({
           });
           if (!setDefaultResponse.ok) {
             const err = await setDefaultResponse.json().catch(() => ({}));
-            setErrorMessage(err?.detail ?? "Failed to set provider as default");
+            toast.error(err?.detail ?? "Failed to set provider as default");
             setApiStatus("error");
             setIsSubmitting(false);
             return;

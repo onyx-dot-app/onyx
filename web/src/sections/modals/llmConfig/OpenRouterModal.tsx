@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { useSWRConfig } from "swr";
 import Separator from "@/refresh-components/Separator";
 import { Formik } from "formik";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
@@ -8,13 +10,9 @@ import {
   OpenRouterModelResponse,
 } from "@/interfaces/llm";
 import * as Yup from "yup";
-import {
-  ProviderFormEntrypointWrapper,
-  ProviderFormContext,
-} from "./components/FormWrapper";
-import { DisplayNameField } from "./components/DisplayNameField";
+import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
-import { LLMConfigurationModalWrapper } from "./shared";
+import { LLMConfigurationModalWrapper } from "./LLMConfigurationModalWrapper";
 import {
   buildDefaultInitialValues,
   buildDefaultValidationSchema,
@@ -24,11 +22,13 @@ import {
   buildOnboardingInitialValues,
   BaseLLMFormValues,
 } from "./formUtils";
-import { AdvancedOptions } from "./components/AdvancedOptions";
-import { DisplayModels } from "./components/DisplayModels";
-import { SingleDefaultModelField } from "./components/SingleDefaultModelField";
-import { FetchModelsButton } from "./components/FetchModelsButton";
-import { useState } from "react";
+import {
+  AdvancedOptions,
+  DisplayModels,
+  DisplayNameField,
+  FetchModelsButton,
+  SingleDefaultModelField,
+} from "./shared";
 
 export const OPENROUTER_PROVIDER_NAME = "openrouter";
 const OPENROUTER_DISPLAY_NAME = "OpenRouter";
@@ -105,193 +105,165 @@ export function OpenRouterModal({
   llmDescriptor,
 }: LLMProviderFormProps) {
   const [fetchedModels, setFetchedModels] = useState<ModelConfiguration[]>([]);
+  const [isTesting, setIsTesting] = useState(false);
   const isOnboarding = variant === "onboarding";
+  const { mutate } = useSWRConfig();
+  const { wellKnownLLMProvider } = useWellKnownLLMProvider(
+    OPENROUTER_PROVIDER_NAME
+  );
+
+  if (open === false) return null;
+
+  const onClose = () => onOpenChange?.(false);
+
+  const modelConfigurations = buildAvailableModelConfigurations(
+    existingLlmProvider,
+    wellKnownLLMProvider ?? llmDescriptor
+  );
+
+  const initialValues: OpenRouterModalValues = isOnboarding
+    ? ({
+        ...buildOnboardingInitialValues(),
+        name: OPENROUTER_PROVIDER_NAME,
+        provider: OPENROUTER_PROVIDER_NAME,
+        api_key: "",
+        api_base: DEFAULT_API_BASE,
+        default_model_name: "",
+      } as OpenRouterModalValues)
+    : {
+        ...buildDefaultInitialValues(existingLlmProvider, modelConfigurations),
+        api_key: existingLlmProvider?.api_key ?? "",
+        api_base: existingLlmProvider?.api_base ?? DEFAULT_API_BASE,
+      };
+
+  const validationSchema = isOnboarding
+    ? Yup.object().shape({
+        api_key: Yup.string().required("API Key is required"),
+        api_base: Yup.string().required("API Base URL is required"),
+        default_model_name: Yup.string().required("Model name is required"),
+      })
+    : buildDefaultValidationSchema().shape({
+        api_key: Yup.string().required("API Key is required"),
+        api_base: Yup.string().required("API Base URL is required"),
+      });
 
   return (
-    <ProviderFormEntrypointWrapper
-      providerName={OPENROUTER_DISPLAY_NAME}
-      providerEndpoint={OPENROUTER_PROVIDER_NAME}
-      existingLlmProvider={existingLlmProvider}
-      open={open}
-      onOpenChange={onOpenChange}
-      variant={variant}
-      onboardingState={onboardingState}
-      onboardingActions={onboardingActions}
+    <Formik
+      initialValues={initialValues}
+      validationSchema={validationSchema}
+      validateOnMount={true}
+      onSubmit={async (values, { setSubmitting }) => {
+        if (isOnboarding && onboardingState && onboardingActions) {
+          const modelConfigsToUse =
+            fetchedModels.length > 0 ? fetchedModels : [];
+
+          await submitOnboardingProvider({
+            providerName: OPENROUTER_PROVIDER_NAME,
+            payload: {
+              ...values,
+              model_configurations: modelConfigsToUse,
+            },
+            onboardingState,
+            onboardingActions,
+            isCustomProvider: false,
+            onClose,
+            setIsSubmitting: setSubmitting,
+            setApiStatus: () => {},
+            setShowApiMessage: () => {},
+          });
+        } else {
+          await submitLLMProvider({
+            providerName: OPENROUTER_PROVIDER_NAME,
+            values,
+            initialValues,
+            modelConfigurations:
+              fetchedModels.length > 0 ? fetchedModels : modelConfigurations,
+            existingLlmProvider,
+            shouldMarkAsDefault,
+            setIsTesting,
+            mutate,
+            onClose,
+            setSubmitting,
+          });
+        }
+      }}
     >
-      {({
-        onClose,
-        mutate,
-        isTesting,
-        setIsTesting,
-        testError,
-        setTestError,
-        wellKnownLLMProvider,
-        onboardingState: ctxOnboardingState,
-        onboardingActions: ctxOnboardingActions,
-      }: ProviderFormContext) => {
-        const modelConfigurations = buildAvailableModelConfigurations(
-          existingLlmProvider,
-          wellKnownLLMProvider ?? llmDescriptor
-        );
+      {(formikProps) => {
+        const currentModels =
+          fetchedModels.length > 0
+            ? fetchedModels
+            : existingLlmProvider?.model_configurations || modelConfigurations;
 
-        const initialValues: OpenRouterModalValues = isOnboarding
-          ? ({
-              ...buildOnboardingInitialValues(),
-              name: OPENROUTER_PROVIDER_NAME,
-              provider: OPENROUTER_PROVIDER_NAME,
-              api_key: "",
-              api_base: DEFAULT_API_BASE,
-              default_model_name: "",
-            } as OpenRouterModalValues)
-          : {
-              ...buildDefaultInitialValues(
-                existingLlmProvider,
-                modelConfigurations
-              ),
-              api_key: existingLlmProvider?.api_key ?? "",
-              api_base: existingLlmProvider?.api_base ?? DEFAULT_API_BASE,
-            };
-
-        const validationSchema = isOnboarding
-          ? Yup.object().shape({
-              api_key: Yup.string().required("API Key is required"),
-              api_base: Yup.string().required("API Base URL is required"),
-              default_model_name: Yup.string().required(
-                "Model name is required"
-              ),
-            })
-          : buildDefaultValidationSchema().shape({
-              api_key: Yup.string().required("API Key is required"),
-              api_base: Yup.string().required("API Base URL is required"),
-            });
+        const isFetchDisabled =
+          !formikProps.values.api_base || !formikProps.values.api_key;
 
         return (
-          <Formik
-            initialValues={initialValues}
-            validationSchema={validationSchema}
-            validateOnMount={true}
-            onSubmit={async (values, { setSubmitting }) => {
-              if (isOnboarding && ctxOnboardingState && ctxOnboardingActions) {
-                const modelConfigsToUse =
-                  fetchedModels.length > 0 ? fetchedModels : [];
-
-                await submitOnboardingProvider({
-                  providerName: OPENROUTER_PROVIDER_NAME,
-                  payload: {
-                    ...values,
-                    model_configurations: modelConfigsToUse,
-                  },
-                  onboardingState: ctxOnboardingState,
-                  onboardingActions: ctxOnboardingActions,
-                  isCustomProvider: false,
-                  onClose,
-                  setIsSubmitting: setSubmitting,
-                  setApiStatus: () => {},
-                  setShowApiMessage: () => {},
-                  setErrorMessage: (msg) => setTestError(msg),
-                });
-              } else {
-                await submitLLMProvider({
-                  providerName: OPENROUTER_PROVIDER_NAME,
-                  values,
-                  initialValues,
-                  modelConfigurations:
-                    fetchedModels.length > 0
-                      ? fetchedModels
-                      : modelConfigurations,
-                  existingLlmProvider,
-                  shouldMarkAsDefault,
-                  setIsTesting,
-                  setTestError,
-                  mutate,
-                  onClose,
-                  setSubmitting,
-                });
-              }
-            }}
+          <LLMConfigurationModalWrapper
+            providerEndpoint={OPENROUTER_PROVIDER_NAME}
+            providerName={OPENROUTER_DISPLAY_NAME}
+            existingProviderName={existingLlmProvider?.name}
+            onClose={onClose}
+            isFormValid={formikProps.isValid}
+            isTesting={isTesting}
           >
-            {(formikProps) => {
-              const currentModels =
-                fetchedModels.length > 0
-                  ? fetchedModels
-                  : existingLlmProvider?.model_configurations ||
-                    modelConfigurations;
+            {!isOnboarding && (
+              <DisplayNameField disabled={!!existingLlmProvider} />
+            )}
 
-              const isFetchDisabled =
-                !formikProps.values.api_base || !formikProps.values.api_key;
+            <PasswordInputTypeInField name="api_key" label="API Key" />
 
-              return (
-                <LLMConfigurationModalWrapper
-                  providerEndpoint={OPENROUTER_PROVIDER_NAME}
-                  existingProviderName={existingLlmProvider?.name}
-                  onClose={onClose}
-                  isFormValid={formikProps.isValid}
-                  isTesting={isTesting}
-                  testError={testError}
-                >
-                  {!isOnboarding && (
-                    <DisplayNameField disabled={!!existingLlmProvider} />
-                  )}
+            <InputLayouts.Vertical
+              name="api_base"
+              title="API Base URL"
+              description="The base URL for OpenRouter API."
+            >
+              <InputTypeInField
+                name="api_base"
+                placeholder={DEFAULT_API_BASE}
+              />
+            </InputLayouts.Vertical>
 
-                  <PasswordInputTypeInField name="api_key" label="API Key" />
+            <FetchModelsButton
+              onFetch={() =>
+                fetchOpenRouterModels({
+                  apiBase: formikProps.values.api_base,
+                  apiKey: formikProps.values.api_key,
+                  providerName: existingLlmProvider?.name,
+                })
+              }
+              isDisabled={isFetchDisabled}
+              disabledHint={
+                !formikProps.values.api_key
+                  ? "Enter your API key first."
+                  : !formikProps.values.api_base
+                    ? "Enter the API base URL."
+                    : undefined
+              }
+              onModelsFetched={setFetchedModels}
+              autoFetchOnInitialLoad={!!existingLlmProvider}
+            />
 
-                  <InputLayouts.Vertical
-                    name="api_base"
-                    title="API Base URL"
-                    description="The base URL for OpenRouter API."
-                  >
-                    <InputTypeInField
-                      name="api_base"
-                      placeholder={DEFAULT_API_BASE}
-                    />
-                  </InputLayouts.Vertical>
+            <Separator />
 
-                  <FetchModelsButton
-                    onFetch={() =>
-                      fetchOpenRouterModels({
-                        apiBase: formikProps.values.api_base,
-                        apiKey: formikProps.values.api_key,
-                        providerName: existingLlmProvider?.name,
-                      })
-                    }
-                    isDisabled={isFetchDisabled}
-                    disabledHint={
-                      !formikProps.values.api_key
-                        ? "Enter your API key first."
-                        : !formikProps.values.api_base
-                          ? "Enter the API base URL."
-                          : undefined
-                    }
-                    onModelsFetched={setFetchedModels}
-                    autoFetchOnInitialLoad={!!existingLlmProvider}
-                  />
+            {isOnboarding ? (
+              <SingleDefaultModelField placeholder="E.g. openai/gpt-4o" />
+            ) : (
+              <DisplayModels
+                modelConfigurations={currentModels}
+                formikProps={formikProps}
+                noModelConfigurationsMessage={
+                  "Fetch available models first, then you'll be able to select " +
+                  "the models you want to make available in Onyx."
+                }
+                recommendedDefaultModel={null}
+                shouldShowAutoUpdateToggle={false}
+              />
+            )}
 
-                  <Separator />
-
-                  {isOnboarding ? (
-                    <SingleDefaultModelField placeholder="E.g. openai/gpt-4o" />
-                  ) : (
-                    <DisplayModels
-                      modelConfigurations={currentModels}
-                      formikProps={formikProps}
-                      noModelConfigurationsMessage={
-                        "Fetch available models first, then you'll be able to select " +
-                        "the models you want to make available in Onyx."
-                      }
-                      recommendedDefaultModel={null}
-                      shouldShowAutoUpdateToggle={false}
-                    />
-                  )}
-
-                  {!isOnboarding && (
-                    <AdvancedOptions formikProps={formikProps} />
-                  )}
-                </LLMConfigurationModalWrapper>
-              );
-            }}
-          </Formik>
+            {!isOnboarding && <AdvancedOptions formikProps={formikProps} />}
+          </LLMConfigurationModalWrapper>
         );
       }}
-    </ProviderFormEntrypointWrapper>
+    </Formik>
   );
 }

@@ -1,3 +1,5 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSWRConfig } from "swr";
 import { Formik, FormikProps } from "formik";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import * as InputLayouts from "@/layouts/input-layouts";
@@ -8,12 +10,8 @@ import {
   ModelConfiguration,
 } from "@/interfaces/llm";
 import * as Yup from "yup";
-import {
-  ProviderFormEntrypointWrapper,
-  ProviderFormContext,
-} from "./components/FormWrapper";
-import { DisplayNameField } from "./components/DisplayNameField";
-import { LLMConfigurationModalWrapper } from "./shared";
+import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
+import { LLMConfigurationModalWrapper } from "./LLMConfigurationModalWrapper";
 import {
   buildDefaultInitialValues,
   buildDefaultValidationSchema,
@@ -23,10 +21,12 @@ import {
   buildOnboardingInitialValues,
   BaseLLMFormValues,
 } from "./formUtils";
-import { AdvancedOptions } from "./components/AdvancedOptions";
-import { DisplayModels } from "./components/DisplayModels";
-import { SingleDefaultModelField } from "./components/SingleDefaultModelField";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  AdvancedOptions,
+  DisplayModels,
+  DisplayNameField,
+  SingleDefaultModelField,
+} from "./shared";
 import { fetchOllamaModels } from "@/app/admin/configuration/llm/utils";
 import debounce from "lodash/debounce";
 
@@ -46,7 +46,6 @@ interface OllamaModalContentProps {
   fetchedModels: ModelConfiguration[];
   setFetchedModels: (models: ModelConfiguration[]) => void;
   isTesting: boolean;
-  testError: string;
   onClose: () => void;
   isFormValid: boolean;
   isOnboarding: boolean;
@@ -58,7 +57,6 @@ function OllamaModalContent({
   fetchedModels,
   setFetchedModels,
   isTesting,
-  testError,
   onClose,
   isFormValid,
   isOnboarding,
@@ -122,7 +120,6 @@ function OllamaModalContent({
       onClose={onClose}
       isFormValid={isFormValid}
       isTesting={isTesting}
-      testError={testError}
     >
       {!isOnboarding && <DisplayNameField disabled={!!existingLlmProvider} />}
 
@@ -169,145 +166,116 @@ export function OllamaModal({
   llmDescriptor,
 }: LLMProviderFormProps) {
   const [fetchedModels, setFetchedModels] = useState<ModelConfiguration[]>([]);
+  const [isTesting, setIsTesting] = useState(false);
   const isOnboarding = variant === "onboarding";
+  const { mutate } = useSWRConfig();
+  const { wellKnownLLMProvider } =
+    useWellKnownLLMProvider(OLLAMA_PROVIDER_NAME);
+
+  if (open === false) return null;
+
+  const onClose = () => onOpenChange?.(false);
+
+  const modelConfigurations = buildAvailableModelConfigurations(
+    existingLlmProvider,
+    wellKnownLLMProvider ?? llmDescriptor
+  );
+
+  const initialValues: OllamaModalValues = isOnboarding
+    ? ({
+        ...buildOnboardingInitialValues(),
+        name: OLLAMA_PROVIDER_NAME,
+        provider: OLLAMA_PROVIDER_NAME,
+        api_base: DEFAULT_API_BASE,
+        default_model_name: "",
+        custom_config: {
+          OLLAMA_API_KEY: "",
+        },
+      } as OllamaModalValues)
+    : {
+        ...buildDefaultInitialValues(existingLlmProvider, modelConfigurations),
+        api_base: existingLlmProvider?.api_base ?? DEFAULT_API_BASE,
+        custom_config: {
+          OLLAMA_API_KEY:
+            (existingLlmProvider?.custom_config?.OLLAMA_API_KEY as string) ??
+            "",
+        },
+      };
+
+  const validationSchema = isOnboarding
+    ? Yup.object().shape({
+        api_base: Yup.string().required("API Base URL is required"),
+        default_model_name: Yup.string().required("Model name is required"),
+      })
+    : buildDefaultValidationSchema().shape({
+        api_base: Yup.string().required("API Base URL is required"),
+      });
 
   return (
-    <ProviderFormEntrypointWrapper
-      providerName="Ollama"
-      providerEndpoint={OLLAMA_PROVIDER_NAME}
-      existingLlmProvider={existingLlmProvider}
-      open={open}
-      onOpenChange={onOpenChange}
-      variant={variant}
-      onboardingState={onboardingState}
-      onboardingActions={onboardingActions}
-    >
-      {({
-        onClose,
-        mutate,
-        isTesting,
-        setIsTesting,
-        testError,
-        setTestError,
-        wellKnownLLMProvider,
-        onboardingState: ctxOnboardingState,
-        onboardingActions: ctxOnboardingActions,
-      }: ProviderFormContext) => {
-        const modelConfigurations = buildAvailableModelConfigurations(
-          existingLlmProvider,
-          wellKnownLLMProvider ?? llmDescriptor
+    <Formik
+      initialValues={initialValues}
+      validationSchema={validationSchema}
+      validateOnMount={true}
+      onSubmit={async (values, { setSubmitting }) => {
+        const filteredCustomConfig = Object.fromEntries(
+          Object.entries(values.custom_config || {}).filter(([, v]) => v !== "")
         );
 
-        const initialValues: OllamaModalValues = isOnboarding
-          ? ({
-              ...buildOnboardingInitialValues(),
-              name: OLLAMA_PROVIDER_NAME,
-              provider: OLLAMA_PROVIDER_NAME,
-              api_base: DEFAULT_API_BASE,
-              default_model_name: "",
-              custom_config: {
-                OLLAMA_API_KEY: "",
-              },
-            } as OllamaModalValues)
-          : {
-              ...buildDefaultInitialValues(
-                existingLlmProvider,
-                modelConfigurations
-              ),
-              api_base: existingLlmProvider?.api_base ?? DEFAULT_API_BASE,
-              custom_config: {
-                OLLAMA_API_KEY:
-                  (existingLlmProvider?.custom_config
-                    ?.OLLAMA_API_KEY as string) ?? "",
-              },
-            };
+        const submitValues = {
+          ...values,
+          custom_config:
+            Object.keys(filteredCustomConfig).length > 0
+              ? filteredCustomConfig
+              : undefined,
+        };
 
-        const validationSchema = isOnboarding
-          ? Yup.object().shape({
-              api_base: Yup.string().required("API Base URL is required"),
-              default_model_name: Yup.string().required(
-                "Model name is required"
-              ),
-            })
-          : buildDefaultValidationSchema().shape({
-              api_base: Yup.string().required("API Base URL is required"),
-            });
+        if (isOnboarding && onboardingState && onboardingActions) {
+          const modelConfigsToUse =
+            fetchedModels.length > 0 ? fetchedModels : [];
 
-        return (
-          <Formik
-            initialValues={initialValues}
-            validationSchema={validationSchema}
-            validateOnMount={true}
-            onSubmit={async (values, { setSubmitting }) => {
-              const filteredCustomConfig = Object.fromEntries(
-                Object.entries(values.custom_config || {}).filter(
-                  ([, v]) => v !== ""
-                )
-              );
-
-              const submitValues = {
-                ...values,
-                custom_config:
-                  Object.keys(filteredCustomConfig).length > 0
-                    ? filteredCustomConfig
-                    : undefined,
-              };
-
-              if (isOnboarding && ctxOnboardingState && ctxOnboardingActions) {
-                const modelConfigsToUse =
-                  fetchedModels.length > 0 ? fetchedModels : [];
-
-                await submitOnboardingProvider({
-                  providerName: OLLAMA_PROVIDER_NAME,
-                  payload: {
-                    ...submitValues,
-                    model_configurations: modelConfigsToUse,
-                  },
-                  onboardingState: ctxOnboardingState,
-                  onboardingActions: ctxOnboardingActions,
-                  isCustomProvider: false,
-                  onClose,
-                  setIsSubmitting: setSubmitting,
-                  setApiStatus: () => {},
-                  setShowApiMessage: () => {},
-                  setErrorMessage: (msg) => setTestError(msg),
-                });
-              } else {
-                await submitLLMProvider({
-                  providerName: OLLAMA_PROVIDER_NAME,
-                  values: submitValues,
-                  initialValues,
-                  modelConfigurations:
-                    fetchedModels.length > 0
-                      ? fetchedModels
-                      : modelConfigurations,
-                  existingLlmProvider,
-                  shouldMarkAsDefault,
-                  setIsTesting,
-                  setTestError,
-                  mutate,
-                  onClose,
-                  setSubmitting,
-                });
-              }
-            }}
-          >
-            {(formikProps) => (
-              <OllamaModalContent
-                formikProps={formikProps}
-                existingLlmProvider={existingLlmProvider}
-                fetchedModels={fetchedModels}
-                setFetchedModels={setFetchedModels}
-                isTesting={isTesting}
-                testError={testError}
-                onClose={onClose}
-                isFormValid={formikProps.isValid}
-                isOnboarding={isOnboarding}
-              />
-            )}
-          </Formik>
-        );
+          await submitOnboardingProvider({
+            providerName: OLLAMA_PROVIDER_NAME,
+            payload: {
+              ...submitValues,
+              model_configurations: modelConfigsToUse,
+            },
+            onboardingState,
+            onboardingActions,
+            isCustomProvider: false,
+            onClose,
+            setIsSubmitting: setSubmitting,
+            setApiStatus: () => {},
+            setShowApiMessage: () => {},
+          });
+        } else {
+          await submitLLMProvider({
+            providerName: OLLAMA_PROVIDER_NAME,
+            values: submitValues,
+            initialValues,
+            modelConfigurations:
+              fetchedModels.length > 0 ? fetchedModels : modelConfigurations,
+            existingLlmProvider,
+            shouldMarkAsDefault,
+            setIsTesting,
+            mutate,
+            onClose,
+            setSubmitting,
+          });
+        }
       }}
-    </ProviderFormEntrypointWrapper>
+    >
+      {(formikProps) => (
+        <OllamaModalContent
+          formikProps={formikProps}
+          existingLlmProvider={existingLlmProvider}
+          fetchedModels={fetchedModels}
+          setFetchedModels={setFetchedModels}
+          isTesting={isTesting}
+          onClose={onClose}
+          isFormValid={formikProps.isValid}
+          isOnboarding={isOnboarding}
+        />
+      )}
+    </Formik>
   );
 }
