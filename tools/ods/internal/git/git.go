@@ -173,6 +173,12 @@ func IsCherryPickInProgress() bool {
 	return cmd.Run() == nil
 }
 
+// IsRebaseInProgress checks if a rebase is currently in progress
+func IsRebaseInProgress() bool {
+	cmd := exec.Command("git", "rev-parse", "--verify", "--quiet", "REBASE_HEAD")
+	return cmd.Run() == nil
+}
+
 // HasStagedChanges checks if there are staged changes in the index
 func HasStagedChanges() bool {
 	cmd := exec.Command("git", "diff", "--quiet", "--cached")

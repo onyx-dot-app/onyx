@@ -301,6 +301,11 @@ func runCherryPickContinue() {
 
 	log.Infof("Resuming cherry-pick (original branch: %s, releases: %v)", state.OriginalBranch, state.Releases)
 
+	// If a rebase is in progress (REBASE_HEAD exists), it must be resolved first
+	if git.IsRebaseInProgress() {
+		log.Fatal("A git rebase is in progress. Resolve it first:\n  To continue: git rebase --continue\n  To abort:    git rebase --abort\nThen re-run: ods cherry-pick --continue")
+	}
+
 	// If git cherry-pick is still in progress (CHERRY_PICK_HEAD exists), continue it
 	if git.IsCherryPickInProgress() {
 		log.Info("Continuing in-progress cherry-pick...")
@@ -329,15 +334,23 @@ func cherryPickToRelease(commitSHAs, commitMessages []string, branchSuffix, vers
 	// Check if hotfix branch already exists
 	branchExists := git.BranchExists(hotfixBranch)
 	if branchExists {
-		log.Infof("Hotfix branch %s already exists, switching", hotfixBranch)
-		if err := git.RunCommand("switch", "--quiet", hotfixBranch); err != nil {
-			return "", fmt.Errorf("failed to checkout existing hotfix branch: %w", err)
-		}
+		currentBranch, _ := git.GetCurrentBranch()
+		if currentBranch == hotfixBranch {
+			// Already on the hotfix branch (e.g. --continue after conflict resolution).
+			// Skip rebase to avoid re-introducing the conflicts the user just resolved.
+			log.Infof("Already on hotfix branch %s, skipping rebase", hotfixBranch)
+		} else {
+			log.Infof("Hotfix branch %s already exists, switching", hotfixBranch)
+			if err := git.RunCommand("switch", "--quiet", hotfixBranch); err != nil {
+				return "", fmt.Errorf("failed to checkout existing hotfix branch: %w", err)
+			}
 
-		// Rebase onto the latest release branch so cherry-picked commits sit on top cleanly
-		log.Infof("Rebasing %s onto %s", hotfixBranch, releaseBranch)
-		if err := git.RunCommand("rebase", "--quiet", fmt.Sprintf("origin/%s", releaseBranch)); err != nil {
-			return "", fmt.Errorf("failed to rebase hotfix branch onto %s: %w", releaseBranch, err)
+			// Rebase onto the latest release branch so cherry-picked commits sit on top cleanly
+			log.Infof("Rebasing %s onto %s", hotfixBranch, releaseBranch)
+			if err := git.RunCommand("rebase", "--quiet", fmt.Sprintf("origin/%s", releaseBranch)); err != nil {
+				_ = git.RunCommand("rebase", "--abort")
+				return "", fmt.Errorf("failed to rebase hotfix branch onto %s (rebase aborted, re-run to retry): %w", releaseBranch, err)
+			}
 		}
 
 		// Check which commits need to be cherry-picked
