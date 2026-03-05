@@ -1,8 +1,11 @@
-import Separator from "@/refresh-components/Separator";
-import { Form, Formik } from "formik";
+import { Form, Formik, FormikProps } from "formik";
 import { TextFormField } from "@/components/Field";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
-import { LLMProviderFormProps, ModelConfiguration } from "@/interfaces/llm";
+import {
+  LLMProviderFormProps,
+  LLMProviderView,
+  ModelConfiguration,
+} from "@/interfaces/llm";
 import * as Yup from "yup";
 import {
   ProviderFormEntrypointWrapper,
@@ -20,9 +23,9 @@ import {
 } from "./formUtils";
 import { AdvancedOptions } from "./components/AdvancedOptions";
 import { DisplayModels } from "./components/DisplayModels";
-import { FetchModelsButton } from "./components/FetchModelsButton";
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchLMStudioModels } from "@/app/admin/configuration/llm/utils";
+import debounce from "lodash/debounce";
 
 export const LM_STUDIO_PROVIDER_NAME = "lm_studio";
 const DEFAULT_API_BASE = "http://localhost:1234";
@@ -32,6 +35,126 @@ interface LMStudioFormValues extends BaseLLMFormValues {
   custom_config: {
     LM_STUDIO_API_KEY?: string;
   };
+}
+
+interface LMStudioFormContentProps {
+  formikProps: FormikProps<LMStudioFormValues>;
+  existingLlmProvider?: LLMProviderView;
+  fetchedModels: ModelConfiguration[];
+  setFetchedModels: (models: ModelConfiguration[]) => void;
+  isTesting: boolean;
+  testError: string;
+  mutate: () => void;
+  onClose: () => void;
+  isFormValid: boolean;
+}
+
+function LMStudioFormContent({
+  formikProps,
+  existingLlmProvider,
+  fetchedModels,
+  setFetchedModels,
+  isTesting,
+  testError,
+  mutate,
+  onClose,
+  isFormValid,
+}: LMStudioFormContentProps) {
+  const [isLoadingModels, setIsLoadingModels] = useState(true);
+
+  const fetchModels = useCallback(
+    (apiBase: string, apiKey: string | undefined, signal: AbortSignal) => {
+      setIsLoadingModels(true);
+      fetchLMStudioModels({
+        api_base: apiBase,
+        api_key: apiKey,
+        api_key_changed: true,
+        provider_name: existingLlmProvider?.name,
+        signal,
+      })
+        .then((data) => {
+          if (signal.aborted) return;
+          if (data.error) {
+            console.error("Error fetching models:", data.error);
+            setFetchedModels([]);
+            return;
+          }
+          setFetchedModels(data.models);
+        })
+        .finally(() => {
+          if (!signal.aborted) {
+            setIsLoadingModels(false);
+          }
+        });
+    },
+    [existingLlmProvider?.name, setFetchedModels]
+  );
+
+  const debouncedFetchModels = useMemo(
+    () => debounce(fetchModels, 500),
+    [fetchModels]
+  );
+
+  const apiBase = formikProps.values.api_base;
+  const apiKey = formikProps.values.custom_config?.LM_STUDIO_API_KEY;
+
+  useEffect(() => {
+    if (apiBase) {
+      const controller = new AbortController();
+      debouncedFetchModels(apiBase, apiKey, controller.signal);
+      return () => {
+        debouncedFetchModels.cancel();
+        controller.abort();
+      };
+    } else {
+      setIsLoadingModels(false);
+      setFetchedModels([]);
+    }
+  }, [apiBase, apiKey, debouncedFetchModels, setFetchedModels]);
+
+  const currentModels =
+    fetchedModels.length > 0
+      ? fetchedModels
+      : existingLlmProvider?.model_configurations || [];
+
+  return (
+    <Form className={LLM_FORM_CLASS_NAME}>
+      <DisplayNameField disabled={!!existingLlmProvider} />
+
+      <TextFormField
+        name="api_base"
+        label="API Base URL"
+        subtext="The base URL for your LM Studio server (e.g., http://localhost:1234)"
+        placeholder={DEFAULT_API_BASE}
+      />
+
+      <PasswordInputTypeInField
+        name="custom_config.LM_STUDIO_API_KEY"
+        label="API Key (Optional)"
+        subtext="Optional API key if your LM Studio server requires authentication."
+      />
+
+      <DisplayModels
+        modelConfigurations={currentModels}
+        formikProps={formikProps}
+        noModelConfigurationsMessage="No models found. Please provide a valid API base URL."
+        isLoading={isLoadingModels}
+        recommendedDefaultModel={null}
+        shouldShowAutoUpdateToggle={false}
+      />
+
+      <AdvancedOptions formikProps={formikProps} />
+
+      <FormActionButtons
+        isTesting={isTesting}
+        testError={testError}
+        existingLlmProvider={existingLlmProvider}
+        mutate={mutate}
+        onClose={onClose}
+        isFormValid={isFormValid}
+      />
+    </Form>
+  );
 }
 
 export function LMStudioForm({
@@ -118,81 +241,19 @@ export function LMStudioForm({
               });
             }}
           >
-            {(formikProps) => {
-              const currentModels =
-                fetchedModels.length > 0
-                  ? fetchedModels
-                  : existingLlmProvider?.model_configurations ||
-                    modelConfigurations;
-
-              const isFetchDisabled = !formikProps.values.api_base;
-              const apiKeyChanged =
-                formikProps.values.custom_config?.LM_STUDIO_API_KEY !==
-                initialValues.custom_config?.LM_STUDIO_API_KEY;
-
-              return (
-                <Form className={LLM_FORM_CLASS_NAME}>
-                  <DisplayNameField disabled={!!existingLlmProvider} />
-
-                  <TextFormField
-                    name="api_base"
-                    label="API Base URL"
-                    subtext="The base URL for your LM Studio server (e.g., http://localhost:1234)"
-                    placeholder={DEFAULT_API_BASE}
-                  />
-
-                  <PasswordInputTypeInField
-                    name="custom_config.LM_STUDIO_API_KEY"
-                    label="API Key (Optional)"
-                    subtext="Optional API key if your LM Studio server requires authentication."
-                  />
-
-                  <FetchModelsButton
-                    onFetch={() =>
-                      fetchLMStudioModels({
-                        api_base: formikProps.values.api_base,
-                        api_key:
-                          formikProps.values.custom_config?.LM_STUDIO_API_KEY,
-                        api_key_changed: apiKeyChanged,
-                        provider_name: existingLlmProvider?.name,
-                      })
-                    }
-                    isDisabled={isFetchDisabled}
-                    disabledHint={
-                      !formikProps.values.api_base
-                        ? "Enter the API base URL first."
-                        : undefined
-                    }
-                    onModelsFetched={setFetchedModels}
-                    autoFetchOnInitialLoad={!!existingLlmProvider}
-                  />
-
-                  <Separator />
-
-                  <DisplayModels
-                    modelConfigurations={currentModels}
-                    formikProps={formikProps}
-                    noModelConfigurationsMessage={
-                      "Fetch available models first, then you'll be able to select " +
-                      "the models you want to make available in Onyx."
-                    }
-                    recommendedDefaultModel={null}
-                    shouldShowAutoUpdateToggle={false}
-                  />
-
-                  <AdvancedOptions formikProps={formikProps} />
-
-                  <FormActionButtons
-                    isTesting={isTesting}
-                    testError={testError}
-                    existingLlmProvider={existingLlmProvider}
-                    mutate={mutate}
-                    onClose={onClose}
-                    isFormValid={formikProps.isValid}
-                  />
-                </Form>
-              );
-            }}
+            {(formikProps) => (
+              <LMStudioFormContent
+                formikProps={formikProps}
+                existingLlmProvider={existingLlmProvider}
+                fetchedModels={fetchedModels}
+                setFetchedModels={setFetchedModels}
+                isTesting={isTesting}
+                testError={testError}
+                mutate={mutate}
+                onClose={onClose}
+                isFormValid={formikProps.isValid}
+              />
+            )}
           </Formik>
         );
       }}

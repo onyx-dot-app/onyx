@@ -43,6 +43,7 @@ import { BedrockModal } from "@/sections/modals/llmConfig/BedrockModal";
 import { VertexAIModal } from "@/sections/modals/llmConfig/VertexAIModal";
 import { OpenRouterModal } from "@/sections/modals/llmConfig/OpenRouterModal";
 import { CustomModal } from "@/sections/modals/llmConfig/CustomModal";
+import { LMStudioForm } from "@/sections/modals/llmConfig/LMStudioForm";
 import { Section } from "@/layouts/general-layouts";
 
 const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.LLM_MODELS]!;
@@ -103,6 +104,13 @@ const PROVIDER_MODAL_MAP: Record<
   ),
   openrouter: (d, open, onOpenChange) => (
     <OpenRouterModal
+      shouldMarkAsDefault={d}
+      open={open}
+      onOpenChange={onOpenChange}
+    />
+  ),
+  lm_studio: (d, open, onOpenChange) => (
+    <LMStudioForm
       shouldMarkAsDefault={d}
       open={open}
       onOpenChange={onOpenChange}

@@ -306,6 +306,7 @@ export const fetchLMStudioModels = async (
         api_key_changed: params.api_key_changed ?? false,
         provider_name: params.provider_name,
       }),
+      signal: params.signal,
     });
 
     if (!response.ok) {

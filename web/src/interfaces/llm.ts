@@ -135,6 +135,7 @@ export interface LMStudioFetchParams {
   api_key?: string;
   api_key_changed?: boolean;
   provider_name?: string;
+  signal?: AbortSignal;
 }
 
 export interface OpenRouterFetchParams {
