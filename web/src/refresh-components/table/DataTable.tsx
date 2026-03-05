@@ -126,6 +126,7 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
     draggable,
     footer,
     size = "regular",
+    onSelectionChange,
     onRowClick,
     height,
     headerBackground,
@@ -147,9 +148,13 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
     pageSize: resolvedPageSize,
     selectionState,
     selectedCount,
+    selectedRowIds,
     clearSelection,
     toggleAllPageRowsSelected,
     isAllPageRowsSelected,
+    isViewingSelected,
+    enterViewMode,
+    exitViewMode,
   } = useDataTable({
     data,
     columns: tanstackColumns,
@@ -157,6 +162,7 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
     initialSorting,
     initialColumnVisibility,
     getRowId: (row: TData) => getRowId(row),
+    onSelectionChange,
   });
 
   // 3. Call useColumnWidths
@@ -418,8 +424,20 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
           multiSelect={footerConfig.multiSelect !== false}
           selectionState={selectionState}
           selectedCount={selectedCount}
-          onClear={footerConfig.onClear ?? clearSelection}
-          onView={footerConfig.onView}
+          onClear={
+            footerConfig.onClear ??
+            (() => {
+              if (isViewingSelected) exitViewMode();
+              clearSelection();
+            })
+          }
+          onView={
+            footerConfig.showView
+              ? isViewingSelected
+                ? exitViewMode
+                : enterViewMode
+              : undefined
+          }
           pageSize={resolvedPageSize}
           totalItems={totalItems}
           currentPage={currentPage}

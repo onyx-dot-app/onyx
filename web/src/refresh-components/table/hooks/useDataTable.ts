@@ -1,12 +1,13 @@
 "use client";
 "use no memo";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   useReactTable,
   getCoreRowModel,
   getSortedRowModel,
   getPaginationRowModel,
+  getFilteredRowModel,
   type Table,
   type ColumnDef,
   type RowData,
@@ -58,9 +59,12 @@ type ManagedKeys =
   | "onColumnSizingChange"
   | "onColumnVisibilityChange"
   | "onPaginationChange"
+  | "onGlobalFilterChange"
   | "getCoreRowModel"
   | "getSortedRowModel"
   | "getPaginationRowModel"
+  | "getFilteredRowModel"
+  | "globalFilterFn"
   | "columnResizeMode"
   | "enableRowSelection"
   | "enableColumnResizing"
@@ -90,6 +94,8 @@ interface UseDataTableOptions<TData extends RowData> {
   initialSorting?: SortingState;
   /** Initial column visibility state. @default {} */
   initialColumnVisibility?: VisibilityState;
+  /** Called whenever the set of selected row IDs changes. */
+  onSelectionChange?: (selectedIds: string[]) => void;
   /** Escape-hatch: extra options spread into `useReactTable`. Managed keys are excluded. */
   tableOptions?: Partial<Omit<TableOptions<TData>, ManagedKeys>>;
 }
@@ -122,10 +128,20 @@ interface UseDataTableReturn<TData extends RowData> {
   selectedCount: number;
   /** Whether every row on the current page is selected. */
   isAllPageRowsSelected: boolean;
+  /** IDs of currently selected rows (derived from `getRowId`). */
+  selectedRowIds: string[];
   /** Deselect all rows. */
   clearSelection: () => void;
   /** Select or deselect all rows on the current page. */
   toggleAllPageRowsSelected: (selected: boolean) => void;
+
+  // View-mode (filter to selected rows)
+  /** Whether the table is currently filtered to show only selected rows. */
+  isViewingSelected: boolean;
+  /** Enter view mode — freeze the current selection as a filter. */
+  enterViewMode: () => void;
+  /** Exit view mode — remove the selection filter. */
+  exitViewMode: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -157,6 +173,7 @@ export default function useDataTable<TData extends RowData>(
     initialSorting = [],
     initialColumnVisibility = {},
     getRowId,
+    onSelectionChange,
     tableOptions,
   } = options;
 
@@ -171,6 +188,8 @@ export default function useDataTable<TData extends RowData>(
     pageIndex: 0,
     pageSize: pageSizeOption,
   });
+  /** null = no filter active; Set<string> = frozen snapshot of selected IDs. */
+  const [viewedIds, setViewedIds] = useState<Set<string> | null>(null);
 
   // ---- sync pageSize prop to internal state --------------------------------
   useEffect(() => {
@@ -192,15 +211,20 @@ export default function useDataTable<TData extends RowData>(
       columnSizing,
       columnVisibility,
       pagination,
+      globalFilter: viewedIds,
     },
     onSortingChange: setSorting,
     onRowSelectionChange: setRowSelection,
     onColumnSizingChange: setColumnSizing,
     onColumnVisibilityChange: setColumnVisibility,
     onPaginationChange: setPagination,
+    onGlobalFilterChange: setViewedIds,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    globalFilterFn: (row, _columnId, filterValue: Set<string> | null) =>
+      filterValue == null ? true : filterValue.has(row.id),
     columnResizeMode,
     enableRowSelection,
     enableColumnResizing,
@@ -217,11 +241,23 @@ export default function useDataTable<TData extends RowData>(
       ? "partial"
       : "none";
 
-  const selectedCount = Object.keys(rowSelection).length;
+  const selectedRowIds = useMemo(
+    () => Object.keys(rowSelection),
+    [rowSelection]
+  );
+  const selectedCount = selectedRowIds.length;
   const totalPages = Math.max(1, table.getPageCount());
   const currentPage = pagination.pageIndex + 1;
-  const totalItems = data.length;
+  const totalItems =
+    viewedIds != null
+      ? table.getPrePaginationRowModel().rows.length
+      : data.length;
   const isPaginated = isFinite(pagination.pageSize);
+
+  // ---- selection change callback ------------------------------------------
+  useEffect(() => {
+    onSelectionChange?.(selectedRowIds);
+  }, [selectedRowIds, onSelectionChange]);
 
   // ---- actions ------------------------------------------------------------
   const setPage = (page: number) => {
@@ -237,6 +273,21 @@ export default function useDataTable<TData extends RowData>(
     table.toggleAllPageRowsSelected(selected);
   };
 
+  // ---- view mode (filter to selected rows) --------------------------------
+  const isViewingSelected = viewedIds != null;
+
+  const enterViewMode = () => {
+    if (selectedRowIds.length > 0) {
+      setViewedIds(new Set(selectedRowIds));
+      setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+    }
+  };
+
+  const exitViewMode = () => {
+    setViewedIds(null);
+    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+  };
+
   return {
     table,
     currentPage,
@@ -247,8 +298,12 @@ export default function useDataTable<TData extends RowData>(
     isPaginated,
     selectionState,
     selectedCount,
+    selectedRowIds,
     isAllPageRowsSelected,
     clearSelection,
     toggleAllPageRowsSelected,
+    isViewingSelected,
+    enterViewMode,
+    exitViewMode,
   };
 }

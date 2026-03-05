@@ -115,8 +115,8 @@ export interface DataTableFooterSelection {
   mode: "selection";
   /** Whether the table supports selecting multiple rows. @default true */
   multiSelect?: boolean;
-  /** Handler for the "View" button. */
-  onView?: () => void;
+  /** When true, shows a "View" button that filters the table to only selected rows. @default false */
+  showView?: boolean;
   /** Handler for the "Clear" button. When omitted, the default clearSelection is used. */
   onClear?: () => void;
 }
@@ -148,6 +148,8 @@ export interface DataTableProps<TData> {
   footer?: DataTableFooterConfig;
   /** Table size variant. @default "regular" */
   size?: TableSize;
+  /** Called whenever the set of selected row IDs changes. Receives IDs produced by `getRowId`. */
+  onSelectionChange?: (selectedIds: string[]) => void;
   /** Called when a row is clicked (replaces the default selection toggle). */
   onRowClick?: (row: TData) => void;
   /**
