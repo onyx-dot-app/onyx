@@ -51,6 +51,7 @@ function MicrophoneButton({
   const wasTTSPlayingRef = useRef(false);
   const manualStopRequestedRef = useRef(false);
   const lastHandledManualStopCountRef = useRef(manualStopCount);
+  const autoListenCooldownTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Handler for VAD-triggered auto-send (when server detects silence)
   const handleFinalTranscript = useCallback(
@@ -113,8 +114,14 @@ function MicrophoneButton({
     }
   }, [isRecording, startRecording, stopRecording, onRecordingStart]);
 
-  // Auto-start listening when TTS finishes (only if autoListen is enabled)
+  // Auto-start listening shortly after TTS finishes (only if autoListen is enabled).
+  // Small cooldown reduces playback bleed being re-captured by the microphone.
   useEffect(() => {
+    if (autoListenCooldownTimerRef.current) {
+      clearTimeout(autoListenCooldownTimerRef.current);
+      autoListenCooldownTimerRef.current = null;
+    }
+
     const stoppedManually =
       manualStopCount !== lastHandledManualStopCountRef.current;
 
@@ -124,11 +131,24 @@ function MicrophoneButton({
       !isTTSLoading &&
       autoListen &&
       !disabled &&
+      !isRecording &&
       !stoppedManually
     ) {
-      startRecording().catch(() => {
-        // Silently ignore auto-start failures
-      });
+      autoListenCooldownTimerRef.current = setTimeout(() => {
+        autoListenCooldownTimerRef.current = null;
+        if (
+          !autoListen ||
+          disabled ||
+          isRecording ||
+          isTTSPlaying ||
+          isTTSLoading
+        ) {
+          return;
+        }
+        startRecording().catch(() => {
+          // Silently ignore auto-start failures
+        });
+      }, 400);
     }
 
     if (stoppedManually) {
@@ -141,9 +161,19 @@ function MicrophoneButton({
     isTTSLoading,
     autoListen,
     disabled,
+    isRecording,
     startRecording,
     manualStopCount,
   ]);
+
+  useEffect(() => {
+    return () => {
+      if (autoListenCooldownTimerRef.current) {
+        clearTimeout(autoListenCooldownTimerRef.current);
+        autoListenCooldownTimerRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (error) {

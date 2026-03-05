@@ -362,16 +362,18 @@ export default function VoiceProviderSetupModal({
                 title="Target URI"
                 subDescription={
                   <>
-                    Paste your endpoint target URI from{" "}
+                    Paste the endpoint shown in{" "}
                     <a
                       href="https://portal.azure.com/"
                       target="_blank"
                       rel="noopener noreferrer"
                       className="underline"
                     >
-                      Azure Portal
+                      Azure Portal (Keys and Endpoint)
                     </a>
-                    .
+                    . Onyx extracts the speech region from this URL. Examples:
+                    https://westus.api.cognitive.microsoft.com/ or
+                    https://westus.tts.speech.microsoft.com/.
                   </>
                 }
                 nonInteractive
@@ -380,9 +382,7 @@ export default function VoiceProviderSetupModal({
                   placeholder={
                     isEditing
                       ? "Leave blank to keep existing"
-                      : mode === "tts"
-                        ? "https://eastus.tts.speech.microsoft.com/cognitiveservices/v1"
-                        : "https://eastus.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1"
+                      : "https://<region>.api.cognitive.microsoft.com/"
                   }
                   value={targetUri}
                   onChange={(e) => setTargetUri(e.target.value)}
@@ -424,7 +424,7 @@ export default function VoiceProviderSetupModal({
               </Vertical>
             )}
 
-            {providerType === "openai" && mode === "tts" && (
+            {mode === "tts" && (
               <Vertical
                 title="Voice"
                 subDescription="This voice will be used for spoken responses."

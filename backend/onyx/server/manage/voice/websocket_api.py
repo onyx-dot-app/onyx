@@ -3,6 +3,7 @@
 import asyncio
 import io
 import json
+import os
 from typing import Any
 
 from fastapi import APIRouter
@@ -29,6 +30,9 @@ router = APIRouter(prefix="/voice")
 
 # Transcribe every ~0.5 seconds of audio (webm/opus is ~2-4KB/s, so ~1-2KB per 0.5s)
 MIN_CHUNK_BYTES = 1500
+VOICE_DISABLE_STREAMING_FALLBACK = (
+    os.environ.get("VOICE_DISABLE_STREAMING_FALLBACK", "").lower() == "true"
+)
 
 
 class ChunkedTranscriber:
@@ -347,15 +351,29 @@ async def websocket_transcribe(
                 logger.error(
                     f"WebSocket transcribe: failed to create streaming transcriber: {e}"
                 )
+                if VOICE_DISABLE_STREAMING_FALLBACK:
+                    await websocket.send_json(
+                        {"type": "error", "message": f"Streaming STT failed: {e}"}
+                    )
+                    return
                 logger.info("WebSocket transcribe: falling back to chunked STT")
-                chunked_transcriber = ChunkedTranscriber(provider)
+                # Browser stream provides raw PCM16 chunks over WebSocket.
+                chunked_transcriber = ChunkedTranscriber(provider, audio_format="pcm16")
                 await handle_chunked_transcription(websocket, chunked_transcriber)
         else:
             # Fall back to chunked transcription
+            if VOICE_DISABLE_STREAMING_FALLBACK:
+                await websocket.send_json(
+                    {
+                        "type": "error",
+                        "message": "Provider doesn't support streaming STT",
+                    }
+                )
+                return
             logger.info(
                 "WebSocket transcribe: using chunked STT (provider doesn't support streaming)"
             )
-            chunked_transcriber = ChunkedTranscriber(provider)
+            chunked_transcriber = ChunkedTranscriber(provider, audio_format="pcm16")
             await handle_chunked_transcription(websocket, chunked_transcriber)
 
     except WebSocketDisconnect:
@@ -527,6 +545,86 @@ async def handle_streaming_synthesis(
         logger.info("Streaming synthesis: handler finished")
 
 
+async def handle_chunked_synthesis(websocket: WebSocket, provider: Any) -> None:
+    """Fallback TTS handler using provider.synthesize_stream."""
+    logger.info("Chunked synthesis: starting handler")
+    text_buffer: list[str] = []
+    voice: str | None = None
+    speed = 1.0
+
+    try:
+        while True:
+            message = await websocket.receive()
+            msg_type = message.get("type", "unknown")
+
+            if msg_type == "websocket.disconnect":
+                logger.info("Chunked synthesis: client disconnected")
+                break
+
+            if "text" not in message:
+                continue
+
+            try:
+                data = json.loads(message["text"])
+            except json.JSONDecodeError:
+                logger.warning(
+                    "Chunked synthesis: failed to parse JSON: "
+                    f"{message.get('text', '')[:100]}"
+                )
+                continue
+
+            msg_data_type = data.get("type")
+            if msg_data_type == "synthesize":
+                text = data.get("text", "")
+                if not text:
+                    for key, value in data.items():
+                        if key != "type" and isinstance(value, str) and value:
+                            text = value
+                            break
+                if text:
+                    text_buffer.append(text)
+                    logger.info(
+                        f"Chunked synthesis: buffered text ({len(text)} chars), "
+                        f"total buffered: {len(text_buffer)} chunks"
+                    )
+                if isinstance(data.get("voice"), str) and data["voice"]:
+                    voice = data["voice"]
+                if isinstance(data.get("speed"), (int, float)):
+                    speed = float(data["speed"])
+            elif msg_data_type == "end":
+                logger.info("Chunked synthesis: end signal received")
+                full_text = " ".join(text_buffer).strip()
+                if not full_text:
+                    await websocket.send_json({"type": "audio_done"})
+                    logger.info("Chunked synthesis: no text, sent audio_done")
+                    break
+
+                chunk_count = 0
+                total_bytes = 0
+                logger.info(
+                    f"Chunked synthesis: sending full text ({len(full_text)} chars)"
+                )
+                async for audio_chunk in provider.synthesize_stream(
+                    full_text, voice=voice, speed=speed
+                ):
+                    if not audio_chunk:
+                        continue
+                    chunk_count += 1
+                    total_bytes += len(audio_chunk)
+                    await websocket.send_bytes(audio_chunk)
+                await websocket.send_json({"type": "audio_done"})
+                logger.info(
+                    f"Chunked synthesis: sent audio_done after {chunk_count} chunks, {total_bytes} bytes"
+                )
+                break
+    except Exception as e:
+        if "disconnect" not in str(e).lower():
+            logger.error(f"Chunked synthesis: error: {e}", exc_info=True)
+            raise
+    finally:
+        logger.info("Chunked synthesis: handler finished")
+
+
 @router.websocket("/synthesize/stream")
 async def websocket_synthesize(
     websocket: WebSocket,
@@ -627,16 +725,28 @@ async def websocket_synthesize(
                 logger.error(
                     f"WebSocket synthesize: failed to create streaming synthesizer: {e}"
                 )
-                await websocket.send_json(
-                    {"type": "error", "message": f"Streaming TTS failed: {e}"}
+                if VOICE_DISABLE_STREAMING_FALLBACK:
+                    await websocket.send_json(
+                        {"type": "error", "message": f"Streaming TTS failed: {e}"}
+                    )
+                    return
+                logger.info(
+                    "WebSocket synthesize: falling back to chunked TTS synthesis"
                 )
+                await handle_chunked_synthesis(websocket, provider)
         else:
-            logger.warning(
-                "WebSocket synthesize: provider doesn't support streaming TTS"
+            if VOICE_DISABLE_STREAMING_FALLBACK:
+                await websocket.send_json(
+                    {
+                        "type": "error",
+                        "message": "Provider doesn't support streaming TTS",
+                    }
+                )
+                return
+            logger.info(
+                "WebSocket synthesize: using chunked TTS (provider doesn't support streaming)"
             )
-            await websocket.send_json(
-                {"type": "error", "message": "Provider doesn't support streaming TTS"}
-            )
+            await handle_chunked_synthesis(websocket, provider)
 
     except WebSocketDisconnect:
         logger.debug("WebSocket synthesize: client disconnected")

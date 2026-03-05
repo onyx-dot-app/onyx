@@ -48,6 +48,7 @@ def get_voice_provider(provider: VoiceProvider) -> VoiceProviderInterface:
 
         return AzureVoiceProvider(
             api_key=api_key,
+            api_base=api_base,
             custom_config=custom_config or {},
             stt_model=stt_model,
             tts_model=tts_model,

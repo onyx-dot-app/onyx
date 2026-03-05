@@ -1,4 +1,8 @@
 import asyncio
+import io
+import re
+import struct
+import wave
 from collections.abc import AsyncIterator
 from typing import Any
 from xml.sax.saxutils import escape
@@ -27,16 +31,19 @@ AZURE_VOICES = [
 
 
 class AzureStreamingTranscriber(StreamingTranscriberProtocol):
-    """Streaming transcription using Azure Speech SDK.
+    """Streaming transcription using Azure Speech SDK."""
 
-    Note: Currently disabled (supports_streaming_stt returns False) because
-    Azure STT requires 16kHz audio but clients send 24kHz. Needs audio
-    resampling implementation before enabling.
-    """
-
-    def __init__(self, api_key: str, region: str):
+    def __init__(
+        self,
+        api_key: str,
+        region: str,
+        input_sample_rate: int = 24000,
+        target_sample_rate: int = 16000,
+    ):
         self.api_key = api_key
         self.region = region
+        self.input_sample_rate = input_sample_rate
+        self.target_sample_rate = target_sample_rate
         self._transcript_queue: asyncio.Queue[TranscriptResult | None] = asyncio.Queue()
         self._accumulated_transcript = ""
         self._recognizer: Any = None
@@ -46,7 +53,13 @@ class AzureStreamingTranscriber(StreamingTranscriberProtocol):
 
     async def connect(self) -> None:
         """Initialize Azure Speech recognizer with push stream."""
-        import azure.cognitiveservices.speech as speechsdk
+        try:
+            import azure.cognitiveservices.speech as speechsdk
+        except ImportError as e:
+            raise RuntimeError(
+                "Azure Speech SDK is required for streaming STT. "
+                "Install `azure-cognitiveservices-speech`."
+            ) from e
 
         self._loop = asyncio.get_running_loop()
 
@@ -102,7 +115,32 @@ class AzureStreamingTranscriber(StreamingTranscriberProtocol):
     async def send_audio(self, chunk: bytes) -> None:
         """Send audio chunk to Azure."""
         if self._audio_stream and not self._closed:
-            self._audio_stream.write(chunk)
+            self._audio_stream.write(self._resample_pcm16(chunk))
+
+    def _resample_pcm16(self, data: bytes) -> bytes:
+        """Resample PCM16 audio from input_sample_rate to target_sample_rate."""
+        if self.input_sample_rate == self.target_sample_rate:
+            return data
+
+        num_samples = len(data) // 2
+        if num_samples == 0:
+            return b""
+
+        samples = list(struct.unpack(f"<{num_samples}h", data))
+        ratio = self.input_sample_rate / self.target_sample_rate
+        new_length = int(num_samples / ratio)
+
+        resampled: list[int] = []
+        for i in range(new_length):
+            src_idx = i * ratio
+            idx_floor = int(src_idx)
+            idx_ceil = min(idx_floor + 1, num_samples - 1)
+            frac = src_idx - idx_floor
+            sample = int(samples[idx_floor] * (1 - frac) + samples[idx_ceil] * frac)
+            sample = max(-32768, min(32767, sample))
+            resampled.append(sample)
+
+        return struct.pack(f"<{len(resampled)}h", *resampled)
 
     async def receive_transcript(self) -> TranscriptResult | None:
         """Receive next transcript."""
@@ -143,7 +181,13 @@ class AzureStreamingSynthesizer(StreamingSynthesizerProtocol):
 
     async def connect(self) -> None:
         """Initialize Azure Speech synthesizer with push stream."""
-        import azure.cognitiveservices.speech as speechsdk
+        try:
+            import azure.cognitiveservices.speech as speechsdk
+        except ImportError as e:
+            raise RuntimeError(
+                "Azure Speech SDK is required for streaming TTS. "
+                "Install `azure-cognitiveservices-speech`."
+            ) from e
 
         self._logger.info("AzureStreamingSynthesizer: connecting")
 
@@ -217,20 +261,104 @@ class AzureVoiceProvider(VoiceProviderInterface):
     def __init__(
         self,
         api_key: str | None,
+        api_base: str | None,
         custom_config: dict[str, Any],
         stt_model: str | None = None,
         tts_model: str | None = None,
         default_voice: str | None = None,
     ):
         self.api_key = api_key
+        self.api_base = api_base
         self.custom_config = custom_config
-        self.speech_region = custom_config.get("speech_region", "")
+        self.speech_region = (
+            custom_config.get("speech_region")
+            or self._extract_speech_region_from_uri(api_base)
+            or ""
+        )
         self.stt_model = stt_model
         self.tts_model = tts_model
         self.default_voice = default_voice or "en-US-JennyNeural"
 
-    async def transcribe(self, _audio_data: bytes, _audio_format: str) -> str:
-        raise NotImplementedError("Azure STT not yet implemented")
+    @staticmethod
+    def _extract_speech_region_from_uri(uri: str | None) -> str | None:
+        """Extract Azure speech region from endpoint URI."""
+        if not uri:
+            return None
+        # Accepted examples:
+        # - https://eastus.tts.speech.microsoft.com/cognitiveservices/v1
+        # - https://eastus.stt.speech.microsoft.com/speech/recognition/...
+        # - https://westus.api.cognitive.microsoft.com/
+        # - https://<resource>.cognitiveservices.azure.com/  (fallback to first label)
+        patterns = [
+            r"https?://([^.]+)\.(?:tts|stt)\.speech\.microsoft\.com",
+            r"https?://([^.]+)\.api\.cognitive\.microsoft\.com",
+            r"https?://([^.]+)\.cognitiveservices\.azure\.com",
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, uri)
+            if match:
+                return match.group(1)
+        return None
+
+    @staticmethod
+    def _pcm16_to_wav(pcm_data: bytes, sample_rate: int = 24000) -> bytes:
+        """Wrap raw PCM16 mono bytes into a WAV container."""
+        buffer = io.BytesIO()
+        with wave.open(buffer, "wb") as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(sample_rate)
+            wav_file.writeframes(pcm_data)
+        return buffer.getvalue()
+
+    async def transcribe(self, audio_data: bytes, audio_format: str) -> str:
+        if not self.api_key:
+            raise ValueError("Azure API key required for STT")
+        if not self.speech_region:
+            raise ValueError("Azure speech region required for STT")
+
+        normalized_format = audio_format.lower()
+        payload = audio_data
+        content_type = f"audio/{normalized_format}"
+
+        # WebSocket chunked fallback sends raw PCM16 bytes.
+        if normalized_format in {"pcm", "pcm16", "raw"}:
+            payload = self._pcm16_to_wav(audio_data, sample_rate=24000)
+            content_type = "audio/wav"
+        elif normalized_format in {"wav", "wave"}:
+            content_type = "audio/wav"
+        elif normalized_format == "webm":
+            content_type = "audio/webm; codecs=opus"
+
+        url = (
+            f"https://{self.speech_region}.stt.speech.microsoft.com/"
+            "speech/recognition/conversation/cognitiveservices/v1"
+        )
+        params = {"language": "en-US", "format": "detailed"}
+        headers = {
+            "Ocp-Apim-Subscription-Key": self.api_key,
+            "Content-Type": content_type,
+            "Accept": "application/json",
+        }
+
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                url, params=params, headers=headers, data=payload
+            ) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    raise RuntimeError(f"Azure STT failed: {error_text}")
+                result = await response.json()
+
+        if result.get("RecognitionStatus") != "Success":
+            return ""
+        nbest = result.get("NBest") or []
+        if nbest and isinstance(nbest, list):
+            display = nbest[0].get("Display")
+            if isinstance(display, str):
+                return display
+        display_text = result.get("DisplayText", "")
+        return display_text if isinstance(display_text, str) else ""
 
     async def synthesize_stream(
         self, text: str, voice: str | None = None, speed: float = 1.0
@@ -301,8 +429,8 @@ class AzureVoiceProvider(VoiceProviderInterface):
         ]
 
     def supports_streaming_stt(self) -> bool:
-        """Disabled until audio resampling is implemented (24kHz -> 16kHz)."""
-        return False
+        """Azure supports streaming STT via Speech SDK."""
+        return True
 
     def supports_streaming_tts(self) -> bool:
         """Azure supports real-time streaming TTS via Speech SDK."""
@@ -319,14 +447,17 @@ class AzureVoiceProvider(VoiceProviderInterface):
         transcriber = AzureStreamingTranscriber(
             api_key=self.api_key,
             region=self.speech_region,
+            input_sample_rate=24000,
+            target_sample_rate=16000,
         )
         await transcriber.connect()
         return transcriber
 
     async def create_streaming_synthesizer(
-        self, voice: str | None = None, _speed: float = 1.0
+        self, voice: str | None = None, speed: float = 1.0
     ) -> AzureStreamingSynthesizer:
         """Create a streaming TTS session."""
+        _ = speed  # Azure SDK streaming path does not currently support runtime speed control.
         if not self.api_key:
             raise ValueError("API key required for streaming TTS")
         if not self.speech_region:
