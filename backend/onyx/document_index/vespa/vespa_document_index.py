@@ -183,6 +183,10 @@ def _update_single_chunk(
         model_config = {"frozen": True}
         assign: list[int]
 
+    class _Personas(BaseModel):
+        model_config = {"frozen": True}
+        assign: list[int]
+
     class _VespaPutFields(BaseModel):
         model_config = {"frozen": True}
         # The names of these fields are based the Vespa schema. Changes to the
@@ -193,6 +197,7 @@ def _update_single_chunk(
         access_control_list: _AccessControl | None = None
         hidden: _Hidden | None = None
         user_project: _UserProjects | None = None
+        personas: _Personas | None = None
 
     class _VespaPutRequest(BaseModel):
         model_config = {"frozen": True}
@@ -227,6 +232,11 @@ def _update_single_chunk(
         if update_request.project_ids is not None
         else None
     )
+    personas_update: _Personas | None = (
+        _Personas(assign=list(update_request.persona_ids))
+        if update_request.persona_ids is not None
+        else None
+    )
 
     vespa_put_fields = _VespaPutFields(
         boost=boost_update,
@@ -234,6 +244,7 @@ def _update_single_chunk(
         access_control_list=access_update,
         hidden=hidden_update,
         user_project=user_projects_update,
+        personas=personas_update,
     )
 
     vespa_put_request = _VespaPutRequest(
@@ -554,10 +565,9 @@ class VespaDocumentIndex(DocumentIndex):
         num_to_retrieve: int,
     ) -> list[InferenceChunk]:
         vespa_where_clauses = build_vespa_filters(filters)
-        # Needs to be at least as much as the rerank-count value set in the
-        # Vespa schema config. Otherwise we would be getting fewer results than
-        # expected for reranking.
-        target_hits = max(10 * num_to_retrieve, RERANK_COUNT)
+        # Avoid over-fetching a very large candidate set for global-phase reranking.
+        # Keep enough headroom for quality while capping cost on larger indices.
+        target_hits = min(max(4 * num_to_retrieve, 100), RERANK_COUNT)
 
         yql = (
             YQL_BASE.format(index_name=self._index_name)

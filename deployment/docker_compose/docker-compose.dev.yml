@@ -35,6 +35,10 @@ services:
       retries: 3
       start_period: 30s
 
+  opensearch:
+    ports:
+      - "9200:9200"
+
   inference_model_server:
     ports:
       - "9000:9000"

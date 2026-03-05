@@ -2,7 +2,7 @@ import { Form, Formik } from "formik";
 import { toast } from "@/hooks/useToast";
 import { createApiKey, updateApiKey } from "./lib";
 import Modal from "@/refresh-components/Modal";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox";

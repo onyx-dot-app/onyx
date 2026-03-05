@@ -2,23 +2,30 @@ package cmd
 
 import (
 	"fmt"
+	"io"
+	"os"
 	"os/exec"
 	"regexp"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/git"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/prompt"
 )
 
+const cherryPickPRLabel = "cherry-pick 🍒"
+
 // CherryPickOptions holds options for the cherry-pick command
 type CherryPickOptions struct {
 	Releases []string
+	Assignees []string
 	DryRun   bool
 	Yes      bool
 	NoVerify bool
+	Continue bool
 }
 
 // NewCherryPickCommand creates a new cherry-pick command
@@ -26,8 +33,9 @@ func NewCherryPickCommand() *cobra.Command {
 	opts := &CherryPickOptions{}
 
 	cmd := &cobra.Command{
-		Use:   "cherry-pick <commit-sha> [<commit-sha>...]",
-		Short: "Cherry-pick one or more commits to a release branch",
+		Use:     "cherry-pick <commit-sha> [<commit-sha>...]",
+		Aliases: []string{"cp"},
+		Short:   "Cherry-pick one or more commits to a release branch",
 		Long: `Cherry-pick one or more commits to a release branch and create a PR.
 
 This command will:
@@ -39,16 +47,39 @@ This command will:
 
 Multiple commits will be cherry-picked in the order specified, similar to git cherry-pick.
 The --release flag can be specified multiple times to cherry-pick to multiple release branches.
+
+If a cherry-pick hits a merge conflict, resolve it manually, then run:
+  $ ods cherry-pick --continue
+
 Example usage:
 
-	$ ods cherry-pick foo123 bar456 --release 2.5 --release 2.6`,
-		Args: cobra.MinimumNArgs(1),
+	$ ods cherry-pick foo123 bar456 --release 2.5 --release 2.6
+	$ ods cp foo123 --release 2.5`,
+		Args: func(cmd *cobra.Command, args []string) error {
+			cont, _ := cmd.Flags().GetBool("continue")
+			if cont {
+				if len(args) > 0 {
+					return fmt.Errorf("--continue does not accept positional arguments")
+				}
+				return nil
+			}
+			if len(args) < 1 {
+				return fmt.Errorf("requires at least 1 arg(s), only received %d", len(args))
+			}
+			return nil
+		},
 		Run: func(cmd *cobra.Command, args []string) {
-			runCherryPick(cmd, args, opts)
+			if opts.Continue {
+				runCherryPickContinue()
+			} else {
+				runCherryPick(cmd, args, opts)
+			}
 		},
 	}
 
+	cmd.Flags().BoolVar(&opts.Continue, "continue", false, "Resume a cherry-pick after manual conflict resolution")
 	cmd.Flags().StringSliceVar(&opts.Releases, "release", []string{}, "Release version(s) to cherry-pick to (e.g., 1.0, v1.1). 'v' prefix is optional. Can be specified multiple times.")
+	cmd.Flags().StringSliceVar(&opts.Assignees, "assignee", nil, "GitHub assignee(s) for the created PR. Can be specified multiple times or as comma-separated values.")
 	cmd.Flags().BoolVar(&opts.DryRun, "dry-run", false, "Perform all local operations but skip pushing to remote and creating PRs")
 	cmd.Flags().BoolVar(&opts.Yes, "yes", false, "Skip confirmation prompts and automatically proceed")
 	cmd.Flags().BoolVar(&opts.NoVerify, "no-verify", false, "Skip pre-commit and commit-msg hooks for cherry-pick and push")
@@ -167,49 +198,118 @@ func runCherryPick(cmd *cobra.Command, args []string, opts *CherryPickOptions) {
 		prTitle = fmt.Sprintf("chore(hotfix): cherry-pick %d commits", len(commitSHAs))
 	}
 
-	// Process each release
+	// Save state so --continue can resume if a conflict occurs
+	assignees, err := resolveAssignees(cmd, opts.Assignees)
+	if err != nil {
+		git.RestoreStash(stashResult)
+		log.Fatalf("Failed to parse assignees: %v", err)
+	}
+
+	state := &git.CherryPickState{
+		OriginalBranch: originalBranch,
+		CommitSHAs:     commitSHAs,
+		CommitMessages: commitMessages,
+		Releases:       releases,
+		Assignees:      assignees,
+		Stashed:        stashResult.Stashed,
+		NoVerify:       opts.NoVerify,
+		DryRun:         opts.DryRun,
+		BranchSuffix:   branchSuffix,
+		PRTitle:        prTitle,
+	}
+	if err := git.SaveCherryPickState(state); err != nil {
+		log.Warnf("Failed to save cherry-pick state (--continue won't work): %v", err)
+	}
+
+	finishCherryPick(state, stashResult)
+}
+
+// finishCherryPick processes each release (cherry-pick remaining commits, push, create PR),
+// then switches back to the original branch and cleans up.
+func finishCherryPick(state *git.CherryPickState, stashResult *git.StashResult) {
+	completed := make(map[string]bool, len(state.CompletedReleases))
+	for _, r := range state.CompletedReleases {
+		completed[r] = true
+	}
+
 	prURLs := []string{}
-	for _, release := range releases {
+	for _, release := range state.Releases {
+		if completed[release] {
+			log.Infof("Release %s already completed, skipping", release)
+			continue
+		}
+
 		log.Infof("Processing release %s", release)
-		prTitleWithRelease := fmt.Sprintf("%s to release %s", prTitle, release)
-		prURL, err := cherryPickToRelease(commitSHAs, commitMessages, branchSuffix, release, prTitleWithRelease, opts.DryRun, opts.NoVerify)
+		prTitleWithRelease := fmt.Sprintf("%s to release %s", state.PRTitle, release)
+		prURL, err := cherryPickToRelease(state.CommitSHAs, state.CommitMessages, state.BranchSuffix, release, prTitleWithRelease, state.Assignees, state.DryRun, state.NoVerify)
 		if err != nil {
-			// Don't try to switch back if there's a merge conflict - git won't allow it
 			if strings.Contains(err.Error(), "merge conflict") {
 				if stashResult.Stashed {
 					log.Warn("Your uncommitted changes are still stashed.")
-					log.Infof("After resolving the conflict and returning to %s, run: git stash pop", originalBranch)
+					log.Infof("After resolving the conflict and returning to %s, run: git stash pop", state.OriginalBranch)
 				}
 			} else {
-				if switchErr := git.RunCommand("switch", "--quiet", originalBranch); switchErr != nil {
+				if switchErr := git.RunCommand("switch", "--quiet", state.OriginalBranch); switchErr != nil {
 					log.Warnf("Failed to switch back to original branch: %v", switchErr)
 				}
 				git.RestoreStash(stashResult)
 			}
 			log.Fatalf("Failed to cherry-pick to release %s: %v", release, err)
 		}
+
+		// Mark release as completed and persist so --continue skips it
+		state.CompletedReleases = append(state.CompletedReleases, release)
+		if saveErr := git.SaveCherryPickState(state); saveErr != nil {
+			log.Warnf("Failed to update state file: %v", saveErr)
+		}
+
 		if prURL != "" {
 			prURLs = append(prURLs, prURL)
 		}
 	}
 
-	// Switch back to the original branch
-	log.Infof("Switching back to original branch: %s", originalBranch)
-	if err := git.RunCommand("switch", "--quiet", originalBranch); err != nil {
+	log.Infof("Switching back to original branch: %s", state.OriginalBranch)
+	if err := git.RunCommand("switch", "--quiet", state.OriginalBranch); err != nil {
 		log.Warnf("Failed to switch back to original branch: %v", err)
 	}
 
-	// Restore stashed changes now that we're back on the original branch
 	git.RestoreStash(stashResult)
+	git.CleanCherryPickState()
 
-	// Print all PR URLs
 	for i, prURL := range prURLs {
 		log.Infof("PR %d: %s", i+1, prURL)
 	}
 }
 
+// runCherryPickContinue resumes a cherry-pick after manual conflict resolution.
+// It finishes any in-progress git cherry-pick, then falls into the normal
+// cherryPickToRelease path which handles skip-applied-commits, push, and PR creation.
+func runCherryPickContinue() {
+	git.CheckGitHubCLI()
+
+	state, err := git.LoadCherryPickState()
+	if err != nil {
+		log.Fatalf("Cannot continue: %v", err)
+	}
+
+	log.Infof("Resuming cherry-pick (original branch: %s, releases: %v)", state.OriginalBranch, state.Releases)
+
+	// If git cherry-pick is still in progress (CHERRY_PICK_HEAD exists), continue it
+	if git.IsCherryPickInProgress() {
+		log.Info("Continuing in-progress cherry-pick...")
+		if err := git.RunCherryPickContinue(); err != nil {
+			log.Fatalf("git cherry-pick --continue failed: %v", err)
+		}
+	}
+
+	// Re-use the normal per-release flow: cherryPickToRelease already handles
+	// "branch exists → skip applied commits → push → create PR"
+	stashResult := &git.StashResult{Stashed: state.Stashed}
+	finishCherryPick(state, stashResult)
+}
+
 // cherryPickToRelease cherry-picks one or more commits to a specific release branch
-func cherryPickToRelease(commitSHAs, commitMessages []string, branchSuffix, version, prTitle string, dryRun, noVerify bool) (string, error) {
+func cherryPickToRelease(commitSHAs, commitMessages []string, branchSuffix, version, prTitle string, assignees []string, dryRun, noVerify bool) (string, error) {
 	releaseBranch := fmt.Sprintf("release/%s", version)
 	hotfixBranch := fmt.Sprintf("hotfix/%s-%s", branchSuffix, version)
 
@@ -230,8 +330,8 @@ func cherryPickToRelease(commitSHAs, commitMessages []string, branchSuffix, vers
 		// Check which commits need to be cherry-picked
 		commitsToCherry := []string{}
 		for _, sha := range commitSHAs {
-			if git.CommitExistsOnBranch(sha, hotfixBranch) {
-				log.Infof("Commit %s already exists on branch %s, skipping", sha, hotfixBranch)
+			if git.IsCommitAppliedOnBranch(sha, hotfixBranch) {
+				log.Infof("Commit %s already applied on branch %s, skipping", sha, hotfixBranch)
 			} else {
 				commitsToCherry = append(commitsToCherry, sha)
 			}
@@ -276,7 +376,7 @@ func cherryPickToRelease(commitSHAs, commitMessages []string, branchSuffix, vers
 
 	// Create PR using GitHub CLI
 	log.Info("Creating PR...")
-	prURL, err := createCherryPickPR(hotfixBranch, releaseBranch, prTitle, commitSHAs, commitMessages)
+	prURL, err := createCherryPickPR(hotfixBranch, releaseBranch, prTitle, commitSHAs, commitMessages, assignees)
 	if err != nil {
 		return "", fmt.Errorf("failed to create PR: %w", err)
 	}
@@ -309,8 +409,7 @@ func performCherryPick(commitSHAs []string) error {
 			log.Info("To resolve:")
 			log.Info("  1. Fix the conflicts in the affected files")
 			log.Info("  2. Stage the resolved files: git add <files>")
-			log.Info("  3. Continue the cherry-pick: git cherry-pick --continue")
-			log.Info("  4. Re-run this command to continue with the remaining steps")
+			log.Info("  3. Continue: ods cherry-pick --continue")
 			return fmt.Errorf("merge conflict during cherry-pick")
 		}
 		// Check if cherry-pick is empty (commit already applied with different SHA)
@@ -371,7 +470,7 @@ func findNearestStableTag(commitSHA string) (string, error) {
 }
 
 // createCherryPickPR creates a pull request for cherry-picks using the GitHub CLI
-func createCherryPickPR(headBranch, baseBranch, title string, commitSHAs, commitMessages []string) (string, error) {
+func createCherryPickPR(headBranch, baseBranch, title string, commitSHAs, commitMessages, assignees []string) (string, error) {
 	var body string
 
 	// Collect all original PR numbers for the summary
@@ -405,15 +504,22 @@ func createCherryPickPR(headBranch, baseBranch, title string, commitSHAs, commit
 
 	// Add standard checklist
 	body += "\n\n"
-	body += "- [x] [Required] I have considered whether this PR needs to be cherry-picked to the latest beta branch.\n"
 	body += "- [x] [Optional] Override Linear Check\n"
 
-	cmd := exec.Command("gh", "pr", "create",
+	args := []string{
+		"pr", "create",
 		"--base", baseBranch,
 		"--head", headBranch,
 		"--title", title,
 		"--body", body,
-	)
+		"--label", cherryPickPRLabel,
+	}
+
+	for _, assignee := range assignees {
+		args = append(args, "--assignee", assignee)
+	}
+
+	cmd := exec.Command("gh", args...)
 
 	output, err := cmd.Output()
 	if err != nil {
@@ -425,4 +531,45 @@ func createCherryPickPR(headBranch, baseBranch, title string, commitSHAs, commit
 
 	prURL := strings.TrimSpace(string(output))
 	return prURL, nil
+}
+
+func parseCSVEnv(name string) ([]string, error) {
+	raw := strings.TrimSpace(os.Getenv(name))
+	if raw == "" {
+		return nil, nil
+	}
+
+	fs := pflag.NewFlagSet("csv-env", pflag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	values := []string{}
+	fs.StringSliceVar(&values, "value", nil, "")
+	if err := fs.Set("value", raw); err != nil {
+		return nil, fmt.Errorf("failed to parse %s=%q: %w", name, raw, err)
+	}
+	return dedupeNonEmpty(values), nil
+}
+
+func resolveAssignees(cmd *cobra.Command, flagAssignees []string) ([]string, error) {
+	if cmd.Flags().Changed("assignee") {
+		return dedupeNonEmpty(flagAssignees), nil
+	}
+
+	return parseCSVEnv("CHERRY_PICK_ASSIGNEE")
+}
+
+func dedupeNonEmpty(values []string) []string {
+	out := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		if _, exists := seen[trimmed]; exists {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		out = append(out, trimmed)
+	}
+	return out
 }

@@ -7,10 +7,10 @@ from onyx.chat.llm_loop import _try_fallback_tool_extraction
 from onyx.chat.llm_loop import construct_message_history
 from onyx.chat.models import ChatLoadedFile
 from onyx.chat.models import ChatMessageSimple
-from onyx.chat.models import ExtractedProjectFiles
+from onyx.chat.models import ContextFileMetadata
+from onyx.chat.models import ExtractedContextFiles
 from onyx.chat.models import FileToolMetadata
 from onyx.chat.models import LlmStepResult
-from onyx.chat.models import ProjectFileMetadata
 from onyx.chat.models import ToolCallSimple
 from onyx.configs.constants import MessageType
 from onyx.file_store.models import ChatFileType
@@ -74,20 +74,20 @@ def create_tool_response(
     )
 
 
-def create_project_files(
+def create_context_files(
     num_files: int = 0, num_images: int = 0, tokens_per_file: int = 100
-) -> ExtractedProjectFiles:
-    """Helper to create ExtractedProjectFiles for testing."""
-    project_file_texts = [f"Project file {i} content" for i in range(num_files)]
-    project_file_metadata = [
-        ProjectFileMetadata(
+) -> ExtractedContextFiles:
+    """Helper to create ExtractedContextFiles for testing."""
+    file_texts = [f"Project file {i} content" for i in range(num_files)]
+    file_metadata = [
+        ContextFileMetadata(
             file_id=f"file_{i}",
             filename=f"file_{i}.txt",
             file_content=f"Project file {i} content",
         )
         for i in range(num_files)
     ]
-    project_image_files = [
+    image_files = [
         ChatLoadedFile(
             file_id=f"image_{i}",
             content=b"",
@@ -98,13 +98,13 @@ def create_project_files(
         )
         for i in range(num_images)
     ]
-    return ExtractedProjectFiles(
-        project_file_texts=project_file_texts,
-        project_image_files=project_image_files,
-        project_as_filter=False,
+    return ExtractedContextFiles(
+        file_texts=file_texts,
+        image_files=image_files,
+        use_as_search_filter=False,
         total_token_count=num_files * tokens_per_file,
-        project_file_metadata=project_file_metadata,
-        project_uncapped_token_count=num_files * tokens_per_file,
+        file_metadata=file_metadata,
+        uncapped_token_count=num_files * tokens_per_file,
     )
 
 
@@ -121,14 +121,14 @@ class TestConstructMessageHistory:
         user_msg2 = create_message("How are you?", MessageType.USER, 5)
 
         simple_chat_history = [user_msg1, assistant_msg1, user_msg2]
-        project_files = create_project_files()
+        context_files = create_context_files()
 
         result = construct_message_history(
             system_prompt=system_prompt,
             custom_agent_prompt=None,
             simple_chat_history=simple_chat_history,
             reminder_message=None,
-            project_files=project_files,
+            context_files=context_files,
             available_tokens=1000,
         )
 
@@ -148,14 +148,14 @@ class TestConstructMessageHistory:
         custom_agent = create_message("Custom instructions", MessageType.USER, 10)
 
         simple_chat_history = [user_msg1, assistant_msg1, user_msg2]
-        project_files = create_project_files()
+        context_files = create_context_files()
 
         result = construct_message_history(
             system_prompt=system_prompt,
             custom_agent_prompt=custom_agent,
             simple_chat_history=simple_chat_history,
             reminder_message=None,
-            project_files=project_files,
+            context_files=context_files,
             available_tokens=1000,
         )
 
@@ -167,25 +167,25 @@ class TestConstructMessageHistory:
         assert result[3] == custom_agent  # Before last user message
         assert result[4] == user_msg2
 
-    def test_with_project_files(self) -> None:
+    def test_with_context_files(self) -> None:
         """Test that project files are inserted before the last user message."""
         system_prompt = create_message("System", MessageType.SYSTEM, 10)
         user_msg1 = create_message("First message", MessageType.USER, 5)
         user_msg2 = create_message("Second message", MessageType.USER, 5)
 
         simple_chat_history = [user_msg1, user_msg2]
-        project_files = create_project_files(num_files=2, tokens_per_file=50)
+        context_files = create_context_files(num_files=2, tokens_per_file=50)
 
         result = construct_message_history(
             system_prompt=system_prompt,
             custom_agent_prompt=None,
             simple_chat_history=simple_chat_history,
             reminder_message=None,
-            project_files=project_files,
+            context_files=context_files,
             available_tokens=1000,
         )
 
-        # Should have: system, user1, project_files_message, user2
+        # Should have: system, user1, context_files_message, user2
         assert len(result) == 4
         assert result[0] == system_prompt
         assert result[1] == user_msg1
@@ -202,14 +202,14 @@ class TestConstructMessageHistory:
         reminder = create_message("Remember to cite sources", MessageType.USER, 10)
 
         simple_chat_history = [user_msg]
-        project_files = create_project_files()
+        context_files = create_context_files()
 
         result = construct_message_history(
             system_prompt=system_prompt,
             custom_agent_prompt=None,
             simple_chat_history=simple_chat_history,
             reminder_message=reminder,
-            project_files=project_files,
+            context_files=context_files,
             available_tokens=1000,
         )
 
@@ -235,14 +235,14 @@ class TestConstructMessageHistory:
             assistant_with_tool,
             tool_response,
         ]
-        project_files = create_project_files()
+        context_files = create_context_files()
 
         result = construct_message_history(
             system_prompt=system_prompt,
             custom_agent_prompt=None,
             simple_chat_history=simple_chat_history,
             reminder_message=None,
-            project_files=project_files,
+            context_files=context_files,
             available_tokens=1000,
         )
 
@@ -264,18 +264,18 @@ class TestConstructMessageHistory:
         custom_agent = create_message("Custom", MessageType.USER, 10)
 
         simple_chat_history = [user_msg1, user_msg2, assistant_with_tool]
-        project_files = create_project_files(num_files=1, tokens_per_file=50)
+        context_files = create_context_files(num_files=1, tokens_per_file=50)
 
         result = construct_message_history(
             system_prompt=system_prompt,
             custom_agent_prompt=custom_agent,
             simple_chat_history=simple_chat_history,
             reminder_message=None,
-            project_files=project_files,
+            context_files=context_files,
             available_tokens=1000,
         )
 
-        # Should have: system, user1, custom_agent, project_files, user2, assistant_with_tool
+        # Should have: system, user1, custom_agent, context_files, user2, assistant_with_tool
         assert len(result) == 6
         assert result[0] == system_prompt
         assert result[1] == user_msg1
@@ -292,14 +292,14 @@ class TestConstructMessageHistory:
         user_msg2 = create_message("Second", MessageType.USER, 5)
 
         simple_chat_history = [user_msg1, user_msg2]
-        project_files = create_project_files(num_files=0, num_images=2)
+        context_files = create_context_files(num_files=0, num_images=2)
 
         result = construct_message_history(
             system_prompt=system_prompt,
             custom_agent_prompt=None,
             simple_chat_history=simple_chat_history,
             reminder_message=None,
-            project_files=project_files,
+            context_files=context_files,
             available_tokens=1000,
         )
 
@@ -332,14 +332,14 @@ class TestConstructMessageHistory:
         )
 
         simple_chat_history = [user_msg]
-        project_files = create_project_files(num_files=0, num_images=1)
+        context_files = create_context_files(num_files=0, num_images=1)
 
         result = construct_message_history(
             system_prompt=system_prompt,
             custom_agent_prompt=None,
             simple_chat_history=simple_chat_history,
             reminder_message=None,
-            project_files=project_files,
+            context_files=context_files,
             available_tokens=1000,
         )
 
@@ -366,7 +366,7 @@ class TestConstructMessageHistory:
             assistant_msg2,
             user_msg3,
         ]
-        project_files = create_project_files()
+        context_files = create_context_files()
 
         # Budget only allows last 3 messages + system (10 + 20 + 20 + 20 = 70 tokens)
         result = construct_message_history(
@@ -374,7 +374,7 @@ class TestConstructMessageHistory:
             custom_agent_prompt=None,
             simple_chat_history=simple_chat_history,
             reminder_message=None,
-            project_files=project_files,
+            context_files=context_files,
             available_tokens=80,
         )
 
@@ -395,7 +395,7 @@ class TestConstructMessageHistory:
         tool_response = create_tool_response("tc_1", "tool_response", 20)
 
         simple_chat_history = [user_msg1, user_msg2, assistant_with_tool, tool_response]
-        project_files = create_project_files()
+        context_files = create_context_files()
 
         # Budget only allows last user message and messages after + system
         # (10 + 20 + 20 + 20 = 70 tokens)
@@ -404,7 +404,7 @@ class TestConstructMessageHistory:
             custom_agent_prompt=None,
             simple_chat_history=simple_chat_history,
             reminder_message=None,
-            project_files=project_files,
+            context_files=context_files,
             available_tokens=80,
         )
 
@@ -432,7 +432,7 @@ class TestConstructMessageHistory:
             assistant_msg1,
             user_msg2,
         ]
-        project_files = create_project_files()
+        context_files = create_context_files()
 
         # Remaining history budget is 10 tokens (30 total - 10 system - 10 last user):
         # keeps [tool_response, assistant_msg1] from history_before_last_user,
@@ -442,7 +442,7 @@ class TestConstructMessageHistory:
             custom_agent_prompt=None,
             simple_chat_history=simple_chat_history,
             reminder_message=None,
-            project_files=project_files,
+            context_files=context_files,
             available_tokens=30,
         )
 
@@ -461,7 +461,7 @@ class TestConstructMessageHistory:
         user_msg2 = create_message("Latest question", MessageType.USER, 10)
 
         simple_chat_history = [user_msg1, assistant_with_tool, tool_response, user_msg2]
-        project_files = create_project_files()
+        context_files = create_context_files()
 
         # Remaining history budget is 25 tokens (45 total - 10 system - 10 last user):
         # keeps both assistant_with_tool and tool_response in history_before_last_user.
@@ -470,7 +470,7 @@ class TestConstructMessageHistory:
             custom_agent_prompt=None,
             simple_chat_history=simple_chat_history,
             reminder_message=None,
-            project_files=project_files,
+            context_files=context_files,
             available_tokens=45,
         )
 
@@ -487,18 +487,18 @@ class TestConstructMessageHistory:
         reminder = create_message("Reminder", MessageType.USER, 10)
 
         simple_chat_history: list[ChatMessageSimple] = []
-        project_files = create_project_files(num_files=1, tokens_per_file=50)
+        context_files = create_context_files(num_files=1, tokens_per_file=50)
 
         result = construct_message_history(
             system_prompt=system_prompt,
             custom_agent_prompt=custom_agent,
             simple_chat_history=simple_chat_history,
             reminder_message=reminder,
-            project_files=project_files,
+            context_files=context_files,
             available_tokens=1000,
         )
 
-        # Should have: system, custom_agent, project_files, reminder
+        # Should have: system, custom_agent, context_files, reminder
         assert len(result) == 4
         assert result[0] == system_prompt
         assert result[1] == custom_agent
@@ -512,7 +512,7 @@ class TestConstructMessageHistory:
         assistant_with_tool = create_assistant_with_tool_call("tc_1", "tool", 5)
 
         simple_chat_history = [assistant_msg, assistant_with_tool]
-        project_files = create_project_files()
+        context_files = create_context_files()
 
         with pytest.raises(ValueError, match="No user message found"):
             construct_message_history(
@@ -520,7 +520,7 @@ class TestConstructMessageHistory:
                 custom_agent_prompt=None,
                 simple_chat_history=simple_chat_history,
                 reminder_message=None,
-                project_files=project_files,
+                context_files=context_files,
                 available_tokens=1000,
             )
 
@@ -531,7 +531,7 @@ class TestConstructMessageHistory:
         custom_agent = create_message("Custom", MessageType.USER, 50)
 
         simple_chat_history = [user_msg]
-        project_files = create_project_files(num_files=1, tokens_per_file=100)
+        context_files = create_context_files(num_files=1, tokens_per_file=100)
 
         # Total required: 50 (system) + 50 (custom) + 100 (project) + 50 (user) = 250
         # But only 200 available
@@ -541,7 +541,7 @@ class TestConstructMessageHistory:
                 custom_agent_prompt=custom_agent,
                 simple_chat_history=simple_chat_history,
                 reminder_message=None,
-                project_files=project_files,
+                context_files=context_files,
                 available_tokens=200,
             )
 
@@ -553,7 +553,7 @@ class TestConstructMessageHistory:
         assistant_with_tool = create_assistant_with_tool_call("tc_1", "tool", 30)
 
         simple_chat_history = [user_msg1, user_msg2, assistant_with_tool]
-        project_files = create_project_files()
+        context_files = create_context_files()
 
         # Budget: 50 tokens
         # Required: 10 (system) + 30 (user2) + 30 (assistant_with_tool) = 70 tokens
@@ -566,7 +566,7 @@ class TestConstructMessageHistory:
                 custom_agent_prompt=None,
                 simple_chat_history=simple_chat_history,
                 reminder_message=None,
-                project_files=project_files,
+                context_files=context_files,
                 available_tokens=50,
             )
 
@@ -592,20 +592,20 @@ class TestConstructMessageHistory:
             assistant_with_tool,
             tool_response,
         ]
-        project_files = create_project_files(num_files=2, tokens_per_file=20)
+        context_files = create_context_files(num_files=2, tokens_per_file=20)
 
         result = construct_message_history(
             system_prompt=system_prompt,
             custom_agent_prompt=custom_agent,
             simple_chat_history=simple_chat_history,
             reminder_message=reminder,
-            project_files=project_files,
+            context_files=context_files,
             available_tokens=1000,
         )
 
         # Expected order:
         # system, user1, assistant1, user2, assistant2,
-        # custom_agent, project_files, user3, assistant_with_tool, tool_response, reminder
+        # custom_agent, context_files, user3, assistant_with_tool, tool_response, reminder
         assert len(result) == 11
         assert result[0] == system_prompt
         assert result[1] == user_msg1
@@ -622,20 +622,20 @@ class TestConstructMessageHistory:
         assert result[9] == tool_response  # After last user
         assert result[10] == reminder  # At the very end
 
-    def test_project_files_json_format(self) -> None:
+    def test_context_files_json_format(self) -> None:
         """Test that project files are formatted correctly as JSON."""
         system_prompt = create_message("System", MessageType.SYSTEM, 10)
         user_msg = create_message("Hello", MessageType.USER, 5)
 
         simple_chat_history = [user_msg]
-        project_files = create_project_files(num_files=2, tokens_per_file=50)
+        context_files = create_context_files(num_files=2, tokens_per_file=50)
 
         result = construct_message_history(
             system_prompt=system_prompt,
             custom_agent_prompt=None,
             simple_chat_history=simple_chat_history,
             reminder_message=None,
-            project_files=project_files,
+            context_files=context_files,
             available_tokens=1000,
         )
 
@@ -692,7 +692,7 @@ class TestForgottenFileMetadata:
             custom_agent_prompt=None,
             simple_chat_history=simple_chat_history,
             reminder_message=None,
-            project_files=create_project_files(),
+            context_files=create_context_files(),
             available_tokens=available_tokens,
             token_counter=_simple_token_counter,
             all_injected_file_metadata=all_injected_file_metadata,

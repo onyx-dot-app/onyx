@@ -16,7 +16,6 @@ from uuid import uuid4
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
-from onyx.connectors.slack.connector import default_msg_filter
 from onyx.connectors.slack.connector import get_channel_messages
 from onyx.connectors.slack.models import ChannelType
 from onyx.connectors.slack.utils import make_paginated_slack_api_call
@@ -113,9 +112,6 @@ def _delete_slack_conversation_messages(
     channel_id = _get_slack_channel_id(channel)
     for message_batch in get_channel_messages(slack_client, channel):
         for message in message_batch:
-            if default_msg_filter(message):
-                continue
-
             if message_to_delete and message.get("text") != message_to_delete:
                 continue
             print(" removing message: ", message.get("text"))

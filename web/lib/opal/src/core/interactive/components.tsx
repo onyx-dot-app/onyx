@@ -1,8 +1,16 @@
+import Link from "next/link";
+import type { Route } from "next";
 import "@opal/core/interactive/styles.css";
 import React from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { cn } from "@opal/utils";
 import type { WithoutStyles } from "@opal/types";
+import {
+  sizeVariants,
+  type SizeVariant,
+  widthVariants,
+  type WidthVariant,
+} from "@opal/shared";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -20,56 +28,33 @@ type InteractiveBaseSelectVariantProps = {
   selected?: boolean;
 };
 
+type InteractiveBaseSidebarProminenceTypes = "light";
+type InteractiveBaseSidebarVariantProps = {
+  variant: "sidebar";
+  prominence?: InteractiveBaseSidebarProminenceTypes;
+  selected?: boolean;
+};
+
 /**
  * Discriminated union tying `variant` to `prominence`.
  *
  * - `"none"` accepts no prominence (`prominence` must not be provided)
  * - `"select"` accepts an optional prominence (defaults to `"light"`) and
  *   an optional `selected` boolean that switches foreground to action-link colours
+ * - `"sidebar"` accepts an optional prominence (defaults to `"light"`) and
+ *   an optional `selected` boolean for the focused/active-item state
  * - `"default"`, `"action"`, and `"danger"` accept an optional prominence
  *   (defaults to `"primary"`)
  */
 type InteractiveBaseVariantProps =
   | { variant?: "none"; prominence?: never; selected?: never }
   | InteractiveBaseSelectVariantProps
+  | InteractiveBaseSidebarVariantProps
   | {
       variant?: InteractiveBaseVariantTypes;
       prominence?: InteractiveBaseProminenceTypes;
       selected?: never;
     };
-
-/**
- * Height presets for `Interactive.Container`.
- *
- * - `"lg"` — 2.25rem (36px), suitable for most buttons/items
- * - `"md"` — 1.75rem (28px), standard compact size
- * - `"sm"` — 1.5rem (24px), for denser UIs
- * - `"xs"` — 1.25rem (20px), for inline elements
- * - `"fit"` — Shrink-wraps to content height (`h-fit`), for variable-height layouts
- */
-type InteractiveContainerHeightVariant =
-  keyof typeof interactiveContainerHeightVariants;
-const interactiveContainerHeightVariants = {
-  lg: "h-[2.25rem]",
-  md: "h-[1.75rem]",
-  sm: "h-[1.5rem]",
-  xs: "h-[1.25rem]",
-  fit: "h-fit",
-} as const;
-const interactiveContainerMinWidthVariants = {
-  lg: "min-w-[2.25rem]",
-  md: "min-w-[1.75rem]",
-  sm: "min-w-[1.5rem]",
-  xs: "min-w-[1.25rem]",
-  fit: "",
-} as const;
-const interactiveContainerPaddingVariants = {
-  lg: "p-2",
-  md: "p-1",
-  sm: "p-1",
-  xs: "p-0.5",
-  fit: "",
-} as const;
 
 /**
  * Border-radius presets for `Interactive.Container`.
@@ -82,6 +67,7 @@ type InteractiveContainerRoundingVariant =
 const interactiveContainerRoundingVariants = {
   default: "rounded-12",
   compact: "rounded-08",
+  mini: "rounded-04",
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -244,7 +230,8 @@ function InteractiveBase({
   ...props
 }: InteractiveBaseProps) {
   const effectiveProminence =
-    prominence ?? (variant === "select" ? "light" : "primary");
+    prominence ??
+    (variant === "select" || variant === "sidebar" ? "light" : "primary");
   const classes = cn(
     "interactive",
     !props.onClick && !href && "!cursor-default !select-auto",
@@ -348,17 +335,23 @@ interface InteractiveContainerProps
   roundingVariant?: InteractiveContainerRoundingVariant;
 
   /**
-   * Height preset controlling the container's vertical size.
-   *
-   * - `"lg"` — 2.25rem (36px), typical button/item height
-   * - `"md"` — 1.75rem (28px), standard compact size
-   * - `"sm"` — 1.5rem (24px), for denser UIs
-   * - `"xs"` — 1.25rem (20px), for inline elements
-   * - `"fit"` — Shrink-wraps to content height (`h-fit`)
+   * Size preset controlling the container's height, min-width, and padding.
+   * Uses the shared `SizeVariant` scale from `@opal/shared`.
    *
    * @default "lg"
+   * @see {@link SizeVariant} for the full list of presets.
    */
-  heightVariant?: InteractiveContainerHeightVariant;
+  heightVariant?: SizeVariant;
+
+  /**
+   * Width preset controlling the container's horizontal size.
+   *
+   * - `"auto"` — Shrink-wraps to content width
+   * - `"full"` — Stretches to fill the parent's width (`w-full`)
+   *
+   * @default "auto"
+   */
+  widthVariant?: WidthVariant;
 }
 
 /**
@@ -377,7 +370,7 @@ interface InteractiveContainerProps
  * // Standard card-like container
  * <Interactive.Base>
  *   <Interactive.Container border>
- *     <LineItemLayout icon={SvgIcon} title="Option" />
+ *     <Content icon={SvgIcon} title="Option" />
  *   </Interactive.Container>
  * </Interactive.Base>
  *
@@ -397,6 +390,7 @@ function InteractiveContainer({
   border,
   roundingVariant = "default",
   heightVariant = "lg",
+  widthVariant = "auto",
   ...props
 }: InteractiveContainerProps) {
   // Radix Slot injects className, style, href, target, rel, and other
@@ -416,14 +410,16 @@ function InteractiveContainer({
     target?: string;
     rel?: string;
   };
+  const { height, minWidth, padding } = sizeVariants[heightVariant];
   const sharedProps = {
     ...rest,
     className: cn(
       "interactive-container",
       interactiveContainerRoundingVariants[roundingVariant],
-      interactiveContainerHeightVariants[heightVariant],
-      interactiveContainerMinWidthVariants[heightVariant],
-      interactiveContainerPaddingVariants[heightVariant],
+      height,
+      minWidth,
+      padding,
+      widthVariants[widthVariant],
       slotClassName
     ),
     "data-border": border ? ("true" as const) : undefined,
@@ -434,9 +430,9 @@ function InteractiveContainer({
   // so all styling (backgrounds, rounding, overflow) lives on one element.
   if (href) {
     return (
-      <a
+      <Link
         ref={ref as React.Ref<HTMLAnchorElement>}
-        href={href}
+        href={href as Route}
         target={target}
         rel={rel}
         {...(sharedProps as React.HTMLAttributes<HTMLAnchorElement>)}
@@ -499,7 +495,8 @@ export {
   type InteractiveBaseProps,
   type InteractiveBaseVariantProps,
   type InteractiveBaseSelectVariantProps,
+  type InteractiveBaseSidebarVariantProps,
+  type InteractiveBaseSidebarProminenceTypes,
   type InteractiveContainerProps,
-  type InteractiveContainerHeightVariant,
   type InteractiveContainerRoundingVariant,
 };

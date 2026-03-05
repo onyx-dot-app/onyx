@@ -18,7 +18,7 @@ import SourceTag from "@/refresh-components/buttons/source-tag/SourceTag";
 import { citationsToSourceInfoArray } from "@/refresh-components/buttons/source-tag/sourceTagUtils";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import LLMPopover from "@/refresh-components/popovers/LLMPopover";
-import { parseLlmDescriptor } from "@/lib/llm/utils";
+import { parseLlmDescriptor } from "@/lib/llmConfig/utils";
 import { LlmManager } from "@/lib/hooks";
 import { Message } from "@/app/app/interfaces";
 import { SvgThumbsDown, SvgThumbsUp } from "@opal/icons";

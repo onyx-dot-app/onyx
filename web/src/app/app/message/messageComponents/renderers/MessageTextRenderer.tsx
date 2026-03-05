@@ -9,7 +9,7 @@ import {
 import { MessageRenderer, FullChatState } from "../interfaces";
 import { isFinalAnswerComplete } from "../../../services/packetUtils";
 import { useMarkdownRenderer } from "../markdownUtils";
-import { BlinkingDot } from "../../BlinkingDot";
+import { BlinkingBar } from "../../BlinkingBar";
 
 // Control the rate of packet streaming (packets per second)
 const PACKET_DELAY_MS = 10;
@@ -138,7 +138,7 @@ export const MessageTextRenderer: MessageRenderer<
             )}
           </>
         ) : (
-          <BlinkingDot addMargin />
+          <BlinkingBar addMargin />
         ),
     },
   ]);

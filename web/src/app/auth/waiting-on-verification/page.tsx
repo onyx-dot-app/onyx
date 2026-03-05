@@ -4,7 +4,7 @@ import {
   getCurrentUserSS,
 } from "@/lib/userSS";
 import { redirect } from "next/navigation";
-import { HealthCheckBanner } from "@/components/health/healthcheck";
+
 import { User } from "@/lib/types";
 import Text from "@/components/ui/text";
 import { RequestNewVerificationEmail } from "./RequestNewVerificationEmail";
@@ -35,9 +35,6 @@ export default async function Page() {
 
   return (
     <main>
-      <div className="absolute top-10x w-full">
-        <HealthCheckBanner />
-      </div>
       <div className="min-h-screen flex flex-col items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
         <Logo folded size={64} className="mx-auto w-fit" />
         <div className="flex">

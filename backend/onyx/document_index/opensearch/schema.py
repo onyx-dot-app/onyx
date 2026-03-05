@@ -12,6 +12,7 @@ from pydantic import model_validator
 from pydantic import SerializerFunctionWrapHandler
 
 from onyx.configs.app_configs import OPENSEARCH_TEXT_ANALYZER
+from onyx.configs.app_configs import USING_AWS_MANAGED_OPENSEARCH
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.constants import DEFAULT_MAX_CHUNK_SIZE
 from onyx.document_index.opensearch.constants import EF_CONSTRUCTION
@@ -41,6 +42,7 @@ IMAGE_FILE_ID_FIELD_NAME = "image_file_id"
 SOURCE_LINKS_FIELD_NAME = "source_links"
 DOCUMENT_SETS_FIELD_NAME = "document_sets"
 USER_PROJECTS_FIELD_NAME = "user_projects"
+PERSONAS_FIELD_NAME = "personas"
 DOCUMENT_ID_FIELD_NAME = "document_id"
 CHUNK_INDEX_FIELD_NAME = "chunk_index"
 MAX_CHUNK_SIZE_FIELD_NAME = "max_chunk_size"
@@ -156,6 +158,7 @@ class DocumentChunk(BaseModel):
 
     document_sets: list[str] | None = None
     user_projects: list[int] | None = None
+    personas: list[int] | None = None
     primary_owners: list[str] | None = None
     secondary_owners: list[str] | None = None
 
@@ -485,6 +488,7 @@ class DocumentSchema:
                 # Product-specific fields.
                 DOCUMENT_SETS_FIELD_NAME: {"type": "keyword"},
                 USER_PROJECTS_FIELD_NAME: {"type": "integer"},
+                PERSONAS_FIELD_NAME: {"type": "integer"},
                 PRIMARY_OWNERS_FIELD_NAME: {"type": "keyword"},
                 SECONDARY_OWNERS_FIELD_NAME: {"type": "keyword"},
                 # OpenSearch metadata fields.
@@ -522,7 +526,7 @@ class DocumentSchema:
         }
 
     @staticmethod
-    def get_index_settings_for_aws_managed_opensearch() -> dict[str, Any]:
+    def get_index_settings_for_aws_managed_opensearch_st_dev() -> dict[str, Any]:
         """
         Settings for AWS-managed OpenSearch.
 
@@ -543,3 +547,41 @@ class DocumentSchema:
                 "knn.algo_param.ef_search": EF_SEARCH,
             }
         }
+
+    @staticmethod
+    def get_index_settings_for_aws_managed_opensearch_mt_cloud() -> dict[str, Any]:
+        """
+        Settings for AWS-managed OpenSearch in multi-tenant cloud.
+
+        324 shards very roughly targets a storage load of ~30Gb per shard, which
+        according to AWS OpenSearch documentation is within a good target range.
+
+        As documented above we need 2 replicas for a total of 3 copies of the
+        data because the cluster is configured with 3-AZ awareness.
+        """
+        return {
+            "index": {
+                "number_of_shards": 324,
+                "number_of_replicas": 2,
+                # Required for vector search.
+                "knn": True,
+                "knn.algo_param.ef_search": EF_SEARCH,
+            }
+        }
+
+    @staticmethod
+    def get_index_settings_based_on_environment() -> dict[str, Any]:
+        """
+        Returns the index settings based on the environment.
+        """
+        if USING_AWS_MANAGED_OPENSEARCH:
+            if MULTI_TENANT:
+                return (
+                    DocumentSchema.get_index_settings_for_aws_managed_opensearch_mt_cloud()
+                )
+            else:
+                return (
+                    DocumentSchema.get_index_settings_for_aws_managed_opensearch_st_dev()
+                )
+        else:
+            return DocumentSchema.get_index_settings()

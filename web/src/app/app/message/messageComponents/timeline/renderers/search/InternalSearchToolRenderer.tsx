@@ -4,7 +4,7 @@ import {
   MessageRenderer,
   RenderType,
 } from "@/app/app/message/messageComponents/interfaces";
-import { BlinkingDot } from "@/app/app/message/BlinkingDot";
+import { BlinkingBar } from "@/app/app/message/BlinkingBar";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import { ValidSources } from "@/lib/types";
 import { SearchChipList, SourceInfo } from "./SearchChipList";
@@ -61,7 +61,7 @@ export const InternalSearchToolRenderer: MessageRenderer<
   children,
 }) => {
   const searchState = constructCurrentSearchState(packets);
-  const { queries, results } = searchState;
+  const { queries, results, isComplete } = searchState;
 
   const isCompact = renderType === RenderType.COMPACT;
   const isHighlight = renderType === RenderType.HIGHLIGHT;
@@ -75,7 +75,7 @@ export const InternalSearchToolRenderer: MessageRenderer<
     return children([
       {
         icon: SvgSearchMenu,
-        status: null,
+        status: queriesHeader,
         content: <></>,
         supportsCollapsible: true,
         timelineLayout: "timeline",
@@ -109,7 +109,15 @@ export const InternalSearchToolRenderer: MessageRenderer<
                   window.open(doc.link, "_blank", "noopener,noreferrer");
                 }
               }}
-              emptyState={!stopPacketSeen ? <BlinkingDot /> : undefined}
+              emptyState={
+                !isComplete ? (
+                  <BlinkingBar />
+                ) : (
+                  <Text as="p" text04 mainUiMuted>
+                    No results found
+                  </Text>
+                )
+              }
             />
           </div>
         ),
@@ -134,7 +142,7 @@ export const InternalSearchToolRenderer: MessageRenderer<
               expansionCount={QUERIES_PER_EXPANSION}
               getKey={(_, index) => index}
               toSourceInfo={queryToSourceInfo}
-              emptyState={!stopPacketSeen ? <BlinkingDot /> : undefined}
+              emptyState={!stopPacketSeen ? <BlinkingBar /> : undefined}
               showDetailsCard={false}
               isQuery={true}
             />
@@ -164,7 +172,15 @@ export const InternalSearchToolRenderer: MessageRenderer<
                 window.open(doc.link, "_blank", "noopener,noreferrer");
               }
             }}
-            emptyState={!stopPacketSeen ? <BlinkingDot /> : undefined}
+            emptyState={
+              !isComplete ? (
+                <BlinkingBar />
+              ) : (
+                <Text as="p" text04 mainUiMuted>
+                  No results found
+                </Text>
+              )
+            }
           />
         ),
       },
@@ -187,7 +203,7 @@ export const InternalSearchToolRenderer: MessageRenderer<
               expansionCount={QUERIES_PER_EXPANSION}
               getKey={(_, index) => index}
               toSourceInfo={queryToSourceInfo}
-              emptyState={!stopPacketSeen ? <BlinkingDot /> : undefined}
+              emptyState={!stopPacketSeen ? <BlinkingBar /> : undefined}
               showDetailsCard={false}
               isQuery={true}
             />
@@ -213,7 +229,15 @@ export const InternalSearchToolRenderer: MessageRenderer<
                     window.open(doc.link, "_blank", "noopener,noreferrer");
                   }
                 }}
-                emptyState={!stopPacketSeen ? <BlinkingDot /> : undefined}
+                emptyState={
+                  !isComplete ? (
+                    <BlinkingBar />
+                  ) : (
+                    <Text as="p" text03 mainUiMuted>
+                      No results found
+                    </Text>
+                  )
+                }
               />
             </>
           )}

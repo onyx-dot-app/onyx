@@ -54,7 +54,7 @@ const iconClassNames = {
 
 export interface LineItemProps
   extends Omit<
-    WithoutStyles<React.HTMLAttributes<HTMLButtonElement>>,
+    WithoutStyles<React.HTMLAttributes<HTMLDivElement>>,
     "children"
   > {
   // line-item variants
@@ -72,7 +72,9 @@ export interface LineItemProps
   description?: string;
   rightChildren?: React.ReactNode;
   href?: string;
-  ref?: React.Ref<HTMLButtonElement>;
+  rel?: string;
+  target?: string;
+  ref?: React.Ref<HTMLDivElement>;
   children?: React.ReactNode;
 }
 
@@ -141,6 +143,8 @@ export default function LineItem({
   children,
   rightChildren,
   href,
+  rel,
+  target,
   ref,
   ...props
 }: LineItemProps) {
@@ -159,17 +163,38 @@ export default function LineItem({
 
   const emphasisKey = emphasized ? "emphasized" : "normal";
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      (e.currentTarget as HTMLDivElement).click();
+    } else if (e.key === " ") {
+      e.preventDefault();
+    }
+    props.onKeyDown?.(e);
+  };
+
+  const handleKeyUp = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === " ") {
+      e.preventDefault();
+      (e.currentTarget as HTMLDivElement).click();
+    }
+    props.onKeyUp?.(e);
+  };
+
   const content = (
-    <button
+    <div
       ref={ref}
+      role="button"
+      tabIndex={0}
       className={cn(
         "flex flex-row w-full items-start p-2 rounded-08 group/LineItem gap-2",
         !!(children && description) ? "items-start" : "items-center",
         buttonClassNames[variant][emphasisKey]
       )}
-      type="button"
       data-selected={selected}
       {...props}
+      onKeyDown={handleKeyDown}
+      onKeyUp={handleKeyUp}
     >
       {Icon && (
         <div
@@ -216,9 +241,13 @@ export default function LineItem({
           </Section>
         ) : null}
       </Section>
-    </button>
+    </div>
   );
 
   if (!href) return content;
-  return <Link href={href as Route}>{content}</Link>;
+  return (
+    <Link href={href as Route} rel={rel} target={target}>
+      {content}
+    </Link>
+  );
 }

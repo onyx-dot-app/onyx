@@ -14,11 +14,11 @@ from tests.integration.tests.query_history.utils import (
 
 def _verify_query_history_pagination(
     chat_sessions: list[DAQueryHistoryEntry],
+    user_performing_action: DATestUser,
     page_size: int = 5,
     feedback_type: QAFeedbackType | None = None,
     start_time: datetime | None = None,
     end_time: datetime | None = None,
-    user_performing_action: DATestUser | None = None,
 ) -> None:
     retrieved_sessions: list[str] = []
 

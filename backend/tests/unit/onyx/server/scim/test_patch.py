@@ -1,14 +1,23 @@
 import pytest
 
+from ee.onyx.server.scim.models import ScimEmail
 from ee.onyx.server.scim.models import ScimGroupMember
 from ee.onyx.server.scim.models import ScimGroupResource
+from ee.onyx.server.scim.models import ScimMeta
 from ee.onyx.server.scim.models import ScimName
 from ee.onyx.server.scim.models import ScimPatchOperation
 from ee.onyx.server.scim.models import ScimPatchOperationType
+from ee.onyx.server.scim.models import ScimPatchResourceValue
+from ee.onyx.server.scim.models import ScimPatchValue
 from ee.onyx.server.scim.models import ScimUserResource
 from ee.onyx.server.scim.patch import apply_group_patch
 from ee.onyx.server.scim.patch import apply_user_patch
 from ee.onyx.server.scim.patch import ScimPatchError
+from ee.onyx.server.scim.providers.entra import EntraProvider
+from ee.onyx.server.scim.providers.okta import OktaProvider
+
+_OKTA_IGNORED = OktaProvider().ignored_patch_paths
+_ENTRA_IGNORED = EntraProvider().ignored_patch_paths
 
 
 def _make_user(**kwargs: object) -> ScimUserResource:
@@ -29,14 +38,14 @@ def _make_group(**kwargs: object) -> ScimGroupResource:
 
 def _replace_op(
     path: str | None = None,
-    value: str | bool | dict | list | None = None,
+    value: ScimPatchValue = None,
 ) -> ScimPatchOperation:
     return ScimPatchOperation(op=ScimPatchOperationType.REPLACE, path=path, value=value)
 
 
 def _add_op(
     path: str | None = None,
-    value: str | bool | dict | list | None = None,
+    value: ScimPatchValue = None,
 ) -> ScimPatchOperation:
     return ScimPatchOperation(op=ScimPatchOperationType.ADD, path=path, value=value)
 
@@ -50,37 +59,42 @@ class TestApplyUserPatch:
 
     def test_deactivate_user(self) -> None:
         user = _make_user()
-        result = apply_user_patch([_replace_op("active", False)], user)
+        result, _ = apply_user_patch([_replace_op("active", False)], user)
         assert result.active is False
         assert result.userName == "test@example.com"
 
     def test_activate_user(self) -> None:
         user = _make_user(active=False)
-        result = apply_user_patch([_replace_op("active", True)], user)
+        result, _ = apply_user_patch([_replace_op("active", True)], user)
         assert result.active is True
 
     def test_replace_given_name(self) -> None:
         user = _make_user()
-        result = apply_user_patch([_replace_op("name.givenName", "NewFirst")], user)
+        result, _ = apply_user_patch([_replace_op("name.givenName", "NewFirst")], user)
         assert result.name is not None
         assert result.name.givenName == "NewFirst"
         assert result.name.familyName == "User"
 
     def test_replace_family_name(self) -> None:
         user = _make_user()
-        result = apply_user_patch([_replace_op("name.familyName", "NewLast")], user)
+        result, _ = apply_user_patch([_replace_op("name.familyName", "NewLast")], user)
         assert result.name is not None
         assert result.name.familyName == "NewLast"
 
     def test_replace_username(self) -> None:
         user = _make_user()
-        result = apply_user_patch([_replace_op("userName", "new@example.com")], user)
+        result, _ = apply_user_patch([_replace_op("userName", "new@example.com")], user)
         assert result.userName == "new@example.com"
 
     def test_replace_without_path_uses_dict(self) -> None:
         user = _make_user()
-        result = apply_user_patch(
-            [_replace_op(None, {"active": False, "userName": "new@example.com"})],
+        result, _ = apply_user_patch(
+            [
+                _replace_op(
+                    None,
+                    ScimPatchResourceValue(active=False, userName="new@example.com"),
+                )
+            ],
             user,
         )
         assert result.active is False
@@ -88,7 +102,7 @@ class TestApplyUserPatch:
 
     def test_multiple_operations(self) -> None:
         user = _make_user()
-        result = apply_user_patch(
+        result, _ = apply_user_patch(
             [
                 _replace_op("active", False),
                 _replace_op("name.givenName", "Updated"),
@@ -101,7 +115,7 @@ class TestApplyUserPatch:
 
     def test_case_insensitive_path(self) -> None:
         user = _make_user()
-        result = apply_user_patch([_replace_op("Active", False)], user)
+        result, _ = apply_user_patch([_replace_op("Active", False)], user)
         assert result.active is False
 
     def test_original_not_mutated(self) -> None:
@@ -114,10 +128,189 @@ class TestApplyUserPatch:
         with pytest.raises(ScimPatchError, match="Unsupported path"):
             apply_user_patch([_replace_op("unknownField", "value")], user)
 
-    def test_remove_op_on_user_raises(self) -> None:
+    def test_remove_op_clears_field(self) -> None:
+        """Remove op should clear the target field (not raise)."""
+        user = _make_user(externalId="ext-123")
+        result, _ = apply_user_patch([_remove_op("externalId")], user)
+        assert result.externalId is None
+
+    def test_remove_unsupported_path_raises(self) -> None:
+        """Remove op on unsupported path (e.g. 'active') should raise."""
         user = _make_user()
-        with pytest.raises(ScimPatchError, match="Unsupported operation"):
+        with pytest.raises(ScimPatchError, match="Unsupported remove path"):
             apply_user_patch([_remove_op("active")], user)
+
+    def test_replace_without_path_ignores_id(self) -> None:
+        """Okta sends 'id' alongside actual changes — it should be silently ignored."""
+        user = _make_user()
+        result, _ = apply_user_patch(
+            [_replace_op(None, ScimPatchResourceValue(active=False, id="some-uuid"))],
+            user,
+            ignored_paths=_OKTA_IGNORED,
+        )
+        assert result.active is False
+
+    def test_replace_without_path_ignores_schemas(self) -> None:
+        """The 'schemas' key in a value dict should be silently ignored."""
+        user = _make_user()
+        result, _ = apply_user_patch(
+            [
+                _replace_op(
+                    None,
+                    ScimPatchResourceValue(
+                        active=False,
+                        schemas=["urn:ietf:params:scim:schemas:core:2.0:User"],
+                    ),
+                )
+            ],
+            user,
+            ignored_paths=_OKTA_IGNORED,
+        )
+        assert result.active is False
+
+    def test_okta_deactivation_payload(self) -> None:
+        """Exact Okta deactivation payload: path-less replace with id + active."""
+        user = _make_user()
+        result, _ = apply_user_patch(
+            [
+                _replace_op(
+                    None,
+                    ScimPatchResourceValue(id="abc-123", active=False),
+                )
+            ],
+            user,
+            ignored_paths=_OKTA_IGNORED,
+        )
+        assert result.active is False
+        assert result.userName == "test@example.com"
+
+    def test_replace_displayname(self) -> None:
+        user = _make_user()
+        result, _ = apply_user_patch(
+            [_replace_op("displayName", "New Display Name")], user
+        )
+        assert result.displayName == "New Display Name"
+        assert result.name is not None
+        assert result.name.formatted == "New Display Name"
+
+    def test_replace_without_path_complex_value_dict(self) -> None:
+        """Okta sends id/schemas/meta alongside actual changes — complex types
+        (lists, nested dicts) must not cause Pydantic validation errors."""
+        user = _make_user()
+        result, _ = apply_user_patch(
+            [
+                _replace_op(
+                    None,
+                    ScimPatchResourceValue(
+                        active=False,
+                        id="some-uuid",
+                        schemas=["urn:ietf:params:scim:schemas:core:2.0:User"],
+                        meta=ScimMeta(resourceType="User"),
+                    ),
+                )
+            ],
+            user,
+            ignored_paths=_OKTA_IGNORED,
+        )
+        assert result.active is False
+        assert result.userName == "test@example.com"
+
+    def test_add_operation_works_like_replace(self) -> None:
+        user = _make_user()
+        result, _ = apply_user_patch([_add_op("externalId", "ext-456")], user)
+        assert result.externalId == "ext-456"
+
+    def test_entra_capitalized_replace_op(self) -> None:
+        """Entra ID sends ``"Replace"`` instead of ``"replace"``."""
+        user = _make_user()
+        op = ScimPatchOperation(op="Replace", path="active", value=False)  # type: ignore[arg-type]
+        result, _ = apply_user_patch([op], user)
+        assert result.active is False
+
+    def test_entra_capitalized_add_op(self) -> None:
+        """Entra ID sends ``"Add"`` instead of ``"add"``."""
+        user = _make_user()
+        op = ScimPatchOperation(op="Add", path="externalId", value="ext-999")  # type: ignore[arg-type]
+        result, _ = apply_user_patch([op], user)
+        assert result.externalId == "ext-999"
+
+    def test_entra_enterprise_extension_handled(self) -> None:
+        """Entra sends the enterprise extension URN as a key in path-less
+        PATCH value dicts — enterprise data should be captured in ent_data."""
+        user = _make_user()
+        value = ScimPatchResourceValue(active=False)
+        # Simulate Entra including the enterprise extension URN as extra data
+        assert value.__pydantic_extra__ is not None
+        value.__pydantic_extra__[
+            "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User"
+        ] = {"department": "Engineering"}
+        result, ent_data = apply_user_patch(
+            [_replace_op(None, value)],
+            user,
+            ignored_paths=_ENTRA_IGNORED,
+        )
+        assert result.active is False
+        assert result.userName == "test@example.com"
+        assert ent_data["department"] == "Engineering"
+
+    def test_okta_handles_enterprise_extension_urn(self) -> None:
+        """Enterprise extension URN paths are handled universally, even
+        for Okta — the data is captured in the enterprise data dict."""
+        user = _make_user()
+        value = ScimPatchResourceValue(active=False)
+        assert value.__pydantic_extra__ is not None
+        value.__pydantic_extra__[
+            "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User"
+        ] = {"department": "Engineering"}
+        result, ent_data = apply_user_patch(
+            [_replace_op(None, value)],
+            user,
+            ignored_paths=_OKTA_IGNORED,
+        )
+        assert result.active is False
+        assert ent_data["department"] == "Engineering"
+
+    def test_emails_primary_eq_true_value(self) -> None:
+        """emails[primary eq true].value should update the primary email entry."""
+        user = _make_user(
+            emails=[ScimEmail(value="old@example.com", type="work", primary=True)]
+        )
+        result, _ = apply_user_patch(
+            [_replace_op("emails[primary eq true].value", "new@example.com")], user
+        )
+        # userName should remain unchanged — emails and userName are separate
+        assert result.userName == "test@example.com"
+        assert len(result.emails) == 1
+        assert result.emails[0].value == "new@example.com"
+        assert result.emails[0].primary is True
+
+    def test_enterprise_urn_department_path(self) -> None:
+        """Dotted enterprise URN path should set department in ent_data."""
+        user = _make_user()
+        _, ent_data = apply_user_patch(
+            [
+                _replace_op(
+                    "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:department",
+                    "Marketing",
+                )
+            ],
+            user,
+        )
+        assert ent_data["department"] == "Marketing"
+
+    def test_enterprise_urn_manager_path(self) -> None:
+        """Dotted enterprise URN path for manager should set manager."""
+        user = _make_user()
+        _, ent_data = apply_user_patch(
+            [
+                _replace_op(
+                    "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:manager",
+                    ScimPatchResourceValue.model_validate({"value": "boss-id"}),
+                )
+            ],
+            user,
+        )
+        assert ent_data["manager"] == "boss-id"
 
 
 class TestApplyGroupPatch:
@@ -135,7 +328,12 @@ class TestApplyGroupPatch:
     def test_add_members(self) -> None:
         group = _make_group()
         result, added, removed = apply_group_patch(
-            [_add_op("members", [{"value": "user-1"}, {"value": "user-2"}])],
+            [
+                _add_op(
+                    "members",
+                    [ScimGroupMember(value="user-1"), ScimGroupMember(value="user-2")],
+                )
+            ],
             group,
         )
         assert len(result.members) == 2
@@ -145,7 +343,7 @@ class TestApplyGroupPatch:
     def test_add_members_without_path(self) -> None:
         group = _make_group()
         result, added, _ = apply_group_patch(
-            [_add_op(None, [{"value": "user-1"}])],
+            [_add_op(None, [ScimGroupMember(value="user-1")])],
             group,
         )
         assert len(result.members) == 1
@@ -154,7 +352,12 @@ class TestApplyGroupPatch:
     def test_add_duplicate_member_skipped(self) -> None:
         group = _make_group(members=[ScimGroupMember(value="user-1")])
         result, added, _ = apply_group_patch(
-            [_add_op("members", [{"value": "user-1"}, {"value": "user-2"}])],
+            [
+                _add_op(
+                    "members",
+                    [ScimGroupMember(value="user-1"), ScimGroupMember(value="user-2")],
+                )
+            ],
             group,
         )
         assert len(result.members) == 2
@@ -190,7 +393,7 @@ class TestApplyGroupPatch:
         result, added, removed = apply_group_patch(
             [
                 _replace_op("displayName", "Renamed"),
-                _add_op("members", [{"value": "user-2"}]),
+                _add_op("members", [ScimGroupMember(value="user-2")]),
                 _remove_op('members[value eq "user-1"]'),
             ],
             group,
@@ -221,7 +424,12 @@ class TestApplyGroupPatch:
             ]
         )
         result, added, removed = apply_group_patch(
-            [_replace_op("members", [{"value": "user-2"}, {"value": "user-3"}])],
+            [
+                _replace_op(
+                    "members",
+                    [ScimGroupMember(value="user-2"), ScimGroupMember(value="user-3")],
+                )
+            ],
             group,
         )
         assert len(result.members) == 2
@@ -256,3 +464,55 @@ class TestApplyGroupPatch:
         group = _make_group()
         apply_group_patch([_replace_op("displayName", "Changed")], group)
         assert group.displayName == "Engineering"
+
+    def test_replace_without_path_ignores_id(self) -> None:
+        """Group replace with 'id' in value dict should be silently ignored."""
+        group = _make_group()
+        result, _, _ = apply_group_patch(
+            [
+                _replace_op(
+                    None, ScimPatchResourceValue(displayName="Updated", id="some-id")
+                )
+            ],
+            group,
+            ignored_paths=_OKTA_IGNORED,
+        )
+        assert result.displayName == "Updated"
+
+    def test_replace_without_path_ignores_schemas(self) -> None:
+        group = _make_group()
+        result, _, _ = apply_group_patch(
+            [
+                _replace_op(
+                    None,
+                    ScimPatchResourceValue(
+                        displayName="Updated",
+                        schemas=["urn:ietf:params:scim:schemas:core:2.0:Group"],
+                    ),
+                )
+            ],
+            group,
+            ignored_paths=_OKTA_IGNORED,
+        )
+        assert result.displayName == "Updated"
+
+    def test_replace_without_path_complex_value_dict(self) -> None:
+        """Group PATCH with complex types in value dict (lists, nested dicts)
+        must not cause Pydantic validation errors."""
+        group = _make_group()
+        result, _, _ = apply_group_patch(
+            [
+                _replace_op(
+                    None,
+                    ScimPatchResourceValue(
+                        displayName="Updated",
+                        id="123",
+                        schemas=["urn:ietf:params:scim:schemas:core:2.0:Group"],
+                        meta=ScimMeta(resourceType="Group"),
+                    ),
+                )
+            ],
+            group,
+            ignored_paths=_OKTA_IGNORED,
+        )
+        assert result.displayName == "Updated"

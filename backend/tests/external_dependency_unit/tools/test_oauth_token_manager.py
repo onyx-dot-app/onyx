@@ -20,6 +20,7 @@ from onyx.auth.oauth_token_manager import OAuthTokenManager
 from onyx.db.models import OAuthConfig
 from onyx.db.oauth_config import create_oauth_config
 from onyx.db.oauth_config import upsert_user_oauth_token
+from onyx.utils.sensitive import SensitiveValue
 from tests.external_dependency_unit.conftest import create_test_user
 
 
@@ -491,3 +492,19 @@ class TestOAuthTokenManagerURLBuilding:
         # Should use & instead of ? since URL already has query params
         assert "foo=bar&" in url or "?foo=bar" in url
         assert "client_id=custom_client_id" in url
+
+
+class TestUnwrapSensitiveStr:
+    """Tests for _unwrap_sensitive_str static method"""
+
+    def test_unwrap_sensitive_str(self) -> None:
+        """Test that both SensitiveValue and plain str inputs are handled"""
+        # SensitiveValue input
+        sensitive = SensitiveValue[str](
+            encrypted_bytes=b"test_client_id",
+            decrypt_fn=lambda b: b.decode(),
+        )
+        assert OAuthTokenManager._unwrap_sensitive_str(sensitive) == "test_client_id"
+
+        # Plain str input
+        assert OAuthTokenManager._unwrap_sensitive_str("plain_string") == "plain_string"

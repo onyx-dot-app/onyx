@@ -4,10 +4,11 @@ import pytest
 import requests
 from sqlalchemy.orm import Session
 
-from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.llm import can_user_access_llm_provider
 from onyx.db.llm import fetch_user_group_ids
+from onyx.db.llm import update_default_provider
+from onyx.db.llm import upsert_llm_provider
 from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import LLMProvider__Persona
 from onyx.db.models import LLMProvider__UserGroup
@@ -17,6 +18,8 @@ from onyx.db.models import User__UserGroup
 from onyx.db.models import UserGroup
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.factory import get_llm_for_persona
+from onyx.server.manage.llm.models import LLMProviderUpsertRequest
+from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.persona import PersonaManager
@@ -38,24 +41,30 @@ def _create_llm_provider(
     is_public: bool,
     is_default: bool,
 ) -> LLMProviderModel:
-    provider = LLMProviderModel(
-        name=name,
-        provider=LlmProviderNames.OPENAI,
-        api_key=None,
-        api_base=None,
-        api_version=None,
-        custom_config=None,
-        default_model_name=default_model_name,
-        deployment_name=None,
-        is_public=is_public,
-        # Use None instead of False to avoid unique constraint violation
-        # The is_default_provider column has unique=True, so only one True and one False allowed
-        is_default_provider=is_default if is_default else None,
-        is_default_vision_provider=False,
-        default_vision_model=None,
+    _provider = upsert_llm_provider(
+        llm_provider_upsert_request=LLMProviderUpsertRequest(
+            name=name,
+            provider=LlmProviderNames.OPENAI,
+            api_key=None,
+            api_base=None,
+            api_version=None,
+            custom_config=None,
+            is_public=is_public,
+            model_configurations=[
+                ModelConfigurationUpsertRequest(
+                    name=default_model_name,
+                    is_visible=True,
+                )
+            ],
+        ),
+        db_session=db_session,
     )
-    db_session.add(provider)
-    db_session.flush()
+    if is_default:
+        update_default_provider(_provider.id, default_model_name, db_session)
+
+    provider = db_session.get(LLMProviderModel, _provider.id)
+    if not provider:
+        raise ValueError(f"Provider {name} not found")
     return provider
 
 
@@ -68,12 +77,6 @@ def _create_persona(
     persona = Persona(
         name=name,
         description=f"{name} description",
-        num_chunks=5,
-        chunks_above=2,
-        chunks_below=2,
-        llm_relevance_filter=True,
-        llm_filter_extraction=True,
-        recency_bias=RecencyBiasSetting.AUTO,
         llm_model_provider_override=provider_name,
         llm_model_version_override="gpt-4o-mini",
         system_prompt="System prompt",
@@ -240,6 +243,116 @@ def test_can_user_access_llm_provider_or_logic(
         )
 
 
+def test_public_provider_with_persona_restrictions(
+    users: tuple[DATestUser, DATestUser],
+) -> None:
+    """Public providers should still enforce persona restrictions.
+
+    Regression test for the bug where is_public=True caused
+    can_user_access_llm_provider() to return True immediately,
+    bypassing persona whitelist checks entirely.
+    """
+    admin_user, _basic_user = users
+
+    with get_session_with_current_tenant() as db_session:
+        # Public provider with persona restrictions
+        public_restricted = _create_llm_provider(
+            db_session,
+            name="public-persona-restricted",
+            default_model_name="gpt-4o",
+            is_public=True,
+            is_default=True,
+        )
+
+        whitelisted_persona = _create_persona(
+            db_session,
+            name="whitelisted-persona",
+            provider_name=public_restricted.name,
+        )
+        non_whitelisted_persona = _create_persona(
+            db_session,
+            name="non-whitelisted-persona",
+            provider_name=public_restricted.name,
+        )
+
+        # Only whitelist one persona
+        db_session.add(
+            LLMProvider__Persona(
+                llm_provider_id=public_restricted.id,
+                persona_id=whitelisted_persona.id,
+            )
+        )
+        db_session.flush()
+        db_session.refresh(public_restricted)
+
+        admin_model = db_session.get(User, admin_user.id)
+        assert admin_model is not None
+        admin_group_ids = fetch_user_group_ids(db_session, admin_model)
+
+        # Whitelisted persona — should be allowed
+        assert can_user_access_llm_provider(
+            public_restricted,
+            admin_group_ids,
+            whitelisted_persona,
+        )
+
+        # Non-whitelisted persona — should be denied despite is_public=True
+        assert not can_user_access_llm_provider(
+            public_restricted,
+            admin_group_ids,
+            non_whitelisted_persona,
+        )
+
+        # No persona context (e.g. global provider list) — should be denied
+        # because provider has persona restrictions set
+        assert not can_user_access_llm_provider(
+            public_restricted,
+            admin_group_ids,
+            persona=None,
+        )
+
+
+def test_public_provider_without_persona_restrictions(
+    users: tuple[DATestUser, DATestUser],
+) -> None:
+    """Public providers with no persona restrictions remain accessible to all."""
+    admin_user, basic_user = users
+
+    with get_session_with_current_tenant() as db_session:
+        public_unrestricted = _create_llm_provider(
+            db_session,
+            name="public-unrestricted",
+            default_model_name="gpt-4o",
+            is_public=True,
+            is_default=True,
+        )
+
+        any_persona = _create_persona(
+            db_session,
+            name="any-persona",
+            provider_name=public_unrestricted.name,
+        )
+
+        admin_model = db_session.get(User, admin_user.id)
+        basic_model = db_session.get(User, basic_user.id)
+        assert admin_model is not None
+        assert basic_model is not None
+
+        admin_group_ids = fetch_user_group_ids(db_session, admin_model)
+        basic_group_ids = fetch_user_group_ids(db_session, basic_model)
+
+        # Any user, any persona — all allowed
+        assert can_user_access_llm_provider(
+            public_unrestricted, admin_group_ids, any_persona
+        )
+        assert can_user_access_llm_provider(
+            public_unrestricted, basic_group_ids, any_persona
+        )
+        assert can_user_access_llm_provider(
+            public_unrestricted, admin_group_ids, persona=None
+        )
+
+
 def test_get_llm_for_persona_falls_back_when_access_denied(
     users: tuple[DATestUser, DATestUser],
 ) -> None:
@@ -300,13 +413,19 @@ def test_get_llm_for_persona_falls_back_when_access_denied(
             persona=persona,
             user=admin_model,
         )
-        assert allowed_llm.config.model_name == restricted_provider.default_model_name
+        assert (
+            allowed_llm.config.model_name
+            == restricted_provider.model_configurations[0].name
+        )
 
         fallback_llm = get_llm_for_persona(
             persona=persona,
             user=basic_model,
         )
-        assert fallback_llm.config.model_name == default_provider.default_model_name
+        assert (
+            fallback_llm.config.model_name
+            == default_provider.model_configurations[0].name
+        )
 
 
 def test_list_llm_provider_basics_excludes_non_public_unrestricted(
@@ -325,6 +444,7 @@ def test_list_llm_provider_basics_excludes_non_public_unrestricted(
         name="public-provider",
         is_public=True,
         set_as_default=True,
+        default_model_name="gpt-4o",
         user_performing_action=admin_user,
     )
 
@@ -344,7 +464,7 @@ def test_list_llm_provider_basics_excludes_non_public_unrestricted(
         headers=basic_user.headers,
     )
     assert response.status_code == 200
-    providers = response.json()
+    providers = response.json()["providers"]
     provider_names = [p["name"] for p in providers]
 
     # Public provider should be visible
@@ -359,7 +479,7 @@ def test_list_llm_provider_basics_excludes_non_public_unrestricted(
         headers=admin_user.headers,
     )
     assert admin_response.status_code == 200
-    admin_providers = admin_response.json()
+    admin_providers = admin_response.json()["providers"]
     admin_provider_names = [p["name"] for p in admin_providers]
 
     assert public_provider.name in admin_provider_names
@@ -375,6 +495,7 @@ def test_provider_delete_clears_persona_references(reset: None) -> None:  # noqa
         name="default-provider",
         is_public=True,
         set_as_default=True,
+        default_model_name="gpt-4o",
         user_performing_action=admin_user,
     )
 

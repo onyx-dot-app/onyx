@@ -5,7 +5,7 @@ import {
 
 import { toast } from "@/hooks/useToast";
 import useSWRMutation from "swr/mutation";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import GenericConfirmModal from "@/components/modals/GenericConfirmModal";
 import { useState } from "react";
 

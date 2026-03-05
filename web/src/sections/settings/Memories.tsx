@@ -6,7 +6,7 @@ import ButtonTile from "@/refresh-components/tiles/ButtonTile";
 import { SvgAddLines, SvgFilter, SvgMenu, SvgPlusCircle } from "@opal/icons";
 import MemoriesModal from "@/refresh-components/modals/MemoriesModal";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button } from "@opal/components";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { MemoryItem } from "@/lib/types";
 
@@ -30,8 +30,8 @@ export default function Memories({ memories, onSaveMemories }: MemoriesProps) {
             memoriesModal.toggle(true);
           }}
           rightChildren={
-            <IconButton
-              internal
+            <Button
+              prominence="internal"
               icon={SvgPlusCircle}
               onClick={() => {
                 setTargetMemoryId(null);

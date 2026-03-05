@@ -5,15 +5,36 @@ import { SlackBot, ValidSources } from "@/lib/types";
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 import { updateSlackBotField } from "@/lib/updateSlackBotField";
-import { Checkbox } from "@/app/admin/settings/SettingsForm";
 import { SlackTokensForm } from "./SlackTokensForm";
 import { SourceIcon } from "@/components/SourceIcon";
 import { EditableStringFieldDisplay } from "@/components/EditableStringFieldDisplay";
 import { deleteSlackBot } from "./new/lib";
 import GenericConfirmModal from "@/components/modals/GenericConfirmModal";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { cn } from "@/lib/utils";
 import { SvgChevronDownSmall, SvgTrash } from "@opal/icons";
+
+function Checkbox({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+}) {
+  return (
+    <label className="flex text-xs cursor-pointer">
+      <input
+        checked={checked}
+        onChange={onChange}
+        type="checkbox"
+        className="mr-2 w-3.5 h-3.5 my-auto"
+      />
+      <span className="block font-medium text-text-700 text-sm">{label}</span>
+    </label>
+  );
+}
 
 export const ExistingSlackBotForm = ({
   existingSlackBot,
@@ -85,20 +106,20 @@ export const ExistingSlackBotForm = ({
         <div className="flex flex-col" ref={dropdownRef}>
           <div className="flex items-center gap-4">
             <Button
-              leftIcon={({ className }) => (
+              prominence="secondary"
+              icon={({ className }) => (
                 <SvgChevronDownSmall
                   className={cn(className, !isExpanded && "-rotate-90")}
                 />
               )}
               onClick={() => setIsExpanded(!isExpanded)}
-              secondary
             >
               Update Tokens
             </Button>
             <Button
-              danger
+              variant="danger"
               onClick={() => setShowDeleteModal(true)}
-              leftIcon={SvgTrash}
+              icon={SvgTrash}
             >
               Delete
             </Button>

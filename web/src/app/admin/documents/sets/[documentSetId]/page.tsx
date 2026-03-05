@@ -5,15 +5,16 @@ import { ErrorCallout } from "@/components/ErrorCallout";
 import { refreshDocumentSets, useDocumentSets } from "../hooks";
 import { useConnectorStatus, useUserGroups } from "@/lib/hooks";
 import { ThreeDotsLoader } from "@/components/Loading";
-import { AdminPageTitle } from "@/components/admin/Title";
-import { BookmarkIcon } from "@/components/icons/icons";
-import BackButton from "@/refresh-components/buttons/BackButton";
+import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
 import CardSection from "@/components/admin/CardSection";
 import { DocumentSetCreationForm } from "../DocumentSetCreationForm";
 import { useRouter } from "next/navigation";
+import { useVectorDbEnabled } from "@/providers/SettingsProvider";
 
 function Main({ documentSetId }: { documentSetId: number }) {
   const router = useRouter();
+  const vectorDbEnabled = useVectorDbEnabled();
 
   const {
     data: documentSets,
@@ -25,12 +26,16 @@ function Main({ documentSetId }: { documentSetId: number }) {
     data: ccPairs,
     isLoading: isCCPairsLoading,
     error: ccPairsError,
-  } = useConnectorStatus();
+  } = useConnectorStatus(30000, vectorDbEnabled);
 
   // EE only
   const { data: userGroups, isLoading: userGroupsIsLoading } = useUserGroups();
 
-  if (isDocumentSetsLoading || isCCPairsLoading || userGroupsIsLoading) {
+  if (
+    isDocumentSetsLoading ||
+    (vectorDbEnabled && isCCPairsLoading) ||
+    userGroupsIsLoading
+  ) {
     return (
       <div className="flex justify-center items-center min-h-[400px]">
         <ThreeDotsLoader />
@@ -47,7 +52,7 @@ function Main({ documentSetId }: { documentSetId: number }) {
     );
   }
 
-  if (ccPairsError || !ccPairs) {
+  if (vectorDbEnabled && (ccPairsError || !ccPairs)) {
     return (
       <ErrorCallout
         errorTitle="Failed to fetch Connectors"
@@ -69,24 +74,17 @@ function Main({ documentSetId }: { documentSetId: number }) {
   }
 
   return (
-    <div>
-      <AdminPageTitle
-        icon={<BookmarkIcon size={32} />}
-        title={documentSet.name}
+    <CardSection>
+      <DocumentSetCreationForm
+        ccPairs={ccPairs ?? []}
+        userGroups={userGroups}
+        onClose={() => {
+          refreshDocumentSets();
+          router.push("/admin/documents/sets");
+        }}
+        existingDocumentSet={documentSet}
       />
-
-      <CardSection>
-        <DocumentSetCreationForm
-          ccPairs={ccPairs}
-          userGroups={userGroups}
-          onClose={() => {
-            refreshDocumentSets();
-            router.push("/admin/documents/sets");
-          }}
-          existingDocumentSet={documentSet}
-        />
-      </CardSection>
-    </div>
+    </CardSection>
   );
 }
 
@@ -95,12 +93,19 @@ export default function Page(props: {
 }) {
   const params = use(props.params);
   const documentSetId = parseInt(params.documentSetId);
+  const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.DOCUMENT_SETS]!;
 
   return (
-    <>
-      <BackButton />
-
-      <Main documentSetId={documentSetId} />
-    </>
+    <SettingsLayouts.Root>
+      <SettingsLayouts.Header
+        icon={route.icon}
+        title="Edit Document Set"
+        separator
+        backButton
+      />
+      <SettingsLayouts.Body>
+        <Main documentSetId={documentSetId} />
+      </SettingsLayouts.Body>
+    </SettingsLayouts.Root>
   );
 }

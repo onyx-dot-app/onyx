@@ -18,7 +18,8 @@ export type ApplicationStatus =
   | "active"
   | "payment_reminder"
   | "gated_access"
-  | "expired";
+  | "expired"
+  | "seat_limit_exceeded";
 
 /**
  * Billing status from Stripe subscription.
@@ -131,6 +132,19 @@ export function hasActiveSubscription(
     return false;
   }
   return data.status !== null;
+}
+
+/**
+ * Check if the response indicates an active *paid* subscription.
+ * Returns true only for status === "active" (excludes trialing, past_due, etc.).
+ */
+export function hasPaidSubscription(
+  data: BillingInformation | SubscriptionStatus
+): data is BillingInformation {
+  if ("subscribed" in data) {
+    return false;
+  }
+  return data.status === BillingStatus.ACTIVE;
 }
 
 /**

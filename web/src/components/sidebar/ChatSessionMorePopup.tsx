@@ -15,7 +15,7 @@ import MoveCustomAgentChatModal from "@/components/modals/MoveCustomAgentChatMod
 // PopoverMenu already imported above
 import { cn, noProp } from "@/lib/utils";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { SvgFolder, SvgFolderIn, SvgShare, SvgTrash } from "@opal/icons";
@@ -52,7 +52,7 @@ export function ChatSessionMorePopup({
 }: ChatSessionMorePopupProps) {
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const { refreshChatSessions } = useChatSessions();
+  const { refreshChatSessions, removeSession } = useChatSessions();
   const { fetchProjects, projects } = useProjectsContext();
 
   const [pendingMoveProjectId, setPendingMoveProjectId] = useState<
@@ -61,8 +61,7 @@ export function ChatSessionMorePopup({
   const [showMoveCustomAgentModal, setShowMoveCustomAgentModal] =
     useState(false);
 
-  const isChatUsingDefaultAssistant =
-    chatSession.persona_id === DEFAULT_PERSONA_ID;
+  const isChatUsingDefaultAgent = chatSession.persona_id === DEFAULT_PERSONA_ID;
 
   const [showMoveOptions, setShowMoveOptions] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -79,13 +78,20 @@ export function ChatSessionMorePopup({
     async (e: React.MouseEvent<HTMLButtonElement>) => {
       e.stopPropagation();
       await deleteChatSession(chatSession.id);
+      removeSession(chatSession.id);
       await refreshChatSessions();
       await fetchProjects();
       setIsDeleteModalOpen(false);
       setPopoverOpen(false);
       afterDelete?.();
     },
-    [chatSession, refreshChatSessions, fetchProjects, afterDelete]
+    [
+      chatSession,
+      refreshChatSessions,
+      removeSession,
+      fetchProjects,
+      afterDelete,
+    ]
   );
 
   const performMove = useCallback(
@@ -107,7 +113,7 @@ export function ChatSessionMorePopup({
         window.localStorage.getItem(LS_HIDE_MOVE_CUSTOM_AGENT_MODAL_KEY) ===
           "true";
 
-      if (!isChatUsingDefaultAssistant && !hideModal) {
+      if (!isChatUsingDefaultAgent && !hideModal) {
         setPendingMoveProjectId(targetProjectId);
         setShowMoveCustomAgentModal(true);
         return;
@@ -115,7 +121,7 @@ export function ChatSessionMorePopup({
 
       await performMove(targetProjectId);
     },
-    [isChatUsingDefaultAssistant, performMove]
+    [isChatUsingDefaultAgent, performMove]
   );
 
   const handleRemoveChatSessionFromProject = useCallback(async () => {
@@ -246,7 +252,7 @@ export function ChatSessionMorePopup({
           icon={SvgTrash}
           onClose={() => setIsDeleteModalOpen(false)}
           submit={
-            <Button danger onClick={handleConfirmDelete}>
+            <Button variant="danger" onClick={handleConfirmDelete}>
               Delete
             </Button>
           }

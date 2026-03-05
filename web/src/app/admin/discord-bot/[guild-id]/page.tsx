@@ -5,13 +5,14 @@ import { cn } from "@/lib/utils";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { toast } from "@/hooks/useToast";
-import { Section, LineItemLayout } from "@/layouts/general-layouts";
+import { Section } from "@/layouts/general-layouts";
+import { ContentAction } from "@opal/layouts";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import Text from "@/refresh-components/texts/Text";
 import Card from "@/refresh-components/cards/Card";
 import { Callout } from "@/components/ui/callout";
 import Message from "@/refresh-components/messages/Message";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { SvgServer } from "@opal/icons";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import {
@@ -25,7 +26,7 @@ import {
 import { DiscordChannelsTable } from "@/app/admin/discord-bot/[guild-id]/DiscordChannelsTable";
 import { DiscordChannelConfig } from "@/app/admin/discord-bot/types";
 import { useAdminPersonas } from "@/hooks/useAdminPersonas";
-import { Persona } from "@/app/admin/assistants/interfaces";
+import { Persona } from "@/app/admin/agents/interfaces";
 
 interface Props {
   params: Promise<{ "guild-id": string }>;
@@ -89,9 +90,11 @@ function GuildDetailContent({
       )}
 
       <Card variant={disabled ? "disabled" : "primary"}>
-        <LineItemLayout
+        <ContentAction
           title="Channel Configuration"
           description="Run !sync-channels in Discord to update the channel list."
+          sizePreset="main-content"
+          variant="section"
           rightChildren={
             isRegistered && !channelsLoading && !channelsError ? (
               <Section
@@ -101,13 +104,17 @@ function GuildDetailContent({
                 width="fit"
                 gap={0.5}
               >
-                <Button onClick={handleEnableAll} disabled={disabled} secondary>
+                <Button
+                  prominence="secondary"
+                  onClick={handleEnableAll}
+                  disabled={disabled}
+                >
                   Enable All
                 </Button>
                 <Button
+                  prominence="secondary"
                   onClick={handleDisableAll}
                   disabled={disabled}
-                  secondary
                 >
                   Disable All
                 </Button>
@@ -299,11 +306,11 @@ export default function Page({ params }: Props) {
       });
       refreshGuild();
       toast.success(
-        personaId ? "Default assistant updated" : "Default assistant cleared"
+        personaId ? "Default agent updated" : "Default agent cleared"
       );
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "Failed to update assistant"
+        err instanceof Error ? err.message : "Failed to update agent"
       );
     } finally {
       setIsUpdating(false);
@@ -339,9 +346,11 @@ export default function Page({ params }: Props) {
       <SettingsLayouts.Body>
         {/* Default Persona Selector */}
         <Card variant={!guild?.enabled ? "disabled" : "primary"}>
-          <LineItemLayout
+          <ContentAction
             title="Default Agent"
             description="The agent used by the bot in all channels unless overridden."
+            sizePreset="main-content"
+            variant="section"
             rightChildren={
               <InputSelect
                 value={guild?.default_persona_id?.toString() ?? "default"}
@@ -355,7 +364,7 @@ export default function Page({ params }: Props) {
                 <InputSelect.Trigger placeholder="Select agent" />
                 <InputSelect.Content>
                   <InputSelect.Item value="default">
-                    Default Assistant
+                    Default Agent
                   </InputSelect.Item>
                   {personas.map((persona) => (
                     <InputSelect.Item

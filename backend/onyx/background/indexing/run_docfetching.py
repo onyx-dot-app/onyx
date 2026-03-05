@@ -58,6 +58,8 @@ from onyx.file_store.document_batch_storage import DocumentBatchStorage
 from onyx.file_store.document_batch_storage import get_document_batch_storage
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.indexing.indexing_pipeline import index_doc_batch_prepare
+from onyx.indexing.postgres_sanitization import sanitize_document_for_postgres
+from onyx.indexing.postgres_sanitization import sanitize_hierarchy_nodes_for_postgres
 from onyx.redis.redis_hierarchy import cache_hierarchy_nodes_batch
 from onyx.redis.redis_hierarchy import ensure_source_node_exists
 from onyx.redis.redis_hierarchy import get_node_id_from_raw_id
@@ -156,36 +158,7 @@ def strip_null_characters(doc_batch: list[Document]) -> list[Document]:
             logger.warning(
                 f"doc {doc.id} too large, Document size: {sys.getsizeof(doc)}"
             )
-        cleaned_doc = doc.model_copy()
-
-        # Postgres cannot handle NUL characters in text fields
-        if "\x00" in cleaned_doc.id:
-            logger.warning(f"NUL characters found in document ID: {cleaned_doc.id}")
-            cleaned_doc.id = cleaned_doc.id.replace("\x00", "")
-
-        if cleaned_doc.title and "\x00" in cleaned_doc.title:
-            logger.warning(
-                f"NUL characters found in document title: {cleaned_doc.title}"
-            )
-            cleaned_doc.title = cleaned_doc.title.replace("\x00", "")
-
-        if "\x00" in cleaned_doc.semantic_identifier:
-            logger.warning(
-                f"NUL characters found in document semantic identifier: {cleaned_doc.semantic_identifier}"
-            )
-            cleaned_doc.semantic_identifier = cleaned_doc.semantic_identifier.replace(
-                "\x00", ""
-            )
-
-        for section in cleaned_doc.sections:
-            if section.link is not None:
-                section.link = section.link.replace("\x00", "")
-
-            # since text can be longer, just replace to avoid double scan
-            if isinstance(section, TextSection) and section.text is not None:
-                section.text = section.text.replace("\x00", "")
-
-        cleaned_batch.append(cleaned_doc)
+        cleaned_batch.append(sanitize_document_for_postgres(doc))
 
     return cleaned_batch
 
@@ -602,10 +575,13 @@ def connector_document_extraction(
 
                 # Process hierarchy nodes batch - upsert to Postgres and cache in Redis
                 if hierarchy_node_batch:
+                    hierarchy_node_batch_cleaned = (
+                        sanitize_hierarchy_nodes_for_postgres(hierarchy_node_batch)
+                    )
                     with get_session_with_current_tenant() as db_session:
                         upserted_nodes = upsert_hierarchy_nodes_batch(
                             db_session=db_session,
-                            nodes=hierarchy_node_batch,
+                            nodes=hierarchy_node_batch_cleaned,
                             source=db_connector.source,
                             commit=True,
                             is_connector_public=is_connector_public,
@@ -624,7 +600,7 @@ def connector_document_extraction(
                         )
 
                     logger.debug(
-                        f"Persisted and cached {len(hierarchy_node_batch)} hierarchy nodes "
+                        f"Persisted and cached {len(hierarchy_node_batch_cleaned)} hierarchy nodes "
                         f"for attempt={index_attempt_id}"
                     )
 

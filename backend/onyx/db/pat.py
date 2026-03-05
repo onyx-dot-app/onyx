@@ -8,6 +8,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
 from onyx.auth.pat import build_displayable_pat
@@ -31,53 +32,59 @@ async def fetch_user_for_pat(
 
     NOTE: This is async since it's used during auth (which is necessarily async due to FastAPI Users).
     NOTE: Expired includes both naturally expired and user-revoked tokens (revocation sets expires_at=NOW()).
+
+    Uses select(User) as primary entity so that joined-eager relationships (e.g. oauth_accounts)
+    are loaded correctly — matching the pattern in fetch_user_for_api_key.
     """
-    # Single joined query with all filters pushed to database
     now = datetime.now(timezone.utc)
-    result = await async_db_session.execute(
-        select(PersonalAccessToken, User)
-        .join(User, PersonalAccessToken.user_id == User.id)
+
+    user = await async_db_session.scalar(
+        select(User)
+        .join(PersonalAccessToken, PersonalAccessToken.user_id == User.id)
         .where(PersonalAccessToken.hashed_token == hashed_token)
         .where(User.is_active)  # type: ignore
         .where(
             (PersonalAccessToken.expires_at.is_(None))
             | (PersonalAccessToken.expires_at > now)
         )
-        .limit(1)
+        .options(selectinload(User.memories))
     )
-    row = result.first()
-
-    if not row:
+    if not user:
         return None
 
-    pat, user = row
-
-    # Throttle last_used_at updates to reduce DB load (5-minute granularity sufficient for auditing)
-    # For request-level auditing, use application logs or a dedicated audit table
-    should_update = (
-        pat.last_used_at is None or (now - pat.last_used_at).total_seconds() > 300
-    )
-
-    if should_update:
-        # Update in separate session to avoid transaction coupling (fire-and-forget)
-        async def _update_last_used() -> None:
-            try:
-                tenant_id = get_current_tenant_id()
-                async with get_async_session_context_manager(
-                    tenant_id
-                ) as separate_session:
-                    await separate_session.execute(
-                        update(PersonalAccessToken)
-                        .where(PersonalAccessToken.hashed_token == hashed_token)
-                        .values(last_used_at=now)
-                    )
-                    await separate_session.commit()
-            except Exception as e:
-                logger.warning(f"Failed to update last_used_at for PAT: {e}")
-
-        asyncio.create_task(_update_last_used())
-
+    _schedule_pat_last_used_update(hashed_token, now)
     return user
+
+
+def _schedule_pat_last_used_update(hashed_token: str, now: datetime) -> None:
+    """Fire-and-forget update of last_used_at, throttled to 5-minute granularity."""
+
+    async def _update() -> None:
+        try:
+            tenant_id = get_current_tenant_id()
+            async with get_async_session_context_manager(tenant_id) as session:
+                pat = await session.scalar(
+                    select(PersonalAccessToken).where(
+                        PersonalAccessToken.hashed_token == hashed_token
+                    )
+                )
+                if not pat:
+                    return
+                if (
+                    pat.last_used_at is not None
+                    and (now - pat.last_used_at).total_seconds() <= 300
+                ):
+                    return
+                await session.execute(
+                    update(PersonalAccessToken)
+                    .where(PersonalAccessToken.hashed_token == hashed_token)
+                    .values(last_used_at=now)
+                )
+                await session.commit()
+        except Exception as e:
+            logger.warning(f"Failed to update last_used_at for PAT: {e}")
+
+    asyncio.create_task(_update())
 
 
 def create_pat(

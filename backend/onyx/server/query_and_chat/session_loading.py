@@ -36,6 +36,8 @@ from onyx.server.query_and_chat.streaming_models import OpenUrlStart
 from onyx.server.query_and_chat.streaming_models import OpenUrlUrls
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.server.query_and_chat.streaming_models import PythonToolDelta
+from onyx.server.query_and_chat.streaming_models import PythonToolStart
 from onyx.server.query_and_chat.streaming_models import ReasoningDelta
 from onyx.server.query_and_chat.streaming_models import ReasoningStart
 from onyx.server.query_and_chat.streaming_models import ResearchAgentStart
@@ -50,6 +52,7 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
 )
 from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
+from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.utils.logger import setup_logger
@@ -377,6 +380,37 @@ def create_memory_packets(
     return packets
 
 
+def create_python_tool_packets(
+    code: str,
+    stdout: str,
+    stderr: str,
+    file_ids: list[str],
+    turn_index: int,
+    tab_index: int = 0,
+) -> list[Packet]:
+    """Recreate PythonToolStart + PythonToolDelta + SectionEnd from the stored
+    tool call data so the frontend can display both the code and its output
+    on page reload."""
+    packets: list[Packet] = []
+    placement = Placement(turn_index=turn_index, tab_index=tab_index)
+
+    packets.append(Packet(placement=placement, obj=PythonToolStart(code=code)))
+
+    packets.append(
+        Packet(
+            placement=placement,
+            obj=PythonToolDelta(
+                stdout=stdout,
+                stderr=stderr,
+                file_ids=file_ids,
+            ),
+        )
+    )
+
+    packets.append(Packet(placement=placement, obj=SectionEnd()))
+    return packets
+
+
 def create_search_packets(
     search_queries: list[str],
     search_docs: list[SavedSearchDoc],
@@ -585,6 +619,41 @@ def translate_assistant_message_to_packets(
                                     index=memory_data.get("index"),
                                 )
                             )
+
+                    elif tool.in_code_tool_id == PythonTool.__name__:
+                        code = cast(
+                            str,
+                            tool_call.tool_call_arguments.get("code", ""),
+                        )
+                        stdout = ""
+                        stderr = ""
+                        file_ids: list[str] = []
+                        if tool_call.tool_call_response:
+                            try:
+                                response_data = json.loads(tool_call.tool_call_response)
+                                stdout = response_data.get("stdout", "")
+                                stderr = response_data.get("stderr", "")
+                                generated_files = response_data.get(
+                                    "generated_files", []
+                                )
+                                file_ids = [
+                                    f.get("file_link", "").split("/")[-1]
+                                    for f in generated_files
+                                    if f.get("file_link")
+                                ]
+                            except (json.JSONDecodeError, KeyError):
+                                # Fall back to raw response as stdout
+                                stdout = tool_call.tool_call_response
+                        turn_tool_packets.extend(
+                            create_python_tool_packets(
+                                code=code,
+                                stdout=stdout,
+                                stderr=stderr,
+                                file_ids=file_ids,
+                                turn_index=turn_num,
+                                tab_index=tool_call.tab_index,
+                            )
+                        )
 
                     else:
                         # Custom tool or unknown tool

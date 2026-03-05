@@ -58,27 +58,25 @@ export default function Logo({ folded, size, className }: LogoProps) {
     includeName: boolean;
   }) => {
     return (
-      <div className="flex flex-col min-w-0">
-        <div className="flex flex-row items-center gap-2 min-w-0">
-          {opts.includeLogo && logo}
-          {opts.includeName && !folded && (
-            <div className="flex-1 min-w-0">
+      <div className="flex min-w-0 gap-2">
+        {opts.includeLogo && logo}
+        {!folded && (
+          /* H3 text is 4px larger (28px) than the Logo icon (24px), so negative margin hack. */
+          <div className="flex flex-1 flex-col -mt-0.5">
+            {opts.includeName && (
               <Truncated headingH3>{applicationName}</Truncated>
-            </div>
-          )}
-        </div>
-        {!NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED && !folded && (
-          <Text
-            secondaryBody
-            text03
-            className={cn(
-              "line-clamp-1 truncate",
-              opts.includeLogo && opts.includeName && "ml-[33px]"
             )}
-            nowrap
-          >
-            Powered by Onyx
-          </Text>
+            {!NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED && (
+              <Text
+                secondaryBody
+                text03
+                className={"line-clamp-1 truncate"}
+                nowrap
+              >
+                Powered by Onyx
+              </Text>
+            )}
+          </div>
         )}
       </div>
     );

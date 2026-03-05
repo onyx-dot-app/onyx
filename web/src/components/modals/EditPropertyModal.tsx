@@ -1,6 +1,6 @@
 import { Formik, Form } from "formik";
 import Modal from "@/refresh-components/Modal";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { TextFormField } from "@/components/Field";
 import { SvgEdit } from "@opal/icons";
 export interface EditPropertyModalProps {

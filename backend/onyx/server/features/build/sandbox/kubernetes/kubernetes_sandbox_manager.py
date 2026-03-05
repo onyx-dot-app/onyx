@@ -1133,7 +1133,8 @@ done
                 # Already deleted
                 service_deleted = True
             else:
-                logger.warning(f"Error deleting Service {service_name}: {e}")
+                logger.error(f"Error deleting Service {service_name}: {e}")
+                raise
 
         pod_deleted = False
         try:
@@ -1148,7 +1149,8 @@ done
                 # Already deleted
                 pod_deleted = True
             else:
-                logger.warning(f"Error deleting Pod {pod_name}: {e}")
+                logger.error(f"Error deleting Pod {pod_name}: {e}")
+                raise
 
         # Wait for resources to be fully deleted to prevent 409 conflicts
         # on immediate re-provisioning
@@ -1351,6 +1353,9 @@ fi
 # Write agent instructions
 echo "Writing AGENTS.md"
 printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
+
+# Populate knowledge sources by scanning the files directory
+python3 /usr/local/bin/generate_agents_md.py {session_path}/AGENTS.md {session_path}/files || true
 
 # Write opencode config
 echo "Writing opencode.json"
@@ -1779,6 +1784,9 @@ ln -sf {symlink_target} {session_path}/files
 # Write agent instructions
 echo "Writing AGENTS.md"
 printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
+
+# Populate knowledge sources by scanning the files directory
+python3 /usr/local/bin/generate_agents_md.py {session_path}/AGENTS.md {session_path}/files || true
 
 # Write opencode config
 echo "Writing opencode.json"

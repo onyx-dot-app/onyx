@@ -51,7 +51,7 @@ import { parsePacket } from "@/app/craft/utils/parsePacket";
  * - tool_call_progress: Full tool call data with status="completed"
  * - agent_plan_update: Plan entries (not rendered as stream items)
  *
- * This function converts assistant messages to StreamItem[] for rendering.
+ * This function converts agent messages to StreamItem[] for rendering.
  */
 function convertMessagesToStreamItems(messages: BuildMessage[]): StreamItem[] {
   const items: StreamItem[] = [];
@@ -149,40 +149,38 @@ function convertMessagesToStreamItems(messages: BuildMessage[]): StreamItem[] {
  * Consolidate raw backend messages into proper conversation turns.
  *
  * The backend stores each streaming packet as a separate message. This function:
- * 1. Groups consecutive assistant messages (between user messages) into turns
+ * 1. Groups consecutive agent messages (between user messages) into turns
  * 2. Converts each group's packets to streamItems
  * 3. Creates consolidated messages with streamItems in message_metadata
  *
- * Returns: Array of consolidated messages (user messages + one assistant message per turn)
+ * Returns: Array of consolidated messages (user messages + one agent message per turn)
  */
 function consolidateMessagesIntoTurns(
   rawMessages: BuildMessage[]
 ): BuildMessage[] {
   const consolidated: BuildMessage[] = [];
-  let currentAssistantPackets: BuildMessage[] = [];
+  let currentAgentPackets: BuildMessage[] = [];
 
   for (const message of rawMessages) {
     if (message.type === "user") {
-      // If we have accumulated assistant packets, consolidate them into one message
-      if (currentAssistantPackets.length > 0) {
-        const streamItems = convertMessagesToStreamItems(
-          currentAssistantPackets
-        );
+      // If we have accumulated agent packets, consolidate them into one message
+      if (currentAgentPackets.length > 0) {
+        const streamItems = convertMessagesToStreamItems(currentAgentPackets);
         const textContent = streamItems
           .filter((item) => item.type === "text")
           .map((item) => item.content)
           .join("");
 
         consolidated.push({
-          id: currentAssistantPackets[0]?.id || genId("assistant-msg"),
+          id: currentAgentPackets[0]?.id || genId("agent-msg"),
           type: "assistant",
           content: textContent,
-          timestamp: currentAssistantPackets[0]?.timestamp || new Date(),
+          timestamp: currentAgentPackets[0]?.timestamp || new Date(),
           message_metadata: {
             streamItems,
           },
         });
-        currentAssistantPackets = [];
+        currentAgentPackets = [];
       }
       // Add the user message as-is
       consolidated.push(message);
@@ -190,48 +188,46 @@ function consolidateMessagesIntoTurns(
       // Check if this message already has consolidated streamItems (from new format)
       if (message.message_metadata?.streamItems) {
         // Already consolidated, add as-is
-        if (currentAssistantPackets.length > 0) {
+        if (currentAgentPackets.length > 0) {
           // Flush any pending packets first
-          const streamItems = convertMessagesToStreamItems(
-            currentAssistantPackets
-          );
+          const streamItems = convertMessagesToStreamItems(currentAgentPackets);
           const textContent = streamItems
             .filter((item) => item.type === "text")
             .map((item) => item.content)
             .join("");
 
           consolidated.push({
-            id: currentAssistantPackets[0]?.id || genId("assistant-msg"),
+            id: currentAgentPackets[0]?.id || genId("agent-msg"),
             type: "assistant",
             content: textContent,
-            timestamp: currentAssistantPackets[0]?.timestamp || new Date(),
+            timestamp: currentAgentPackets[0]?.timestamp || new Date(),
             message_metadata: {
               streamItems,
             },
           });
-          currentAssistantPackets = [];
+          currentAgentPackets = [];
         }
         consolidated.push(message);
       } else {
         // Old format - accumulate for consolidation
-        currentAssistantPackets.push(message);
+        currentAgentPackets.push(message);
       }
     }
   }
 
-  // Don't forget any trailing assistant packets
-  if (currentAssistantPackets.length > 0) {
-    const streamItems = convertMessagesToStreamItems(currentAssistantPackets);
+  // Don't forget any trailing agent packets
+  if (currentAgentPackets.length > 0) {
+    const streamItems = convertMessagesToStreamItems(currentAgentPackets);
     const textContent = streamItems
       .filter((item) => item.type === "text")
       .map((item) => item.content)
       .join("");
 
     consolidated.push({
-      id: currentAssistantPackets[0]?.id || genId("assistant-msg"),
+      id: currentAgentPackets[0]?.id || genId("agent-msg"),
       type: "assistant",
       content: textContent,
-      timestamp: currentAssistantPackets[0]?.timestamp || new Date(),
+      timestamp: currentAgentPackets[0]?.timestamp || new Date(),
       message_metadata: {
         streamItems,
       },
@@ -309,7 +305,7 @@ export interface BuildSessionData {
   /** Active tool calls for the current response */
   toolCalls: ToolCall[];
   /**
-   * FIFO stream items for the current assistant turn.
+   * FIFO stream items for the current agent turn.
    * Items are stored in chronological order as they arrive.
    * Rendered directly without transformation.
    */
@@ -336,7 +332,7 @@ export interface BuildSessionData {
   filesTabState: FilesTabState;
   /** Browser-style tab navigation history for back/forward */
   tabHistory: TabNavigationHistory;
-  /** Follow-up suggestions after first assistant message */
+  /** Follow-up suggestions after first agent message */
   followupSuggestions: SuggestionBubble[] | null;
   /** Whether suggestions are currently being generated */
   suggestionsLoading: boolean;

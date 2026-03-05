@@ -8,7 +8,6 @@ from collections.abc import Generator
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.discord_bot import bulk_create_channel_configs
 from onyx.db.discord_bot import create_discord_bot_config
 from onyx.db.discord_bot import create_guild_config
@@ -36,14 +35,8 @@ def _create_test_persona(db_session: Session, persona_id: int, name: str) -> Per
         id=persona_id,
         name=name,
         description="Test persona for Discord bot tests",
-        num_chunks=5.0,
-        chunks_above=1,
-        chunks_below=1,
-        llm_relevance_filter=False,
-        llm_filter_extraction=False,
-        recency_bias=RecencyBiasSetting.FAVOR_RECENT,
         is_visible=True,
-        is_default_persona=False,
+        featured=False,
         deleted=False,
         builtin_persona=False,
     )

@@ -6,15 +6,11 @@ import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { adminDeleteCredential } from "@/lib/credential";
 import { setupGoogleDriveOAuth } from "@/lib/googleDrive";
-import {
-  DOCS_ADMINS_PATH,
-  GOOGLE_DRIVE_AUTH_IS_ADMIN_COOKIE_NAME,
-} from "@/lib/constants";
-import Cookies from "js-cookie";
+import { DOCS_ADMINS_PATH } from "@/lib/constants";
 import { TextFormField, SectionHeader } from "@/components/Field";
 import { Form, Formik } from "formik";
 import { User } from "@/lib/types";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import {
   Credential,
   GoogleDriveCredentialJson,
@@ -318,7 +314,7 @@ export const DriveJsonUploadSection = ({
           {isAdmin && !existingAuthCredential && (
             <div className="mt-2">
               <Button
-                danger
+                variant="danger"
                 onClick={async () => {
                   const endpoint =
                     localServiceAccountData?.service_account_email
@@ -471,7 +467,7 @@ export const DriveAuthSection = ({
             </div>
           </div>
           <Button
-            danger
+            variant="danger"
             onClick={async () => {
               handleRevokeAccess(
                 connectorAssociated,
@@ -592,11 +588,6 @@ export const DriveAuthSection = ({
           onClick={async () => {
             setIsAuthenticating(true);
             try {
-              // cookie used by callback to determine where to finally redirect to
-              Cookies.set(GOOGLE_DRIVE_AUTH_IS_ADMIN_COOKIE_NAME, "true", {
-                path: "/",
-              });
-
               const [authUrl, errorMsg] = await setupGoogleDriveOAuth({
                 isAdmin: true,
                 name: "OAuth (uploaded)",

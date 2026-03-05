@@ -4,6 +4,7 @@ Pre-built at import time — these never change at runtime. Separated from
 api.py to keep the endpoint module focused on request handling.
 """
 
+from ee.onyx.server.scim.models import SCIM_ENTERPRISE_USER_SCHEMA
 from ee.onyx.server.scim.models import SCIM_GROUP_SCHEMA
 from ee.onyx.server.scim.models import SCIM_USER_SCHEMA
 from ee.onyx.server.scim.models import ScimResourceType
@@ -20,6 +21,9 @@ USER_RESOURCE_TYPE = ScimResourceType.model_validate(
         "endpoint": "/scim/v2/Users",
         "description": "SCIM User resource",
         "schema": SCIM_USER_SCHEMA,
+        "schemaExtensions": [
+            {"schema": SCIM_ENTERPRISE_USER_SCHEMA, "required": False}
+        ],
     }
 )
 
@@ -100,6 +104,31 @@ USER_SCHEMA_DEF = ScimSchemaDefinition(
             type="string",
             description="Identifier from the provisioning client (IdP).",
             caseExact=True,
+        ),
+    ],
+)
+
+ENTERPRISE_USER_SCHEMA_DEF = ScimSchemaDefinition(
+    id=SCIM_ENTERPRISE_USER_SCHEMA,
+    name="EnterpriseUser",
+    description="Enterprise User extension (RFC 7643 §4.3)",
+    attributes=[
+        ScimSchemaAttribute(
+            name="department",
+            type="string",
+            description="Department.",
+        ),
+        ScimSchemaAttribute(
+            name="manager",
+            type="complex",
+            description="The user's manager.",
+            subAttributes=[
+                ScimSchemaAttribute(
+                    name="value",
+                    type="string",
+                    description="Manager user ID.",
+                ),
+            ],
         ),
     ],
 )

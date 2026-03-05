@@ -186,7 +186,12 @@ export const DefaultDropdown = forwardRef<HTMLDivElement, DefaultDropdownProps>(
             <FiChevronDown className="my-auto ml-auto" />
           </div>
         </Popover.Trigger>
-        <Popover.Content align="start" side={side} sideOffset={5}>
+        <Popover.Content
+          align="start"
+          side={side}
+          sideOffset={5}
+          width="trigger"
+        >
           <div
             ref={ref}
             className={`

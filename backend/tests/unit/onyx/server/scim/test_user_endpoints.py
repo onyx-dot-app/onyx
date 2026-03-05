@@ -9,22 +9,27 @@ from uuid import uuid4
 from fastapi import Response
 from sqlalchemy.exc import IntegrityError
 
+from ee.onyx.server.scim.api import _scim_name_to_str
 from ee.onyx.server.scim.api import create_user
 from ee.onyx.server.scim.api import delete_user
 from ee.onyx.server.scim.api import get_user
 from ee.onyx.server.scim.api import list_users
 from ee.onyx.server.scim.api import patch_user
 from ee.onyx.server.scim.api import replace_user
-from ee.onyx.server.scim.models import ScimListResponse
+from ee.onyx.server.scim.models import ScimMappingFields
 from ee.onyx.server.scim.models import ScimName
 from ee.onyx.server.scim.models import ScimPatchOperation
 from ee.onyx.server.scim.models import ScimPatchOperationType
 from ee.onyx.server.scim.models import ScimPatchRequest
 from ee.onyx.server.scim.models import ScimUserResource
 from ee.onyx.server.scim.patch import ScimPatchError
+from ee.onyx.server.scim.providers.base import ScimProvider
 from tests.unit.onyx.server.scim.conftest import assert_scim_error
 from tests.unit.onyx.server.scim.conftest import make_db_user
 from tests.unit.onyx.server.scim.conftest import make_scim_user
+from tests.unit.onyx.server.scim.conftest import make_user_mapping
+from tests.unit.onyx.server.scim.conftest import parse_scim_list
+from tests.unit.onyx.server.scim.conftest import parse_scim_user
 
 
 class TestListUsers:
@@ -35,6 +40,7 @@ class TestListUsers:
         mock_db_session: MagicMock,
         mock_token: MagicMock,
         mock_dal: MagicMock,
+        provider: ScimProvider,
     ) -> None:
         mock_dal.list_users.return_value = ([], 0)
 
@@ -43,36 +49,42 @@ class TestListUsers:
             startIndex=1,
             count=100,
             _token=mock_token,
+            provider=provider,
             db_session=mock_db_session,
         )
 
-        assert isinstance(result, ScimListResponse)
-        assert result.totalResults == 0
-        assert result.Resources == []
+        parsed = parse_scim_list(result)
+        assert parsed.totalResults == 0
+        assert parsed.Resources == []
 
     def test_returns_users_with_scim_shape(
         self,
         mock_db_session: MagicMock,
         mock_token: MagicMock,
         mock_dal: MagicMock,
+        provider: ScimProvider,
     ) -> None:
         user = make_db_user(email="alice@example.com", personal_name="Alice Smith")
-        mock_dal.list_users.return_value = ([(user, "ext-abc")], 1)
+        mapping = make_user_mapping(
+            external_id="ext-abc", user_id=user.id, scim_username="Alice@example.com"
+        )
+        mock_dal.list_users.return_value = ([(user, mapping)], 1)
 
         result = list_users(
             filter=None,
             startIndex=1,
             count=100,
             _token=mock_token,
+            provider=provider,
             db_session=mock_db_session,
         )
 
-        assert isinstance(result, ScimListResponse)
-        assert result.totalResults == 1
-        assert len(result.Resources) == 1
-        resource = result.Resources[0]
+        parsed = parse_scim_list(result)
+        assert parsed.totalResults == 1
+        assert len(parsed.Resources) == 1
+        resource = parsed.Resources[0]
         assert isinstance(resource, ScimUserResource)
-        assert resource.userName == "alice@example.com"
+        assert resource.userName == "Alice@example.com"
         assert resource.externalId == "ext-abc"
 
     def test_unsupported_filter_attribute_returns_400(
@@ -80,6 +92,7 @@ class TestListUsers:
         mock_db_session: MagicMock,
         mock_token: MagicMock,
         mock_dal: MagicMock,
+        provider: ScimProvider,
     ) -> None:
         mock_dal.list_users.side_effect = ValueError(
             "Unsupported filter attribute: emails"
@@ -90,6 +103,7 @@ class TestListUsers:
             startIndex=1,
             count=100,
             _token=mock_token,
+            provider=provider,
             db_session=mock_db_session,
         )
 
@@ -100,12 +114,14 @@ class TestListUsers:
         mock_db_session: MagicMock,
         mock_token: MagicMock,
         mock_dal: MagicMock,  # noqa: ARG002
+        provider: ScimProvider,
     ) -> None:
         result = list_users(
             filter="not a valid filter",
             startIndex=1,
             count=100,
             _token=mock_token,
+            provider=provider,
             db_session=mock_db_session,
         )
 
@@ -120,6 +136,7 @@ class TestGetUser:
         mock_db_session: MagicMock,
         mock_token: MagicMock,
         mock_dal: MagicMock,
+        provider: ScimProvider,
     ) -> None:
         user = make_db_user(email="alice@example.com")
         mock_dal.get_user.return_value = user
@@ -127,22 +144,25 @@ class TestGetUser:
         result = get_user(
             user_id=str(user.id),
             _token=mock_token,
+            provider=provider,
             db_session=mock_db_session,
         )
 
-        assert isinstance(result, ScimUserResource)
-        assert result.userName == "alice@example.com"
-        assert result.id == str(user.id)
+        resource = parse_scim_user(result)
+        assert resource.userName == "alice@example.com"
+        assert resource.id == str(user.id)
 
     def test_invalid_uuid_returns_404(
         self,
         mock_db_session: MagicMock,
         mock_token: MagicMock,
         mock_dal: MagicMock,  # noqa: ARG002
+        provider: ScimProvider,
     ) -> None:
         result = get_user(
             user_id="not-a-uuid",
             _token=mock_token,
+            provider=provider,
             db_session=mock_db_session,
         )
 
@@ -153,12 +173,14 @@ class TestGetUser:
         mock_db_session: MagicMock,
         mock_token: MagicMock,
         mock_dal: MagicMock,
+        provider: ScimProvider,
     ) -> None:
         mock_dal.get_user.return_value = None
 
         result = get_user(
             user_id=str(uuid4()),
             _token=mock_token,
+            provider=provider,
             db_session=mock_db_session,
         )
 
@@ -175,6 +197,7 @@ class TestCreateUser:
         mock_db_session: MagicMock,
         mock_token: MagicMock,
         mock_dal: MagicMock,
+        provider: ScimProvider,
     ) -> None:
         mock_dal.get_user_by_email.return_value = None
         resource = make_scim_user(userName="new@example.com")
@@ -182,48 +205,100 @@ class TestCreateUser:
         result = create_user(
             user_resource=resource,
             _token=mock_token,
+            provider=provider,
             db_session=mock_db_session,
         )
 
-        assert isinstance(result, ScimUserResource)
-        assert result.userName == "new@example.com"
+        resource = parse_scim_user(result, status=201)
+        assert resource.userName == "new@example.com"
         mock_dal.add_user.assert_called_once()
         mock_dal.commit.assert_called_once()
 
-    def test_missing_external_id_returns_400(
-        self,
-        mock_db_session: MagicMock,
-        mock_token: MagicMock,
-        mock_dal: MagicMock,  # noqa: ARG002
-    ) -> None:
-        resource = make_scim_user(externalId=None)
-
-        result = create_user(
-            user_resource=resource,
-            _token=mock_token,
-            db_session=mock_db_session,
-        )
-
-        assert_scim_error(result, 400)
-
     @patch("ee.onyx.server.scim.api._check_seat_availability", return_value=None)
-    def test_duplicate_email_returns_409(
+    def test_missing_external_id_still_creates_mapping(
         self,
         mock_seats: MagicMock,  # noqa: ARG002
         mock_db_session: MagicMock,
         mock_token: MagicMock,
         mock_dal: MagicMock,
+        provider: ScimProvider,
     ) -> None:
-        mock_dal.get_user_by_email.return_value = make_db_user()
+        """Mapping is always created to mark user as SCIM-managed."""
+        mock_dal.get_user_by_email.return_value = None
+        resource = make_scim_user(externalId=None)
+
+        result = create_user(
+            user_resource=resource,
+            _token=mock_token,
+            provider=provider,
+            db_session=mock_db_session,
+        )
+
+        parsed = parse_scim_user(result, status=201)
+        assert parsed.userName is not None
+        mock_dal.add_user.assert_called_once()
+        mock_dal.create_user_mapping.assert_called_once()
+        mock_dal.commit.assert_called_once()
+
+    @patch("ee.onyx.server.scim.api._check_seat_availability", return_value=None)
+    def test_duplicate_scim_managed_email_returns_409(
+        self,
+        mock_seats: MagicMock,  # noqa: ARG002
+        mock_db_session: MagicMock,
+        mock_token: MagicMock,
+        mock_dal: MagicMock,
+        provider: ScimProvider,
+    ) -> None:
+        """409 only when the existing user already has a SCIM mapping."""
+        existing = make_db_user()
+        mock_dal.get_user_by_email.return_value = existing
+        mock_dal.get_user_mapping_by_user_id.return_value = make_user_mapping(
+            user_id=existing.id
+        )
         resource = make_scim_user()
 
         result = create_user(
             user_resource=resource,
             _token=mock_token,
+            provider=provider,
             db_session=mock_db_session,
         )
 
         assert_scim_error(result, 409)
+
+    @patch("ee.onyx.server.scim.api._check_seat_availability", return_value=None)
+    def test_existing_user_without_mapping_gets_linked(
+        self,
+        mock_seats: MagicMock,  # noqa: ARG002
+        mock_db_session: MagicMock,
+        mock_token: MagicMock,
+        mock_dal: MagicMock,
+        provider: ScimProvider,
+    ) -> None:
+        """Pre-existing user without SCIM mapping gets adopted (linked)."""
+        existing = make_db_user(email="admin@example.com", personal_name=None)
+        mock_dal.get_user_by_email.return_value = existing
+        mock_dal.get_user_mapping_by_user_id.return_value = None
+        resource = make_scim_user(userName="admin@example.com", externalId="ext-admin")
+
+        result = create_user(
+            user_resource=resource,
+            _token=mock_token,
+            provider=provider,
+            db_session=mock_db_session,
+        )
+
+        parsed = parse_scim_user(result, status=201)
+        assert parsed.userName == "admin@example.com"
+        # Should NOT create a new user — reuse existing
+        mock_dal.add_user.assert_not_called()
+        # Should sync is_active and personal_name from the SCIM request
+        mock_dal.update_user.assert_called_once_with(
+            existing, is_active=True, personal_name="Test User"
+        )
+        # Should create a SCIM mapping for the existing user
+        mock_dal.create_user_mapping.assert_called_once()
+        mock_dal.commit.assert_called_once()
 
     @patch("ee.onyx.server.scim.api._check_seat_availability", return_value=None)
     def test_integrity_error_returns_409(
@@ -232,6 +307,7 @@ class TestCreateUser:
         mock_db_session: MagicMock,
         mock_token: MagicMock,
         mock_dal: MagicMock,
+        provider: ScimProvider,
     ) -> None:
         mock_dal.get_user_by_email.return_value = None
         mock_dal.add_user.side_effect = IntegrityError("dup", {}, Exception())
@@ -240,6 +316,7 @@ class TestCreateUser:
         result = create_user(
             user_resource=resource,
             _token=mock_token,
+            provider=provider,
             db_session=mock_db_session,
         )
 
@@ -253,6 +330,7 @@ class TestCreateUser:
         mock_db_session: MagicMock,
         mock_token: MagicMock,
         mock_dal: MagicMock,  # noqa: ARG002
+        provider: ScimProvider,
     ) -> None:
         mock_seats.return_value = "Seat limit reached"
         resource = make_scim_user()
@@ -260,6 +338,7 @@ class TestCreateUser:
         result = create_user(
             user_resource=resource,
             _token=mock_token,
+            provider=provider,
             db_session=mock_db_session,
         )
 
@@ -272,6 +351,7 @@ class TestCreateUser:
         mock_db_session: MagicMock,
         mock_token: MagicMock,
         mock_dal: MagicMock,
+        provider: ScimProvider,
     ) -> None:
         mock_dal.get_user_by_email.return_value = None
         resource = make_scim_user(externalId="ext-123")
@@ -279,11 +359,12 @@ class TestCreateUser:
         result = create_user(
             user_resource=resource,
             _token=mock_token,
+            provider=provider,
             db_session=mock_db_session,
         )
 
-        assert isinstance(result, ScimUserResource)
-        assert result.externalId == "ext-123"
+        resource = parse_scim_user(result, status=201)
+        assert resource.externalId == "ext-123"
         mock_dal.create_user_mapping.assert_called_once()
 
 
@@ -295,6 +376,7 @@ class TestReplaceUser:
         mock_db_session: MagicMock,
         mock_token: MagicMock,
         mock_dal: MagicMock,
+        provider: ScimProvider,
     ) -> None:
         user = make_db_user(email="old@example.com")
         mock_dal.get_user.return_value = user
@@ -307,10 +389,11 @@ class TestReplaceUser:
             user_id=str(user.id),
             user_resource=resource,
             _token=mock_token,
+            provider=provider,
             db_session=mock_db_session,
         )
 
-        assert isinstance(result, ScimUserResource)
+        parse_scim_user(result)
         mock_dal.update_user.assert_called_once()
         mock_dal.commit.assert_called_once()
 
@@ -319,6 +402,7 @@ class TestReplaceUser:
         mock_db_session: MagicMock,
         mock_token: MagicMock,
         mock_dal: MagicMock,
+        provider: ScimProvider,
     ) -> None:
         mock_dal.get_user.return_value = None
 
@@ -326,6 +410,7 @@ class TestReplaceUser:
             user_id=str(uuid4()),
             user_resource=make_scim_user(),
             _token=mock_token,
+            provider=provider,
             db_session=mock_db_session,
         )
 
@@ -338,6 +423,7 @@ class TestReplaceUser:
         mock_db_session: MagicMock,
         mock_token: MagicMock,
         mock_dal: MagicMock,
+        provider: ScimProvider,
     ) -> None:
         user = make_db_user(is_active=False)
         mock_dal.get_user.return_value = user
@@ -348,6 +434,7 @@ class TestReplaceUser:
             user_id=str(user.id),
             user_resource=resource,
             _token=mock_token,
+            provider=provider,
             db_session=mock_db_session,
         )
 
@@ -359,6 +446,7 @@ class TestReplaceUser:
         mock_db_session: MagicMock,
         mock_token: MagicMock,
         mock_dal: MagicMock,
+        provider: ScimProvider,
     ) -> None:
         user = make_db_user()
         mock_dal.get_user.return_value = user
@@ -369,11 +457,20 @@ class TestReplaceUser:
             user_id=str(user.id),
             user_resource=resource,
             _token=mock_token,
+            provider=provider,
             db_session=mock_db_session,
         )
 
-        assert isinstance(result, ScimUserResource)
-        mock_dal.sync_user_external_id.assert_called_once_with(user.id, None)
+        parse_scim_user(result)
+        mock_dal.sync_user_external_id.assert_called_once_with(
+            user.id,
+            None,
+            scim_username="test@example.com",
+            fields=ScimMappingFields(
+                given_name="Test",
+                family_name="User",
+            ),
+        )
 
 
 class TestPatchUser:
@@ -384,6 +481,7 @@ class TestPatchUser:
         mock_db_session: MagicMock,
         mock_token: MagicMock,
         mock_dal: MagicMock,
+        provider: ScimProvider,
     ) -> None:
         user = make_db_user(is_active=True)
         mock_dal.get_user.return_value = user
@@ -401,10 +499,11 @@ class TestPatchUser:
             user_id=str(user.id),
             patch_request=patch_req,
             _token=mock_token,
+            provider=provider,
             db_session=mock_db_session,
         )
 
-        assert isinstance(result, ScimUserResource)
+        parse_scim_user(result)
         mock_dal.update_user.assert_called_once()
 
     def test_not_found_returns_404(
@@ -412,6 +511,7 @@ class TestPatchUser:
         mock_db_session: MagicMock,
         mock_token: MagicMock,
         mock_dal: MagicMock,
+        provider: ScimProvider,
     ) -> None:
         mock_dal.get_user.return_value = None
         patch_req = ScimPatchRequest(
@@ -428,10 +528,44 @@ class TestPatchUser:
             user_id=str(uuid4()),
             patch_request=patch_req,
             _token=mock_token,
+            provider=provider,
             db_session=mock_db_session,
         )
 
         assert_scim_error(result, 404)
+
+    def test_patch_displayname_persists(
+        self,
+        mock_db_session: MagicMock,
+        mock_token: MagicMock,
+        mock_dal: MagicMock,
+        provider: ScimProvider,
+    ) -> None:
+        """PATCH displayName should update personal_name in the DB."""
+        user = make_db_user(personal_name="Old Name")
+        mock_dal.get_user.return_value = user
+        patch_req = ScimPatchRequest(
+            Operations=[
+                ScimPatchOperation(
+                    op=ScimPatchOperationType.REPLACE,
+                    path="displayName",
+                    value="New Display Name",
+                )
+            ]
+        )
+
+        result = patch_user(
+            user_id=str(user.id),
+            patch_request=patch_req,
+            _token=mock_token,
+            provider=provider,
+            db_session=mock_db_session,
+        )
+
+        parse_scim_user(result)
+        # Verify the update_user call received the new display name
+        call_kwargs = mock_dal.update_user.call_args
+        assert call_kwargs[1]["personal_name"] == "New Display Name"
 
     @patch("ee.onyx.server.scim.api.apply_user_patch")
     def test_patch_error_returns_error_response(
@@ -440,6 +574,7 @@ class TestPatchUser:
         mock_db_session: MagicMock,
         mock_token: MagicMock,
         mock_dal: MagicMock,
+        provider: ScimProvider,
     ) -> None:
         user = make_db_user()
         mock_dal.get_user.return_value = user
@@ -457,6 +592,7 @@ class TestPatchUser:
             user_id=str(user.id),
             patch_request=patch_req,
             _token=mock_token,
+            provider=provider,
             db_session=mock_db_session,
         )
 
@@ -519,3 +655,89 @@ class TestDeleteUser:
         )
 
         assert_scim_error(result, 404)
+
+
+class TestScimNameToStr:
+    """Tests for _scim_name_to_str helper."""
+
+    def test_prefers_formatted_over_components(self) -> None:
+        """When client provides formatted, use it — the client knows what it wants."""
+        name = ScimName(
+            givenName="Jane", familyName="Smith", formatted="Dr. Jane Smith"
+        )
+        assert _scim_name_to_str(name) == "Dr. Jane Smith"
+
+    def test_given_name_only(self) -> None:
+        name = ScimName(givenName="Jane")
+        assert _scim_name_to_str(name) == "Jane"
+
+    def test_family_name_only(self) -> None:
+        name = ScimName(familyName="Smith")
+        assert _scim_name_to_str(name) == "Smith"
+
+    def test_falls_back_to_formatted(self) -> None:
+        name = ScimName(formatted="Display Name")
+        assert _scim_name_to_str(name) == "Display Name"
+
+    def test_none_returns_none(self) -> None:
+        assert _scim_name_to_str(None) is None
+
+    def test_empty_name_returns_none(self) -> None:
+        name = ScimName()
+        assert _scim_name_to_str(name) is None
+
+
+class TestEmailCasePreservation:
+    """Tests verifying email case is preserved through SCIM endpoints."""
+
+    @patch("ee.onyx.server.scim.api._check_seat_availability", return_value=None)
+    def test_create_preserves_username_case(
+        self,
+        mock_seats: MagicMock,  # noqa: ARG002
+        mock_db_session: MagicMock,
+        mock_token: MagicMock,
+        mock_dal: MagicMock,
+        provider: ScimProvider,
+    ) -> None:
+        """POST /Users with mixed-case userName returns the original case."""
+        mock_dal.get_user_by_email.return_value = None
+        resource = make_scim_user(userName="Alice@Example.COM")
+
+        result = create_user(
+            user_resource=resource,
+            _token=mock_token,
+            provider=provider,
+            db_session=mock_db_session,
+        )
+
+        resource = parse_scim_user(result, status=201)
+        assert resource.userName == "Alice@Example.COM"
+        assert resource.emails[0].value == "Alice@Example.COM"
+
+    def test_get_preserves_username_case(
+        self,
+        mock_db_session: MagicMock,
+        mock_token: MagicMock,
+        mock_dal: MagicMock,
+        provider: ScimProvider,
+    ) -> None:
+        """GET /Users/{id} returns the original-case userName from mapping."""
+        user = make_db_user(email="alice@example.com")
+        mock_dal.get_user.return_value = user
+        mapping = make_user_mapping(
+            external_id="ext-1",
+            user_id=user.id,
+            scim_username="Alice@Example.COM",
+        )
+        mock_dal.get_user_mapping_by_user_id.return_value = mapping
+
+        result = get_user(
+            user_id=str(user.id),
+            _token=mock_token,
+            provider=provider,
+            db_session=mock_db_session,
+        )
+
+        resource = parse_scim_user(result)
+        assert resource.userName == "Alice@Example.COM"
+        assert resource.emails[0].value == "Alice@Example.COM"

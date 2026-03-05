@@ -10,7 +10,7 @@ from onyx.tools.utils import explicit_tool_calling_supported
         (LlmProviderNames.ANTHROPIC, "claude-4-sonnet-20250514", True),
         (
             "another-provider",
-            "claude-3-haiku-20240307",
+            "claude-haiku-4-5-20251001",
             True,
         ),
         (

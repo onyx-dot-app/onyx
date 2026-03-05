@@ -31,13 +31,6 @@ class CustomToolResponse(BaseModel):
     tool_name: str
 
 
-class ProjectSearchConfig(BaseModel):
-    """Configuration for search tool availability in project context."""
-
-    search_usage: SearchToolUsage
-    disable_forced_tool: bool
-
-
 class CreateChatSessionID(BaseModel):
     chat_session_id: UUID
 
@@ -132,8 +125,8 @@ class ChatMessageSimple(BaseModel):
     file_id: str | None = None
 
 
-class ProjectFileMetadata(BaseModel):
-    """Metadata for a project file to enable citation support."""
+class ContextFileMetadata(BaseModel):
+    """Metadata for a context-injected file to enable citation support."""
 
     file_id: str
     filename: str
@@ -167,18 +160,26 @@ class ChatHistoryResult(BaseModel):
     all_injected_file_metadata: dict[str, FileToolMetadata]
 
 
-class ExtractedProjectFiles(BaseModel):
-    project_file_texts: list[str]
-    project_image_files: list[ChatLoadedFile]
-    project_as_filter: bool
+class ExtractedContextFiles(BaseModel):
+    """Result of attempting to load user files (from a project or persona) into context."""
+
+    file_texts: list[str]
+    image_files: list[ChatLoadedFile]
+    use_as_search_filter: bool
     total_token_count: int
-    # Metadata for project files to enable citations
-    project_file_metadata: list[ProjectFileMetadata]
-    # None if not a project
-    project_uncapped_token_count: int | None
     # Lightweight metadata for files exposed via FileReaderTool
-    # (populated when files don't fit in context and vector DB is disabled)
+    # (populated when files don't fit in context and vector DB is disabled).
+    file_metadata: list[ContextFileMetadata]
+    uncapped_token_count: int | None
     file_metadata_for_tool: list[FileToolMetadata] = []
+
+
+class SearchParams(BaseModel):
+    """Resolved search filter IDs and search-tool usage for a chat turn."""
+
+    search_project_id: int | None
+    search_persona_id: int | None
+    search_usage: SearchToolUsage
 
 
 class LlmStepResult(BaseModel):

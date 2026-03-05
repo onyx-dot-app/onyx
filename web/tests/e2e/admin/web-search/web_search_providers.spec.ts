@@ -354,6 +354,42 @@ test.describe("Web Search Provider Configuration", () => {
     });
   });
 
+  test.describe("Brave Provider", () => {
+    const BRAVE_SEARCH_API_KEY = process.env.BRAVE_SEARCH_API_KEY;
+
+    test.skip(
+      !BRAVE_SEARCH_API_KEY,
+      "BRAVE_SEARCH_API_KEY environment variable not set"
+    );
+
+    test("should configure Brave as web search provider", async ({ page }) => {
+      await openProviderModal(page, "Brave");
+
+      const modalDialog = page.getByRole("dialog", { name: /set up brave/i });
+      await expect(modalDialog).toBeVisible({ timeout: 10000 });
+
+      const apiKeyInput = modalDialog.getByLabel(/api key/i);
+      await apiKeyInput.waitFor({ state: "visible", timeout: 5000 });
+      await apiKeyInput.clear();
+      await apiKeyInput.fill(BRAVE_SEARCH_API_KEY!);
+
+      const modalConnectButton = modalDialog.getByRole("button", {
+        name: "Connect",
+        exact: true,
+      });
+      await expect(modalConnectButton).toBeEnabled({ timeout: 5000 });
+      await modalConnectButton.click();
+
+      await expect(modalDialog).not.toBeVisible({ timeout: 30000 });
+      await page.waitForLoadState("networkidle");
+
+      const braveCard = await findProviderCard(page, "Brave");
+      await expect(
+        braveCard.getByRole("button", { name: "Current Default" })
+      ).toBeVisible({ timeout: 15000 });
+    });
+  });
+
   test.describe("Provider Switching", () => {
     // These tests require both providers to be configured
     const EXA_API_KEY = process.env.EXA_API_KEY;

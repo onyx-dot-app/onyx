@@ -92,6 +92,7 @@ from onyx.db.connector_credential_pair import get_connector_credential_pairs_for
 from onyx.db.connector_credential_pair import (
     get_connector_credential_pairs_for_user_parallel,
 )
+from onyx.db.connector_credential_pair import verify_user_has_access_to_cc_pair
 from onyx.db.credentials import cleanup_gmail_credentials
 from onyx.db.credentials import cleanup_google_drive_credentials
 from onyx.db.credentials import create_credential
@@ -103,6 +104,7 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import IndexingMode
+from onyx.db.enums import ProcessingMode
 from onyx.db.federated import fetch_all_federated_connectors_parallel
 from onyx.db.index_attempt import get_index_attempts_for_cc_pair
 from onyx.db.index_attempt import get_latest_index_attempts_by_status
@@ -571,6 +573,43 @@ def _normalize_file_names_for_backwards_compatibility(
     return file_names + file_locations[len(file_names) :]
 
 
+def _fetch_and_check_file_connector_cc_pair_permissions(
+    connector_id: int,
+    user: User,
+    db_session: Session,
+    require_editable: bool,
+) -> ConnectorCredentialPair:
+    cc_pair = fetch_connector_credential_pair_for_connector(db_session, connector_id)
+    if cc_pair is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No Connector-Credential Pair found for this connector",
+        )
+
+    has_requested_access = verify_user_has_access_to_cc_pair(
+        cc_pair_id=cc_pair.id,
+        db_session=db_session,
+        user=user,
+        get_editable=require_editable,
+    )
+    if has_requested_access:
+        return cc_pair
+
+    # Special case: global curators should be able to manage files
+    # for public file connectors even when they are not the creator.
+    if (
+        require_editable
+        and user.role == UserRole.GLOBAL_CURATOR
+        and cc_pair.access_type == AccessType.PUBLIC
+    ):
+        return cc_pair
+
+    raise HTTPException(
+        status_code=403,
+        detail="Access denied. User cannot manage files for this connector.",
+    )
+
+
 @router.post("/admin/connector/file/upload", tags=PUBLIC_API_TAGS)
 def upload_files_api(
     files: list[UploadFile],
@@ -582,7 +621,7 @@ def upload_files_api(
 @router.get("/admin/connector/{connector_id}/files", tags=PUBLIC_API_TAGS)
 def list_connector_files(
     connector_id: int,
-    user: User = Depends(current_curator_or_admin_user),  # noqa: ARG001
+    user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> ConnectorFilesResponse:
     """List all files in a file connector."""
@@ -594,6 +633,13 @@ def list_connector_files(
         raise HTTPException(
             status_code=400, detail="This endpoint only works with file connectors"
         )
+
+    _ = _fetch_and_check_file_connector_cc_pair_permissions(
+        connector_id=connector_id,
+        user=user,
+        db_session=db_session,
+        require_editable=False,
+    )
 
     file_locations = connector.connector_specific_config.get("file_locations", [])
     file_names = connector.connector_specific_config.get("file_names", [])
@@ -644,7 +690,7 @@ def update_connector_files(
     connector_id: int,
     files: list[UploadFile] | None = File(None),
     file_ids_to_remove: str = Form("[]"),
-    user: User = Depends(current_curator_or_admin_user),  # noqa: ARG001
+    user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> FileUploadResponse:
     """
@@ -662,12 +708,13 @@ def update_connector_files(
         )
 
     # Get the connector-credential pair for indexing/pruning triggers
-    cc_pair = fetch_connector_credential_pair_for_connector(db_session, connector_id)
-    if cc_pair is None:
-        raise HTTPException(
-            status_code=404,
-            detail="No Connector-Credential Pair found for this connector",
-        )
+    # and validate user permissions for file management.
+    cc_pair = _fetch_and_check_file_connector_cc_pair_permissions(
+        connector_id=connector_id,
+        user=user,
+        db_session=db_session,
+        require_editable=True,
+    )
 
     # Parse file IDs to remove
     try:
@@ -987,6 +1034,7 @@ def get_connector_status(
         user=user,
         eager_load_connector=True,
         eager_load_credential=True,
+        eager_load_user=True,
         get_editable=False,
     )
 
@@ -1000,11 +1048,23 @@ def get_connector_status(
             relationship.user_group_id
         )
 
+    # Pre-compute credential_ids per connector to avoid N+1 lazy loads
+    connector_to_credential_ids: dict[int, list[int]] = {}
+    for cc_pair in cc_pairs:
+        connector_to_credential_ids.setdefault(cc_pair.connector_id, []).append(
+            cc_pair.credential_id
+        )
+
     return [
         ConnectorStatus(
             cc_pair_id=cc_pair.id,
             name=cc_pair.name,
-            connector=ConnectorSnapshot.from_connector_db_model(cc_pair.connector),
+            connector=ConnectorSnapshot.from_connector_db_model(
+                cc_pair.connector,
+                credential_ids=connector_to_credential_ids.get(
+                    cc_pair.connector_id, []
+                ),
+            ),
             credential=CredentialSnapshot.from_credential_db_model(cc_pair.credential),
             access_type=cc_pair.access_type,
             groups=group_cc_pair_relationships_dict.get(cc_pair.id, []),
@@ -1059,15 +1119,27 @@ def get_connector_indexing_status(
     parallel_functions: list[tuple[CallableProtocol, tuple[Any, ...]]] = [
         # Get editable connector/credential pairs
         (
-            get_connector_credential_pairs_for_user_parallel,
-            (user, True, None, True, True, True, True, request.source),
+            lambda: get_connector_credential_pairs_for_user_parallel(
+                user, True, None, True, True, False, True, request.source
+            ),
+            (),
         ),
         # Get federated connectors
         (fetch_all_federated_connectors_parallel, ()),
         # Get most recent index attempts
-        (get_latest_index_attempts_parallel, (request.secondary_index, True, False)),
+        (
+            lambda: get_latest_index_attempts_parallel(
+                request.secondary_index, True, False
+            ),
+            (),
+        ),
         # Get most recent finished index attempts
-        (get_latest_index_attempts_parallel, (request.secondary_index, True, True)),
+        (
+            lambda: get_latest_index_attempts_parallel(
+                request.secondary_index, True, True
+            ),
+            (),
+        ),
     ]
 
     if user and user.role == UserRole.ADMIN:
@@ -1084,8 +1156,10 @@ def get_connector_indexing_status(
         parallel_functions.append(
             # Get non-editable connector/credential pairs
             (
-                get_connector_credential_pairs_for_user_parallel,
-                (user, False, None, True, True, True, True, request.source),
+                lambda: get_connector_credential_pairs_for_user_parallel(
+                    user, False, None, True, True, False, True, request.source
+                ),
+                (),
             ),
         )
 
@@ -1911,6 +1985,7 @@ Tenant ID: {tenant_id}
 class BasicCCPairInfo(BaseModel):
     has_successful_run: bool
     source: DocumentSource
+    status: ConnectorCredentialPairStatus
 
 
 @router.get("/connector-status", tags=PUBLIC_API_TAGS)
@@ -1924,13 +1999,17 @@ def get_basic_connector_indexing_status(
         get_editable=False,
         user=user,
     )
+
+    # NOTE: This endpoint excludes Craft connectors
     return [
         BasicCCPairInfo(
             has_successful_run=cc_pair.last_successful_index_time is not None,
             source=cc_pair.connector.source,
+            status=cc_pair.status,
         )
         for cc_pair in cc_pairs
         if cc_pair.connector.source != DocumentSource.INGESTION_API
+        and cc_pair.processing_mode == ProcessingMode.REGULAR
     ]
 
 

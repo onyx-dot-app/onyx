@@ -42,4 +42,9 @@ export interface InputComboBoxProps
   separatorLabel?: string;
   /** Show "Add" prefix in create option (e.g., "Add [value]") */
   showAddPrefix?: boolean;
+  /**
+   * When true, keep non-matching options visible under a separator while searching.
+   * Defaults to false so search results are strictly filtered.
+   */
+  showOtherOptions?: boolean;
 }

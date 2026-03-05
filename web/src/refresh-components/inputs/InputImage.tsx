@@ -259,6 +259,7 @@ export default function InputImage({
             "transition-opacity duration-150"
           )}
         >
+          {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
           <IconButton
             icon={SvgX}
             onClick={noProp(onRemove)}

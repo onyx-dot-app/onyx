@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Card from "@/refresh-components/cards/Card";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import InputFile from "@/refresh-components/inputs/InputFile";
 import { Section } from "@/layouts/general-layouts";
@@ -19,6 +19,7 @@ interface LicenseActivationCardProps {
   onClose: () => void;
   onSuccess: () => void;
   license?: LicenseStatus;
+  hideClose?: boolean;
 }
 
 export default function LicenseActivationCard({
@@ -26,6 +27,7 @@ export default function LicenseActivationCard({
   onClose,
   onSuccess,
   license,
+  hideClose,
 }: LicenseActivationCardProps) {
   const [licenseKey, setLicenseKey] = useState("");
   const [isActivating, setIsActivating] = useState(false);
@@ -117,12 +119,14 @@ export default function LicenseActivationCard({
             </Text>
           </Section>
           <Section flexDirection="row" gap={0.5} height="auto" width="auto">
-            <Button main secondary onClick={() => setShowInput(true)}>
+            <Button prominence="secondary" onClick={() => setShowInput(true)}>
               Update Key
             </Button>
-            <Button main tertiary onClick={handleClose}>
-              Close
-            </Button>
+            {!hideClose && (
+              <Button prominence="tertiary" onClick={handleClose}>
+                Close
+              </Button>
+            )}
           </Section>
         </Section>
       </Card>
@@ -142,7 +146,11 @@ export default function LicenseActivationCard({
           <Text headingH3>
             {hasLicense ? "Update License Key" : "Activate License Key"}
           </Text>
-          <Button secondary onClick={handleClose} disabled={isActivating}>
+          <Button
+            prominence="secondary"
+            onClick={handleClose}
+            disabled={isActivating}
+          >
             Cancel
           </Button>
         </Section>
@@ -215,8 +223,6 @@ export default function LicenseActivationCard({
       {/* Footer */}
       <Section flexDirection="row" justifyContent="end" padding={1}>
         <Button
-          main
-          primary
           onClick={handleActivate}
           disabled={isActivating || !licenseKey.trim() || success}
         >

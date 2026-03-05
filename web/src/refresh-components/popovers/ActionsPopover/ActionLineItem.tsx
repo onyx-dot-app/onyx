@@ -25,7 +25,7 @@ export interface ActionItemProps {
   disabled: boolean;
   isForced: boolean;
   isUnavailable?: boolean;
-  unavailableReason?: string;
+  tooltip?: string;
   showAdminConfigure?: boolean;
   adminConfigureHref?: string;
   adminConfigureTooltip?: string;
@@ -33,7 +33,6 @@ export interface ActionItemProps {
   onForceToggle: () => void;
   onSourceManagementOpen?: () => void;
   hasNoConnectors?: boolean;
-  hasNoKnowledgeSources?: boolean;
   toolAuthStatus?: ToolAuthStatus;
   onOAuthAuthenticate?: () => void;
   onClose?: () => void;
@@ -48,7 +47,7 @@ export default function ActionLineItem({
   disabled,
   isForced,
   isUnavailable = false,
-  unavailableReason,
+  tooltip,
   showAdminConfigure = false,
   adminConfigureHref,
   adminConfigureTooltip = "Configure",
@@ -56,7 +55,6 @@ export default function ActionLineItem({
   onForceToggle,
   onSourceManagementOpen,
   hasNoConnectors = false,
-  hasNoKnowledgeSources = false,
   toolAuthStatus,
   onOAuthAuthenticate,
   onClose,
@@ -78,11 +76,6 @@ export default function ActionLineItem({
     tool?.in_code_tool_id === SEARCH_TOOL_ID &&
     hasNoConnectors;
 
-  const isSearchToolWithNoKnowledgeSources =
-    !currentProjectId &&
-    tool?.in_code_tool_id === SEARCH_TOOL_ID &&
-    hasNoKnowledgeSources;
-
   const isSearchToolAndNotInProject =
     tool?.in_code_tool_id === SEARCH_TOOL_ID && !currentProjectId;
 
@@ -95,22 +88,14 @@ export default function ActionLineItem({
     sourceCounts.enabled > 0 &&
     sourceCounts.enabled < sourceCounts.total;
 
-  const tooltipText = isSearchToolWithNoKnowledgeSources
-    ? "No knowledge sources are available. Contact your admin to add a knowledge source to this agent."
-    : isUnavailable
-      ? unavailableReason
-      : tool?.description;
+  const tooltipText = tooltip || tool?.description;
 
   return (
     <SimpleTooltip tooltip={tooltipText} className="max-w-[30rem]">
       <div data-testid={`tool-option-${toolName}`}>
         <LineItem
           onClick={() => {
-            if (
-              isSearchToolWithNoConnectors ||
-              isSearchToolWithNoKnowledgeSources
-            )
-              return;
+            if (isSearchToolWithNoConnectors) return;
             if (isUnavailable) {
               if (isForced) onForceToggle();
               return;
@@ -123,24 +108,16 @@ export default function ActionLineItem({
           }}
           selected={isForced}
           strikethrough={
-            disabled ||
-            isSearchToolWithNoConnectors ||
-            isSearchToolWithNoKnowledgeSources ||
-            isUnavailable
+            disabled || isSearchToolWithNoConnectors || isUnavailable
           }
           icon={Icon}
           rightChildren={
             <Section gap={0.25} flexDirection="row">
               {!isUnavailable && tool?.oauth_config_id && toolAuthStatus && (
                 <Button
-                  icon={({ className }) => (
-                    <SvgKey
-                      className={cn(
-                        className,
-                        "stroke-yellow-500 hover:stroke-yellow-600"
-                      )}
-                    />
-                  )}
+                  icon={SvgKey}
+                  prominence="secondary"
+                  size="sm"
                   onClick={noProp(() => {
                     if (
                       !toolAuthStatus.hasToken ||
@@ -153,6 +130,7 @@ export default function ActionLineItem({
               )}
 
               {!isSearchToolWithNoConnectors && !isUnavailable && (
+                // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
                 <IconButton
                   icon={SvgSlash}
                   onClick={noProp(onToggle)}
@@ -201,31 +179,25 @@ export default function ActionLineItem({
                 </span>
               )}
 
-              {isSearchToolAndNotInProject &&
-                !isSearchToolWithNoKnowledgeSources && (
-                  <IconButton
-                    icon={
-                      isSearchToolWithNoConnectors
-                        ? SvgSettings
-                        : SvgChevronRight
-                    }
-                    onClick={noProp(() => {
-                      if (isSearchToolWithNoConnectors)
-                        router.push("/admin/add-connector");
-                      else onSourceManagementOpen?.();
-                    })}
-                    internal
-                    className={cn(
-                      isSearchToolWithNoConnectors &&
-                        "invisible group-hover/LineItem:visible"
-                    )}
-                    tooltip={
-                      isSearchToolWithNoConnectors
-                        ? "Add Connectors"
-                        : "Configure Connectors"
-                    }
-                  />
-                )}
+              {isSearchToolAndNotInProject && (
+                <Button
+                  icon={
+                    isSearchToolWithNoConnectors ? SvgSettings : SvgChevronRight
+                  }
+                  onClick={noProp(() => {
+                    if (isSearchToolWithNoConnectors)
+                      router.push("/admin/add-connector");
+                    else onSourceManagementOpen?.();
+                  })}
+                  prominence="tertiary"
+                  size="sm"
+                  tooltip={
+                    isSearchToolWithNoConnectors
+                      ? "Add Connectors"
+                      : "Configure Connectors"
+                  }
+                />
+              )}
             </Section>
           }
         >
