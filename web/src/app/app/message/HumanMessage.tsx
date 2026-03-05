@@ -190,7 +190,7 @@ const HumanMessage = React.memo(function HumanMessage({
             }}
             onCancelEdit={() => setIsEditing(false)}
           />
-        ) : typeof content === "string" ? (
+        ) : (
           <>
             <div className="md:max-w-[37.5rem] flex basis-[100%] md:basis-auto justify-end md:order-1">
               <div
@@ -218,7 +218,7 @@ const HumanMessage = React.memo(function HumanMessage({
                 </Text>
               </div>
             </div>
-            {onEdit && !isEditing && (
+            {onEdit && (
               <div className="absolute md:relative right-0 z-content flex flex-row p-1 opacity-0 group-hover:opacity-100 transition-opacity">
                 <CopyIconButton
                   getCopyText={() => content}
@@ -234,25 +234,6 @@ const HumanMessage = React.memo(function HumanMessage({
                 />
               </div>
             )}
-          </>
-        ) : (
-          <>
-            <div
-              className={cn(
-                "my-auto",
-                onEdit && !isEditing
-                  ? "opacity-0 group-hover:opacity-100 transition-opacity"
-                  : "invisible"
-              )}
-            >
-              <Button
-                icon={SvgEdit}
-                onClick={() => setIsEditing(true)}
-                prominence="tertiary"
-                tooltip="Edit"
-              />
-            </div>
-            <div className="ml-auto rounded-lg p-1">{content}</div>
           </>
         )}
         <div className="md:min-w-[100%] flex justify-end order-1 mt-1">
