@@ -2,6 +2,8 @@
 
 from unittest.mock import patch
 
+import pytest
+
 from onyx.server.metrics.threadpool import InstrumentedThreadPoolExecutor
 from onyx.server.metrics.threadpool import ThreadCountCollector
 
@@ -39,10 +41,8 @@ def test_instrumented_executor_handles_exceptions() -> None:
 
         with InstrumentedThreadPoolExecutor(max_workers=1) as executor:
             future = executor.submit(lambda: 1 / 0)
-            try:
+            with pytest.raises(ZeroDivisionError):
                 future.result(timeout=5)
-            except ZeroDivisionError:
-                pass
 
         # Metrics should still be recorded even on failure
         mock_submitted.inc.assert_called_once()

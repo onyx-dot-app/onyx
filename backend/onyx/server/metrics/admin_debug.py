@@ -78,12 +78,13 @@ def get_pool_state() -> dict[str, Any]:
                     "overflow": pool.overflow(),
                     "size": pool.size(),
                 }
-    except Exception:
+    except (ImportError, RuntimeError, AttributeError):
         logger.warning("Failed to read postgres pool state", exc_info=True)
         result["postgres"]["error"] = "unable to read pool state"
 
     # Redis pools — uses private redis-py attributes (_in_use_connections, etc.)
-    # because there is no public API for pool statistics.
+    # because there is no public API for pool statistics.  Wrapped per-pool so
+    # one failure doesn't block the other.
     try:
         from redis import BlockingConnectionPool
 
@@ -95,14 +96,23 @@ def get_pool_state() -> dict[str, Any]:
             ("primary", cast(BlockingConnectionPool, pool_instance._pool)),
             ("replica", cast(BlockingConnectionPool, pool_instance._replica_pool)),
         ]:
-            result["redis"][label] = {
-                "in_use": len(rpool._in_use_connections),
-                "available": len(rpool._available_connections),
-                "max_connections": rpool.max_connections,
-                "created_connections": rpool._created_connections,
-            }
-    except Exception:
-        logger.warning("Failed to read redis pool state", exc_info=True)
+            try:
+                result["redis"][label] = {
+                    "in_use": len(rpool._in_use_connections),
+                    "available": len(rpool._available_connections),
+                    "max_connections": rpool.max_connections,
+                    "created_connections": rpool._created_connections,
+                }
+            except (AttributeError, TypeError):
+                logger.warning(
+                    "Redis pool %s: unable to read internals — "
+                    "redis-py private API may have changed",
+                    label,
+                    exc_info=True,
+                )
+                result["redis"][label] = {"error": "unable to read pool internals"}
+    except ImportError:
+        logger.warning("Failed to import redis pool classes", exc_info=True)
         result["redis"]["error"] = "unable to read pool state"
 
     return result
