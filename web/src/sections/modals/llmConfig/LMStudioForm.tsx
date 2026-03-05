@@ -3,6 +3,7 @@ import { TextFormField } from "@/components/Field";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import {
   LLMProviderFormProps,
+  LLMProviderName,
   LLMProviderView,
   ModelConfiguration,
 } from "@/interfaces/llm";
@@ -24,7 +25,7 @@ import {
 import { AdvancedOptions } from "./components/AdvancedOptions";
 import { DisplayModels } from "./components/DisplayModels";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { fetchLMStudioModels } from "@/app/admin/configuration/llm/utils";
+import { fetchModels } from "@/app/admin/configuration/llm/utils";
 import debounce from "lodash/debounce";
 
 export const LM_STUDIO_PROVIDER_NAME = "lm_studio";
@@ -62,16 +63,18 @@ function LMStudioFormContent({
 }: LMStudioFormContentProps) {
   const [isLoadingModels, setIsLoadingModels] = useState(true);
 
-  const fetchModels = useCallback(
+  const doFetchModels = useCallback(
     (apiBase: string, apiKey: string | undefined, signal: AbortSignal) => {
       setIsLoadingModels(true);
-      fetchLMStudioModels({
-        api_base: apiBase,
-        api_key: apiKey,
-        api_key_changed: true,
-        provider_name: existingLlmProvider?.name,
-        signal,
-      })
+      fetchModels(
+        LLMProviderName.LM_STUDIO,
+        {
+          api_base: apiBase,
+          custom_config: apiKey ? { LM_STUDIO_API_KEY: apiKey } : {},
+          name: existingLlmProvider?.name,
+        },
+        signal
+      )
         .then((data) => {
           if (signal.aborted) return;
           if (data.error) {
@@ -91,8 +94,8 @@ function LMStudioFormContent({
   );
 
   const debouncedFetchModels = useMemo(
-    () => debounce(fetchModels, 500),
-    [fetchModels]
+    () => debounce(doFetchModels, 500),
+    [doFetchModels]
   );
 
   const apiBase = formikProps.values.api_base;

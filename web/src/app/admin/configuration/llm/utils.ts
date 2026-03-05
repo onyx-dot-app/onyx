@@ -145,7 +145,7 @@ export const fetchBedrockModels = async (
       let errorMessage = "Failed to fetch models";
       try {
         const errorData = await response.json();
-        errorMessage = errorData.detail || errorMessage;
+        errorMessage = errorData.message || errorMessage;
       } catch {
         // ignore JSON parsing errors
       }
@@ -199,7 +199,7 @@ export const fetchOllamaModels = async (
       let errorMessage = "Failed to fetch models";
       try {
         const errorData = await response.json();
-        errorMessage = errorData.detail || errorMessage;
+        errorMessage = errorData.message || errorMessage;
       } catch {
         // ignore JSON parsing errors
       }
@@ -257,7 +257,7 @@ export const fetchOpenRouterModels = async (
       let errorMessage = "Failed to fetch models";
       try {
         const errorData = await response.json();
-        errorMessage = errorData.detail || errorMessage;
+        errorMessage = errorData.message || errorMessage;
       } catch {
         // ignore JSON parsing errors
       }
@@ -313,7 +313,7 @@ export const fetchLMStudioModels = async (
       let errorMessage = "Failed to fetch models";
       try {
         const errorData = await response.json();
-        errorMessage = errorData.detail || errorMessage;
+        errorMessage = errorData.message || errorMessage;
       } catch {
         // ignore JSON parsing errors
       }
@@ -350,7 +350,8 @@ export const fetchModels = async (
     name?: string;
     custom_config?: Record<string, string>;
     model_configurations?: ModelConfiguration[];
-  }
+  },
+  signal?: AbortSignal
 ) => {
   const customConfig = formValues.custom_config || {};
 
@@ -367,12 +368,15 @@ export const fetchModels = async (
       return fetchOllamaModels({
         api_base: formValues.api_base,
         provider_name: formValues.name,
+        signal,
       });
     case LLMProviderName.LM_STUDIO:
       return fetchLMStudioModels({
         api_base: formValues.api_base,
         api_key: formValues.custom_config?.LM_STUDIO_API_KEY,
+        api_key_changed: !!formValues.custom_config?.LM_STUDIO_API_KEY,
         provider_name: formValues.name,
+        signal,
       });
     case LLMProviderName.OPENROUTER:
       return fetchOpenRouterModels({
