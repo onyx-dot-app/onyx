@@ -156,10 +156,7 @@ test.describe("Share Chat Session Modal", () => {
     expect(patchBody).toEqual({ sharing_status: "public" });
 
     const linkInput = dialog.locator('[aria-label="share-modal-link-input"]');
-    await expect(linkInput).toBeVisible({ timeout: 5000 });
-
-    const inputValue = await linkInput.locator("input").inputValue();
-    expect(inputValue).toContain("/app/shared/");
+    await expect(linkInput).toHaveValue("/app/shared/", { timeout: 5000 });
 
     await expect(submitButton).toHaveText("Copy Link");
     await expect(dialog.getByText("Chat shared")).toBeVisible();
