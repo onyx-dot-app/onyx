@@ -579,7 +579,7 @@ function Root({ children, enableBackground }: AppRootProps) {
           <div className="absolute inset-0 backdrop-blur-[1px] pointer-events-none" />
           {isSafari ? (
             <div
-              className="absolute z-0 inset-0 bg-cover bg-center bg-fixed pointer-events-none overflow-hidden"
+              className="absolute z-0 inset-0 bg-cover bg-center bg-fixed pointer-events-none"
               style={{
                 backgroundImage: `url(${appBackgroundUrl})`,
                 filter: "blur(16px)",
