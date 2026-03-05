@@ -1,11 +1,3 @@
-"""Tests for tool call argument delta streaming via maybe_emit_argument_delta.
-
-All tests exercise the public function maybe_emit_argument_delta, which
-internally uses _find_active_json_key, _extract_raw_json_string_value, and
-_decode_partial_json_string. Testing through the public interface ensures
-the internal helpers can be freely refactored without breaking tests.
-"""
-
 from typing import Any
 from unittest.mock import MagicMock
 from unittest.mock import patch
@@ -13,11 +5,6 @@ from unittest.mock import patch
 from onyx.chat.tool_call_args_streaming import maybe_emit_argument_delta
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import ToolCallArgumentDelta
-
-
-# =============================================================================
-# Helpers
-# =============================================================================
 
 
 def _make_tool_call_delta(
@@ -79,11 +66,6 @@ def _stream_fragments(
             for value in obj.argument_deltas.values():
                 emitted.append(value)
     return emitted
-
-
-# =============================================================================
-# Early-exit / guard tests
-# =============================================================================
 
 
 class TestMaybeEmitArgumentDeltaGuards:
@@ -159,11 +141,6 @@ class TestMaybeEmitArgumentDeltaGuards:
         assert _collect(tc_map, delta) == []
 
 
-# =============================================================================
-# Basic emission behavior
-# =============================================================================
-
-
 class TestMaybeEmitArgumentDeltaBasic:
     """Tests for correct packet content and incremental emission."""
 
@@ -231,11 +208,6 @@ class TestMaybeEmitArgumentDeltaBasic:
         }
         # Opening quote just arrived, value is empty
         assert _collect(tc_map, _make_tool_call_delta(arguments='"')) == []
-
-
-# =============================================================================
-# JSON escape decoding
-# =============================================================================
 
 
 class TestMaybeEmitArgumentDeltaDecoding:
@@ -345,11 +317,6 @@ class TestMaybeEmitArgumentDeltaDecoding:
         }
         packets = _collect(tc_map, _make_tool_call_delta(arguments="0"))
         assert packets[0].obj.argument_deltas == {"code": "hello"}
-
-
-# =============================================================================
-# End-to-end streaming simulation
-# =============================================================================
 
 
 class TestArgumentDeltaStreamingE2E:
@@ -505,11 +472,6 @@ class TestArgumentDeltaStreamingE2E:
 
         full = "".join(_stream_fragments(fragments, tc_map))
         assert full == 'url = "https://example.com"'
-
-
-# =============================================================================
-# Edge cases
-# =============================================================================
 
 
 class TestMaybeEmitArgumentDeltaEdgeCases:
