@@ -128,6 +128,7 @@ from onyx.server.metrics.postgres_connection_pool import (
 from onyx.server.metrics.prometheus_setup import setup_app_observability
 from onyx.server.metrics.prometheus_setup import setup_prometheus_metrics
 from onyx.server.metrics.prometheus_setup import start_observability
+from onyx.server.metrics.prometheus_setup import stop_observability
 from onyx.server.middleware.latency_logging import add_latency_logging_middleware
 from onyx.server.middleware.rate_limiting import close_auth_limiter
 from onyx.server.middleware.rate_limiting import get_auth_rate_limiters
@@ -392,6 +393,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
         from onyx.background.periodic_poller import stop_periodic_poller
 
         stop_periodic_poller()
+
+    await stop_observability()
 
     SqlEngine.reset_engine()
 

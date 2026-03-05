@@ -234,6 +234,22 @@ Pool label values: `primary`, `replica`.
 onyx_redis_pool_in_use{pool="primary"} / onyx_redis_pool_max{pool="primary"}
 ```
 
+## Event Loop Metrics
+
+Always-on background asyncio task. Detects blocked event loops.
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `onyx_api_event_loop_lag_seconds` | Gauge | — | Current scheduling lag |
+| `onyx_api_event_loop_lag_max_seconds` | Gauge | — | Max lag since process start |
+
+Configurable via `EVENT_LOOP_LAG_PROBE_INTERVAL_SECONDS` (default `2.0`).
+
+```promql
+# Alert if event loop is blocked > 100ms
+onyx_api_event_loop_lag_seconds > 0.1
+```
+
 ## Example PromQL Queries
 
 ### Which endpoints are saturated right now?
