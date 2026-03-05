@@ -57,7 +57,7 @@ type viewport struct {
 	pickerIndex  int
 	pickerType   pickerKind
 	scrollOffset int // lines scrolled up from bottom (0 = pinned to bottom)
-	lastMaxScroll int // cached from last render for clamping in scrollUp
+	lastHeight   int // viewport height from last render
 }
 
 // newMarkdownRenderer creates a Glamour renderer with zero left margin.
