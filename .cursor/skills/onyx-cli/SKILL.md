@@ -31,11 +31,11 @@ cd cli && go build -o onyx-cli . && sudo mv onyx-cli /usr/local/bin/
 
 ### 3. Check if configured
 
-The CLI is configured when `~/.config/onyx-cli/config.json` exists and contains an `api_key`. Check with:
-
 ```bash
-test -s ~/.config/onyx-cli/config.json && echo "configured" || echo "not configured"
+onyx-cli validate-config
 ```
+
+This checks the config file exists, API key is present, and tests the server connection via `/api/me`. Exit code 0 on success, non-zero with a descriptive error on failure.
 
 If unconfigured, you have two options:
 
@@ -50,7 +50,7 @@ This prompts for the Onyx server URL and API key, tests the connection, and save
 **Option B — Environment variables (non-interactive, preferred for agents):**
 
 ```bash
-export ONYX_SERVER_URL="https://your-onyx-server.com"  # default: http://localhost:3000
+export ONYX_SERVER_URL="https://your-onyx-server.com"  # default: https://cloud.onyx.app
 export ONYX_API_KEY="your-api-key"
 ```
 
@@ -58,7 +58,7 @@ Environment variables override the config file. If these are set, no config file
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `ONYX_SERVER_URL` | No | Onyx server base URL (default: `http://localhost:3000`) |
+| `ONYX_SERVER_URL` | No | Onyx server base URL (default: `https://cloud.onyx.app`) |
 | `ONYX_API_KEY` | Yes | API key for authentication |
 | `ONYX_PERSONA_ID` | No | Default agent/persona ID |
 
@@ -67,6 +67,14 @@ If neither the config file nor environment variables are set, tell the user that
 - Set `ONYX_SERVER_URL` and `ONYX_API_KEY` environment variables
 
 ## Commands
+
+### Validate configuration
+
+```bash
+onyx-cli validate-config
+```
+
+Checks config file exists, API key is present, and tests the server connection. Use this before `ask` or `agents` to confirm the CLI is properly set up.
 
 ### List available agents
 
