@@ -1,4 +1,3 @@
-import functools
 import json
 from collections.abc import Generator
 from collections.abc import Mapping
@@ -10,28 +9,11 @@ from onyx.llm.model_response import ChatCompletionDeltaToolCall
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import ToolCallArgumentDelta
+from onyx.tools.built_in_tools import TOOL_NAME_TO_CLASS
 from onyx.tools.interface import Tool
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-
-@functools.cache
-def _get_tool_name_to_class() -> dict[str, Type[Tool]]:
-    """Build a mapping from tool name (as sent to the LLM) to tool class."""
-    from onyx.tools.built_in_tools import BUILT_IN_TOOL_MAP
-
-    result: dict[str, Type[Tool]] = {}
-    for cls in BUILT_IN_TOOL_MAP.values():
-        name_attr = cls.__dict__.get("name")
-        if isinstance(name_attr, property) and name_attr.fget is not None:
-            tool_name = name_attr.fget(cls)
-        elif isinstance(name_attr, str):
-            tool_name = name_attr
-        else:
-            continue
-        result[tool_name] = cls
-    return result
 
 
 def _get_tool_class(
@@ -42,7 +24,7 @@ def _get_tool_class(
     tool_name = tool_calls_in_progress.get(tool_call_delta.index, {}).get("name")
     if not tool_name:
         return None
-    return _get_tool_name_to_class().get(tool_name)
+    return TOOL_NAME_TO_CLASS.get(tool_name)
 
 
 class _Token(NamedTuple):
