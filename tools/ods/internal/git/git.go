@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
@@ -171,6 +172,20 @@ func HasMergeConflict() bool {
 func IsCherryPickInProgress() bool {
 	cmd := exec.Command("git", "rev-parse", "--verify", "--quiet", "CHERRY_PICK_HEAD")
 	return cmd.Run() == nil
+}
+
+// CountUniqueCommits returns the number of commits on branch that are not on upstream.
+func CountUniqueCommits(branch, upstream string) (int, error) {
+	cmd := exec.Command("git", "rev-list", "--count", fmt.Sprintf("%s..%s", upstream, branch))
+	output, err := cmd.Output()
+	if err != nil {
+		return 0, fmt.Errorf("git rev-list --count failed: %w", err)
+	}
+	count, err := strconv.Atoi(strings.TrimSpace(string(output)))
+	if err != nil {
+		return 0, fmt.Errorf("failed to parse commit count: %w", err)
+	}
+	return count, nil
 }
 
 // IsRebaseInProgress checks if a rebase is currently in progress

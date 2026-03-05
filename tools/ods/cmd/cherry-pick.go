@@ -335,22 +335,28 @@ func cherryPickToRelease(commitSHAs, commitMessages []string, branchSuffix, vers
 	branchExists := git.BranchExists(hotfixBranch)
 	if branchExists {
 		currentBranch, _ := git.GetCurrentBranch()
-		if currentBranch == hotfixBranch {
-			// Already on the hotfix branch (e.g. --continue after conflict resolution).
-			// Skip rebase to avoid re-introducing the conflicts the user just resolved.
-			log.Infof("Already on hotfix branch %s, skipping rebase", hotfixBranch)
-		} else {
+		if currentBranch != hotfixBranch {
 			log.Infof("Hotfix branch %s already exists, switching", hotfixBranch)
 			if err := git.RunCommand("switch", "--quiet", hotfixBranch); err != nil {
 				return "", fmt.Errorf("failed to checkout existing hotfix branch: %w", err)
 			}
+		}
 
-			// Rebase onto the latest release branch so cherry-picked commits sit on top cleanly
+		// Only rebase when the branch has no unique commits (pure fast-forward).
+		// If unique commits exist (e.g. after --continue resolved a cherry-pick
+		// conflict), rebasing would re-apply them and risk the same conflicts.
+		remoteRef := fmt.Sprintf("origin/%s", releaseBranch)
+		uniqueCount, err := git.CountUniqueCommits(hotfixBranch, remoteRef)
+		if err != nil {
+			log.Warnf("Could not determine unique commits, skipping rebase: %v", err)
+		} else if uniqueCount == 0 {
 			log.Infof("Rebasing %s onto %s", hotfixBranch, releaseBranch)
-			if err := git.RunCommand("rebase", "--quiet", fmt.Sprintf("origin/%s", releaseBranch)); err != nil {
+			if err := git.RunCommand("rebase", "--quiet", remoteRef); err != nil {
 				_ = git.RunCommand("rebase", "--abort")
 				return "", fmt.Errorf("failed to rebase hotfix branch onto %s (rebase aborted, re-run to retry): %w", releaseBranch, err)
 			}
+		} else {
+			log.Infof("Branch %s has %d unique commit(s), skipping rebase", hotfixBranch, uniqueCount)
 		}
 
 		// Check which commits need to be cherry-picked
