@@ -92,6 +92,24 @@ def _prompt_to_dicts(prompt: LanguageModelInput) -> list[dict[str, Any]]:
     return [prompt.model_dump(exclude_none=True)]
 
 
+def _normalize_content(raw: Any) -> str:
+    """Normalize a message content field to a plain string.
+
+    Content can be a string, None, or a list of content-block dicts
+    (e.g. [{"type": "text", "text": "..."}]).
+    """
+    if raw is None:
+        return ""
+    if isinstance(raw, str):
+        return raw
+    if isinstance(raw, list):
+        return "\n".join(
+            block.get("text", "") if isinstance(block, dict) else str(block)
+            for block in raw
+        )
+    return str(raw)
+
+
 def _strip_tool_content_from_messages(
     messages: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
@@ -121,7 +139,7 @@ def _strip_tool_content_from_messages(
                     f"[Tool Call] name={name} id={tc_id} args={args}"
                 )
 
-            existing_content = msg.get("content") or ""
+            existing_content = _normalize_content(msg.get("content"))
             parts = (
                 [existing_content] + tool_call_lines
                 if existing_content
@@ -136,7 +154,7 @@ def _strip_tool_content_from_messages(
         elif role == "tool":
             # Convert tool response to user message with text content
             tool_call_id = msg.get("tool_call_id", "")
-            content = msg.get("content", "")
+            content = _normalize_content(msg.get("content"))
             new_msg = {
                 "role": "user",
                 "content": f"[Tool Result] id={tool_call_id}\n{content}",

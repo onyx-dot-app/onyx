@@ -1346,3 +1346,43 @@ def test_strip_tool_content_passes_through_non_tool_messages() -> None:
 
     result = _strip_tool_content_from_messages(messages)
     assert result == messages
+
+
+def test_strip_tool_content_handles_list_content_blocks() -> None:
+    from onyx.llm.multi_llm import _strip_tool_content_from_messages
+
+    messages: list[dict[str, Any]] = [
+        {
+            "role": "assistant",
+            "content": [{"type": "text", "text": "Searching now."}],
+            "tool_calls": [
+                {
+                    "id": "tc_1",
+                    "type": "function",
+                    "function": {"name": "search", "arguments": "{}"},
+                }
+            ],
+        },
+        {
+            "role": "tool",
+            "content": [
+                {"type": "text", "text": "result A"},
+                {"type": "text", "text": "result B"},
+            ],
+            "tool_call_id": "tc_1",
+        },
+    ]
+
+    result = _strip_tool_content_from_messages(messages)
+
+    # Assistant: list content flattened + tool call appended
+    assert result[0]["role"] == "assistant"
+    assert "Searching now." in result[0]["content"]
+    assert "[Tool Call]" in result[0]["content"]
+    assert isinstance(result[0]["content"], str)
+
+    # Tool: list content flattened into user message
+    assert result[1]["role"] == "user"
+    assert "result A" in result[1]["content"]
+    assert "result B" in result[1]["content"]
+    assert isinstance(result[1]["content"], str)
