@@ -1,12 +1,3 @@
-"""Streaming tool call argument delta emission.
-
-LLMs stream tool call arguments as incremental raw JSON fragments (e.g.
-``\\n`` as literal characters instead of actual newlines). This module
-decodes the accumulated JSON value for each key and emits only the newly
-decoded portion as ``ToolCallArgumentDelta`` packets so the frontend can
-simply concatenate clean, displayable text.
-"""
-
 import functools
 import json
 import re
