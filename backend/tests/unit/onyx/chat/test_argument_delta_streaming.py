@@ -200,10 +200,8 @@ class TestMaybeEmitArgumentDeltaBasic:
         # Delta carries closing of "code" value + opening of "lang" key + start of value
         tc_map[0]["arguments"] = '{"code": "xy", "lang": "py'
         packets_2 = _collect(tc_map, _make_tool_call_delta(arguments='y", "lang": "py'))
-        # First packet: tail of the previous key, second: new key's value
-        assert len(packets_2) == 2
-        assert packets_2[0].obj.argument_deltas == {"code": "y"}
-        assert packets_2[1].obj.argument_deltas == {"lang": "py"}
+        assert len(packets_2) == 1
+        assert packets_2[0].obj.argument_deltas == {"code": "y", "lang": "py"}
 
     @patch("onyx.chat.tool_call_args_streaming._get_tool_class")
     def test_empty_value_emits_nothing(self, mock_get_tool: MagicMock) -> None:
@@ -528,11 +526,13 @@ class TestMaybeEmitArgumentDeltaEdgeCases:
         }
         packets = _collect(tc_map, _make_tool_call_delta(arguments=accumulated))
 
-        assert len(packets) == 4
-        assert packets[0].obj.argument_deltas == {"a": "one"}
-        assert packets[1].obj.argument_deltas == {"b": "two"}
-        assert packets[2].obj.argument_deltas == {"c": "three"}
-        assert packets[3].obj.argument_deltas == {"d": "four"}
+        assert len(packets) == 1
+        assert packets[0].obj.argument_deltas == {
+            "a": "one",
+            "b": "two",
+            "c": "three",
+            "d": "four",
+        }
 
     @patch("onyx.chat.tool_call_args_streaming._get_tool_class")
     def test_delta_on_second_arg_after_first_complete(
@@ -554,11 +554,11 @@ class TestMaybeEmitArgumentDeltaEdgeCases:
         assert packets[0].obj.argument_deltas == {"lang": "py"}
 
     @patch("onyx.chat.tool_call_args_streaming._get_tool_class")
-    def test_non_string_json_value_emits_nothing(
+    def test_incomplete_non_string_value_emits_nothing(
         self, mock_get_tool: MagicMock
     ) -> None:
-        """Non-string values (numbers, booleans) don't have opening quotes,
-        so the value extraction returns None and nothing is emitted."""
+        """A non-string value with no trailing delimiter is still being
+        streamed and should not be emitted yet."""
         mock_get_tool.return_value = _mock_tool_class()
 
         tc_map: dict[int, dict[str, Any]] = {
@@ -571,10 +571,8 @@ class TestMaybeEmitArgumentDeltaEdgeCases:
         assert _collect(tc_map, _make_tool_call_delta(arguments="0")) == []
 
     @patch("onyx.chat.tool_call_args_streaming._get_tool_class")
-    def test_string_arg_after_non_string_still_streamed(
-        self, mock_get_tool: MagicMock
-    ) -> None:
-        """A string argument following a non-string value is still emitted."""
+    def test_complete_non_string_value_emitted(self, mock_get_tool: MagicMock) -> None:
+        """A non-string value is emitted once its trailing delimiter arrives."""
         mock_get_tool.return_value = _mock_tool_class()
 
         tc_map: dict[int, dict[str, Any]] = {
@@ -584,7 +582,9 @@ class TestMaybeEmitArgumentDeltaEdgeCases:
                 "arguments": '{"timeout": 30, "code": "hello',
             }
         }
-        packets = _collect(tc_map, _make_tool_call_delta(arguments="hello"))
+        packets = _collect(
+            tc_map, _make_tool_call_delta(arguments='30, "code": "hello')
+        )
 
         assert len(packets) == 1
-        assert packets[0].obj.argument_deltas == {"code": "hello"}
+        assert packets[0].obj.argument_deltas == {"timeout": "30", "code": "hello"}

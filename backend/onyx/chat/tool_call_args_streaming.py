@@ -36,7 +36,7 @@ def _get_tool_name_to_class() -> dict[str, Type[Tool]]:
 
 def _get_tool_class(
     tool_calls_in_progress: Mapping[int, Mapping[str, Any]],
-    tool_call_delta: Any,
+    tool_call_delta: ChatCompletionDeltaToolCall,
 ) -> Type[Tool] | None:
     """Look up the Tool subclass for a streaming tool call delta."""
     tool_name = tool_calls_in_progress.get(tool_call_delta.index, {}).get("name")
@@ -109,7 +109,14 @@ def _decode_partial_json_string(raw: str) -> str:
     for trim in range(min(7, len(raw) + 1)):
         candidate = raw[: len(raw) - trim] if trim else raw
         try:
-            return json.loads('"' + candidate + '"')
+            result = json.loads('"' + candidate + '"')
+            if trim > 0 and not result and raw:
+                logger.warning(
+                    "Dropped %d chars from partial JSON string value (trim=%d)",
+                    len(raw),
+                    trim,
+                )
+            return result
         except (json.JSONDecodeError, ValueError):
             continue
     logger.warning(
@@ -164,7 +171,13 @@ def _extract_delta_args(pre: str, delta: str) -> dict[str, str]:
         if full[pos] != '"':
             # Non-string value (number, boolean, null, array, object):
             # skip to the next top-level comma or closing brace.
+            val_start = pos
             pos = _skip_json_value(full, pos)
+            # Only emit once the value is complete (delimiter found)
+            if pos < len(full):
+                raw_val = full[val_start:pos].strip()
+                if raw_val:
+                    result[key.value] = raw_val
             continue
         val = _parse_json_string(full, pos)
 
@@ -194,8 +207,6 @@ def maybe_emit_argument_delta(
 ) -> Generator[Packet, None, None]:
     """Emit decoded tool-call argument deltas to the frontend.
 
-    NOTE: Currently skips over arguments with non-string arguments
-
     Stateless: derives what's new by comparing ``accumulated_args``
     against the state before the current fragment was appended.
     """
@@ -216,12 +227,15 @@ def maybe_emit_argument_delta(
     tool_type = tc_data.get("name", "")
     tool_id = tc_data.get("id", "")
 
-    for arg_name, arg_delta in _extract_delta_args(prev_args, delta_fragment).items():
-        yield Packet(
-            placement=placement,
-            obj=ToolCallArgumentDelta(
-                tool_type=tool_type,
-                tool_id=tool_id,
-                argument_deltas={arg_name: arg_delta},
-            ),
-        )
+    argument_deltas = _extract_delta_args(prev_args, delta_fragment)
+    if not argument_deltas:
+        return
+
+    yield Packet(
+        placement=placement,
+        obj=ToolCallArgumentDelta(
+            tool_type=tool_type,
+            tool_id=tool_id,
+            argument_deltas=argument_deltas,
+        ),
+    )
