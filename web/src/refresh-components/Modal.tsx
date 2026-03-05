@@ -515,10 +515,16 @@ const ModalBody = React.forwardRef<HTMLDivElement, ModalBodyProps>(
         ref={ref}
         className={cn(
           twoTone && "bg-background-tint-01",
-          "h-full min-h-0 overflow-y-auto w-full"
+          "flex-auto min-h-0 overflow-y-auto w-full"
         )}
       >
-        <Section padding={1} gap={1} alignItems="start" {...props}>
+        <Section
+          height="auto"
+          padding={1}
+          gap={1}
+          alignItems="start"
+          {...props}
+        >
           {children}
         </Section>
       </div>
