@@ -6,7 +6,6 @@ from typing import cast
 
 import requests
 from fastapi import Depends
-from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -35,6 +34,8 @@ from onyx.connectors.google_utils.shared_constants import (
 from onyx.db.credentials import create_credential
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.documents.models import CredentialBase
 from shared_configs.contextvars import get_current_tenant_id
@@ -119,9 +120,9 @@ def handle_google_drive_oauth_callback(
     tenant_id: str | None = Depends(get_current_tenant_id),
 ) -> JSONResponse:
     if not GoogleDriveOAuth.CLIENT_ID or not GoogleDriveOAuth.CLIENT_SECRET:
-        raise HTTPException(
-            status_code=500,
-            detail="Google Drive client ID or client secret is not configured.",
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR,
+            "Google Drive client ID or client secret is not configured.",
         )
 
     r = get_redis_client(tenant_id=tenant_id)
@@ -142,9 +143,9 @@ def handle_google_drive_oauth_callback(
 
     session_json_bytes = cast(bytes, r.get(r_key))
     if not session_json_bytes:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Google Drive OAuth failed - OAuth state key not found: key={r_key}",
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            f"Google Drive OAuth failed - OAuth state key not found: key={r_key}",
         )
 
     session_json = session_json_bytes.decode("utf-8")
