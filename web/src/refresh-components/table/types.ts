@@ -103,9 +103,7 @@ export type OnyxColumnDef<TData> =
 // DataTable props
 // ---------------------------------------------------------------------------
 
-export interface DataTableDraggableConfig<TData> {
-  /** Extract a unique string ID from each row. */
-  getRowId: (row: TData) => string;
+export interface DataTableDraggableConfig {
   /** Called after a successful reorder with the new ID order and changed positions. */
   onReorder: (
     ids: string[],
@@ -136,6 +134,8 @@ export interface DataTableProps<TData> {
   data: TData[];
   /** Column definitions created via `createTableColumns()`. */
   columns: OnyxColumnDef<TData>[];
+  /** Extract a unique string ID from each row. Used for stable row identity. */
+  getRowId: (row: TData) => string;
   /** Rows per page. Set `Infinity` to disable pagination. @default 10 */
   pageSize?: number;
   /** Initial sorting state. */
@@ -143,7 +143,7 @@ export interface DataTableProps<TData> {
   /** Initial column visibility state. */
   initialColumnVisibility?: VisibilityState;
   /** Enable drag-and-drop row reordering. */
-  draggable?: DataTableDraggableConfig<TData>;
+  draggable?: DataTableDraggableConfig;
   /** Footer configuration. */
   footer?: DataTableFooterConfig;
   /** Table size variant. @default "regular" */

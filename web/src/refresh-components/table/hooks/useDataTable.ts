@@ -63,7 +63,8 @@ type ManagedKeys =
   | "getPaginationRowModel"
   | "columnResizeMode"
   | "enableRowSelection"
-  | "enableColumnResizing";
+  | "enableColumnResizing"
+  | "getRowId";
 
 /**
  * Options accepted by {@link useDataTable}.
@@ -81,6 +82,8 @@ interface UseDataTableOptions<TData extends RowData> {
   enableRowSelection?: boolean;
   /** Whether columns can be resized. @default true */
   enableColumnResizing?: boolean;
+  /** Stable row identity function. TanStack tracks selection by ID instead of array index. */
+  getRowId: TableOptions<TData>["getRowId"];
   /** Resize strategy. @default "onChange" */
   columnResizeMode?: ColumnResizeMode;
   /** Initial sorting state. @default [] */
@@ -153,6 +156,7 @@ export default function useDataTable<TData extends RowData>(
     columnResizeMode = "onChange",
     initialSorting = [],
     initialColumnVisibility = {},
+    getRowId,
     tableOptions,
   } = options;
 
@@ -181,6 +185,7 @@ export default function useDataTable<TData extends RowData>(
   const table = useReactTable({
     data,
     columns,
+    getRowId,
     state: {
       sorting,
       rowSelection,

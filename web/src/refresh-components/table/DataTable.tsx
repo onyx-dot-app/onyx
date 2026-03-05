@@ -34,8 +34,6 @@ import type {
 } from "@/refresh-components/table/types";
 import type { TableSize } from "@/refresh-components/table/TableSizeContext";
 
-const noopGetRowId = () => "";
-
 // ---------------------------------------------------------------------------
 // Internal: resolve size-dependent widths and build TanStack columns
 // ---------------------------------------------------------------------------
@@ -121,6 +119,7 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
   const {
     data,
     columns,
+    getRowId,
     pageSize,
     initialSorting,
     initialColumnVisibility,
@@ -157,6 +156,7 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
     pageSize: effectivePageSize,
     initialSorting,
     initialColumnVisibility,
+    getRowId: (row: TData) => getRowId(row),
   });
 
   // 3. Call useColumnWidths
@@ -168,7 +168,7 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
   // 4. Call useDraggableRows (conditional)
   const draggableReturn = useDraggableRows({
     data,
-    getRowId: draggable?.getRowId ?? noopGetRowId,
+    getRowId,
     enabled: !!draggable && table.getState().sorting.length === 0,
     onReorder: draggable?.onReorder,
   });
@@ -315,9 +315,7 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
                   ? (activeId) => {
                       const row = table
                         .getRowModel()
-                        .rows.find(
-                          (r) => draggable!.getRowId(r.original) === activeId
-                        );
+                        .rows.find((r) => getRowId(r.original) === activeId);
                       if (!row) return null;
                       return <DragOverlayRow row={row} variant={rowVariant} />;
                     }
@@ -325,9 +323,7 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
               }
             >
               {table.getRowModel().rows.map((row) => {
-                const rowId = hasDraggable
-                  ? draggable!.getRowId(row.original)
-                  : undefined;
+                const rowId = hasDraggable ? getRowId(row.original) : undefined;
 
                 return (
                   <TableRow
@@ -336,6 +332,12 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
                     sortableId={rowId}
                     selected={row.getIsSelected()}
                     onClick={() => {
+                      if (
+                        hasDraggable &&
+                        draggableReturn.wasDraggingRef.current
+                      ) {
+                        return;
+                      }
                       if (onRowClick) {
                         onRowClick(row.original);
                       } else if (isSelectable) {
