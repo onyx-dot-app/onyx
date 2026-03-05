@@ -44,7 +44,7 @@ export default function AppHealthBanner() {
     if (isExtension) {
       // In the Chrome extension, open login in a new tab so OAuth popups
       // work correctly (the extension iframe has no navigable URL origin).
-      window.open(window.location.origin + "/auth/login", "_blank");
+      window.open(window.location.origin + "/auth/login", "_blank", "noopener,noreferrer");
     } else {
       router.push("/auth/login");
     }
