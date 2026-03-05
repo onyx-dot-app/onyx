@@ -295,6 +295,20 @@ def handle_followup_button(
             unfurl=False,
         )
 
+    # Ask user for debugging details
+    respond_in_thread(
+        client=client.web_client,
+        channel=channel_id,
+        text=(
+            "To help us debug your issue faster, please share the following details:\n"
+            "- *Environment* (e.g., Production, Staging, alpha)\n"
+            "- *TenantId* and *Organization Id*  \n"
+            "- *ConnectionId*\n"
+        ),
+        thread_ts=thread_ts,
+        unfurl=False,
+    )
+
     if action_id is not None:
         message_id, _, _ = decompose_action_id(action_id)
 
