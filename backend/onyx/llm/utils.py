@@ -59,6 +59,32 @@ CUSTOM_LITELLM_MODEL_OVERRIDES: dict[str, dict[str, Any]] = {
     for model_name in _TWELVE_LABS_PEGASUS_MODEL_NAMES
 }
 
+# Known vision-capable model name patterns for fallback when LiteLLM's
+# model_cost data is missing the supports_vision field.
+VISION_CAPABLE_MODEL_PATTERNS = frozenset(
+    {
+        "claude-3",
+        "claude-sonnet",
+        "claude-opus",
+        "claude-haiku",
+        "gpt-4o",
+        "gpt-4-turbo",
+        "gpt-4.1",
+        "gpt-5",
+        "gemini",
+    }
+)
+
+
+def _infer_vision_support(model_name: str) -> bool:
+    """Infer vision support from model name patterns.
+
+    Used as a fallback when LiteLLM's model_cost data doesn't include
+    the supports_vision field for a known model.
+    """
+    model_lower = model_name.lower()
+    return any(pattern in model_lower for pattern in VISION_CAPABLE_MODEL_PATTERNS)
+
 
 def truncate_litellm_user_id(user_id: str) -> str:
     """Truncate the LiteLLM `user` field maximum length."""
@@ -715,11 +741,17 @@ def litellm_thinks_model_supports_image_input(
         if not model_obj:
             logger.warning(
                 f"No litellm entry found for {model_provider}/{model_name}, "
-                "this model may or may not support image input."
+                "falling back to pattern-based vision inference."
             )
-            return False
-        # The or False here is because sometimes the dict contains the key but the value is None
-        return model_obj.get("supports_vision", False) or False
+            return _infer_vision_support(model_name)
+
+        supports_vision = model_obj.get("supports_vision")
+        if supports_vision is not None:
+            return bool(supports_vision)
+
+        # supports_vision not set in LiteLLM data — fall back to pattern matching
+        # (e.g. vertex_ai/claude-3-5-haiku is missing this field)
+        return _infer_vision_support(model_name)
     except Exception:
         logger.exception(
             f"Failed to get model object for {model_provider}/{model_name}"
