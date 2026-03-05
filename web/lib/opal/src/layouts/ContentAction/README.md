@@ -6,16 +6,17 @@ A row layout that pairs a [`Content`](../Content/README.md) block with optional 
 
 ## Why ContentAction?
 
-`Content` renders icon + title + description but has no slot for actions. When you need a settings row, card header, or list item with an action on the right you would typically wrap `Content` in a manual flex-row. `ContentAction` standardises that pattern and adds padding alignment with `Interactive.Container` and `Button` via the shared `SizeVariant` scale.
+`Content` renders icon + title + description but has no slot for actions. When you need a settings row, card header, or list item with an action on the right, `ContentAction` standardises that pattern and adds padding alignment with `Interactive.Container` and `Button` via the shared `SizeVariant` scale.
 
 ## Props
 
-Inherits **all** props from [`Content`](../Content/README.md) (same discriminated-union API) plus:
+Inherits **all** props from [`Content`](../Content/README.md) (same discriminated-union API, including `widthVariant`, `withInteractive`, etc.) plus:
 
 | Prop | Type | Default | Description |
 |---|---|---|---|
-| `rightChildren` | `ReactNode` | `undefined` | Content rendered on the right side. Wrapper stretches to the full height of the row. |
-| `paddingVariant` | `SizeVariant` | `"lg"` | Padding preset applied around the `Content` area. Uses the shared size scale from `@opal/shared`. |
+| `rightChildren` | `ReactNode` | — | Content rendered on the right side. Wrapper stretches to the full height of the row. |
+| `paddingVariant` | `SizeVariant` | `"lg"` | Padding preset applied around the `Content` area. |
+| `ref` | `React.Ref<HTMLDivElement>` | — | Ref forwarded to the root `<div>`. |
 
 ### `paddingVariant` reference
 
@@ -27,8 +28,6 @@ Inherits **all** props from [`Content`](../Content/README.md) (same discriminate
 | `xs` | `p-0.5` | 0.125rem (2px) |
 | `2xs` | `p-0.5` | 0.125rem (2px) |
 | `fit` | `p-0` | 0 |
-
-These values are identical to the padding applied by `Interactive.Container` at each size, so `ContentAction` labels naturally align with adjacent buttons of the same size.
 
 ## Layout Structure
 
@@ -42,13 +41,12 @@ These values are identical to the padding applied by `Interactive.Container` at 
 
 ## Usage Examples
 
-### Settings row with an edit button
-
 ```tsx
 import { ContentAction } from "@opal/layouts";
 import { Button } from "@opal/components";
 import SvgSettings from "@opal/icons/settings";
 
+// Settings row with an edit button
 <ContentAction
   icon={SvgSettings}
   title="OpenAI"
@@ -61,33 +59,8 @@ import SvgSettings from "@opal/icons/settings";
     <Button icon={SvgSettings} prominence="tertiary" onClick={handleEdit} />
   }
 />
-```
 
-### Card header with connect action
-
-```tsx
-import { ContentAction } from "@opal/layouts";
-import { Button } from "@opal/components";
-import { SvgArrowExchange, SvgCloud } from "@opal/icons";
-
-<ContentAction
-  icon={SvgCloud}
-  title="Google Cloud Vertex AI"
-  description="Gemini"
-  sizePreset="main-content"
-  variant="section"
-  paddingVariant="md"
-  rightChildren={
-    <Button rightIcon={SvgArrowExchange} prominence="tertiary">
-      Connect
-    </Button>
-  }
-/>
-```
-
-### No right children (padding-only wrapper)
-
-```tsx
+// No right children (padding-only wrapper for alignment)
 <ContentAction
   title="Section Header"
   sizePreset="main-content"
@@ -95,5 +68,3 @@ import { SvgArrowExchange, SvgCloud } from "@opal/icons";
   paddingVariant="lg"
 />
 ```
-
-When `rightChildren` is omitted the component renders only the padded `Content` — useful for alignment consistency when some rows have actions and others don't.
