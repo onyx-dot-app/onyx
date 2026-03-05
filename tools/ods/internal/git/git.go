@@ -227,7 +227,7 @@ func ResolvePRToMergeCommit(prNumber string) (string, error) {
 		return "", fmt.Errorf("gh pr view failed: %w", err)
 	}
 	sha := strings.TrimSpace(string(output))
-	if sha == "" {
+	if sha == "" || sha == "null" {
 		return "", fmt.Errorf("PR #%s has no merge commit (is it merged?)", prNumber)
 	}
 	return sha, nil
