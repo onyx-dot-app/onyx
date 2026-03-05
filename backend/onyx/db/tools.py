@@ -163,6 +163,7 @@ def update_tool(
     old_oauth_config_id = tool.oauth_config_id
     if not isinstance(oauth_config_id, UnsetType):
         tool.oauth_config_id = oauth_config_id
+        db_session.flush()
 
     # Clean up orphaned OAuthConfig if the oauth_config_id was changed
     if (
