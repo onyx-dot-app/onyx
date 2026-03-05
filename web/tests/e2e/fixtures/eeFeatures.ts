@@ -28,10 +28,15 @@ export const test = base.extend<{
   eeEnabled: boolean;
 }>({
   eeEnabled: async ({ page }, use) => {
-    await loginAs(page, "admin");
-    const res = await page.request.get("/api/settings");
+    // Try fetching settings directly first — avoids login if cookies are
+    // already present (e.g. from a previous test in the same worker).
+    let res = await page.request.get("/api/settings");
     if (!res.ok()) {
-      // Fail open — if we can't determine, assume EE is not enabled
+      // Not authenticated yet — login and retry.
+      await loginAs(page, "admin");
+      res = await page.request.get("/api/settings");
+    }
+    if (!res.ok()) {
       await use(false);
       return;
     }
