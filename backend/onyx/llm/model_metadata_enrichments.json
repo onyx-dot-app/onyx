@@ -3021,6 +3021,11 @@
     "model_vendor": "deepseek",
     "model_version": "latest"
   },
+  "ollama/deepseek-v3.2:cloud": {
+    "display_name": "DeepSeek V3.2 Cloud",
+    "model_vendor": "deepseek",
+    "model_version": "latest"
+  },
   "ollama/gpt-oss:120b-cloud": {
     "display_name": "GPT Open-Source 120B",
     "model_vendor": "openai",
