@@ -649,10 +649,13 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    # App-scoped observability (memory delta middleware, etc.).
+    # App-scoped observability (admin debug router, memory delta middleware).
     # Must be called after all routers — memory delta builds its route map
     # at registration time.
-    setup_app_observability(application)
+    setup_app_observability(
+        application,
+        include_router_fn=include_router_with_global_prefix_prepended,
+    )
 
     if LOG_ENDPOINT_LATENCY:
         add_latency_logging_middleware(application, logger)

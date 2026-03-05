@@ -17,12 +17,16 @@ SQLAlchemy connection pool metrics are registered separately via
 (after engines are created, before ``start_observability``).
 """
 
+from collections.abc import Callable
+
+from fastapi import APIRouter
 from fastapi import FastAPI
 from prometheus_fastapi_instrumentator import Instrumentator
 from prometheus_fastapi_instrumentator.metrics import default as default_metrics
 from sqlalchemy.exc import TimeoutError as SATimeoutError
 from starlette.applications import Starlette
 
+from onyx.configs.app_configs import ENABLE_ADMIN_DEBUG_ENDPOINTS
 from onyx.configs.app_configs import ENABLE_DEEP_PROFILING
 from onyx.server.metrics.per_tenant import per_tenant_request_callback
 from onyx.server.metrics.postgres_connection_pool import pool_timeout_handler
@@ -87,7 +91,10 @@ def setup_prometheus_metrics(app: Starlette) -> None:
     instrumentator.instrument(app, latency_lowr_buckets=_LATENCY_BUCKETS).expose(app)
 
 
-def setup_app_observability(app: FastAPI) -> None:
+def setup_app_observability(
+    app: FastAPI,
+    include_router_fn: Callable[[FastAPI, APIRouter], None] | None = None,
+) -> None:
     """Register app-scoped observability components.
 
     Must be called in ``get_application()`` AFTER all routers are registered
@@ -95,7 +102,18 @@ def setup_app_observability(app: FastAPI) -> None:
 
     Args:
         app: The FastAPI application.
+        include_router_fn: Callback ``(app, router) -> None`` that includes
+            a router with the application's global prefix.  If ``None``,
+            falls back to ``app.include_router(router)``.
     """
+    if ENABLE_ADMIN_DEBUG_ENDPOINTS:
+        from onyx.server.metrics.admin_debug import router as debug_router
+
+        if include_router_fn is not None:
+            include_router_fn(app, debug_router)
+        else:
+            app.include_router(debug_router)
+
     from onyx.server.metrics.memory_delta import add_memory_delta_middleware
 
     add_memory_delta_middleware(app)
@@ -115,6 +133,11 @@ def start_observability() -> None:
     setup_redis_connection_pool_metrics()
     setup_threadpool_metrics()
     start_event_loop_lag_probe()
+
+    if ENABLE_ADMIN_DEBUG_ENDPOINTS:
+        from onyx.server.metrics.admin_debug import set_start_time
+
+        set_start_time()
 
     if ENABLE_DEEP_PROFILING:
         from onyx.server.metrics.deep_profiling import start_deep_profiling
