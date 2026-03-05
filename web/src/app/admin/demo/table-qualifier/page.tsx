@@ -5,7 +5,7 @@ import Text from "@/refresh-components/texts/Text";
 import TableQualifier from "@/refresh-components/table/TableQualifier";
 import { TableSizeProvider } from "@/refresh-components/table/TableSizeContext";
 import type { TableSize } from "@/refresh-components/table/TableSizeContext";
-import type { QualifierContentType } from "@/refresh-components/table/dataTableTypes";
+import type { QualifierContentType } from "@/refresh-components/table/types";
 import { SvgCheckCircle } from "@opal/icons";
 
 // ---------------------------------------------------------------------------

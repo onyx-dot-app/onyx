@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import {
   type Table,
   type ColumnDef,
@@ -36,10 +36,9 @@ function SortingPopover<TData extends RowData>({
   descendingLabel = "Descending",
 }: SortingPopoverProps<TData>) {
   const [open, setOpen] = useState(false);
-  const sortableColumns = useMemo(
-    () => table.getAllLeafColumns().filter((col) => col.getCanSort()),
-    [table]
-  );
+  const sortableColumns = table
+    .getAllLeafColumns()
+    .filter((col) => col.getCanSort());
 
   const currentSort = sorting[0] ?? null;
 
@@ -96,7 +95,10 @@ function SortingPopover<TData extends RowData>({
                 emphasized
                 rightChildren={isSorted ? <SvgCheck size={16} /> : undefined}
                 onClick={() => {
-                  if (isSorted) return;
+                  if (isSorted) {
+                    table.resetSorting();
+                    return;
+                  }
                   column.toggleSorting(false);
                 }}
               >
@@ -105,41 +107,37 @@ function SortingPopover<TData extends RowData>({
             );
           })}
 
-          <Divider showTitle text="Sorting Order" />
+          {currentSort !== null && (
+            <>
+              <Divider showTitle text="Sorting Order" />
 
-          <LineItem
-            selected={currentSort !== null && !currentSort.desc}
-            emphasized
-            rightChildren={
-              currentSort !== null && !currentSort.desc ? (
-                <SvgCheck size={16} />
-              ) : undefined
-            }
-            onClick={() => {
-              if (currentSort) {
-                table.setSorting([{ id: currentSort.id, desc: false }]);
-              }
-            }}
-          >
-            {ascendingLabel}
-          </LineItem>
+              <LineItem
+                selected={!currentSort.desc}
+                emphasized
+                rightChildren={
+                  !currentSort.desc ? <SvgCheck size={16} /> : undefined
+                }
+                onClick={() => {
+                  table.setSorting([{ id: currentSort.id, desc: false }]);
+                }}
+              >
+                {ascendingLabel}
+              </LineItem>
 
-          <LineItem
-            selected={currentSort !== null && currentSort.desc}
-            emphasized
-            rightChildren={
-              currentSort !== null && currentSort.desc ? (
-                <SvgCheck size={16} />
-              ) : undefined
-            }
-            onClick={() => {
-              if (currentSort) {
-                table.setSorting([{ id: currentSort.id, desc: true }]);
-              }
-            }}
-          >
-            {descendingLabel}
-          </LineItem>
+              <LineItem
+                selected={currentSort.desc}
+                emphasized
+                rightChildren={
+                  currentSort.desc ? <SvgCheck size={16} /> : undefined
+                }
+                onClick={() => {
+                  table.setSorting([{ id: currentSort.id, desc: true }]);
+                }}
+              >
+                {descendingLabel}
+              </LineItem>
+            </>
+          )}
         </Popover.Menu>
       </Popover.Content>
     </Popover>

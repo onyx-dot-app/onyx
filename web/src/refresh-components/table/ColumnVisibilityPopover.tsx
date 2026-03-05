@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import {
   type Table,
   type ColumnDef,
@@ -29,10 +29,9 @@ function ColumnVisibilityPopover<TData extends RowData>({
   size = "regular",
 }: ColumnVisibilityPopoverProps<TData>) {
   const [open, setOpen] = useState(false);
-  const hideableColumns = useMemo(
-    () => table.getAllLeafColumns().filter((col) => col.getCanHide()),
-    [table]
-  );
+  const hideableColumns = table
+    .getAllLeafColumns()
+    .filter((col) => col.getCanHide());
 
   return (
     <Popover open={open} onOpenChange={setOpen}>

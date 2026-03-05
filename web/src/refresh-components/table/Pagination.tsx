@@ -1,3 +1,5 @@
+"use client";
+
 import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
@@ -105,7 +107,11 @@ function getPageNumbers(currentPage: number, totalPages: number) {
     }
 
     if (startPage > 2) {
-      pages.push("start-ellipsis");
+      if (startPage === 3) {
+        pages.push(2);
+      } else {
+        pages.push("start-ellipsis");
+      }
     }
 
     for (let i = startPage; i <= endPage; i++) {
@@ -113,7 +119,11 @@ function getPageNumbers(currentPage: number, totalPages: number) {
     }
 
     if (endPage < totalPages - 1) {
-      pages.push("end-ellipsis");
+      if (endPage === totalPages - 2) {
+        pages.push(totalPages - 1);
+      } else {
+        pages.push("end-ellipsis");
+      }
     }
 
     pages.push(totalPages);
@@ -152,6 +162,7 @@ function NavButtons({
         disabled={currentPage <= 1}
         size={size}
         prominence="tertiary"
+        tooltip="Previous page"
       />
       {children}
       <Button
@@ -160,6 +171,7 @@ function NavButtons({
         disabled={currentPage >= totalPages}
         size={size}
         prominence="tertiary"
+        tooltip="Next page"
       />
     </>
   );

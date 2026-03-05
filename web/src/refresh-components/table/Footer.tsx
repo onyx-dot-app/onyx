@@ -49,8 +49,6 @@ interface FooterSelectionModeProps {
  */
 interface FooterSummaryModeProps {
   mode: "summary";
-  /** Number of items displayed per page. */
-  pageSize: number;
   /** First item number in the current page (e.g. `1`). */
   rangeStart: number;
   /** Last item number in the current page (e.g. `25`). */
@@ -200,7 +198,7 @@ function SelectionLeft({
               icon={SvgEye}
               onClick={onView}
               tooltip="View"
-              size="md"
+              size={isSmall ? "sm" : "md"}
               prominence="tertiary"
             />
           )}
@@ -209,7 +207,7 @@ function SelectionLeft({
               icon={SvgXCircle}
               onClick={onClear}
               tooltip="Clear selection"
-              size="md"
+              size={isSmall ? "sm" : "md"}
               prominence="tertiary"
             />
           )}
