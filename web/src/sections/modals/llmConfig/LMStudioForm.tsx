@@ -62,10 +62,12 @@ function LMStudioFormContent({
   isFormValid,
 }: LMStudioFormContentProps) {
   const [isLoadingModels, setIsLoadingModels] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   const doFetchModels = useCallback(
     (apiBase: string, apiKey: string | undefined, signal: AbortSignal) => {
       setIsLoadingModels(true);
+      setFetchError(null);
       fetchModels(
         LLMProviderName.LM_STUDIO,
         {
@@ -78,7 +80,7 @@ function LMStudioFormContent({
         .then((data) => {
           if (signal.aborted) return;
           if (data.error) {
-            console.error("Error fetching models:", data.error);
+            setFetchError(data.error);
             setFetchedModels([]);
             return;
           }
@@ -140,7 +142,9 @@ function LMStudioFormContent({
       <DisplayModels
         modelConfigurations={currentModels}
         formikProps={formikProps}
-        noModelConfigurationsMessage="No models found. Please provide a valid API base URL."
+        noModelConfigurationsMessage={
+          fetchError || "No models found. Please provide a valid API base URL."
+        }
         isLoading={isLoadingModels}
         recommendedDefaultModel={null}
         shouldShowAutoUpdateToggle={false}

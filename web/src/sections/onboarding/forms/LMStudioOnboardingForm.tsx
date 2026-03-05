@@ -11,7 +11,10 @@ import Separator from "@/refresh-components/Separator";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { cn, noProp } from "@/lib/utils";
 import { SvgRefreshCw } from "@opal/icons";
-import { WellKnownLLMProviderDescriptor } from "@/interfaces/llm";
+import {
+  ModelConfiguration,
+  WellKnownLLMProviderDescriptor,
+} from "@/interfaces/llm";
 import {
   OnboardingFormWrapper,
   OnboardingFormChildProps,
@@ -42,7 +45,7 @@ interface LMStudioFormValues {
   api_base: string;
   api_key_changed: boolean;
   default_model_name: string;
-  model_configurations: any[];
+  model_configurations: ModelConfiguration[];
   groups: number[];
   is_public: boolean;
   custom_config: {

@@ -48,6 +48,7 @@ from onyx.llm.utils import test_llm
 from onyx.llm.well_known_providers.auto_update_service import (
     fetch_llm_recommendations_from_github,
 )
+from onyx.llm.well_known_providers.constants import LM_STUDIO_API_KEY_CONFIG_KEY
 from onyx.llm.well_known_providers.llm_provider_options import (
     fetch_available_well_known_llms,
 )
@@ -1235,6 +1236,9 @@ def get_lm_studio_available_models(
     display names, and context lengths.
     """
     cleaned_api_base = request.api_base.strip().rstrip("/")
+    # Strip /v1 suffix that users may copy from OpenAI-compatible tool configs;
+    # the native metadata endpoint lives at /api/v1/models, not /v1/api/v1/models.
+    cleaned_api_base = cleaned_api_base.removesuffix("/v1")
     if not cleaned_api_base:
         raise OnyxError(
             OnyxErrorCode.VALIDATION_ERROR,
@@ -1249,7 +1253,7 @@ def get_lm_studio_available_models(
             name=request.provider_name, db_session=db_session
         )
         if existing_provider and existing_provider.custom_config:
-            api_key = existing_provider.custom_config.get("LM_STUDIO_API_KEY")
+            api_key = existing_provider.custom_config.get(LM_STUDIO_API_KEY_CONFIG_KEY)
 
     url = f"{cleaned_api_base}/api/v1/models"
     headers: dict[str, str] = {}
