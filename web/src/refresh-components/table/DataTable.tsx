@@ -396,7 +396,11 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
                       // Actions cell
                       if (cellColDef?.kind === "actions") {
                         return (
-                          <ActionsContainer key={cell.id} type="cell">
+                          <ActionsContainer
+                            key={cell.id}
+                            type="cell"
+                            onClick={(e) => e.stopPropagation()}
+                          >
                             {flexRender(
                               cell.column.columnDef.cell,
                               cell.getContext()

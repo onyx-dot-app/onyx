@@ -117,12 +117,26 @@ Fixed-width column rendered at the trailing edge. Houses column visibility and s
 | `showColumnVisibility` | `boolean` | `true` | Show the column visibility popover |
 | `showSorting` | `boolean` | `true` | Show the sorting popover |
 | `sortingFooterText` | `string` | - | Footer text inside the sorting popover |
+| `cell` | `(row: TData) => ReactNode` | - | Row-level cell renderer for action buttons |
 
 Width is fixed: 88px at `"regular"`, 20px at `"small"`.
 
 ```ts
 tc.actions({
   sortingFooterText: "Everyone will see agents in this order.",
+})
+```
+
+Row-level actions — the `cell` callback receives the row data and renders content in each body row. Clicks inside the cell automatically call `stopPropagation`, so they won't trigger row selection.
+
+```tsx
+tc.actions({
+  cell: (row) => (
+    <div className="flex gap-x-1">
+      <IconButton icon={SvgPencil} onClick={() => openEdit(row.id)} />
+      <IconButton icon={SvgTrash} onClick={() => confirmDelete(row.id)} />
+    </div>
+  ),
 })
 ```
 
