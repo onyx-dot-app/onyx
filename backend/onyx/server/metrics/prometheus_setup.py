@@ -23,9 +23,13 @@ from prometheus_fastapi_instrumentator.metrics import default as default_metrics
 from sqlalchemy.exc import TimeoutError as SATimeoutError
 from starlette.applications import Starlette
 
+from onyx.configs.app_configs import ENABLE_DEEP_PROFILING
 from onyx.server.metrics.per_tenant import per_tenant_request_callback
 from onyx.server.metrics.postgres_connection_pool import pool_timeout_handler
 from onyx.server.metrics.slow_requests import slow_request_callback
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 _EXCLUDED_HANDLERS = [
     "/health",
@@ -112,6 +116,13 @@ def start_observability() -> None:
     setup_threadpool_metrics()
     start_event_loop_lag_probe()
 
+    if ENABLE_DEEP_PROFILING:
+        from onyx.server.metrics.deep_profiling import start_deep_profiling
+
+        start_deep_profiling()
+
+    logger.info("Observability metrics started")
+
 
 async def stop_observability() -> None:
     """Shut down lifespan-scoped observability probes.
@@ -121,3 +132,10 @@ async def stop_observability() -> None:
     from onyx.server.metrics.event_loop_lag import stop_event_loop_lag_probe
 
     await stop_event_loop_lag_probe()
+
+    if ENABLE_DEEP_PROFILING:
+        from onyx.server.metrics.deep_profiling import stop_deep_profiling
+
+        await stop_deep_profiling()
+
+    logger.info("Observability metrics stopped")
