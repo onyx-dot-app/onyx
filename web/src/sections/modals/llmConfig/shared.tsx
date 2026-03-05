@@ -7,22 +7,20 @@ import { IsPublicGroupSelector } from "@/components/IsPublicGroupSelector";
 import { AgentsMultiSelect } from "@/components/AgentsMultiSelect";
 import { useAgents } from "@/hooks/useAgents";
 import { ModelConfiguration, SimpleKnownModel } from "@/interfaces/llm";
-import { Section } from "@/layouts/general-layouts";
 import * as InputLayouts from "@/layouts/input-layouts";
-import { cn } from "@/lib/utils";
-import Button from "@/refresh-components/buttons/Button";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import Switch from "@/refresh-components/inputs/Switch";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import Text from "@/refresh-components/texts/Text";
-import { Button as OpalButton } from "@opal/components";
+import { Button as OpalButton, LineItemButton, Tag } from "@opal/components";
 import { BaseLLMFormValues } from "./formUtils";
-import { Card } from "@/refresh-components/cards";
 import { WithoutStyles } from "@opal/types";
 import Separator from "@/refresh-components/Separator";
-import SwitchField from "@/refresh-components/form/SwitchField";
+import { Section } from "@/layouts/general-layouts";
+import { Hoverable } from "@opal/core";
+import { SvgCheck } from "@opal/icons";
 
 export function FieldSeparator() {
   return <Separator noPadding className="px-2" />;
@@ -230,9 +228,9 @@ export function AdvancedOptions({ formikProps }: AdvancedOptionsProps) {
   );
 }
 
-// ─── DisplayModels ───────────────────────────────────────────────────────────
+// ─── DisplayModelsField ─────────────────────────────────────────────────────
 
-export interface DisplayModelsProps<T> {
+export interface DisplayModelsFieldProps<T> {
   formikProps: FormikProps<T>;
   modelConfigurations: ModelConfiguration[];
   noModelConfigurationsMessage?: string;
@@ -241,23 +239,17 @@ export interface DisplayModelsProps<T> {
   shouldShowAutoUpdateToggle: boolean;
 }
 
-export function DisplayModels<T extends BaseLLMFormValues>({
+export function DisplayModelsField<T extends BaseLLMFormValues>({
   formikProps,
   modelConfigurations,
   noModelConfigurationsMessage,
   isLoading,
   recommendedDefaultModel,
   shouldShowAutoUpdateToggle,
-}: DisplayModelsProps<T>) {
+}: DisplayModelsFieldProps<T>) {
   const isAutoMode = formikProps.values.is_auto_mode;
   const selectedModels = formikProps.values.selected_model_names ?? [];
   const defaultModel = formikProps.values.default_model_name;
-  const selectedModelSet = new Set(selectedModels);
-  const allModelNames = modelConfigurations.map((model) => model.name);
-  const areAllModelsSelected =
-    allModelNames.length > 0 &&
-    allModelNames.every((modelName) => selectedModelSet.has(modelName));
-  const areSomeModelsSelected = selectedModels.length > 0;
 
   function handleCheckboxChange(modelName: string, checked: boolean) {
     // Read current values inside the handler to avoid stale closure issues
@@ -299,267 +291,112 @@ export function DisplayModels<T extends BaseLLMFormValues>({
     );
   }
 
-  function handleSelectAllModels() {
-    formikProps.setFieldValue("selected_model_names", allModelNames);
-
-    const currentDefault = defaultModel ?? "";
-    const hasValidDefault =
-      currentDefault.length > 0 && allModelNames.includes(currentDefault);
-
-    if (!hasValidDefault && allModelNames.length > 0) {
-      const nextDefault =
-        recommendedDefaultModel &&
-        allModelNames.includes(recommendedDefaultModel.name)
-          ? recommendedDefaultModel.name
-          : allModelNames[0];
-      formikProps.setFieldValue("default_model_name", nextDefault);
-    }
-  }
-
-  function handleClearAllModels() {
-    formikProps.setFieldValue("selected_model_names", []);
-    formikProps.setFieldValue("default_model_name", null);
-  }
-
-  // Sort auto mode models: default model first
   const visibleModels = modelConfigurations.filter((m) => m.is_visible);
-  const sortedAutoModels = [...visibleModels].sort((a, b) => {
-    const aIsDefault = a.name === defaultModel;
-    const bIsDefault = b.name === defaultModel;
-    if (aIsDefault && !bIsDefault) return -1;
-    if (!aIsDefault && bIsDefault) return 1;
-    return 0;
-  });
 
   return (
-    <Card variant="borderless" padding={0.5} gap={0.5}>
-      <InputLayouts.Horizontal
-        title="Models"
-        description="Select models to make available for this provider."
-      >
-        {/*<OpalButton />*/}
-      </InputLayouts.Horizontal>
+    <FieldWrapper>
+      <Section gap={0.5}>
+        <InputLayouts.Horizontal
+          title="Models"
+          description="Select models to make available for this provider."
+        />
 
-      {!isAutoMode && modelConfigurations.length > 0 && (
-        <Section
-          flexDirection="row"
-          justifyContent="between"
-          alignItems="center"
-          height="auto"
-          gap={0.5}
-        >
-          <Section
-            flexDirection="row"
-            justifyContent="start"
-            alignItems="center"
-            height="auto"
-            width="fit"
-            gap={0.5}
-          >
-            <Checkbox
-              checked={areAllModelsSelected}
-              indeterminate={areSomeModelsSelected && !areAllModelsSelected}
-              onCheckedChange={() =>
-                areAllModelsSelected
-                  ? handleClearAllModels()
-                  : handleSelectAllModels()
-              }
-              aria-label="Select all models"
-            />
-            {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
-            <Button
-              main
-              internal
-              className="p-0 h-auto rounded-none"
-              onClick={() =>
-                areAllModelsSelected
-                  ? handleClearAllModels()
-                  : handleSelectAllModels()
-              }
-            >
-              <Text
-                as="span"
-                secondaryBody
-                className={cn(
-                  "text-xs",
-                  areSomeModelsSelected ? "text-text-03" : "text-text-02"
-                )}
-              >
-                Select all models
-              </Text>
-            </Button>
-          </Section>
-          {areSomeModelsSelected && (
-            // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
-            <Button
-              main
-              internal
-              className="p-0 h-auto rounded-none"
-              onClick={handleClearAllModels}
-            >
-              <Text
-                as="span"
-                secondaryBody
-                className="text-xs text-action-link-05 hover:text-action-link-06"
-              >
-                Clear all ({selectedModels.length})
-              </Text>
-            </Button>
-          )}
-        </Section>
-      )}
-
-      <div className="border border-border-01 rounded-lg p-3">
-        {/* Model list section */}
-        <div
-          className={cn(
-            "flex flex-col gap-1",
-            shouldShowAutoUpdateToggle && "mt-3 pt-3 border-t border-border-01"
-          )}
-        >
-          {isAutoMode && shouldShowAutoUpdateToggle ? (
-            // Auto mode: read-only display
-            <div className="flex flex-col gap-2">
-              {sortedAutoModels.map((model) => {
-                const isDefault = model.name === defaultModel;
-                return (
-                  <div
-                    key={model.name}
-                    className={cn(
-                      "flex items-center justify-between gap-3 rounded-lg border p-1",
-                      "bg-background-neutral-00",
-                      isDefault ? "border-action-link-05" : "border-border-01"
-                    )}
-                  >
-                    <div className="flex flex-1 items-center gap-2 px-2 py-1">
-                      <div
-                        className={cn(
-                          "size-2 shrink-0 rounded-full",
-                          isDefault
-                            ? "bg-action-link-05"
-                            : "bg-background-neutral-03"
-                        )}
-                      />
-                      <div className="flex flex-col gap-0.5">
-                        <Text mainUiAction text05>
-                          {model.display_name || model.name}
-                        </Text>
-                        {model.display_name && (
-                          <Text secondaryBody text03>
-                            {model.name}
-                          </Text>
-                        )}
-                      </div>
-                    </div>
-                    {isDefault && (
-                      <div className="flex items-center justify-end pr-2">
-                        <Text
-                          secondaryBody
-                          className="text-action-text-link-05"
-                        >
-                          Default
-                        </Text>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            // Manual mode: checkbox selection
-            <div
-              className={cn(
-                "flex flex-col gap-1",
-                "max-h-48 4xl:max-h-64",
-                "overflow-y-auto"
-              )}
-            >
-              {modelConfigurations.map((modelConfiguration) => {
+        <Section gap={0.25}>
+          {isAutoMode
+            ? // Auto mode: read-only display
+              visibleModels.map((model) => (
+                <Hoverable.Root
+                  key={model.name}
+                  group="asdf"
+                  widthVariant="full"
+                >
+                  <LineItemButton
+                    variant="section"
+                    sizePreset="main-ui"
+                    prominence="heavy"
+                    selected
+                    icon={() => <Checkbox checked />}
+                    title={model.display_name || model.name}
+                    rightChildren={
+                      model.name === defaultModel ? (
+                        <Section>
+                          <Tag title="Default Model" color="blue" />
+                        </Section>
+                      ) : undefined
+                    }
+                  />
+                </Hoverable.Root>
+              ))
+            : // Manual mode: checkbox selection
+              modelConfigurations.map((modelConfiguration) => {
                 const isSelected = selectedModels.includes(
                   modelConfiguration.name
                 );
                 const isDefault = defaultModel === modelConfiguration.name;
 
                 return (
-                  <div
-                    key={modelConfiguration.name}
-                    className="flex items-center justify-between py-1.5 px-2 rounded hover:bg-background-neutral-subtle"
+                  <Hoverable.Root
+                    group="LLMConfigurationButton"
+                    widthVariant="full"
                   >
-                    <div
-                      className="flex items-center gap-2 cursor-pointer"
+                    <LineItemButton
+                      key={modelConfiguration.name}
+                      variant="section"
+                      sizePreset="main-ui"
+                      prominence="heavy"
+                      selected={isSelected}
+                      icon={() => <Checkbox checked={isSelected} />}
+                      title={modelConfiguration.name}
                       onClick={() =>
                         handleCheckboxChange(
                           modelConfiguration.name,
                           !isSelected
                         )
                       }
-                    >
-                      <div
-                        className="flex items-center"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <Checkbox
-                          checked={isSelected}
-                          onCheckedChange={(checked) =>
-                            handleCheckboxChange(
-                              modelConfiguration.name,
-                              checked
-                            )
-                          }
-                        />
-                      </div>
-                      <Text
-                        as="p"
-                        secondaryBody
-                        className="select-none leading-none"
-                      >
-                        {modelConfiguration.name}
-                      </Text>
-                    </div>
-                    {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
-                    <Button
-                      main
-                      internal
-                      type="button"
-                      disabled={!isSelected}
-                      onClick={() => handleSetDefault(modelConfiguration.name)}
-                      className={cn(
-                        "px-2 py-0.5 rounded transition-all duration-200 ease-in-out",
-                        isSelected
-                          ? "opacity-100 translate-x-0"
-                          : "opacity-0 translate-x-2 pointer-events-none",
-                        isDefault
-                          ? "bg-action-link-05 font-medium scale-100"
-                          : "bg-background-neutral-02 hover:bg-background-neutral-03 scale-95 hover:scale-100"
-                      )}
-                    >
-                      <Text
-                        as="span"
-                        secondaryBody
-                        className={cn(
-                          "text-xs",
-                          isDefault ? "text-text-inverse" : "text-text-03"
-                        )}
-                      >
-                        {isDefault ? "Default" : "Set as default"}
-                      </Text>
-                    </Button>
-                  </div>
+                      rightChildren={
+                        isSelected ? (
+                          isDefault ? (
+                            <Section>
+                              <Tag color="blue" title="Default Model" />
+                            </Section>
+                          ) : (
+                            <Hoverable.Item
+                              group="LLMConfigurationButton"
+                              variant="opacity-on-hover"
+                            >
+                              <OpalButton
+                                size="sm"
+                                prominence="internal"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleSetDefault(modelConfiguration.name);
+                                }}
+                                type="button"
+                              >
+                                Set as default
+                              </OpalButton>
+                            </Hoverable.Item>
+                          )
+                        ) : undefined
+                      }
+                    />
+                  </Hoverable.Root>
                 );
               })}
-            </div>
-          )}
-        </div>
-      </div>
+        </Section>
 
-      {shouldShowAutoUpdateToggle && (
-        <InputLayouts.Horizontal
-          title="Auto Update"
-          description="Update the available models when new models are released."
-        >
-          <Switch checked={isAutoMode} onCheckedChange={handleToggleAutoMode} />
-        </InputLayouts.Horizontal>
-      )}
-    </Card>
+        {shouldShowAutoUpdateToggle && (
+          <InputLayouts.Horizontal
+            title="Auto Update"
+            description="Update the available models when new models are released."
+          >
+            <Switch
+              checked={isAutoMode}
+              onCheckedChange={handleToggleAutoMode}
+            />
+          </InputLayouts.Horizontal>
+        )}
+      </Section>
+    </FieldWrapper>
   );
 }

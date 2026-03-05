@@ -2,6 +2,7 @@ import "@opal/core/hoverable/styles.css";
 import React, { createContext, useContext, useState, useCallback } from "react";
 import { cn } from "@opal/utils";
 import type { WithoutStyles } from "@opal/types";
+import { widthVariants, type WidthVariant } from "@opal/shared";
 
 // ---------------------------------------------------------------------------
 // Context-per-group registry
@@ -38,6 +39,8 @@ interface HoverableRootProps
   extends WithoutStyles<React.HTMLAttributes<HTMLDivElement>> {
   children: React.ReactNode;
   group: string;
+  /** Width preset. @default "auto" */
+  widthVariant?: WidthVariant;
 }
 
 type HoverableItemVariant = "opacity-on-hover";
@@ -77,6 +80,7 @@ interface HoverableItemProps
 function HoverableRoot({
   group,
   children,
+  widthVariant = "auto",
   onMouseEnter: consumerMouseEnter,
   onMouseLeave: consumerMouseLeave,
   ...props
@@ -103,7 +107,12 @@ function HoverableRoot({
 
   return (
     <GroupContext.Provider value={hovered}>
-      <div {...props} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
+      <div
+        {...props}
+        className={cn(widthVariants[widthVariant])}
+        onMouseEnter={onMouseEnter}
+        onMouseLeave={onMouseLeave}
+      >
         {children}
       </div>
     </GroupContext.Provider>

@@ -19,7 +19,7 @@ import {
 import {
   AdvancedOptions,
   APIKeyField,
-  DisplayModels,
+  DisplayModelsField,
   DisplayNameField,
   FieldSeparator,
   SingleDefaultModelField,
@@ -143,7 +143,7 @@ export function OpenAIModal({
           {isOnboarding ? (
             <SingleDefaultModelField placeholder="E.g. gpt-5.2" />
           ) : (
-            <DisplayModels
+            <DisplayModelsField
               modelConfigurations={modelConfigurations}
               formikProps={formikProps}
               recommendedDefaultModel={

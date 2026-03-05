@@ -59,6 +59,9 @@ interface ContentBaseProps {
    * @default "auto"
    */
   widthVariant?: WidthVariant;
+
+  /** When `true`, the title color hooks into `Interactive.Base`'s `--interactive-foreground` variable. */
+  withInteractive?: boolean;
 }
 
 // ---------------------------------------------------------------------------

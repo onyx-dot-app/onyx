@@ -48,6 +48,9 @@ interface ContentLgProps {
 
   /** Size preset. Default: `"headline"`. */
   sizePreset?: ContentLgSizePreset;
+
+  /** When `true`, the title color hooks into `Interactive.Base`'s `--interactive-foreground` variable. */
+  withInteractive?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -86,6 +89,7 @@ function ContentLg({
   description,
   editable,
   onTitleChange,
+  withInteractive,
 }: ContentLgProps) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(title);
@@ -104,7 +108,11 @@ function ContentLg({
   }
 
   return (
-    <div className="opal-content-lg" style={{ gap: config.gap }}>
+    <div
+      className="opal-content-lg"
+      data-interactive={withInteractive || undefined}
+      style={{ gap: config.gap }}
+    >
       {Icon && (
         <div
           className={cn(

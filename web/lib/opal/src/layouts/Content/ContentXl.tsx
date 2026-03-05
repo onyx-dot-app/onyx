@@ -60,6 +60,9 @@ interface ContentXlProps {
 
   /** Optional tertiary icon rendered in the icon row. */
   moreIcon2?: IconFunctionComponent;
+
+  /** When `true`, the title color hooks into `Interactive.Base`'s `--interactive-foreground` variable. */
+  withInteractive?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -106,6 +109,7 @@ function ContentXl({
   onTitleChange,
   moreIcon1: MoreIcon1,
   moreIcon2: MoreIcon2,
+  withInteractive,
 }: ContentXlProps) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(title);
@@ -124,7 +128,10 @@ function ContentXl({
   }
 
   return (
-    <div className="opal-content-xl">
+    <div
+      className="opal-content-xl"
+      data-interactive={withInteractive || undefined}
+    >
       {(Icon || MoreIcon1 || MoreIcon2) && (
         <div className="opal-content-xl-icon-row">
           {Icon && (

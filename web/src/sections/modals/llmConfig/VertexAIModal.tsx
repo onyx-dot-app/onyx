@@ -21,7 +21,7 @@ import {
 } from "./formUtils";
 import {
   AdvancedOptions,
-  DisplayModels,
+  DisplayModelsField,
   DisplayNameField,
   SingleDefaultModelField,
 } from "./shared";
@@ -203,7 +203,7 @@ export function VertexAIModal({
           {isOnboarding ? (
             <SingleDefaultModelField placeholder="E.g. gemini-2.5-pro" />
           ) : (
-            <DisplayModels
+            <DisplayModelsField
               modelConfigurations={modelConfigurations}
               formikProps={formikProps}
               recommendedDefaultModel={

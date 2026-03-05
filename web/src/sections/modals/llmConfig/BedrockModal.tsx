@@ -26,7 +26,7 @@ import {
 } from "./formUtils";
 import {
   AdvancedOptions,
-  DisplayModels,
+  DisplayModelsField,
   DisplayNameField,
   FetchModelsButton,
   SingleDefaultModelField,
@@ -246,7 +246,7 @@ function BedrockModalInternals({
       {isOnboarding ? (
         <SingleDefaultModelField placeholder="E.g. us.anthropic.claude-sonnet-4-5-v1" />
       ) : (
-        <DisplayModels
+        <DisplayModelsField
           modelConfigurations={currentModels}
           formikProps={formikProps}
           noModelConfigurationsMessage={

@@ -61,6 +61,9 @@ interface ContentMdProps {
 
   /** Size preset. Default: `"main-ui"`. */
   sizePreset?: ContentMdSizePreset;
+
+  /** When `true`, the title color hooks into `Interactive.Base`'s `--interactive-foreground` variable. */
+  withInteractive?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -130,6 +133,7 @@ function ContentMd({
   auxIcon,
   tag,
   sizePreset = "main-ui",
+  withInteractive,
 }: ContentMdProps) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(title);
@@ -149,7 +153,11 @@ function ContentMd({
   }
 
   return (
-    <div className="opal-content-md" style={{ gap: config.gap }}>
+    <div
+      className="opal-content-md"
+      data-interactive={withInteractive || undefined}
+      style={{ gap: config.gap }}
+    >
       {Icon && (
         <div
           className={cn(

@@ -40,6 +40,9 @@ interface ContentSmProps {
 
   /** Title prominence. Default: `"default"`. */
   prominence?: ContentSmProminence;
+
+  /** When `true`, the title color hooks into `Interactive.Base`'s `--interactive-foreground` variable. */
+  withInteractive?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -80,6 +83,7 @@ function ContentSm({
   sizePreset = "main-ui",
   orientation = "inline",
   prominence = "default",
+  withInteractive,
 }: ContentSmProps) {
   const config = CONTENT_SM_PRESETS[sizePreset];
 
@@ -88,6 +92,7 @@ function ContentSm({
       className="opal-content-sm"
       data-orientation={orientation}
       data-prominence={prominence}
+      data-interactive={withInteractive || undefined}
       style={{ gap: config.gap }}
     >
       {Icon && (

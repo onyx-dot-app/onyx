@@ -41,7 +41,7 @@ export function LLMConfigurationModalWrapper({
 
   return (
     <Modal open onOpenChange={onClose}>
-      <Modal.Content height="lg">
+      <Modal.Content width="md-sm" height="lg">
         <Form className="flex flex-col h-full min-h-0">
           <Modal.Header
             icon={providerIcon}

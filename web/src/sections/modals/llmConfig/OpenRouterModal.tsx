@@ -26,7 +26,7 @@ import {
 import {
   AdvancedOptions,
   APIKeyField,
-  DisplayModels,
+  DisplayModelsField,
   DisplayNameField,
   FetchModelsButton,
   SingleDefaultModelField,
@@ -250,7 +250,7 @@ export function OpenRouterModal({
             {isOnboarding ? (
               <SingleDefaultModelField placeholder="E.g. openai/gpt-4o" />
             ) : (
-              <DisplayModels
+              <DisplayModelsField
                 modelConfigurations={currentModels}
                 formikProps={formikProps}
                 noModelConfigurationsMessage={
