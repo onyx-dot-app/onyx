@@ -1,6 +1,5 @@
 from fastapi import APIRouter
 from fastapi import Depends
-from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_admin_user
@@ -15,6 +14,8 @@ from onyx.db.input_prompt import remove_public_input_prompt
 from onyx.db.input_prompt import update_input_prompt
 from onyx.db.models import InputPrompt__User
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.input_prompt.models import CreateInputPromptRequest
 from onyx.server.features.input_prompt.models import InputPromptSnapshot
 from onyx.server.features.input_prompt.models import UpdateInputPromptRequest
@@ -97,7 +98,7 @@ def patch_input_prompt(
     except ValueError as e:
         error_msg = "Error occurred while updated input prompt"
         logger.warn(f"{error_msg}. Stack trace: {e}")
-        raise HTTPException(status_code=404, detail=error_msg)
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, error_msg)
 
     return InputPromptSnapshot.from_model(updated_input_prompt)
 
@@ -117,7 +118,7 @@ def delete_input_prompt(
     except ValueError as e:
         error_msg = "Error occurred while deleting input prompt"
         logger.warn(f"{error_msg}. Stack trace: {e}")
-        raise HTTPException(status_code=404, detail=error_msg)
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, error_msg)
 
 
 @admin_router.delete("/{input_prompt_id}")
@@ -132,7 +133,7 @@ def delete_public_input_prompt(
     except ValueError as e:
         error_msg = "Error occurred while deleting input prompt"
         logger.warn(f"{error_msg}. Stack trace: {e}")
-        raise HTTPException(status_code=404, detail=error_msg)
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, error_msg)
 
 
 @basic_router.post("/{input_prompt_id}/hide")

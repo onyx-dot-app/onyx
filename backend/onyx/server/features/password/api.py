@@ -1,6 +1,5 @@
 from fastapi import APIRouter
 from fastapi import Depends
-from fastapi import HTTPException
 from fastapi_users.exceptions import InvalidPasswordException
 from sqlalchemy.orm import Session
 
@@ -11,6 +10,8 @@ from onyx.auth.users import User
 from onyx.auth.users import UserManager
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.users import get_user_by_email
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.password.models import ChangePasswordRequest
 from onyx.server.features.password.models import UserResetRequest
 from onyx.server.features.password.models import UserResetResponse
@@ -34,10 +35,11 @@ async def change_my_password(
             new_password=form_data.new_password,
         )
     except InvalidPasswordException as e:
-        raise HTTPException(status_code=400, detail=str(e.reason))
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e.reason))
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"An unexpected error occurred: {str(e)}"
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR,
+            f"An unexpected error occurred: {str(e)}",
         )
 
 
@@ -53,7 +55,7 @@ async def admin_reset_user_password(
     """
     user = get_user_by_email(user_reset_request.user_email, db_session)
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise OnyxError(OnyxErrorCode.USER_NOT_FOUND, "User not found")
     new_password = await user_manager.reset_password_as_admin(user.id)
     return UserResetResponse(
         user_id=str(user.id),

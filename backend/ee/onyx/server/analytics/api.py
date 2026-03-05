@@ -4,7 +4,6 @@ from typing import List
 
 from fastapi import APIRouter
 from fastapi import Depends
-from fastapi import HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -22,6 +21,8 @@ from onyx.auth.users import current_user
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 
 router = APIRouter(prefix="/analytics", tags=PUBLIC_API_TAGS)
 
@@ -231,8 +232,9 @@ def get_assistant_stats(
     end = end or datetime.datetime.utcnow()
 
     if not user_can_view_assistant_stats(db_session, user, assistant_id):
-        raise HTTPException(
-            status_code=403, detail="Not allowed to access this assistant's stats."
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Not allowed to access this assistant's stats.",
         )
 
     # Pull daily usage from the DB calls

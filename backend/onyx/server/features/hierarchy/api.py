@@ -1,6 +1,5 @@
 from fastapi import APIRouter
 from fastapi import Depends
-from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from onyx.access.hierarchy_access import get_user_external_group_ids
@@ -12,6 +11,8 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.hierarchy import get_accessible_hierarchy_nodes_for_source
 from onyx.db.models import User
 from onyx.db.opensearch_migration import get_opensearch_retrieval_state
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.hierarchy.constants import DOCUMENT_PAGE_SIZE
 from onyx.server.features.hierarchy.constants import HIERARCHY_NODE_DOCUMENTS_PATH
 from onyx.server.features.hierarchy.constants import HIERARCHY_NODES_LIST_PATH
@@ -43,14 +44,14 @@ router = APIRouter(prefix=HIERARCHY_NODES_PREFIX)
 
 def _require_opensearch(db_session: Session) -> None:
     if not ENABLE_OPENSEARCH_INDEXING_FOR_ONYX:
-        raise HTTPException(
-            status_code=403,
-            detail=OPENSEARCH_NOT_ENABLED_MESSAGE,
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            OPENSEARCH_NOT_ENABLED_MESSAGE,
         )
     if not get_opensearch_retrieval_state(db_session):
-        raise HTTPException(
-            status_code=403,
-            detail=MIGRATION_STATUS_MESSAGE,
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            MIGRATION_STATUS_MESSAGE,
         )
 
 

@@ -2,7 +2,6 @@
 
 from collections.abc import Callable
 
-from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import ANTHROPIC_DEFAULT_API_KEY
@@ -12,6 +11,8 @@ from onyx.configs.app_configs import OPENROUTER_DEFAULT_API_KEY
 from onyx.db.usage import check_usage_limit
 from onyx.db.usage import UsageLimitExceededError
 from onyx.db.usage import UsageType
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.tenant_usage_limits import TenantUsageLimitKeys
 from onyx.server.tenant_usage_limits import TenantUsageLimitOverrides
 from onyx.utils.logger import setup_logger
@@ -267,4 +268,4 @@ def check_usage_and_raise(
                 "Please upgrade your plan or wait for the next billing period."
             )
 
-        raise HTTPException(status_code=429, detail=detail)
+        raise OnyxError(OnyxErrorCode.RATE_LIMITED, detail)
