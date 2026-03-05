@@ -4,6 +4,8 @@ import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
 
 const TEST_PREFIX = "E2E-PROJECT-FILES-VISUAL";
+const ATTACHMENT_ITEM_TITLE_TEST_ID = "attachment-item-title";
+const ATTACHMENT_ITEM_ICON_WRAPPER_TEST_ID = "attachment-item-icon-wrapper";
 const LONG_FILE_NAME =
   "CSE_202_Final_Project_Solution_Regression_Check_Long_Name.txt";
 const FILE_CONTENT = "Visual regression test content for long filename cards.";
@@ -148,23 +150,32 @@ test.describe("Project Files visual regression", () => {
     await expect(filesSection).toBeVisible();
 
     const fileTitle = filesSection
-      .locator('[data-testid="file-card-title"]')
+      .locator(`[data-testid="${ATTACHMENT_ITEM_TITLE_TEST_ID}"]`)
       .filter({ hasText: LONG_FILE_NAME })
       .first();
     await expect(fileTitle).toBeVisible();
 
+    // Wait for deterministic post-processing state before geometry checks/screenshot.
+    await expect(fileTitle).not.toContainText("Processing...", {
+      timeout: 30_000,
+    });
+    await expect(fileTitle).not.toContainText("Uploading...", {
+      timeout: 30_000,
+    });
+    await expect(fileTitle).toContainText("TXT", { timeout: 30_000 });
+
     const iconWrapper = filesSection
-      .locator('[data-testid="file-icon-wrapper"]')
+      .locator(`[data-testid="${ATTACHMENT_ITEM_ICON_WRAPPER_TEST_ID}"]`)
       .first();
     await expect(iconWrapper).toBeVisible();
+
+    await expectElementScreenshot(filesSection, {
+      name: "project-files-long-underscore-filename",
+    });
 
     const iconGeometry = await getElementGeometryInCard(iconWrapper);
     const titleGeometry = await getElementGeometryInCard(fileTitle);
     expectGeometryWithinCard(iconGeometry);
     expectGeometryWithinCard(titleGeometry);
-
-    await expectElementScreenshot(filesSection, {
-      name: "project-files-long-underscore-filename",
-    });
   });
 });
