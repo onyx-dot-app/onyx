@@ -57,8 +57,6 @@ botocore==1.39.11
     #   s3transfer
 brotli==1.2.0
     # via onyx
-cachetools==6.2.2
-    # via google-auth
 celery==5.5.1
     # via sentry-sdk
 certifi==2025.11.12
@@ -95,7 +93,9 @@ colorama==0.4.6 ; sys_platform == 'win32'
     #   click
     #   tqdm
 cryptography==46.0.5
-    # via pyjwt
+    # via
+    #   google-auth
+    #   pyjwt
 decorator==5.2.1
     # via retry
 discord-py==2.4.0
@@ -136,7 +136,7 @@ google-api-core==2.28.1
     #   google-cloud-core
     #   google-cloud-resource-manager
     #   google-cloud-storage
-google-auth==2.43.0
+google-auth==2.48.0
     # via
     #   google-api-core
     #   google-cloud-aiplatform
@@ -146,7 +146,7 @@ google-auth==2.43.0
     #   google-cloud-storage
     #   google-genai
     #   kubernetes
-google-cloud-aiplatform==1.121.0
+google-cloud-aiplatform==1.133.0
     # via onyx
 google-cloud-bigquery==3.38.0
     # via google-cloud-aiplatform
@@ -263,7 +263,6 @@ numpy==2.4.1
     #   onyx
     #   scikit-learn
     #   scipy
-    #   shapely
     #   transformers
     #   voyageai
 nvidia-cublas-cu12==12.8.4.1 ; platform_machine == 'x86_64' and sys_platform == 'linux'
@@ -452,8 +451,6 @@ sentry-sdk==2.14.0
     # via onyx
 setuptools==80.9.0 ; python_full_version >= '3.12'
     # via torch
-shapely==2.0.6
-    # via google-cloud-aiplatform
 six==1.17.0
     # via
     #   kubernetes
