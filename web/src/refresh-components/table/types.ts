@@ -152,6 +152,9 @@ export interface DataTableProps<TData> {
   onSelectionChange?: (selectedIds: string[]) => void;
   /** Called when a row is clicked (replaces the default selection toggle). */
   onRowClick?: (row: TData) => void;
+  /** Search term for global text filtering. When provided, rows are filtered
+   *  to those containing the term in any accessor column value (case-insensitive). */
+  searchTerm?: string;
   /**
    * Max height of the scrollable table area. When set, the table body scrolls
    * vertically while the header stays pinned at the top.

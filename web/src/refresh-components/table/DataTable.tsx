@@ -128,6 +128,7 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
     size = "regular",
     onSelectionChange,
     onRowClick,
+    searchTerm,
     height,
     headerBackground,
   } = props;
@@ -163,6 +164,7 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
     initialColumnVisibility,
     getRowId: (row: TData) => getRowId(row),
     onSelectionChange,
+    searchTerm,
   });
 
   // 3. Call useColumnWidths

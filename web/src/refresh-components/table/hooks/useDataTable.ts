@@ -1,7 +1,7 @@
 "use client";
 "use no memo";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
   useReactTable,
   getCoreRowModel,
@@ -43,6 +43,15 @@ export function toOnyxSortDirection(
   if (dir === "asc") return "ascending";
   if (dir === "desc") return "descending";
   return "none";
+}
+
+// ---------------------------------------------------------------------------
+// Global filter value (combines view-mode + text search)
+// ---------------------------------------------------------------------------
+
+interface GlobalFilterValue {
+  selectedIds: Set<string> | null;
+  searchTerm: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -96,6 +105,9 @@ interface UseDataTableOptions<TData extends RowData> {
   initialColumnVisibility?: VisibilityState;
   /** Called whenever the set of selected row IDs changes. */
   onSelectionChange?: (selectedIds: string[]) => void;
+  /** Search term for global text filtering. Rows are filtered to those containing
+   *  the term in any accessor column value (case-insensitive). */
+  searchTerm?: string;
   /** Escape-hatch: extra options spread into `useReactTable`. Managed keys are excluded. */
   tableOptions?: Partial<Omit<TableOptions<TData>, ManagedKeys>>;
 }
@@ -174,6 +186,7 @@ export default function useDataTable<TData extends RowData>(
     initialColumnVisibility = {},
     getRowId,
     onSelectionChange,
+    searchTerm,
     tableOptions,
   } = options;
 
@@ -188,8 +201,11 @@ export default function useDataTable<TData extends RowData>(
     pageIndex: 0,
     pageSize: pageSizeOption,
   });
-  /** null = no filter active; Set<string> = frozen snapshot of selected IDs. */
-  const [viewedIds, setViewedIds] = useState<Set<string> | null>(null);
+  /** Combined global filter: view-mode (selected IDs) + text search. */
+  const [globalFilter, setGlobalFilter] = useState<GlobalFilterValue>({
+    selectedIds: null,
+    searchTerm: "",
+  });
 
   // ---- sync pageSize prop to internal state --------------------------------
   useEffect(() => {
@@ -199,6 +215,25 @@ export default function useDataTable<TData extends RowData>(
       pageIndex: 0,
     }));
   }, [pageSizeOption]);
+
+  // ---- sync external searchTerm prop into combined filter state ------------
+  const preSearchPageRef = useRef<number>(0);
+
+  useEffect(() => {
+    const term = searchTerm ?? "";
+    const wasSearching = !!globalFilter.searchTerm;
+
+    if (!wasSearching && term) {
+      // Entering search — save current page, reset to 0
+      preSearchPageRef.current = pagination.pageIndex;
+      setPagination((p) => ({ ...p, pageIndex: 0 }));
+    } else if (wasSearching && !term) {
+      // Clearing search — restore saved page
+      setPagination((p) => ({ ...p, pageIndex: preSearchPageRef.current }));
+    }
+
+    setGlobalFilter((prev) => ({ ...prev, searchTerm: term }));
+  }, [searchTerm]);
 
   // ---- TanStack table instance --------------------------------------------
   const table = useReactTable({
@@ -211,20 +246,42 @@ export default function useDataTable<TData extends RowData>(
       columnSizing,
       columnVisibility,
       pagination,
-      globalFilter: viewedIds,
+      globalFilter,
     },
     onSortingChange: setSorting,
     onRowSelectionChange: setRowSelection,
     onColumnSizingChange: setColumnSizing,
     onColumnVisibilityChange: setColumnVisibility,
     onPaginationChange: setPagination,
-    onGlobalFilterChange: setViewedIds,
+    onGlobalFilterChange: setGlobalFilter,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
-    globalFilterFn: (row, _columnId, filterValue: Set<string> | null) =>
-      filterValue == null ? true : filterValue.has(row.id),
+    globalFilterFn: (row, _columnId, filterValue: GlobalFilterValue) => {
+      // View-mode filter (selected IDs)
+      if (
+        filterValue.selectedIds != null &&
+        !filterValue.selectedIds.has(row.id)
+      ) {
+        return false;
+      }
+      // Text search filter
+      if (filterValue.searchTerm) {
+        const term = filterValue.searchTerm.toLowerCase();
+        return row.getAllCells().some((cell) => {
+          const value = cell.getValue();
+          return (
+            typeof value === "string" && value.toLowerCase().includes(term)
+          );
+        });
+      }
+      return true;
+    },
+    // We manage page resets explicitly (search enter/clear, view mode,
+    // pageSize change) so disable TanStack's auto-reset which would
+    // clobber our restored page index when the filter changes.
+    autoResetPageIndex: false,
     columnResizeMode,
     enableRowSelection,
     enableColumnResizing,
@@ -248,10 +305,11 @@ export default function useDataTable<TData extends RowData>(
   const selectedCount = selectedRowIds.length;
   const totalPages = Math.max(1, table.getPageCount());
   const currentPage = pagination.pageIndex + 1;
-  const totalItems =
-    viewedIds != null
-      ? table.getPrePaginationRowModel().rows.length
-      : data.length;
+  const hasActiveFilter =
+    globalFilter.selectedIds != null || !!globalFilter.searchTerm;
+  const totalItems = hasActiveFilter
+    ? table.getPrePaginationRowModel().rows.length
+    : data.length;
   const isPaginated = isFinite(pagination.pageSize);
 
   // ---- selection change callback ------------------------------------------
@@ -274,17 +332,20 @@ export default function useDataTable<TData extends RowData>(
   };
 
   // ---- view mode (filter to selected rows) --------------------------------
-  const isViewingSelected = viewedIds != null;
+  const isViewingSelected = globalFilter.selectedIds != null;
 
   const enterViewMode = () => {
     if (selectedRowIds.length > 0) {
-      setViewedIds(new Set(selectedRowIds));
+      setGlobalFilter((prev) => ({
+        ...prev,
+        selectedIds: new Set(selectedRowIds),
+      }));
       setPagination((prev) => ({ ...prev, pageIndex: 0 }));
     }
   };
 
   const exitViewMode = () => {
-    setViewedIds(null);
+    setGlobalFilter((prev) => ({ ...prev, selectedIds: null }));
     setPagination((prev) => ({ ...prev, pageIndex: 0 }));
   };
 
