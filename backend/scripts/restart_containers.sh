@@ -64,8 +64,10 @@ fi
 # broken.
 VSCODE_ENV="$SCRIPT_DIR/../../.vscode/.env"
 if [[ -z "${OPENSEARCH_ADMIN_PASSWORD:-}" && -f "$VSCODE_ENV" ]]; then
+    set -a
     # shellcheck source=/dev/null
     source "$VSCODE_ENV"
+    set +a
 fi
 
 # Start the OpenSearch container using the same service from docker-compose that
