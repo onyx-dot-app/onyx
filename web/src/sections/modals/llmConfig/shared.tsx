@@ -19,6 +19,20 @@ import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import Text from "@/refresh-components/texts/Text";
 import { Button as OpalButton } from "@opal/components";
 import { BaseLLMFormValues } from "./formUtils";
+import { Card } from "@/refresh-components/cards";
+import { WithoutStyles } from "@opal/types";
+import Separator from "@/refresh-components/Separator";
+import SwitchField from "@/refresh-components/form/SwitchField";
+
+export function FieldSeparator() {
+  return <Separator noPadding className="px-2" />;
+}
+
+type FieldWrapperProps = WithoutStyles<React.HTMLAttributes<HTMLDivElement>>;
+
+function FieldWrapper(props: FieldWrapperProps) {
+  return <div {...props} className="p-2 w-full" />;
+}
 
 // ─── DisplayNameField ────────────────────────────────────────────────────────
 
@@ -28,18 +42,20 @@ interface DisplayNameFieldProps {
 
 export function DisplayNameField({ disabled = false }: DisplayNameFieldProps) {
   return (
-    <InputLayouts.Vertical
-      name="name"
-      title="Display Name"
-      subDescription="Used to identify this provider in the app."
-      optional
-    >
-      <InputTypeInField
+    <FieldWrapper>
+      <InputLayouts.Vertical
         name="name"
-        placeholder="Display Name"
-        variant={disabled ? "disabled" : undefined}
-      />
-    </InputLayouts.Vertical>
+        title="Display Name"
+        subDescription="Used to identify this provider in the app."
+        optional
+      >
+        <InputTypeInField
+          name="name"
+          placeholder="Display Name"
+          variant={disabled ? "disabled" : undefined}
+        />
+      </InputLayouts.Vertical>
+    </FieldWrapper>
   );
 }
 
@@ -55,18 +71,20 @@ export function APIKeyField({
   providerName,
 }: APIKeyFieldProps) {
   return (
-    <InputLayouts.Vertical
-      name="api_key"
-      title="API Key"
-      subDescription={
-        providerName
-          ? `Paste your API key from ${providerName} to access your models.`
-          : "Paste your API key to access your models."
-      }
-      optional={optional}
-    >
-      <PasswordInputTypeInField name="api_key" />
-    </InputLayouts.Vertical>
+    <FieldWrapper>
+      <InputLayouts.Vertical
+        name="api_key"
+        title="API Key"
+        subDescription={
+          providerName
+            ? `Paste your API key from ${providerName} to access your models.`
+            : "Paste your API key to access your models."
+        }
+        optional={optional}
+      >
+        <PasswordInputTypeInField name="api_key" />
+      </InputLayouts.Vertical>
+    </FieldWrapper>
   );
 }
 
@@ -214,40 +232,13 @@ export function AdvancedOptions({ formikProps }: AdvancedOptionsProps) {
 
 // ─── DisplayModels ───────────────────────────────────────────────────────────
 
-interface AutoModeToggleProps {
-  isAutoMode: boolean;
-  onToggle: (nextValue: boolean) => void;
-}
-
-function AutoModeToggle({ isAutoMode, onToggle }: AutoModeToggleProps) {
-  return (
-    <div className="flex items-center justify-between">
-      <div>
-        <Text as="p" mainUiAction className="block">
-          Auto Update
-        </Text>
-        <Text as="p" secondaryBody text03 className="block">
-          Automatically update the available models when new models are
-          released. Recommended for most teams.
-        </Text>
-      </div>
-      <Switch checked={isAutoMode} onCheckedChange={onToggle} />
-    </div>
-  );
-}
-
-function DisplayModelHeader({ alternativeText }: { alternativeText?: string }) {
-  return (
-    <div>
-      <Text as="p" mainUiAction>
-        Available Models
-      </Text>
-      <Text as="p" secondaryBody text03>
-        {alternativeText ??
-          "Select which models to make available for this provider."}
-      </Text>
-    </div>
-  );
+export interface DisplayModelsProps<T> {
+  formikProps: FormikProps<T>;
+  modelConfigurations: ModelConfiguration[];
+  noModelConfigurationsMessage?: string;
+  isLoading?: boolean;
+  recommendedDefaultModel: SimpleKnownModel | null;
+  shouldShowAutoUpdateToggle: boolean;
 }
 
 export function DisplayModels<T extends BaseLLMFormValues>({
@@ -257,28 +248,18 @@ export function DisplayModels<T extends BaseLLMFormValues>({
   isLoading,
   recommendedDefaultModel,
   shouldShowAutoUpdateToggle,
-}: {
-  formikProps: FormikProps<T>;
-  modelConfigurations: ModelConfiguration[];
-  noModelConfigurationsMessage?: string;
-  isLoading?: boolean;
-  recommendedDefaultModel: SimpleKnownModel | null;
-  shouldShowAutoUpdateToggle: boolean;
-}) {
+}: DisplayModelsProps<T>) {
   const isAutoMode = formikProps.values.is_auto_mode;
+  const selectedModels = formikProps.values.selected_model_names ?? [];
+  const defaultModel = formikProps.values.default_model_name;
+  const selectedModelSet = new Set(selectedModels);
+  const allModelNames = modelConfigurations.map((model) => model.name);
+  const areAllModelsSelected =
+    allModelNames.length > 0 &&
+    allModelNames.every((modelName) => selectedModelSet.has(modelName));
+  const areSomeModelsSelected = selectedModels.length > 0;
 
-  if (isLoading) {
-    return (
-      <div>
-        <DisplayModelHeader />
-        <div className="mt-2 flex items-center p-3 border border-border-01 rounded-lg bg-background-neutral-00">
-          <div className="h-5 w-5 animate-spin rounded-full border-2 border-border-03 border-t-action-link-05" />
-        </div>
-      </div>
-    );
-  }
-
-  const handleCheckboxChange = (modelName: string, checked: boolean) => {
+  function handleCheckboxChange(modelName: string, checked: boolean) {
     // Read current values inside the handler to avoid stale closure issues
     const currentSelected = formikProps.values.selected_model_names ?? [];
     const currentDefault = formikProps.values.default_model_name;
@@ -300,13 +281,13 @@ export function DisplayModels<T extends BaseLLMFormValues>({
         formikProps.setFieldValue("default_model_name", null);
       }
     }
-  };
+  }
 
-  const handleSetDefault = (modelName: string) => {
+  function handleSetDefault(modelName: string) {
     formikProps.setFieldValue("default_model_name", modelName);
-  };
+  }
 
-  const handleToggleAutoMode = (nextIsAutoMode: boolean) => {
+  function handleToggleAutoMode(nextIsAutoMode: boolean) {
     formikProps.setFieldValue("is_auto_mode", nextIsAutoMode);
     formikProps.setFieldValue(
       "selected_model_names",
@@ -316,18 +297,9 @@ export function DisplayModels<T extends BaseLLMFormValues>({
       "default_model_name",
       recommendedDefaultModel?.name ?? null
     );
-  };
+  }
 
-  const selectedModels = formikProps.values.selected_model_names ?? [];
-  const defaultModel = formikProps.values.default_model_name;
-  const selectedModelSet = new Set(selectedModels);
-  const allModelNames = modelConfigurations.map((model) => model.name);
-  const areAllModelsSelected =
-    allModelNames.length > 0 &&
-    allModelNames.every((modelName) => selectedModelSet.has(modelName));
-  const areSomeModelsSelected = selectedModels.length > 0;
-
-  const handleSelectAllModels = () => {
+  function handleSelectAllModels() {
     formikProps.setFieldValue("selected_model_names", allModelNames);
 
     const currentDefault = defaultModel ?? "";
@@ -342,20 +314,11 @@ export function DisplayModels<T extends BaseLLMFormValues>({
           : allModelNames[0];
       formikProps.setFieldValue("default_model_name", nextDefault);
     }
-  };
-  const handleClearAllModels = () => {
+  }
+
+  function handleClearAllModels() {
     formikProps.setFieldValue("selected_model_names", []);
     formikProps.setFieldValue("default_model_name", null);
-  };
-
-  if (modelConfigurations.length === 0) {
-    return (
-      <div>
-        <DisplayModelHeader
-          alternativeText={noModelConfigurationsMessage ?? "No models found"}
-        />
-      </div>
-    );
   }
 
   // Sort auto mode models: default model first
@@ -369,8 +332,14 @@ export function DisplayModels<T extends BaseLLMFormValues>({
   });
 
   return (
-    <div className="flex flex-col gap-3">
-      <DisplayModelHeader />
+    <Card variant="borderless" padding={0.5} gap={0.5}>
+      <InputLayouts.Horizontal
+        title="Models"
+        description="Select models to make available for this provider."
+      >
+        {/*<OpalButton />*/}
+      </InputLayouts.Horizontal>
+
       {!isAutoMode && modelConfigurations.length > 0 && (
         <Section
           flexDirection="row"
@@ -439,14 +408,8 @@ export function DisplayModels<T extends BaseLLMFormValues>({
           )}
         </Section>
       )}
-      <div className="border border-border-01 rounded-lg p-3">
-        {shouldShowAutoUpdateToggle && (
-          <AutoModeToggle
-            isAutoMode={isAutoMode}
-            onToggle={handleToggleAutoMode}
-          />
-        )}
 
+      <div className="border border-border-01 rounded-lg p-3">
         {/* Model list section */}
         <div
           className={cn(
@@ -588,6 +551,15 @@ export function DisplayModels<T extends BaseLLMFormValues>({
           )}
         </div>
       </div>
-    </div>
+
+      {shouldShowAutoUpdateToggle && (
+        <InputLayouts.Horizontal
+          title="Auto Update"
+          description="Update the available models when new models are released."
+        >
+          <Switch checked={isAutoMode} onCheckedChange={handleToggleAutoMode} />
+        </InputLayouts.Horizontal>
+      )}
+    </Card>
   );
 }

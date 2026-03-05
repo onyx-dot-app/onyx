@@ -9,7 +9,6 @@ import {
   getProviderDisplayName,
   getProviderProductName,
 } from "@/lib/llmConfig/providers";
-import { Section } from "@/layouts/general-layouts";
 
 interface LLMConfigurationModalWrapperProps {
   providerEndpoint: string;
@@ -52,8 +51,8 @@ export function LLMConfigurationModalWrapper({
             description={description}
             onClose={onClose}
           />
-          <Modal.Body>
-            <Section alignItems="start">{children}</Section>
+          <Modal.Body padding={0.5} gap={0.5}>
+            {children}
           </Modal.Body>
           <Modal.Footer>
             <Button prominence="secondary" onClick={onClose} type="button">

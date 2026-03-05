@@ -21,6 +21,7 @@ import {
   APIKeyField,
   DisplayModels,
   DisplayNameField,
+  FieldSeparator,
   SingleDefaultModelField,
 } from "./shared";
 import Separator from "@/refresh-components/Separator";
@@ -133,11 +134,12 @@ export function OpenAIModal({
 
           {!isOnboarding && (
             <>
-              <Separator noPadding />
+              <FieldSeparator />
               <DisplayNameField disabled={!!existingLlmProvider} />
             </>
           )}
 
+          <FieldSeparator />
           {isOnboarding ? (
             <SingleDefaultModelField placeholder="E.g. gpt-5.2" />
           ) : (
@@ -151,7 +153,12 @@ export function OpenAIModal({
             />
           )}
 
-          {!isOnboarding && <AdvancedOptions formikProps={formikProps} />}
+          {!isOnboarding && (
+            <>
+              <FieldSeparator />
+              {/*<AdvancedOptions formikProps={formikProps} />*/}
+            </>
+          )}
         </LLMConfigurationModalWrapper>
       )}
     </Formik>
