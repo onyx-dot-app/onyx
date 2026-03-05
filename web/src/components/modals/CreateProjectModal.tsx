@@ -68,7 +68,9 @@ export default function CreateProjectModal({
             <Button prominence="secondary" onClick={() => modal.toggle(false)}>
               Cancel
             </Button>
-            <Button onClick={handleSubmit}>Create Project</Button>
+            <Button disabled={!projectName.trim()} onClick={handleSubmit}>
+              Create Project
+            </Button>
           </Modal.Footer>
         </Modal.Content>
       </Modal>
