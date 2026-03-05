@@ -216,6 +216,23 @@ func IsCommitAppliedOnBranch(commitSHA, branchName string) bool {
 	return false
 }
 
+// ResolvePRToMergeCommit resolves a GitHub PR number to its merge commit SHA
+func ResolvePRToMergeCommit(prNumber string) (string, error) {
+	cmd := exec.Command("gh", "pr", "view", prNumber, "--json", "mergeCommit", "--jq", ".mergeCommit.oid")
+	output, err := cmd.Output()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return "", fmt.Errorf("gh pr view failed: %w: %s", err, string(exitErr.Stderr))
+		}
+		return "", fmt.Errorf("gh pr view failed: %w", err)
+	}
+	sha := strings.TrimSpace(string(output))
+	if sha == "" {
+		return "", fmt.Errorf("PR #%s has no merge commit (is it merged?)", prNumber)
+	}
+	return sha, nil
+}
+
 // RunCherryPickContinue runs git cherry-pick --continue --no-edit
 func RunCherryPickContinue() error {
 	return RunCommandVerboseOnError("cherry-pick", "--continue", "--no-edit")
