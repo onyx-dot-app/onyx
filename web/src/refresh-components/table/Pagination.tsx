@@ -183,13 +183,14 @@ function NavButtons({
  * appropriate UI.
  */
 export default function Pagination(props: PaginationProps) {
-  switch (props.type) {
+  const normalized = { ...props, totalPages: Math.max(1, props.totalPages) };
+  switch (normalized.type) {
     case "simple":
-      return <SimplePaginationInner {...props} />;
+      return <SimplePaginationInner {...normalized} />;
     case "count":
-      return <CountPaginationInner {...props} />;
+      return <CountPaginationInner {...normalized} />;
     case "list":
-      return <ListPaginationInner {...props} />;
+      return <ListPaginationInner {...normalized} />;
   }
 }
 
