@@ -282,6 +282,17 @@ topk(10, onyx_tracemalloc_delta_bytes)
 rate(onyx_gc_uncollectable_total[5m])
 ```
 
+## Admin Debug Endpoints (opt-in)
+
+Requires `ENABLE_ADMIN_DEBUG_ENDPOINTS=true`. All require admin auth.
+
+| Endpoint | Method | Returns |
+|----------|--------|---------|
+| `/admin/debug/process-info` | GET | RSS, VMS, CPU%, FD count, threads, uptime |
+| `/admin/debug/pool-state` | GET | Postgres + Redis pool state as JSON |
+| `/admin/debug/threads` | GET | All threads (name, daemon, ident) |
+| `/admin/debug/event-loop-lag` | GET | Current + max event loop lag |
+
 ## Example PromQL Queries
 
 ### Which endpoints are saturated right now?
