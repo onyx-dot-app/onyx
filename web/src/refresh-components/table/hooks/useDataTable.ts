@@ -278,7 +278,9 @@ export default function useDataTable<TData extends RowData>(
 
   // ---- TanStack table instance --------------------------------------------
   const serverPageCount = isServerSide
-    ? Math.ceil((serverSide!.totalItems || 0) / pagination.pageSize)
+    ? isFinite(pagination.pageSize) && pagination.pageSize > 0
+      ? Math.ceil((serverSide!.totalItems || 0) / pagination.pageSize)
+      : 1
     : undefined;
 
   const tableOpts: TableOptions<TData> = {
