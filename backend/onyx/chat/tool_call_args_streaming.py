@@ -6,6 +6,7 @@ from typing import Any
 from typing import NamedTuple
 from typing import Type
 
+from onyx.llm.model_response import ChatCompletionDeltaToolCall
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import ToolCallArgumentDelta
@@ -188,7 +189,7 @@ def _extract_delta_args(pre: str, delta: str) -> dict[str, str]:
 
 def maybe_emit_argument_delta(
     tool_calls_in_progress: Mapping[int, Mapping[str, Any]],
-    tool_call_delta: Any,
+    tool_call_delta: ChatCompletionDeltaToolCall,
     placement: Placement,
 ) -> Generator[Packet, None, None]:
     """Emit decoded tool-call argument deltas to the frontend.
