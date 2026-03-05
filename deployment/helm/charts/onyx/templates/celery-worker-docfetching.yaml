@@ -68,7 +68,7 @@ spec:
               "--pool=threads",
               "--concurrency=2",
               "--prefetch-multiplier=1",
-              "--loglevel=INFO",
+              {{ printf "--loglevel=%s" .Values.celery_worker_docfetching.logLevel | quote }},
               "--hostname=docfetching@%n",
               "-Q",
               "connector_doc_fetching",

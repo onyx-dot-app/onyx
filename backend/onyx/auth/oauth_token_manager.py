@@ -58,16 +58,27 @@ class OAuthTokenManager:
         if not user_token.token_data:
             raise ValueError("No token data available for refresh")
 
+        if (
+            self.oauth_config.client_id is None
+            or self.oauth_config.client_secret is None
+        ):
+            raise ValueError(
+                "OAuth client_id and client_secret are required for token refresh"
+            )
+
         token_data = self._unwrap_token_data(user_token.token_data)
 
+        data: dict[str, str] = {
+            "grant_type": "refresh_token",
+            "refresh_token": token_data["refresh_token"],
+            "client_id": self._unwrap_sensitive_str(self.oauth_config.client_id),
+            "client_secret": self._unwrap_sensitive_str(
+                self.oauth_config.client_secret
+            ),
+        }
         response = requests.post(
             self.oauth_config.token_url,
-            data={
-                "grant_type": "refresh_token",
-                "refresh_token": token_data["refresh_token"],
-                "client_id": self.oauth_config.client_id,
-                "client_secret": self.oauth_config.client_secret,
-            },
+            data=data,
             headers={"Accept": "application/json"},
         )
         response.raise_for_status()
@@ -115,15 +126,26 @@ class OAuthTokenManager:
 
     def exchange_code_for_token(self, code: str, redirect_uri: str) -> dict[str, Any]:
         """Exchange authorization code for access token"""
+        if (
+            self.oauth_config.client_id is None
+            or self.oauth_config.client_secret is None
+        ):
+            raise ValueError(
+                "OAuth client_id and client_secret are required for code exchange"
+            )
+
+        data: dict[str, str] = {
+            "grant_type": "authorization_code",
+            "code": code,
+            "client_id": self._unwrap_sensitive_str(self.oauth_config.client_id),
+            "client_secret": self._unwrap_sensitive_str(
+                self.oauth_config.client_secret
+            ),
+            "redirect_uri": redirect_uri,
+        }
         response = requests.post(
             self.oauth_config.token_url,
-            data={
-                "grant_type": "authorization_code",
-                "code": code,
-                "client_id": self.oauth_config.client_id,
-                "client_secret": self.oauth_config.client_secret,
-                "redirect_uri": redirect_uri,
-            },
+            data=data,
             headers={"Accept": "application/json"},
         )
         response.raise_for_status()
@@ -141,8 +163,13 @@ class OAuthTokenManager:
         oauth_config: OAuthConfig, redirect_uri: str, state: str
     ) -> str:
         """Build OAuth authorization URL"""
+        if oauth_config.client_id is None:
+            raise ValueError("OAuth client_id is required to build authorization URL")
+
         params: dict[str, Any] = {
-            "client_id": oauth_config.client_id,
+            "client_id": OAuthTokenManager._unwrap_sensitive_str(
+                oauth_config.client_id
+            ),
             "redirect_uri": redirect_uri,
             "response_type": "code",
             "state": state,
@@ -160,6 +187,12 @@ class OAuthTokenManager:
         separator = "&" if "?" in oauth_config.authorization_url else "?"
 
         return f"{oauth_config.authorization_url}{separator}{urlencode(params)}"
+
+    @staticmethod
+    def _unwrap_sensitive_str(value: SensitiveValue[str] | str) -> str:
+        if isinstance(value, SensitiveValue):
+            return value.get_value(apply_mask=False)
+        return value
 
     @staticmethod
     def _unwrap_token_data(

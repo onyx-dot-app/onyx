@@ -1,4 +1,5 @@
 import json
+import mimetypes
 
 from sqlalchemy.orm import Session
 
@@ -12,12 +13,39 @@ from onyx.db.chat import create_db_search_doc
 from onyx.db.models import ChatMessage
 from onyx.db.models import ToolCall
 from onyx.db.tools import create_tool_call_no_commit
+from onyx.file_store.models import FileDescriptor
 from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.natural_language_processing.utils import get_tokenizer
+from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
 from onyx.tools.models import ToolCallInfo
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+
+def _extract_referenced_file_descriptors(
+    tool_calls: list[ToolCallInfo],
+    message_text: str,
+) -> list[FileDescriptor]:
+    """Extract FileDescriptors for code interpreter files referenced in the message text."""
+    descriptors: list[FileDescriptor] = []
+    for tool_call_info in tool_calls:
+        if not tool_call_info.generated_files:
+            continue
+        for gen_file in tool_call_info.generated_files:
+            file_id = (
+                gen_file.file_link.rsplit("/", 1)[-1] if gen_file.file_link else ""
+            )
+            if file_id and file_id in message_text:
+                mime_type, _ = mimetypes.guess_type(gen_file.filename)
+                descriptors.append(
+                    FileDescriptor(
+                        id=file_id,
+                        type=mime_type_to_chat_file_type(mime_type),
+                        name=gen_file.filename,
+                    )
+                )
+    return descriptors
 
 
 def _create_and_link_tool_calls(
@@ -296,6 +324,15 @@ def save_chat_turn(
     assistant_message.citations = (
         citation_number_to_search_doc_id if citation_number_to_search_doc_id else None
     )
+
+    # 8. Attach code interpreter generated files that the assistant actually
+    # referenced in its response, so they are available via load_all_chat_files
+    # on subsequent turns. Files not mentioned are intermediate artifacts.
+    if message_text:
+        referenced = _extract_referenced_file_descriptors(tool_calls, message_text)
+        if referenced:
+            existing_files = assistant_message.files or []
+            assistant_message.files = existing_files + referenced
 
     # Finally save the messages, tool calls, and docs
     db_session.commit()

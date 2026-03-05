@@ -146,6 +146,7 @@ class DocumentIndexingBatchAdapter:
                     doc_id_to_document_set.get(chunk.source_document.id, [])
                 ),
                 user_project=[],
+                personas=[],
                 boost=(
                     context.id_to_boost_map[chunk.source_document.id]
                     if chunk.source_document.id in context.id_to_boost_map

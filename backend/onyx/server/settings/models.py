@@ -19,6 +19,7 @@ class ApplicationStatus(str, Enum):
     PAYMENT_REMINDER = "payment_reminder"
     GRACE_PERIOD = "grace_period"
     GATED_ACCESS = "gated_access"
+    SEAT_LIMIT_EXCEEDED = "seat_limit_exceeded"
 
 
 class Notification(BaseModel):
@@ -55,11 +56,15 @@ class Settings(BaseModel):
     gpu_enabled: bool | None = None
     application_status: ApplicationStatus = ApplicationStatus.ACTIVE
     anonymous_user_enabled: bool | None = None
+    invite_only_enabled: bool = False
     deep_research_enabled: bool | None = None
+    search_ui_enabled: bool | None = None
 
-    # Enterprise features flag - set by license enforcement at runtime
-    # When LICENSE_ENFORCEMENT_ENABLED=true, this reflects license status
-    # When LICENSE_ENFORCEMENT_ENABLED=false, defaults to False
+    # Whether EE features are unlocked for use.
+    # Depends on license status: True when the user has a valid license
+    # (ACTIVE, GRACE_PERIOD, PAYMENT_REMINDER), False when there's no license
+    # or the license is expired (GATED_ACCESS).
+    # This controls UI visibility of EE features (user groups, analytics, RBAC, etc.).
     ee_features_enabled: bool = False
 
     temperature_override_enabled: bool | None = False
@@ -79,6 +84,10 @@ class Settings(BaseModel):
 
     # Default Assistant settings
     disable_default_assistant: bool | None = False
+
+    # Seat usage - populated by license enforcement when seat limit is exceeded
+    seat_count: int | None = None
+    used_seats: int | None = None
 
     # OpenSearch migration
     opensearch_indexing_enabled: bool = False

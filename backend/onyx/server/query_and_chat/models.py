@@ -125,6 +125,11 @@ class SendMessageRequest(BaseModel):
     # - No CitationInfo packets are emitted during streaming
     include_citations: bool = True
 
+    # Additional context injected into the LLM call but NOT stored in the DB
+    # (not shown in chat history). Used e.g. by the Chrome extension to pass
+    # the current tab URL when "Read this tab" is enabled.
+    additional_context: str | None = None
+
     @model_validator(mode="after")
     def check_chat_session_id_or_info(self) -> "SendMessageRequest":
         # If neither is provided, default to creating a new chat session using the
@@ -187,6 +192,7 @@ class ChatSessionDetails(BaseModel):
 
 class ChatSessionsResponse(BaseModel):
     sessions: list[ChatSessionDetails]
+    has_more: bool = False
 
 
 class ChatMessageDetail(BaseModel):
@@ -224,6 +230,7 @@ class ChatSessionDetailResponse(BaseModel):
     current_alternate_model: str | None
     current_temperature_override: float | None
     deleted: bool = False
+    owner_name: str | None = None
     packets: list[list[Packet]]
 
 

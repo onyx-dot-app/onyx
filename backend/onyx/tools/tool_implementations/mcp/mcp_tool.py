@@ -159,7 +159,8 @@ class MCPTool(Tool[None]):
                 and self.mcp_server.auth_type is not None
             )
             has_auth_config = (
-                self.connection_config is not None and bool(headers)
+                (self.connection_config is not None and bool(headers))
+                or bool(self._additional_headers)
             ) or (is_passthrough_oauth and self._user_oauth_token is not None)
 
             if requires_auth and not has_auth_config:

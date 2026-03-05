@@ -14,11 +14,20 @@
   border-color: var(--border-01);
 }
 
-.switch-normal[data-state="checked"] {
+.switch-normal-checked {
   background-color: var(--action-link-05);
+  border: 1px solid transparent;
 }
-.switch-normal[data-state="checked"]:hover {
+.switch-normal-checked:hover {
   background-color: var(--action-link-04);
+}
+.switch-normal-checked:focus,
+.switch-normal-checked:focus-within {
+  border-color: var(--action-link-04);
+}
+.switch-normal-checked:focus:hover,
+.switch-normal-checked:focus-within:hover {
+  border-color: var(--border-01);
 }
 
 .switch-disabled {
@@ -26,8 +35,10 @@
   border: 1px solid transparent;
   cursor: not-allowed !important;
 }
-.switch-disabled[data-state="checked"] {
+.switch-disabled-checked {
   background-color: var(--action-link-03);
+  border: 1px solid transparent;
+  cursor: not-allowed !important;
 }
 
 .switch-thumb {

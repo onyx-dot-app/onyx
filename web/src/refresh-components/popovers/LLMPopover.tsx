@@ -3,12 +3,12 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
-import { structureValue } from "@/lib/llm/utils";
+import { structureValue } from "@/lib/llmConfig/utils";
 import {
   getProviderIcon,
   AGGREGATOR_PROVIDERS,
 } from "@/app/admin/configuration/llm/utils";
-import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
+import { LLMProviderDescriptor } from "@/interfaces/llm";
 import { Slider } from "@/components/ui/slider";
 import { useUser } from "@/providers/UserProvider";
 import LineItem from "@/refresh-components/buttons/LineItem";
@@ -33,7 +33,7 @@ import { LLMOption, LLMOptionGroup } from "./interfaces";
 
 export interface LLMPopoverProps {
   llmManager: LlmManager;
-  requiresImageGeneration?: boolean;
+  requiresImageInput?: boolean;
   folded?: boolean;
   onSelect?: (value: string) => void;
   currentModelName?: string;
@@ -140,6 +140,7 @@ export function groupLlmOptions(
 
 export default function LLMPopover({
   llmManager,
+  requiresImageInput,
   folded,
   onSelect,
   currentModelName,
@@ -186,19 +187,23 @@ export default function LLMPopover({
     [llmProviders, currentModelName]
   );
 
-  // Filter options by search query
+  // Filter options by vision capability (when images are uploaded) and search query
   const filteredOptions = useMemo(() => {
-    if (!searchQuery.trim()) {
-      return llmOptions;
+    let result = llmOptions;
+    if (requiresImageInput) {
+      result = result.filter((opt) => opt.supportsImageInput);
     }
-    const query = searchQuery.toLowerCase();
-    return llmOptions.filter(
-      (opt) =>
-        opt.displayName.toLowerCase().includes(query) ||
-        opt.modelName.toLowerCase().includes(query) ||
-        (opt.vendor && opt.vendor.toLowerCase().includes(query))
-    );
-  }, [llmOptions, searchQuery]);
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      result = result.filter(
+        (opt) =>
+          opt.displayName.toLowerCase().includes(query) ||
+          opt.modelName.toLowerCase().includes(query) ||
+          (opt.vendor && opt.vendor.toLowerCase().includes(query))
+      );
+    }
+    return result;
+  }, [llmOptions, searchQuery, requiresImageInput]);
 
   // Group options by provider using backend-provided display names and ordering
   // For aggregator providers (bedrock, openrouter, vertex_ai), flatten to "Provider/Vendor" format

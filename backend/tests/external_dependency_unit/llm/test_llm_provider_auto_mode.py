@@ -14,9 +14,14 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
+from onyx.db.enums import LLMModelFlowType
+from onyx.db.llm import fetch_auto_mode_providers
 from onyx.db.llm import fetch_default_llm_model
 from onyx.db.llm import fetch_existing_llm_provider
+from onyx.db.llm import fetch_existing_llm_providers
+from onyx.db.llm import fetch_llm_provider_view
 from onyx.db.llm import remove_llm_provider
+from onyx.db.llm import sync_auto_mode_models
 from onyx.db.llm import update_default_provider
 from onyx.db.models import UserRole
 from onyx.llm.constants import LlmProviderNames
@@ -132,7 +137,6 @@ class TestAutoModeSyncFeature:
                         api_key="sk-test-key-00000000000000000000000000000000000",
                         api_key_changed=True,
                         is_auto_mode=True,
-                        default_model_name=expected_default_model,
                         model_configurations=[],  # No model configs provided
                     ),
                     is_creation=True,
@@ -160,13 +164,8 @@ class TestAutoModeSyncFeature:
                 if mc.name in all_expected_models:
                     assert mc.is_visible is True, f"Model '{mc.name}' should be visible"
 
-            # Verify the default model was set correctly
-            assert (
-                provider.default_model_name == expected_default_model
-            ), f"Default model should be '{expected_default_model}'"
-
             # Step 4: Set the provider as default
-            update_default_provider(provider.id, db_session)
+            update_default_provider(provider.id, expected_default_model, db_session)
 
             # Step 5: Fetch the default provider and verify
             default_model = fetch_default_llm_model(db_session)
@@ -214,8 +213,8 @@ class TestAutoModeSyncFeature:
                     ),
                     additional_visible_models=[
                         SimpleKnownModel(
-                            name="claude-3-5-haiku-latest",
-                            display_name="Claude 3.5 Haiku",
+                            name="claude-haiku-4-5",
+                            display_name="Claude Haiku 4.5",
                         )
                     ],
                 ),
@@ -235,7 +234,6 @@ class TestAutoModeSyncFeature:
                         api_key="sk-test-key-00000000000000000000000000000000000",
                         api_key_changed=True,
                         is_auto_mode=True,
-                        default_model_name="gpt-4o",
                         model_configurations=[],
                     ),
                     is_creation=True,
@@ -257,7 +255,7 @@ class TestAutoModeSyncFeature:
 
             # Anthropic models should NOT be present
             assert "claude-3-5-sonnet-latest" not in model_names
-            assert "claude-3-5-haiku-latest" not in model_names
+            assert "claude-haiku-4-5" not in model_names
 
         finally:
             db_session.rollback()
@@ -314,7 +312,6 @@ class TestAutoModeSyncFeature:
                     api_key="sk-test-key-00000000000000000000000000000000000",
                     api_key_changed=True,
                     is_auto_mode=False,  # Not in auto mode initially
-                    default_model_name="gpt-4",
                     model_configurations=initial_models,
                 ),
                 is_creation=True,
@@ -323,13 +320,13 @@ class TestAutoModeSyncFeature:
             )
 
             # Verify initial state: all models are visible
-            provider = fetch_existing_llm_provider(
+            initial_provider = fetch_existing_llm_provider(
                 name=provider_name, db_session=db_session
             )
-            assert provider is not None
-            assert provider.is_auto_mode is False
+            assert initial_provider is not None
+            assert initial_provider.is_auto_mode is False
 
-            for mc in provider.model_configurations:
+            for mc in initial_provider.model_configurations:
                 assert (
                     mc.is_visible is True
                 ), f"Initial model '{mc.name}' should be visible"
@@ -341,12 +338,12 @@ class TestAutoModeSyncFeature:
             ):
                 put_llm_provider(
                     llm_provider_upsert_request=LLMProviderUpsertRequest(
+                        id=initial_provider.id,
                         name=provider_name,
                         provider=LlmProviderNames.OPENAI,
                         api_key=None,  # Not changing API key
                         api_key_changed=False,
                         is_auto_mode=True,  # Now enabling auto mode
-                        default_model_name=auto_mode_default,
                         model_configurations=[],  # Auto mode will sync from config
                     ),
                     is_creation=False,  # This is an update
@@ -357,15 +354,15 @@ class TestAutoModeSyncFeature:
             # Step 3: Verify model visibility after auto mode transition
             # Expire session cache to force fresh fetch after sync_auto_mode_models committed
             db_session.expire_all()
-            provider = fetch_existing_llm_provider(
-                name=provider_name, db_session=db_session
+            provider_view = fetch_llm_provider_view(
+                provider_name=provider_name, db_session=db_session
             )
-            assert provider is not None
-            assert provider.is_auto_mode is True
+            assert provider_view is not None
+            assert provider_view.is_auto_mode is True
 
             # Build a map of model name -> visibility
             model_visibility = {
-                mc.name: mc.is_visible for mc in provider.model_configurations
+                mc.name: mc.is_visible for mc in provider_view.model_configurations
             }
 
             # Models in auto mode config should be visible
@@ -384,9 +381,6 @@ class TestAutoModeSyncFeature:
                     assert (
                         model_visibility[model_name] is False
                     ), f"Model '{model_name}' not in auto config should NOT be visible"
-
-            # Verify the default model was updated
-            assert provider.default_model_name == auto_mode_default
 
         finally:
             db_session.rollback()
@@ -429,8 +423,12 @@ class TestAutoModeSyncFeature:
                         api_key="sk-test-key-00000000000000000000000000000000000",
                         api_key_changed=True,
                         is_auto_mode=True,
-                        default_model_name="gpt-4o",
-                        model_configurations=[],
+                        model_configurations=[
+                            ModelConfigurationUpsertRequest(
+                                name="gpt-4o",
+                                is_visible=True,
+                            )
+                        ],
                     ),
                     is_creation=True,
                     _=_create_mock_admin(),
@@ -482,7 +480,7 @@ class TestAutoModeSyncFeature:
 
         # Provider 2 (Anthropic) config
         provider_2_default_model = "claude-3-5-sonnet-latest"
-        provider_2_additional_models = ["claude-3-5-haiku-latest"]
+        provider_2_additional_models = ["claude-haiku-4-5"]
 
         # Create mock recommendations with both providers
         mock_recommendations = LLMRecommendations(
@@ -532,7 +530,6 @@ class TestAutoModeSyncFeature:
                         api_key=provider_1_api_key,
                         api_key_changed=True,
                         is_auto_mode=True,
-                        default_model_name=provider_1_default_model,
                         model_configurations=[],
                     ),
                     is_creation=True,
@@ -546,7 +543,7 @@ class TestAutoModeSyncFeature:
                 name=provider_1_name, db_session=db_session
             )
             assert provider_1 is not None
-            update_default_provider(provider_1.id, db_session)
+            update_default_provider(provider_1.id, provider_1_default_model, db_session)
 
             with patch(
                 "onyx.server.manage.llm.api.fetch_llm_recommendations_from_github",
@@ -560,7 +557,6 @@ class TestAutoModeSyncFeature:
                         api_key=provider_2_api_key,
                         api_key_changed=True,
                         is_auto_mode=True,
-                        default_model_name=provider_2_default_model,
                         model_configurations=[],
                     ),
                     is_creation=True,
@@ -581,7 +577,7 @@ class TestAutoModeSyncFeature:
                 name=provider_2_name, db_session=db_session
             )
             assert provider_2 is not None
-            update_default_provider(provider_2.id, db_session)
+            update_default_provider(provider_2.id, provider_2_default_model, db_session)
 
             # Step 5: Verify provider 2 is now the default
             db_session.expire_all()
@@ -606,3 +602,455 @@ class TestAutoModeSyncFeature:
             db_session.rollback()
             _cleanup_provider(db_session, provider_1_name)
             _cleanup_provider(db_session, provider_2_name)
+
+
+class TestAutoModeMissingFlows:
+    """Regression test: sync_auto_mode_models must create LLMModelFlow rows
+    for every ModelConfiguration it inserts, otherwise the provider vanishes
+    from listing queries that join through LLMModelFlow."""
+
+    def test_sync_auto_mode_creates_flow_rows(
+        self,
+        db_session: Session,
+        provider_name: str,
+    ) -> None:
+        """
+        Steps:
+        1. Create a provider with no model configs (empty shell).
+        2. Call sync_auto_mode_models to add models from a mock config.
+        3. Assert every new ModelConfiguration has at least one LLMModelFlow.
+        4. Assert fetch_existing_llm_providers (which joins through
+           LLMModelFlow) returns the provider.
+        """
+        mock_recommendations = _create_mock_llm_recommendations(
+            provider=LlmProviderNames.OPENAI,
+            default_model_name="gpt-4o",
+            additional_models=["gpt-4o-mini"],
+        )
+
+        try:
+            # Step 1: Create provider with no model configs
+            put_llm_provider(
+                llm_provider_upsert_request=LLMProviderUpsertRequest(
+                    name=provider_name,
+                    provider=LlmProviderNames.OPENAI,
+                    api_key="sk-test-key-00000000000000000000000000000000000",
+                    api_key_changed=True,
+                    is_auto_mode=True,
+                    model_configurations=[],
+                ),
+                is_creation=True,
+                _=_create_mock_admin(),
+                db_session=db_session,
+            )
+
+            # Step 2: Run sync_auto_mode_models (simulating the periodic sync)
+            db_session.expire_all()
+            provider = fetch_existing_llm_provider(
+                name=provider_name, db_session=db_session
+            )
+            assert provider is not None
+
+            sync_auto_mode_models(
+                db_session=db_session,
+                provider=provider,
+                llm_recommendations=mock_recommendations,
+            )
+
+            # Step 3: Every ModelConfiguration must have at least one LLMModelFlow
+            db_session.expire_all()
+            provider = fetch_existing_llm_provider(
+                name=provider_name, db_session=db_session
+            )
+            assert provider is not None
+
+            synced_model_names = {mc.name for mc in provider.model_configurations}
+            assert "gpt-4o" in synced_model_names
+            assert "gpt-4o-mini" in synced_model_names
+
+            for mc in provider.model_configurations:
+                assert len(mc.llm_model_flows) > 0, (
+                    f"ModelConfiguration '{mc.name}' (id={mc.id}) has no "
+                    f"LLMModelFlow rows — it will be invisible to listing queries"
+                )
+
+                flow_types = {f.llm_model_flow_type for f in mc.llm_model_flows}
+                assert (
+                    LLMModelFlowType.CHAT in flow_types
+                ), f"ModelConfiguration '{mc.name}' is missing a CHAT flow"
+
+            # Step 4: The provider must appear in fetch_existing_llm_providers
+            listed_providers = fetch_existing_llm_providers(
+                db_session=db_session,
+                flow_type_filter=[LLMModelFlowType.CHAT],
+            )
+            listed_provider_names = {p.name for p in listed_providers}
+            assert provider_name in listed_provider_names, (
+                f"Provider '{provider_name}' not returned by "
+                f"fetch_existing_llm_providers — models are missing flow rows"
+            )
+
+        finally:
+            db_session.rollback()
+            _cleanup_provider(db_session, provider_name)
+
+
+class TestAutoModeTransitionsAndResync:
+    """Tests for auto/manual transitions, config evolution, and sync idempotency."""
+
+    def test_auto_to_manual_mode_preserves_models_and_stops_syncing(
+        self,
+        db_session: Session,
+        provider_name: str,
+    ) -> None:
+        """Disabling auto mode should preserve the current model list and
+        prevent future syncs from altering visibility.
+
+        Steps:
+        1. Create provider in auto mode — models synced from config.
+        2. Update provider to manual mode (is_auto_mode=False).
+        3. Verify all models remain with unchanged visibility.
+        4. Call sync_auto_mode_models with a *different* config.
+        5. Verify fetch_auto_mode_providers excludes this provider, so the
+           periodic task would never call sync on it.
+        """
+        initial_config = _create_mock_llm_recommendations(
+            provider=LlmProviderNames.OPENAI,
+            default_model_name="gpt-4o",
+            additional_models=["gpt-4o-mini"],
+        )
+
+        try:
+            # Step 1: Create in auto mode
+            with patch(
+                "onyx.server.manage.llm.api.fetch_llm_recommendations_from_github",
+                return_value=initial_config,
+            ):
+                put_llm_provider(
+                    llm_provider_upsert_request=LLMProviderUpsertRequest(
+                        name=provider_name,
+                        provider=LlmProviderNames.OPENAI,
+                        api_key="sk-test-key-00000000000000000000000000000000000",
+                        api_key_changed=True,
+                        is_auto_mode=True,
+                        model_configurations=[],
+                    ),
+                    is_creation=True,
+                    _=_create_mock_admin(),
+                    db_session=db_session,
+                )
+
+            db_session.expire_all()
+            provider = fetch_existing_llm_provider(
+                name=provider_name, db_session=db_session
+            )
+            assert provider is not None
+            visibility_before = {
+                mc.name: mc.is_visible for mc in provider.model_configurations
+            }
+            assert visibility_before == {"gpt-4o": True, "gpt-4o-mini": True}
+
+            # Step 2: Switch to manual mode
+            put_llm_provider(
+                llm_provider_upsert_request=LLMProviderUpsertRequest(
+                    id=provider.id,
+                    name=provider_name,
+                    provider=LlmProviderNames.OPENAI,
+                    api_key=None,
+                    api_key_changed=False,
+                    is_auto_mode=False,
+                    model_configurations=[
+                        ModelConfigurationUpsertRequest(name="gpt-4o", is_visible=True),
+                        ModelConfigurationUpsertRequest(
+                            name="gpt-4o-mini", is_visible=True
+                        ),
+                    ],
+                ),
+                is_creation=False,
+                _=_create_mock_admin(),
+                db_session=db_session,
+            )
+
+            # Step 3: Models unchanged
+            db_session.expire_all()
+            provider = fetch_existing_llm_provider(
+                name=provider_name, db_session=db_session
+            )
+            assert provider is not None
+            assert provider.is_auto_mode is False
+            visibility_after = {
+                mc.name: mc.is_visible for mc in provider.model_configurations
+            }
+            assert visibility_after == visibility_before
+
+            # Step 4-5: Provider excluded from auto mode queries
+            auto_providers = fetch_auto_mode_providers(db_session)
+            auto_provider_ids = {p.id for p in auto_providers}
+            assert provider.id not in auto_provider_ids
+
+        finally:
+            db_session.rollback()
+            _cleanup_provider(db_session, provider_name)
+
+    def test_resync_adds_new_and_hides_removed_models(
+        self,
+        db_session: Session,
+        provider_name: str,
+    ) -> None:
+        """When the GitHub config changes between syncs, a subsequent sync
+        should add newly listed models and hide models that were removed.
+
+        Steps:
+        1. Create provider in auto mode with config v1: [gpt-4o, gpt-4o-mini].
+        2. Sync with config v2: [gpt-4o, gpt-4-turbo] (gpt-4o-mini removed,
+           gpt-4-turbo added).
+        3. Verify gpt-4o still visible, gpt-4o-mini hidden, gpt-4-turbo added
+           and visible.
+        """
+        config_v1 = _create_mock_llm_recommendations(
+            provider=LlmProviderNames.OPENAI,
+            default_model_name="gpt-4o",
+            additional_models=["gpt-4o-mini"],
+        )
+        config_v2 = _create_mock_llm_recommendations(
+            provider=LlmProviderNames.OPENAI,
+            default_model_name="gpt-4o",
+            additional_models=["gpt-4-turbo"],
+        )
+
+        try:
+            # Step 1: Create with config v1
+            with patch(
+                "onyx.server.manage.llm.api.fetch_llm_recommendations_from_github",
+                return_value=config_v1,
+            ):
+                put_llm_provider(
+                    llm_provider_upsert_request=LLMProviderUpsertRequest(
+                        name=provider_name,
+                        provider=LlmProviderNames.OPENAI,
+                        api_key="sk-test-key-00000000000000000000000000000000000",
+                        api_key_changed=True,
+                        is_auto_mode=True,
+                        model_configurations=[],
+                    ),
+                    is_creation=True,
+                    _=_create_mock_admin(),
+                    db_session=db_session,
+                )
+
+            # Step 2: Re-sync with config v2
+            db_session.expire_all()
+            provider = fetch_existing_llm_provider(
+                name=provider_name, db_session=db_session
+            )
+            assert provider is not None
+
+            changes = sync_auto_mode_models(
+                db_session=db_session,
+                provider=provider,
+                llm_recommendations=config_v2,
+            )
+            assert changes > 0
+
+            # Step 3: Verify
+            db_session.expire_all()
+            provider = fetch_existing_llm_provider(
+                name=provider_name, db_session=db_session
+            )
+            assert provider is not None
+
+            visibility = {
+                mc.name: mc.is_visible for mc in provider.model_configurations
+            }
+
+            # gpt-4o: still in config -> visible
+            assert visibility["gpt-4o"] is True
+            # gpt-4o-mini: removed from config -> hidden (not deleted)
+            assert "gpt-4o-mini" in visibility, "Removed model should still exist in DB"
+            assert visibility["gpt-4o-mini"] is False
+            # gpt-4-turbo: newly added -> visible
+            assert visibility["gpt-4-turbo"] is True
+
+        finally:
+            db_session.rollback()
+            _cleanup_provider(db_session, provider_name)
+
+    def test_sync_is_idempotent(
+        self,
+        db_session: Session,
+        provider_name: str,
+    ) -> None:
+        """Running sync twice with the same config should produce zero
+        changes on the second call."""
+        config = _create_mock_llm_recommendations(
+            provider=LlmProviderNames.OPENAI,
+            default_model_name="gpt-4o",
+            additional_models=["gpt-4o-mini", "gpt-4-turbo"],
+        )
+
+        try:
+            with patch(
+                "onyx.server.manage.llm.api.fetch_llm_recommendations_from_github",
+                return_value=config,
+            ):
+                put_llm_provider(
+                    llm_provider_upsert_request=LLMProviderUpsertRequest(
+                        name=provider_name,
+                        provider=LlmProviderNames.OPENAI,
+                        api_key="sk-test-key-00000000000000000000000000000000000",
+                        api_key_changed=True,
+                        is_auto_mode=True,
+                        model_configurations=[],
+                    ),
+                    is_creation=True,
+                    _=_create_mock_admin(),
+                    db_session=db_session,
+                )
+
+            db_session.expire_all()
+            provider = fetch_existing_llm_provider(
+                name=provider_name, db_session=db_session
+            )
+            assert provider is not None
+
+            # First explicit sync (may report changes if creation already synced)
+            sync_auto_mode_models(
+                db_session=db_session,
+                provider=provider,
+                llm_recommendations=config,
+            )
+
+            # Snapshot state after first sync
+            db_session.expire_all()
+            provider = fetch_existing_llm_provider(
+                name=provider_name, db_session=db_session
+            )
+            assert provider is not None
+            snapshot = {
+                mc.name: (mc.is_visible, mc.display_name)
+                for mc in provider.model_configurations
+            }
+
+            # Second sync — should be a no-op
+            changes = sync_auto_mode_models(
+                db_session=db_session,
+                provider=provider,
+                llm_recommendations=config,
+            )
+            assert (
+                changes == 0
+            ), f"Expected 0 changes on idempotent re-sync, got {changes}"
+
+            # State should be identical
+            db_session.expire_all()
+            provider = fetch_existing_llm_provider(
+                name=provider_name, db_session=db_session
+            )
+            assert provider is not None
+            current = {
+                mc.name: (mc.is_visible, mc.display_name)
+                for mc in provider.model_configurations
+            }
+            assert current == snapshot
+
+        finally:
+            db_session.rollback()
+            _cleanup_provider(db_session, provider_name)
+
+    def test_default_model_hidden_when_removed_from_config(
+        self,
+        db_session: Session,
+        provider_name: str,
+    ) -> None:
+        """When the current default model is removed from the config, sync
+        should hide it. The default model flow row should still exist (it
+        points at the ModelConfiguration), but the model is no longer visible.
+
+        Steps:
+        1. Create provider with config: default=gpt-4o, additional=[gpt-4o-mini].
+        2. Set gpt-4o as the global default.
+        3. Re-sync with config: default=gpt-4o-mini (gpt-4o removed entirely).
+        4. Verify gpt-4o is hidden, gpt-4o-mini is visible, and
+           fetch_default_llm_model still returns a result (the flow row persists).
+        """
+        config_v1 = _create_mock_llm_recommendations(
+            provider=LlmProviderNames.OPENAI,
+            default_model_name="gpt-4o",
+            additional_models=["gpt-4o-mini"],
+        )
+        config_v2 = _create_mock_llm_recommendations(
+            provider=LlmProviderNames.OPENAI,
+            default_model_name="gpt-4o-mini",
+            additional_models=[],
+        )
+
+        try:
+            with patch(
+                "onyx.server.manage.llm.api.fetch_llm_recommendations_from_github",
+                return_value=config_v1,
+            ):
+                put_llm_provider(
+                    llm_provider_upsert_request=LLMProviderUpsertRequest(
+                        name=provider_name,
+                        provider=LlmProviderNames.OPENAI,
+                        api_key="sk-test-key-00000000000000000000000000000000000",
+                        api_key_changed=True,
+                        is_auto_mode=True,
+                        model_configurations=[],
+                    ),
+                    is_creation=True,
+                    _=_create_mock_admin(),
+                    db_session=db_session,
+                )
+
+            # Step 2: Set gpt-4o as global default
+            db_session.expire_all()
+            provider = fetch_existing_llm_provider(
+                name=provider_name, db_session=db_session
+            )
+            assert provider is not None
+            update_default_provider(provider.id, "gpt-4o", db_session)
+
+            default_before = fetch_default_llm_model(db_session)
+            assert default_before is not None
+            assert default_before.name == "gpt-4o"
+
+            # Step 3: Re-sync with config v2 (gpt-4o removed)
+            db_session.expire_all()
+            provider = fetch_existing_llm_provider(
+                name=provider_name, db_session=db_session
+            )
+            assert provider is not None
+
+            changes = sync_auto_mode_models(
+                db_session=db_session,
+                provider=provider,
+                llm_recommendations=config_v2,
+            )
+            assert changes > 0
+
+            # Step 4: Verify visibility
+            db_session.expire_all()
+            provider = fetch_existing_llm_provider(
+                name=provider_name, db_session=db_session
+            )
+            assert provider is not None
+
+            visibility = {
+                mc.name: mc.is_visible for mc in provider.model_configurations
+            }
+            assert visibility["gpt-4o"] is False, "Removed default should be hidden"
+            assert visibility["gpt-4o-mini"] is True, "New default should be visible"
+
+            # The LLMModelFlow row for gpt-4o still exists (is_default=True),
+            # but the model is hidden. fetch_default_llm_model filters on
+            # is_visible=True, so it should NOT return gpt-4o.
+            db_session.expire_all()
+            default_after = fetch_default_llm_model(db_session)
+            assert (
+                default_after is None or default_after.name != "gpt-4o"
+            ), "Hidden model should not be returned as the default"
+
+        finally:
+            db_session.rollback()
+            _cleanup_provider(db_session, provider_name)

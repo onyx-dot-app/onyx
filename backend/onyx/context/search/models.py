@@ -72,6 +72,7 @@ class BaseFilters(BaseModel):
 class UserFileFilters(BaseModel):
     user_file_ids: list[UUID] | None = None
     project_id: int | None = None
+    persona_id: int | None = None
 
 
 class AssistantKnowledgeFilters(BaseModel):

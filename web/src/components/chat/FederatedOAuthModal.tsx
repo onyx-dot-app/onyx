@@ -2,14 +2,14 @@
 
 import { useContext, useState } from "react";
 import Modal from "@/refresh-components/Modal";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { ValidSources } from "@/lib/types";
 import { SettingsContext } from "@/providers/SettingsProvider";
 import { getSourceMetadata } from "@/lib/sources";
 import useFederatedOAuthStatus from "@/hooks/useFederatedOAuthStatus";
 import { SvgLink } from "@opal/icons";
 import { Card } from "@/refresh-components/cards";
-import { LineItemLayout } from "@/layouts/general-layouts";
+import { ContentAction } from "@opal/layouts";
 
 export interface FederatedConnectorOAuthStatus {
   federated_connector_id: number;
@@ -136,20 +136,21 @@ export default function FederatedOAuthModal() {
 
             return (
               <Card key={connector.federated_connector_id}>
-                <LineItemLayout
+                <ContentAction
                   icon={sourceMetadata.icon}
                   title={sourceMetadata.displayName}
                   description={sourceMetadata.category}
+                  sizePreset="main-content"
+                  variant="section"
                   rightChildren={
                     <Button
-                      secondary
+                      prominence="secondary"
                       target="_blank"
                       href={connector.authorize_url}
                     >
                       Connect
                     </Button>
                   }
-                  center
                 />
               </Card>
             );

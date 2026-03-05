@@ -13,6 +13,7 @@ from sqlalchemy import func
 from sqlalchemy import Select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
 from onyx.auth.schemas import UserRole
@@ -97,6 +98,11 @@ async def get_user_count(only_admin_users: bool = False) -> int:
 
 # Need to override this because FastAPI Users doesn't give flexibility for backend field creation logic in OAuth flow
 class SQLAlchemyUserAdminDB(SQLAlchemyUserDatabase[UP, ID]):
+    async def _get_user(self, statement: Select) -> UP | None:
+        statement = statement.options(selectinload(User.memories))
+        results = await self.session.execute(statement)
+        return results.unique().scalar_one_or_none()
+
     async def create(
         self,
         create_dict: Dict[str, Any],

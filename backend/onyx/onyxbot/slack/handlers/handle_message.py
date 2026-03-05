@@ -3,10 +3,12 @@ import datetime
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
+from onyx.auth.schemas import UserRole
 from onyx.configs.onyxbot_configs import ONYX_BOT_FEEDBACK_REMINDER
 from onyx.configs.onyxbot_configs import ONYX_BOT_REACT_EMOJI
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import SlackChannelConfig
+from onyx.db.user_preferences import activate_user
 from onyx.db.users import add_slack_user_if_not_exists
 from onyx.db.users import get_user_by_email
 from onyx.onyxbot.slack.blocks import get_feedback_reminder_blocks
@@ -242,6 +244,44 @@ def handle_message(
                         ),
                     )
                     return False
+
+            elif (
+                not existing_user.is_active
+                and existing_user.role == UserRole.SLACK_USER
+            ):
+                check_seat_fn = fetch_ee_implementation_or_noop(
+                    "onyx.db.license",
+                    "check_seat_availability",
+                    None,
+                )
+                seat_result = check_seat_fn(db_session=db_session)
+                if seat_result is not None and not seat_result.available:
+                    logger.info(
+                        f"Blocked inactive Slack user {message_info.email}: "
+                        f"{seat_result.error_message}"
+                    )
+                    respond_in_thread_or_channel(
+                        client=client,
+                        channel=channel,
+                        thread_ts=message_info.msg_to_respond,
+                        text=(
+                            "We weren't able to respond because your organization "
+                            "has reached its user seat limit. Your account is "
+                            "currently deactivated and cannot be reactivated "
+                            "until more seats are available. Please contact "
+                            "your Onyx administrator."
+                        ),
+                    )
+                    return False
+
+                activate_user(existing_user, db_session)
+                invalidate_license_cache_fn = fetch_ee_implementation_or_noop(
+                    "onyx.db.license",
+                    "invalidate_license_cache",
+                    None,
+                )
+                invalidate_license_cache_fn()
+                logger.info(f"Reactivated inactive Slack user {message_info.email}")
 
             add_slack_user_if_not_exists(db_session, message_info.email)
 

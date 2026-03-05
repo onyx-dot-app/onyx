@@ -46,6 +46,7 @@ from onyx.connectors.google_drive.file_retrieval import get_external_access_for_
 from onyx.connectors.google_drive.file_retrieval import get_files_in_shared_drive
 from onyx.connectors.google_drive.file_retrieval import get_folder_metadata
 from onyx.connectors.google_drive.file_retrieval import get_root_folder_id
+from onyx.connectors.google_drive.file_retrieval import get_shared_drive_name
 from onyx.connectors.google_drive.file_retrieval import has_link_only_permission
 from onyx.connectors.google_drive.models import DriveRetrievalStage
 from onyx.connectors.google_drive.models import GoogleDriveCheckpoint
@@ -156,10 +157,7 @@ def _is_shared_drive_root(folder: GoogleDriveFileType) -> bool:
         return False
 
     # For shared drive content, the root has id == driveId
-    if drive_id and folder_id == drive_id:
-        return True
-
-    return False
+    return bool(drive_id and folder_id == drive_id)
 
 
 def _public_access() -> ExternalAccess:
@@ -616,6 +614,16 @@ class GoogleDriveConnector(
                 # empty parents due to permission limitations)
                 # Check shared drive root first (simple ID comparison)
                 if _is_shared_drive_root(folder):
+                    # files().get() returns 'Drive' for shared drive roots;
+                    # fetch the real name via drives().get().
+                    # Try both the retriever and admin since the admin may
+                    # not have access to private shared drives.
+                    drive_name = self._get_shared_drive_name(
+                        current_id, file.user_email
+                    )
+                    if drive_name:
+                        node.display_name = drive_name
+                    node.node_type = HierarchyNodeType.SHARED_DRIVE
                     reached_terminal = True
                     break
 
@@ -689,6 +697,15 @@ class GoogleDriveConnector(
             f"All attempts failed to fetch folder {folder_id} "
             f"(tried {retriever_email} and {self.primary_admin_email})"
         )
+        return None
+
+    def _get_shared_drive_name(self, drive_id: str, retriever_email: str) -> str | None:
+        """Fetch the name of a shared drive, trying both the retriever and admin."""
+        for email in {retriever_email, self.primary_admin_email}:
+            svc = get_drive_service(self.creds, email)
+            name = get_shared_drive_name(svc, drive_id)
+            if name:
+                return name
         return None
 
     def get_all_drive_ids(self) -> set[str]:

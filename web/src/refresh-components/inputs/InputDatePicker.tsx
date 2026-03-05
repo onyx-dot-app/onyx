@@ -1,6 +1,6 @@
 "use client";
 
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import Calendar from "@/refresh-components/Calendar";
 import Popover from "@/refresh-components/Popover";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
@@ -40,7 +40,7 @@ export default function InputDatePicker({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <Popover.Trigger asChild id={name} name={name}>
-        <Button leftIcon={SvgCalendar} secondary disabled={disabled}>
+        <Button prominence="secondary" icon={SvgCalendar} disabled={disabled}>
           {selectedDate ? selectedDate.toLocaleDateString() : "Select Date"}
         </Button>
       </Popover.Trigger>

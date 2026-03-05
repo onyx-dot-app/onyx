@@ -1,7 +1,7 @@
 "use client";
 
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 
@@ -35,7 +35,7 @@ const Page = () => {
           </ul>
         </div>
 
-        <Button href="/auth/login" className="w-full">
+        <Button href="/auth/login" width="full">
           Return to Login Page
         </Button>
         <p className="text-sm text-text-500 text-center">

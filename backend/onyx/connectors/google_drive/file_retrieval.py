@@ -154,6 +154,26 @@ def _get_hierarchy_fields_for_file_type(field_type: DriveFileFieldType) -> str:
         return HIERARCHY_FIELDS
 
 
+def get_shared_drive_name(
+    service: Resource,
+    drive_id: str,
+) -> str | None:
+    """Fetch the actual name of a shared drive via the drives().get() API.
+
+    The files().get() API returns 'Drive' as the name for shared drive root
+    folders. Only drives().get() returns the real user-assigned name.
+    """
+    try:
+        drive = service.drives().get(driveId=drive_id, fields="name").execute()
+        return drive.get("name")
+    except HttpError as e:
+        if e.resp.status in (403, 404):
+            logger.debug(f"Cannot access drive {drive_id}: {e}")
+        else:
+            raise
+    return None
+
+
 def get_external_access_for_folder(
     folder: GoogleDriveFileType,
     google_domain: str,

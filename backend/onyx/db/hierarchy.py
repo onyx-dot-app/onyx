@@ -1,5 +1,7 @@
 """CRUD operations for HierarchyNode."""
 
+from collections import defaultdict
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -523,6 +525,53 @@ def get_document_parent_hierarchy_node_ids(
     results = db_session.execute(stmt).all()
 
     return {doc_id: parent_id for doc_id, parent_id in results}
+
+
+def update_document_parent_hierarchy_nodes(
+    db_session: Session,
+    doc_parent_map: dict[str, int | None],
+    commit: bool = True,
+) -> int:
+    """Bulk-update Document.parent_hierarchy_node_id for multiple documents.
+
+    Only updates rows whose current value differs from the desired value to
+    avoid unnecessary writes.
+
+    Args:
+        db_session: SQLAlchemy session
+        doc_parent_map: Mapping of document_id → desired parent_hierarchy_node_id
+        commit: Whether to commit the transaction
+
+    Returns:
+        Number of documents actually updated
+    """
+    if not doc_parent_map:
+        return 0
+
+    doc_ids = list(doc_parent_map.keys())
+    existing = get_document_parent_hierarchy_node_ids(db_session, doc_ids)
+
+    by_parent: dict[int | None, list[str]] = defaultdict(list)
+    for doc_id, desired_parent_id in doc_parent_map.items():
+        current = existing.get(doc_id)
+        if current == desired_parent_id or doc_id not in existing:
+            continue
+        by_parent[desired_parent_id].append(doc_id)
+
+    updated = 0
+    for desired_parent_id, ids in by_parent.items():
+        db_session.query(Document).filter(Document.id.in_(ids)).update(
+            {Document.parent_hierarchy_node_id: desired_parent_id},
+            synchronize_session=False,
+        )
+        updated += len(ids)
+
+    if commit:
+        db_session.commit()
+    elif updated:
+        db_session.flush()
+
+    return updated
 
 
 def update_hierarchy_node_permissions(

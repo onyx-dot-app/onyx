@@ -1,9 +1,18 @@
+/* Hoverable */
+export {
+  Hoverable,
+  type HoverableRootProps,
+  type HoverableItemProps,
+  type HoverableItemVariant,
+} from "@opal/core/hoverable/components";
+
 /* Interactive */
 export {
   Interactive,
   type InteractiveBaseProps,
   type InteractiveBaseVariantProps,
+  type InteractiveBaseSidebarVariantProps,
+  type InteractiveBaseSidebarProminenceTypes,
   type InteractiveContainerProps,
-  type InteractiveContainerHeightVariant,
   type InteractiveContainerRoundingVariant,
 } from "@opal/core/interactive/components";

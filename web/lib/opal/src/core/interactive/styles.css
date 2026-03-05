@@ -8,7 +8,7 @@
 
 /* Interactive — container */
 .interactive-container {
-  @apply flex self-stretch items-center justify-center overflow-clip;
+  @apply flex items-center justify-center overflow-clip;
 }
 .interactive-container[data-border="true"] {
   @apply border;
@@ -394,7 +394,7 @@
 }
 .interactive[data-interactive-base-variant="select"][data-disabled] {
   @apply bg-transparent;
-  --interactive-foreground: var(--text-02);
+  --interactive-foreground: var(--text-01);
 }
 .interactive[data-interactive-base-variant="select"][data-selected="true"][data-disabled] {
   --interactive-foreground: var(--action-link-03);
@@ -415,6 +415,26 @@
   @apply bg-background-tint-02;
 }
 .interactive[data-interactive-base-variant="select"][data-interactive-base-prominence="heavy"][data-selected="true"]:active:not(
+    [data-disabled]
+  ) {
+  @apply bg-background-tint-00;
+}
+
+/* ---------------------------------------------------------------------------
+   Sidebar + Light
+   --------------------------------------------------------------------------- */
+.interactive[data-interactive-base-variant="sidebar"][data-interactive-base-prominence="light"] {
+  @apply bg-transparent;
+}
+.interactive[data-interactive-base-variant="sidebar"][data-interactive-base-prominence="light"]:hover:not(
+    [data-disabled]
+  ),
+.interactive[data-interactive-base-variant="sidebar"][data-interactive-base-prominence="light"][data-transient="true"]:not(
+    [data-disabled]
+  ) {
+  @apply bg-background-tint-03;
+}
+.interactive[data-interactive-base-variant="sidebar"][data-interactive-base-prominence="light"][data-selected="true"]:not(
     [data-disabled]
   ) {
   @apply bg-background-tint-00;

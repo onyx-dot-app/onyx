@@ -12,7 +12,11 @@
  *   - Agent Override dropdown
  */
 
-import { test, expect, gotoGuildDetailPage } from "./fixtures";
+import {
+  test,
+  expect,
+  gotoGuildDetailPage,
+} from "@tests/e2e/admin/discord-bot/fixtures";
 
 // Disable retries for Discord bot tests - attempt once at most
 test.describe.configure({ retries: 0 });
@@ -47,9 +51,7 @@ test.describe("Guild Detail Page & Channel Configuration", () => {
     });
 
     // Find the persona/agent dropdown (InputSelect)
-    const agentDropdown = adminPage.locator(
-      'button:has-text("Default Assistant")'
-    );
+    const agentDropdown = adminPage.locator('button:has-text("Default Agent")');
 
     if (await agentDropdown.isVisible({ timeout: 5000 }).catch(() => false)) {
       await agentDropdown.click();

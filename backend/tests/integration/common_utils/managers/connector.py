@@ -8,7 +8,6 @@ from onyx.db.enums import AccessType
 from onyx.server.documents.models import ConnectorUpdateRequest
 from onyx.server.documents.models import DocumentSource
 from tests.integration.common_utils.constants import API_SERVER_URL
-from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.test_models import DATestConnector
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -16,13 +15,13 @@ from tests.integration.common_utils.test_models import DATestUser
 class ConnectorManager:
     @staticmethod
     def create(
+        user_performing_action: DATestUser,
         name: str | None = None,
         source: DocumentSource = DocumentSource.FILE,
         input_type: InputType = InputType.LOAD_STATE,
         connector_specific_config: dict[str, Any] | None = None,
         access_type: AccessType = AccessType.PUBLIC,
         groups: list[int] | None = None,
-        user_performing_action: DATestUser | None = None,
         refresh_freq: int | None = None,
     ) -> DATestConnector:
         name = f"{name}-connector" if name else f"test-connector-{uuid4()}"
@@ -51,11 +50,7 @@ class ConnectorManager:
         response = requests.post(
             url=f"{API_SERVER_URL}/manage/admin/connector",
             json=connector_update_request.model_dump(),
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         response.raise_for_status()
 
@@ -73,45 +68,33 @@ class ConnectorManager:
     @staticmethod
     def edit(
         connector: DATestConnector,
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> None:
         response = requests.patch(
             url=f"{API_SERVER_URL}/manage/admin/connector/{connector.id}",
             json=connector.model_dump(exclude={"id"}),
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         response.raise_for_status()
 
     @staticmethod
     def delete(
         connector: DATestConnector,
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> None:
         response = requests.delete(
             url=f"{API_SERVER_URL}/manage/admin/connector/{connector.id}",
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         response.raise_for_status()
 
     @staticmethod
     def get_all(
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> list[DATestConnector]:
         response = requests.get(
             url=f"{API_SERVER_URL}/manage/connector",
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         response.raise_for_status()
         return [
@@ -127,15 +110,12 @@ class ConnectorManager:
 
     @staticmethod
     def get(
-        connector_id: int, user_performing_action: DATestUser | None = None
+        connector_id: int,
+        user_performing_action: DATestUser,
     ) -> DATestConnector:
         response = requests.get(
             url=f"{API_SERVER_URL}/manage/connector/{connector_id}",
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         response.raise_for_status()
         conn = response.json()

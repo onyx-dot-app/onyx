@@ -11,10 +11,10 @@ import {
   TextArrayField,
   TextFormField,
 } from "@/components/Field";
-import Button from "@/refresh-components/buttons/Button";
-import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
+import { Button } from "@opal/components";
+import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
 import DocumentSetCard from "@/sections/cards/DocumentSetCard";
-import CollapsibleSection from "@/app/admin/assistants/CollapsibleSection";
+import CollapsibleSection from "@/app/admin/agents/CollapsibleSection";
 import { StandardAnswerCategoryResponse } from "@/components/standardAnswers/getStandardAnswerCategoriesIfEE";
 import { StandardAnswerCategoryDropdownField } from "@/components/standardAnswers/StandardAnswerCategoryDropdown";
 import { RadioGroup } from "@/components/ui/radio-group";
@@ -45,8 +45,8 @@ export interface SlackChannelConfigFormFieldsProps {
   isUpdate: boolean;
   isDefault: boolean;
   documentSets: DocumentSetSummary[];
-  searchEnabledAssistants: MinimalPersonaSnapshot[];
-  nonSearchAssistants: MinimalPersonaSnapshot[];
+  searchEnabledAgents: MinimalPersonaSnapshot[];
+  nonSearchAgents: MinimalPersonaSnapshot[];
   standardAnswerCategoryResponse: StandardAnswerCategoryResponse;
   slack_bot_id: number;
   formikProps: any;
@@ -56,8 +56,8 @@ export function SlackChannelConfigFormFields({
   isUpdate,
   isDefault,
   documentSets,
-  searchEnabledAssistants,
-  nonSearchAssistants,
+  searchEnabledAgents,
+  nonSearchAgents,
   standardAnswerCategoryResponse,
   slack_bot_id,
   formikProps,
@@ -65,8 +65,7 @@ export function SlackChannelConfigFormFields({
   const router = useRouter();
   const { values, setFieldValue } = useFormikContext<any>();
   const [viewUnselectableSets, setViewUnselectableSets] = useState(false);
-  const [viewSyncEnabledAssistants, setViewSyncEnabledAssistants] =
-    useState(false);
+  const [viewSyncEnabledAgents, setViewSyncEnabledAgents] = useState(false);
 
   // Helper function to check if a document set contains sync connectors
   const documentSetContainsSync = (documentSet: DocumentSetSummary) => {
@@ -87,11 +86,11 @@ export function SlackChannelConfigFormFields({
     return documentSet.cc_pair_summaries;
   };
 
-  const [syncEnabledAssistants, availableAssistants] = useMemo(() => {
+  const [syncEnabledAgents, availableAgents] = useMemo(() => {
     const sync: MinimalPersonaSnapshot[] = [];
     const available: MinimalPersonaSnapshot[] = [];
 
-    searchEnabledAssistants.forEach((persona) => {
+    searchEnabledAgents.forEach((persona) => {
       const hasSyncSet = persona.document_sets.some(documentSetContainsSync);
       if (hasSyncSet) {
         sync.push(persona);
@@ -101,7 +100,7 @@ export function SlackChannelConfigFormFields({
     });
 
     return [sync, available];
-  }, [searchEnabledAssistants]);
+  }, [searchEnabledAgents]);
 
   const unselectableSets = useMemo(() => {
     return documentSets.filter(documentSetContainsSync);
@@ -151,10 +150,10 @@ export function SlackChannelConfigFormFields({
       );
       return selectedSets.some((ds) => documentSetContainsPrivate(ds));
     } else if (values.knowledge_source === "assistant") {
-      const chosenAssistant = searchEnabledAssistants.find(
+      const chosenAgent = searchEnabledAgents.find(
         (p) => p.id == values.persona_id
       );
-      return chosenAssistant?.document_sets.some((ds) =>
+      return chosenAgent?.document_sets.some((ds) =>
         documentSetContainsPrivate(ds)
       );
     }
@@ -224,14 +223,14 @@ export function SlackChannelConfigFormFields({
             <RadioGroupItemField
               value="assistant"
               id="assistant"
-              label="Search Assistant"
+              label="Search Agent"
               sublabel="Control both the documents and the prompt to use for answering questions"
             />
             <RadioGroupItemField
-              value="non_search_assistant"
-              id="non_search_assistant"
-              label="Non-Search Assistant"
-              sublabel="Chat with an assistant that does not use documents"
+              value="non_search_agent"
+              id="non_search_agent"
+              label="Non-Search Agent"
+              sublabel="Chat with an agent that does not use documents"
             />
           </RadioGroup>
         </div>
@@ -327,29 +326,28 @@ export function SlackChannelConfigFormFields({
           <div className="mt-4">
             <SubLabel>
               <>
-                Select the search-enabled assistant OnyxBot will use while
-                answering questions in Slack.
-                {syncEnabledAssistants.length > 0 && (
+                Select the search-enabled agent OnyxBot will use while answering
+                questions in Slack.
+                {syncEnabledAgents.length > 0 && (
                   <>
                     <br />
                     <span className="text-sm text-text-dark/80">
-                      Note: Some of your assistants have auto-synced connectors
-                      in their document sets. You cannot select these assistants
-                      as they will not be able to answer questions in Slack.{" "}
+                      Note: Some of your agents have auto-synced connectors in
+                      their document sets. You cannot select these agents as
+                      they will not be able to answer questions in Slack.{" "}
                       <button
                         type="button"
                         onClick={() =>
-                          setViewSyncEnabledAssistants(
-                            (viewSyncEnabledAssistants) =>
-                              !viewSyncEnabledAssistants
+                          setViewSyncEnabledAgents(
+                            (viewSyncEnabledAgents) => !viewSyncEnabledAgents
                           )
                         }
                         className="text-sm text-action-link-05"
                       >
-                        {viewSyncEnabledAssistants
+                        {viewSyncEnabledAgents
                           ? "Hide un-selectable "
                           : "View all "}
-                        assistants
+                        agents
                       </button>
                     </span>
                   </>
@@ -359,64 +357,61 @@ export function SlackChannelConfigFormFields({
 
             <SelectorFormField
               name="persona_id"
-              options={availableAssistants.map((persona) => ({
+              options={availableAgents.map((persona) => ({
                 name: persona.name,
                 value: persona.id,
               }))}
             />
-            {viewSyncEnabledAssistants && syncEnabledAssistants.length > 0 && (
+            {viewSyncEnabledAgents && syncEnabledAgents.length > 0 && (
               <div className="mt-4">
                 <p className="text-sm text-text-dark/80">
-                  Un-selectable assistants:
+                  Un-selectable agents:
                 </p>
                 <div className="mb-3 mt-2 flex gap-2 flex-wrap text-sm">
-                  {syncEnabledAssistants.map(
-                    (persona: MinimalPersonaSnapshot) => (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          router.push(`/app/agents/edit/${persona.id}` as Route)
-                        }
-                        key={persona.id}
-                        className="p-2 bg-background-100 cursor-pointer rounded-md flex items-center gap-2"
-                      >
-                        <AgentAvatar agent={persona} size={16} />
-                        {persona.name}
-                      </button>
-                    )
-                  )}
+                  {syncEnabledAgents.map((persona: MinimalPersonaSnapshot) => (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        router.push(`/app/agents/edit/${persona.id}` as Route)
+                      }
+                      key={persona.id}
+                      className="p-2 bg-background-100 cursor-pointer rounded-md flex items-center gap-2"
+                    >
+                      <AgentAvatar agent={persona} size={16} />
+                      {persona.name}
+                    </button>
+                  ))}
                 </div>
               </div>
             )}
           </div>
         )}
-        {values.knowledge_source === "non_search_assistant" && (
+        {values.knowledge_source === "non_search_agent" && (
           <div className="mt-4">
             <SubLabel>
               <>
-                Select the non-search assistant OnyxBot will use while answering
+                Select the non-search agent OnyxBot will use while answering
                 questions in Slack.
-                {syncEnabledAssistants.length > 0 && (
+                {syncEnabledAgents.length > 0 && (
                   <>
                     <br />
                     <span className="text-sm text-text-dark/80">
-                      Note: Some of your assistants have auto-synced connectors
-                      in their document sets. You cannot select these assistants
-                      as they will not be able to answer questions in Slack.{" "}
+                      Note: Some of your agents have auto-synced connectors in
+                      their document sets. You cannot select these agents as
+                      they will not be able to answer questions in Slack.{" "}
                       <button
                         type="button"
                         onClick={() =>
-                          setViewSyncEnabledAssistants(
-                            (viewSyncEnabledAssistants) =>
-                              !viewSyncEnabledAssistants
+                          setViewSyncEnabledAgents(
+                            (viewSyncEnabledAgents) => !viewSyncEnabledAgents
                           )
                         }
                         className="text-sm text-action-link-05"
                       >
-                        {viewSyncEnabledAssistants
+                        {viewSyncEnabledAgents
                           ? "Hide un-selectable "
                           : "View all "}
-                        assistants
+                        agents
                       </button>
                     </span>
                   </>
@@ -426,7 +421,7 @@ export function SlackChannelConfigFormFields({
 
             <SelectorFormField
               name="persona_id"
-              options={nonSearchAssistants.map((persona) => ({
+              options={nonSearchAgents.map((persona) => ({
                 name: persona.name,
                 value: persona.id,
               }))}
@@ -436,7 +431,7 @@ export function SlackChannelConfigFormFields({
       </div>
       <Separator className="my-4" />
       <Accordion type="multiple" className="gap-y-2 w-full">
-        {values.knowledge_source !== "non_search_assistant" && (
+        {values.knowledge_source !== "non_search_agent" && (
           <AccordionItem value="search-options">
             <AccordionTrigger className="text-text">
               Search Configuration
@@ -524,7 +519,7 @@ export function SlackChannelConfigFormFields({
                 name="is_ephemeral"
                 label="Respond to user in a private (ephemeral) message"
                 tooltip="If set, OnyxBot will respond only to the user in a private (ephemeral) message. If you also
-                chose 'Search' Assistant above, selecting this option will make documents that are private to the user
+                chose 'Search' Agent above, selecting this option will make documents that are private to the user
                 available for their queries."
               />
 
@@ -603,7 +598,7 @@ export function SlackChannelConfigFormFields({
           </TooltipProvider>
         )}
         <Button type="submit">{isUpdate ? "Update" : "Create"}</Button>
-        <Button secondary onClick={() => router.back()}>
+        <Button prominence="secondary" onClick={() => router.back()}>
           Cancel
         </Button>
       </div>

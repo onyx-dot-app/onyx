@@ -37,8 +37,6 @@ interface TimelineStepProps {
   isStreaming?: boolean;
 }
 
-const noopCallback = () => {};
-
 const TimelineStep = React.memo(function TimelineStep({
   step,
   chatState,
@@ -104,7 +102,6 @@ const TimelineStep = React.memo(function TimelineStep({
     <TimelineRendererComponent
       packets={step.packets}
       chatState={chatState}
-      onComplete={noopCallback}
       animate={!stopPacketSeen}
       stopPacketSeen={stopPacketSeen}
       stopReason={stopReason}

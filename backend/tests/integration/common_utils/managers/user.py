@@ -7,6 +7,8 @@ import requests
 from requests import HTTPError
 
 from onyx.auth.schemas import UserRole
+from onyx.configs.constants import ANONYMOUS_USER_EMAIL
+from onyx.configs.constants import ANONYMOUS_USER_UUID
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.server.documents.models import PaginatedReturn
 from onyx.server.manage.models import UserInfo
@@ -25,6 +27,23 @@ def build_email(name: str) -> str:
 
 
 class UserManager:
+    @staticmethod
+    def get_anonymous_user() -> DATestUser:
+        """Get a DATestUser representing the anonymous user.
+
+        Anonymous users are real users in the database with LIMITED role.
+        They don't have login cookies - requests are made with GENERAL_HEADERS.
+        The anonymous_user_enabled setting must be True for these requests to work.
+        """
+        return DATestUser(
+            id=ANONYMOUS_USER_UUID,
+            email=ANONYMOUS_USER_EMAIL,
+            password="",
+            headers=GENERAL_HEADERS,
+            role=UserRole.LIMITED,
+            is_active=True,
+        )
+
     @staticmethod
     def create(
         name: str | None = None,
@@ -227,12 +246,12 @@ class UserManager:
 
     @staticmethod
     def get_user_page(
+        user_performing_action: DATestUser,
         page_num: int = 0,
         page_size: int = 10,
         search_query: str | None = None,
         role_filter: list[UserRole] | None = None,
         is_active_filter: bool | None = None,
-        user_performing_action: DATestUser | None = None,
     ) -> PaginatedReturn[FullUserSnapshot]:
         query_params: dict[str, str | list[str] | int] = {
             "page_num": page_num,
@@ -247,11 +266,7 @@ class UserManager:
 
         response = requests.get(
             url=f"{API_SERVER_URL}/manage/users/accepted?{urlencode(query_params, doseq=True)}",
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         response.raise_for_status()
 

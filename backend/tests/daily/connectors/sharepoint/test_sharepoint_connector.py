@@ -12,6 +12,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import Document
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import ImageSection
+from onyx.connectors.sharepoint.connector import SharepointAuthMethod
 from onyx.connectors.sharepoint.connector import SharepointConnector
 from onyx.db.enums import HierarchyNodeType
 from tests.daily.connectors.utils import load_all_from_connector
@@ -25,6 +26,7 @@ class ExpectedDocument:
     content: str
     folder_path: str | None = None
     library: str = "Shared Documents"  # Default to main library
+    expected_link_substrings: list[str] | None = None
 
 
 EXPECTED_DOCUMENTS = [
@@ -32,22 +34,29 @@ EXPECTED_DOCUMENTS = [
         semantic_identifier="test1.docx",
         content="test1",
         folder_path="test",
+        expected_link_substrings=["_layouts/15/Doc.aspx", "file=test1.docx"],
     ),
     ExpectedDocument(
         semantic_identifier="test2.docx",
         content="test2",
         folder_path="test/nested with spaces",
+        expected_link_substrings=["_layouts/15/Doc.aspx", "file=test2.docx"],
     ),
     ExpectedDocument(
         semantic_identifier="should-not-index-on-specific-folder.docx",
         content="should-not-index-on-specific-folder",
         folder_path=None,  # root folder
+        expected_link_substrings=[
+            "_layouts/15/Doc.aspx",
+            "file=should-not-index-on-specific-folder.docx",
+        ],
     ),
     ExpectedDocument(
         semantic_identifier="other.docx",
         content="other",
         folder_path=None,
         library="Other Library",
+        expected_link_substrings=["_layouts/15/Doc.aspx", "file=other.docx"],
     ),
 ]
 
@@ -61,11 +70,13 @@ EXPECTED_PAGES = [
             "Add a document library\n\n## Document library"
         ),
         folder_path=None,
+        expected_link_substrings=["SitePages/CollabHome.aspx"],
     ),
     ExpectedDocument(
         semantic_identifier="Home",
         content="# Home",
         folder_path=None,
+        expected_link_substrings=["SitePages/Home.aspx"],
     ),
 ]
 
@@ -88,6 +99,20 @@ def verify_document_content(doc: Document, expected: ExpectedDocument) -> None:
     assert len(doc.sections) == 1
     assert doc.sections[0].text is not None
     assert expected.content == doc.sections[0].text
+
+    if expected.expected_link_substrings is not None:
+        actual_link = doc.sections[0].link
+        assert actual_link is not None, (
+            f"Expected section link containing {expected.expected_link_substrings} "
+            f"for '{expected.semantic_identifier}', but link was None"
+        )
+        for substr in expected.expected_link_substrings:
+            assert substr in actual_link, (
+                f"Section link for '{expected.semantic_identifier}' "
+                f"missing expected substring '{substr}', "
+                f"actual link: '{actual_link}'"
+            )
+
     verify_document_metadata(doc)
 
 
@@ -497,3 +522,46 @@ def test_sharepoint_connector_hierarchy_nodes(
                 f"Document {doc.semantic_identifier} should have "
                 "parent_hierarchy_raw_node_id set"
             )
+
+
+@pytest.fixture
+def sharepoint_cert_credentials() -> dict[str, str]:
+    return {
+        "authentication_method": SharepointAuthMethod.CERTIFICATE.value,
+        "sp_client_id": os.environ["PERM_SYNC_SHAREPOINT_CLIENT_ID"],
+        "sp_private_key": os.environ["PERM_SYNC_SHAREPOINT_PRIVATE_KEY"],
+        "sp_certificate_password": os.environ[
+            "PERM_SYNC_SHAREPOINT_CERTIFICATE_PASSWORD"
+        ],
+        "sp_directory_id": os.environ["PERM_SYNC_SHAREPOINT_DIRECTORY_ID"],
+    }
+
+
+def test_resolve_tenant_domain_from_site_urls(
+    sharepoint_cert_credentials: dict[str, str],
+) -> None:
+    """Verify that certificate auth resolves the tenant domain from site URLs
+    without calling the /organization endpoint."""
+    site_url = os.environ["SHAREPOINT_SITE"]
+    connector = SharepointConnector(sites=[site_url])
+    connector.load_credentials(sharepoint_cert_credentials)
+
+    assert connector.sp_tenant_domain is not None
+    assert len(connector.sp_tenant_domain) > 0
+    # The tenant domain should match the first label of the site URL hostname
+    from urllib.parse import urlsplit
+
+    expected = urlsplit(site_url).hostname.split(".")[0]  # type: ignore
+    assert connector.sp_tenant_domain == expected
+
+
+def test_resolve_tenant_domain_from_root_site(
+    sharepoint_cert_credentials: dict[str, str],
+) -> None:
+    """Verify that certificate auth resolves the tenant domain via the root
+    site endpoint when no site URLs are configured."""
+    connector = SharepointConnector(sites=[])
+    connector.load_credentials(sharepoint_cert_credentials)
+
+    assert connector.sp_tenant_domain is not None
+    assert len(connector.sp_tenant_domain) > 0

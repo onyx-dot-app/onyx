@@ -108,7 +108,7 @@ durationpy==0.10
     # via kubernetes
 einops==0.8.1
     # via onyx
-fastapi==0.128.0
+fastapi==0.133.1
     # via
     #   onyx
     #   sentry-sdk
@@ -246,7 +246,7 @@ litellm==1.81.6
     # via onyx
 markupsafe==3.0.3
     # via jinja2
-mcp==1.25.0
+mcp==1.26.0
     # via claude-agent-sdk
 mpmath==1.3.0
     # via sympy
@@ -525,6 +525,7 @@ typing-extensions==4.15.0
     #   typing-inspection
 typing-inspection==0.4.2
     # via
+    #   fastapi
     #   mcp
     #   pydantic
     #   pydantic-settings

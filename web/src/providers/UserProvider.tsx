@@ -15,7 +15,7 @@ import {
 } from "@/lib/types";
 import { getCurrentUser } from "@/lib/user";
 import { usePostHog } from "posthog-js/react";
-import { CombinedSettings } from "@/app/admin/settings/interfaces";
+import { CombinedSettings } from "@/interfaces/settings";
 import { SettingsContext } from "@/providers/SettingsProvider";
 import { useTokenRefresh } from "@/hooks/useTokenRefresh";
 import { AuthTypeMetadata } from "@/lib/userSS";
@@ -31,9 +31,9 @@ interface UserContextType {
   authTypeMetadata: AuthTypeMetadata;
   updateUserAutoScroll: (autoScroll: boolean) => Promise<void>;
   updateUserShortcuts: (enabled: boolean) => Promise<void>;
-  toggleAssistantPinnedStatus: (
-    currentPinnedAssistantIDs: number[],
-    assistantId: number,
+  toggleAgentPinnedStatus: (
+    currentPinnedAgentIDs: number[],
+    agentId: number,
     isPinned: boolean
   ) => Promise<boolean>;
   updateUserTemperatureOverrideEnabled: (enabled: boolean) => Promise<void>;
@@ -282,9 +282,9 @@ export function UserProvider({
     }
   };
 
-  const toggleAssistantPinnedStatus = async (
-    currentPinnedAssistantIDs: number[],
-    assistantId: number,
+  const toggleAgentPinnedStatus = async (
+    currentPinnedAgentIDs: number[],
+    agentId: number,
     isPinned: boolean
   ) => {
     setUpToDateUser((prevUser) => {
@@ -294,21 +294,15 @@ export function UserProvider({
         preferences: {
           ...prevUser.preferences,
           pinned_assistants: isPinned
-            ? [...currentPinnedAssistantIDs, assistantId]
-            : currentPinnedAssistantIDs.filter((id) => id !== assistantId),
+            ? [...currentPinnedAgentIDs, agentId]
+            : currentPinnedAgentIDs.filter((id) => id !== agentId),
         },
       };
     });
 
-    let updatedPinnedAssistantsIds = currentPinnedAssistantIDs;
-
-    if (isPinned) {
-      updatedPinnedAssistantsIds.push(assistantId);
-    } else {
-      updatedPinnedAssistantsIds = updatedPinnedAssistantsIds.filter(
-        (id) => id !== assistantId
-      );
-    }
+    let updatedPinnedAgentsIds = isPinned
+      ? [...currentPinnedAgentIDs, agentId]
+      : currentPinnedAgentIDs.filter((id) => id !== agentId);
     try {
       const response = await fetch(`/api/user/pinned-assistants`, {
         method: "PATCH",
@@ -316,7 +310,7 @@ export function UserProvider({
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          ordered_assistant_ids: updatedPinnedAssistantsIds,
+          ordered_assistant_ids: updatedPinnedAgentsIds,
         }),
       });
 
@@ -484,7 +478,7 @@ export function UserProvider({
         updateUserChatBackground,
         updateUserDefaultModel,
         updateUserDefaultAppMode,
-        toggleAssistantPinnedStatus,
+        toggleAgentPinnedStatus,
         isAdmin: upToDateUser?.role === UserRole.ADMIN,
         // Curator status applies for either global or basic curator
         isCurator:

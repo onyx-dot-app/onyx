@@ -63,6 +63,10 @@ if TYPE_CHECKING:
 _LLM_PROMPT_LONG_TERM_LOG_CATEGORY = "llm_prompt"
 LEGACY_MAX_TOKENS_KWARG = "max_tokens"
 STANDARD_MAX_TOKENS_KWARG = "max_completion_tokens"
+_VERTEX_ANTHROPIC_MODELS_REJECTING_OUTPUT_CONFIG = (
+    "claude-opus-4-5",
+    "claude-opus-4-6",
+)
 
 
 class LLMTimeoutError(Exception):
@@ -86,6 +90,106 @@ def _prompt_to_dicts(prompt: LanguageModelInput) -> list[dict[str, Any]]:
     if isinstance(prompt, list):
         return [msg.model_dump(exclude_none=True) for msg in prompt]
     return [prompt.model_dump(exclude_none=True)]
+
+
+def _normalize_content(raw: Any) -> str:
+    """Normalize a message content field to a plain string.
+
+    Content can be a string, None, or a list of content-block dicts
+    (e.g. [{"type": "text", "text": "..."}]).
+    """
+    if raw is None:
+        return ""
+    if isinstance(raw, str):
+        return raw
+    if isinstance(raw, list):
+        return "\n".join(
+            block.get("text", "") if isinstance(block, dict) else str(block)
+            for block in raw
+        )
+    return str(raw)
+
+
+def _strip_tool_content_from_messages(
+    messages: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Convert tool-related messages to plain text.
+
+    Bedrock's Converse API requires toolConfig when messages contain
+    toolUse/toolResult content blocks. When no tools are provided for the
+    current request, we must convert any tool-related history into plain text
+    to avoid the "toolConfig field must be defined" error.
+
+    This is the same approach used by _OllamaHistoryMessageFormatter.
+    """
+    result: list[dict[str, Any]] = []
+    for msg in messages:
+        role = msg.get("role")
+        tool_calls = msg.get("tool_calls")
+
+        if role == "assistant" and tool_calls:
+            # Convert structured tool calls to text representation
+            tool_call_lines = []
+            for tc in tool_calls:
+                func = tc.get("function", {})
+                name = func.get("name", "unknown")
+                args = func.get("arguments", "{}")
+                tc_id = tc.get("id", "")
+                tool_call_lines.append(
+                    f"[Tool Call] name={name} id={tc_id} args={args}"
+                )
+
+            existing_content = _normalize_content(msg.get("content"))
+            parts = (
+                [existing_content] + tool_call_lines
+                if existing_content
+                else tool_call_lines
+            )
+            new_msg = {
+                "role": "assistant",
+                "content": "\n".join(parts),
+            }
+            result.append(new_msg)
+
+        elif role == "tool":
+            # Convert tool response to user message with text content
+            tool_call_id = msg.get("tool_call_id", "")
+            content = _normalize_content(msg.get("content"))
+            tool_result_text = f"[Tool Result] id={tool_call_id}\n{content}"
+            # Merge into previous user message if it is also a converted
+            # tool result to avoid consecutive user messages (Bedrock requires
+            # strict user/assistant alternation).
+            if (
+                result
+                and result[-1]["role"] == "user"
+                and "[Tool Result]" in result[-1].get("content", "")
+            ):
+                result[-1]["content"] += "\n\n" + tool_result_text
+            else:
+                result.append({"role": "user", "content": tool_result_text})
+
+        else:
+            result.append(msg)
+
+    return result
+
+
+def _messages_contain_tool_content(messages: list[dict[str, Any]]) -> bool:
+    """Check if any messages contain tool-related content blocks."""
+    for msg in messages:
+        if msg.get("role") == "tool":
+            return True
+        if msg.get("role") == "assistant" and msg.get("tool_calls"):
+            return True
+    return False
+
+
+def _is_vertex_model_rejecting_output_config(model_name: str) -> bool:
+    normalized_model_name = model_name.lower()
+    return any(
+        blocked_model in normalized_model_name
+        for blocked_model in _VERTEX_ANTHROPIC_MODELS_REJECTING_OUTPUT_CONFIG
+    )
 
 
 class LitellmLLM(LLM):
@@ -266,10 +370,11 @@ class LitellmLLM(LLM):
         is_ollama = self._model_provider == LlmProviderNames.OLLAMA_CHAT
         is_mistral = self._model_provider == LlmProviderNames.MISTRAL
         is_vertex_ai = self._model_provider == LlmProviderNames.VERTEX_AI
-        # Vertex Anthropic Opus 4.5 rejects output_config.
-        # Keep this guard until LiteLLM/Vertex accept the field for this model.
-        is_vertex_opus_4_5 = (
-            is_vertex_ai and "claude-opus-4-5" in self.config.model_name.lower()
+        # Some Vertex Anthropic models reject output_config.
+        # Keep this guard until LiteLLM/Vertex accept the field for these models.
+        is_vertex_model_rejecting_output_config = (
+            is_vertex_ai
+            and _is_vertex_model_rejecting_output_config(self.config.model_name)
         )
 
         #########################
@@ -301,7 +406,7 @@ class LitellmLLM(LLM):
         # Temperature
         temperature = 1 if is_reasoning else self._temperature
 
-        if stream and not is_vertex_opus_4_5:
+        if stream and not is_vertex_model_rejecting_output_config:
             optional_kwargs["stream_options"] = {"include_usage": True}
 
         # Note, there is a reasoning_effort parameter in LiteLLM but it is completely jank and does not work for any
@@ -310,7 +415,7 @@ class LitellmLLM(LLM):
             is_reasoning
             # The default of this parameter not set is surprisingly not the equivalent of an Auto but is actually Off
             and reasoning_effort != ReasoningEffort.OFF
-            and not is_vertex_opus_4_5
+            and not is_vertex_model_rejecting_output_config
         ):
             if is_openai_model:
                 # OpenAI API does not accept reasoning params for GPT 5 chat models
@@ -391,13 +496,30 @@ class LitellmLLM(LLM):
                 else nullcontext()
             )
             with env_ctx:
+                messages = _prompt_to_dicts(prompt)
+
+                # Bedrock's Converse API requires toolConfig when messages
+                # contain toolUse/toolResult content blocks. When no tools are
+                # provided for this request but the history contains tool
+                # content from previous turns, strip it to plain text.
+                is_bedrock = self._model_provider in {
+                    LlmProviderNames.BEDROCK,
+                    LlmProviderNames.BEDROCK_CONVERSE,
+                }
+                if (
+                    is_bedrock
+                    and not tools
+                    and _messages_contain_tool_content(messages)
+                ):
+                    messages = _strip_tool_content_from_messages(messages)
+
                 response = litellm.completion(
                     mock_response=get_llm_mock_response() or MOCK_LLM_RESPONSE,
                     model=model,
                     base_url=self._api_base or None,
                     api_version=self._api_version or None,
                     custom_llm_provider=self._custom_llm_provider or None,
-                    messages=_prompt_to_dicts(prompt),
+                    messages=messages,
                     tools=tools,
                     tool_choice=tool_choice,
                     stream=stream,

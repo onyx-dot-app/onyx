@@ -7,12 +7,14 @@ SCIM protocol schemas follow the wire format defined in:
 Admin API schemas are internal to Onyx and used for SCIM token management.
 """
 
+from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 
 from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
+from pydantic import field_validator
 
 
 # ---------------------------------------------------------------------------
@@ -30,6 +32,10 @@ SCIM_SERVICE_PROVIDER_CONFIG_SCHEMA = (
     "urn:ietf:params:scim:schemas:core:2.0:ServiceProviderConfig"
 )
 SCIM_RESOURCE_TYPE_SCHEMA = "urn:ietf:params:scim:schemas:core:2.0:ResourceType"
+SCIM_SCHEMA_SCHEMA = "urn:ietf:params:scim:schemas:core:2.0:Schema"
+SCIM_ENTERPRISE_USER_SCHEMA = (
+    "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User"
+)
 
 
 # ---------------------------------------------------------------------------
@@ -62,6 +68,43 @@ class ScimMeta(BaseModel):
     location: str | None = None
 
 
+class ScimUserGroupRef(BaseModel):
+    """Group reference within a User resource (RFC 7643 §4.1.2, read-only)."""
+
+    value: str
+    display: str | None = None
+
+
+class ScimManagerRef(BaseModel):
+    """Manager sub-attribute for the enterprise extension (RFC 7643 §4.3)."""
+
+    value: str | None = None
+
+
+class ScimEnterpriseExtension(BaseModel):
+    """Enterprise User extension attributes (RFC 7643 §4.3)."""
+
+    department: str | None = None
+    manager: ScimManagerRef | None = None
+
+
+@dataclass
+class ScimMappingFields:
+    """Stored SCIM mapping fields that need to round-trip through the IdP.
+
+    Entra ID sends structured name components, email metadata, and enterprise
+    extension attributes that must be returned verbatim in subsequent GET
+    responses. These fields are persisted on ScimUserMapping and threaded
+    through the DAL, provider, and endpoint layers.
+    """
+
+    department: str | None = None
+    manager: str | None = None
+    given_name: str | None = None
+    family_name: str | None = None
+    scim_emails_json: str | None = None
+
+
 class ScimUserResource(BaseModel):
     """SCIM User resource representation (RFC 7643 §4.1).
 
@@ -70,14 +113,22 @@ class ScimUserResource(BaseModel):
     to match the SCIM wire format (not Python convention).
     """
 
+    model_config = ConfigDict(populate_by_name=True)
+
     schemas: list[str] = Field(default_factory=lambda: [SCIM_USER_SCHEMA])
     id: str | None = None  # Onyx's internal user ID, set on responses
     externalId: str | None = None  # IdP's identifier for this user
     userName: str  # Typically the user's email address
     name: ScimName | None = None
+    displayName: str | None = None
     emails: list[ScimEmail] = Field(default_factory=list)
     active: bool = True
+    groups: list[ScimUserGroupRef] = Field(default_factory=list)
     meta: ScimMeta | None = None
+    enterprise_extension: ScimEnterpriseExtension | None = Field(
+        default=None,
+        alias="urn:ietf:params:scim:schemas:extension:enterprise:2.0:User",
+    )
 
 
 class ScimGroupMember(BaseModel):
@@ -120,12 +171,53 @@ class ScimPatchOperationType(str, Enum):
     REMOVE = "remove"
 
 
+class ScimPatchResourceValue(BaseModel):
+    """Partial resource dict for path-less PATCH replace operations.
+
+    When an IdP sends a PATCH without a ``path``, the ``value`` is a dict
+    of resource attributes to set.  IdPs may include read-only fields
+    (``id``, ``schemas``, ``meta``) alongside actual changes — these are
+    stripped by the provider's ``ignored_patch_paths`` before processing.
+
+    ``extra="allow"`` lets unknown attributes pass through so the patch
+    handler can decide what to do with them (ignore or reject).
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    active: bool | None = None
+    userName: str | None = None
+    displayName: str | None = None
+    externalId: str | None = None
+    name: ScimName | None = None
+    members: list[ScimGroupMember] | None = None
+    id: str | None = None
+    schemas: list[str] | None = None
+    meta: ScimMeta | None = None
+
+
+ScimPatchValue = str | bool | list[ScimGroupMember] | ScimPatchResourceValue | None
+
+
 class ScimPatchOperation(BaseModel):
     """Single PATCH operation (RFC 7644 §3.5.2)."""
 
     op: ScimPatchOperationType
     path: str | None = None
-    value: str | list[dict[str, str]] | dict[str, str | bool] | bool | None = None
+    value: ScimPatchValue = None
+
+    @field_validator("op", mode="before")
+    @classmethod
+    def normalize_operation(cls, v: object) -> object:
+        """Normalize op to lowercase for case-insensitive matching.
+
+        Some IdPs (e.g. Entra ID) send capitalized ops like ``"Replace"``
+        instead of ``"replace"``. This is safe for all providers since the
+        enum values are lowercase. If a future provider requires other
+        pre-processing quirks, move patch deserialization into the provider
+        subclass instead of adding more special cases here.
+        """
+        return v.lower() if isinstance(v, str) else v
 
 
 class ScimPatchRequest(BaseModel):
@@ -195,10 +287,39 @@ class ScimServiceProviderConfig(BaseModel):
     )
 
 
+class ScimSchemaAttribute(BaseModel):
+    """Attribute definition within a SCIM Schema (RFC 7643 §7)."""
+
+    name: str
+    type: str
+    multiValued: bool = False
+    required: bool = False
+    description: str = ""
+    caseExact: bool = False
+    mutability: str = "readWrite"
+    returned: str = "default"
+    uniqueness: str = "none"
+    subAttributes: list["ScimSchemaAttribute"] = Field(default_factory=list)
+
+
+class ScimSchemaDefinition(BaseModel):
+    """SCIM Schema definition (RFC 7643 §7).
+
+    Served at GET /scim/v2/Schemas. Describes the attributes available
+    on each resource type so IdPs know which fields they can provision.
+    """
+
+    schemas: list[str] = Field(default_factory=lambda: [SCIM_SCHEMA_SCHEMA])
+    id: str
+    name: str
+    description: str
+    attributes: list[ScimSchemaAttribute] = Field(default_factory=list)
+
+
 class ScimSchemaExtension(BaseModel):
     """Schema extension reference within ResourceType (RFC 7643 §6)."""
 
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(populate_by_name=True, serialize_by_alias=True)
 
     schema_: str = Field(alias="schema")
     required: bool
@@ -211,7 +332,7 @@ class ScimResourceType(BaseModel):
     types are available (Users, Groups) and their respective endpoints.
     """
 
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(populate_by_name=True, serialize_by_alias=True)
 
     schemas: list[str] = Field(default_factory=lambda: [SCIM_RESOURCE_TYPE_SCHEMA])
     id: str
@@ -244,6 +365,7 @@ class ScimTokenResponse(BaseModel):
     is_active: bool
     created_at: datetime
     last_used_at: datetime | None = None
+    idp_domain: str | None = None
 
 
 class ScimTokenCreatedResponse(ScimTokenResponse):

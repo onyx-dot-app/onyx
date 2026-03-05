@@ -104,6 +104,44 @@ The foundational layer for all clickable surfaces in the design system. Defines 
 | **Active** | `action-link-05` | `action-link-05` |
 | **Disabled** | `action-link-03` | `action-link-03` |
 
+### Sidebar (unselected)
+
+> No CSS `:active` state — only hover/transient and selected.
+
+**Background**
+
+| | Light |
+|---|---|
+| **Rest** | `transparent` |
+| **Hover / Transient** | `background-tint-03` |
+| **Disabled** | `transparent` |
+
+**Foreground**
+
+| | Light |
+|---|---|
+| **Rest** | `text-03` |
+| **Hover / Transient** | `text-04` |
+| **Disabled** | `text-01` |
+
+### Sidebar (selected)
+
+> Completely static — hover and transient have no effect.
+
+**Background**
+
+| | Light |
+|---|---|
+| **All states** | `background-tint-00` |
+| **Disabled** | `transparent` |
+
+**Foreground**
+
+| | Light |
+|---|---|
+| **All states** | `text-03` (icon: `text-02`) |
+| **Disabled** | `text-01` |
+
 ## Sub-components
 
 | Sub-component | Role |

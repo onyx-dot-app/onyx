@@ -18,7 +18,7 @@ import SourceTag from "@/refresh-components/buttons/source-tag/SourceTag";
 import { citationsToSourceInfoArray } from "@/refresh-components/buttons/source-tag/sourceTagUtils";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import LLMPopover from "@/refresh-components/popovers/LLMPopover";
-import { parseLlmDescriptor } from "@/lib/llm/utils";
+import { parseLlmDescriptor } from "@/lib/llmConfig/utils";
 import { LlmManager } from "@/lib/hooks";
 import { Message } from "@/app/app/interfaces";
 import { SvgThumbsDown, SvgThumbsUp } from "@opal/icons";
@@ -75,6 +75,7 @@ const SourcesTagWrapper = React.memo(function SourcesTagWrapper({
 
   return (
     <SourceTag
+      variant="button"
       displayName="Sources"
       sources={sources}
       onSourceClick={handleSourceClick}
@@ -209,7 +210,10 @@ export default function MessageToolbar({
         <FeedbackModal {...feedbackModalProps!} />
       </modal.Provider>
 
-      <div className="flex md:flex-row justify-between items-center w-full transition-transform duration-300 ease-in-out transform opacity-100 pl-1">
+      <div
+        data-testid="AgentMessage/toolbar"
+        className="flex md:flex-row justify-between items-center w-full transition-transform duration-300 ease-in-out transform opacity-100 pl-1"
+      >
         <TooltipGroup>
           <div className="flex items-center">
             {includeMessageSwitcher && (

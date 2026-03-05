@@ -66,6 +66,7 @@ function FooterLinks({
           <Text secondaryBody text03>
             Have a license key?
           </Text>
+          {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
           <Button action tertiary onClick={onActivateLicense}>
             <Text secondaryBody text05 className="underline">
               {licenseText}
@@ -73,6 +74,7 @@ function FooterLinks({
           </Button>
         </>
       )}
+      {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
       <Button
         action
         tertiary
@@ -121,17 +123,22 @@ export default function BillingPage() {
   const billing = hasSubscription ? (billingData as BillingInformation) : null;
   const isSelfHosted = !NEXT_PUBLIC_CLOUD_ENABLED;
 
-  // User is only air-gapped if they have a manual license AND Stripe is not connected
-  // Once Stripe connects successfully, they're no longer air-gapped
   const hasManualLicense = licenseData?.source === "manual_upload";
-  const stripeConnected = billingData && !billingError;
-  const isAirGapped = hasManualLicense && !stripeConnected;
+
+  // Air-gapped: billing endpoint is unreachable (manual license + connectivity error)
+  const isAirGapped = !!(hasManualLicense && billingError);
+
+  // Stripe error: auto-fetched license but billing endpoint is unreachable
   const hasStripeError = !!(
     isSelfHosted &&
     licenseData?.has_license &&
     billingError &&
     !hasManualLicense
   );
+
+  // Manual license without active Stripe subscription
+  // Stripe-dependent actions (manage plan, update seats) won't work
+  const isManualLicenseOnly = !!(hasManualLicense && !hasSubscription);
 
   // Set initial view based on subscription status (only once when data first loads)
   useEffect(() => {
@@ -243,7 +250,10 @@ export default function BillingPage() {
         return {
           icon: hasSubscription ? SvgWallet : SvgArrowUpCircle,
           title: hasSubscription ? "View Plans" : "Upgrade Plan",
-          showBackButton: !!hasSubscription,
+          showBackButton: !!(
+            hasSubscription ||
+            (isSelfHosted && licenseData?.has_license)
+          ),
         };
       case "details":
         return {
@@ -271,9 +281,11 @@ export default function BillingPage() {
   };
 
   const handleBack = () => {
+    const hasEntitlement =
+      hasSubscription || (isSelfHosted && licenseData?.has_license);
     if (view === "checkout") {
-      changeView(hasSubscription ? "details" : "plans");
-    } else if (view === "plans" && hasSubscription) {
+      changeView(hasEntitlement ? "details" : "plans");
+    } else if (view === "plans" && hasEntitlement) {
       changeView("details");
     }
   };
@@ -293,6 +305,7 @@ export default function BillingPage() {
       plans: (
         <PlansView
           hasSubscription={!!hasSubscription}
+          hasLicense={!!licenseData?.has_license}
           onCheckout={() => changeView("checkout")}
           hideFeatures={showLicenseActivationInput}
         />
@@ -304,7 +317,19 @@ export default function BillingPage() {
           onViewPlans={() => changeView("plans")}
           onRefresh={handleRefresh}
           isAirGapped={isAirGapped}
+          isManualLicenseOnly={isManualLicenseOnly}
           hasStripeError={hasStripeError}
+          licenseCard={
+            isManualLicenseOnly ? (
+              <LicenseActivationCard
+                isOpen
+                onSuccess={handleLicenseActivated}
+                license={licenseData ?? undefined}
+                onClose={() => {}}
+                hideClose
+              />
+            ) : undefined
+          }
         />
       ),
     };
@@ -321,7 +346,7 @@ export default function BillingPage() {
     if (isLoading || view === null) return null;
     return (
       <>
-        {showLicenseActivationInput && (
+        {showLicenseActivationInput && !isManualLicenseOnly && (
           <div className="w-full billing-card-enter">
             <LicenseActivationCard
               isOpen={showLicenseActivationInput}
@@ -340,6 +365,7 @@ export default function BillingPage() {
             isSelfHosted ? () => setShowLicenseActivationInput(true) : undefined
           }
           hideLicenseLink={
+            isManualLicenseOnly ||
             showLicenseActivationInput ||
             (view === "plans" &&
               (!!hasSubscription || !!licenseData?.has_license))

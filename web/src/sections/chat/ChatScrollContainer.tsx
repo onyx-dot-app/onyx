@@ -9,6 +9,7 @@ import React, {
   useState,
 } from "react";
 import { ScrollContainerProvider } from "@/components/chat/ScrollContainerContext";
+import { cn } from "@/lib/utils";
 
 // Size constants
 const DEFAULT_ANCHOR_OFFSET_PX = 16; // 1rem
@@ -49,6 +50,9 @@ export interface ChatScrollContainerProps {
 
   /** Session ID - resets scroll state when changed */
   sessionId?: string;
+
+  /** Hide the scrollbar (scroll still works, just invisible) */
+  hideScrollbar?: boolean;
 }
 
 // Build a CSS mask that fades content opacity at top/bottom edges
@@ -69,6 +73,7 @@ const ChatScrollContainer = React.memo(
         isStreaming = false,
         onScrollButtonVisibilityChange,
         sessionId,
+        hideScrollbar = false,
       }: ChatScrollContainerProps,
       ref: ForwardedRef<ChatScrollContainerHandle>
     ) => {
@@ -346,7 +351,11 @@ const ChatScrollContainer = React.memo(
           <div
             key={sessionId}
             ref={scrollContainerRef}
-            className="flex flex-col flex-1 min-h-0 overflow-y-auto overflow-x-hidden default-scrollbar"
+            data-testid="chat-scroll-container"
+            className={cn(
+              "flex flex-col flex-1 min-h-0 overflow-y-auto overflow-x-hidden",
+              hideScrollbar ? "no-scrollbar" : "default-scrollbar"
+            )}
             onScroll={handleScroll}
             style={{
               scrollbarGutter: "stable both-edges",

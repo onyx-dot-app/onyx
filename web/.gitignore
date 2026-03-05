@@ -38,6 +38,7 @@ next-env.d.ts
 
 # playwright testing temp files
 /admin*_auth.json
+/worker*_auth.json
 /user_auth.json
 /build-archive.log
 /test-results

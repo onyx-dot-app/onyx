@@ -1,5 +1,11 @@
+from __future__ import annotations
+
+import json
+import time
+from collections.abc import Generator
 from typing import Literal
 from typing import TypedDict
+from typing import Union
 
 import requests
 from pydantic import BaseModel
@@ -8,6 +14,9 @@ from onyx.configs.app_configs import CODE_INTERPRETER_BASE_URL
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+_HEALTH_CACHE_TTL_SECONDS = 30
+_health_cache: dict[str, tuple[float, bool]] = {}
 
 
 class FileInput(TypedDict):
@@ -36,6 +45,39 @@ class ExecuteResponse(BaseModel):
     files: list[WorkspaceFile]
 
 
+class StreamOutputEvent(BaseModel):
+    """SSE 'output' event: a chunk of stdout or stderr"""
+
+    stream: Literal["stdout", "stderr"]
+    data: str
+
+
+class StreamResultEvent(BaseModel):
+    """SSE 'result' event: final execution result"""
+
+    exit_code: int | None
+    timed_out: bool
+    duration_ms: int
+    files: list[WorkspaceFile]
+
+
+class StreamErrorEvent(BaseModel):
+    """SSE 'error' event: execution-level error"""
+
+    message: str
+
+
+StreamEvent = Union[StreamOutputEvent, StreamResultEvent, StreamErrorEvent]
+
+_SSE_EVENT_MAP: dict[
+    str, type[StreamOutputEvent | StreamResultEvent | StreamErrorEvent]
+] = {
+    "output": StreamOutputEvent,
+    "result": StreamResultEvent,
+    "error": StreamErrorEvent,
+}
+
+
 class CodeInterpreterClient:
     """Client for Code Interpreter service"""
 
@@ -44,6 +86,63 @@ class CodeInterpreterClient:
             raise ValueError("CODE_INTERPRETER_BASE_URL not configured")
         self.base_url = base_url.rstrip("/")
         self.session = requests.Session()
+        self._closed = False
+
+    def __enter__(self) -> CodeInterpreterClient:
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        self.close()
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self.session.close()
+        self._closed = True
+
+    def _build_payload(
+        self,
+        code: str,
+        stdin: str | None,
+        timeout_ms: int,
+        files: list[FileInput] | None,
+    ) -> dict:
+        payload: dict = {
+            "code": code,
+            "timeout_ms": timeout_ms,
+        }
+        if stdin is not None:
+            payload["stdin"] = stdin
+        if files:
+            payload["files"] = files
+        return payload
+
+    def health(self, use_cache: bool = False) -> bool:
+        """Check if the Code Interpreter service is healthy
+
+        Args:
+            use_cache: When True, return a cached result if available and
+                       within the TTL window. The cache is always populated
+                       after a live request regardless of this flag.
+        """
+        if use_cache:
+            cached = _health_cache.get(self.base_url)
+            if cached is not None:
+                cached_at, cached_result = cached
+                if time.monotonic() - cached_at < _HEALTH_CACHE_TTL_SECONDS:
+                    return cached_result
+
+        url = f"{self.base_url}/health"
+        try:
+            response = self.session.get(url, timeout=5)
+            response.raise_for_status()
+            result = response.json().get("status") == "ok"
+        except Exception as e:
+            logger.warning(f"Exception caught when checking health, e={e}")
+            result = False
+
+        _health_cache[self.base_url] = (time.monotonic(), result)
+        return result
 
     def execute(
         self,
@@ -52,24 +151,112 @@ class CodeInterpreterClient:
         timeout_ms: int = 30000,
         files: list[FileInput] | None = None,
     ) -> ExecuteResponse:
-        """Execute Python code"""
+        """Execute Python code (batch)"""
         url = f"{self.base_url}/v1/execute"
-
-        payload = {
-            "code": code,
-            "timeout_ms": timeout_ms,
-        }
-
-        if stdin is not None:
-            payload["stdin"] = stdin
-
-        if files:
-            payload["files"] = files
+        payload = self._build_payload(code, stdin, timeout_ms, files)
 
         response = self.session.post(url, json=payload, timeout=timeout_ms / 1000 + 10)
         response.raise_for_status()
 
         return ExecuteResponse(**response.json())
+
+    def execute_streaming(
+        self,
+        code: str,
+        stdin: str | None = None,
+        timeout_ms: int = 30000,
+        files: list[FileInput] | None = None,
+    ) -> Generator[StreamEvent, None, None]:
+        """Execute Python code with streaming SSE output.
+
+        Yields StreamEvent objects (StreamOutputEvent, StreamResultEvent,
+        StreamErrorEvent) as execution progresses. Falls back to batch
+        execution if the streaming endpoint is not available (older
+        code-interpreter versions).
+        """
+        url = f"{self.base_url}/v1/execute/stream"
+        payload = self._build_payload(code, stdin, timeout_ms, files)
+
+        response = self.session.post(
+            url,
+            json=payload,
+            stream=True,
+            timeout=timeout_ms / 1000 + 10,
+        )
+
+        if response.status_code == 404:
+            logger.info(
+                "Streaming endpoint not available, " "falling back to batch execution"
+            )
+            response.close()
+            yield from self._batch_as_stream(code, stdin, timeout_ms, files)
+            return
+
+        try:
+            response.raise_for_status()
+            yield from self._parse_sse(response)
+        finally:
+            response.close()
+
+    def _parse_sse(
+        self, response: requests.Response
+    ) -> Generator[StreamEvent, None, None]:
+        """Parse SSE streaming response into StreamEvent objects.
+
+        Expected format per event:
+            event: <type>
+            data: <json>
+            <blank line>
+        """
+        event_type: str | None = None
+        data_lines: list[str] = []
+
+        for line in response.iter_lines(decode_unicode=True):
+            if line is None:
+                continue
+
+            if line == "":
+                # Blank line marks end of an SSE event
+                if event_type is not None and data_lines:
+                    data = "\n".join(data_lines)
+                    model_cls = _SSE_EVENT_MAP.get(event_type)
+                    if model_cls is not None:
+                        yield model_cls(**json.loads(data))
+                    else:
+                        logger.warning(f"Unknown SSE event type: {event_type}")
+                event_type = None
+                data_lines = []
+            elif line.startswith("event:"):
+                event_type = line[len("event:") :].strip()
+            elif line.startswith("data:"):
+                data_lines.append(line[len("data:") :].strip())
+
+        if event_type is not None or data_lines:
+            logger.warning(
+                f"SSE stream ended with incomplete event: "
+                f"event_type={event_type}, data_lines={data_lines}"
+            )
+
+    def _batch_as_stream(
+        self,
+        code: str,
+        stdin: str | None,
+        timeout_ms: int,
+        files: list[FileInput] | None,
+    ) -> Generator[StreamEvent, None, None]:
+        """Execute via batch endpoint and yield results as stream events."""
+        result = self.execute(code, stdin, timeout_ms, files)
+
+        if result.stdout:
+            yield StreamOutputEvent(stream="stdout", data=result.stdout)
+        if result.stderr:
+            yield StreamOutputEvent(stream="stderr", data=result.stderr)
+        yield StreamResultEvent(
+            exit_code=result.exit_code,
+            timed_out=result.timed_out,
+            duration_ms=result.duration_ms,
+            files=result.files,
+        )
 
     def upload_file(self, file_content: bytes, filename: str) -> str:
         """Upload file to Code Interpreter and return file_id"""

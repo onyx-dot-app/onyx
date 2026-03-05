@@ -11,6 +11,7 @@ import Button from "@/refresh-components/buttons/Button";
 import Separator from "@/refresh-components/Separator";
 import Text from "@/refresh-components/texts/Text";
 import { SvgUsers } from "@opal/icons";
+import { useVectorDbEnabled } from "@/providers/SettingsProvider";
 export interface UserGroupCreationFormProps {
   onClose: () => void;
   users: User[];
@@ -25,8 +26,8 @@ export default function UserGroupCreationForm({
   existingUserGroup,
 }: UserGroupCreationFormProps) {
   const isUpdate = existingUserGroup !== undefined;
+  const vectorDbEnabled = useVectorDbEnabled();
 
-  // Filter out ccPairs that aren't access_type "private"
   const privateCcPairs = ccPairs.filter(
     (ccPair) => ccPair.access_type === "private"
   );
@@ -87,21 +88,31 @@ export default function UserGroupCreationForm({
 
                 <Separator />
 
-                <Text as="p" className="font-medium">
-                  Select which private connectors this group has access to:
-                </Text>
-                <Text as="p" text02>
-                  All documents indexed by the selected connectors will be
-                  visible to users in this group.
-                </Text>
+                {vectorDbEnabled ? (
+                  <>
+                    <Text as="p" className="font-medium">
+                      Select which private connectors this group has access to:
+                    </Text>
+                    <Text as="p" text02>
+                      All documents indexed by the selected connectors will be
+                      visible to users in this group.
+                    </Text>
 
-                <ConnectorEditor
-                  allCCPairs={privateCcPairs}
-                  selectedCCPairIds={values.cc_pair_ids}
-                  setSetCCPairIds={(ccPairsIds) =>
-                    setFieldValue("cc_pair_ids", ccPairsIds)
-                  }
-                />
+                    <ConnectorEditor
+                      allCCPairs={privateCcPairs}
+                      selectedCCPairIds={values.cc_pair_ids}
+                      setSetCCPairIds={(ccPairsIds) =>
+                        setFieldValue("cc_pair_ids", ccPairsIds)
+                      }
+                    />
+                  </>
+                ) : (
+                  <Text as="p" text03>
+                    Connectors are not available in Onyx Lite. Redeploy Onyx
+                    with DISABLE_VECTOR_DB=false to index knowledge via
+                    connectors.
+                  </Text>
+                )}
 
                 <Separator />
 
@@ -123,6 +134,7 @@ export default function UserGroupCreationForm({
                   />
                 </div>
                 <div className="flex">
+                  {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
                   <Button
                     type="submit"
                     disabled={isSubmitting}

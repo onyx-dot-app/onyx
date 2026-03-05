@@ -21,8 +21,8 @@ from onyx.configs.app_configs import POSTGRES_POOL_RECYCLE
 from onyx.configs.app_configs import POSTGRES_PORT
 from onyx.configs.app_configs import POSTGRES_USE_NULL_POOL
 from onyx.configs.app_configs import POSTGRES_USER
+from onyx.db.engine.iam_auth import create_ssl_context_if_iam
 from onyx.db.engine.iam_auth import get_iam_auth_token
-from onyx.db.engine.iam_auth import ssl_context
 from onyx.db.engine.sql_engine import ASYNC_DB_API
 from onyx.db.engine.sql_engine import build_connection_string
 from onyx.db.engine.sql_engine import is_valid_schema_name
@@ -66,7 +66,7 @@ def get_sqlalchemy_async_engine() -> AsyncEngine:
         if app_name:
             connect_args["server_settings"] = {"application_name": app_name}
 
-        connect_args["ssl"] = ssl_context
+        connect_args["ssl"] = create_ssl_context_if_iam()
 
         engine_kwargs = {
             "connect_args": connect_args,
@@ -97,7 +97,7 @@ def get_sqlalchemy_async_engine() -> AsyncEngine:
                 user = POSTGRES_USER
                 token = get_iam_auth_token(host, port, user, AWS_REGION_NAME)
                 cparams["password"] = token
-                cparams["ssl"] = ssl_context
+                cparams["ssl"] = create_ssl_context_if_iam()
 
     return _ASYNC_ENGINE
 

@@ -4,10 +4,7 @@ import useSWR from "swr";
 import { useRouter } from "next/navigation";
 import { Route } from "next";
 import { usePostHog } from "posthog-js/react";
-import {
-  Notification,
-  NotificationType,
-} from "@/app/admin/settings/interfaces";
+import { Notification, NotificationType } from "@/interfaces/settings";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import Text from "@/refresh-components/texts/Text";
 import LineItem from "@/refresh-components/buttons/LineItem";

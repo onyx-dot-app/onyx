@@ -207,7 +207,9 @@ def test_mcp_search_respects_acl_filters(
         cc_pair_ids=[restricted_cc_pair.id],
         user_performing_action=admin_user,
     )
-    UserGroupManager.wait_for_sync([user_group], user_performing_action=admin_user)
+    UserGroupManager.wait_for_sync(
+        user_performing_action=admin_user, user_groups_to_check=[user_group]
+    )
 
     restricted_doc_content = "MCP restricted knowledge base document"
     _seed_document_and_wait_for_indexing(

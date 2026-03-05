@@ -1,7 +1,8 @@
 /* Shared tooltip content styling */
 
 .opal-tooltip {
-  @apply z-50 rounded-08 px-3 py-2 text-sm
+  z-index: var(--z-tooltip, 1300);
+  @apply rounded-08 px-3 py-2 text-sm
     bg-background-neutral-dark-03 text-text-light-05
     animate-in fade-in-0 zoom-in-95
     data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95

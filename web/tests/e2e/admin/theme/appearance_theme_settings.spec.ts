@@ -1,5 +1,5 @@
-import { test, expect } from "@playwright/test";
-import { loginAs } from "../../utils/auth";
+import { test, expect } from "@tests/e2e/fixtures/eeFeatures";
+import { loginAs } from "@tests/e2e/utils/auth";
 
 test.describe("Appearance Theme Settings @exclusive", () => {
   const TEST_VALUES = {
@@ -12,24 +12,21 @@ test.describe("Appearance Theme Settings @exclusive", () => {
     consentPrompt: "I agree to the terms",
   };
 
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async ({ page, eeEnabled }) => {
+    test.skip(
+      !eeEnabled,
+      "Enterprise license not active — skipping theme tests"
+    );
+
+    // Fresh session — the eeEnabled fixture already logged in to check the
+    // setting, so clear cookies and re-login for a clean test state.
     await page.context().clearCookies();
     await loginAs(page, "admin");
 
-    // Navigate first so localStorage is accessible (API-based login
-    // doesn't navigate, leaving the page on about:blank).
     await page.goto("/admin/theme");
-    await page.waitForLoadState("networkidle");
-
-    // Skip the entire test when Enterprise features are not licensed.
-    // The /admin/theme page is gated behind ee_features_enabled and
-    // renders a license-required message instead of the settings form.
-    const eeLocked = page.getByText(
-      "This functionality requires an active Enterprise license."
-    );
-    if (await eeLocked.isVisible({ timeout: 1000 }).catch(() => false)) {
-      test.skip(true, "Enterprise license not active — skipping theme tests");
-    }
+    await expect(
+      page.locator('[data-label="application-name-input"]')
+    ).toBeVisible({ timeout: 10_000 });
 
     // Clear localStorage to ensure consent modal shows
     await page.evaluate(() => {
@@ -65,8 +62,8 @@ test.describe("Appearance Theme Settings @exclusive", () => {
     const noticeToggle = page.locator(
       '[data-label="first-visit-notice-toggle"]'
     );
-    const isChecked = await noticeToggle.getAttribute("data-state");
-    if (isChecked === "checked") {
+    const isChecked = await noticeToggle.getAttribute("aria-checked");
+    if (isChecked === "true") {
       await noticeToggle.click();
       await page.waitForTimeout(300);
     }
@@ -128,8 +125,8 @@ test.describe("Appearance Theme Settings @exclusive", () => {
 
     // 9. Enable Consent Requirement (only if not already enabled)
     const consentToggle = page.locator('[data-label="require-consent-toggle"]');
-    const consentState = await consentToggle.getAttribute("data-state");
-    if (consentState !== "checked") {
+    const consentState = await consentToggle.getAttribute("aria-checked");
+    if (consentState !== "true") {
       await consentToggle.click();
     }
 

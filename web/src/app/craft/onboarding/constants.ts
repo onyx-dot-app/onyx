@@ -19,13 +19,12 @@ const LLM_SELECTION_PRIORITY = [
 interface MinimalLlmProvider {
   name: string;
   provider: string;
-  default_model_name: string;
-  is_default_provider: boolean | null;
+  model_configurations: { name: string; is_visible: boolean }[];
 }
 
 /**
  * Get the best default LLM selection based on available providers.
- * Priority: Anthropic > OpenAI > OpenRouter > system default > first available
+ * Priority: Anthropic > OpenAI > OpenRouter > first available
  */
 export function getDefaultLlmSelection(
   llmProviders: MinimalLlmProvider[] | undefined
@@ -44,23 +43,16 @@ export function getDefaultLlmSelection(
     }
   }
 
-  // Fallback: use the default provider's default model
-  const defaultProvider = llmProviders.find((p) => p.is_default_provider);
-  if (defaultProvider) {
-    return {
-      providerName: defaultProvider.name,
-      provider: defaultProvider.provider,
-      modelName: defaultProvider.default_model_name,
-    };
-  }
-
-  // Final fallback: first available provider
+  // Fallback: first available provider, use its first visible model
   const firstProvider = llmProviders[0];
   if (firstProvider) {
+    const firstModel = firstProvider.model_configurations.find(
+      (m) => m.is_visible
+    );
     return {
       providerName: firstProvider.name,
       provider: firstProvider.provider,
-      modelName: firstProvider.default_model_name,
+      modelName: firstModel?.name ?? "",
     };
   }
 

@@ -1,4 +1,4 @@
-import { CombinedSettings } from "@/app/admin/settings/interfaces";
+import { CombinedSettings } from "@/interfaces/settings";
 import { ChatSession, toChatSession } from "@/app/app/interfaces";
 import { fetchSettingsSS } from "@/components/settings/lib";
 import { fetchBackendChatSessionSS } from "@/lib/chat/fetchBackendChatSessionSS";

@@ -21,6 +21,7 @@ import "@/app/admin/billing/billing.css";
 import type { IconProps } from "@opal/types";
 import Card from "@/refresh-components/cards/Card";
 import Button from "@/refresh-components/buttons/Button";
+import { Button as OpalButton } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { Section } from "@/layouts/general-layouts";
 
@@ -146,24 +147,31 @@ function PlanCard({
         {/* Button */}
         <div className="plan-card-button">
           {isCurrentPlan ? (
+            // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
             <Button tertiary transient className="pointer-events-none">
               <Text mainUiAction text03>
                 Your Current Plan
               </Text>
             </Button>
           ) : href ? (
-            <Button
-              main
-              secondary
+            <OpalButton
+              prominence="secondary"
               href={href}
               target="_blank"
               rel="noopener noreferrer"
             >
               {buttonLabel}
-            </Button>
-          ) : (
-            <Button main primary onClick={onClick} leftIcon={ButtonIcon}>
+            </OpalButton>
+          ) : onClick ? (
+            <OpalButton onClick={onClick} icon={ButtonIcon}>
               {buttonLabel}
+            </OpalButton>
+          ) : (
+            // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
+            <Button tertiary transient className="pointer-events-none">
+              <Text mainUiAction text03>
+                Included in your plan
+              </Text>
             </Button>
           )}
         </div>
@@ -221,12 +229,14 @@ function PlanCard({
 
 interface PlansViewProps {
   hasSubscription?: boolean;
+  hasLicense?: boolean;
   onCheckout: () => void;
   hideFeatures?: boolean;
 }
 
 export default function PlansView({
   hasSubscription,
+  hasLicense,
   onCheckout,
   hideFeatures,
 }: PlansViewProps) {
@@ -239,10 +249,10 @@ export default function PlansView({
         "per seat/month billed annually\nor $25 per seat if billed monthly",
       buttonLabel: "Get Business Plan",
       buttonVariant: "primary",
-      onClick: onCheckout,
+      onClick: hasLicense ? undefined : onCheckout,
       features: BUSINESS_FEATURES,
       featuresPrefix: "Get more work done with AI for your team.",
-      isCurrentPlan: hasSubscription,
+      isCurrentPlan: !!hasSubscription,
     },
     {
       icon: SvgOrganization,
@@ -254,6 +264,7 @@ export default function PlansView({
       href: SALES_URL,
       features: ENTERPRISE_FEATURES,
       featuresPrefix: "Everything in Business Plan, plus:",
+      isCurrentPlan: !!hasLicense && !hasSubscription,
     },
   ];
 

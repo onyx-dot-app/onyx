@@ -33,7 +33,7 @@ def generate_schema(output_path: str, tagged_for_docs: str | None = None) -> boo
     try:
         # Import here to avoid requiring backend dependencies when not generating schema
         from fastapi.openapi.utils import get_openapi
-        from onyx.main import app as app_fn  # type: ignore
+        from onyx.main import app as app_fn
     except ImportError as e:
         print(f"Error: Failed to import required modules: {e}", file=sys.stderr)
         print(

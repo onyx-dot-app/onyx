@@ -10,6 +10,7 @@ from onyx.configs.constants import MessageType
 from onyx.db.enums import ArtifactType
 from onyx.db.enums import BuildSessionStatus
 from onyx.db.enums import SandboxStatus
+from onyx.db.enums import SharingScope
 from onyx.server.features.build.sandbox.models import (
     FilesystemEntry as FileSystemEntry,
 )
@@ -107,6 +108,7 @@ class SessionResponse(BaseModel):
     nextjs_port: int | None
     sandbox: SandboxResponse | None
     artifacts: list[ArtifactResponse]
+    sharing_scope: SharingScope
 
     @classmethod
     def from_model(
@@ -129,6 +131,7 @@ class SessionResponse(BaseModel):
             nextjs_port=session.nextjs_port,
             sandbox=(SandboxResponse.from_model(sandbox) if sandbox else None),
             artifacts=[ArtifactResponse.from_model(a) for a in session.artifacts],
+            sharing_scope=session.sharing_scope,
         )
 
 
@@ -157,6 +160,19 @@ class SessionListResponse(BaseModel):
     """Response containing list of sessions."""
 
     sessions: list[SessionResponse]
+
+
+class SetSessionSharingRequest(BaseModel):
+    """Request to set the sharing scope of a session."""
+
+    sharing_scope: SharingScope
+
+
+class SetSessionSharingResponse(BaseModel):
+    """Response after setting session sharing scope."""
+
+    session_id: str
+    sharing_scope: SharingScope
 
 
 # ===== Message Models =====
@@ -244,6 +260,7 @@ class WebappInfo(BaseModel):
     webapp_url: str | None  # URL to access the webapp (e.g., http://localhost:3015)
     status: str  # Sandbox status (running, terminated, etc.)
     ready: bool  # Whether the NextJS dev server is actually responding
+    sharing_scope: SharingScope
 
 
 # ===== File Upload Models =====

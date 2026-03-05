@@ -32,7 +32,7 @@ from onyx.db.persona import get_persona_snapshots_for_user
 from onyx.db.persona import get_persona_snapshots_paginated
 from onyx.db.persona import mark_persona_as_deleted
 from onyx.db.persona import mark_persona_as_not_deleted
-from onyx.db.persona import update_persona_is_default
+from onyx.db.persona import update_persona_featured
 from onyx.db.persona import update_persona_label
 from onyx.db.persona import update_persona_public_status
 from onyx.db.persona import update_persona_shared
@@ -130,8 +130,8 @@ class IsPublicRequest(BaseModel):
     is_public: bool
 
 
-class IsDefaultRequest(BaseModel):
-    is_default_persona: bool
+class IsFeaturedRequest(BaseModel):
+    featured: bool
 
 
 @admin_router.patch("/{persona_id}/visible")
@@ -168,22 +168,22 @@ def patch_user_persona_public_status(
         raise HTTPException(status_code=403, detail=str(e))
 
 
-@admin_router.patch("/{persona_id}/default")
-def patch_persona_default_status(
+@admin_router.patch("/{persona_id}/featured")
+def patch_persona_featured_status(
     persona_id: int,
-    is_default_request: IsDefaultRequest,
+    is_featured_request: IsFeaturedRequest,
     user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     try:
-        update_persona_is_default(
+        update_persona_featured(
             persona_id=persona_id,
-            is_default=is_default_request.is_default_persona,
+            featured=is_featured_request.featured,
             db_session=db_session,
             user=user,
         )
     except ValueError as e:
-        logger.exception("Failed to update persona default status")
+        logger.exception("Failed to update persona featured status")
         raise HTTPException(status_code=403, detail=str(e))
 
 
@@ -405,6 +405,7 @@ class PersonaShareRequest(BaseModel):
     user_ids: list[UUID] | None = None
     group_ids: list[int] | None = None
     is_public: bool | None = None
+    label_ids: list[int] | None = None
 
 
 # We notify each user when a user is shared with them
@@ -415,14 +416,22 @@ def share_persona(
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> None:
-    update_persona_shared(
-        persona_id=persona_id,
-        user=user,
-        db_session=db_session,
-        user_ids=persona_share_request.user_ids,
-        group_ids=persona_share_request.group_ids,
-        is_public=persona_share_request.is_public,
-    )
+    try:
+        update_persona_shared(
+            persona_id=persona_id,
+            user=user,
+            db_session=db_session,
+            user_ids=persona_share_request.user_ids,
+            group_ids=persona_share_request.group_ids,
+            is_public=persona_share_request.is_public,
+            label_ids=persona_share_request.label_ids,
+        )
+    except PermissionError as e:
+        logger.exception("Failed to share persona")
+        raise HTTPException(status_code=403, detail=str(e))
+    except ValueError as e:
+        logger.exception("Failed to share persona")
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @basic_router.delete("/{persona_id}", tags=PUBLIC_API_TAGS)

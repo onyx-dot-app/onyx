@@ -28,7 +28,9 @@ postgresql:
 # -- Master toggle for vector database support. When false:
 #   - Sets DISABLE_VECTOR_DB=true on all backend pods
 #   - Skips the indexing model server deployment (embeddings not needed)
-#   - Skips docprocessing and docfetching celery workers
+#   - Skips ALL celery worker deployments (beat, primary, light, heavy,
+#     monitoring, user-file-processing, docprocessing, docfetching) — the
+#     API server handles background work via FastAPI BackgroundTasks
 #   - You should also set vespa.enabled=false and opensearch.enabled=false
 #     to prevent those subcharts from deploying
 vectorDB:
@@ -184,6 +186,7 @@ inferenceCapability:
   #   rollingUpdate:
   #     maxSurge: 0
   #     maxUnavailable: 1
+
 
 indexCapability:
   service:
@@ -522,6 +525,7 @@ celery_shared:
 
 celery_beat:
   replicaCount: 1
+  logLevel: INFO
   podAnnotations: {}
   podLabels:
     scope: onyx-backend-celery
@@ -542,6 +546,7 @@ celery_beat:
 
 celery_worker_heavy:
   replicaCount: 1
+  logLevel: INFO
   autoscaling:
     enabled: false
     minReplicas: 1
@@ -575,6 +580,7 @@ celery_worker_heavy:
 
 celery_worker_docprocessing:
   replicaCount: 1
+  logLevel: INFO
   autoscaling:
     enabled: false
     minReplicas: 1
@@ -608,6 +614,7 @@ celery_worker_docprocessing:
 
 celery_worker_light:
   replicaCount: 1
+  logLevel: INFO
   autoscaling:
     enabled: false
     minReplicas: 1
@@ -641,6 +648,7 @@ celery_worker_light:
 
 celery_worker_monitoring:
   replicaCount: 1
+  logLevel: INFO
   autoscaling:
     enabled: false
     minReplicas: 1
@@ -674,6 +682,7 @@ celery_worker_monitoring:
 
 celery_worker_primary:
   replicaCount: 1
+  logLevel: INFO
   autoscaling:
     enabled: false
     minReplicas: 1
@@ -707,6 +716,7 @@ celery_worker_primary:
 
 celery_worker_user_file_processing:
   replicaCount: 1
+  logLevel: INFO
   autoscaling:
     enabled: false
     minReplicas: 1
@@ -851,6 +861,7 @@ mcpServer:
 
 celery_worker_docfetching:
   replicaCount: 1
+  logLevel: INFO
   autoscaling:
     enabled: false
     minReplicas: 1
@@ -948,7 +959,7 @@ minio:
 
 # Code Interpreter - Python code execution service (beta feature)
 codeInterpreter:
-  enabled: false  # Disabled by default (beta feature)
+  enabled: true
 
   replicaCount: 1
 

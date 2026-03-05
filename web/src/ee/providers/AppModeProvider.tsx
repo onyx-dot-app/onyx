@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { AppModeContext, AppMode } from "@/providers/AppModeProvider";
 import { useUser } from "@/providers/UserProvider";
+import { useSettingsContext } from "@/providers/SettingsProvider";
 
 export interface AppModeProviderProps {
   children: React.ReactNode;
@@ -17,25 +18,33 @@ export interface AppModeProviderProps {
  * - **chat**: Forces chat mode - conversation with follow-up questions
  *
  * The initial mode is read from the user's persisted `default_app_mode` preference.
+ * When search mode is unavailable (admin setting or no connectors), the mode is locked to "chat".
  */
 export function AppModeProvider({ children }: AppModeProviderProps) {
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
   const { user } = useUser();
+  const { isSearchModeAvailable } = useSettingsContext();
 
   const persistedMode = user?.preferences?.default_app_mode;
-  const initialMode: AppMode =
-    isPaidEnterpriseFeaturesEnabled && persistedMode
-      ? (persistedMode.toLowerCase() as AppMode)
-      : "chat";
+  const [appMode, setAppModeState] = useState<AppMode>("chat");
 
-  const [appMode, setAppModeState] = useState<AppMode>(initialMode);
+  useEffect(() => {
+    if (!isPaidEnterpriseFeaturesEnabled || !isSearchModeAvailable) {
+      setAppModeState("chat");
+      return;
+    }
+
+    if (persistedMode) {
+      setAppModeState(persistedMode.toLowerCase() as AppMode);
+    }
+  }, [isPaidEnterpriseFeaturesEnabled, isSearchModeAvailable, persistedMode]);
 
   const setAppMode = useCallback(
     (mode: AppMode) => {
-      if (!isPaidEnterpriseFeaturesEnabled) return;
+      if (!isPaidEnterpriseFeaturesEnabled || !isSearchModeAvailable) return;
       setAppModeState(mode);
     },
-    [isPaidEnterpriseFeaturesEnabled]
+    [isPaidEnterpriseFeaturesEnabled, isSearchModeAvailable]
   );
 
   return (

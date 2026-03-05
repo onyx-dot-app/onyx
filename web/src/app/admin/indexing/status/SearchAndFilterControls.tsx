@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { Badge } from "@/components/ui/badge";
 import { FilterComponent, FilterOptions } from "./FilterComponent";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";

@@ -406,6 +406,7 @@ const InputBar = memo(
               {/* Bottom right controls */}
               <div className="flex flex-row items-center gap-1">
                 {/* Submit button */}
+                {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
                 <IconButton
                   icon={sandboxInitializing ? SvgLoader : SvgArrowUp}
                   onClick={handleSubmit}

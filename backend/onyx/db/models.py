@@ -77,6 +77,7 @@ from onyx.db.enums import (
     ThemePreference,
     DefaultAppMode,
     SwitchoverType,
+    SharingScope,
 )
 from onyx.configs.constants import NotificationType
 from onyx.configs.constants import SearchFeedbackType
@@ -102,7 +103,6 @@ from onyx.utils.encryption import encrypt_string_to_bytes
 from onyx.utils.sensitive import SensitiveValue
 from onyx.utils.headers import HeaderItemDict
 from shared_configs.enums import EmbeddingProvider
-from onyx.context.search.enums import RecencyBiasSetting
 
 # TODO: After anonymous user migration has been deployed, make user_id columns NOT NULL
 # and update Mapped[User | None] relationships to Mapped[User] where needed.
@@ -286,7 +286,7 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
 
     # relationships
     credentials: Mapped[list["Credential"]] = relationship(
-        "Credential", back_populates="user", lazy="joined"
+        "Credential", back_populates="user"
     )
     chat_sessions: Mapped[list["ChatSession"]] = relationship(
         "ChatSession", back_populates="user"
@@ -320,7 +320,6 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         "Memory",
         back_populates="user",
         cascade="all, delete-orphan",
-        lazy="selectin",
         order_by="desc(Memory.id)",
     )
     oauth_user_tokens: Mapped[list["OAuthUserToken"]] = relationship(
@@ -806,12 +805,13 @@ class HierarchyNode(Base):
         "HierarchyNode", remote_side=[id], back_populates="children"
     )
     children: Mapped[list["HierarchyNode"]] = relationship(
-        "HierarchyNode", back_populates="parent"
+        "HierarchyNode", back_populates="parent", passive_deletes=True
     )
     child_documents: Mapped[list["Document"]] = relationship(
         "Document",
         back_populates="parent_hierarchy_node",
         foreign_keys="Document.parent_hierarchy_node_id",
+        passive_deletes=True,
     )
     # Personas that have this hierarchy node attached for scoped search
     personas: Mapped[list["Persona"]] = relationship(
@@ -936,6 +936,7 @@ class Document(Base):
         "HierarchyNode",
         back_populates="document",
         foreign_keys="HierarchyNode.document_id",
+        passive_deletes=True,
     )
     # Personas that have this document directly attached for scoped search
     attached_personas: Mapped[list["Persona"]] = relationship(
@@ -1038,7 +1039,9 @@ class OpenSearchTenantMigrationRecord(Base):
         nullable=False,
     )
     # Opaque continuation token from Vespa's Visit API.
-    # NULL means "not started" or "visit completed".
+    # NULL means "not started".
+    # Otherwise contains a serialized mapping between slice ID and continuation
+    # token for that slice.
     vespa_visit_continuation_token: Mapped[str | None] = mapped_column(
         Text, nullable=True
     )
@@ -1061,6 +1064,9 @@ class OpenSearchTenantMigrationRecord(Base):
     )
     enable_opensearch_retrieval: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
+    )
+    approx_chunk_count_in_vespa: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
     )
 
 
@@ -2815,13 +2821,17 @@ class LLMProvider(Base):
     custom_config: Mapped[dict[str, str] | None] = mapped_column(
         postgresql.JSONB(), nullable=True
     )
-    default_model_name: Mapped[str] = mapped_column(String)
+
+    # Deprecated: use LLMModelFlow with CHAT flow type instead
+    default_model_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
     deployment_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
-    # should only be set for a single provider
-    is_default_provider: Mapped[bool | None] = mapped_column(Boolean, unique=True)
+    # Deprecated: use LLMModelFlow.is_default with CHAT flow type instead
+    is_default_provider: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    # Deprecated: use LLMModelFlow.is_default with VISION flow type instead
     is_default_vision_provider: Mapped[bool | None] = mapped_column(Boolean)
+    # Deprecated: use LLMModelFlow with VISION flow type instead
     default_vision_model: Mapped[str | None] = mapped_column(String, nullable=True)
     # EE only
     is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
@@ -2872,6 +2882,7 @@ class ModelConfiguration(Base):
     # - The end-user is configuring a model and chooses not to set a max-input-tokens limit.
     max_input_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
+    # Deprecated: use LLMModelFlow with VISION flow type instead
     supports_image_input: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
     # Human-readable display name for the model.
@@ -3253,19 +3264,6 @@ class Persona(Base):
     )
     name: Mapped[str] = mapped_column(String)
     description: Mapped[str] = mapped_column(String)
-    # Number of chunks to pass to the LLM for generation.
-    num_chunks: Mapped[float | None] = mapped_column(Float, nullable=True)
-    chunks_above: Mapped[int] = mapped_column(Integer)
-    chunks_below: Mapped[int] = mapped_column(Integer)
-    # Pass every chunk through LLM for evaluation, fairly expensive
-    # Can be turned off globally by admin, in which case, this setting is ignored
-    llm_relevance_filter: Mapped[bool] = mapped_column(Boolean)
-    # Enables using LLM to extract time and source type filters
-    # Can also be admin disabled globally
-    llm_filter_extraction: Mapped[bool] = mapped_column(Boolean)
-    recency_bias: Mapped[RecencyBiasSetting] = mapped_column(
-        Enum(RecencyBiasSetting, native_enum=False)
-    )
 
     # Allows the persona to specify a specific default LLM model
     # NOTE: only is applied on the actual response generation - is not used for things like
@@ -3292,11 +3290,8 @@ class Persona(Base):
     # Treated specially (cannot be user edited etc.)
     builtin_persona: Mapped[bool] = mapped_column(Boolean, default=False)
 
-    # Default personas are personas created by admins and are automatically added
-    # to all users' assistants list.
-    is_default_persona: Mapped[bool] = mapped_column(
-        Boolean, default=False, nullable=False
-    )
+    # Featured personas are highlighted in the UI
+    featured: Mapped[bool] = mapped_column(Boolean, default=False)
     # controls whether the persona is available to be selected by users
     is_visible: Mapped[bool] = mapped_column(Boolean, default=True)
     # controls the ordering of personas in the UI
@@ -4263,6 +4258,9 @@ class UserFile(Base):
     needs_project_sync: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
     )
+    needs_persona_sync: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
     last_project_sync_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -4710,6 +4708,12 @@ class BuildSession(Base):
     demo_data_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("true")
     )
+    sharing_scope: Mapped[SharingScope] = mapped_column(
+        String,
+        nullable=False,
+        default=SharingScope.PRIVATE,
+        server_default="private",
+    )
 
     # Relationships
     user: Mapped[User | None] = relationship("User", foreign_keys=[user_id])
@@ -4922,10 +4926,18 @@ class ScimUserMapping(Base):
     __tablename__ = "scim_user_mapping"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    external_id: Mapped[str] = mapped_column(String, unique=True, index=True)
+    external_id: Mapped[str | None] = mapped_column(
+        String, unique=True, index=True, nullable=True
+    )
     user_id: Mapped[UUID] = mapped_column(
         ForeignKey("user.id", ondelete="CASCADE"), unique=True, nullable=False
     )
+    scim_username: Mapped[str | None] = mapped_column(String, nullable=True)
+    department: Mapped[str | None] = mapped_column(String, nullable=True)
+    manager: Mapped[str | None] = mapped_column(String, nullable=True)
+    given_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    family_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    scim_emails_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -4963,4 +4975,35 @@ class ScimGroupMapping(Base):
 
     user_group: Mapped[UserGroup] = relationship(
         "UserGroup", foreign_keys=[user_group_id]
+    )
+
+
+class CodeInterpreterServer(Base):
+    """Details about the code interpreter server"""
+
+    __tablename__ = "code_interpreter_server"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    server_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+
+class CacheStore(Base):
+    """Key-value cache table used by ``PostgresCacheBackend``.
+
+    Replaces Redis for simple KV caching, locks, and list operations
+    when ``CACHE_BACKEND=postgres`` (NO_VECTOR_DB deployments).
+
+    Intentionally separate from ``KVStore``:
+    - Stores raw bytes (LargeBinary) vs JSONB, matching Redis semantics.
+    - Has ``expires_at`` for TTL; rows are periodically garbage-collected.
+    - Holds ephemeral data (tokens, stop signals, lock state) not
+      persistent application config, so cleanup can be aggressive.
+    """
+
+    __tablename__ = "cache_store"
+
+    key: Mapped[str] = mapped_column(String, primary_key=True)
+    value: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    expires_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )

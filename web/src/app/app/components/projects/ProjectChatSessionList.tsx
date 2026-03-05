@@ -21,7 +21,7 @@ export default function ProjectChatSessionList() {
     refreshCurrentProjectDetails,
     isLoadingProjectDetails,
   } = useProjectsContext();
-  const { agents: assistants } = useAgents();
+  const { agents } = useAgents();
   const [isRenamingChat, setIsRenamingChat] = React.useState<string | null>(
     null
   );
@@ -38,7 +38,7 @@ export default function ProjectChatSessionList() {
   if (!currentProjectId) return null;
 
   return (
-    <div className="flex flex-col gap-2 px-2 w-full max-w-[800px] mx-auto mt-4">
+    <div className="flex flex-col gap-2 px-2 w-full mx-auto mt-4">
       <div className="flex items-center pl-2">
         <Text as="p" text02 secondaryBody>
           Recent Chats
@@ -56,7 +56,7 @@ export default function ProjectChatSessionList() {
           No chats yet.
         </Text>
       ) : (
-        <div className="flex flex-col gap-2 max-h-[46vh] overflow-y-auto overscroll-y-none">
+        <div className="flex flex-col gap-2">
           {projectChats.map((chat) => (
             <Link
               key={chat.id}
@@ -74,17 +74,17 @@ export default function ProjectChatSessionList() {
                 <div className="flex gap-3 min-w-0 w-full">
                   <div className="flex h-full w-fit pt-1 pl-1">
                     {(() => {
-                      const personaIdToDefault =
-                        currentProjectDetails?.persona_id_to_is_default || {};
-                      const isDefault = personaIdToDefault[chat.persona_id];
-                      if (isDefault === false) {
-                        const assistant = assistants.find(
+                      const personaIdToFeatured =
+                        currentProjectDetails?.persona_id_to_featured || {};
+                      const isFeatured = personaIdToFeatured[chat.persona_id];
+                      if (isFeatured === false) {
+                        const agent = agents.find(
                           (a) => a.id === chat.persona_id
                         );
-                        if (assistant) {
+                        if (agent) {
                           return (
                             <div className="h-full pt-1">
-                              <AgentAvatar agent={assistant} size={18} />
+                              <AgentAvatar agent={agent} size={18} />
                             </div>
                           );
                         }

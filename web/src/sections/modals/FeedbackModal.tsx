@@ -1,7 +1,7 @@
 "use client";
 
 import { FeedbackType } from "@/app/app/interfaces";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import useFeedbackController from "@/hooks/useFeedbackController";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import { SvgThumbsDown, SvgThumbsUp } from "@opal/icons";
@@ -90,8 +90,8 @@ export default function FeedbackModal({
 
                 <Modal.Footer>
                   <Button
+                    prominence="secondary"
                     onClick={() => modal.toggle(false)}
-                    secondary
                     type="button"
                   >
                     Cancel

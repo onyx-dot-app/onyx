@@ -4,6 +4,8 @@ from unittest.mock import patch
 
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.models import Document
+from tests.daily.connectors.google_drive.consts_and_utils import _clear_parents
+from tests.daily.connectors.google_drive.consts_and_utils import _pick
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_FOLDER_3_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import (
     assert_expected_docs_in_retrieved_docs,
@@ -51,8 +53,6 @@ def _check_for_error(
     retrieved_failures = output.failures
     assert len(retrieved_failures) <= 1
 
-    # current behavior is to fail silently for 403s; leaving this here for when we revert
-    # if all 403s get fixed
     if len(retrieved_failures) == 1:
         fail_msg = retrieved_failures[0].failure_message
         assert "HttpError 403" in fail_msg
@@ -83,14 +83,11 @@ def test_all(
     output = load_connector_outputs(connector)
 
     expected_file_ids = (
-        # These are the files from my drive
         TEST_USER_1_FILE_IDS
-        # These are the files from shared drives
         + SHARED_DRIVE_1_FILE_IDS
         + FOLDER_1_FILE_IDS
         + FOLDER_1_1_FILE_IDS
         + FOLDER_1_2_FILE_IDS
-        # These are the files shared with me from admin
         + ADMIN_FOLDER_3_FILE_IDS
         + list(range(0, 2))
     )
@@ -102,13 +99,9 @@ def test_all(
         expected_file_ids=expected_file_ids,
     )
 
-    # Verify hierarchy nodes - test_user_1 has access to shared_drive_1, folder_3,
-    # perm sync drives, and additional drives/folders
-    expected_ids, expected_parents = get_expected_hierarchy_for_test_user_1()
     assert_hierarchy_nodes_match_expected(
         retrieved_nodes=output.hierarchy_nodes,
-        expected_node_ids=expected_ids,
-        expected_parent_mapping=expected_parents,
+        expected_nodes=get_expected_hierarchy_for_test_user_1(),
     )
 
 
@@ -133,7 +126,6 @@ def test_shared_drives_only(
     output = load_connector_outputs(connector)
 
     expected_file_ids = (
-        # These are the files from shared drives
         SHARED_DRIVE_1_FILE_IDS
         + FOLDER_1_FILE_IDS
         + FOLDER_1_1_FILE_IDS
@@ -146,14 +138,9 @@ def test_shared_drives_only(
         expected_file_ids=expected_file_ids,
     )
 
-    # Verify hierarchy nodes - test_user_1 sees multiple shared drives/folders
-    expected_ids, expected_parents = (
-        get_expected_hierarchy_for_test_user_1_shared_drives_only()
-    )
     assert_hierarchy_nodes_match_expected(
         retrieved_nodes=output.hierarchy_nodes,
-        expected_node_ids=expected_ids,
-        expected_parent_mapping=expected_parents,
+        expected_nodes=get_expected_hierarchy_for_test_user_1_shared_drives_only(),
     )
 
 
@@ -177,24 +164,15 @@ def test_shared_with_me_only(
     )
     output = load_connector_outputs(connector)
 
-    expected_file_ids = (
-        # These are the files shared with me from admin
-        ADMIN_FOLDER_3_FILE_IDS
-        + list(range(0, 2))
-    )
+    expected_file_ids = ADMIN_FOLDER_3_FILE_IDS + list(range(0, 2))
     assert_expected_docs_in_retrieved_docs(
         retrieved_docs=output.documents,
         expected_file_ids=expected_file_ids,
     )
 
-    # Verify hierarchy nodes - shared-with-me folders
-    expected_ids, expected_parents = (
-        get_expected_hierarchy_for_test_user_1_shared_with_me_only()
-    )
     assert_hierarchy_nodes_match_expected(
         retrieved_nodes=output.hierarchy_nodes,
-        expected_node_ids=expected_ids,
-        expected_parent_mapping=expected_parents,
+        expected_nodes=get_expected_hierarchy_for_test_user_1_shared_with_me_only(),
     )
 
 
@@ -218,21 +196,15 @@ def test_my_drive_only(
     )
     output = load_connector_outputs(connector)
 
-    # These are the files from my drive
     expected_file_ids = TEST_USER_1_FILE_IDS
     assert_expected_docs_in_retrieved_docs(
         retrieved_docs=output.documents,
         expected_file_ids=expected_file_ids,
     )
 
-    # Verify hierarchy nodes - My Drive root + its folder(s)
-    expected_ids, expected_parents = (
-        get_expected_hierarchy_for_test_user_1_my_drive_only()
-    )
     assert_hierarchy_nodes_match_expected(
         retrieved_nodes=output.hierarchy_nodes,
-        expected_node_ids=expected_ids,
-        expected_parent_mapping=expected_parents,
+        expected_nodes=get_expected_hierarchy_for_test_user_1_my_drive_only(),
     )
 
 
@@ -256,20 +228,15 @@ def test_shared_my_drive_folder(
     )
     output = load_connector_outputs(connector)
 
-    expected_file_ids = (
-        # this is a folder from admin's drive that is shared with me
-        ADMIN_FOLDER_3_FILE_IDS
-    )
+    expected_file_ids = ADMIN_FOLDER_3_FILE_IDS
     assert_expected_docs_in_retrieved_docs(
         retrieved_docs=output.documents,
         expected_file_ids=expected_file_ids,
     )
 
-    # Verify hierarchy nodes - only folder_3
-    expected_ids = {FOLDER_3_ID}
     assert_hierarchy_nodes_match_expected(
         retrieved_nodes=output.hierarchy_nodes,
-        expected_node_ids=expected_ids,
+        expected_nodes=_clear_parents(_pick(FOLDER_3_ID), FOLDER_3_ID),
     )
 
 
@@ -299,16 +266,9 @@ def test_shared_drive_folder(
         expected_file_ids=expected_file_ids,
     )
 
-    # Verify hierarchy nodes - includes shared drive root + folder_1 subtree
-    expected_ids = {SHARED_DRIVE_1_ID, FOLDER_1_ID, FOLDER_1_1_ID, FOLDER_1_2_ID}
-    expected_parents: dict[str, str | None] = {
-        SHARED_DRIVE_1_ID: None,
-        FOLDER_1_ID: SHARED_DRIVE_1_ID,
-        FOLDER_1_1_ID: FOLDER_1_ID,
-        FOLDER_1_2_ID: FOLDER_1_ID,
-    }
     assert_hierarchy_nodes_match_expected(
         retrieved_nodes=output.hierarchy_nodes,
-        expected_node_ids=expected_ids,
-        expected_parent_mapping=expected_parents,
+        expected_nodes=_pick(
+            SHARED_DRIVE_1_ID, FOLDER_1_ID, FOLDER_1_1_ID, FOLDER_1_2_ID
+        ),
     )

@@ -1,23 +1,13 @@
 import { NextRequest } from "next/server";
 
 export const getDomain = (request: NextRequest) => {
-  // use env variable if set
+  // Use the WEB_DOMAIN env variable if set (required in production).
+  // Never trust X-Forwarded-* headers from the request — they can be
+  // spoofed by an attacker to poison redirect URLs (host header poisoning).
   if (process.env.WEB_DOMAIN) {
     return process.env.WEB_DOMAIN;
   }
 
-  // next, try and build domain from headers
-  const requestedHost = request.headers.get("X-Forwarded-Host");
-  const requestedPort = request.headers.get("X-Forwarded-Port");
-  const requestedProto = request.headers.get("X-Forwarded-Proto");
-  if (requestedHost) {
-    const url = request.nextUrl.clone();
-    url.host = requestedHost;
-    url.protocol = requestedProto || url.protocol;
-    url.port = requestedPort || url.port;
-    return url.origin;
-  }
-
-  // finally just use whatever is in the request
+  // Fallback for local development: use Next.js's own origin.
   return request.nextUrl.origin;
 };

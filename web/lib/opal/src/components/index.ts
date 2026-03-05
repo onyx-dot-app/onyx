@@ -12,3 +12,10 @@ export {
   OpenButton,
   type OpenButtonProps,
 } from "@opal/components/buttons/OpenButton/components";
+
+/* Tag */
+export {
+  Tag,
+  type TagProps,
+  type TagColor,
+} from "@opal/components/Tag/components";

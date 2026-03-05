@@ -12,6 +12,7 @@ from onyx.document_index.vespa_constants import DOCUMENT_ID
 from onyx.document_index.vespa_constants import DOCUMENT_SETS
 from onyx.document_index.vespa_constants import HIDDEN
 from onyx.document_index.vespa_constants import METADATA_LIST
+from onyx.document_index.vespa_constants import PERSONAS
 from onyx.document_index.vespa_constants import SOURCE_TYPE
 from onyx.document_index.vespa_constants import TENANT_ID
 from onyx.document_index.vespa_constants import USER_PROJECT
@@ -149,6 +150,18 @@ def build_vespa_filters(
         # Vespa YQL 'contains' expects a string literal; quote the integer
         return f'({USER_PROJECT} contains "{pid}") and '
 
+    def _build_persona_filter(
+        persona_id: int | None,
+    ) -> str:
+        if persona_id is None:
+            return ""
+        try:
+            pid = int(persona_id)
+        except Exception:
+            logger.warning(f"Invalid persona ID: {persona_id}")
+            return ""
+        return f'({PERSONAS} contains "{pid}") and '
+
     # Start building the filter string
     filter_str = f"!({HIDDEN}=true) and " if not include_hidden else ""
 
@@ -191,6 +204,9 @@ def build_vespa_filters(
 
     # User project filter (array<int> attribute membership)
     filter_str += _build_user_project_filter(filters.project_id)
+
+    # Persona filter (array<int> attribute membership)
+    filter_str += _build_persona_filter(filters.persona_id)
 
     # Time filter
     filter_str += _build_time_filter(filters.time_cutoff)

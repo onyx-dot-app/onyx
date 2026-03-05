@@ -13,6 +13,7 @@ from sqlalchemy.orm import aliased
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
+from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.db.connector_credential_pair import get_cc_pair_groups_for_ids
 from onyx.db.connector_credential_pair import get_connector_credential_pairs
 from onyx.db.enums import AccessType
@@ -246,6 +247,7 @@ def insert_document_set(
             description=document_set_creation_request.description,
             user_id=user_id,
             is_public=document_set_creation_request.is_public,
+            is_up_to_date=DISABLE_VECTOR_DB,
             time_last_modified_by_user=func.now(),
         )
         db_session.add(new_document_set_row)
@@ -336,7 +338,8 @@ def update_document_set(
             )
 
         document_set_row.description = document_set_update_request.description
-        document_set_row.is_up_to_date = False
+        if not DISABLE_VECTOR_DB:
+            document_set_row.is_up_to_date = False
         document_set_row.is_public = document_set_update_request.is_public
         document_set_row.time_last_modified_by_user = func.now()
         versioned_private_doc_set_fn = fetch_versioned_implementation(
@@ -554,10 +557,19 @@ def fetch_all_document_sets_for_user(
     stmt = (
         select(DocumentSetDBModel)
         .distinct()
-        .options(selectinload(DocumentSetDBModel.federated_connectors))
+        .options(
+            selectinload(DocumentSetDBModel.connector_credential_pairs).selectinload(
+                ConnectorCredentialPair.connector
+            ),
+            selectinload(DocumentSetDBModel.users),
+            selectinload(DocumentSetDBModel.groups),
+            selectinload(DocumentSetDBModel.federated_connectors).selectinload(
+                FederatedConnector__DocumentSet.federated_connector
+            ),
+        )
     )
     stmt = _add_user_filters(stmt, user, get_editable=get_editable)
-    return db_session.scalars(stmt).all()
+    return db_session.scalars(stmt).unique().all()
 
 
 def fetch_documents_for_document_set_paginated(

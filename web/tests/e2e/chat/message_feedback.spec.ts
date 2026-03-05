@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
-import { loginAsRandomUser } from "../utils/auth";
-import { sendMessage } from "../utils/chatActions";
+import { loginAsRandomUser } from "@tests/e2e/utils/auth";
+import { sendMessage } from "@tests/e2e/utils/chatActions";
 
 test.describe("Message feedback thumbs controls", () => {
   test.beforeEach(async ({ page }) => {

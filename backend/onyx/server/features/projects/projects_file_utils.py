@@ -7,13 +7,14 @@ from PIL import UnidentifiedImageError
 from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
+from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import FILE_TOKEN_COUNT_THRESHOLD
+from onyx.db.llm import fetch_default_llm_model
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_processing.extract_file_text import get_file_ext
 from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.file_processing.password_validation import is_file_password_protected
-from onyx.llm.factory import get_default_llm
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
@@ -116,7 +117,9 @@ def estimate_image_tokens_for_upload(
             pass
 
 
-def categorize_uploaded_files(files: list[UploadFile]) -> CategorizedFiles:
+def categorize_uploaded_files(
+    files: list[UploadFile], db_session: Session
+) -> CategorizedFiles:
     """
     Categorize uploaded files based on text extractability and tokenized length.
 
@@ -128,11 +131,11 @@ def categorize_uploaded_files(files: list[UploadFile]) -> CategorizedFiles:
     """
 
     results = CategorizedFiles()
-    llm = get_default_llm()
+    default_model = fetch_default_llm_model(db_session)
 
-    tokenizer = get_tokenizer(
-        model_name=llm.config.model_name, provider_type=llm.config.model_provider
-    )
+    model_name = default_model.name if default_model else None
+    provider_type = default_model.llm_provider.provider if default_model else None
+    tokenizer = get_tokenizer(model_name=model_name, provider_type=provider_type)
 
     # Check if threshold checks should be skipped
     skip_threshold = False

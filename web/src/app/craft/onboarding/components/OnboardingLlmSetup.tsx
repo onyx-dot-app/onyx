@@ -5,10 +5,7 @@ import { cn } from "@/lib/utils";
 import { Disabled } from "@/refresh-components/Disabled";
 import Text from "@/refresh-components/texts/Text";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
-import {
-  LLMProviderName,
-  LLMProviderDescriptor,
-} from "@/app/admin/configuration/llm/interfaces";
+import { LLMProviderName, LLMProviderDescriptor } from "@/interfaces/llm";
 
 // Provider configurations
 export type ProviderKey = "anthropic" | "openai" | "openrouter";

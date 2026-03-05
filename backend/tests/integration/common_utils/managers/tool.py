@@ -1,7 +1,6 @@
 import requests
 
 from tests.integration.common_utils.constants import API_SERVER_URL
-from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.test_models import DATestTool
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -9,15 +8,11 @@ from tests.integration.common_utils.test_models import DATestUser
 class ToolManager:
     @staticmethod
     def list_tools(
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> list[DATestTool]:
         response = requests.get(
             url=f"{API_SERVER_URL}/tool",
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         response.raise_for_status()
         return [

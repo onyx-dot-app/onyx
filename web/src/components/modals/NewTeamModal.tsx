@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
 import { Dialog } from "@headlessui/react";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { toast } from "@/hooks/useToast";
 import { useUser } from "@/providers/UserProvider";
 import { useModalContext } from "../context/ModalContext";
@@ -160,7 +160,7 @@ export default function NewTeamModal() {
               <div className="flex w-full pt-2">
                 <Button
                   onClick={handleContinueToNewOrg}
-                  className="w-full"
+                  width="full"
                   rightIcon={SvgArrowRight}
                 >
                   Continue with new team
@@ -177,7 +177,7 @@ export default function NewTeamModal() {
               <div className="flex w-full pt-2">
                 <Button
                   onClick={handleContinueToNewOrg}
-                  className="w-full"
+                  width="full"
                   rightIcon={SvgArrowRight}
                 >
                   Try Onyx while waiting
@@ -192,9 +192,9 @@ export default function NewTeamModal() {
               <div className="flex flex-col items-center justify-center gap-4 mt-4">
                 <Button
                   onClick={handleRequestInvite}
-                  className="w-full"
+                  width="full"
                   disabled={isSubmitting}
-                  leftIcon={isSubmitting ? SimpleLoader : SvgArrowUp}
+                  icon={isSubmitting ? SimpleLoader : SvgArrowUp}
                 >
                   {isSubmitting
                     ? "Sending request..."
@@ -203,9 +203,9 @@ export default function NewTeamModal() {
               </div>
               <Button
                 onClick={handleContinueToNewOrg}
-                className="w-full"
-                leftIcon={SvgPlus}
-                secondary
+                width="full"
+                icon={SvgPlus}
+                prominence="secondary"
               >
                 Continue with new team
               </Button>
