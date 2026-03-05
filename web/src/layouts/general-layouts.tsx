@@ -167,6 +167,8 @@ export interface AttachmentItemLayoutProps {
   icon: React.FunctionComponent<IconProps>;
   middleText?: string;
   rightChildren?: React.ReactNode;
+  titleTestId?: string;
+  iconWrapperTestId?: string;
 }
 function AttachmentItemLayout({
   title,
@@ -174,12 +176,17 @@ function AttachmentItemLayout({
   icon: Icon,
   middleText,
   rightChildren,
+  titleTestId,
+  iconWrapperTestId,
 }: AttachmentItemLayoutProps) {
   return (
     <Section flexDirection="row" gap={0.25} padding={0.25}>
       <div className={cn("h-[2.25rem] aspect-square rounded-08")}>
         <Section>
-          <div className="attachment-button__icon-wrapper">
+          <div
+            className="attachment-button__icon-wrapper"
+            data-testid={iconWrapperTestId}
+          >
             <Icon className="attachment-button__icon" />
           </div>
         </Section>
@@ -190,12 +197,14 @@ function AttachmentItemLayout({
         alignItems="center"
         gap={1.5}
       >
-        <Content
-          title={title}
-          description={description}
-          sizePreset="main-ui"
-          variant="section"
-        />
+        <div data-testid={titleTestId} className="min-w-0">
+          <Content
+            title={title}
+            description={description}
+            sizePreset="main-ui"
+            variant="section"
+          />
+        </div>
         {middleText && (
           <div className="flex-1">
             <Truncated text03 secondaryBody>
