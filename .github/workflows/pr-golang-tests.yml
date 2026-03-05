@@ -16,7 +16,7 @@ on:
 permissions: {}
 
 env:
-  GO_VERSION: stable
+  GO_VERSION: "1.26"
 
 jobs:
   detect-modules:
@@ -30,13 +30,14 @@ jobs:
       - uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # ratchet:actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: go.work.sum
+          cache-dependency-path: "**/go.sum"
       - id: set-modules
-        run: echo "modules=$(go list -m -json | jq -s '.' | jq -c '[.[].Dir]')" >> "$GITHUB_OUTPUT"
+        run: echo "modules=$(find . -name 'go.mod' -exec dirname {} \; | jq -Rc '[.,inputs]')" >> "$GITHUB_OUTPUT"
 
   golang:
     needs: detect-modules
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     strategy:
       matrix:
         modules: ${{ fromJSON(needs.detect-modules.outputs.modules) }}
