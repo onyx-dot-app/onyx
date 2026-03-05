@@ -52,6 +52,22 @@ def upgrade() -> None:
         ),
     )
 
+    # Add partial unique indexes to enforce only one default STT/TTS provider
+    op.execute(
+        """
+        CREATE UNIQUE INDEX ix_voice_provider_one_default_stt
+        ON voice_provider (is_default_stt)
+        WHERE is_default_stt = true
+        """
+    )
+    op.execute(
+        """
+        CREATE UNIQUE INDEX ix_voice_provider_one_default_tts
+        ON voice_provider (is_default_tts)
+        WHERE is_default_tts = true
+        """
+    )
+
     # Add voice preference columns to user table
     op.add_column(
         "user",
@@ -95,6 +111,9 @@ def downgrade() -> None:
     op.drop_column("user", "voice_playback_speed")
     op.drop_column("user", "voice_auto_playback")
     op.drop_column("user", "voice_auto_send")
+
+    op.execute("DROP INDEX IF EXISTS ix_voice_provider_one_default_tts")
+    op.execute("DROP INDEX IF EXISTS ix_voice_provider_one_default_stt")
 
     # Drop voice_provider table
     op.drop_table("voice_provider")

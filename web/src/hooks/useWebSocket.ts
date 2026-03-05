@@ -58,7 +58,10 @@ export function useWebSocket<TReceive = unknown, TSend = unknown>({
   }, [onMessage, onOpen, onClose, onError]);
 
   const connect = useCallback(async (): Promise<void> => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
+    if (
+      wsRef.current?.readyState === WebSocket.OPEN ||
+      wsRef.current?.readyState === WebSocket.CONNECTING
+    ) {
       return;
     }
 

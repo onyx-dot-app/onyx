@@ -15,6 +15,8 @@ interface TranscriptMessage {
 export interface UseVoiceRecorderOptions {
   /** Called when VAD detects silence and final transcript is received */
   onFinalTranscript?: (text: string) => void;
+  /** If true, automatically stop recording when VAD detects silence */
+  autoStopOnSilence?: boolean;
 }
 
 export interface UseVoiceRecorderReturn {
@@ -51,17 +53,23 @@ class VoiceRecorderSession {
   private onFinalTranscript: ((text: string) => void) | null;
   private onError: (error: string) => void;
   private onSilenceTimeout: (() => void) | null;
+  private onVADStop: (() => void) | null;
+  private autoStopOnSilence: boolean;
 
   constructor(
     onTranscriptChange: (text: string) => void,
     onFinalTranscript: ((text: string) => void) | null,
     onError: (error: string) => void,
-    onSilenceTimeout?: () => void
+    onSilenceTimeout?: () => void,
+    autoStopOnSilence?: boolean,
+    onVADStop?: () => void
   ) {
     this.onTranscriptChange = onTranscriptChange;
     this.onFinalTranscript = onFinalTranscript;
     this.onError = onError;
     this.onSilenceTimeout = onSilenceTimeout || null;
+    this.autoStopOnSilence = autoStopOnSilence ?? false;
+    this.onVADStop = onVADStop || null;
   }
 
   get recording(): boolean {
@@ -89,8 +97,8 @@ class VoiceRecorderSession {
       },
     });
 
-    // Connect WebSocket
-    const wsUrl = this.getWebSocketUrl();
+    // Get WS token and connect WebSocket
+    const wsUrl = await this.getWebSocketUrl();
     this.websocket = new WebSocket(wsUrl);
     this.websocket.onmessage = this.handleMessage;
     this.websocket.onerror = () => this.onError("Connection failed");
@@ -190,14 +198,24 @@ class VoiceRecorderSession {
     this.isActive = false;
   }
 
-  private getWebSocketUrl(): string {
+  private async getWebSocketUrl(): Promise<string> {
+    // Fetch short-lived WS token
+    const tokenResponse = await fetch("/api/voice/ws-token", {
+      method: "POST",
+      credentials: "include",
+    });
+    if (!tokenResponse.ok) {
+      throw new Error("Failed to get WebSocket authentication token");
+    }
+    const { token } = await tokenResponse.json();
+
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const isDev = window.location.port === "3000";
     const host = isDev ? "localhost:8080" : window.location.host;
     const path = isDev
       ? "/voice/transcribe/stream"
       : "/api/voice/transcribe/stream";
-    return `${protocol}//${host}${path}`;
+    return `${protocol}//${host}${path}?token=${encodeURIComponent(token)}`;
   }
 
   private waitForConnection(): Promise<void> {
@@ -231,9 +249,19 @@ class VoiceRecorderSession {
         }
 
         if (data.is_final && data.text) {
-          // VAD detected silence - trigger callback and reset
+          // VAD detected silence - trigger callback
           if (this.onFinalTranscript) {
             this.onFinalTranscript(data.text);
+          }
+
+          // Auto-stop recording if enabled
+          if (this.autoStopOnSilence) {
+            // Trigger stop callback to update React state
+            if (this.onVADStop) {
+              this.onVADStop();
+            }
+          } else {
+            // If not auto-stopping, reset for next utterance
             this.transcript = "";
             this.onTranscriptChange("");
             this.resetBackendTranscript();
@@ -340,11 +368,13 @@ export function useVoiceRecorder(
 
   const sessionRef = useRef<VoiceRecorderSession | null>(null);
   const onFinalTranscriptRef = useRef(options?.onFinalTranscript);
+  const autoStopOnSilenceRef = useRef(options?.autoStopOnSilence ?? true); // Default to true
 
   // Keep callback ref in sync
   useEffect(() => {
     onFinalTranscriptRef.current = options?.onFinalTranscript;
-  }, [options?.onFinalTranscript]);
+    autoStopOnSilenceRef.current = options?.autoStopOnSilence ?? true;
+  }, [options?.onFinalTranscript, options?.autoStopOnSilence]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -359,10 +389,22 @@ export function useVoiceRecorder(
     setError(null);
     setLiveTranscript("");
 
+    // Create VAD stop handler that will stop the session
+    const handleVADStop = () => {
+      if (sessionRef.current) {
+        sessionRef.current.stop().then(() => {
+          setIsRecording(false);
+        });
+      }
+    };
+
     sessionRef.current = new VoiceRecorderSession(
       setLiveTranscript,
       (text) => onFinalTranscriptRef.current?.(text),
-      setError
+      setError,
+      undefined, // onSilenceTimeout
+      autoStopOnSilenceRef.current,
+      handleVADStop
     );
 
     try {

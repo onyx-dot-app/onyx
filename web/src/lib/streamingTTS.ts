@@ -351,14 +351,24 @@ export class WebSocketStreamingTTSPlayer {
     this.onError = options?.onError;
   }
 
-  private getWebSocketUrl(): string {
+  private async getWebSocketUrl(): Promise<string> {
+    // Fetch short-lived WS token
+    const tokenResponse = await fetch("/api/voice/ws-token", {
+      method: "POST",
+      credentials: "include",
+    });
+    if (!tokenResponse.ok) {
+      throw new Error("Failed to get WebSocket authentication token");
+    }
+    const { token } = await tokenResponse.json();
+
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const isDev = window.location.port === "3000";
     const host = isDev ? "localhost:8080" : window.location.host;
     const path = isDev
       ? "/voice/synthesize/stream"
       : "/api/voice/synthesize/stream";
-    return `${protocol}//${host}${path}`;
+    return `${protocol}//${host}${path}?token=${encodeURIComponent(token)}`;
   }
 
   async connect(voice?: string, speed?: number): Promise<void> {
@@ -405,8 +415,8 @@ export class WebSocketStreamingTTSPlayer {
     });
 
     // Connect WebSocket
+    const url = await this.getWebSocketUrl();
     return new Promise((resolve, reject) => {
-      const url = this.getWebSocketUrl();
       this.websocket = new WebSocket(url);
 
       this.websocket.onopen = () => {

@@ -45,18 +45,20 @@ function MicrophoneButton({
   stopRecordingRef,
   onRecordingStart,
 }: MicrophoneButtonProps) {
-  const { isTTSPlaying, isTTSLoading } = useVoiceMode();
+  const { isTTSPlaying, isTTSLoading, manualStopCount } = useVoiceMode();
 
   // Refs for tracking state across renders
   const wasTTSPlayingRef = useRef(false);
-  const prevChatStateRef = useRef<ChatState | undefined>(chatState);
+  const manualStopRequestedRef = useRef(false);
+  const lastHandledManualStopCountRef = useRef(manualStopCount);
 
   // Handler for VAD-triggered auto-send (when server detects silence)
   const handleFinalTranscript = useCallback(
     (text: string) => {
       onTranscription(text);
+      const isManualStop = manualStopRequestedRef.current;
       // Only auto-send if chat is ready for input (not streaming)
-      if (autoSend && onAutoSend && chatState === "input") {
+      if (!isManualStop && autoSend && onAutoSend && chatState === "input") {
         onAutoSend(text);
       }
     },
@@ -94,7 +96,12 @@ function MicrophoneButton({
   const handleClick = useCallback(async () => {
     if (isRecording) {
       // When recording, clicking the mic button stops recording
-      await stopRecording();
+      manualStopRequestedRef.current = true;
+      try {
+        await stopRecording();
+      } finally {
+        manualStopRequestedRef.current = false;
+      }
     } else {
       try {
         // Clear input before starting recording
@@ -108,52 +115,34 @@ function MicrophoneButton({
 
   // Auto-start listening when TTS finishes (only if autoListen is enabled)
   useEffect(() => {
+    const stoppedManually =
+      manualStopCount !== lastHandledManualStopCountRef.current;
+
     if (
       wasTTSPlayingRef.current &&
       !isTTSPlaying &&
       !isTTSLoading &&
       autoListen &&
-      !disabled
-    ) {
-      startRecording().catch(() => {
-        // Silently ignore auto-start failures
-      });
-    }
-    wasTTSPlayingRef.current = isTTSPlaying || isTTSLoading;
-  }, [isTTSPlaying, isTTSLoading, autoListen, disabled, startRecording]);
-
-  // Auto-start listening when chat response finishes (streaming -> input)
-  // Only if autoListen is enabled - otherwise it's single-turn (user must click mic again)
-  useEffect(() => {
-    const wasStreaming = prevChatStateRef.current === "streaming";
-    const nowInput = chatState === "input";
-
-    // Only auto-start if:
-    // 1. Chat just finished streaming (was streaming, now input)
-    // 2. autoListen is enabled (user wants continuous conversation)
-    // 3. Not disabled
-    // 4. TTS is not playing (will be handled by TTS effect if it plays)
-    if (
-      wasStreaming &&
-      nowInput &&
-      autoListen &&
       !disabled &&
-      !isTTSPlaying &&
-      !isTTSLoading
+      !stoppedManually
     ) {
       startRecording().catch(() => {
         // Silently ignore auto-start failures
       });
     }
 
-    prevChatStateRef.current = chatState;
+    if (stoppedManually) {
+      lastHandledManualStopCountRef.current = manualStopCount;
+    }
+
+    wasTTSPlayingRef.current = isTTSPlaying || isTTSLoading;
   }, [
-    chatState,
-    autoListen,
-    disabled,
     isTTSPlaying,
     isTTSLoading,
+    autoListen,
+    disabled,
     startRecording,
+    manualStopCount,
   ]);
 
   useEffect(() => {
@@ -167,6 +156,23 @@ function MicrophoneButton({
 
   // Disable when processing or TTS is playing (don't want to pick up TTS audio)
   const isDisabled = disabled || isProcessing || isTTSPlaying || isTTSLoading;
+
+  // Debug logging for disabled state
+  useEffect(() => {
+    console.log(
+      `[MicrophoneButton] isDisabled=${isDisabled}: ` +
+        `disabled=${disabled}, isProcessing=${isProcessing}, ` +
+        `isTTSPlaying=${isTTSPlaying}, isTTSLoading=${isTTSLoading}, ` +
+        `isRecording=${isRecording}`
+    );
+  }, [
+    disabled,
+    isProcessing,
+    isTTSPlaying,
+    isTTSLoading,
+    isRecording,
+    isDisabled,
+  ]);
 
   // Recording = darkened (primary), not recording = light (tertiary)
   const prominence = isRecording ? "primary" : "tertiary";

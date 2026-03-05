@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect } from "react";
-import { SvgPlayCircle, SvgPauseCircle, SvgStop } from "@opal/icons";
+import { SvgPlayCircle, SvgStop } from "@opal/icons";
 import { Button } from "@opal/components";
 import { useVoicePlayback } from "@/hooks/useVoicePlayback";
+import { useVoiceMode } from "@/providers/VoiceModeProvider";
 import { toast } from "@/hooks/useToast";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 
@@ -15,20 +16,42 @@ interface TTSButtonProps {
 
 function TTSButton({ text, voice, speed }: TTSButtonProps) {
   const { isPlaying, isLoading, error, play, pause, stop } = useVoicePlayback();
+  const { isTTSPlaying, isTTSLoading, stopTTS } = useVoiceMode();
+
+  const isGlobalTTSActive = isTTSPlaying || isTTSLoading;
+  const isButtonPlaying = isGlobalTTSActive || isPlaying;
+  const isButtonLoading = !isGlobalTTSActive && isLoading;
 
   const handleClick = useCallback(async () => {
-    if (isPlaying) {
+    if (isGlobalTTSActive) {
+      // Stop auto-playback voice mode stream from the toolbar button.
+      stopTTS({ manual: true });
+      stop();
+    } else if (isPlaying) {
       pause();
-    } else if (isLoading) {
+    } else if (isButtonLoading) {
       stop();
     } else {
       try {
+        // Ensure no voice-mode stream is active before starting manual playback.
+        stopTTS();
         await play(text, voice, speed);
       } catch {
         toast.error("Could not play audio");
       }
     }
-  }, [isPlaying, isLoading, text, voice, speed, play, pause, stop]);
+  }, [
+    isGlobalTTSActive,
+    isPlaying,
+    isButtonLoading,
+    text,
+    voice,
+    speed,
+    play,
+    pause,
+    stop,
+    stopTTS,
+  ]);
 
   useEffect(() => {
     if (error) {
@@ -36,11 +59,15 @@ function TTSButton({ text, voice, speed }: TTSButtonProps) {
     }
   }, [error]);
 
-  const icon = isLoading ? SimpleLoader : isPlaying ? SvgStop : SvgPlayCircle;
+  const icon = isButtonLoading
+    ? SimpleLoader
+    : isButtonPlaying
+      ? SvgStop
+      : SvgPlayCircle;
 
-  const tooltip = isPlaying
+  const tooltip = isButtonPlaying
     ? "Stop playback"
-    : isLoading
+    : isButtonLoading
       ? "Loading..."
       : "Read aloud";
 

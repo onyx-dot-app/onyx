@@ -3007,6 +3007,22 @@ class VoiceProvider(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
+    # Enforce only one default STT provider and one default TTS provider at DB level
+    __table_args__ = (
+        Index(
+            "ix_voice_provider_one_default_stt",
+            "is_default_stt",
+            unique=True,
+            postgresql_where=(is_default_stt == True),  # noqa: E712
+        ),
+        Index(
+            "ix_voice_provider_one_default_tts",
+            "is_default_tts",
+            unique=True,
+            postgresql_where=(is_default_tts == True),  # noqa: E712
+        ),
+    )
+
 
 class CloudEmbeddingProvider(Base):
     __tablename__ = "embedding_provider"

@@ -6,15 +6,16 @@ import json
 from typing import Any
 
 from fastapi import APIRouter
+from fastapi import Depends
 from fastapi import WebSocket
 from fastapi import WebSocketDisconnect
 from sqlalchemy.orm import Session
 
-from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
+from onyx.auth.users import current_user_from_websocket
 from onyx.db.engine.sql_engine import get_sqlalchemy_engine
+from onyx.db.models import User
 from onyx.db.voice import fetch_default_stt_provider
 from onyx.db.voice import fetch_default_tts_provider
-from onyx.redis.redis_pool import retrieve_auth_token_data_from_redis
 from onyx.utils.logger import setup_logger
 from onyx.voice.factory import get_voice_provider
 from onyx.voice.interface import StreamingSynthesizerProtocol
@@ -24,29 +25,6 @@ from onyx.voice.interface import TranscriptResult
 logger = setup_logger()
 
 router = APIRouter(prefix="/voice")
-
-
-async def verify_websocket_auth(websocket: WebSocket) -> bool:
-    """
-    Verify WebSocket authentication using cookie-based auth.
-    Returns True if authenticated, False otherwise.
-    """
-    # Check for auth cookie
-    auth_token = websocket.cookies.get(FASTAPI_USERS_AUTH_COOKIE_NAME)
-    if not auth_token:
-        logger.warning("WebSocket auth: no auth cookie found")
-        return False
-
-    # Verify token in Redis
-    try:
-        token_data = await retrieve_auth_token_data_from_redis(websocket)
-        if token_data is None:
-            logger.warning("WebSocket auth: invalid or expired token")
-            return False
-        return True
-    except Exception as e:
-        logger.error(f"WebSocket auth: error verifying token: {e}")
-        return False
 
 
 # Transcribe every ~0.5 seconds of audio (webm/opus is ~2-4KB/s, so ~1-2KB per 0.5s)
@@ -284,7 +262,10 @@ async def handle_chunked_transcription(
 
 
 @router.websocket("/transcribe/stream")
-async def websocket_transcribe(websocket: WebSocket) -> None:
+async def websocket_transcribe(
+    websocket: WebSocket,
+    _user: User = Depends(current_user_from_websocket),
+) -> None:
     """
     WebSocket endpoint for streaming speech-to-text.
 
@@ -293,26 +274,18 @@ async def websocket_transcribe(websocket: WebSocket) -> None:
     - Server sends JSON: {"type": "transcript", "text": "...", "is_final": false}
     - Client sends JSON {"type": "end"} to signal end
     - Server responds with final transcript and closes
+
+    Authentication:
+        Requires `token` query parameter (e.g., /voice/transcribe/stream?token=xxx).
+        Applies same auth checks as HTTP endpoints (verification, role checks).
     """
-    logger.info("WebSocket transcribe: connection request received")
+    logger.info("WebSocket transcribe: connection request received (authenticated)")
 
     try:
         await websocket.accept()
         logger.info("WebSocket transcribe: connection accepted")
     except Exception as e:
         logger.error(f"WebSocket transcribe: failed to accept connection: {e}")
-        return
-
-    # Verify authentication
-    if not await verify_websocket_auth(websocket):
-        logger.warning("WebSocket transcribe: authentication failed")
-        try:
-            await websocket.send_json(
-                {"type": "error", "message": "Authentication required"}
-            )
-            await websocket.close(code=4401)
-        except Exception:
-            pass
         return
 
     streaming_transcriber = None
@@ -410,32 +383,51 @@ async def handle_streaming_synthesis(
     websocket: WebSocket,
     synthesizer: StreamingSynthesizerProtocol,
 ) -> None:
-    """Handle TTS using native streaming API."""
+    """Handle TTS using native streaming API.
+
+    Buffers all text, then sends to ElevenLabs when complete.
+    This is more reliable than streaming chunks incrementally.
+    """
     logger.info("Streaming synthesis: starting handler")
 
     async def send_audio() -> None:
         """Background task to send audio chunks to client."""
+        chunk_count = 0
+        total_bytes = 0
         try:
             while True:
                 audio_chunk = await synthesizer.receive_audio()
                 if audio_chunk is None:
-                    # End of stream
+                    logger.info(
+                        f"Streaming synthesis: audio stream ended, sent {chunk_count} chunks, {total_bytes} bytes"
+                    )
                     try:
                         await websocket.send_json({"type": "audio_done"})
-                    except Exception:
-                        pass  # Client may have disconnected
+                        logger.info("Streaming synthesis: sent audio_done to client")
+                    except Exception as e:
+                        logger.warning(
+                            f"Streaming synthesis: failed to send audio_done: {e}"
+                        )
                     break
                 if audio_chunk:  # Skip empty chunks
+                    chunk_count += 1
+                    total_bytes += len(audio_chunk)
                     try:
                         await websocket.send_bytes(audio_chunk)
-                    except Exception:
-                        break  # Client disconnected
+                    except Exception as e:
+                        logger.warning(
+                            f"Streaming synthesis: failed to send chunk: {e}"
+                        )
+                        break
         except asyncio.CancelledError:
-            pass
+            logger.info(
+                f"Streaming synthesis: send_audio cancelled after {chunk_count} chunks"
+            )
         except Exception as e:
-            logger.debug(f"Streaming synthesis: send_audio error: {e}")
+            logger.error(f"Streaming synthesis: send_audio error: {e}")
 
     send_task: asyncio.Task | None = None
+    text_buffer: list[str] = []  # Buffer text chunks until "end"
     disconnected = False
 
     try:
@@ -458,20 +450,56 @@ async def handle_streaming_synthesis(
             if "text" in message:
                 try:
                     data = json.loads(message["text"])
-                    logger.info(f"Streaming synthesis: received message: {data}")
 
                     if data.get("type") == "synthesize":
                         text = data.get("text", "")
+                        if not text:
+                            for key, value in data.items():
+                                if key != "type" and isinstance(value, str) and value:
+                                    text = value
+                                    break
                         if text:
-                            # Start sending audio in background
-                            if send_task is None or send_task.done():
-                                send_task = asyncio.create_task(send_audio())
-                            await synthesizer.send_text(text)
+                            # Buffer text instead of sending immediately
+                            text_buffer.append(text)
+                            logger.info(
+                                f"Streaming synthesis: buffered text ({len(text)} chars), "
+                                f"total buffered: {len(text_buffer)} chunks"
+                            )
 
                     elif data.get("type") == "end":
                         logger.info("Streaming synthesis: end signal received")
-                        if hasattr(synthesizer, "flush"):
-                            await synthesizer.flush()
+
+                        if text_buffer:
+                            # Combine all buffered text
+                            full_text = " ".join(text_buffer)
+                            logger.info(
+                                f"Streaming synthesis: sending full text ({len(full_text)} chars): "
+                                f"'{full_text[:100]}...'"
+                            )
+
+                            # Start audio receiver
+                            send_task = asyncio.create_task(send_audio())
+
+                            # Send all text at once
+                            await synthesizer.send_text(full_text)
+                            logger.info(
+                                "Streaming synthesis: full text sent to synthesizer"
+                            )
+
+                            # Signal end of input
+                            if hasattr(synthesizer, "flush"):
+                                await synthesizer.flush()
+
+                            # Wait for all audio to be sent
+                            logger.info(
+                                "Streaming synthesis: waiting for audio stream to complete"
+                            )
+                            try:
+                                await asyncio.wait_for(send_task, timeout=60.0)
+                            except asyncio.TimeoutError:
+                                logger.warning(
+                                    "Streaming synthesis: timeout waiting for audio"
+                                )
                         break
 
                 except json.JSONDecodeError:
@@ -483,17 +511,27 @@ async def handle_streaming_synthesis(
         if "disconnect" not in str(e).lower():
             logger.error(f"Streaming synthesis: error: {e}", exc_info=True)
     finally:
-        if send_task:
-            send_task.cancel()
+        if send_task and not send_task.done():
+            logger.info("Streaming synthesis: waiting for send_task to finish")
             try:
-                await send_task
+                await asyncio.wait_for(send_task, timeout=30.0)
+            except asyncio.TimeoutError:
+                logger.warning("Streaming synthesis: timeout waiting for send_task")
+                send_task.cancel()
+                try:
+                    await send_task
+                except asyncio.CancelledError:
+                    pass
             except asyncio.CancelledError:
                 pass
         logger.info("Streaming synthesis: handler finished")
 
 
 @router.websocket("/synthesize/stream")
-async def websocket_synthesize(websocket: WebSocket) -> None:
+async def websocket_synthesize(
+    websocket: WebSocket,
+    _user: User = Depends(current_user_from_websocket),
+) -> None:
     """
     WebSocket endpoint for streaming text-to-speech.
 
@@ -502,26 +540,18 @@ async def websocket_synthesize(websocket: WebSocket) -> None:
     - Server sends binary audio chunks
     - Server sends JSON: {"type": "audio_done"} when synthesis completes
     - Client sends JSON {"type": "end"} to close connection
+
+    Authentication:
+        Requires `token` query parameter (e.g., /voice/synthesize/stream?token=xxx).
+        Applies same auth checks as HTTP endpoints (verification, role checks).
     """
-    logger.info("WebSocket synthesize: connection request received")
+    logger.info("WebSocket synthesize: connection request received (authenticated)")
 
     try:
         await websocket.accept()
         logger.info("WebSocket synthesize: connection accepted")
     except Exception as e:
         logger.error(f"WebSocket synthesize: failed to accept connection: {e}")
-        return
-
-    # Verify authentication
-    if not await verify_websocket_auth(websocket):
-        logger.warning("WebSocket synthesize: authentication failed")
-        try:
-            await websocket.send_json(
-                {"type": "error", "message": "Authentication required"}
-            )
-            await websocket.close(code=4401)
-        except Exception:
-            pass
         return
 
     streaming_synthesizer: StreamingSynthesizerProtocol | None = None
