@@ -1,6 +1,5 @@
 from fastapi import APIRouter
 from fastapi import Depends
-from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -27,6 +26,8 @@ from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
 from onyx.db.models import UserRole
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -79,8 +80,8 @@ def create_user_group(
     try:
         db_user_group = insert_user_group(db_session, user_group)
     except IntegrityError:
-        raise HTTPException(
-            400,
+        raise OnyxError(
+            OnyxErrorCode.DUPLICATE_RESOURCE,
             f"User group with name '{user_group.name}' already exists. Please "
             + "choose a different name.",
         )
@@ -104,7 +105,7 @@ def patch_user_group(
             )
         )
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e))
 
 
 @router.post("/admin/user-group/{user_group_id}/add-users")
@@ -124,7 +125,7 @@ def add_users(
             )
         )
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e))
 
 
 @router.post("/admin/user-group/{user_group_id}/set-curator")
@@ -143,7 +144,7 @@ def set_user_curator(
         )
     except ValueError as e:
         logger.error(f"Error setting user curator: {e}")
-        raise HTTPException(status_code=404, detail=str(e))
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e))
 
 
 @router.delete("/admin/user-group/{user_group_id}")
@@ -155,7 +156,7 @@ def delete_user_group(
     try:
         prepare_user_group_for_deletion(db_session, user_group_id)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e))
 
     if DISABLE_VECTOR_DB:
         user_group = fetch_user_group(db_session, user_group_id)
