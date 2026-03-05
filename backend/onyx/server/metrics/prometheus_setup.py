@@ -95,3 +95,15 @@ def setup_app_observability(app: FastAPI) -> None:
     from onyx.server.metrics.memory_delta import add_memory_delta_middleware
 
     add_memory_delta_middleware(app)
+
+
+def start_observability() -> None:
+    """Start lifespan-scoped observability probes and collectors.
+
+    Called from ``lifespan()`` after engines/pools are ready.
+    """
+    from onyx.server.metrics.redis_connection_pool import (
+        setup_redis_connection_pool_metrics,
+    )
+
+    setup_redis_connection_pool_metrics()
