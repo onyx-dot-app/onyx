@@ -272,11 +272,15 @@ class LitellmLLM(LLM):
         # LM Studio: LiteLLM defaults to "fake-api-key" when no key is provided,
         # which LM Studio rejects. Ensure we always pass an explicit key (or empty
         # string) to prevent LiteLLM from injecting its fake default.
-        if (
-            model_provider == LlmProviderNames.LM_STUDIO
-            and "api_key" not in model_kwargs
-        ):
-            model_kwargs["api_key"] = ""
+        if model_provider == LlmProviderNames.LM_STUDIO:
+            model_kwargs.setdefault("api_key", "")
+
+            # Users provide the server root (e.g. http://localhost:1234) but LiteLLM
+            # needs /v1 for OpenAI-compatible calls.
+            if self._api_base is not None:
+                base = self._api_base.rstrip("/")
+                self._api_base = base if base.endswith("/v1") else f"{base}/v1"
+                model_kwargs["api_base"] = self._api_base
 
         # Default vertex_location to "global" if not provided for Vertex AI
         # Latest gemini models are only available through the global region

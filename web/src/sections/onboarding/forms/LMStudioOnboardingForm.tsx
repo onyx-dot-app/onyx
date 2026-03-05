@@ -11,12 +11,12 @@ import Separator from "@/refresh-components/Separator";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { cn, noProp } from "@/lib/utils";
 import { SvgRefreshCw } from "@opal/icons";
-import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
+import { WellKnownLLMProviderDescriptor } from "@/interfaces/llm";
 import {
   OnboardingFormWrapper,
   OnboardingFormChildProps,
 } from "./OnboardingFormWrapper";
-import { OnboardingActions, OnboardingState } from "../types";
+import { OnboardingActions, OnboardingState } from "@/interfaces/onboarding";
 import { buildInitialValues } from "../components/llmConnectionHelpers";
 import ConnectionProviderIcon from "@/refresh-components/ConnectionProviderIcon";
 import { ProviderIcon } from "@/app/admin/configuration/llm/ProviderIcon";
@@ -26,7 +26,7 @@ const FIELD_API_BASE = "api_base";
 const FIELD_DEFAULT_MODEL_NAME = "default_model_name";
 const FIELD_LM_STUDIO_API_KEY = "custom_config.LM_STUDIO_API_KEY";
 
-const LM_STUDIO_DEFAULT_URL = "http://localhost:1234/v1";
+const LM_STUDIO_DEFAULT_URL = "http://localhost:1234";
 
 interface LMStudioOnboardingFormProps {
   llmDescriptor: WellKnownLLMProviderDescriptor;
@@ -111,7 +111,7 @@ function LMStudioFormFields(
             {!showApiMessage && (
               <FormField.Message
                 messages={{
-                  idle: "Your LM Studio server URL (default: http://localhost:1234/v1).",
+                  idle: "Your LM Studio server URL (default: http://localhost:1234).",
                   error: meta.error,
                 }}
               />

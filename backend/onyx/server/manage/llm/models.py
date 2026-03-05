@@ -384,6 +384,7 @@ class LMStudioFinalModelResponse(BaseModel):
     display_name: str  # Human-readable name
     max_input_tokens: int | None  # From LM Studio API or None if unavailable
     supports_image_input: bool
+    supports_reasoning: bool
 
 
 class DefaultModel(BaseModel):

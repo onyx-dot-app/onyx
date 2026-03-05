@@ -326,6 +326,7 @@ export const fetchLMStudioModels = async (
       is_visible: true,
       max_input_tokens: modelData.max_input_tokens,
       supports_image_input: modelData.supports_image_input,
+      supports_reasoning: modelData.supports_reasoning,
     }));
 
     return { models };
