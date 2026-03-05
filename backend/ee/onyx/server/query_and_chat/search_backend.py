@@ -2,7 +2,6 @@ from collections.abc import Generator
 
 from fastapi import APIRouter
 from fastapi import Depends
-from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -23,6 +22,8 @@ from onyx.auth.users import current_user
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.factory import get_default_llm
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.server.utils import get_json_line
@@ -107,7 +108,7 @@ def handle_send_search_message(
                     yield get_json_line(packet.model_dump())
         except NotImplementedError as e:
             yield get_json_line(SearchErrorPacket(error=str(e)).model_dump())
-        except HTTPException:
+        except OnyxError:
             raise
         except Exception as e:
             logger.exception("Error in search streaming")
@@ -135,21 +136,21 @@ def get_search_history(
     """
     # Validate limit
     if limit <= 0:
-        raise HTTPException(
-            status_code=400,
-            detail="limit must be greater than 0",
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "limit must be greater than 0",
         )
     if limit > 1000:
-        raise HTTPException(
-            status_code=400,
-            detail="limit must be at most 1000",
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "limit must be at most 1000",
         )
 
     # Validate filter_days
     if filter_days is not None and filter_days <= 0:
-        raise HTTPException(
-            status_code=400,
-            detail="filter_days must be greater than 0",
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "filter_days must be greater than 0",
         )
 
     search_queries = fetch_search_queries_for_user(
