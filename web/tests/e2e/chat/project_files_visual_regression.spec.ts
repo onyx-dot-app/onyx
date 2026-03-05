@@ -10,6 +10,17 @@ const FILE_CONTENT = "Visual regression test content for long filename cards.";
 
 let projectId: number | null = null;
 
+type Geometry = {
+  elementLeft: number;
+  elementRight: number;
+  elementTop: number;
+  elementBottom: number;
+  cardLeft: number;
+  cardRight: number;
+  cardTop: number;
+  cardBottom: number;
+};
+
 function getFilesSection(page: Page): Locator {
   return page
     .locator("div")
@@ -36,6 +47,53 @@ async function uploadFileToProject(
   });
 
   expect(response.ok()).toBeTruthy();
+}
+
+async function getElementGeometryInCard(
+  element: Locator
+): Promise<Geometry | null> {
+  return element.evaluate((targetEl) => {
+    let cardEl: HTMLElement | null = targetEl.parentElement;
+
+    while (cardEl) {
+      const style = window.getComputedStyle(cardEl);
+      const hasBorder =
+        parseFloat(style.borderTopWidth) > 0 ||
+        parseFloat(style.borderLeftWidth) > 0;
+      const hasRadius = parseFloat(style.borderTopLeftRadius) > 0;
+
+      if (hasBorder && hasRadius) {
+        break;
+      }
+      cardEl = cardEl.parentElement;
+    }
+
+    if (!cardEl) {
+      return null;
+    }
+
+    const elementRect = targetEl.getBoundingClientRect();
+    const cardRect = cardEl.getBoundingClientRect();
+
+    return {
+      elementLeft: elementRect.left,
+      elementRight: elementRect.right,
+      elementTop: elementRect.top,
+      elementBottom: elementRect.bottom,
+      cardLeft: cardRect.left,
+      cardRight: cardRect.right,
+      cardTop: cardRect.top,
+      cardBottom: cardRect.bottom,
+    };
+  });
+}
+
+function expectGeometryWithinCard(geometry: Geometry | null): void {
+  expect(geometry).not.toBeNull();
+  expect(geometry!.elementLeft).toBeGreaterThanOrEqual(geometry!.cardLeft - 1);
+  expect(geometry!.elementRight).toBeLessThanOrEqual(geometry!.cardRight + 1);
+  expect(geometry!.elementTop).toBeGreaterThanOrEqual(geometry!.cardTop - 1);
+  expect(geometry!.elementBottom).toBeLessThanOrEqual(geometry!.cardBottom + 1);
 }
 
 test.describe("Project Files visual regression", () => {
@@ -68,10 +126,11 @@ test.describe("Project Files visual regression", () => {
   });
 
   test.beforeEach(async ({ page }, workerInfo) => {
-    test.skip(
-      projectId === null,
-      "Project setup failed; skipping project file visual regression"
-    );
+    if (projectId === null) {
+      throw new Error(
+        "Project setup failed in beforeAll; cannot run visual regression test"
+      );
+    }
 
     await page.context().clearCookies();
     await loginAsWorkerUser(page, workerInfo.workerIndex);
@@ -89,50 +148,20 @@ test.describe("Project Files visual regression", () => {
     await expect(filesSection).toBeVisible();
 
     const fileTitle = filesSection
-      .locator(".opal-content-md-title")
+      .locator('[data-testid="file-card-title"]')
       .filter({ hasText: LONG_FILE_NAME })
       .first();
     await expect(fileTitle).toBeVisible();
 
     const iconWrapper = filesSection
-      .locator(".attachment-button__icon-wrapper")
+      .locator('[data-testid="file-icon-wrapper"]')
       .first();
     await expect(iconWrapper).toBeVisible();
 
-    const geometry = await iconWrapper.evaluate((iconEl) => {
-      let cardEl: HTMLElement | null = iconEl.parentElement;
-
-      while (cardEl) {
-        const style = window.getComputedStyle(cardEl);
-        const hasBorder =
-          parseFloat(style.borderTopWidth) > 0 ||
-          parseFloat(style.borderLeftWidth) > 0;
-        const hasRadius = parseFloat(style.borderTopLeftRadius) > 0;
-
-        if (hasBorder && hasRadius) {
-          break;
-        }
-        cardEl = cardEl.parentElement;
-      }
-
-      if (!cardEl) {
-        return null;
-      }
-
-      const iconRect = iconEl.getBoundingClientRect();
-      const cardRect = cardEl.getBoundingClientRect();
-
-      return {
-        iconLeft: iconRect.left,
-        iconRight: iconRect.right,
-        cardLeft: cardRect.left,
-        cardRight: cardRect.right,
-      };
-    });
-
-    expect(geometry).not.toBeNull();
-    expect(geometry!.iconLeft).toBeGreaterThanOrEqual(geometry!.cardLeft - 1);
-    expect(geometry!.iconRight).toBeLessThanOrEqual(geometry!.cardRight + 1);
+    const iconGeometry = await getElementGeometryInCard(iconWrapper);
+    const titleGeometry = await getElementGeometryInCard(fileTitle);
+    expectGeometryWithinCard(iconGeometry);
+    expectGeometryWithinCard(titleGeometry);
 
     await expectElementScreenshot(filesSection, {
       name: "project-files-long-underscore-filename",

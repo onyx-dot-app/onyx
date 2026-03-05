@@ -185,6 +185,8 @@ export function FileCard({
                   : "Processing..."
                 : typeLabel
             }
+            titleTestId="file-card-title"
+            iconWrapperTestId="file-icon-wrapper"
           />
           <Spacer horizontal rem={0.5} />
         </Interactive.Container>
