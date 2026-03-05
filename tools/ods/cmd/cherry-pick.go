@@ -377,11 +377,11 @@ func cherryPickToRelease(commitSHAs, commitMessages []string, branchSuffix, vers
 		return "", nil
 	}
 
-	// Push the hotfix branch
+	// Push the hotfix branch (use --force-with-lease since rebase may have rewritten history)
 	log.Infof("Pushing hotfix branch: %s", hotfixBranch)
-	pushArgs := []string{"push", "-u", "origin", hotfixBranch}
+	pushArgs := []string{"push", "--force-with-lease", "-u", "origin", hotfixBranch}
 	if noVerify {
-		pushArgs = []string{"push", "--no-verify", "-u", "origin", hotfixBranch}
+		pushArgs = []string{"push", "--force-with-lease", "--no-verify", "-u", "origin", hotfixBranch}
 	}
 	if err := git.RunCommandVerboseOnError(pushArgs...); err != nil {
 		return "", fmt.Errorf("failed to push hotfix branch: %w", err)
