@@ -57,7 +57,7 @@ type viewport struct {
 	pickerIndex  int
 	pickerType   pickerKind
 	scrollOffset int // lines scrolled up from bottom (0 = pinned to bottom)
-	lastMaxScroll int // cached from last render for clamping in scrollUp
+	lastHeight   int // viewport height from last render
 }
 
 // newMarkdownRenderer creates a Glamour renderer with zero left margin.
@@ -110,10 +110,6 @@ func (v *viewport) startAgent() {
 
 func (v *viewport) appendToken(token string) {
 	v.streamBuf += token
-	// Only auto-scroll when already pinned to bottom; preserve user's scroll position
-	if v.scrollOffset == 0 {
-		v.scrollOffset = 0
-	}
 }
 
 func (v *viewport) finishAgent() {
@@ -219,10 +215,18 @@ func (v *viewport) showPicker(kind pickerKind, items []pickerItem) {
 	v.pickerIndex = 0
 }
 
+func (v *viewport) maxScroll() int {
+	ms := v.totalLines() - v.lastHeight
+	if ms < 0 {
+		return 0
+	}
+	return ms
+}
+
 func (v *viewport) scrollUp(n int) {
 	v.scrollOffset += n
-	if v.scrollOffset > v.lastMaxScroll {
-		v.scrollOffset = v.lastMaxScroll
+	if ms := v.maxScroll(); v.scrollOffset > ms {
+		v.scrollOffset = ms
 	}
 }
 
@@ -352,6 +356,31 @@ func (v *viewport) renderPicker(width, height int) string {
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, panel)
 }
 
+// totalLines computes the total number of rendered content lines.
+func (v *viewport) totalLines() int {
+	var lines []string
+	for _, e := range v.entries {
+		if e.kind == entryCitation && !v.showSources {
+			continue
+		}
+		lines = append(lines, e.rendered)
+	}
+	if v.streaming && v.streamBuf != "" {
+		bufLines := strings.Split(v.streamBuf, "\n")
+		if len(bufLines) > 0 {
+			bufLines[0] = agentDot + " " + bufLines[0]
+			for i := 1; i < len(bufLines); i++ {
+				bufLines[i] = "  " + bufLines[i]
+			}
+		}
+		lines = append(lines, strings.Join(bufLines, "\n"))
+	} else if v.streaming {
+		lines = append(lines, agentDot+" ")
+	}
+	content := strings.Join(lines, "\n")
+	return len(strings.Split(content, "\n"))
+}
+
 // view renders the full viewport content.
 func (v *viewport) view(height int) string {
 	// If picker is active, render it as an overlay
@@ -386,12 +415,11 @@ func (v *viewport) view(height int) string {
 	contentLines := strings.Split(content, "\n")
 	total := len(contentLines)
 
-	// Cache max scroll for clamping in scrollUp()
+	v.lastHeight = height
 	maxScroll := total - height
 	if maxScroll < 0 {
 		maxScroll = 0
 	}
-	v.lastMaxScroll = maxScroll
 	scrollOffset := v.scrollOffset
 	if scrollOffset > maxScroll {
 		scrollOffset = maxScroll
