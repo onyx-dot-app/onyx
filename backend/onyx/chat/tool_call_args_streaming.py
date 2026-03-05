@@ -181,16 +181,11 @@ def _extract_delta_args(
         if pos >= len(full):
             break
         if full[pos] != '"':
-            # Non-string value (number, boolean, null, array, object):
-            # skip to the next top-level comma or closing brace.
-            val_start = pos
+            # Skip non-string values (number, boolean, null, array, object).
+            # They are available in the final tool-call kickoff packet;
+            # emitting them here as strings would be ambiguous for consumers
+            # (e.g. the number 30 vs the string "30").
             pos = _skip_json_value(full, pos)
-            # Only emit once the value is complete (delimiter found)
-            # and the delimiter falls within the delta region
-            if pos < len(full) and pos >= delta_start:
-                raw_val = full[val_start:pos].strip()
-                if raw_val:
-                    result[key.value] = raw_val
             continue
         val = _parse_json_string(full, pos)
 
@@ -221,8 +216,7 @@ def maybe_emit_argument_delta(
 ) -> Generator[Packet, None, None]:
     """Emit decoded tool-call argument deltas to the frontend.
 
-    Stateless: derives what's new by comparing ``accumulated_args``
-    against the state before the current fragment was appended.
+    NOTE: Currently skips non-string arguments
 
     ``scan_offsets`` is a mutable dict keyed by tool-call index that allows
     each call to skip past already-processed key-value pairs, reducing

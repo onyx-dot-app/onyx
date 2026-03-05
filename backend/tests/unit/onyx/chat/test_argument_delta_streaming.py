@@ -563,25 +563,10 @@ class TestMaybeEmitArgumentDeltaEdgeCases:
         assert packets[0].obj.argument_deltas == {"lang": "py"}
 
     @patch("onyx.chat.tool_call_args_streaming._get_tool_class")
-    def test_incomplete_non_string_value_emits_nothing(
-        self, mock_get_tool: MagicMock
-    ) -> None:
-        """A non-string value with no trailing delimiter is still being
-        streamed and should not be emitted yet."""
-        mock_get_tool.return_value = _mock_tool_class()
-
-        tc_map: dict[int, dict[str, Any]] = {
-            0: {
-                "id": "tc_1",
-                "name": "python",
-                "arguments": '{"timeout": 30',
-            }
-        }
-        assert _collect(tc_map, _make_tool_call_delta(arguments="0")) == []
-
-    @patch("onyx.chat.tool_call_args_streaming._get_tool_class")
-    def test_complete_non_string_value_emitted(self, mock_get_tool: MagicMock) -> None:
-        """A non-string value is emitted once its trailing delimiter arrives."""
+    def test_non_string_values_skipped(self, mock_get_tool: MagicMock) -> None:
+        """Non-string values (numbers, booleans, null) are skipped — they are
+        available in the final tool-call kickoff packet. String arguments
+        following them are still emitted."""
         mock_get_tool.return_value = _mock_tool_class()
 
         tc_map: dict[int, dict[str, Any]] = {
@@ -596,28 +581,4 @@ class TestMaybeEmitArgumentDeltaEdgeCases:
         )
 
         assert len(packets) == 1
-        assert packets[0].obj.argument_deltas == {"timeout": "30", "code": "hello"}
-
-    @patch("onyx.chat.tool_call_args_streaming._get_tool_class")
-    def test_non_string_value_not_re_emitted(self, mock_get_tool: MagicMock) -> None:
-        """A non-string value already completed in a prior delta must not be
-        emitted again on subsequent deltas."""
-        mock_get_tool.return_value = _mock_tool_class()
-
-        # First delta: comma arrives, completing timeout=30
-        tc_map: dict[int, dict[str, Any]] = {
-            0: {
-                "id": "tc_1",
-                "name": "python",
-                "arguments": '{"timeout": 30, "code": "x',
-            }
-        }
-        packets_1 = _collect(tc_map, _make_tool_call_delta(arguments=', "code": "x'))
-        assert len(packets_1) == 1
-        assert packets_1[0].obj.argument_deltas == {"timeout": "30", "code": "x"}
-
-        # Second delta: only extends "code" — timeout must NOT reappear
-        tc_map[0]["arguments"] = '{"timeout": 30, "code": "xy'
-        packets_2 = _collect(tc_map, _make_tool_call_delta(arguments="y"))
-        assert len(packets_2) == 1
-        assert packets_2[0].obj.argument_deltas == {"code": "y"}
+        assert packets[0].obj.argument_deltas == {"code": "hello"}
