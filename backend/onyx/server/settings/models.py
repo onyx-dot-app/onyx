@@ -19,6 +19,7 @@ class ApplicationStatus(str, Enum):
     PAYMENT_REMINDER = "payment_reminder"
     GRACE_PERIOD = "grace_period"
     GATED_ACCESS = "gated_access"
+    SEAT_LIMIT_EXCEEDED = "seat_limit_exceeded"
 
 
 class Notification(BaseModel):
@@ -81,6 +82,10 @@ class Settings(BaseModel):
 
     # Default Assistant settings
     disable_default_assistant: bool | None = False
+
+    # Seat usage - populated by license enforcement when seat limit is exceeded
+    seat_count: int | None = None
+    used_seats: int | None = None
 
     # OpenSearch migration
     opensearch_indexing_enabled: bool = False

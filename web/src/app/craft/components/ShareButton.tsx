@@ -2,14 +2,15 @@
 
 import { useState, useEffect } from "react";
 import Text from "@/refresh-components/texts/Text";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { SvgLink, SvgCopy, SvgCheck, SvgX } from "@opal/icons";
 import { setSessionSharing } from "@/app/craft/services/apiServices";
 import type { SharingScope } from "@/app/craft/types/streamingTypes";
 import { cn } from "@/lib/utils";
 import Popover from "@/refresh-components/Popover";
 import Truncated from "@/refresh-components/texts/Truncated";
-import { Section, LineItemLayout } from "@/layouts/general-layouts";
+import { Section } from "@/layouts/general-layouts";
+import { ContentAction } from "@opal/layouts";
 
 interface ShareButtonProps {
   sessionId: string;
@@ -97,10 +98,9 @@ export default function ShareButton({
       <Popover open={isOpen} onOpenChange={setIsOpen}>
         <Popover.Trigger asChild>
           <Button
-            action
-            primary={isShared}
-            tertiary={!isShared}
-            leftIcon={SvgLink}
+            variant="action"
+            prominence={isShared ? "primary" : "tertiary"}
+            icon={SvgLink}
             aria-label="Share webapp"
           >
             {isShared ? "Shared" : "Share"}
@@ -133,11 +133,12 @@ export default function ShareButton({
                       : "hover:bg-background-tint-02"
                   )}
                 >
-                  <LineItemLayout
+                  <ContentAction
                     title={opt.label}
                     description={opt.description}
-                    variant="tertiary"
-                    reducedPadding
+                    sizePreset="main-ui"
+                    variant="section"
+                    paddingVariant="sm"
                   />
                 </div>
               ))}
@@ -160,10 +161,10 @@ export default function ShareButton({
                     </Truncated>
                   </div>
                   <Button
-                    action
-                    tertiary
+                    variant="action"
+                    prominence="tertiary"
                     size="md"
-                    leftIcon={
+                    icon={
                       copyState === "copied"
                         ? SvgCheck
                         : copyState === "error"

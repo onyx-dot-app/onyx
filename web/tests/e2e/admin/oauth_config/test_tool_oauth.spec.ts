@@ -61,7 +61,7 @@ test.afterAll(async ({ browser }: { browser: Browser }) => {
 
   // Delete the assistant first (it references the tool)
   if (createdAssistantId !== null) {
-    await client.deleteAssistant(createdAssistantId);
+    await client.deleteAgent(createdAssistantId);
   }
 
   // Then delete the tool
@@ -211,12 +211,12 @@ test("Tool OAuth Configuration: Creation, Selection, and Assistant Integration",
   await page.waitForLoadState("networkidle");
 
   // Fill in basic assistant details
-  const assistantName = `Test Assistant ${Date.now()}`;
-  const assistantDescription = "Assistant with OAuth tool";
+  const agentName = `Test Assistant ${Date.now()}`;
+  const agentDescription = "Assistant with OAuth tool";
   const assistantInstructions = "Use the tool when needed";
 
-  await page.locator('input[name="name"]').fill(assistantName);
-  await page.locator('textarea[name="description"]').fill(assistantDescription);
+  await page.locator('input[name="name"]').fill(agentName);
+  await page.locator('textarea[name="description"]').fill(agentDescription);
   await page
     .locator('textarea[name="instructions"]')
     .fill(assistantInstructions);
@@ -241,14 +241,14 @@ test("Tool OAuth Configuration: Creation, Selection, and Assistant Integration",
   await createButton.click();
 
   // Verify redirection to app page with the new assistant ID
-  await page.waitForURL(/.*\/app\?assistantId=\d+.*/, { timeout: 10000 });
+  await page.waitForURL(/.*\/app\?agentId=\d+.*/, { timeout: 10000 });
   const assistantUrl = page.url();
-  const assistantIdMatch = assistantUrl.match(/assistantId=(\d+)/);
-  expect(assistantIdMatch).toBeTruthy();
+  const agentIdMatch = assistantUrl.match(/agentId=(\d+)/);
+  expect(agentIdMatch).toBeTruthy();
 
   // Store assistant ID for cleanup
-  if (assistantIdMatch) {
-    createdAssistantId = Number(assistantIdMatch[1]);
+  if (agentIdMatch) {
+    createdAssistantId = Number(agentIdMatch[1]);
   }
 
   // Test complete! We've verified:

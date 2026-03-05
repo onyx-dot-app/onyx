@@ -5,11 +5,10 @@ import SimpleTabs from "@/refresh-components/SimpleTabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import InvitedUserTable from "@/components/admin/users/InvitedUserTable";
 import SignedUpUserTable from "@/components/admin/users/SignedUpUserTable";
-
 import Modal from "@/refresh-components/Modal";
 import { ThreeDotsLoader } from "@/components/Loading";
-import { AdminPageTitle } from "@/components/admin/Title";
 import { toast } from "@/hooks/useToast";
+import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useSWR, { mutate } from "swr";
 import { ErrorCallout } from "@/components/ErrorCallout";
@@ -19,10 +18,14 @@ import { InvitedUserSnapshot } from "@/lib/types";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import PendingUsersTable from "@/components/admin/users/PendingUsersTable";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { Spinner } from "@/components/Spinner";
-import { SvgDownloadCloud, SvgUser, SvgUserPlus } from "@opal/icons";
+import { SvgDownloadCloud, SvgUserPlus } from "@opal/icons";
+import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
+
+const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.USERS]!;
+
 interface CountDisplayProps {
   label: string;
   value: number | null;
@@ -48,7 +51,7 @@ function CountDisplay({ label, value, isLoading }: CountDisplayProps) {
   );
 }
 
-const UsersTables = ({
+function UsersTables({
   q,
   isDownloadingUsers,
   setIsDownloadingUsers,
@@ -56,7 +59,7 @@ const UsersTables = ({
   q: string;
   isDownloadingUsers: boolean;
   setIsDownloadingUsers: (loading: boolean) => void;
-}) => {
+}) {
   const [currentUsersCount, setCurrentUsersCount] = useState<number | null>(
     null
   );
@@ -147,7 +150,7 @@ const UsersTables = ({
             <div className="flex justify-between items-center gap-1">
               <CardTitle>Current Users</CardTitle>
               <Button
-                leftIcon={SvgDownloadCloud}
+                icon={SvgDownloadCloud}
                 disabled={isDownloadingUsers}
                 onClick={() => downloadAllUsers()}
               >
@@ -236,9 +239,9 @@ const UsersTables = ({
   });
 
   return <SimpleTabs tabs={tabs} defaultValue="current" />;
-};
+}
 
-const SearchableTables = () => {
+function SearchableTables() {
   const [query, setQuery] = useState("");
   const [isDownloadingUsers, setIsDownloadingUsers] = useState(false);
 
@@ -262,7 +265,7 @@ const SearchableTables = () => {
       </div>
     </div>
   );
-};
+}
 
 function AddUserButton() {
   const [bulkAddUsersModal, setBulkAddUsersModal] = useState(false);
@@ -325,13 +328,13 @@ function AddUserButton() {
   );
 }
 
-const Page = () => {
+export default function Page() {
   return (
-    <>
-      <AdminPageTitle title="Manage Users" icon={SvgUser} />
-      <SearchableTables />
-    </>
+    <SettingsLayouts.Root>
+      <SettingsLayouts.Header title={route.title} icon={route.icon} separator />
+      <SettingsLayouts.Body>
+        <SearchableTables />
+      </SettingsLayouts.Body>
+    </SettingsLayouts.Root>
   );
-};
-
-export default Page;
+}

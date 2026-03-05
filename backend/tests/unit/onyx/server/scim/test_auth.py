@@ -1,11 +1,11 @@
 from unittest.mock import MagicMock
 
 import pytest
-from fastapi import HTTPException
 
 from ee.onyx.server.scim.auth import _hash_scim_token
 from ee.onyx.server.scim.auth import generate_scim_token
 from ee.onyx.server.scim.auth import SCIM_TOKEN_PREFIX
+from ee.onyx.server.scim.auth import ScimAuthError
 from ee.onyx.server.scim.auth import verify_scim_token
 
 
@@ -60,7 +60,7 @@ class TestVerifyScimToken:
     def test_missing_header_raises_401(self) -> None:
         request = self._make_request(None)
         dal = self._make_dal()
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(ScimAuthError) as exc_info:
             verify_scim_token(request, dal)
         assert exc_info.value.status_code == 401
         assert "Missing" in str(exc_info.value.detail)
@@ -68,7 +68,7 @@ class TestVerifyScimToken:
     def test_wrong_prefix_raises_401(self) -> None:
         request = self._make_request("Bearer on_some_api_key")
         dal = self._make_dal()
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(ScimAuthError) as exc_info:
             verify_scim_token(request, dal)
         assert exc_info.value.status_code == 401
 
@@ -76,7 +76,7 @@ class TestVerifyScimToken:
         raw, _, _ = generate_scim_token()
         request = self._make_request(f"Bearer {raw}")
         dal = self._make_dal(token=None)
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(ScimAuthError) as exc_info:
             verify_scim_token(request, dal)
         assert exc_info.value.status_code == 401
         assert "Invalid" in str(exc_info.value.detail)
@@ -87,7 +87,7 @@ class TestVerifyScimToken:
         mock_token = MagicMock()
         mock_token.is_active = False
         dal = self._make_dal(token=mock_token)
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(ScimAuthError) as exc_info:
             verify_scim_token(request, dal)
         assert exc_info.value.status_code == 401
         assert "revoked" in str(exc_info.value.detail)

@@ -772,6 +772,7 @@ def _convert_driveitem_to_slim_document(
     drive_name: str,
     ctx: ClientContext,
     graph_client: GraphClient,
+    parent_hierarchy_raw_node_id: str | None = None,
 ) -> SlimDocument:
     if driveitem.id is None:
         raise ValueError("DriveItem ID is required")
@@ -787,11 +788,15 @@ def _convert_driveitem_to_slim_document(
     return SlimDocument(
         id=driveitem.id,
         external_access=external_access,
+        parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
     )
 
 
 def _convert_sitepage_to_slim_document(
-    site_page: dict[str, Any], ctx: ClientContext | None, graph_client: GraphClient
+    site_page: dict[str, Any],
+    ctx: ClientContext | None,
+    graph_client: GraphClient,
+    parent_hierarchy_raw_node_id: str | None = None,
 ) -> SlimDocument:
     """Convert a SharePoint site page to a SlimDocument object."""
     if site_page.get("id") is None:
@@ -808,6 +813,7 @@ def _convert_sitepage_to_slim_document(
     return SlimDocument(
         id=id,
         external_access=external_access,
+        parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
     )
 
 
@@ -1594,12 +1600,22 @@ class SharepointConnector(
                             )
                         )
 
+                    parent_hierarchy_url: str | None = None
+                    if drive_web_url:
+                        parent_hierarchy_url = self._get_parent_hierarchy_url(
+                            site_url, drive_web_url, drive_name, driveitem
+                        )
+
                     try:
                         logger.debug(f"Processing: {driveitem.web_url}")
                         ctx = self._create_rest_client_context(site_descriptor.url)
                         doc_batch.append(
                             _convert_driveitem_to_slim_document(
-                                driveitem, drive_name, ctx, self.graph_client
+                                driveitem,
+                                drive_name,
+                                ctx,
+                                self.graph_client,
+                                parent_hierarchy_raw_node_id=parent_hierarchy_url,
                             )
                         )
                     except Exception as e:
@@ -1619,7 +1635,10 @@ class SharepointConnector(
                     ctx = self._create_rest_client_context(site_descriptor.url)
                     doc_batch.append(
                         _convert_sitepage_to_slim_document(
-                            site_page, ctx, self.graph_client
+                            site_page,
+                            ctx,
+                            self.graph_client,
+                            parent_hierarchy_raw_node_id=site_descriptor.url,
                         )
                     )
                     if len(doc_batch) >= SLIM_BATCH_SIZE:

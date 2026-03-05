@@ -19,7 +19,8 @@ export function SettingsProvider({
   settings: CombinedSettings;
 }) {
   const [isMobile, setIsMobile] = useState<boolean | undefined>();
-  const { ccPairs } = useCCPairs();
+  const vectorDbEnabled = settings.settings.vector_db_enabled !== false;
+  const { ccPairs } = useCCPairs(vectorDbEnabled);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -64,4 +65,9 @@ export function useSettingsContext() {
     );
   }
   return context;
+}
+
+export function useVectorDbEnabled(): boolean {
+  const settings = useSettingsContext();
+  return settings.settings.vector_db_enabled !== false;
 }

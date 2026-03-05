@@ -18,6 +18,14 @@ inputs:
     description: "Optional NIGHTLY_LLM_API_BASE"
     required: false
     default: ""
+  api-version:
+    description: "Optional NIGHTLY_LLM_API_VERSION"
+    required: false
+    default: ""
+  deployment-name:
+    description: "Optional NIGHTLY_LLM_DEPLOYMENT_NAME"
+    required: false
+    default: ""
   custom-config-json:
     description: "Optional NIGHTLY_LLM_CUSTOM_CONFIG_JSON"
     required: false
@@ -60,6 +68,7 @@ runs:
         DISABLE_TELEMETRY=true
         INTEGRATION_TESTS_MODE=true
         AUTO_LLM_UPDATE_INTERVAL_SECONDS=10
+        AWS_REGION_NAME=us-west-2
         ONYX_BACKEND_IMAGE=${ECR_CACHE}:nightly-llm-it-backend-${RUN_ID}
         ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:nightly-llm-it-model-server-${RUN_ID}
         EOF2
@@ -83,6 +92,8 @@ runs:
         NIGHTLY_LLM_PROVIDER: ${{ inputs.provider }}
         NIGHTLY_LLM_API_KEY: ${{ inputs.provider-api-key }}
         NIGHTLY_LLM_API_BASE: ${{ inputs.api-base }}
+        NIGHTLY_LLM_API_VERSION: ${{ inputs.api-version }}
+        NIGHTLY_LLM_DEPLOYMENT_NAME: ${{ inputs.deployment-name }}
         NIGHTLY_LLM_CUSTOM_CONFIG_JSON: ${{ inputs.custom-config-json }}
         NIGHTLY_LLM_STRICT: ${{ inputs.strict }}
         RUNS_ON_ECR_CACHE: ${{ inputs.runs-on-ecr-cache }}
@@ -106,10 +117,13 @@ runs:
             -e REDIS_HOST=cache \
             -e API_SERVER_HOST=api_server \
             -e TEST_WEB_HOSTNAME=test-runner \
+            -e AWS_REGION_NAME=us-west-2 \
             -e NIGHTLY_LLM_PROVIDER="${NIGHTLY_LLM_PROVIDER}" \
             -e NIGHTLY_LLM_MODELS="${MODELS}" \
             -e NIGHTLY_LLM_API_KEY="${NIGHTLY_LLM_API_KEY}" \
             -e NIGHTLY_LLM_API_BASE="${NIGHTLY_LLM_API_BASE}" \
+            -e NIGHTLY_LLM_API_VERSION="${NIGHTLY_LLM_API_VERSION}" \
+            -e NIGHTLY_LLM_DEPLOYMENT_NAME="${NIGHTLY_LLM_DEPLOYMENT_NAME}" \
             -e NIGHTLY_LLM_CUSTOM_CONFIG_JSON="${NIGHTLY_LLM_CUSTOM_CONFIG_JSON}" \
             -e NIGHTLY_LLM_STRICT="${NIGHTLY_LLM_STRICT}" \
             ${RUNS_ON_ECR_CACHE}:nightly-llm-it-${RUN_ID} \

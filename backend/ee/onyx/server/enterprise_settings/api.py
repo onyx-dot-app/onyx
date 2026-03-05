@@ -223,6 +223,15 @@ def get_active_scim_token(
     token = dal.get_active_token()
     if not token:
         raise HTTPException(status_code=404, detail="No active SCIM token")
+
+    # Derive the IdP domain from the first synced user as a heuristic.
+    idp_domain: str | None = None
+    mappings, _total = dal.list_user_mappings(start_index=1, count=1)
+    if mappings:
+        user = dal.get_user(mappings[0].user_id)
+        if user and "@" in user.email:
+            idp_domain = user.email.rsplit("@", 1)[1]
+
     return ScimTokenResponse(
         id=token.id,
         name=token.name,
@@ -230,6 +239,7 @@ def get_active_scim_token(
         is_active=token.is_active,
         created_at=token.created_at,
         last_used_at=token.last_used_at,
+        idp_domain=idp_domain,
     )
 
 

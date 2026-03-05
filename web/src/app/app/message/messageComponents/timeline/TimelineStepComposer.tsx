@@ -50,7 +50,9 @@ export function TimelineStepComposer({
             header={result.status}
             isExpanded={result.isExpanded}
             onToggle={result.onToggle}
-            collapsible={collapsible && !isSingleStep}
+            collapsible={
+              collapsible && (!isSingleStep || !!result.alwaysCollapsible)
+            }
             supportsCollapsible={result.supportsCollapsible}
             isLastStep={index === results.length - 1 && isLastStep}
             isFirstStep={index === 0 && isFirstStep}

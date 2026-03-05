@@ -1,6 +1,7 @@
 import json
 import time
 from collections.abc import Callable
+from typing import Any
 from typing import Literal
 
 from sqlalchemy.orm import Session
@@ -51,6 +52,7 @@ from onyx.tools.built_in_tools import STOPPING_TOOLS_NAMES
 from onyx.tools.interface import Tool
 from onyx.tools.models import ChatFile
 from onyx.tools.models import MemoryToolResponseSnapshot
+from onyx.tools.models import PythonToolRichResponse
 from onyx.tools.models import ToolCallInfo
 from onyx.tools.models import ToolCallKickoff
 from onyx.tools.models import ToolResponse
@@ -530,11 +532,13 @@ def _create_file_tool_metadata_message(
     """
     lines = [
         "You have access to the following files. Use the read_file tool to "
-        "read sections of any file:"
+        "read sections of any file. You MUST pass the file_id UUID (not the "
+        "filename) to read_file:"
     ]
     for meta in file_metadata:
         lines.append(
-            f'- {meta.file_id}: "{meta.filename}" (~{meta.approx_char_count:,} chars)'
+            f'- file_id="{meta.file_id}" filename="{meta.filename}" '
+            f"(~{meta.approx_char_count:,} chars)"
         )
 
     message_content = "\n".join(lines)
@@ -558,12 +562,16 @@ def _create_context_files_message(
     # Format as documents JSON as described in README
     documents_list = []
     for idx, file_text in enumerate(context_files.file_texts, start=1):
-        documents_list.append(
-            {
-                "document": idx,
-                "contents": file_text,
-            }
+        title = (
+            context_files.file_metadata[idx - 1].filename
+            if idx - 1 < len(context_files.file_metadata)
+            else None
         )
+        entry: dict[str, Any] = {"document": idx}
+        if title:
+            entry["title"] = title
+        entry["contents"] = file_text
+        documents_list.append(entry)
 
     documents_json = json.dumps({"documents": documents_list}, indent=2)
     message_content = f"Here are some documents provided for context, they may not all be relevant:\n{documents_json}"
@@ -959,6 +967,13 @@ def run_llm_loop(
                 ):
                     generated_images = tool_response.rich_response.generated_images
 
+                # Extract generated_files if this is a code interpreter response
+                generated_files = None
+                if isinstance(tool_response.rich_response, PythonToolRichResponse):
+                    generated_files = (
+                        tool_response.rich_response.generated_files or None
+                    )
+
                 # Persist memory if this is a memory tool response
                 memory_snapshot: MemoryToolResponseSnapshot | None = None
                 if isinstance(tool_response.rich_response, MemoryToolResponse):
@@ -1010,6 +1025,7 @@ def run_llm_loop(
                     tool_call_response=saved_response,
                     search_docs=displayed_docs or search_docs,
                     generated_images=generated_images,
+                    generated_files=generated_files,
                 )
                 # Add to state container for partial save support
                 state_container.add_tool_call(tool_call_info)

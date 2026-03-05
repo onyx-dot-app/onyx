@@ -7,6 +7,9 @@ from unittest.mock import patch
 import httpx
 import pytest
 
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+
 
 class TestGetStripePublishableKey:
     """Tests for get_stripe_publishable_key endpoint."""
@@ -62,15 +65,14 @@ class TestGetStripePublishableKey:
     )
     async def test_rejects_invalid_env_var_key_format(self) -> None:
         """Should reject keys that don't start with pk_."""
-        from fastapi import HTTPException
-
         from ee.onyx.server.tenants.billing_api import get_stripe_publishable_key
 
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(OnyxError) as exc_info:
             await get_stripe_publishable_key()
 
         assert exc_info.value.status_code == 500
-        assert "Invalid Stripe publishable key format" in exc_info.value.detail
+        assert exc_info.value.error_code is OnyxErrorCode.INTERNAL_ERROR
+        assert exc_info.value.message == "Invalid Stripe publishable key format"
 
     @pytest.mark.asyncio
     @patch("ee.onyx.server.tenants.billing_api.STRIPE_PUBLISHABLE_KEY_OVERRIDE", None)
@@ -80,8 +82,6 @@ class TestGetStripePublishableKey:
     )
     async def test_rejects_invalid_s3_key_format(self) -> None:
         """Should reject keys from S3 that don't start with pk_."""
-        from fastapi import HTTPException
-
         from ee.onyx.server.tenants.billing_api import get_stripe_publishable_key
 
         mock_response = MagicMock()
@@ -92,11 +92,12 @@ class TestGetStripePublishableKey:
             mock_client.return_value.__aenter__.return_value.get = AsyncMock(
                 return_value=mock_response
             )
-            with pytest.raises(HTTPException) as exc_info:
+            with pytest.raises(OnyxError) as exc_info:
                 await get_stripe_publishable_key()
 
         assert exc_info.value.status_code == 500
-        assert "Invalid Stripe publishable key format" in exc_info.value.detail
+        assert exc_info.value.error_code is OnyxErrorCode.INTERNAL_ERROR
+        assert exc_info.value.message == "Invalid Stripe publishable key format"
 
     @pytest.mark.asyncio
     @patch("ee.onyx.server.tenants.billing_api.STRIPE_PUBLISHABLE_KEY_OVERRIDE", None)
@@ -106,34 +107,32 @@ class TestGetStripePublishableKey:
     )
     async def test_handles_s3_fetch_error(self) -> None:
         """Should return error when S3 fetch fails."""
-        from fastapi import HTTPException
-
         from ee.onyx.server.tenants.billing_api import get_stripe_publishable_key
 
         with patch("httpx.AsyncClient") as mock_client:
             mock_client.return_value.__aenter__.return_value.get = AsyncMock(
                 side_effect=httpx.HTTPError("Connection failed")
             )
-            with pytest.raises(HTTPException) as exc_info:
+            with pytest.raises(OnyxError) as exc_info:
                 await get_stripe_publishable_key()
 
         assert exc_info.value.status_code == 500
-        assert "Failed to fetch Stripe publishable key" in exc_info.value.detail
+        assert exc_info.value.error_code is OnyxErrorCode.INTERNAL_ERROR
+        assert exc_info.value.message == "Failed to fetch Stripe publishable key"
 
     @pytest.mark.asyncio
     @patch("ee.onyx.server.tenants.billing_api.STRIPE_PUBLISHABLE_KEY_OVERRIDE", None)
     @patch("ee.onyx.server.tenants.billing_api.STRIPE_PUBLISHABLE_KEY_URL", None)
     async def test_error_when_no_config(self) -> None:
         """Should return error when neither env var nor S3 URL is configured."""
-        from fastapi import HTTPException
-
         from ee.onyx.server.tenants.billing_api import get_stripe_publishable_key
 
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(OnyxError) as exc_info:
             await get_stripe_publishable_key()
 
         assert exc_info.value.status_code == 500
-        assert "not configured" in exc_info.value.detail
+        assert exc_info.value.error_code is OnyxErrorCode.INTERNAL_ERROR
+        assert "not configured" in exc_info.value.message
 
     @pytest.mark.asyncio
     @patch(

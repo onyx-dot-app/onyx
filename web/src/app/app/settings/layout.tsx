@@ -33,27 +33,27 @@ export default function Layout({ children }: LayoutProps) {
             <div className="flex flex-col px-2 w-[12.5rem]">
               <SidebarTab
                 href="/app/settings/general"
-                transient={pathname === "/app/settings/general"}
+                selected={pathname === "/app/settings/general"}
               >
                 General
               </SidebarTab>
               <SidebarTab
                 href="/app/settings/chat-preferences"
-                transient={pathname === "/app/settings/chat-preferences"}
+                selected={pathname === "/app/settings/chat-preferences"}
               >
                 Chat Preferences
               </SidebarTab>
               {showAccountsAccessTab && (
                 <SidebarTab
                   href="/app/settings/accounts-access"
-                  transient={pathname === "/app/settings/accounts-access"}
+                  selected={pathname === "/app/settings/accounts-access"}
                 >
                   Accounts & Access
                 </SidebarTab>
               )}
               <SidebarTab
                 href="/app/settings/connectors"
-                transient={pathname === "/app/settings/connectors"}
+                selected={pathname === "/app/settings/connectors"}
               >
                 Connectors
               </SidebarTab>

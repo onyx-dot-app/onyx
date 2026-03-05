@@ -1,4 +1,3 @@
-import { HealthCheckBanner } from "@/components/health/healthcheck";
 import { User } from "@/lib/types";
 import {
   getCurrentUserSS,
@@ -105,10 +104,6 @@ export default async function Page(props: PageProps) {
         authState="login"
         footerContent={ssoLoginFooterContent}
       >
-        <div className="absolute top-10x w-full">
-          <HealthCheckBanner />
-        </div>
-
         <LoginPage
           authUrl={authUrl}
           authTypeMetadata={authTypeMetadata}

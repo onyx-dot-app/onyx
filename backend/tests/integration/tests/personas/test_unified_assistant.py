@@ -31,9 +31,8 @@ def test_unified_assistant(reset: None, admin_user: DATestUser) -> None:  # noqa
         "search, web browsing, and image generation"
         in unified_assistant.description.lower()
     )
-    assert unified_assistant.is_default_persona is True
+    assert unified_assistant.featured is True
     assert unified_assistant.is_visible is True
-    assert unified_assistant.num_chunks == 25
 
     # Verify tools
     tools = unified_assistant.tools

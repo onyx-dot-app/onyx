@@ -23,6 +23,8 @@ _ENV_PROVIDER = "NIGHTLY_LLM_PROVIDER"
 _ENV_MODELS = "NIGHTLY_LLM_MODELS"
 _ENV_API_KEY = "NIGHTLY_LLM_API_KEY"
 _ENV_API_BASE = "NIGHTLY_LLM_API_BASE"
+_ENV_API_VERSION = "NIGHTLY_LLM_API_VERSION"
+_ENV_DEPLOYMENT_NAME = "NIGHTLY_LLM_DEPLOYMENT_NAME"
 _ENV_CUSTOM_CONFIG_JSON = "NIGHTLY_LLM_CUSTOM_CONFIG_JSON"
 _ENV_STRICT = "NIGHTLY_LLM_STRICT"
 
@@ -34,8 +36,82 @@ class NightlyProviderConfig(BaseModel):
     model_names: list[str]
     api_key: str | None
     api_base: str | None
+    api_version: str | None
+    deployment_name: str | None
     custom_config: dict[str, str] | None
     strict: bool
+
+
+def _stringify_custom_config_value(value: object) -> str:
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (dict, list)):
+        return json.dumps(value)
+    return str(value)
+
+
+def _looks_like_vertex_credentials_payload(
+    raw_custom_config: dict[object, object],
+) -> bool:
+    normalized_keys = {str(key).strip().lower() for key in raw_custom_config}
+    provider_specific_keys = {
+        "vertex_credentials",
+        "credentials_file",
+        "vertex_credentials_file",
+        "google_application_credentials",
+        "vertex_location",
+        "location",
+        "vertex_region",
+        "region",
+    }
+    if normalized_keys & provider_specific_keys:
+        return False
+
+    normalized_type = str(raw_custom_config.get("type", "")).strip().lower()
+    if normalized_type not in {"service_account", "external_account"}:
+        return False
+
+    # Service account JSON usually includes private_key/client_email, while external
+    # account JSON includes credential_source. Either shape should be accepted.
+    has_service_account_markers = any(
+        key in normalized_keys for key in {"private_key", "client_email"}
+    )
+    has_external_account_markers = "credential_source" in normalized_keys
+    return has_service_account_markers or has_external_account_markers
+
+
+def _normalize_custom_config(
+    provider: str, raw_custom_config: dict[object, object]
+) -> dict[str, str]:
+    if provider == "vertex_ai" and _looks_like_vertex_credentials_payload(
+        raw_custom_config
+    ):
+        return {"vertex_credentials": json.dumps(raw_custom_config)}
+
+    normalized: dict[str, str] = {}
+    for raw_key, raw_value in raw_custom_config.items():
+        key = str(raw_key).strip()
+        key_lower = key.lower()
+
+        if provider == "vertex_ai":
+            if key_lower in {
+                "vertex_credentials",
+                "credentials_file",
+                "vertex_credentials_file",
+                "google_application_credentials",
+            }:
+                key = "vertex_credentials"
+            elif key_lower in {
+                "vertex_location",
+                "location",
+                "vertex_region",
+                "region",
+            }:
+                key = "vertex_location"
+
+        normalized[key] = _stringify_custom_config_value(raw_value)
+
+    return normalized
 
 
 def _env_true(env_var: str, default: bool = False) -> bool:
@@ -66,6 +142,8 @@ def _load_provider_config() -> NightlyProviderConfig:
     model_names = _parse_models_env(_ENV_MODELS)
     api_key = os.environ.get(_ENV_API_KEY) or None
     api_base = os.environ.get(_ENV_API_BASE) or None
+    api_version = os.environ.get(_ENV_API_VERSION) or None
+    deployment_name = os.environ.get(_ENV_DEPLOYMENT_NAME) or None
     strict = _env_true(_ENV_STRICT, default=False)
 
     custom_config: dict[str, str] | None = None
@@ -74,7 +152,9 @@ def _load_provider_config() -> NightlyProviderConfig:
         parsed = json.loads(custom_config_json)
         if not isinstance(parsed, dict):
             raise ValueError(f"{_ENV_CUSTOM_CONFIG_JSON} must be a JSON object")
-        custom_config = {str(key): str(value) for key, value in parsed.items()}
+        custom_config = _normalize_custom_config(
+            provider=provider, raw_custom_config=parsed
+        )
 
     if provider == "ollama_chat" and api_key and not custom_config:
         custom_config = {"OLLAMA_API_KEY": api_key}
@@ -84,6 +164,8 @@ def _load_provider_config() -> NightlyProviderConfig:
         model_names=model_names,
         api_key=api_key,
         api_base=api_base,
+        api_version=api_version,
+        deployment_name=deployment_name,
         custom_config=custom_config,
         strict=strict,
     )
@@ -105,10 +187,15 @@ def _validate_provider_config(config: NightlyProviderConfig) -> None:
             message=f"{_ENV_MODELS} must include at least one model",
         )
 
-    if config.provider != "ollama_chat" and not config.api_key:
+    if config.provider != "ollama_chat" and not (
+        config.api_key or config.custom_config
+    ):
         _skip_or_fail(
             strict=config.strict,
-            message=(f"{_ENV_API_KEY} is required for provider '{config.provider}'"),
+            message=(
+                f"{_ENV_API_KEY} or {_ENV_CUSTOM_CONFIG_JSON} is required for "
+                f"provider '{config.provider}'"
+            ),
         )
 
     if config.provider == "ollama_chat" and not (
@@ -118,6 +205,39 @@ def _validate_provider_config(config: NightlyProviderConfig) -> None:
             strict=config.strict,
             message=(f"{_ENV_API_BASE} is required for provider '{config.provider}'"),
         )
+
+    if config.provider == "azure":
+        if not config.api_base:
+            _skip_or_fail(
+                strict=config.strict,
+                message=(
+                    f"{_ENV_API_BASE} is required for provider '{config.provider}'"
+                ),
+            )
+        if not config.api_version:
+            _skip_or_fail(
+                strict=config.strict,
+                message=(
+                    f"{_ENV_API_VERSION} is required for provider '{config.provider}'"
+                ),
+            )
+
+    if config.provider == "vertex_ai":
+        has_vertex_credentials = bool(
+            config.custom_config and config.custom_config.get("vertex_credentials")
+        )
+        if not has_vertex_credentials:
+            configured_keys = (
+                sorted(config.custom_config.keys()) if config.custom_config else []
+            )
+            _skip_or_fail(
+                strict=config.strict,
+                message=(
+                    f"{_ENV_CUSTOM_CONFIG_JSON} must include 'vertex_credentials' "
+                    f"for provider '{config.provider}'. "
+                    f"Found keys: {configured_keys}"
+                ),
+            )
 
 
 def _assert_integration_mode_enabled() -> None:
@@ -157,13 +277,18 @@ def _create_provider_payload(
     model_name: str,
     api_key: str | None,
     api_base: str | None,
+    api_version: str | None,
+    deployment_name: str | None,
     custom_config: dict[str, str] | None,
 ) -> dict:
     return {
         "name": provider_name,
         "provider": provider,
+        "model": model_name,
         "api_key": api_key,
         "api_base": api_base,
+        "api_version": api_version,
+        "deployment_name": deployment_name,
         "custom_config": custom_config,
         "default_model_name": model_name,
         "is_public": True,
@@ -175,24 +300,23 @@ def _create_provider_payload(
     }
 
 
-def _ensure_provider_is_default(provider_id: int, admin_user: DATestUser) -> None:
+def _ensure_provider_is_default(
+    provider_id: int, model_name: str, admin_user: DATestUser
+) -> None:
     list_response = requests.get(
         f"{API_SERVER_URL}/admin/llm/provider",
         headers=admin_user.headers,
     )
     list_response.raise_for_status()
-    providers = list_response.json()
-
-    current_default = next(
-        (provider for provider in providers if provider.get("is_default_provider")),
-        None,
+    default_text = list_response.json().get("default_text")
+    assert default_text is not None, "Expected a default provider after setting default"
+    assert default_text.get("provider_id") == provider_id, (
+        f"Expected provider {provider_id} to be default, "
+        f"found {default_text.get('provider_id')}"
     )
     assert (
-        current_default is not None
-    ), "Expected a default provider after setting provider as default"
-    assert (
-        current_default["id"] == provider_id
-    ), f"Expected provider {provider_id} to be default, found {current_default['id']}"
+        default_text.get("model_name") == model_name
+    ), f"Expected default model {model_name}, found {default_text.get('model_name')}"
 
 
 def _run_chat_assertions(
@@ -265,6 +389,8 @@ def _create_and_test_provider_for_model(
         model_name=model_name,
         api_key=config.api_key,
         api_base=resolved_api_base,
+        api_version=config.api_version,
+        deployment_name=config.deployment_name,
         custom_config=config.custom_config,
     )
 
@@ -291,8 +417,9 @@ def _create_and_test_provider_for_model(
 
     try:
         set_default_response = requests.post(
-            f"{API_SERVER_URL}/admin/llm/provider/{provider_id}/default",
+            f"{API_SERVER_URL}/admin/llm/default",
             headers=admin_user.headers,
+            json={"provider_id": provider_id, "model_name": model_name},
         )
         assert set_default_response.status_code == 200, (
             f"Setting default provider failed for provider={config.provider} "
@@ -300,7 +427,9 @@ def _create_and_test_provider_for_model(
             f"{set_default_response.text}"
         )
 
-        _ensure_provider_is_default(provider_id=provider_id, admin_user=admin_user)
+        _ensure_provider_is_default(
+            provider_id=provider_id, model_name=model_name, admin_user=admin_user
+        )
         _run_chat_assertions(
             admin_user=admin_user,
             search_tool_id=search_tool_id,

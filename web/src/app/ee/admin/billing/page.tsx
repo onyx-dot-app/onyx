@@ -1,6 +1,6 @@
-import { AdminPageTitle } from "@/components/admin/Title";
+import * as SettingsLayouts from "@/layouts/settings-layouts";
 import BillingInformationPage from "./BillingInformationPage";
-import { MdOutlineCreditCard } from "react-icons/md";
+import { SvgCreditCard } from "@opal/icons";
 
 export interface BillingInformation {
   stripe_subscription_id: string;
@@ -18,12 +18,15 @@ export interface BillingInformation {
 
 export default function page() {
   return (
-    <>
-      <AdminPageTitle
+    <SettingsLayouts.Root>
+      <SettingsLayouts.Header
+        icon={SvgCreditCard}
         title="Billing Information"
-        icon={<MdOutlineCreditCard size={32} className="my-auto" />}
+        separator
       />
-      <BillingInformationPage />
-    </>
+      <SettingsLayouts.Body>
+        <BillingInformationPage />
+      </SettingsLayouts.Body>
+    </SettingsLayouts.Root>
   );
 }

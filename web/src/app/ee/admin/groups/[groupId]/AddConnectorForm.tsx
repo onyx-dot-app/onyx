@@ -1,4 +1,4 @@
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import Modal from "@/refresh-components/Modal";
 import { useState } from "react";
 import { updateUserGroup } from "./lib";

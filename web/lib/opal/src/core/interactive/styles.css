@@ -419,3 +419,23 @@
   ) {
   @apply bg-background-tint-00;
 }
+
+/* ---------------------------------------------------------------------------
+   Sidebar + Light
+   --------------------------------------------------------------------------- */
+.interactive[data-interactive-base-variant="sidebar"][data-interactive-base-prominence="light"] {
+  @apply bg-transparent;
+}
+.interactive[data-interactive-base-variant="sidebar"][data-interactive-base-prominence="light"]:hover:not(
+    [data-disabled]
+  ),
+.interactive[data-interactive-base-variant="sidebar"][data-interactive-base-prominence="light"][data-transient="true"]:not(
+    [data-disabled]
+  ) {
+  @apply bg-background-tint-03;
+}
+.interactive[data-interactive-base-variant="sidebar"][data-interactive-base-prominence="light"][data-selected="true"]:not(
+    [data-disabled]
+  ) {
+  @apply bg-background-tint-00;
+}

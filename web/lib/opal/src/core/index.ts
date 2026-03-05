@@ -11,7 +11,8 @@ export {
   Interactive,
   type InteractiveBaseProps,
   type InteractiveBaseVariantProps,
+  type InteractiveBaseSidebarVariantProps,
+  type InteractiveBaseSidebarProminenceTypes,
   type InteractiveContainerProps,
-  type InteractiveContainerWidthVariant,
   type InteractiveContainerRoundingVariant,
 } from "@opal/core/interactive/components";

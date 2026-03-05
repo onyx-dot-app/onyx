@@ -18,11 +18,8 @@ from sqlalchemy.orm import Session
 from onyx.access.hierarchy_access import get_user_external_group_ids
 from onyx.auth.schemas import UserRole
 from onyx.configs.app_configs import CURATORS_CANNOT_VIEW_OR_EDIT_NON_OWNED_ASSISTANTS
-from onyx.configs.chat_configs import CONTEXT_CHUNKS_ABOVE
-from onyx.configs.chat_configs import CONTEXT_CHUNKS_BELOW
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.constants import NotificationType
-from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.constants import SLACK_BOT_PERSONA_PREFIX
 from onyx.db.document_access import get_accessible_documents_by_ids
 from onyx.db.models import ConnectorCredentialPair
@@ -254,13 +251,15 @@ def create_update_persona(
     # Permission to actually use these is checked later
 
     try:
-        # Default persona validation
-        if create_persona_request.is_default_persona:
-            # Curators can edit default personas, but not make them
+        # Featured persona validation
+        if create_persona_request.featured:
+
+            # Curators can edit featured personas, but not make them
+            # TODO this will be reworked soon with RBAC permissions feature
             if user.role == UserRole.CURATOR or user.role == UserRole.GLOBAL_CURATOR:
                 pass
             elif user.role != UserRole.ADMIN:
-                raise ValueError("Only admins can make a default persona")
+                raise ValueError("Only admins can make a featured persona")
 
         # Convert incoming string UUIDs to UUID objects for DB operations
         converted_user_file_ids = None
@@ -281,7 +280,6 @@ def create_update_persona(
             document_set_ids=create_persona_request.document_set_ids,
             tool_ids=create_persona_request.tool_ids,
             is_public=create_persona_request.is_public,
-            recency_bias=create_persona_request.recency_bias,
             llm_model_provider_override=create_persona_request.llm_model_provider_override,
             llm_model_version_override=create_persona_request.llm_model_version_override,
             starter_messages=create_persona_request.starter_messages,
@@ -295,10 +293,7 @@ def create_update_persona(
             remove_image=create_persona_request.remove_image,
             search_start_date=create_persona_request.search_start_date,
             label_ids=create_persona_request.label_ids,
-            num_chunks=create_persona_request.num_chunks,
-            llm_relevance_filter=create_persona_request.llm_relevance_filter,
-            llm_filter_extraction=create_persona_request.llm_filter_extraction,
-            is_default_persona=create_persona_request.is_default_persona,
+            featured=create_persona_request.featured,
             user_file_ids=converted_user_file_ids,
             commit=False,
             hierarchy_node_ids=create_persona_request.hierarchy_node_ids,
@@ -874,10 +869,6 @@ def upsert_persona(
     user: User | None,
     name: str,
     description: str,
-    num_chunks: float,
-    llm_relevance_filter: bool,
-    llm_filter_extraction: bool,
-    recency_bias: RecencyBiasSetting,
     llm_model_provider_override: str | None,
     llm_model_version_override: str | None,
     starter_messages: list[StarterMessage] | None,
@@ -898,13 +889,11 @@ def upsert_persona(
     remove_image: bool | None = None,
     search_start_date: datetime | None = None,
     builtin_persona: bool = False,
-    is_default_persona: bool | None = None,
+    featured: bool | None = None,
     label_ids: list[int] | None = None,
     user_file_ids: list[UUID] | None = None,
     hierarchy_node_ids: list[int] | None = None,
     document_ids: list[str] | None = None,
-    chunks_above: int = CONTEXT_CHUNKS_ABOVE,
-    chunks_below: int = CONTEXT_CHUNKS_BELOW,
     replace_base_system_prompt: bool = False,
 ) -> Persona:
     """
@@ -1015,12 +1004,6 @@ def upsert_persona(
         # `default` and `built-in` properties can only be set when creating a persona.
         existing_persona.name = name
         existing_persona.description = description
-        existing_persona.num_chunks = num_chunks
-        existing_persona.chunks_above = chunks_above
-        existing_persona.chunks_below = chunks_below
-        existing_persona.llm_relevance_filter = llm_relevance_filter
-        existing_persona.llm_filter_extraction = llm_filter_extraction
-        existing_persona.recency_bias = recency_bias
         existing_persona.llm_model_provider_override = llm_model_provider_override
         existing_persona.llm_model_version_override = llm_model_version_override
         existing_persona.starter_messages = starter_messages
@@ -1034,10 +1017,8 @@ def upsert_persona(
         if label_ids is not None:
             existing_persona.labels.clear()
             existing_persona.labels = labels or []
-        existing_persona.is_default_persona = (
-            is_default_persona
-            if is_default_persona is not None
-            else existing_persona.is_default_persona
+        existing_persona.featured = (
+            featured if featured is not None else existing_persona.featured
         )
         # Update embedded prompt fields if provided
         if system_prompt is not None:
@@ -1090,12 +1071,6 @@ def upsert_persona(
             is_public=is_public,
             name=name,
             description=description,
-            num_chunks=num_chunks,
-            chunks_above=chunks_above,
-            chunks_below=chunks_below,
-            llm_relevance_filter=llm_relevance_filter,
-            llm_filter_extraction=llm_filter_extraction,
-            recency_bias=recency_bias,
             builtin_persona=builtin_persona,
             system_prompt=system_prompt or "",
             task_prompt=task_prompt or "",
@@ -1111,9 +1086,7 @@ def upsert_persona(
             display_priority=display_priority,
             is_visible=is_visible,
             search_start_date=search_start_date,
-            is_default_persona=(
-                is_default_persona if is_default_persona is not None else False
-            ),
+            featured=(featured if featured is not None else False),
             user_files=user_files or [],
             labels=labels or [],
             hierarchy_nodes=hierarchy_nodes or [],
@@ -1158,9 +1131,9 @@ def delete_old_default_personas(
     db_session.commit()
 
 
-def update_persona_is_default(
+def update_persona_featured(
     persona_id: int,
-    is_default: bool,
+    featured: bool,
     db_session: Session,
     user: User,
 ) -> None:
@@ -1168,7 +1141,7 @@ def update_persona_is_default(
         db_session=db_session, persona_id=persona_id, user=user, get_editable=True
     )
 
-    persona.is_default_persona = is_default
+    persona.featured = featured
     db_session.commit()
 
 

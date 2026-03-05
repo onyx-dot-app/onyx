@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from ee.onyx.server.user_group.models import SetCuratorRequest
 from ee.onyx.server.user_group.models import UserGroupCreate
 from ee.onyx.server.user_group.models import UserGroupUpdate
+from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
@@ -471,7 +472,9 @@ def _add_user_group__cc_pair_relationships__no_commit(
 
 def insert_user_group(db_session: Session, user_group: UserGroupCreate) -> UserGroup:
     db_user_group = UserGroup(
-        name=user_group.name, time_last_modified_by_user=func.now()
+        name=user_group.name,
+        time_last_modified_by_user=func.now(),
+        is_up_to_date=DISABLE_VECTOR_DB,
     )
     db_session.add(db_user_group)
     db_session.flush()  # give the group an ID
@@ -774,8 +777,7 @@ def update_user_group(
             cc_pair_ids=user_group_update.cc_pair_ids,
         )
 
-    # only needs to sync with Vespa if the cc_pairs have been updated
-    if cc_pairs_updated:
+    if cc_pairs_updated and not DISABLE_VECTOR_DB:
         db_user_group.is_up_to_date = False
 
     removed_users = db_session.scalars(

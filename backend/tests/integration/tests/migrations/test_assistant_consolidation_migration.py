@@ -25,7 +25,7 @@ def test_cold_startup_default_assistant() -> None:
         result = db_session.execute(
             text(
                 """
-                SELECT id, name, builtin_persona, is_default_persona, deleted
+                SELECT id, name, builtin_persona, featured, deleted
                 FROM persona
                 WHERE builtin_persona = true
                 ORDER BY id
@@ -40,7 +40,7 @@ def test_cold_startup_default_assistant() -> None:
         assert default[0] == 0, "Default assistant should have ID 0"
         assert default[1] == "Assistant", "Should be named 'Assistant'"
         assert default[2] is True, "Should be builtin"
-        assert default[3] is True, "Should be default"
+        assert default[3] is True, "Should be featured"
         assert default[4] is False, "Should not be deleted"
 
         # Check tools are properly associated
@@ -72,6 +72,9 @@ def test_cold_startup_default_assistant() -> None:
         assert (
             "read_file" in tool_names
         ), "Default assistant should have FileReaderTool attached"
+        assert (
+            "python" in tool_names
+        ), "Default assistant should have PythonTool attached"
 
         # Also verify by display names for clarity
         assert (
@@ -86,8 +89,11 @@ def test_cold_startup_default_assistant() -> None:
         assert (
             "File Reader" in tool_display_names
         ), "Default assistant should have File Reader tool"
-
-        # Should have exactly 5 tools
         assert (
-            len(tool_associations) == 5
-        ), f"Default assistant should have exactly 5 tools attached, got {len(tool_associations)}"
+            "Code Interpreter" in tool_display_names
+        ), "Default assistant should have Code Interpreter tool"
+
+        # Should have exactly 6 tools
+        assert (
+            len(tool_associations) == 6
+        ), f"Default assistant should have exactly 6 tools attached, got {len(tool_associations)}"

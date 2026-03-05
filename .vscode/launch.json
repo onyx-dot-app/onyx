@@ -40,19 +40,7 @@
       }
     },
     {
-      "name": "Celery (lightweight mode)",
-      "configurations": [
-        "Celery primary",
-        "Celery background",
-        "Celery beat"
-      ],
-      "presentation": {
-        "group": "1"
-      },
-      "stopAll": true
-    },
-    {
-      "name": "Celery (standard mode)",
+      "name": "Celery",
       "configurations": [
         "Celery primary",
         "Celery light",
@@ -252,35 +240,6 @@
         "group": "2"
       },
       "consoleTitle": "Celery light Console"
-    },
-    {
-      "name": "Celery background",
-      "type": "debugpy",
-      "request": "launch",
-      "module": "celery",
-      "cwd": "${workspaceFolder}/backend",
-      "envFile": "${workspaceFolder}/.vscode/.env",
-      "env": {
-        "LOG_LEVEL": "INFO",
-        "PYTHONUNBUFFERED": "1",
-        "PYTHONPATH": "."
-      },
-      "args": [
-        "-A",
-        "onyx.background.celery.versioned_apps.background",
-        "worker",
-        "--pool=threads",
-        "--concurrency=20",
-        "--prefetch-multiplier=4",
-        "--loglevel=INFO",
-        "--hostname=background@%n",
-        "-Q",
-        "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,checkpoint_cleanup,index_attempt_cleanup,docprocessing,connector_doc_fetching,connector_pruning,connector_doc_permissions_sync,connector_external_group_sync,csv_generation,kg_processing,monitoring,user_file_processing,user_file_project_sync,user_file_delete,opensearch_migration"
-      ],
-      "presentation": {
-        "group": "2"
-      },
-      "consoleTitle": "Celery background Console"
     },
     {
       "name": "Celery heavy",

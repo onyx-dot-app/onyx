@@ -35,7 +35,7 @@ import {
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 import { getSourceMetadata } from "@/lib/sources";
 import { deleteConnector } from "@/app/craft/services/apiServices";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import {
   OAUTH_STATE_KEY,
   getDemoDataEnabled,
@@ -46,7 +46,7 @@ import Switch from "@/refresh-components/inputs/Switch";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import NotAllowedModal from "@/app/craft/onboarding/components/NotAllowedModal";
 import { useOnboarding } from "@/app/craft/onboarding/BuildOnboardingProvider";
-import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
+import { useLLMProviders } from "@/hooks/useLLMProviders";
 import { useUser } from "@/providers/UserProvider";
 import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
 import {
@@ -377,7 +377,7 @@ export default function BuildConfigPage() {
           rightChildren={
             <div className="flex items-center gap-2">
               <Button
-                secondary
+                prominence="secondary"
                 onClick={handleRestoreChanges}
                 disabled={!hasChanges || isUpdating}
               >

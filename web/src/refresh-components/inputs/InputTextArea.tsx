@@ -53,6 +53,7 @@ export interface InputTextAreaProps
   autoResize?: boolean;
   maxRows?: number;
   resizable?: boolean;
+  rightSection?: React.ReactNode;
 }
 const InputTextArea = React.forwardRef<HTMLTextAreaElement, InputTextAreaProps>(
   (
@@ -64,6 +65,7 @@ const InputTextArea = React.forwardRef<HTMLTextAreaElement, InputTextAreaProps>(
       autoResize = false,
       maxRows,
       resizable = true,
+      rightSection,
       ...props
     },
     ref
@@ -122,7 +124,7 @@ const InputTextArea = React.forwardRef<HTMLTextAreaElement, InputTextAreaProps>(
           disabled={disabled}
           readOnly={isReadOnly}
           className={cn(
-            "w-full min-h-[3rem] bg-transparent focus:outline-none p-0.5",
+            "w-full min-w-0 flex-1 min-h-[3rem] bg-transparent focus:outline-none p-0.5",
             resizeClass,
             innerClasses[variant],
             textClasses[variant]
@@ -130,6 +132,11 @@ const InputTextArea = React.forwardRef<HTMLTextAreaElement, InputTextAreaProps>(
           rows={rows}
           {...props}
         />
+        {rightSection && (
+          <div className="shrink-0 self-start -my-1 -mr-1 font-sans text-base">
+            {rightSection}
+          </div>
+        )}
       </div>
     );
   }

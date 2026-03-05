@@ -146,7 +146,6 @@ services:
       - indexing_model_server
     restart: unless-stopped
     environment:
-      - USE_LIGHTWEIGHT_BACKGROUND_WORKER=${USE_LIGHTWEIGHT_BACKGROUND_WORKER:-true}
       - FILE_STORE_BACKEND=${FILE_STORE_BACKEND:-s3}
       - POSTGRES_HOST=${POSTGRES_HOST:-relational_db}
       - VESPA_HOST=${VESPA_HOST:-index}
@@ -520,7 +519,7 @@ services:
       - minio_data:/data
     command: server /data --console-address ":9001"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: ["CMD", "mc", "ready", "local"]
       interval: 30s
       timeout: 20s
       retries: 3

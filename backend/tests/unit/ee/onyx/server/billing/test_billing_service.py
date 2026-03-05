@@ -14,7 +14,8 @@ from ee.onyx.server.billing.models import CreateCheckoutSessionResponse
 from ee.onyx.server.billing.models import CreateCustomerPortalSessionResponse
 from ee.onyx.server.billing.models import SeatUpdateResponse
 from ee.onyx.server.billing.models import SubscriptionStatusResponse
-from ee.onyx.server.billing.service import BillingServiceError
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 
 
 class TestMakeBillingRequest:
@@ -78,7 +79,7 @@ class TestMakeBillingRequest:
         mock_base_url: MagicMock,
         mock_headers: MagicMock,
     ) -> None:
-        """Should raise BillingServiceError on HTTP error."""
+        """Should raise OnyxError on HTTP error."""
         from ee.onyx.server.billing.service import _make_billing_request
 
         mock_base_url.return_value = "https://api.example.com"
@@ -91,7 +92,7 @@ class TestMakeBillingRequest:
         mock_client = make_mock_http_client("post", side_effect=error)
 
         with patch("httpx.AsyncClient", mock_client):
-            with pytest.raises(BillingServiceError) as exc_info:
+            with pytest.raises(OnyxError) as exc_info:
                 await _make_billing_request(
                     method="POST",
                     path="/test",
@@ -99,6 +100,7 @@ class TestMakeBillingRequest:
                 )
 
         assert exc_info.value.status_code == 400
+        assert exc_info.value.error_code is OnyxErrorCode.BAD_GATEWAY
         assert "Bad request" in exc_info.value.message
 
     @pytest.mark.asyncio
@@ -136,7 +138,7 @@ class TestMakeBillingRequest:
         mock_base_url: MagicMock,
         mock_headers: MagicMock,
     ) -> None:
-        """Should raise BillingServiceError on connection error."""
+        """Should raise OnyxError on connection error."""
         from ee.onyx.server.billing.service import _make_billing_request
 
         mock_base_url.return_value = "https://api.example.com"
@@ -145,10 +147,11 @@ class TestMakeBillingRequest:
         mock_client = make_mock_http_client("post", side_effect=error)
 
         with patch("httpx.AsyncClient", mock_client):
-            with pytest.raises(BillingServiceError) as exc_info:
+            with pytest.raises(OnyxError) as exc_info:
                 await _make_billing_request(method="POST", path="/test")
 
         assert exc_info.value.status_code == 502
+        assert exc_info.value.error_code is OnyxErrorCode.BAD_GATEWAY
         assert "Failed to connect" in exc_info.value.message
 
 

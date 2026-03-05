@@ -15,7 +15,9 @@ from uuid import UUID
 
 from fastapi import APIRouter
 from fastapi import Depends
+from fastapi import FastAPI
 from fastapi import Query
+from fastapi import Request
 from fastapi import Response
 from fastapi.responses import JSONResponse
 from fastapi_users.password import PasswordHelper
@@ -24,6 +26,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.scim import ScimDAL
+from ee.onyx.server.scim.auth import ScimAuthError
 from ee.onyx.server.scim.auth import verify_scim_token
 from ee.onyx.server.scim.filtering import parse_scim_filter
 from ee.onyx.server.scim.models import SCIM_LIST_RESPONSE_SCHEMA
@@ -75,6 +78,22 @@ class ScimJSONResponse(JSONResponse):
 scim_router = APIRouter(prefix="/scim/v2", tags=["SCIM"])
 
 _pw_helper = PasswordHelper()
+
+
+def register_scim_exception_handlers(app: FastAPI) -> None:
+    """Register SCIM-specific exception handlers on the FastAPI app.
+
+    Call this after ``app.include_router(scim_router)`` so that auth
+    failures from ``verify_scim_token`` return RFC 7644 §3.12 error
+    envelopes (with ``schemas`` and ``status`` fields) instead of
+    FastAPI's default ``{"detail": "..."}`` format.
+    """
+
+    @app.exception_handler(ScimAuthError)
+    async def _handle_scim_auth_error(
+        _request: Request, exc: ScimAuthError
+    ) -> ScimJSONResponse:
+        return _scim_error_response(exc.status_code, exc.detail)
 
 
 def _get_provider(
@@ -322,6 +341,7 @@ def list_users(
     """List users with optional SCIM filter and pagination."""
     dal = ScimDAL(db_session)
     dal.update_token_last_used(_token.id)
+    dal.commit()
 
     try:
         scim_filter = parse_scim_filter(filter)
@@ -365,6 +385,7 @@ def get_user(
     """Get a single user by ID."""
     dal = ScimDAL(db_session)
     dal.update_token_last_used(_token.id)
+    dal.commit()
 
     result = _fetch_user_or_404(user_id, dal)
     if isinstance(result, ScimJSONResponse):
@@ -402,20 +423,62 @@ def create_user(
 
     email = user_resource.userName.strip()
 
-    # externalId is how the IdP correlates this user on subsequent requests.
-    # Without it, the IdP can't find the user and will try to re-create,
-    # hitting a 409 conflict — so we require it up front.
-    if not user_resource.externalId:
-        return _scim_error_response(400, "externalId is required")
+    # Check for existing user — if they exist but aren't SCIM-managed yet,
+    # link them to the IdP rather than rejecting with 409.
+    external_id: str | None = user_resource.externalId
+    scim_username: str = user_resource.userName.strip()
+    fields: ScimMappingFields = _fields_from_resource(user_resource)
 
-    # Enforce seat limit
+    existing_user = dal.get_user_by_email(email)
+    if existing_user:
+        existing_mapping = dal.get_user_mapping_by_user_id(existing_user.id)
+        if existing_mapping:
+            return _scim_error_response(409, f"User with email {email} already exists")
+
+        # Adopt pre-existing user into SCIM management.
+        # Reactivating a deactivated user consumes a seat, so enforce the
+        # seat limit the same way replace_user does.
+        if user_resource.active and not existing_user.is_active:
+            seat_error = _check_seat_availability(dal)
+            if seat_error:
+                return _scim_error_response(403, seat_error)
+
+        personal_name = _scim_name_to_str(user_resource.name)
+        dal.update_user(
+            existing_user,
+            is_active=user_resource.active,
+            **({"personal_name": personal_name} if personal_name else {}),
+        )
+
+        try:
+            dal.create_user_mapping(
+                external_id=external_id,
+                user_id=existing_user.id,
+                scim_username=scim_username,
+                fields=fields,
+            )
+            dal.commit()
+        except IntegrityError:
+            dal.rollback()
+            return _scim_error_response(
+                409, f"User with email {email} already has a SCIM mapping"
+            )
+
+        return _scim_resource_response(
+            provider.build_user_resource(
+                existing_user,
+                external_id,
+                scim_username=scim_username,
+                fields=fields,
+            ),
+            status_code=201,
+        )
+
+    # Only enforce seat limit for net-new users — adopting a pre-existing
+    # user doesn't consume a new seat.
     seat_error = _check_seat_availability(dal)
     if seat_error:
         return _scim_error_response(403, seat_error)
-
-    # Check for existing user
-    if dal.get_user_by_email(email):
-        return _scim_error_response(409, f"User with email {email} already exists")
 
     # Create user with a random password (SCIM users authenticate via IdP)
     personal_name = _scim_name_to_str(user_resource.name)
@@ -434,18 +497,21 @@ def create_user(
         dal.rollback()
         return _scim_error_response(409, f"User with email {email} already exists")
 
-    # Create SCIM mapping (externalId is validated above, always present)
-    external_id = user_resource.externalId
-    scim_username = user_resource.userName.strip()
-    fields = _fields_from_resource(user_resource)
-    dal.create_user_mapping(
-        external_id=external_id,
-        user_id=user.id,
-        scim_username=scim_username,
-        fields=fields,
-    )
-
-    dal.commit()
+    # Always create a SCIM mapping so that the user is marked as
+    # SCIM-managed. externalId may be None (RFC 7643 says it's optional).
+    try:
+        dal.create_user_mapping(
+            external_id=external_id,
+            user_id=user.id,
+            scim_username=scim_username,
+            fields=fields,
+        )
+        dal.commit()
+    except IntegrityError:
+        dal.rollback()
+        return _scim_error_response(
+            409, f"User with email {email} already has a SCIM mapping"
+        )
 
     return _scim_resource_response(
         provider.build_user_resource(
@@ -721,6 +787,7 @@ def list_groups(
     """List groups with optional SCIM filter and pagination."""
     dal = ScimDAL(db_session)
     dal.update_token_last_used(_token.id)
+    dal.commit()
 
     try:
         scim_filter = parse_scim_filter(filter)
@@ -757,6 +824,7 @@ def get_group(
     """Get a single group by ID."""
     dal = ScimDAL(db_session)
     dal.update_token_last_used(_token.id)
+    dal.commit()
 
     result = _fetch_group_or_404(group_id, dal)
     if isinstance(result, ScimJSONResponse):

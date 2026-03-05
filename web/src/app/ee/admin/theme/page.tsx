@@ -1,8 +1,8 @@
 "use client";
 
 import * as SettingsLayouts from "@/layouts/settings-layouts";
-import { SvgPaintBrush } from "@opal/icons";
-import Button from "@/refresh-components/buttons/Button";
+import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
+import { Button } from "@opal/components";
 import {
   AppearanceThemeSettings,
   AppearanceThemeSettingsRef,
@@ -14,6 +14,8 @@ import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { EnterpriseSettings } from "@/interfaces/settings";
 import { useRouter } from "next/navigation";
+
+const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.THEME]!;
 
 const CHAR_LIMITS = {
   application_name: 50,
@@ -211,9 +213,9 @@ export default function ThemePage() {
           <Form className="w-full h-full">
             <SettingsLayouts.Root>
               <SettingsLayouts.Header
-                title="Appearance & Theming"
+                title={route.title}
                 description="Customize how the application appears to users across your organization."
-                icon={SvgPaintBrush}
+                icon={route.icon}
                 rightChildren={
                   <Button
                     type="button"

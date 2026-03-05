@@ -1,6 +1,9 @@
 "use client";
 
-import { MOBILE_SIDEBAR_BREAKPOINT_PX } from "@/lib/constants";
+import {
+  DESKTOP_SMALL_BREAKPOINT_PX,
+  MOBILE_SIDEBAR_BREAKPOINT_PX,
+} from "@/lib/constants";
 import { useState, useCallback } from "react";
 import useOnMount from "@/hooks/useOnMount";
 
@@ -8,6 +11,7 @@ export interface ScreenSize {
   height: number;
   width: number;
   isMobile: boolean;
+  isSmallScreen: boolean;
 }
 
 export default function useScreenSize(): ScreenSize {
@@ -29,10 +33,12 @@ export default function useScreenSize(): ScreenSize {
   });
 
   const isMobile = sizes.width <= MOBILE_SIDEBAR_BREAKPOINT_PX;
+  const isSmall = sizes.width <= DESKTOP_SMALL_BREAKPOINT_PX;
 
   return {
     height: sizes.height,
     width: sizes.width,
-    isMobile: isMounted ? isMobile : false,
+    isMobile: isMounted && isMobile,
+    isSmallScreen: isMounted && isSmall,
   };
 }

@@ -1,13 +1,13 @@
-import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
+import { LLMProviderDescriptor } from "@/interfaces/llm";
 
 export function makeProvider(
   overrides: Partial<LLMProviderDescriptor>
 ): LLMProviderDescriptor {
   return {
+    id: overrides.id ?? 1,
     name: overrides.name ?? "Provider",
     provider: overrides.provider ?? "openai",
-    default_model_name: overrides.default_model_name ?? "default-model",
-    is_default_provider: overrides.is_default_provider ?? false,
+    provider_display_name: overrides.provider_display_name ?? "Provider",
     model_configurations: overrides.model_configurations ?? [],
     ...overrides,
   };

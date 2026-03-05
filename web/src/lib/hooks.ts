@@ -23,23 +23,22 @@ import {
 } from "react";
 import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
 import { SourceMetadata } from "./search/interfaces";
-import { parseLlmDescriptor } from "./llm/utils";
+import { parseLlmDescriptor } from "./llmConfig/utils";
 import { ChatSession } from "@/app/app/interfaces";
-import { AllUsersResponse } from "./types";
 import { Credential } from "./connectors/credentials";
 import { SettingsContext } from "@/providers/SettingsProvider";
 import {
   MinimalPersonaSnapshot,
   PersonaLabel,
-} from "@/app/admin/assistants/interfaces";
-import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
+} from "@/app/admin/agents/interfaces";
+import { DefaultModel, LLMProviderDescriptor } from "@/interfaces/llm";
 import { isAnthropic } from "@/app/admin/configuration/llm/utils";
 import { getSourceMetadataForSources } from "./sources";
 import { AuthType, NEXT_PUBLIC_CLOUD_ENABLED } from "./constants";
 import { useUser } from "@/providers/UserProvider";
 import { SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
 import { updateTemperatureOverrideForChatSession } from "@/app/app/services/lib";
-import { useLLMProviders } from "./hooks/useLLMProviders";
+import { useLLMProviders } from "@/hooks/useLLMProviders";
 
 const CREDENTIAL_URL = "/api/manage/admin/credential";
 
@@ -93,7 +92,8 @@ const CONNECTOR_STATUS_URL = "/api/manage/admin/connector/status";
 
 export const useConnectorIndexingStatusWithPagination = (
   filters: Omit<IndexingStatusRequest, "source" | "source_to_page"> = {},
-  refreshInterval = 30000
+  refreshInterval = 30000,
+  enabled: boolean = true
 ) => {
   const { mutate } = useSWRConfig();
   //maintains the current page for each source
@@ -125,7 +125,9 @@ export const useConnectorIndexingStatusWithPagination = (
     [filters]
   );
 
-  const swrKey = [INDEXING_STATUS_URL, JSON.stringify(mainRequest)];
+  const swrKey = enabled
+    ? [INDEXING_STATUS_URL, JSON.stringify(mainRequest)]
+    : null;
 
   // Main data fetch with auto-refresh
   const { data, isLoading, error } = useSWR<
@@ -188,7 +190,7 @@ export const useConnectorIndexingStatusWithPagination = (
 
   // Function to refresh all data (maintains current pagination)
   const refreshAllData = useCallback(() => {
-    mutate(swrKey);
+    if (swrKey) mutate(swrKey);
   }, [mutate, swrKey]);
 
   // Reset pagination when filters change (but not search)
@@ -208,27 +210,33 @@ export const useConnectorIndexingStatusWithPagination = (
   };
 };
 
-export const useConnectorStatus = (refreshInterval = 30000) => {
+export const useConnectorStatus = (
+  refreshInterval = 30000,
+  enabled: boolean = true
+) => {
   const { mutate } = useSWRConfig();
   const url = CONNECTOR_STATUS_URL;
   const swrResponse = useSWR<ConnectorStatus<any, any>[]>(
-    url,
+    enabled ? url : null,
     errorHandlingFetcher,
     { refreshInterval: refreshInterval }
   );
 
   return {
     ...swrResponse,
-    refreshIndexingStatus: () => mutate(url),
+    refreshIndexingStatus: enabled ? () => mutate(url) : () => {},
   };
 };
 
-export const useBasicConnectorStatus = () => {
+export const useBasicConnectorStatus = (enabled: boolean = true) => {
   const url = "/api/manage/connector-status";
-  const swrResponse = useSWR<CCPairBasicInfo[]>(url, errorHandlingFetcher);
+  const swrResponse = useSWR<CCPairBasicInfo[]>(
+    enabled ? url : null,
+    errorHandlingFetcher
+  );
   return {
     ...swrResponse,
-    refreshIndexingStatus: () => mutate(url),
+    refreshIndexingStatus: enabled ? () => mutate(url) : () => {},
   };
 };
 
@@ -484,7 +492,7 @@ export interface LlmManager {
   updateModelOverrideBasedOnChatSession: (chatSession?: ChatSession) => void;
   imageFilesPresent: boolean;
   updateImageFilesPresent: (present: boolean) => void;
-  liveAssistant: MinimalPersonaSnapshot | null;
+  liveAgent: MinimalPersonaSnapshot | null;
   maxTemperature: number;
   llmProviders: LLMProviderDescriptor[] | undefined;
   isLoadingProviders: boolean;
@@ -512,8 +520,8 @@ Thus, the input should be
 - Current assistant
 
 Changes take place as
-- liveAssistant or currentChatSession changes (and the associated model override is set)
-- (updateCurrentLlm) User explicitly setting a model override (and we explicitly override and set the userSpecifiedOverride which we'll use in place of the user preferences unless overridden by an assistant)
+- liveAgent or currentChatSession changes (and the associated model override is set)
+- (updateCurrentLlm) User explicitly setting a model override (and we explicitly override and set the userSpecifiedOverride which we'll use in place of the user preferences unless overridden by an agent)
 
 If we have a live assistant, we should use that model override
 
@@ -533,26 +541,31 @@ providing appropriate defaults for new conversations based on the available tool
 */
 
 export function getDefaultLlmDescriptor(
-  llmProviders: LLMProviderDescriptor[]
+  llmProviders: LLMProviderDescriptor[],
+  defaultText?: DefaultModel | null
 ): LlmDescriptor | null {
-  const defaultProvider = llmProviders.find(
-    (provider) => provider.is_default_provider
-  );
-  if (defaultProvider) {
-    return {
-      name: defaultProvider.name,
-      provider: defaultProvider.provider,
-      modelName: defaultProvider.default_model_name,
-    };
+  if (defaultText) {
+    const provider = llmProviders.find((p) => p.id === defaultText.provider_id);
+    if (provider) {
+      return {
+        name: provider.name,
+        provider: provider.provider,
+        modelName: defaultText.model_name,
+      };
+    }
   }
+  // Fallback: first provider with visible models
   const firstLlmProvider = llmProviders.find(
     (provider) => provider.model_configurations.length > 0
   );
   if (firstLlmProvider) {
+    const firstModel = firstLlmProvider.model_configurations.find(
+      (m) => m.is_visible
+    );
     return {
       name: firstLlmProvider.name,
       provider: firstLlmProvider.provider,
-      modelName: firstLlmProvider.default_model_name,
+      modelName: firstModel?.name ?? "",
     };
   }
   return null;
@@ -631,25 +644,30 @@ export function getValidLlmDescriptorForProviders(
 
 export function useLlmManager(
   currentChatSession?: ChatSession,
-  liveAssistant?: MinimalPersonaSnapshot
+  liveAgent?: MinimalPersonaSnapshot
 ): LlmManager {
   const { user } = useUser();
 
   // Get all user-accessible providers via SWR (general providers - no persona filter)
   // This includes public + all restricted providers user can access via groups
-  const { llmProviders: allUserProviders, isLoading: isLoadingAllProviders } =
-    useLLMProviders();
+  const {
+    llmProviders: allUserProviders,
+    defaultText: allUserDefaultText,
+    isLoading: isLoadingAllProviders,
+  } = useLLMProviders();
   // Fetch persona-specific providers to enforce RBAC restrictions per assistant
-  // Only fetch if we have an assistant selected
-  const personaId =
-    liveAssistant?.id !== undefined ? liveAssistant.id : undefined;
+  // Only fetch if we have an agent selected
+  const personaId = liveAgent?.id !== undefined ? liveAgent.id : undefined;
   const {
     llmProviders: personaProviders,
+    defaultText: personaDefaultText,
     isLoading: isLoadingPersonaProviders,
   } = useLLMProviders(personaId);
 
   const llmProviders =
     personaProviders !== undefined ? personaProviders : allUserProviders;
+  const defaultText =
+    personaProviders !== undefined ? personaDefaultText : allUserDefaultText;
 
   const [userHasManuallyOverriddenLLM, setUserHasManuallyOverriddenLLM] =
     useState(false);
@@ -661,20 +679,20 @@ export function useLlmManager(
   });
 
   // Track the previous assistant ID to detect when it changes
-  const prevAssistantIdRef = useRef<number | undefined>(undefined);
+  const prevAgentIdRef = useRef<number | undefined>(undefined);
 
   // Reset manual override when switching to a different assistant
   useEffect(() => {
     if (
-      liveAssistant?.id !== undefined &&
-      prevAssistantIdRef.current !== undefined &&
-      liveAssistant.id !== prevAssistantIdRef.current
+      liveAgent?.id !== undefined &&
+      prevAgentIdRef.current !== undefined &&
+      liveAgent.id !== prevAgentIdRef.current
     ) {
       // User switched to a different assistant - reset manual override
       setUserHasManuallyOverriddenLLM(false);
     }
-    prevAssistantIdRef.current = liveAssistant?.id;
-  }, [liveAssistant?.id]);
+    prevAgentIdRef.current = liveAgent?.id;
+  }, [liveAgent?.id]);
 
   const llmUpdate = () => {
     /* Should be called when the live assistant or current chat session changes */
@@ -697,9 +715,9 @@ export function useLlmManager(
         setCurrentLlm(
           getValidLlmDescriptor(currentChatSession.current_alternate_model)
         );
-      } else if (liveAssistant?.llm_model_version_override) {
+      } else if (liveAgent?.llm_model_version_override) {
         setCurrentLlm(
-          getValidLlmDescriptor(liveAssistant.llm_model_version_override)
+          getValidLlmDescriptor(liveAgent.llm_model_version_override)
         );
       } else if (userHasManuallyOverriddenLLM) {
         // if the user has an override and there's nothing special about the
@@ -708,7 +726,7 @@ export function useLlmManager(
       } else if (user?.preferences?.default_model) {
         setCurrentLlm(getValidLlmDescriptor(user.preferences.default_model));
       } else {
-        const defaultLlm = getDefaultLlmDescriptor(llmProviders);
+        const defaultLlm = getDefaultLlmDescriptor(llmProviders, defaultText);
         if (defaultLlm) {
           setCurrentLlm(defaultLlm);
         }
@@ -761,9 +779,7 @@ export function useLlmManager(
         currentChatSession.current_temperature_override,
         isAnthropicModel ? 1.0 : 2.0
       );
-    } else if (
-      liveAssistant?.tools.some((tool) => tool.name === SEARCH_TOOL_ID)
-    ) {
+    } else if (liveAgent?.tools.some((tool) => tool.name === SEARCH_TOOL_ID)) {
       return 0;
     }
     return 0.5;
@@ -810,15 +826,13 @@ export function useLlmManager(
 
     if (currentChatSession?.current_temperature_override) {
       setTemperature(currentChatSession.current_temperature_override);
-    } else if (
-      liveAssistant?.tools.some((tool) => tool.name === SEARCH_TOOL_ID)
-    ) {
+    } else if (liveAgent?.tools.some((tool) => tool.name === SEARCH_TOOL_ID)) {
       setTemperature(0);
     } else {
       setTemperature(0.5);
     }
   }, [
-    liveAssistant,
+    liveAgent,
     currentChatSession,
     llmProviders,
     user?.preferences?.default_model,
@@ -834,8 +848,10 @@ export function useLlmManager(
     }
   };
 
-  // Track if any provider exists (for onboarding checks)
-  const hasAnyProvider = (allUserProviders?.length ?? 0) > 0;
+  // Track if any provider exists for the current persona context.
+  // Uses the persona-aware list so chat input reflects actual access,
+  // falling back to the global list when no persona is selected.
+  const hasAnyProvider = (llmProviders?.length ?? 0) > 0;
 
   return {
     updateModelOverrideBasedOnChatSession,
@@ -845,7 +861,7 @@ export function useLlmManager(
     updateTemperature,
     imageFilesPresent,
     updateImageFilesPresent,
-    liveAssistant: liveAssistant ?? null,
+    liveAgent: liveAgent ?? null,
     maxTemperature,
     llmProviders,
     isLoadingProviders:

@@ -15,15 +15,20 @@ permissions:
 jobs:
   provider-chat-test:
     uses: ./.github/workflows/reusable-nightly-llm-provider-chat.yml
+    secrets: inherit
+    permissions:
+      contents: read
+      id-token: write
     with:
       openai_models: ${{ vars.NIGHTLY_LLM_OPENAI_MODELS }}
       anthropic_models: ${{ vars.NIGHTLY_LLM_ANTHROPIC_MODELS }}
+      bedrock_models: ${{ vars.NIGHTLY_LLM_BEDROCK_MODELS }}
+      vertex_ai_models: ${{ vars.NIGHTLY_LLM_VERTEX_AI_MODELS }}
+      azure_models: ${{ vars.NIGHTLY_LLM_AZURE_MODELS }}
+      azure_api_base: ${{ vars.NIGHTLY_LLM_AZURE_API_BASE }}
+      ollama_models: ${{ vars.NIGHTLY_LLM_OLLAMA_MODELS }}
+      openrouter_models: ${{ vars.NIGHTLY_LLM_OPENROUTER_MODELS }}
       strict: true
-    secrets:
-      openai_api_key: ${{ secrets.OPENAI_API_KEY }}
-      anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-      DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
 
   notify-slack-on-failure:
     needs: [provider-chat-test]

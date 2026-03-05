@@ -32,9 +32,6 @@ def get_multipass_config(search_settings: SearchSettings) -> MultipassConfig:
     Determines whether to enable multipass and large chunks by examining
     the current search settings and the embedder configuration.
     """
-    if not search_settings:
-        return MultipassConfig(multipass_indexing=False, enable_large_chunks=False)
-
     multipass = should_use_multipass(search_settings)
     enable_large_chunks = SearchSettings.can_use_large_chunks(
         multipass, search_settings.model_name, search_settings.provider_type

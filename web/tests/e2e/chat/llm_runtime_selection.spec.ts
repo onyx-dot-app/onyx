@@ -98,7 +98,10 @@ type LlmProviderBasics = {
 async function listUserLlmProviders(page: Page): Promise<LlmProviderBasics[]> {
   const response = await page.request.get("/api/llm/provider");
   expect(response.ok()).toBeTruthy();
-  return (await response.json()) as LlmProviderBasics[];
+  const data = (await response.json()) as {
+    providers: LlmProviderBasics[];
+  };
+  return data.providers;
 }
 
 async function waitForModelOnProvider(
@@ -127,18 +130,18 @@ async function waitForModelOnProvider(
 
 function buildMockStreamResponse(turn: number): string {
   const userMessageId = turn * 100 + 1;
-  const assistantMessageId = turn * 100 + 2;
+  const agentMessageId = turn * 100 + 2;
 
   const packets = [
     {
       user_message_id: userMessageId,
-      reserved_assistant_message_id: assistantMessageId,
+      reserved_assistant_message_id: agentMessageId,
     },
     {
       placement: { turn_index: 0, tab_index: 0 },
       obj: {
         type: "message_start",
-        id: `mock-${assistantMessageId}`,
+        id: `mock-${agentMessageId}`,
         content: "Mock response for provider collision assertion.",
         final_documents: null,
       },
@@ -148,7 +151,7 @@ function buildMockStreamResponse(turn: number): string {
       obj: { type: "stop", stop_reason: "finished" },
     },
     {
-      message_id: assistantMessageId,
+      message_id: agentMessageId,
       citations: {},
       files: [],
     },

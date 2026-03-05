@@ -1,5 +1,5 @@
 import Modal from "@/refresh-components/Modal";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { SvgAlertTriangle } from "@opal/icons";
 export interface InstantSwitchConfirmModalProps {
@@ -31,7 +31,7 @@ export default function InstantSwitchConfirmModal({
         </Modal.Body>
         <Modal.Footer>
           <Button onClick={onConfirm}>Confirm</Button>
-          <Button secondary onClick={onClose}>
+          <Button prominence="secondary" onClick={onClose}>
             Cancel
           </Button>
         </Modal.Footer>

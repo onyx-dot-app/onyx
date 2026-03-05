@@ -24,10 +24,20 @@ trap 'echo "Error occurred on line $LINENO. Exiting script." >&2; cleanup' ERR
 # ./restart_containers.sh [vespa_volume] [postgres_volume] [redis_volume]
 # [minio_volume] [--keep-opensearch-data]
 
-VESPA_VOLUME=${1:-""}  # Default is empty if not provided
-POSTGRES_VOLUME=${2:-""}  # Default is empty if not provided
-REDIS_VOLUME=${3:-""}  # Default is empty if not provided
-MINIO_VOLUME=${4:-""}  # Default is empty if not provided
+KEEP_OPENSEARCH_DATA=false
+POSITIONAL_ARGS=()
+for arg in "$@"; do
+    if [[ "$arg" == "--keep-opensearch-data" ]]; then
+        KEEP_OPENSEARCH_DATA=true
+    else
+        POSITIONAL_ARGS+=("$arg")
+    fi
+done
+
+VESPA_VOLUME=${POSITIONAL_ARGS[0]:-""}
+POSTGRES_VOLUME=${POSITIONAL_ARGS[1]:-""}
+REDIS_VOLUME=${POSITIONAL_ARGS[2]:-""}
+MINIO_VOLUME=${POSITIONAL_ARGS[3]:-""}
 
 KEEP_OPENSEARCH_DATA=false
 for arg in "$@"; do
@@ -56,6 +66,17 @@ else
     docker run --detach --name onyx_vespa --hostname vespa-container --publish 8081:8081 --publish 19071:19071 vespaengine/vespa:8
 fi
 
+# If OPENSEARCH_ADMIN_PASSWORD is not already set, try loading it from
+# .vscode/.env so existing dev setups that stored it there aren't silently
+# broken.
+VSCODE_ENV="$SCRIPT_DIR/../../.vscode/.env"
+if [[ -z "${OPENSEARCH_ADMIN_PASSWORD:-}" && -f "$VSCODE_ENV" ]]; then
+    set -a
+    # shellcheck source=/dev/null
+    source "$VSCODE_ENV"
+    set +a
+fi
+
 # Start the OpenSearch container using the same service from docker-compose that
 # our users use, setting OPENSEARCH_INITIAL_ADMIN_PASSWORD from the env's
 # OPENSEARCH_ADMIN_PASSWORD if it exists, else defaulting to StrongPassword123!.
@@ -63,7 +84,7 @@ fi
 # restarts, else the volume is deleted so the container starts fresh.
 if [[ "$KEEP_OPENSEARCH_DATA" == "false" ]]; then
     echo "Deleting opensearch-data volume..."
-    docker volume rm opensearch-data 2>/dev/null || true
+    docker volume rm onyx_opensearch-data 2>/dev/null || true
 fi
 echo "Starting OpenSearch container..."
 docker compose -f "$COMPOSE_FILE" -f "$COMPOSE_DEV_FILE" --profile opensearch-enabled up --force-recreate -d opensearch

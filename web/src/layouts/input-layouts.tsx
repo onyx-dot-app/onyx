@@ -4,13 +4,18 @@ import Text from "@/refresh-components/texts/Text";
 import { SvgXOctagon, SvgAlertCircle } from "@opal/icons";
 import { useField, useFormikContext } from "formik";
 import { Section } from "@/layouts/general-layouts";
+import { Content } from "@opal/layouts";
 import Label from "@/refresh-components/form/Label";
 
-interface OrientationLayoutProps extends TitleLayoutProps {
+interface OrientationLayoutProps {
   name?: string;
   disabled?: boolean;
   nonInteractive?: boolean;
   children?: React.ReactNode;
+  title: string;
+  description?: string;
+  optional?: boolean;
+  sizePreset?: "main-content" | "main-ui";
 }
 
 /**
@@ -44,11 +49,20 @@ function VerticalInputLayout({
   nonInteractive,
   children,
   subDescription,
-  ...titleLayoutProps
+  title,
+  description,
+  optional,
+  sizePreset = "main-content",
 }: VerticalLayoutProps) {
   const content = (
     <Section gap={0.25} alignItems="start">
-      <TitleLayout {...titleLayoutProps} />
+      <Content
+        title={title}
+        description={description}
+        optional={optional}
+        sizePreset={sizePreset}
+        variant="section"
+      />
       {children}
       {name && <ErrorLayout name={name} />}
       {subDescription && (
@@ -110,7 +124,10 @@ function HorizontalInputLayout({
   nonInteractive,
   children,
   center,
-  ...titleLayoutProps
+  title,
+  description,
+  optional,
+  sizePreset = "main-content",
 }: HorizontalLayoutProps) {
   const content = (
     <Section gap={0.25} alignItems="start">
@@ -120,7 +137,13 @@ function HorizontalInputLayout({
         alignItems={center ? "center" : "start"}
       >
         <div className="flex flex-col flex-1 self-stretch">
-          <TitleLayout {...titleLayoutProps} />
+          <Content
+            title={title}
+            description={description}
+            optional={optional}
+            sizePreset={sizePreset}
+            variant="section"
+          />
         </div>
         <div className="flex flex-col items-end">{children}</div>
       </Section>
@@ -133,80 +156,6 @@ function HorizontalInputLayout({
     <Label name={name} disabled={disabled}>
       {content}
     </Label>
-  );
-}
-
-/**
- * TitleLayout - A reusable title/description component for form fields
- *
- * Renders a title with an optional description and "Optional" indicator.
- * This is a pure presentational component — it does not render a `<label>`
- * element. Label semantics are handled by the parent orientation layout
- * (Vertical/Horizontal) or by the caller.
- *
- * Exported as `Title` for convenient usage.
- *
- * @param title - The main label text
- * @param description - Additional helper text shown below the title
- * @param optional - Whether to show "(Optional)" indicator
- * @param center - If true, centers the title and description text. Default: false
- *
- * @example
- * ```tsx
- * import { Title } from "@/layouts/input-layouts";
- *
- * <Title
- *   name="username"
- *   title="Username"
- *   description="Choose a unique username"
- *   optional
- * />
- * ```
- */
-type TitleLayoutVariants = "primary" | "secondary";
-export interface TitleLayoutProps {
-  title: string;
-  description?: string;
-  optional?: boolean;
-  center?: boolean;
-  variant?: TitleLayoutVariants;
-}
-function TitleLayout({
-  title,
-  description,
-  optional,
-  center,
-  variant = "primary",
-}: TitleLayoutProps) {
-  return (
-    <Section gap={0} height="fit">
-      <Section
-        flexDirection="row"
-        justifyContent={center ? "center" : "start"}
-        gap={0.25}
-      >
-        <Text
-          mainContentEmphasis={variant === "primary"}
-          mainUiAction={variant === "secondary"}
-          text04
-        >
-          {title}
-        </Text>
-        {optional && (
-          <Text text03 mainContentMuted>
-            (Optional)
-          </Text>
-        )}
-      </Section>
-
-      {description && (
-        <Section alignItems={center ? "center" : "start"}>
-          <Text secondaryBody text03>
-            {description}
-          </Text>
-        </Section>
-      )}
-    </Section>
   );
 }
 
@@ -280,7 +229,6 @@ function ErrorTextLayout({ children, type = "error" }: ErrorTextLayoutProps) {
 export {
   VerticalInputLayout as Vertical,
   HorizontalInputLayout as Horizontal,
-  TitleLayout as Title,
   ErrorLayout as Error,
   ErrorTextLayout,
 };

@@ -23,7 +23,6 @@
 import { cn, ensureHrefProtocol, noProp } from "@/lib/utils";
 import type { Components } from "react-markdown";
 import Text from "@/refresh-components/texts/Text";
-import RefreshButton from "@/refresh-components/buttons/Button";
 import { useCallback, useMemo, useState, useEffect } from "react";
 import { useAppBackground } from "@/providers/AppBackgroundProvider";
 import { useTheme } from "next-themes";
@@ -48,7 +47,6 @@ import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";
 import SimplePopover from "@/refresh-components/SimplePopover";
 import { Interactive } from "@opal/core";
 import { Button, OpenButton } from "@opal/components";
-import { LineItemLayout } from "@/layouts/general-layouts";
 import { useAppSidebarContext } from "@/providers/AppSidebarProvider";
 import useScreenSize from "@/hooks/useScreenSize";
 import {
@@ -105,7 +103,8 @@ function Header() {
     refreshCurrentProjectDetails,
     currentProjectId,
   } = useProjectsContext();
-  const { currentChatSession, refreshChatSessions } = useChatSessions();
+  const { currentChatSession, refreshChatSessions, removeSession } =
+    useChatSessions();
   const router = useRouter();
   const appFocus = useAppFocus();
   const { classification } = useQueryController();
@@ -187,6 +186,7 @@ function Header() {
       if (!response.ok) {
         throw new Error("Failed to delete chat session");
       }
+      removeSession(currentChatSession.id);
       await Promise.all([refreshChatSessions(), fetchProjects()]);
       router.replace("/app");
       setDeleteModalOpen(false);
@@ -194,7 +194,13 @@ function Header() {
       console.error("Failed to delete chat:", error);
       showErrorNotification("Failed to delete chat. Please try again.");
     }
-  }, [currentChatSession, refreshChatSessions, fetchProjects, router]);
+  }, [
+    currentChatSession,
+    refreshChatSessions,
+    removeSession,
+    fetchProjects,
+    router,
+  ]);
 
   const setDeleteConfirmationModalOpen = useCallback((open: boolean) => {
     setDeleteModalOpen(open);
@@ -280,9 +286,9 @@ function Header() {
           icon={SvgTrash}
           onClose={() => setDeleteModalOpen(false)}
           submit={
-            <RefreshButton danger onClick={handleDeleteChat}>
+            <Button variant="danger" onClick={handleDeleteChat}>
               Delete
-            </RefreshButton>
+            </Button>
           }
         >
           Are you sure you want to delete this chat? This action cannot be
@@ -307,10 +313,10 @@ function Header() {
         */}
         <div className="flex-1 flex flex-row items-center gap-2 h-[3.3rem]">
           {isMobile && (
-            <IconButton
+            <Button
+              prominence="internal"
               icon={SvgSidebar}
               onClick={() => setFolded(false)}
-              internal
             />
           )}
           {isPaidEnterpriseFeaturesEnabled &&
@@ -320,6 +326,7 @@ function Header() {
               <Popover open={modePopoverOpen} onOpenChange={setModePopoverOpen}>
                 <Popover.Trigger asChild>
                   <OpenButton
+                    aria-label="Change app mode"
                     icon={
                       effectiveMode === "search" ? SvgSearchMenu : SvgBubbleText
                     }
@@ -391,10 +398,11 @@ function Header() {
                 onClick={() => setShowShareModal(true)}
                 aria-label="share-chat-button"
               >
-                Share Chat
+                Share
               </Button>
               <SimplePopover
                 trigger={
+                  /* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */
                   <IconButton
                     icon={SvgMoreHorizontal}
                     className="ml-2"

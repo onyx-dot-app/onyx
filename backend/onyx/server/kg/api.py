@@ -5,7 +5,6 @@ from sqlalchemy.orm import Session
 from onyx.auth.users import current_admin_user
 from onyx.configs.constants import TMP_DRALPHA_PERSONA_NAME
 from onyx.configs.kg_configs import KG_BETA_ASSISTANT_DESCRIPTION
-from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.entities import get_entity_stats_by_grounded_source_name
 from onyx.db.entity_type import get_configured_entity_types
@@ -134,11 +133,7 @@ def enable_or_disable_kg(
         system_prompt=KG_BETA_ASSISTANT_SYSTEM_PROMPT,
         task_prompt=KG_BETA_ASSISTANT_TASK_PROMPT,
         datetime_aware=False,
-        num_chunks=25,
-        llm_relevance_filter=False,
         is_public=False,
-        llm_filter_extraction=False,
-        recency_bias=RecencyBiasSetting.NO_DECAY,
         document_set_ids=[],
         tool_ids=[search_tool.id, kg_tool.id],
         llm_model_provider_override=None,
@@ -147,7 +142,7 @@ def enable_or_disable_kg(
         users=[user.id],
         groups=[],
         label_ids=[],
-        is_default_persona=False,
+        featured=False,
         display_priority=0,
         user_file_ids=[],
     )

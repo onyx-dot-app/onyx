@@ -129,6 +129,7 @@ export default function AttachmentButton({
               </Truncated>
             </div>
             {onView && (
+              // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
               <IconButton
                 icon={SvgExternalLink}
                 onClick={noProp(onView)}

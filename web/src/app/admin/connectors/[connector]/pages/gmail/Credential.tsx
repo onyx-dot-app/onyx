@@ -1,4 +1,4 @@
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { toast } from "@/hooks/useToast";
 import React, { useState, useEffect } from "react";
 import { useSWRConfig } from "swr";
@@ -7,10 +7,7 @@ import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { adminDeleteCredential } from "@/lib/credential";
 import { setupGmailOAuth } from "@/lib/gmail";
-import {
-  DOCS_ADMINS_PATH,
-  GMAIL_AUTH_IS_ADMIN_COOKIE_NAME,
-} from "@/lib/constants";
+import { DOCS_ADMINS_PATH } from "@/lib/constants";
 import { CRAFT_OAUTH_COOKIE_NAME } from "@/app/craft/v1/constants";
 import Cookies from "js-cookie";
 import { TextFormField, SectionHeader } from "@/components/Field";
@@ -317,7 +314,7 @@ export const GmailJsonUploadSection = ({
           {isAdmin && !existingAuthCredential && (
             <div className="mt-2">
               <Button
-                danger
+                variant="danger"
                 onClick={async () => {
                   const endpoint =
                     localServiceAccountData?.service_account_email
@@ -473,7 +470,7 @@ export const GmailAuthSection = ({
           </div>
           <Section flexDirection="row" justifyContent="between" height="fit">
             <Button
-              danger
+              variant="danger"
               onClick={async () => {
                 handleRevokeAccess(
                   connectorExists,
@@ -485,10 +482,7 @@ export const GmailAuthSection = ({
               Revoke Access
             </Button>
             {buildMode && onCredentialCreated && (
-              <Button
-                primary
-                onClick={() => onCredentialCreated(existingCredential)}
-              >
+              <Button onClick={() => onCredentialCreated(existingCredential)}>
                 Continue
               </Button>
             )}
@@ -602,9 +596,6 @@ export const GmailAuthSection = ({
           onClick={async () => {
             setIsAuthenticating(true);
             try {
-              Cookies.set(GMAIL_AUTH_IS_ADMIN_COOKIE_NAME, "true", {
-                path: "/",
-              });
               if (buildMode) {
                 Cookies.set(CRAFT_OAUTH_COOKIE_NAME, "true", {
                   path: "/",

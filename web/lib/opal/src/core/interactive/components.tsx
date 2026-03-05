@@ -1,9 +1,16 @@
+import Link from "next/link";
+import type { Route } from "next";
 import "@opal/core/interactive/styles.css";
 import React from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { cn } from "@opal/utils";
 import type { WithoutStyles } from "@opal/types";
-import { sizeVariants, type SizeVariant } from "@opal/shared";
+import {
+  sizeVariants,
+  type SizeVariant,
+  widthVariants,
+  type WidthVariant,
+} from "@opal/shared";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -21,35 +28,33 @@ type InteractiveBaseSelectVariantProps = {
   selected?: boolean;
 };
 
+type InteractiveBaseSidebarProminenceTypes = "light";
+type InteractiveBaseSidebarVariantProps = {
+  variant: "sidebar";
+  prominence?: InteractiveBaseSidebarProminenceTypes;
+  selected?: boolean;
+};
+
 /**
  * Discriminated union tying `variant` to `prominence`.
  *
  * - `"none"` accepts no prominence (`prominence` must not be provided)
  * - `"select"` accepts an optional prominence (defaults to `"light"`) and
  *   an optional `selected` boolean that switches foreground to action-link colours
+ * - `"sidebar"` accepts an optional prominence (defaults to `"light"`) and
+ *   an optional `selected` boolean for the focused/active-item state
  * - `"default"`, `"action"`, and `"danger"` accept an optional prominence
  *   (defaults to `"primary"`)
  */
 type InteractiveBaseVariantProps =
   | { variant?: "none"; prominence?: never; selected?: never }
   | InteractiveBaseSelectVariantProps
+  | InteractiveBaseSidebarVariantProps
   | {
       variant?: InteractiveBaseVariantTypes;
       prominence?: InteractiveBaseProminenceTypes;
       selected?: never;
     };
-
-/**
- * Width presets for `Interactive.Container`.
- *
- * - `"auto"` — Shrink-wraps to content width (default)
- * - `"full"` — Stretches to fill the parent's width (`w-full`)
- */
-type InteractiveContainerWidthVariant = "auto" | "full";
-const interactiveContainerWidthVariants = {
-  auto: "w-auto",
-  full: "w-full",
-} as const;
 
 /**
  * Border-radius presets for `Interactive.Container`.
@@ -225,7 +230,8 @@ function InteractiveBase({
   ...props
 }: InteractiveBaseProps) {
   const effectiveProminence =
-    prominence ?? (variant === "select" ? "light" : "primary");
+    prominence ??
+    (variant === "select" || variant === "sidebar" ? "light" : "primary");
   const classes = cn(
     "interactive",
     !props.onClick && !href && "!cursor-default !select-auto",
@@ -345,7 +351,7 @@ interface InteractiveContainerProps
    *
    * @default "auto"
    */
-  widthVariant?: InteractiveContainerWidthVariant;
+  widthVariant?: WidthVariant;
 }
 
 /**
@@ -413,7 +419,7 @@ function InteractiveContainer({
       height,
       minWidth,
       padding,
-      interactiveContainerWidthVariants[widthVariant],
+      widthVariants[widthVariant],
       slotClassName
     ),
     "data-border": border ? ("true" as const) : undefined,
@@ -424,9 +430,9 @@ function InteractiveContainer({
   // so all styling (backgrounds, rounding, overflow) lives on one element.
   if (href) {
     return (
-      <a
+      <Link
         ref={ref as React.Ref<HTMLAnchorElement>}
-        href={href}
+        href={href as Route}
         target={target}
         rel={rel}
         {...(sharedProps as React.HTMLAttributes<HTMLAnchorElement>)}
@@ -489,7 +495,8 @@ export {
   type InteractiveBaseProps,
   type InteractiveBaseVariantProps,
   type InteractiveBaseSelectVariantProps,
+  type InteractiveBaseSidebarVariantProps,
+  type InteractiveBaseSidebarProminenceTypes,
   type InteractiveContainerProps,
-  type InteractiveContainerWidthVariant,
   type InteractiveContainerRoundingVariant,
 };

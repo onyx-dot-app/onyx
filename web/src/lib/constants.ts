@@ -28,11 +28,6 @@ export const NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED =
 
 export const TENANT_ID_COOKIE_NAME = "onyx_tid";
 
-export const GMAIL_AUTH_IS_ADMIN_COOKIE_NAME = "gmail_auth_is_admin";
-
-export const GOOGLE_DRIVE_AUTH_IS_ADMIN_COOKIE_NAME =
-  "google_drive_auth_is_admin";
-
 export const SEARCH_TYPE_COOKIE_NAME = "search_type";
 export const AGENTIC_SEARCH_TYPE_COOKIE_NAME = "agentic_type";
 
@@ -111,7 +106,7 @@ export const MODAL_ROOT_ID = "modal-root";
 export const ANONYMOUS_USER_NAME = "Anonymous";
 export const UNNAMED_CHAT = "New Chat";
 
-export const DEFAULT_ASSISTANT_ID = 0;
+export const DEFAULT_AGENT_ID = 0;
 export const GENERAL_ASSISTANT_ID = -1;
 export const IMAGE_ASSISTANT_ID = -2;
 export const ART_ASSISTANT_ID = -3;
@@ -122,6 +117,7 @@ export const MAX_FILES_TO_SHOW = 3;
 
 // SIZES
 export const MOBILE_SIDEBAR_BREAKPOINT_PX = 640;
+export const DESKTOP_SMALL_BREAKPOINT_PX = 912;
 export const DEFAULT_AGENT_AVATAR_SIZE_PX = 18;
 export const HORIZON_DISTANCE_PX = 800;
 export const LOGO_FOLDED_SIZE_PX = 24;

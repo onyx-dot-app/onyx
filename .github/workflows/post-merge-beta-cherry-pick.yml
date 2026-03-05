@@ -114,8 +114,10 @@ jobs:
 
       - name: Mark workflow as failed if cherry-pick failed
         if: steps.gate.outputs.should_cherrypick == 'true' && steps.run_cherry_pick.outputs.status == 'failure'
+        env:
+          CHERRY_PICK_REASON: ${{ steps.run_cherry_pick.outputs.reason }}
         run: |
-          echo "::error::Automated cherry-pick failed (${{ steps.run_cherry_pick.outputs.reason }})."
+          echo "::error::Automated cherry-pick failed (${CHERRY_PICK_REASON})."
           exit 1
 
   notify-slack-on-cherry-pick-failure:
