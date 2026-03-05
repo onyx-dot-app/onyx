@@ -114,6 +114,7 @@ function LMStudioFormContent({
     } else {
       setIsLoadingModels(false);
       setFetchedModels([]);
+      setFetchError(null);
     }
   }, [apiBase, apiKey, debouncedFetchModels, setFetchedModels]);
 
