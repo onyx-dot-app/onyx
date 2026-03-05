@@ -2,7 +2,6 @@ from datetime import datetime
 from datetime import timezone
 from uuid import UUID
 
-from fastapi import HTTPException
 from sqlalchemy import and_
 from sqlalchemy import asc
 from sqlalchemy import delete
@@ -26,6 +25,8 @@ from onyx.db.models import User
 from onyx.db.models import User__UserGroup
 from onyx.db.models import UserGroup__ConnectorCredentialPair
 from onyx.db.models import UserRole
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -134,8 +135,9 @@ def update_document_boost_for_user(
     stmt = _add_user_filters(stmt, user, get_editable=True)
     result: DbDocument | None = db_session.execute(stmt).scalar_one_or_none()
     if result is None:
-        raise HTTPException(
-            status_code=400, detail="Document is not editable by this user"
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Document is not editable by this user",
         )
 
     result.boost = boost
@@ -156,8 +158,9 @@ def update_document_hidden_for_user(
     stmt = _add_user_filters(stmt, user, get_editable=True)
     result = db_session.execute(stmt).scalar_one_or_none()
     if result is None:
-        raise HTTPException(
-            status_code=400, detail="Document is not editable by this user"
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Document is not editable by this user",
         )
 
     result.hidden = hidden

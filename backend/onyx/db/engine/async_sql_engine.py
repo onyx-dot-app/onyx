@@ -4,7 +4,6 @@ from typing import Any
 from typing import AsyncContextManager
 
 import asyncpg  # type: ignore
-from fastapi import HTTPException
 from sqlalchemy import event
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -28,6 +27,8 @@ from onyx.db.engine.sql_engine import build_connection_string
 from onyx.db.engine.sql_engine import is_valid_schema_name
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.db.engine.sql_engine import USE_IAM_AUTH
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import get_current_tenant_id
@@ -114,7 +115,7 @@ async def get_async_session(
         tenant_id = get_current_tenant_id()
 
     if not is_valid_schema_name(tenant_id):
-        raise HTTPException(status_code=400, detail="Invalid tenant ID")
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, "Invalid tenant ID")
 
     engine = get_sqlalchemy_async_engine()
 

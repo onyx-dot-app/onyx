@@ -2,7 +2,6 @@ from collections.abc import Sequence
 from typing import Any
 from uuid import UUID
 
-from fastapi import HTTPException
 from fastapi_users.password import PasswordHelper
 from sqlalchemy import func
 from sqlalchemy import select
@@ -24,6 +23,8 @@ from onyx.db.models import Persona__User
 from onyx.db.models import SamlAccount
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
 
@@ -44,22 +45,22 @@ def validate_user_role_update(
     """
 
     if current_role == UserRole.SLACK_USER:
-        raise HTTPException(
-            status_code=400,
-            detail="To change a Slack User's role, they must first login to Onyx via the web app.",
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "To change a Slack User's role, they must first login to Onyx via the web app.",
         )
 
     if current_role == UserRole.EXT_PERM_USER:
         # This shouldn't happen, but just in case
-        raise HTTPException(
-            status_code=400,
-            detail="To change an External Permissioned User's role, they must first login to Onyx via the web app.",
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "To change an External Permissioned User's role, they must first login to Onyx via the web app.",
         )
 
     if current_role == UserRole.LIMITED:
-        raise HTTPException(
-            status_code=400,
-            detail="To change a Limited User's role, they must first login to Onyx via the web app.",
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "To change a Limited User's role, they must first login to Onyx via the web app.",
         )
 
     if explicit_override:
@@ -67,40 +68,34 @@ def validate_user_role_update(
 
     if requested_role == UserRole.CURATOR:
         # This shouldn't happen, but just in case
-        raise HTTPException(
-            status_code=400,
-            detail="Curator role must be set via the User Group Menu",
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Curator role must be set via the User Group Menu",
         )
 
     if requested_role == UserRole.LIMITED:
         # This shouldn't happen, but just in case
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "A user cannot be set to a Limited User role. "
-                "This role is automatically assigned to users through certain endpoints in the API."
-            ),
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "A user cannot be set to a Limited User role. "
+            "This role is automatically assigned to users through certain endpoints in the API.",
         )
 
     if requested_role == UserRole.SLACK_USER:
         # This shouldn't happen, but just in case
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "A user cannot be set to a Slack User role. "
-                "This role is automatically assigned to users who only use Onyx via Slack."
-            ),
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "A user cannot be set to a Slack User role. "
+            "This role is automatically assigned to users who only use Onyx via Slack.",
         )
 
     if requested_role == UserRole.EXT_PERM_USER:
         # This shouldn't happen, but just in case
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "A user cannot be set to an External Permissioned User role. "
-                "This role is automatically assigned to users who have been "
-                "pulled in to the system via an external permissions system."
-            ),
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "A user cannot be set to an External Permissioned User role. "
+            "This role is automatically assigned to users who have been "
+            "pulled in to the system via an external permissions system.",
         )
 
 
