@@ -3112,6 +3112,11 @@
     "model_vendor": "alibaba",
     "model_version": "latest"
   },
+  "ollama/qwen3.5:397b-cloud": {
+    "display_name": "Qwen3.5:397B Cloud",
+    "model_vendor": "alibaba",
+    "model_version": "latest"
+  },
   "ollama/vicuna": {
     "display_name": "Vicuna",
     "model_vendor": "lmsys",
