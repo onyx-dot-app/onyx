@@ -64,6 +64,7 @@ import { AppMode, useAppMode } from "@/providers/AppModeProvider";
 import useAppFocus from "@/hooks/useAppFocus";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import useBrowserInfo from "@/hooks/useBrowserInfo";
 
 /**
  * App Header Component
@@ -527,8 +528,16 @@ function Root({ children, enableBackground }: AppRootProps) {
   const { hasBackground, appBackgroundUrl } = useAppBackground();
   const { resolvedTheme } = useTheme();
   const appFocus = useAppFocus();
+  const { isSafari } = useBrowserInfo();
   const isLightMode = resolvedTheme === "light";
   const showBackground = hasBackground && enableBackground;
+  const horizontalBlurMask = `linear-gradient(
+    to right,
+    transparent 0%,
+    black max(0%, calc(50% - 25rem)),
+    black min(100%, calc(50% + 25rem)),
+    transparent 100%
+  )`;
 
   return (
     /* NOTE: Some elements, markdown tables in particular, refer to this `@container` in order to
@@ -568,25 +577,25 @@ function Root({ children, enableBackground }: AppRootProps) {
       {showBackground && appFocus.isChat() && (
         <>
           <div className="absolute inset-0 backdrop-blur-[1px] pointer-events-none" />
-          <div
-            className="absolute z-0 inset-0 backdrop-blur-md transition-all duration-600 pointer-events-none"
-            style={{
-              maskImage: `linear-gradient(
-                to right,
-                transparent 0%,
-                black max(0%, calc(50% - 25rem)),
-                black min(100%, calc(50% + 25rem)),
-                transparent 100%
-              )`,
-              WebkitMaskImage: `linear-gradient(
-                to right,
-                transparent 0%,
-                black max(0%, calc(50% - 25rem)),
-                black min(100%, calc(50% + 25rem)),
-                transparent 100%
-              )`,
-            }}
-          />
+          {isSafari ? (
+            <div
+              className="absolute z-0 inset-0 bg-cover bg-center bg-fixed pointer-events-none"
+              style={{
+                backgroundImage: `url(${appBackgroundUrl})`,
+                filter: "blur(16px)",
+                maskImage: horizontalBlurMask,
+                WebkitMaskImage: horizontalBlurMask,
+              }}
+            />
+          ) : (
+            <div
+              className="absolute z-0 inset-0 backdrop-blur-md transition-all duration-600 pointer-events-none"
+              style={{
+                maskImage: horizontalBlurMask,
+                WebkitMaskImage: horizontalBlurMask,
+              }}
+            />
+          )}
         </>
       )}
 
