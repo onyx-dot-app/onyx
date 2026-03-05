@@ -41,10 +41,16 @@ def _collect(
     tc_map: dict[int, dict[str, Any]],
     delta: MagicMock,
     placement: Placement | None = None,
+    scan_offsets: dict[int, int] | None = None,
 ) -> list[Any]:
     """Run maybe_emit_argument_delta and return the yielded packets."""
     return list(
-        maybe_emit_argument_delta(tc_map, delta, placement or _make_placement())
+        maybe_emit_argument_delta(
+            tc_map,
+            delta,
+            placement or _make_placement(),
+            scan_offsets if scan_offsets is not None else {},
+        )
     )
 
 
@@ -56,11 +62,14 @@ def _stream_fragments(
     """Feed fragments into maybe_emit_argument_delta one by one, returning
     all emitted content values concatenated per-key as a flat list."""
     pl = placement or _make_placement()
+    scan_offsets: dict[int, int] = {}
     emitted: list[str] = []
     for frag in fragments:
         tc_map[0]["arguments"] += frag
         delta = _make_tool_call_delta(arguments=frag)
-        for packet in maybe_emit_argument_delta(tc_map, delta, pl):
+        for packet in maybe_emit_argument_delta(
+            tc_map, delta, pl, scan_offsets=scan_offsets
+        ):
             obj = packet.obj
             assert isinstance(obj, ToolCallArgumentDelta)
             for value in obj.argument_deltas.values():

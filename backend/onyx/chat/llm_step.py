@@ -1019,6 +1019,7 @@ def run_llm_step_pkt_generator(
         )
 
     id_to_tool_call_map: dict[int, dict[str, Any]] = {}
+    arg_scan_offsets: dict[int, int] = {}
     reasoning_start = False
     answer_start = False
     accumulated_reasoning = ""
@@ -1230,6 +1231,7 @@ def run_llm_step_pkt_generator(
                         tool_calls_in_progress=id_to_tool_call_map,
                         tool_call_delta=tool_call_delta,
                         placement=_current_placement(),
+                        scan_offsets=arg_scan_offsets,
                     )
 
         # Flush any tail text buffered while checking for split "<function_calls" markers.

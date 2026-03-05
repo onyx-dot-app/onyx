@@ -125,30 +125,42 @@ def _decode_partial_json_string(raw: str) -> str:
     return ""
 
 
-def _extract_delta_args(pre: str, delta: str) -> dict[str, str]:
+def _extract_delta_args(
+    pre: str, delta: str, scan_offset: int = 0
+) -> tuple[dict[str, str], int]:
     """Extract decoded argument values contributed by ``delta``.
 
     Walks ``pre + delta`` as a partial JSON object (``{"k": "v", ...}``),
     and for each string value returns only the decoded content that falls
     within the ``delta`` portion. Escape sequences that straddle the
     boundary are handled correctly.
+
+    Returns ``(argument_deltas, next_scan_offset)`` where
+    ``next_scan_offset`` should be passed to the next call to skip
+    completed key-value pairs, reducing cost from O(accumulated) to
+    O(delta) per call.
     """
     full = pre + delta
     delta_start = len(pre)
-    delta_end = len(full)
 
     result: dict[str, str] = {}
 
-    # Advance to opening brace
-    pos = full.find("{")
-    if pos == -1:
-        return result
-    pos += 1
+    if scan_offset > 0:
+        pos = scan_offset
+    else:
+        pos = full.find("{")
+        if pos == -1:
+            return result, 0
+        pos += 1
+
+    resume = pos
 
     while pos < len(full):
         pos = _skip(full, pos)
         if pos >= len(full) or full[pos] == "}":
             break
+
+        resume = pos  # remember start of this key-value pair
 
         # Key
         if full[pos] != '"':
@@ -184,7 +196,7 @@ def _extract_delta_args(pre: str, delta: str) -> dict[str, str]:
 
         # Only include the portion of this value that overlaps with delta
         lo = max(val.start, delta_start)
-        hi = min(val.end, delta_end)
+        hi = val.end
         if lo < hi:
             # Decode from value start through both boundaries so escape
             # sequences straddling the delta edge are handled correctly.
@@ -198,26 +210,30 @@ def _extract_delta_args(pre: str, delta: str) -> dict[str, str]:
             break
         pos = val.end + 1
 
-    return result
+    return result, resume
 
 
 def maybe_emit_argument_delta(
     tool_calls_in_progress: Mapping[int, Mapping[str, Any]],
     tool_call_delta: ChatCompletionDeltaToolCall,
     placement: Placement,
+    scan_offsets: dict[int, int],
 ) -> Generator[Packet, None, None]:
     """Emit decoded tool-call argument deltas to the frontend.
 
     Stateless: derives what's new by comparing ``accumulated_args``
     against the state before the current fragment was appended.
+
+    ``scan_offsets`` is a mutable dict keyed by tool-call index that allows
+    each call to skip past already-processed key-value pairs, reducing
+    per-call cost from O(accumulated) to O(delta).
     """
     tool_cls = _get_tool_class(tool_calls_in_progress, tool_call_delta)
     if not tool_cls or not tool_cls.do_emit_argument_deltas():
         return
 
-    delta_fragment = (
-        tool_call_delta.function.arguments if tool_call_delta.function else None
-    )
+    fn = tool_call_delta.function
+    delta_fragment = fn.arguments if fn else None
     if not delta_fragment:
         return
 
@@ -225,18 +241,20 @@ def maybe_emit_argument_delta(
     accumulated_args = tc_data["arguments"]
     prev_args = accumulated_args[: -len(delta_fragment)]
 
-    tool_type = tc_data.get("name", "")
-    tool_id = tc_data.get("id", "")
+    idx = tool_call_delta.index
+    offset = scan_offsets.get(idx, 0)
 
-    argument_deltas = _extract_delta_args(prev_args, delta_fragment)
+    argument_deltas, new_offset = _extract_delta_args(prev_args, delta_fragment, offset)
+    scan_offsets[idx] = new_offset
+
     if not argument_deltas:
         return
 
     yield Packet(
         placement=placement,
         obj=ToolCallArgumentDelta(
-            tool_type=tool_type,
-            tool_id=tool_id,
+            tool_type=tc_data.get("name", ""),
+            tool_id=tc_data.get("id", ""),
             argument_deltas=argument_deltas,
         ),
     )
