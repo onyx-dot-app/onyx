@@ -34,7 +34,6 @@ from onyx.db.memory import add_memory
 from onyx.db.memory import update_memory_at_index
 from onyx.db.memory import UserMemoryContext
 from onyx.db.models import Persona
-from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.interfaces import ToolChoiceOptions
@@ -78,28 +77,6 @@ def _looks_like_xml_tool_call_payload(text: str | None) -> bool:
         "<function_calls" in lowered
         and "<invoke" in lowered
         and "<parameter" in lowered
-    )
-
-
-def _should_keep_bedrock_tool_definitions(
-    llm: object, simple_chat_history: list[ChatMessageSimple]
-) -> bool:
-    """Bedrock requires tool config when history includes toolUse/toolResult blocks."""
-    model_provider = getattr(getattr(llm, "config", None), "model_provider", None)
-    if model_provider not in {
-        LlmProviderNames.BEDROCK,
-        LlmProviderNames.BEDROCK_CONVERSE,
-    }:
-        return False
-
-    return any(
-        (
-            msg.message_type == MessageType.ASSISTANT
-            and msg.tool_calls
-            and len(msg.tool_calls) > 0
-        )
-        or msg.message_type == MessageType.TOOL_CALL_RESPONSE
-        for msg in simple_chat_history
     )
 
 
@@ -674,12 +651,7 @@ def run_llm_loop(
             elif out_of_cycles or ran_image_gen:
                 # Last cycle, no tools allowed, just answer!
                 tool_choice = ToolChoiceOptions.NONE
-                # Bedrock requires tool config in requests that include toolUse/toolResult history.
-                final_tools = (
-                    tools
-                    if _should_keep_bedrock_tool_definitions(llm, simple_chat_history)
-                    else []
-                )
+                final_tools = []
             else:
                 tool_choice = ToolChoiceOptions.AUTO
                 final_tools = tools
