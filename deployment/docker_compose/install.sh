@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-# Expected resource requirements
+# Expected resource requirements (overridden below if --lite)
 EXPECTED_DOCKER_RAM_GB=10
 EXPECTED_DISK_GB=32
 
@@ -10,6 +10,7 @@ EXPECTED_DISK_GB=32
 SHUTDOWN_MODE=false
 DELETE_DATA_MODE=false
 INCLUDE_CRAFT=false  # Disabled by default, use --include-craft to enable
+LITE_MODE=false       # Disabled by default, use --lite to enable
 NO_PROMPT=false
 DRY_RUN=false
 VERBOSE=false
@@ -26,6 +27,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --include-craft)
             INCLUDE_CRAFT=true
+            shift
+            ;;
+        --lite)
+            LITE_MODE=true
             shift
             ;;
         --no-prompt)
@@ -47,6 +52,7 @@ while [[ $# -gt 0 ]]; do
             echo ""
             echo "Options:"
             echo "  --include-craft  Enable Onyx Craft (AI-powered web app building)"
+            echo "  --lite           Deploy Onyx Lite (no Vespa, Redis, or model servers)"
             echo "  --shutdown       Stop (pause) Onyx containers"
             echo "  --delete-data    Remove all Onyx data (containers, volumes, and files)"
             echo "  --no-prompt      Run non-interactively with defaults (for CI/automation)"
@@ -56,6 +62,7 @@ while [[ $# -gt 0 ]]; do
             echo ""
             echo "Examples:"
             echo "  $0                    # Install Onyx"
+            echo "  $0 --lite             # Install Onyx Lite (minimal deployment)"
             echo "  $0 --include-craft    # Install Onyx with Craft enabled"
             echo "  $0 --shutdown         # Pause Onyx services"
             echo "  $0 --delete-data      # Completely remove Onyx and all data"
@@ -74,7 +81,31 @@ if [[ "$VERBOSE" = true ]]; then
     set -x
 fi
 
+if [[ "$LITE_MODE" = true ]] && [[ "$INCLUDE_CRAFT" = true ]]; then
+    echo "ERROR: --lite and --include-craft cannot be used together."
+    echo "Craft requires services (Vespa, Redis, background workers) that lite mode disables."
+    exit 1
+fi
+
+# Lite mode needs far fewer resources (no Vespa, Redis, or model servers)
+if [[ "$LITE_MODE" = true ]]; then
+    EXPECTED_DOCKER_RAM_GB=4
+    EXPECTED_DISK_GB=16
+fi
+
 INSTALL_ROOT="${INSTALL_PREFIX:-onyx_data}"
+
+LITE_COMPOSE_FILE="docker-compose.onyx-lite.yml"
+
+# Build the -f flags for docker compose. For shutdown/delete-data we auto-detect
+# whether the lite overlay was previously downloaded; for install we use --lite.
+compose_file_args() {
+    local args="-f docker-compose.yml"
+    if [[ "$LITE_MODE" = true ]] || [[ -f "${INSTALL_ROOT}/deployment/${LITE_COMPOSE_FILE}" ]]; then
+        args="$args -f ${LITE_COMPOSE_FILE}"
+    fi
+    echo "$args"
+}
 
 # --- Temp file cleanup ---
 TMPFILES=()
@@ -214,7 +245,7 @@ if [ "$SHUTDOWN_MODE" = true ]; then
             fi
 
             # Stop containers (without removing them)
-            (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD -f docker-compose.yml stop)
+            (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args) stop)
             if [ $? -eq 0 ]; then
                 print_success "Onyx containers stopped (paused)"
             else
@@ -272,7 +303,7 @@ if [ "$DELETE_DATA_MODE" = true ]; then
             fi
 
             # Stop and remove containers with volumes
-            (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD -f docker-compose.yml down -v)
+            (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args) down -v)
             if [ $? -eq 0 ]; then
                 print_success "Onyx containers and volumes removed"
             else
@@ -306,8 +337,13 @@ echo " \____/|_| |_|\__, /_/\_\ "
 echo "               __/ |      "
 echo "              |___/       "
 echo -e "${NC}"
-echo "Welcome to Onyx Installation Script"
-echo "===================================="
+if [[ "$LITE_MODE" = true ]]; then
+    echo "Welcome to Onyx Lite Installation Script"
+    echo "========================================="
+else
+    echo "Welcome to Onyx Installation Script"
+    echo "===================================="
+fi
 echo ""
 
 # User acknowledgment section
@@ -315,6 +351,11 @@ echo -e "${YELLOW}${BOLD}This script will:${NC}"
 echo "1. Download deployment files for Onyx into a new '${INSTALL_ROOT}' directory"
 echo "2. Check your system resources (Docker, memory, disk space)"
 echo "3. Guide you through deployment options (version, authentication)"
+if [[ "$LITE_MODE" = true ]]; then
+    echo ""
+    echo -e "${YELLOW}${BOLD}Lite mode:${NC} Vespa, Redis, and model servers will NOT be started."
+    echo "This gives you the core chat experience with lower resource requirements."
+fi
 echo ""
 
 if is_interactive; then
@@ -336,9 +377,11 @@ fi
 if [[ "$DRY_RUN" = true ]]; then
     print_info "Dry run mode — showing what would happen:"
     echo "  • Install root: ${INSTALL_ROOT}"
+    echo "  • Lite mode: ${LITE_MODE}"
     echo "  • Include Craft: ${INCLUDE_CRAFT}"
     echo "  • OS type: ${OSTYPE:-unknown} (WSL: ${IS_WSL})"
     echo "  • Downloader: ${DOWNLOADER}"
+    echo "  • Min RAM: ${EXPECTED_DOCKER_RAM_GB}GB, Min disk: ${EXPECTED_DISK_GB}GB"
     echo ""
     print_success "Dry run complete (no changes made)"
     exit 0
@@ -515,6 +558,9 @@ print_info "This step downloads all necessary configuration files from GitHub...
 echo ""
 print_info "Downloading the following files:"
 echo "  • docker-compose.yml - Main Docker Compose configuration"
+if [[ "$LITE_MODE" = true ]]; then
+    echo "  • ${LITE_COMPOSE_FILE} - Lite mode overlay"
+fi
 echo "  • env.template - Environment variables template"
 echo "  • nginx/app.conf.template - Nginx web server configuration"
 echo "  • nginx/run-nginx.sh - Nginx startup script"
@@ -560,6 +606,19 @@ else
     print_error "Failed to download Docker Compose file"
     print_info "Please ensure you have internet connection and try again"
     exit 1
+fi
+
+# Download lite overlay if --lite was requested
+if [[ "$LITE_MODE" = true ]]; then
+    LITE_FILE="${INSTALL_ROOT}/deployment/${LITE_COMPOSE_FILE}"
+    print_info "Downloading ${LITE_COMPOSE_FILE} (lite overlay)..."
+    if download_file "${GITHUB_RAW_URL}/${LITE_COMPOSE_FILE}" "$LITE_FILE" 2>/dev/null; then
+        print_success "Lite overlay downloaded successfully"
+    else
+        print_error "Failed to download lite overlay"
+        print_info "Please ensure you have internet connection and try again"
+        exit 1
+    fi
 fi
 
 # Download env.template file
@@ -630,7 +689,7 @@ if [ -d "${INSTALL_ROOT}/deployment" ] && [ -f "${INSTALL_ROOT}/deployment/docke
 
     if [ -n "$COMPOSE_CMD" ]; then
         # Check if any containers are running
-        RUNNING_CONTAINERS=$(cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD -f docker-compose.yml ps -q 2>/dev/null | wc -l)
+        RUNNING_CONTAINERS=$(cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args) ps -q 2>/dev/null | wc -l)
         if [ "$RUNNING_CONTAINERS" -gt 0 ]; then
             print_error "Onyx services are currently running!"
             echo ""
@@ -801,6 +860,13 @@ else
     echo ""
 fi
 
+# Reject craft image tags when running in lite mode
+if [[ "$LITE_MODE" = true ]] && [[ "${VERSION:-}" == craft-* ]]; then
+    print_error "Cannot use a craft image tag (${VERSION}) with --lite."
+    print_info "Craft requires services (Vespa, Redis, background workers) that lite mode disables."
+    exit 1
+fi
+
 # Function to check if a port is available
 is_port_available() {
     local port=$1
@@ -886,7 +952,7 @@ print_step "Pulling Docker images"
 print_info "This may take several minutes depending on your internet connection..."
 echo ""
 print_info "Downloading Docker images (this may take a while)..."
-(cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD -f docker-compose.yml pull --quiet)
+(cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args) pull --quiet)
 if [ $? -eq 0 ]; then
     print_success "Docker images downloaded successfully"
 else
@@ -900,9 +966,9 @@ print_info "Launching containers..."
 echo ""
 if [ "$USE_LATEST" = true ]; then
     print_info "Force pulling latest images and recreating containers..."
-    (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD -f docker-compose.yml up -d --pull always --force-recreate)
+    (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args) up -d --pull always --force-recreate)
 else
-    (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD -f docker-compose.yml up -d)
+    (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args) up -d)
 fi
 if [ $? -ne 0 ]; then
     print_error "Failed to start Onyx services"
@@ -924,7 +990,7 @@ echo ""
 # Check for restart loops
 print_info "Checking container health status..."
 RESTART_ISSUES=false
-CONTAINERS=$(cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD -f docker-compose.yml ps -q 2>/dev/null)
+CONTAINERS=$(cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args) ps -q 2>/dev/null)
 
 for CONTAINER in $CONTAINERS; do
     PROJECT_NAME="$(basename "$INSTALL_ROOT")_deployment_"
@@ -953,7 +1019,7 @@ if [ "$RESTART_ISSUES" = true ]; then
     print_error "Some containers are experiencing issues!"
     echo ""
     print_info "Please check the logs for more information:"
-    echo "  (cd \"${INSTALL_ROOT}/deployment\" && $COMPOSE_CMD -f docker-compose.yml logs)"
+    echo "  (cd \"${INSTALL_ROOT}/deployment\" && $COMPOSE_CMD $(compose_file_args) logs)"
 
     echo ""
     print_info "If the issue persists, please contact: founders@onyx.app"
@@ -1032,6 +1098,18 @@ echo ""
 print_info "If authentication is enabled, you can create your admin account here:"
 echo "   • Visit http://localhost:${HOST_PORT}/auth/signup to create your admin account"
 echo "   • The first user created will automatically have admin privileges"
+echo ""
+if [[ "$LITE_MODE" = true ]]; then
+    echo ""
+    print_info "Running in Lite mode — the following services are NOT started:"
+    echo "  • Vespa (vector database)"
+    echo "  • Redis (cache)"
+    echo "  • Model servers (embedding/inference)"
+    echo "  • Background workers (Celery)"
+    echo ""
+    print_info "Connectors and RAG search are disabled. LLM chat, tools, user file"
+    print_info "uploads, Projects, Agent knowledge, and code interpreter still work."
+fi
 echo ""
 print_info "Refer to the README in the ${INSTALL_ROOT} directory for more information."
 echo ""
