@@ -46,17 +46,8 @@ export interface Settings {
   // Onyx Craft (Build Mode) feature flag
   onyx_craft_enabled?: boolean;
 
-  // Whether the backend is running Enterprise Edition code.
-  // When true, EE-only API routes (/license, /admin/billing, /manage/admin/user-group,
-  // etc.) are registered and safe to call. When false (CE), those routes don't exist.
-  // This is a deployment fact — it does NOT mean EE features are unlocked.
-  // See ee_features_enabled for license-based feature gating.
-  running_ee_backend?: boolean;
-
   // Whether EE features are unlocked (user has a valid enterprise license).
   // Controls UI visibility of EE features like user groups, analytics, RBAC.
-  // Note: running_ee_backend can be true while this is false — EE routes
-  // exist but features are locked until a license is obtained.
   ee_features_enabled?: boolean;
 
   // Seat usage - populated when seat limit is exceeded

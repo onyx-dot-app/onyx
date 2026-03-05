@@ -3,34 +3,14 @@ import useSWR from "swr";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { LicenseStatus } from "@/lib/billing/interfaces";
-import { useSettingsContext } from "@/providers/SettingsProvider";
-
-const EMPTY_STATE = {
-  data: undefined,
-  isLoading: false,
-  error: undefined,
-  refresh: () => Promise.resolve(undefined),
-};
 
 /**
  * Hook to fetch license status for self-hosted deployments.
  *
- * Skips the fetch when:
- * - Cloud deployment (uses tenant auth instead)
- * - Backend is not running EE (CE has no /license route)
- *
- * Uses `running_ee_backend` from settings to determine if the /license
- * endpoint exists. This prevents 404s on CE deployments.
+ * Skips the fetch on cloud deployments (uses tenant auth instead).
  */
 export function useLicense() {
-  const { settings } = useSettingsContext();
-
-  // running_ee_backend tells us if EE API routes are registered.
-  // Only fetch when: not cloud AND backend has the /license endpoint.
-  const url =
-    NEXT_PUBLIC_CLOUD_ENABLED || !settings.running_ee_backend
-      ? null
-      : "/api/license";
+  const url = NEXT_PUBLIC_CLOUD_ENABLED ? null : "/api/license";
 
   const { data, error, mutate, isLoading } = useSWR<LicenseStatus>(
     url,
@@ -44,5 +24,14 @@ export function useLicense() {
     }
   );
 
-  return url ? { data, isLoading, error, refresh: mutate } : EMPTY_STATE;
+  if (!url) {
+    return {
+      data: undefined,
+      isLoading: false,
+      error: undefined,
+      refresh: () => Promise.resolve(undefined),
+    };
+  }
+
+  return { data, isLoading, error, refresh: mutate };
 }

@@ -80,12 +80,6 @@ def apply_license_status_to_settings(settings: Settings) -> Settings:
     If LICENSE_ENFORCEMENT_ENABLED is false, ee_features_enabled is set to True
     (since EE code was loaded via ENABLE_PAID_ENTERPRISE_EDITION_FEATURES).
     """
-    # This function only runs when the backend is EE, so EE routes are
-    # guaranteed to be registered. The frontend uses this to know it can
-    # safely call EE-only endpoints (e.g. /license, /admin/billing) without
-    # getting 404s. This is always True here — CE keeps the default (False).
-    settings.running_ee_backend = True
-
     if not LICENSE_ENFORCEMENT_ENABLED:
         # License enforcement disabled - EE code is loaded via
         # ENABLE_PAID_ENTERPRISE_EDITION_FEATURES, so EE features are on

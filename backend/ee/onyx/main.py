@@ -154,8 +154,6 @@ def get_application() -> FastAPI:
 
     # Unified billing API - always registered in EE.
     # Each endpoint is protected by the `current_admin_user` dependency (admin auth).
-    # The /api/settings running_ee_backend flag tells the frontend whether
-    # to call these endpoints (avoids 404s when the EE backend isn't running).
     include_router_with_global_prefix_prepended(application, billing_router)
 
     if MULTI_TENANT:
