@@ -18,6 +18,11 @@ const DOCX_MIMES = [
   "application/msword",
 ];
 
+function isLegacyDoc(fileName: string): boolean {
+  const lower = fileName.toLowerCase();
+  return lower.endsWith(".doc") && !lower.endsWith(".docx");
+}
+
 interface DocxLoadResult {
   plainText: string;
   wordCount: number;
@@ -33,11 +38,16 @@ function DocxPreview({ fileUrl, onLoad }: DocxPreviewProps) {
   const [error, setError] = useState<string | null>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const styleRef = useRef<HTMLDivElement>(null);
+  const onLoadRef = useRef(onLoad);
+  onLoadRef.current = onLoad;
 
   useEffect(() => {
     async function loadDocument() {
       try {
         const response = await fetch(fileUrl);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch document: ${response.status}`);
+        }
         const buffer = await response.arrayBuffer();
 
         // Render the DOCX with full layout fidelity
@@ -66,7 +76,7 @@ function DocxPreview({ fileUrl, onLoad }: DocxPreviewProps) {
           .split(/\s+/)
           .filter((w: string) => w.length > 0).length;
 
-        onLoad({ plainText: text, wordCount: words });
+        onLoadRef.current({ plainText: text, wordCount: words });
       } catch {
         setError(
           "Could not preview this document. Download the file to view it."
@@ -76,7 +86,7 @@ function DocxPreview({ fileUrl, onLoad }: DocxPreviewProps) {
       }
     }
     loadDocument();
-  }, [fileUrl, onLoad]);
+  }, [fileUrl]);
 
   if (error) {
     return (
@@ -128,14 +138,26 @@ export const docxVariant: PreviewVariant = {
     return "Word Document";
   },
 
-  renderContent: (ctx: PreviewContext) => (
-    <DocxPreview
-      fileUrl={ctx.fileUrl}
-      onLoad={(result) => {
-        lastDocxResult = result;
-      }}
-    />
-  ),
+  renderContent: (ctx: PreviewContext) => {
+    if (isLegacyDoc(ctx.fileName)) {
+      return (
+        <Section justifyContent="center" alignItems="center" padding={1.5}>
+          <Text text03 mainUiBody>
+            Legacy .doc format cannot be previewed. Download the file to view
+            it.
+          </Text>
+        </Section>
+      );
+    }
+    return (
+      <DocxPreview
+        fileUrl={ctx.fileUrl}
+        onLoad={(result) => {
+          lastDocxResult = result;
+        }}
+      />
+    );
+  },
 
   renderFooterLeft: () => null,
   renderFooterRight: (ctx: PreviewContext) => (
