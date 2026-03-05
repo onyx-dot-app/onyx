@@ -5,7 +5,6 @@ from typing import cast
 
 from fastapi import APIRouter
 from fastapi import Depends
-from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_admin_user
@@ -28,6 +27,8 @@ from onyx.db.feedback import update_document_boost_for_user
 from onyx.db.feedback import update_document_hidden_for_user
 from onyx.db.index_attempt import cancel_indexing_attempts_for_ccpair
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
@@ -124,11 +125,11 @@ def validate_existing_genai_api_key(
     try:
         llm = get_default_llm(timeout=10)
     except ValueError:
-        raise HTTPException(status_code=404, detail="LLM not setup")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "LLM not setup")
 
     error = test_llm(llm)
     if error:
-        raise HTTPException(status_code=400, detail=error)
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, error)
 
     # Mark check as successful
     curr_time = datetime.now(tz=timezone.utc)
@@ -159,10 +160,7 @@ def create_deletion_attempt_for_connector_id(
             f"'{credential_id}' does not exist. Has it already been deleted?"
         )
         logger.error(error)
-        raise HTTPException(
-            status_code=404,
-            detail=error,
-        )
+        raise OnyxError(OnyxErrorCode.CONNECTOR_NOT_FOUND, error)
 
     # Cancel any scheduled indexing attempts
     cancel_indexing_attempts_for_ccpair(
@@ -178,9 +176,9 @@ def create_deletion_attempt_for_connector_id(
     #     connector_credential_pair=cc_pair, db_session=db_session
     # )
     # if deletion_attempt_disallowed_reason:
-    #     raise HTTPException(
-    #         status_code=400,
-    #         detail=deletion_attempt_disallowed_reason,
+    #     raise OnyxError(
+    #         OnyxErrorCode.VALIDATION_ERROR,
+    #         deletion_attempt_disallowed_reason,
     #     )
 
     # mark as deleting
