@@ -2,7 +2,6 @@
 
 from fastapi import APIRouter
 from fastapi import Depends
-from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from onyx.auth.oauth_token_manager import OAuthTokenManager
@@ -20,6 +19,8 @@ from onyx.db.oauth_config import get_oauth_configs
 from onyx.db.oauth_config import get_tools_by_oauth_config
 from onyx.db.oauth_config import update_oauth_config
 from onyx.db.oauth_config import upsert_user_oauth_token
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.federated_connectors.oauth_utils import generate_oauth_state
 from onyx.federated_connectors.oauth_utils import verify_oauth_state
 from onyx.server.features.oauth_config.models import OAuthCallbackResponse
@@ -79,7 +80,7 @@ def create_oauth_config_endpoint(
         )
         return _oauth_config_to_snapshot(oauth_config, db_session)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
 
 
 @admin_router.get("")
@@ -101,8 +102,8 @@ def get_oauth_config_endpoint(
     """Retrieve a single OAuth configuration (admin only)."""
     oauth_config = get_oauth_config(oauth_config_id, db_session)
     if not oauth_config:
-        raise HTTPException(
-            status_code=404, detail=f"OAuth config with id {oauth_config_id} not found"
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND, f"OAuth config with id {oauth_config_id} not found"
         )
     return _oauth_config_to_snapshot(oauth_config, db_session)
 
@@ -131,7 +132,7 @@ def update_oauth_config_endpoint(
         )
         return _oauth_config_to_snapshot(updated_config, db_session)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e))
 
 
 @admin_router.delete("/{oauth_config_id}")
@@ -145,7 +146,7 @@ def delete_oauth_config_endpoint(
         delete_oauth_config(oauth_config_id, db_session)
         return {"message": "OAuth configuration deleted successfully"}
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e))
 
 
 """User endpoints for OAuth flow"""
@@ -165,9 +166,9 @@ def initiate_oauth_flow(
     # Get OAuth config
     oauth_config = get_oauth_config(request.oauth_config_id, db_session)
     if not oauth_config:
-        raise HTTPException(
-            status_code=404,
-            detail=f"OAuth config with id {request.oauth_config_id} not found",
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            f"OAuth config with id {request.oauth_config_id} not found",
         )
 
     # Generate state parameter and store in Redis
@@ -206,8 +207,8 @@ def handle_oauth_callback(
 
         # Verify the user_id matches
         if str(user.id) != session.user_id:
-            raise HTTPException(
-                status_code=403, detail="User mismatch in OAuth callback"
+            raise OnyxError(
+                OnyxErrorCode.UNAUTHORIZED, "User mismatch in OAuth callback"
             )
 
         # Extract oauth_config_id from session (stored during initiate)
@@ -216,9 +217,9 @@ def handle_oauth_callback(
         # Get OAuth config
         oauth_config = get_oauth_config(oauth_config_id, db_session)
         if not oauth_config:
-            raise HTTPException(
-                status_code=404,
-                detail=f"OAuth config with id {oauth_config_id} not found",
+            raise OnyxError(
+                OnyxErrorCode.NOT_FOUND,
+                f"OAuth config with id {oauth_config_id} not found",
             )
 
         # Exchange code for token
@@ -262,4 +263,4 @@ def revoke_oauth_token(
         delete_user_oauth_token(oauth_config_id, user.id, db_session)
         return {"message": "OAuth token revoked successfully"}
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e))

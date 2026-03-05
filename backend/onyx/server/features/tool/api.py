@@ -2,7 +2,6 @@ from typing import Any
 
 from fastapi import APIRouter
 from fastapi import Depends
-from fastapi import HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -19,6 +18,8 @@ from onyx.db.tools import get_tool_by_id
 from onyx.db.tools import get_tools
 from onyx.db.tools import get_tools_by_ids
 from onyx.db.tools import update_tool
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.tool.models import CustomToolCreate
 from onyx.server.features.tool.models import CustomToolUpdate
 from onyx.server.features.tool.models import ToolSnapshot
@@ -40,16 +41,16 @@ def _validate_tool_definition(definition: dict[str, Any]) -> None:
     try:
         validate_openapi_schema(definition)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
 
 
 def _validate_auth_settings(tool_data: CustomToolCreate | CustomToolUpdate) -> None:
     if tool_data.passthrough_auth and tool_data.custom_headers:
         for header in tool_data.custom_headers:
             if header.key.lower() == "authorization":
-                raise HTTPException(
-                    status_code=400,
-                    detail="Cannot use passthrough auth with custom authorization headers",
+                raise OnyxError(
+                    OnyxErrorCode.VALIDATION_ERROR,
+                    "Cannot use passthrough auth with custom authorization headers",
                 )
 
 
@@ -58,12 +59,12 @@ def _get_editable_custom_tool(tool_id: int, db_session: Session, user: User) -> 
     try:
         tool = get_tool_by_id(tool_id, db_session)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e))
 
     if tool.in_code_tool_id is not None:
-        raise HTTPException(
-            status_code=400,
-            detail="Built-in tools cannot be modified through this endpoint.",
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Built-in tools cannot be modified through this endpoint.",
         )
 
     # Admins can always make changes; non-admins must own the tool.
@@ -71,9 +72,9 @@ def _get_editable_custom_tool(tool_id: int, db_session: Session, user: User) -> 
         return tool
 
     if tool.user_id is None or tool.user_id != user.id:
-        raise HTTPException(
-            status_code=403,
-            detail="You can only modify actions that you created.",
+        raise OnyxError(
+            OnyxErrorCode.UNAUTHORIZED,
+            "You can only modify actions that you created.",
         )
 
     return tool
@@ -137,10 +138,10 @@ def delete_custom_tool(
     try:
         delete_tool__no_commit(tool_id, db_session)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e))
     except Exception as e:
         # handles case where tool is still used by an Assistant
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
     db_session.commit()
 
 
@@ -166,7 +167,7 @@ def update_tools_status(
     bulk updates.
     """
     if not update_data.tool_ids:
-        raise HTTPException(status_code=400, detail="No tool IDs provided")
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, "No tool IDs provided")
 
     tools = get_tools_by_ids(update_data.tool_ids, db_session)
     tools_by_id = {tool.id: tool for tool in tools}
@@ -183,8 +184,8 @@ def update_tools_status(
             missing_tools.append(tool_id)
 
     if missing_tools:
-        raise HTTPException(
-            status_code=404, detail=f"Tools with IDs {missing_tools} not found"
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND, f"Tools with IDs {missing_tools} not found"
         )
 
     db_session.commit()
@@ -242,7 +243,7 @@ def get_custom_tool(
     try:
         tool = get_tool_by_id(tool_id, db_session)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e))
     return ToolSnapshot.from_model(tool)
 
 
