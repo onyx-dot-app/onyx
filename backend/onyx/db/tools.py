@@ -13,6 +13,7 @@ from onyx.db.constants import UNSET
 from onyx.db.constants import UnsetType
 from onyx.db.enums import MCPServerStatus
 from onyx.db.models import MCPServer
+from onyx.db.models import OAuthConfig
 from onyx.db.models import Tool
 from onyx.db.models import ToolCall
 from onyx.server.features.tool.models import Header
@@ -171,8 +172,21 @@ def delete_tool__no_commit(tool_id: int, db_session: Session) -> None:
     if tool is None:
         raise ValueError(f"Tool with ID {tool_id} does not exist")
 
+    oauth_config_id = tool.oauth_config_id
+
     db_session.delete(tool)
-    db_session.flush()  # Don't commit yet, let caller decide when to commit
+    db_session.flush()
+
+    # Clean up orphaned OAuthConfig if no other tools reference it
+    if oauth_config_id is not None:
+        other_tools = db_session.scalars(
+            select(Tool).where(Tool.oauth_config_id == oauth_config_id)
+        ).all()
+        if not other_tools:
+            oauth_config = db_session.get(OAuthConfig, oauth_config_id)
+            if oauth_config:
+                db_session.delete(oauth_config)
+                db_session.flush()
 
 
 def get_builtin_tool(
