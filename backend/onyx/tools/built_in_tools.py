@@ -68,7 +68,9 @@ def _build_tool_name_to_class() -> dict[str, Type[BUILT_IN_TOOL_TYPES]]:
         elif isinstance(name_attr, str):
             tool_name = name_attr
         else:
-            continue
+            raise ValueError(
+                f"Built-in tool {cls.__name__} must define a valid LLM-facing tool name"
+            )
         result[tool_name] = cls
     return result
 
