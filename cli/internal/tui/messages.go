@@ -34,13 +34,3 @@ type AgentsLoadedMsg struct {
 	Agents []models.AgentSummary
 	Err    error
 }
-
-// InfoMsg is a simple informational message for display.
-type InfoMsg struct {
-	Text string
-}
-
-// ErrorMsg wraps an error for display.
-type ErrorMsg struct {
-	Err error
-}

@@ -361,10 +361,6 @@ func (m Model) handleStreamEvent(msg api.StreamEventMsg) (tea.Model, tea.Cmd) {
 	if !m.isStreaming {
 		return m, nil
 	}
-	if msg.Event == nil {
-		return m, api.WaitForStreamEvent(m.streamCh)
-	}
-
 	switch e := msg.Event.(type) {
 	case models.SessionCreatedEvent:
 		m.chatSessionID = &e.ChatSessionID
@@ -453,15 +449,16 @@ func (m Model) handleStreamDone(msg api.StreamDoneMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) finishStream(err error) (Model, tea.Cmd) {
-	if m.agentStarted {
-		m.viewport.finishAgent()
-		if len(m.citations) > 0 {
-			m.viewport.addCitations(m.citations)
-		}
+	m.viewport.finishAgent()
+	if m.agentStarted && len(m.citations) > 0 {
+		m.viewport.addCitations(m.citations)
 	}
 	m.isStreaming = false
 	m.agentStarted = false
 	m.status.setStreaming(false)
+	if m.streamCancel != nil {
+		m.streamCancel()
+	}
 	m.streamCancel = nil
 	m.streamCh = nil
 
