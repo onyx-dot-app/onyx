@@ -29,9 +29,8 @@ const DEFAULT_BROWSER_INFO: BrowserInfo = {
 export default function useBrowserInfo(): BrowserInfo {
   const [browserInfo, setBrowserInfo] =
     useState<BrowserInfo>(DEFAULT_BROWSER_INFO);
-
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    const userAgent = window.navigator.userAgent;
 
     const userAgent = window.navigator.userAgent;
     const isEdge = /Edg/i.test(userAgent);
