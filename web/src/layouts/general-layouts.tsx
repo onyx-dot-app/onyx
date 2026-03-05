@@ -176,7 +176,10 @@ function AttachmentItemLayout({
     <Section flexDirection="row" gap={0.25} padding={0.25}>
       <div className={cn("h-[2.25rem] aspect-square rounded-08")}>
         <Section>
-          <div className="attachment-button__icon-wrapper">
+          <div
+            className="attachment-button__icon-wrapper"
+            data-testid="attachment-item-icon-wrapper"
+          >
             <Icon className="attachment-button__icon" />
           </div>
         </Section>
@@ -187,7 +190,7 @@ function AttachmentItemLayout({
         alignItems="center"
         gap={1.5}
       >
-        <div className="flex-1 min-w-0">
+        <div data-testid="attachment-item-title" className="flex-1 min-w-0">
           <Content
             title={title}
             description={description}
