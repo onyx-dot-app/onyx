@@ -1,5 +1,5 @@
-import { test, expect } from "@playwright/test";
-import { loginAs } from "../../utils/auth";
+import { test, expect } from "@tests/e2e/fixtures/eeFeatures";
+import { loginAs } from "@tests/e2e/utils/auth";
 
 test.describe("Appearance Theme Settings", () => {
   const TEST_VALUES = {
@@ -12,9 +12,21 @@ test.describe("Appearance Theme Settings", () => {
     consentPrompt: "I agree to the terms",
   };
 
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async ({ page, eeEnabled }) => {
+    test.skip(
+      !eeEnabled,
+      "Enterprise license not active — skipping theme tests"
+    );
+
+    // Fresh session — the eeEnabled fixture already logged in to check the
+    // setting, so clear cookies and re-login for a clean test state.
     await page.context().clearCookies();
     await loginAs(page, "admin");
+
+    await page.goto("/admin/theme");
+    await expect(
+      page.locator('[data-label="application-name-input"]')
+    ).toBeVisible({ timeout: 10_000 });
 
     // Clear localStorage to ensure consent modal shows
     await page.evaluate(() => {
