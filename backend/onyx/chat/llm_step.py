@@ -1226,6 +1226,7 @@ def run_llm_step_pkt_generator(
                 yield from _close_reasoning_if_active()
 
                 for tool_call_delta in delta.tool_calls:
+                    # maybe_emit depends and update being called first and attaching the delta
                     _update_tool_call_with_delta(id_to_tool_call_map, tool_call_delta)
                     yield from maybe_emit_argument_delta(
                         tool_calls_in_progress=id_to_tool_call_map,
