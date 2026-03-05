@@ -2,6 +2,7 @@ import functools
 import json
 import re
 from collections.abc import Generator
+from collections.abc import Mapping
 from typing import Any
 from typing import Type
 
@@ -30,7 +31,7 @@ def _get_tool_name_to_class() -> dict[str, Type[Tool]]:
 
 
 def _get_tool_class(
-    tool_calls_in_progress: dict[int, dict[str, Any]],
+    tool_calls_in_progress: Mapping[int, Mapping[str, Any]],
     tool_call_delta: Any,
 ) -> Type[Tool] | None:
     """Look up the Tool subclass for a streaming tool call delta.
@@ -135,27 +136,23 @@ def _decode_partial_json_string(raw_escaped: str) -> str:
 
 
 def maybe_emit_argument_delta(
-    tool_calls_in_progress: dict[int, dict[str, Any]],
+    tool_calls_in_progress: Mapping[int, Mapping[str, Any]],
     tool_call_delta: Any,
     placement: Placement,
 ) -> Generator[Packet, None, None]:
     """Emit decoded tool call argument content to the frontend.
 
-    LLMs stream tool call arguments as raw JSON fragments containing escape
-    sequences (e.g. ``\\n`` instead of actual newlines). This function:
-    1. Determines which JSON key is currently being streamed
-    2. Extracts and decodes its accumulated string value
-    3. Emits only the *newly decoded* portion as a ``ToolCallArgumentDelta``
-
-    The frontend can then simply concatenate these deltas to build clean,
-    displayable content without any JSON parsing.
+    Stateless: derives the delta by comparing the accumulated arguments
+    against their state before the current fragment was appended.
     """
     tool_cls = _get_tool_class(tool_calls_in_progress, tool_call_delta)
     if not tool_cls or not tool_cls.do_emit_argument_deltas():
         return
 
-    has_new_args = tool_call_delta.function and tool_call_delta.function.arguments
-    if not has_new_args:
+    delta_fragment = (
+        tool_call_delta.function.arguments if tool_call_delta.function else None
+    )
+    if not delta_fragment:
         return
 
     tc_data = tool_calls_in_progress[tool_call_delta.index]
@@ -167,20 +164,20 @@ def maybe_emit_argument_delta(
         return
 
     # Step 2: Extract the raw (still-escaped) string value for that key
-    raw_value = _extract_raw_json_string_value(accumulated_args, active_key)
-    if raw_value is None:
+    current_raw = _extract_raw_json_string_value(accumulated_args, active_key)
+    if current_raw is None:
         return
 
-    # Step 3: Decode escape sequences and emit only the new portion
-    decoded_value = _decode_partial_json_string(raw_value)
-    emitted_lengths: dict[str, int] = tc_data.setdefault("_emitted_lens", {})
-    previously_emitted = emitted_lengths.get(active_key, 0)
+    # Step 3: Derive the new portion by comparing against pre-delta state
+    prev_args = accumulated_args[: -len(delta_fragment)]
+    prev_raw = _extract_raw_json_string_value(prev_args, active_key)
 
-    if len(decoded_value) <= previously_emitted:
+    decoded_current = _decode_partial_json_string(current_raw)
+    decoded_prev = _decode_partial_json_string(prev_raw) if prev_raw is not None else ""
+
+    new_content = decoded_current[len(decoded_prev) :]
+    if not new_content:
         return
-
-    new_content = decoded_value[previously_emitted:]
-    emitted_lengths[active_key] = len(decoded_value)
 
     yield Packet(
         placement=placement,

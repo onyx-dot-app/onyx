@@ -127,19 +127,6 @@ class TestMaybeEmitArgumentDeltaGuards:
         }
         assert _collect(tc_map, _make_tool_call_delta(arguments="{")) == []
 
-    @patch("onyx.chat.tool_call_args_streaming._get_tool_class")
-    def test_no_duplicate_emission(self, mock_get_tool: MagicMock) -> None:
-        """Calling with the same accumulated args produces no new packets."""
-        mock_get_tool.return_value = _mock_tool_class()
-
-        tc_map: dict[int, dict[str, Any]] = {
-            0: {"id": "tc_1", "name": "python", "arguments": '{"code": "x'}
-        }
-        delta = _make_tool_call_delta(arguments="x")
-
-        assert len(_collect(tc_map, delta)) == 1
-        assert _collect(tc_map, delta) == []
-
 
 class TestMaybeEmitArgumentDeltaBasic:
     """Tests for correct packet content and incremental emission."""
@@ -155,7 +142,7 @@ class TestMaybeEmitArgumentDeltaBasic:
                 "arguments": '{"code": "print(1)',
             }
         }
-        packets = _collect(tc_map, _make_tool_call_delta(arguments=")"))
+        packets = _collect(tc_map, _make_tool_call_delta(arguments="print(1)"))
 
         assert len(packets) == 1
         obj = packets[0].obj
@@ -175,11 +162,11 @@ class TestMaybeEmitArgumentDeltaBasic:
             0: {"id": "tc_1", "name": "python", "arguments": '{"code": "abc'}
         }
 
-        packets_1 = _collect(tc_map, _make_tool_call_delta(arguments="c"))
+        packets_1 = _collect(tc_map, _make_tool_call_delta(arguments="abc"))
         assert packets_1[0].obj.argument_deltas == {"code": "abc"}
 
         tc_map[0]["arguments"] = '{"code": "abcdef'
-        packets_2 = _collect(tc_map, _make_tool_call_delta(arguments="f"))
+        packets_2 = _collect(tc_map, _make_tool_call_delta(arguments="def"))
         assert packets_2[0].obj.argument_deltas == {"code": "def"}
 
     @patch("onyx.chat.tool_call_args_streaming._get_tool_class")
@@ -195,7 +182,7 @@ class TestMaybeEmitArgumentDeltaBasic:
         assert packets_1[0].obj.argument_deltas == {"code": "x"}
 
         tc_map[0]["arguments"] = '{"code": "x", "output": "hello'
-        packets_2 = _collect(tc_map, _make_tool_call_delta(arguments="o"))
+        packets_2 = _collect(tc_map, _make_tool_call_delta(arguments="hello"))
         assert packets_2[0].obj.argument_deltas == {"output": "hello"}
 
     @patch("onyx.chat.tool_call_args_streaming._get_tool_class")
@@ -224,7 +211,7 @@ class TestMaybeEmitArgumentDeltaDecoding:
                 "arguments": '{"code": "line1\\nline2',
             }
         }
-        packets = _collect(tc_map, _make_tool_call_delta(arguments="2"))
+        packets = _collect(tc_map, _make_tool_call_delta(arguments="line1\\nline2"))
         assert packets[0].obj.argument_deltas == {"code": "line1\nline2"}
 
     @patch("onyx.chat.tool_call_args_streaming._get_tool_class")
@@ -238,7 +225,7 @@ class TestMaybeEmitArgumentDeltaDecoding:
                 "arguments": '{"code": "\\tindented',
             }
         }
-        packets = _collect(tc_map, _make_tool_call_delta(arguments="d"))
+        packets = _collect(tc_map, _make_tool_call_delta(arguments="\\tindented"))
         assert packets[0].obj.argument_deltas == {"code": "\tindented"}
 
     @patch("onyx.chat.tool_call_args_streaming._get_tool_class")
@@ -252,7 +239,7 @@ class TestMaybeEmitArgumentDeltaDecoding:
                 "arguments": '{"code": "say \\"hi\\"',
             }
         }
-        packets = _collect(tc_map, _make_tool_call_delta(arguments='"'))
+        packets = _collect(tc_map, _make_tool_call_delta(arguments='say \\"hi\\"'))
         assert packets[0].obj.argument_deltas == {"code": 'say "hi"'}
 
     @patch("onyx.chat.tool_call_args_streaming._get_tool_class")
@@ -266,7 +253,7 @@ class TestMaybeEmitArgumentDeltaDecoding:
                 "arguments": '{"code": "path\\\\dir',
             }
         }
-        packets = _collect(tc_map, _make_tool_call_delta(arguments="r"))
+        packets = _collect(tc_map, _make_tool_call_delta(arguments="path\\\\dir"))
         assert packets[0].obj.argument_deltas == {"code": "path\\dir"}
 
     @patch("onyx.chat.tool_call_args_streaming._get_tool_class")
@@ -280,7 +267,7 @@ class TestMaybeEmitArgumentDeltaDecoding:
                 "arguments": '{"code": "\\u0041',
             }
         }
-        packets = _collect(tc_map, _make_tool_call_delta(arguments="1"))
+        packets = _collect(tc_map, _make_tool_call_delta(arguments="\\u0041"))
         assert packets[0].obj.argument_deltas == {"code": "A"}
 
     @patch("onyx.chat.tool_call_args_streaming._get_tool_class")
@@ -297,7 +284,7 @@ class TestMaybeEmitArgumentDeltaDecoding:
                 "arguments": '{"code": "hello\\',
             }
         }
-        packets = _collect(tc_map, _make_tool_call_delta(arguments="\\"))
+        packets = _collect(tc_map, _make_tool_call_delta(arguments="hello\\"))
         # "hello" can be decoded; the trailing backslash is trimmed
         assert packets[0].obj.argument_deltas == {"code": "hello"}
 
@@ -315,7 +302,7 @@ class TestMaybeEmitArgumentDeltaDecoding:
                 "arguments": '{"code": "hello\\u00',
             }
         }
-        packets = _collect(tc_map, _make_tool_call_delta(arguments="0"))
+        packets = _collect(tc_map, _make_tool_call_delta(arguments="hello\\u00"))
         assert packets[0].obj.argument_deltas == {"code": "hello"}
 
 
@@ -499,13 +486,13 @@ class TestMaybeEmitArgumentDeltaEdgeCases:
         }
 
         # Delta for index 0
-        packets_0 = _collect(tc_map, _make_tool_call_delta(index=0, arguments="a"))
+        packets_0 = _collect(tc_map, _make_tool_call_delta(index=0, arguments="aaa"))
         assert len(packets_0) == 1
         assert packets_0[0].obj.tool_id == "tc_1"
         assert packets_0[0].obj.argument_deltas == {"code": "aaa"}
 
         # Delta for index 1
-        packets_1 = _collect(tc_map, _make_tool_call_delta(index=1, arguments="b"))
+        packets_1 = _collect(tc_map, _make_tool_call_delta(index=1, arguments="bbb"))
         assert len(packets_1) == 1
         assert packets_1[0].obj.tool_id == "tc_2"
         assert packets_1[0].obj.argument_deltas == {"code": "bbb"}
