@@ -102,10 +102,10 @@ def register_ollama_models() -> None:
             "ollama/kimi-k2:1t": {"supports_function_calling": True},
             "ollama/kimi-k2:1t-cloud": {"supports_function_calling": True},
             # GLM
+            "ollama_chat/glm-4.6:latest": {"supports_function_calling": True},
             "ollama_chat/glm-4.6:cloud": {"supports_function_calling": True},
-            "ollama_chat/glm-4.6": {"supports_function_calling": True},
-            "ollama/glm-4.6": {"supports_function_calling": True},
-            "ollama/glm-4.6-cloud": {"supports_function_calling": True},
+            "ollama/glm-4.6:latest": {"supports_function_calling": True},
+            "ollama/glm-4.6:cloud": {"supports_function_calling": True},
         }
     )
 
