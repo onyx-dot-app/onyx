@@ -243,6 +243,40 @@ Always-on via `InstrumentedThreadPoolExecutor` (wraps all `ThreadPoolExecutor` u
 onyx_process_thread_count
 ```
 
+## Deep Profiling Metrics (opt-in)
+
+Requires `ENABLE_DEEP_PROFILING=true`. Adds ~10-20% allocation overhead.
+
+### Configuration
+
+| Env Var | Default | Description |
+|---------|---------|-------------|
+| `ENABLE_DEEP_PROFILING` | `false` | Enable tracemalloc + GC + object counting |
+| `DEEP_PROFILING_SNAPSHOT_INTERVAL_SECONDS` | `60.0` | Interval between snapshots |
+| `DEEP_PROFILING_TOP_N_ALLOCATIONS` | `20` | Top allocation sites to export |
+| `DEEP_PROFILING_TOP_N_TYPES` | `30` | Top object types to export |
+
+### Metrics
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `onyx_tracemalloc_top_bytes` | Gauge | `source` | Bytes by top allocation sites |
+| `onyx_tracemalloc_top_count` | Gauge | `source` | Allocation count by source |
+| `onyx_tracemalloc_delta_bytes` | Gauge | `source` | Growth since previous snapshot |
+| `onyx_tracemalloc_total_bytes` | Gauge | — | Total traced memory |
+| `onyx_gc_collections_total` | Counter | `generation` | GC runs per generation |
+| `onyx_gc_collected_total` | Counter | `generation` | Objects collected |
+| `onyx_gc_uncollectable_total` | Counter | `generation` | Uncollectable objects |
+| `onyx_object_type_count` | Gauge | `type` | Live objects by type (top N) |
+
+```promql
+# Top leaking code locations
+topk(10, onyx_tracemalloc_delta_bytes)
+
+# GC uncollectable (true leaks)
+rate(onyx_gc_uncollectable_total[5m])
+```
+
 ## Example PromQL Queries
 
 ### Which endpoints are saturated right now?
