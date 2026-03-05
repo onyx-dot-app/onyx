@@ -39,13 +39,6 @@ POSTGRES_VOLUME=${POSITIONAL_ARGS[1]:-""}
 REDIS_VOLUME=${POSITIONAL_ARGS[2]:-""}
 MINIO_VOLUME=${POSITIONAL_ARGS[3]:-""}
 
-KEEP_OPENSEARCH_DATA=false
-for arg in "$@"; do
-    if [[ "$arg" == "--keep-opensearch-data" ]]; then
-        KEEP_OPENSEARCH_DATA=true
-    fi
-done
-
 # Stop and remove the existing containers
 echo "Stopping and removing existing containers..."
 stop_and_remove_containers
