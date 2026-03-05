@@ -82,7 +82,7 @@ function getSelectionMessage(
     return multi ? "Select items to continue" : "Select an item to continue";
   }
   if (!multi) return "Item selected";
-  return `${count} items selected`;
+  return `${count} item${count !== 1 ? "s" : ""} selected`;
 }
 
 /**
