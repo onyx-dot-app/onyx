@@ -66,6 +66,7 @@ function processColumns<TData>(
     // Clone def to avoid mutating the caller's column definitions
     const clonedDef: ColumnDef<TData, any> = {
       ...col.def,
+      id: col.id,
       size:
         "fixed" in resolvedWidth ? resolvedWidth.fixed : resolvedWidth.weight,
     };
