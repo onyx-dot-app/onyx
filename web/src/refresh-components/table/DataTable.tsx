@@ -325,7 +325,16 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
                         .getRowModel()
                         .rows.find((r) => getRowId(r.original) === activeId);
                       if (!row) return null;
-                      return <DragOverlayRow row={row} variant={rowVariant} />;
+                      return (
+                        <DragOverlayRow
+                          row={row}
+                          variant={rowVariant}
+                          columnWidths={columnWidths}
+                          columnKindMap={columnKindMap}
+                          qualifierColumn={qualifierColumn}
+                          isSelectable={isSelectable}
+                        />
+                      );
                     }
                   : undefined
               }
