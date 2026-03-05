@@ -30,7 +30,10 @@ export default function Layout({ children }: LayoutProps) {
         <SettingsLayouts.Body>
           <div className="grid grid-cols-[auto_1fr]">
             {/* Left: Tab Navigation */}
-            <div className="flex flex-col px-2 w-[12.5rem]">
+            <div
+              data-testid="settings-left-tab-navigation"
+              className="flex flex-col px-2 w-[12.5rem]"
+            >
               <SidebarTab
                 href="/app/settings/general"
                 selected={pathname === "/app/settings/general"}
