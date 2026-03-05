@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -e
+set -euo pipefail
 
 # Expected resource requirements
 EXPECTED_DOCKER_RAM_GB=10
@@ -10,6 +10,9 @@ EXPECTED_DISK_GB=32
 SHUTDOWN_MODE=false
 DELETE_DATA_MODE=false
 INCLUDE_CRAFT=false  # Disabled by default, use --include-craft to enable
+NO_PROMPT=false
+DRY_RUN=false
+VERBOSE=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -25,6 +28,18 @@ while [[ $# -gt 0 ]]; do
             INCLUDE_CRAFT=true
             shift
             ;;
+        --no-prompt)
+            NO_PROMPT=true
+            shift
+            ;;
+        --dry-run)
+            DRY_RUN=true
+            shift
+            ;;
+        --verbose)
+            VERBOSE=true
+            shift
+            ;;
         --help|-h)
             echo "Onyx Installation Script"
             echo ""
@@ -34,6 +49,9 @@ while [[ $# -gt 0 ]]; do
             echo "  --include-craft  Enable Onyx Craft (AI-powered web app building)"
             echo "  --shutdown       Stop (pause) Onyx containers"
             echo "  --delete-data    Remove all Onyx data (containers, volumes, and files)"
+            echo "  --no-prompt      Run non-interactively with defaults (for CI/automation)"
+            echo "  --dry-run        Show what would be done without making changes"
+            echo "  --verbose        Show detailed output for debugging"
             echo "  --help, -h       Show this help message"
             echo ""
             echo "Examples:"
@@ -41,6 +59,7 @@ while [[ $# -gt 0 ]]; do
             echo "  $0 --include-craft    # Install Onyx with Craft enabled"
             echo "  $0 --shutdown         # Pause Onyx services"
             echo "  $0 --delete-data      # Completely remove Onyx and all data"
+            echo "  $0 --no-prompt        # Non-interactive install with defaults"
             exit 0
             ;;
         *)
@@ -51,7 +70,91 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+if [[ "$VERBOSE" = true ]]; then
+    set -x
+fi
+
 INSTALL_ROOT="${INSTALL_PREFIX:-onyx_data}"
+
+# --- Temp file cleanup ---
+TMPFILES=()
+cleanup_tmpfiles() {
+    local f
+    for f in "${TMPFILES[@]:-}"; do
+        rm -rf "$f" 2>/dev/null || true
+    done
+}
+trap cleanup_tmpfiles EXIT
+
+mktempfile() {
+    local f
+    f="$(mktemp)"
+    TMPFILES+=("$f")
+    echo "$f"
+}
+
+# --- Downloader detection (curl with wget fallback) ---
+DOWNLOADER=""
+detect_downloader() {
+    if command -v curl &> /dev/null; then
+        DOWNLOADER="curl"
+        return 0
+    fi
+    if command -v wget &> /dev/null; then
+        DOWNLOADER="wget"
+        return 0
+    fi
+    echo "ERROR: Neither curl nor wget found. Please install one and retry."
+    exit 1
+}
+detect_downloader
+
+download_file() {
+    local url="$1"
+    local output="$2"
+    if [[ "$DOWNLOADER" == "curl" ]]; then
+        curl -fsSL --retry 3 --retry-delay 2 --retry-connrefused -o "$output" "$url"
+    else
+        wget -q --tries=3 --timeout=20 -O "$output" "$url"
+    fi
+}
+
+# --- Interactive prompt helpers ---
+is_interactive() {
+    [[ "$NO_PROMPT" = false ]] && [[ -t 0 ]]
+}
+
+prompt_or_default() {
+    local prompt_text="$1"
+    local default_value="$2"
+    if is_interactive; then
+        read -p "$prompt_text" -r REPLY
+        if [[ -z "$REPLY" ]]; then
+            REPLY="$default_value"
+        fi
+    else
+        REPLY="$default_value"
+    fi
+}
+
+prompt_yn_or_default() {
+    local prompt_text="$1"
+    local default_value="$2"
+    if is_interactive; then
+        read -p "$prompt_text" -n 1 -r
+        echo ""
+    else
+        REPLY="$default_value"
+    fi
+}
+
+prompt_enter_or_skip() {
+    local prompt_text="$1"
+    if is_interactive; then
+        echo -e "$prompt_text"
+        read -r
+    fi
+}
 
 # Colors for output
 RED='\033[0;31m'
@@ -140,12 +243,17 @@ if [ "$DELETE_DATA_MODE" = true ]; then
     echo "  • All downloaded files and configurations"
     echo "  • All user data and documents"
     echo ""
-    read -p "Are you sure you want to continue? Type 'DELETE' to confirm: " -r
-    echo ""
-
-    if [ "$REPLY" != "DELETE" ]; then
-        print_info "Operation cancelled."
-        exit 0
+    if is_interactive; then
+        read -p "Are you sure you want to continue? Type 'DELETE' to confirm: " -r
+        echo ""
+        if [ "$REPLY" != "DELETE" ]; then
+            print_info "Operation cancelled."
+            exit 0
+        fi
+    else
+        print_error "Cannot confirm destructive operation in non-interactive mode."
+        print_info "Run interactively or remove the ${INSTALL_ROOT} directory manually."
+        exit 1
     fi
 
     print_info "Removing Onyx containers and volumes..."
@@ -209,14 +317,31 @@ echo "2. Check your system resources (Docker, memory, disk space)"
 echo "3. Guide you through deployment options (version, authentication)"
 echo ""
 
-# Only prompt for acknowledgment if running interactively
-if [ -t 0 ]; then
+if is_interactive; then
     echo -e "${YELLOW}${BOLD}Please acknowledge and press Enter to continue...${NC}"
     read -r
     echo ""
 else
     echo -e "${YELLOW}${BOLD}Running in non-interactive mode - proceeding automatically...${NC}"
     echo ""
+fi
+
+# Detect OS (including WSL)
+IS_WSL=false
+if [[ -n "${WSL_DISTRO_NAME:-}" ]] || grep -qi microsoft /proc/version 2>/dev/null; then
+    IS_WSL=true
+fi
+
+# Dry-run: show plan and exit
+if [[ "$DRY_RUN" = true ]]; then
+    print_info "Dry run mode — showing what would happen:"
+    echo "  • Install root: ${INSTALL_ROOT}"
+    echo "  • Include Craft: ${INCLUDE_CRAFT}"
+    echo "  • OS type: ${OSTYPE:-unknown} (WSL: ${IS_WSL})"
+    echo "  • Downloader: ${DOWNLOADER}"
+    echo ""
+    print_success "Dry run complete (no changes made)"
+    exit 0
 fi
 
 # GitHub repo base URL - using main branch
@@ -260,41 +385,35 @@ else
     exit 1
 fi
 
-# Function to compare version numbers
+# Returns 0 if $1 <= $2, 1 if $1 > $2
+# Handles missing or non-numeric parts gracefully (treats them as 0)
 version_compare() {
-    # Returns 0 if $1 <= $2, 1 if $1 > $2
-    local version1=$1
-    local version2=$2
+    local version1="${1:-0.0.0}"
+    local version2="${2:-0.0.0}"
 
-    # Split versions into components
-    local v1_major=$(echo $version1 | cut -d. -f1)
-    local v1_minor=$(echo $version1 | cut -d. -f2)
-    local v1_patch=$(echo $version1 | cut -d. -f3)
+    local v1_major v1_minor v1_patch v2_major v2_minor v2_patch
+    v1_major=$(echo "$version1" | cut -d. -f1)
+    v1_minor=$(echo "$version1" | cut -d. -f2)
+    v1_patch=$(echo "$version1" | cut -d. -f3)
+    v2_major=$(echo "$version2" | cut -d. -f1)
+    v2_minor=$(echo "$version2" | cut -d. -f2)
+    v2_patch=$(echo "$version2" | cut -d. -f3)
 
-    local v2_major=$(echo $version2 | cut -d. -f1)
-    local v2_minor=$(echo $version2 | cut -d. -f2)
-    local v2_patch=$(echo $version2 | cut -d. -f3)
+    # Default non-numeric or empty parts to 0
+    [[ "$v1_major" =~ ^[0-9]+$ ]] || v1_major=0
+    [[ "$v1_minor" =~ ^[0-9]+$ ]] || v1_minor=0
+    [[ "$v1_patch" =~ ^[0-9]+$ ]] || v1_patch=0
+    [[ "$v2_major" =~ ^[0-9]+$ ]] || v2_major=0
+    [[ "$v2_minor" =~ ^[0-9]+$ ]] || v2_minor=0
+    [[ "$v2_patch" =~ ^[0-9]+$ ]] || v2_patch=0
 
-    # Compare major version
-    if [ "$v1_major" -lt "$v2_major" ]; then
-        return 0
-    elif [ "$v1_major" -gt "$v2_major" ]; then
-        return 1
-    fi
+    if [ "$v1_major" -lt "$v2_major" ]; then return 0
+    elif [ "$v1_major" -gt "$v2_major" ]; then return 1; fi
 
-    # Compare minor version
-    if [ "$v1_minor" -lt "$v2_minor" ]; then
-        return 0
-    elif [ "$v1_minor" -gt "$v2_minor" ]; then
-        return 1
-    fi
+    if [ "$v1_minor" -lt "$v2_minor" ]; then return 0
+    elif [ "$v1_minor" -gt "$v2_minor" ]; then return 1; fi
 
-    # Compare patch version
-    if [ "$v1_patch" -le "$v2_patch" ]; then
-        return 0
-    else
-        return 1
-    fi
+    [ "$v1_patch" -le "$v2_patch" ]
 }
 
 # Check Docker daemon
@@ -371,8 +490,7 @@ if [ "$RESOURCE_WARNING" = true ]; then
     echo ""
     print_warning "Onyx recommends at least ${EXPECTED_DOCKER_RAM_GB}GB RAM and ${EXPECTED_DISK_GB}GB disk space for optimal performance."
     echo ""
-    read -p "Do you want to continue anyway? (y/N): " -n 1 -r
-    echo ""
+    prompt_yn_or_default "Do you want to continue anyway? (y/N): " "y"
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
         print_info "Installation cancelled. Please allocate more resources and try again."
         exit 1
@@ -406,7 +524,7 @@ echo ""
 # Download Docker Compose file
 COMPOSE_FILE="${INSTALL_ROOT}/deployment/docker-compose.yml"
 print_info "Downloading docker-compose.yml..."
-if curl -fsSL -o "$COMPOSE_FILE" "${GITHUB_RAW_URL}/docker-compose.yml" 2>/dev/null; then
+if download_file "${GITHUB_RAW_URL}/docker-compose.yml" "$COMPOSE_FILE" 2>/dev/null; then
     print_success "Docker Compose file downloaded successfully"
 
     # Check if Docker Compose version is older than 2.24.0 and show warning
@@ -431,8 +549,7 @@ if curl -fsSL -o "$COMPOSE_FILE" "${GITHUB_RAW_URL}/docker-compose.yml" 2>/dev/n
         echo ""
         print_warning "The installation will continue, but may fail if Docker Compose cannot parse the file."
         echo ""
-        read -p "Do you want to continue anyway? (y/N): " -n 1 -r
-        echo ""
+        prompt_yn_or_default "Do you want to continue anyway? (y/N): " "y"
         if [[ ! $REPLY =~ ^[Yy]$ ]]; then
             print_info "Installation cancelled. Please upgrade Docker Compose or manually edit the docker-compose.yml file."
             exit 1
@@ -448,7 +565,7 @@ fi
 # Download env.template file
 ENV_TEMPLATE="${INSTALL_ROOT}/deployment/env.template"
 print_info "Downloading env.template..."
-if curl -fsSL -o "$ENV_TEMPLATE" "${GITHUB_RAW_URL}/env.template" 2>/dev/null; then
+if download_file "${GITHUB_RAW_URL}/env.template" "$ENV_TEMPLATE" 2>/dev/null; then
     print_success "Environment template downloaded successfully"
 else
     print_error "Failed to download env.template"
@@ -462,7 +579,7 @@ NGINX_BASE_URL="https://raw.githubusercontent.com/onyx-dot-app/onyx/main/deploym
 # Download app.conf.template
 NGINX_CONFIG="${INSTALL_ROOT}/data/nginx/app.conf.template"
 print_info "Downloading nginx configuration template..."
-if curl -fsSL -o "$NGINX_CONFIG" "$NGINX_BASE_URL/app.conf.template" 2>/dev/null; then
+if download_file "$NGINX_BASE_URL/app.conf.template" "$NGINX_CONFIG" 2>/dev/null; then
     print_success "Nginx configuration template downloaded"
 else
     print_error "Failed to download nginx configuration template"
@@ -473,7 +590,7 @@ fi
 # Download run-nginx.sh script
 NGINX_RUN_SCRIPT="${INSTALL_ROOT}/data/nginx/run-nginx.sh"
 print_info "Downloading nginx startup script..."
-if curl -fsSL -o "$NGINX_RUN_SCRIPT" "$NGINX_BASE_URL/run-nginx.sh" 2>/dev/null; then
+if download_file "$NGINX_BASE_URL/run-nginx.sh" "$NGINX_RUN_SCRIPT" 2>/dev/null; then
     chmod +x "$NGINX_RUN_SCRIPT"
     print_success "Nginx startup script downloaded and made executable"
 else
@@ -485,7 +602,7 @@ fi
 # Download README file
 README_FILE="${INSTALL_ROOT}/README.md"
 print_info "Downloading README.md..."
-if curl -fsSL -o "$README_FILE" "${GITHUB_RAW_URL}/README.md" 2>/dev/null; then
+if download_file "${GITHUB_RAW_URL}/README.md" "$README_FILE" 2>/dev/null; then
     print_success "README.md downloaded successfully"
 else
     print_error "Failed to download README.md"
@@ -534,7 +651,7 @@ if [ -f "$ENV_FILE" ]; then
     echo "• Press Enter to restart with current configuration"
     echo "• Type 'update' to update to a newer version"
     echo ""
-    read -p "Choose an option [default: restart]: " -r
+    prompt_or_default "Choose an option [default: restart]: " ""
     echo ""
 
     if [ "$REPLY" = "update" ]; then
@@ -543,22 +660,19 @@ if [ -f "$ENV_FILE" ]; then
         echo "• Press Enter for latest (recommended)"
         echo "• Type a specific tag (e.g., v0.1.0)"
         echo ""
-        # If --include-craft was passed, default to craft-latest
         if [ "$INCLUDE_CRAFT" = true ]; then
-            read -p "Enter tag [default: craft-latest]: " -r VERSION
+            prompt_or_default "Enter tag [default: craft-latest]: " "craft-latest"
+            VERSION="$REPLY"
         else
-            read -p "Enter tag [default: latest]: " -r VERSION
+            prompt_or_default "Enter tag [default: latest]: " "latest"
+            VERSION="$REPLY"
         fi
         echo ""
 
-        if [ -z "$VERSION" ]; then
-            if [ "$INCLUDE_CRAFT" = true ]; then
-                VERSION="craft-latest"
-                print_info "Selected: craft-latest (Craft enabled)"
-            else
-                VERSION="latest"
-                print_info "Selected: Latest version"
-            fi
+        if [ "$INCLUDE_CRAFT" = true ] && [ "$VERSION" = "craft-latest" ]; then
+            print_info "Selected: craft-latest (Craft enabled)"
+        elif [ "$VERSION" = "latest" ]; then
+            print_info "Selected: Latest version"
         else
             print_info "Selected: $VERSION"
         fi
@@ -595,23 +709,21 @@ else
         echo "• Press Enter for craft-latest (recommended for Craft)"
         echo "• Type a specific tag (e.g., craft-v1.0.0)"
         echo ""
-        read -p "Enter tag [default: craft-latest]: " -r VERSION
+        prompt_or_default "Enter tag [default: craft-latest]: " "craft-latest"
+        VERSION="$REPLY"
     else
         echo "• Press Enter for latest (recommended)"
         echo "• Type a specific tag (e.g., v0.1.0)"
         echo ""
-        read -p "Enter tag [default: latest]: " -r VERSION
+        prompt_or_default "Enter tag [default: latest]: " "latest"
+        VERSION="$REPLY"
     fi
     echo ""
 
-    if [ -z "$VERSION" ]; then
-        if [ "$INCLUDE_CRAFT" = true ]; then
-            VERSION="craft-latest"
-            print_info "Selected: craft-latest (Craft enabled)"
-        else
-            VERSION="latest"
-            print_info "Selected: Latest tag"
-        fi
+    if [ "$INCLUDE_CRAFT" = true ] && [ "$VERSION" = "craft-latest" ]; then
+        print_info "Selected: craft-latest (Craft enabled)"
+    elif [ "$VERSION" = "latest" ]; then
+        print_info "Selected: Latest tag"
     else
         print_info "Selected: $VERSION"
     fi
@@ -857,8 +969,12 @@ check_onyx_health() {
     echo ""
 
     while [ $attempt -le $max_attempts ]; do
-        # Check for successful HTTP responses (200, 301, 302, etc.)
-        local http_code=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:$port")
+        local http_code=""
+        if [[ "$DOWNLOADER" == "curl" ]]; then
+            http_code=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:$port" 2>/dev/null || echo "000")
+        else
+            http_code=$(wget -q --spider -S "http://localhost:$port" 2>&1 | grep "HTTP/" | tail -1 | awk '{print $2}' || echo "000")
+        fi
         if echo "$http_code" | grep -qE "^(200|301|302|303|307|308)$"; then
             return 0
         fi
