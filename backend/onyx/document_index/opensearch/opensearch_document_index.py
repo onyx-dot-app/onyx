@@ -271,6 +271,9 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
         embedding_dim: int,
         embedding_precision: EmbeddingPrecision,
         secondary_index_name: str | None,
+        secondary_embedding_dim: int | None,
+        secondary_embedding_precision: EmbeddingPrecision | None,
+        # NOTE: We do not support large chunks right now.
         large_chunks_enabled: bool,  # noqa: ARG002
         secondary_large_chunks_enabled: bool | None,  # noqa: ARG002
         multitenant: bool = False,
@@ -286,12 +289,25 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
                 f"Expected {MULTI_TENANT}, got {multitenant}."
             )
         tenant_id = get_current_tenant_id()
+        tenant_state = TenantState(tenant_id=tenant_id, multitenant=multitenant)
         self._real_index = OpenSearchDocumentIndex(
-            tenant_state=TenantState(tenant_id=tenant_id, multitenant=multitenant),
+            tenant_state=tenant_state,
             index_name=index_name,
             embedding_dim=embedding_dim,
             embedding_precision=embedding_precision,
         )
+        self._secondary_real_index: OpenSearchDocumentIndex | None = None
+        if self.secondary_index_name:
+            if secondary_embedding_dim is None or secondary_embedding_precision is None:
+                raise ValueError(
+                    "Bug: Secondary index embedding dimension and precision are not set."
+                )
+            self._secondary_real_index = OpenSearchDocumentIndex(
+                tenant_state=tenant_state,
+                index_name=self.secondary_index_name,
+                embedding_dim=secondary_embedding_dim,
+                embedding_precision=secondary_embedding_precision,
+            )
 
     @staticmethod
     def register_multitenant_indices(
@@ -307,19 +323,38 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
         self,
         primary_embedding_dim: int,
         primary_embedding_precision: EmbeddingPrecision,
-        secondary_index_embedding_dim: int | None,  # noqa: ARG002
-        secondary_index_embedding_precision: EmbeddingPrecision | None,  # noqa: ARG002
+        secondary_index_embedding_dim: int | None,
+        secondary_index_embedding_precision: EmbeddingPrecision | None,
     ) -> None:
-        # Only handle primary index for now, ignore secondary.
-        return self._real_index.verify_and_create_index_if_necessary(
+        self._real_index.verify_and_create_index_if_necessary(
             primary_embedding_dim, primary_embedding_precision
         )
+        if self.secondary_index_name:
+            if (
+                secondary_index_embedding_dim is None
+                or secondary_index_embedding_precision is None
+            ):
+                raise ValueError(
+                    "Bug: Secondary index embedding dimension and precision are not set."
+                )
+            assert (
+                self._secondary_real_index is not None
+            ), "Bug: Secondary index is not initialized."
+            self._secondary_real_index.verify_and_create_index_if_necessary(
+                secondary_index_embedding_dim, secondary_index_embedding_precision
+            )
 
     def index(
         self,
         chunks: list[DocMetadataAwareIndexChunk],
         index_batch_params: IndexBatchParams,
     ) -> set[OldDocumentInsertionRecord]:
+        """
+        NOTE: Do NOT consider the secondary index here. A separate indexing
+        pipeline will be responsible for indexing to the secondary index. This
+        design is not ideal and we should reconsider this when revamping index
+        swapping.
+        """
         # Convert IndexBatchParams to IndexingMetadata.
         chunk_counts: dict[str, IndexingMetadata.ChunkCounts] = {}
         for doc_id in index_batch_params.doc_id_to_new_chunk_cnt:
@@ -351,7 +386,20 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
         tenant_id: str,  # noqa: ARG002
         chunk_count: int | None,
     ) -> int:
-        return self._real_index.delete(doc_id, chunk_count)
+        """
+        NOTE: Remember to handle the secondary index here. There is no separate
+        pipeline for deleting chunks in the secondary index. This design is not
+        ideal and we should reconsider this when revamping index swapping.
+        """
+        total_chunks_deleted = self._real_index.delete(doc_id, chunk_count)
+        if self.secondary_index_name:
+            assert (
+                self._secondary_real_index is not None
+            ), "Bug: Secondary index is not initialized."
+            total_chunks_deleted += self._secondary_real_index.delete(
+                doc_id, chunk_count
+            )
+        return total_chunks_deleted
 
     def update_single(
         self,
@@ -362,6 +410,11 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
         fields: VespaDocumentFields | None,
         user_fields: VespaDocumentUserFields | None,
     ) -> None:
+        """
+        NOTE: Remember to handle the secondary index here. There is no separate
+        pipeline for updating chunks in the secondary index. This design is not
+        ideal and we should reconsider this when revamping index swapping.
+        """
         if fields is None and user_fields is None:
             logger.warning(
                 f"Tried to update document {doc_id} with no updated fields or user fields."
@@ -392,6 +445,11 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
 
         try:
             self._real_index.update([update_request])
+            if self.secondary_index_name:
+                assert (
+                    self._secondary_real_index is not None
+                ), "Bug: Secondary index is not initialized."
+                self._secondary_real_index.update([update_request])
         except NotFoundError:
             logger.exception(
                 f"Tried to update document {doc_id} but at least one of its chunks was not found in OpenSearch. "
