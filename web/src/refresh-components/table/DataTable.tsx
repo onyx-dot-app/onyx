@@ -429,8 +429,14 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
 
     // Summary mode
     const rangeStart =
-      totalItems === 0 ? 0 : (currentPage - 1) * resolvedPageSize + 1;
-    const rangeEnd = Math.min(currentPage * resolvedPageSize, totalItems);
+      totalItems === 0
+        ? 0
+        : !isFinite(resolvedPageSize)
+          ? 1
+          : (currentPage - 1) * resolvedPageSize + 1;
+    const rangeEnd = !isFinite(resolvedPageSize)
+      ? totalItems
+      : Math.min(currentPage * resolvedPageSize, totalItems);
 
     return (
       <Footer
