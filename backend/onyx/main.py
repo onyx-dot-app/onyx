@@ -127,6 +127,7 @@ from onyx.server.metrics.postgres_connection_pool import (
 )
 from onyx.server.metrics.prometheus_setup import setup_app_observability
 from onyx.server.metrics.prometheus_setup import setup_prometheus_metrics
+from onyx.server.metrics.prometheus_setup import start_observability
 from onyx.server.middleware.latency_logging import add_latency_logging_middleware
 from onyx.server.middleware.rate_limiting import close_auth_limiter
 from onyx.server.middleware.rate_limiting import get_auth_rate_limiters
@@ -334,6 +335,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
             "readonly": SqlEngine.get_readonly_engine(),
         },
     )
+
+    # Lifespan-scoped observability (redis pool, etc.).
+    # All probes/collectors are orchestrated through prometheus_setup.
+    start_observability()
 
     verify_auth = fetch_versioned_implementation(
         "onyx.auth.users", "verify_auth_setting"
