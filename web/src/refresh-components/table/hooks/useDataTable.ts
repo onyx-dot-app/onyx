@@ -108,6 +108,13 @@ interface UseDataTableOptions<TData extends RowData> {
   /** Search term for global text filtering. Rows are filtered to those containing
    *  the term in any accessor column value (case-insensitive). */
   searchTerm?: string;
+  /** Server-side configuration. When provided, enables manual pagination/sorting/filtering. */
+  serverSide?: {
+    totalItems: number;
+    onSortingChange: (sorting: SortingState) => void;
+    onPaginationChange: (pageIndex: number, pageSize: number) => void;
+    onSearchTermChange: (searchTerm: string) => void;
+  };
   /** Escape-hatch: extra options spread into `useReactTable`. Managed keys are excluded. */
   tableOptions?: Partial<Omit<TableOptions<TData>, ManagedKeys>>;
 }
@@ -187,8 +194,11 @@ export default function useDataTable<TData extends RowData>(
     getRowId,
     onSelectionChange,
     searchTerm,
+    serverSide,
     tableOptions,
   } = options;
+
+  const isServerSide = !!serverSide;
 
   // ---- internal state -----------------------------------------------------
   const [sorting, setSorting] = useState<SortingState>(initialSorting);
@@ -217,9 +227,11 @@ export default function useDataTable<TData extends RowData>(
   }, [pageSizeOption]);
 
   // ---- sync external searchTerm prop into combined filter state ------------
+  // (client-side only — server-side uses separate callbacks instead)
   const preSearchPageRef = useRef<number>(0);
 
   useEffect(() => {
+    if (isServerSide) return;
     const term = searchTerm ?? "";
     const wasSearching = !!globalFilter.searchTerm;
 
@@ -233,10 +245,39 @@ export default function useDataTable<TData extends RowData>(
     }
 
     setGlobalFilter((prev) => ({ ...prev, searchTerm: term }));
-  }, [searchTerm]);
+  }, [searchTerm, isServerSide]);
+
+  // ---- server-side: 3 separate callbacks -----------------------------------
+  // Single ref for the whole serverSide config — prevents effects from
+  // re-firing when the consumer passes an inline object each render.
+  const serverSideRef = useRef(serverSide);
+  serverSideRef.current = serverSide;
+
+  useEffect(() => {
+    if (!isServerSide) return;
+    serverSideRef.current!.onSortingChange(sorting);
+  }, [sorting, isServerSide]);
+
+  useEffect(() => {
+    if (!isServerSide) return;
+    serverSideRef.current!.onPaginationChange(
+      pagination.pageIndex,
+      pagination.pageSize
+    );
+  }, [pagination.pageIndex, pagination.pageSize, isServerSide]);
+
+  useEffect(() => {
+    if (!isServerSide) return;
+    setPagination((p) => ({ ...p, pageIndex: 0 }));
+    serverSideRef.current!.onSearchTermChange(searchTerm ?? "");
+  }, [searchTerm, isServerSide]);
 
   // ---- TanStack table instance --------------------------------------------
-  const table = useReactTable({
+  const serverPageCount = isServerSide
+    ? Math.ceil((serverSide!.totalItems || 0) / pagination.pageSize)
+    : undefined;
+
+  const tableOpts: TableOptions<TData> = {
     data,
     columns,
     getRowId,
@@ -246,19 +287,44 @@ export default function useDataTable<TData extends RowData>(
       columnSizing,
       columnVisibility,
       pagination,
-      globalFilter,
+      ...(isServerSide ? {} : { globalFilter }),
     },
-    onSortingChange: setSorting,
+    onSortingChange: isServerSide
+      ? (updater) => {
+          setSorting(updater);
+          setPagination((p) => ({ ...p, pageIndex: 0 }));
+        }
+      : setSorting,
     onRowSelectionChange: setRowSelection,
     onColumnSizingChange: setColumnSizing,
     onColumnVisibilityChange: setColumnVisibility,
     onPaginationChange: setPagination,
-    onGlobalFilterChange: setGlobalFilter,
     getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    globalFilterFn: (row, _columnId, filterValue: GlobalFilterValue) => {
+    // We manage page resets explicitly (search enter/clear, view mode,
+    // pageSize change) so disable TanStack's auto-reset which would
+    // clobber our restored page index when the filter changes.
+    autoResetPageIndex: false,
+    columnResizeMode,
+    enableRowSelection,
+    enableColumnResizing,
+    ...tableOptions,
+  };
+
+  if (isServerSide) {
+    tableOpts.manualPagination = true;
+    tableOpts.manualSorting = true;
+    tableOpts.manualFiltering = true;
+    tableOpts.pageCount = serverPageCount;
+  } else {
+    tableOpts.onGlobalFilterChange = setGlobalFilter;
+    tableOpts.getSortedRowModel = getSortedRowModel();
+    tableOpts.getPaginationRowModel = getPaginationRowModel();
+    tableOpts.getFilteredRowModel = getFilteredRowModel();
+    tableOpts.globalFilterFn = (
+      row,
+      _columnId,
+      filterValue: GlobalFilterValue
+    ) => {
       // View-mode filter (selected IDs)
       if (
         filterValue.selectedIds != null &&
@@ -277,16 +343,10 @@ export default function useDataTable<TData extends RowData>(
         });
       }
       return true;
-    },
-    // We manage page resets explicitly (search enter/clear, view mode,
-    // pageSize change) so disable TanStack's auto-reset which would
-    // clobber our restored page index when the filter changes.
-    autoResetPageIndex: false,
-    columnResizeMode,
-    enableRowSelection,
-    enableColumnResizing,
-    ...tableOptions,
-  });
+    };
+  }
+
+  const table = useReactTable(tableOpts);
 
   // ---- derived values -----------------------------------------------------
   const isAllPageRowsSelected = table.getIsAllPageRowsSelected();
@@ -305,11 +365,15 @@ export default function useDataTable<TData extends RowData>(
   const selectedCount = selectedRowIds.length;
   const totalPages = Math.max(1, table.getPageCount());
   const currentPage = pagination.pageIndex + 1;
-  const hasActiveFilter =
-    globalFilter.selectedIds != null || !!globalFilter.searchTerm;
-  const totalItems = hasActiveFilter
-    ? table.getPrePaginationRowModel().rows.length
-    : data.length;
+  const totalItems = isServerSide
+    ? serverSide!.totalItems
+    : (() => {
+        const hasActiveFilter =
+          globalFilter.selectedIds != null || !!globalFilter.searchTerm;
+        return hasActiveFilter
+          ? table.getPrePaginationRowModel().rows.length
+          : data.length;
+      })();
   const isPaginated = isFinite(pagination.pageSize);
 
   // ---- selection change callback ------------------------------------------

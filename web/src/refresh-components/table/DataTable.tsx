@@ -24,6 +24,7 @@ import { ColumnVisibilityPopover } from "@/refresh-components/table/ColumnVisibi
 import { SortingPopover } from "@/refresh-components/table/SortingPopover";
 import type { WidthConfig } from "@/refresh-components/table/hooks/useColumnWidths";
 import type { ColumnDef } from "@tanstack/react-table";
+import { cn } from "@/lib/utils";
 import type {
   DataTableProps,
   DataTableFooterConfig,
@@ -131,6 +132,7 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
     searchTerm,
     height,
     headerBackground,
+    serverSide,
   } = props;
 
   const effectivePageSize = pageSize ?? (footer ? 10 : data.length);
@@ -165,6 +167,14 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
     getRowId: (row: TData) => getRowId(row),
     onSelectionChange,
     searchTerm,
+    serverSide: serverSide
+      ? {
+          totalItems: serverSide.totalItems,
+          onSortingChange: serverSide.onSortingChange,
+          onPaginationChange: serverSide.onPaginationChange,
+          onSearchTermChange: serverSide.onSearchTermChange,
+        }
+      : undefined,
   });
 
   // 3. Call useColumnWidths
@@ -173,15 +183,16 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
     ...widthConfig,
   });
 
-  // 4. Call useDraggableRows (conditional)
+  // 4. Call useDraggableRows (conditional — disabled in server-side mode)
+  const effectiveDraggable = serverSide ? undefined : draggable;
   const draggableReturn = useDraggableRows({
     data,
     getRowId,
-    enabled: !!draggable && table.getState().sorting.length === 0,
-    onReorder: draggable?.onReorder,
+    enabled: !!effectiveDraggable && table.getState().sorting.length === 0,
+    onReorder: effectiveDraggable?.onReorder,
   });
 
-  const hasDraggable = !!draggable;
+  const hasDraggable = !!effectiveDraggable;
   const rowVariant = hasDraggable ? "table" : "list";
 
   const isSelectable =
@@ -191,11 +202,16 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
   // Render
   // ---------------------------------------------------------------------------
 
+  const isServerLoading = !!serverSide?.isLoading;
+
   function renderContent() {
     return (
       <div>
         <div
-          className="overflow-x-auto"
+          className={cn(
+            "overflow-x-auto transition-opacity duration-150",
+            isServerLoading && "opacity-50 pointer-events-none"
+          )}
           ref={containerRef}
           style={{
             ...(height != null

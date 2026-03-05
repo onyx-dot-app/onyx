@@ -100,6 +100,24 @@ export type OnyxColumnDef<TData> =
   | OnyxActionsColumn<TData>;
 
 // ---------------------------------------------------------------------------
+// Server-side pagination / sorting / search
+// ---------------------------------------------------------------------------
+
+/** Server-side configuration for DataTable. */
+export interface ServerSideConfig {
+  /** Total row count from the server. Used to compute page count. */
+  totalItems: number;
+  /** Whether data is currently being fetched. Shows loading state. */
+  isLoading?: boolean;
+  /** Fired when sorting state changes. */
+  onSortingChange: (sorting: SortingState) => void;
+  /** Fired when pagination changes (including page resets from sort/search). */
+  onPaginationChange: (pageIndex: number, pageSize: number) => void;
+  /** Fired when searchTerm changes. */
+  onSearchTermChange: (searchTerm: string) => void;
+}
+
+// ---------------------------------------------------------------------------
 // DataTable props
 // ---------------------------------------------------------------------------
 
@@ -164,4 +182,12 @@ export interface DataTableProps<TData> {
   /** Background color for the sticky header row, preventing rows from showing
    *  through when scrolling. Accepts any CSS color value. */
   headerBackground?: string;
+  /**
+   * Enable server-side mode. When provided:
+   * - TanStack uses manualPagination/manualSorting/manualFiltering
+   * - `data` should contain only the current page's rows
+   * - Dragging is automatically disabled
+   * - Fires separate callbacks for sorting, pagination, and search changes
+   */
+  serverSide?: ServerSideConfig;
 }
