@@ -41,7 +41,6 @@ export default function useBrowserInfo(): BrowserInfo {
     const isChromium = /Chromium/i.test(userAgent) || isChrome;
     const isSafari =
       /Safari/i.test(userAgent) &&
-      !isChrome &&
       !isChromium &&
       !isEdge &&
       !isOpera &&
