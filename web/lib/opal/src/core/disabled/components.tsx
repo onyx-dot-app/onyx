@@ -81,6 +81,7 @@ function Disabled({
       <Slot
         ref={ref}
         {...rest}
+        aria-disabled={disabled || undefined}
         data-opal-disabled={disabled || undefined}
         data-allow-click={disabled && allowClick ? "" : undefined}
       >
