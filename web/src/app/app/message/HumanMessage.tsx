@@ -195,7 +195,7 @@ const HumanMessage = React.memo(function HumanMessage({
       id="onyx-human-message"
       className="group flex flex-col justify-end w-full relative"
     >
-      <FileDisplay alignBubble files={files || []} />
+      <FileDisplay files={files || []} />
       {isEditing ? (
         <MessageEditing
           content={content}
