@@ -7,7 +7,7 @@ A composite component that wraps `Interactive.Base(select) > Interactive.Contain
 ## Architecture
 
 ```
-Interactive.Base (variant="select")  <- prominence, selected, disabled, onClick, href, ref
+Interactive.Base (variant="select")  <- prominence, selected, onClick, href, ref
   └─ Interactive.Container           <- type, width, size, rounding (derived from size)
        └─ ContentAction              <- withInteractive, paddingVariant="fit", widthVariant="full"
             ├─ Content               <- icon, title, description, sizePreset, variant, ...
@@ -24,7 +24,6 @@ Interactive.Base (variant="select")  <- prominence, selected, disabled, onClick,
 |------|------|---------|-------------|
 | `prominence` | `"light" \| "heavy"` | `"light"` | Interactive select prominence |
 | `selected` | `boolean` | — | Whether the item appears selected |
-| `disabled` | `boolean` | — | Disables interaction |
 | `onClick` | `MouseEventHandler<HTMLElement>` | — | Click handler |
 | `href` | `string` | — | Renders an anchor instead of a div |
 | `target` | `string` | — | Anchor target (e.g. `"_blank"`) |

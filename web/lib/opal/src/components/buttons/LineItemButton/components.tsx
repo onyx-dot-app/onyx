@@ -1,5 +1,5 @@
 import "@opal/components/tooltip.css";
-import { Disabled, Interactive, type InteractiveBaseProps } from "@opal/core";
+import { Interactive, type InteractiveBaseProps } from "@opal/core";
 import type { SizeVariant, WidthVariant } from "@opal/shared";
 import type { TooltipSide } from "@opal/components";
 import type { ContentActionProps } from "@opal/layouts/ContentAction/components";
@@ -21,9 +21,6 @@ interface LineItemButtonProps extends ContentPassthroughProps {
 
   /** Whether this item is selected. */
   selected?: boolean;
-
-  /** Whether this item is disabled. */
-  disabled?: boolean;
 
   /** Click handler. */
   onClick?: InteractiveBaseProps["onClick"];
@@ -67,7 +64,6 @@ function LineItemButton({
   // Interactive surface
   prominence = "light",
   selected,
-  disabled,
   onClick,
   href,
   target,
@@ -86,35 +82,33 @@ function LineItemButton({
   ...contentActionProps
 }: LineItemButtonProps) {
   const item = (
-    <Disabled disabled={disabled}>
-      <Interactive.Base
-        variant="select"
-        prominence={prominence}
-        selected={selected}
-        onClick={onClick}
-        href={href}
-        target={target}
-        group={group}
-        transient={transient}
-        ref={ref}
+    <Interactive.Base
+      variant="select"
+      prominence={prominence}
+      selected={selected}
+      onClick={onClick}
+      href={href}
+      target={target}
+      group={group}
+      transient={transient}
+      ref={ref}
+    >
+      <Interactive.Container
+        type={type}
+        widthVariant={width}
+        heightVariant={size}
+        roundingVariant={
+          size === "lg" ? "default" : size === "2xs" ? "mini" : "compact"
+        }
       >
-        <Interactive.Container
-          type={type}
-          widthVariant={width}
-          heightVariant={size}
-          roundingVariant={
-            size === "lg" ? "default" : size === "2xs" ? "mini" : "compact"
-          }
-        >
-          <ContentAction
-            {...(contentActionProps as ContentActionProps)}
-            withInteractive
-            paddingVariant="fit"
-            widthVariant="full"
-          />
-        </Interactive.Container>
-      </Interactive.Base>
-    </Disabled>
+        <ContentAction
+          {...(contentActionProps as ContentActionProps)}
+          withInteractive
+          paddingVariant="fit"
+          widthVariant="full"
+        />
+      </Interactive.Container>
+    </Interactive.Base>
   );
 
   if (!tooltip) return item;
