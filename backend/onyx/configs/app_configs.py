@@ -69,9 +69,7 @@ FILE_TOKEN_COUNT_THRESHOLD = int(
 )
 
 # Maximum upload size for a single user file (chat/projects) in MB.
-USER_FILE_MAX_UPLOAD_SIZE_MB = int(
-    os.environ.get("USER_FILE_MAX_UPLOAD_SIZE_MB") or 50
-)
+USER_FILE_MAX_UPLOAD_SIZE_MB = int(os.environ.get("USER_FILE_MAX_UPLOAD_SIZE_MB") or 50)
 USER_FILE_MAX_UPLOAD_SIZE_BYTES = USER_FILE_MAX_UPLOAD_SIZE_MB * 1024 * 1024
 
 # If set to true, will show extra/uncommon connectors in the "Other" category
