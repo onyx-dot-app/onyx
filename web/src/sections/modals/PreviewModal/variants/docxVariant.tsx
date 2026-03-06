@@ -43,6 +43,8 @@ function DocxPreview({ fileUrl, onLoad }: DocxPreviewProps) {
 
   useEffect(() => {
     async function loadDocument() {
+      setIsLoading(true);
+      setError(null);
       try {
         const response = await fetch(fileUrl);
         if (!response.ok) {
