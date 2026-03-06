@@ -1,6 +1,10 @@
 import "@opal/components/buttons/select-button/styles.css";
 import "@opal/components/tooltip.css";
-import { Interactive, type InteractiveStatefulProps } from "@opal/core";
+import {
+  Interactive,
+  useDisabled,
+  type InteractiveStatefulProps,
+} from "@opal/core";
 import type { SizeVariant, WidthVariant } from "@opal/shared";
 import type { TooltipSide } from "@opal/components";
 import type { IconFunctionComponent } from "@opal/types";
@@ -75,6 +79,7 @@ function SelectButton({
   tooltipSide = "top",
   ...statefulProps
 }: SelectButtonProps) {
+  const { isDisabled } = useDisabled();
   const isLarge = size === "lg";
 
   const labelEl = children ? (
@@ -123,8 +128,7 @@ function SelectButton({
   );
 
   const resolvedTooltip =
-    tooltip ??
-    (foldable && statefulProps.disabled && children ? children : undefined);
+    tooltip ?? (foldable && isDisabled && children ? children : undefined);
 
   if (!resolvedTooltip) return button;
 

@@ -22,7 +22,7 @@ import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import { useAppMode } from "@/providers/AppModeProvider";
 import useAppFocus from "@/hooks/useAppFocus";
 import { cn, isImageFile } from "@/lib/utils";
-import { Disabled } from "@/refresh-components/Disabled";
+import { Disabled } from "@opal/core";
 import { useUser } from "@/providers/UserProvider";
 import {
   SettingsContext,
@@ -439,13 +439,14 @@ const AppInputBar = React.memo(
             }}
             handleUploadChange={handleUploadChange}
             trigger={(open) => (
-              <Button
-                icon={SvgPlusCircle}
-                tooltip="Attach Files"
-                interaction={open ? "hover" : "rest"}
-                disabled={disabled}
-                prominence="tertiary"
-              />
+              <Disabled disabled={disabled}>
+                <Button
+                  icon={SvgPlusCircle}
+                  tooltip="Attach Files"
+                  interaction={open ? "hover" : "rest"}
+                  prominence="tertiary"
+                />
+              </Disabled>
             )}
             selectedFileIds={currentMessageFiles.map((f) => f.id)}
           />
@@ -467,36 +468,38 @@ const AppInputBar = React.memo(
               />
             )}
             {onToggleTabReading ? (
-              <SelectButton
-                icon={SvgGlobe}
-                onClick={onToggleTabReading}
-                state={tabReadingEnabled ? "selected" : "empty"}
-                disabled={disabled}
-              >
-                {tabReadingEnabled
-                  ? currentTabUrl
-                    ? (() => {
-                        try {
-                          return new URL(currentTabUrl).hostname;
-                        } catch {
-                          return currentTabUrl;
-                        }
-                      })()
-                    : "Reading tab..."
-                  : "Read this tab"}
-              </SelectButton>
+              <Disabled disabled={disabled}>
+                <SelectButton
+                  icon={SvgGlobe}
+                  onClick={onToggleTabReading}
+                  state={tabReadingEnabled ? "selected" : "empty"}
+                >
+                  {tabReadingEnabled
+                    ? currentTabUrl
+                      ? (() => {
+                          try {
+                            return new URL(currentTabUrl).hostname;
+                          } catch {
+                            return currentTabUrl;
+                          }
+                        })()
+                      : "Reading tab..."
+                    : "Read this tab"}
+                </SelectButton>
+              </Disabled>
             ) : (
               showDeepResearch && (
-                <SelectButton
-                  variant="select-light"
-                  icon={SvgHourglass}
-                  onClick={toggleDeepResearch}
-                  state={deepResearchEnabled ? "selected" : "empty"}
-                  foldable={!deepResearchEnabled}
-                  disabled={disabled}
-                >
-                  Deep Research
-                </SelectButton>
+                <Disabled disabled={disabled}>
+                  <SelectButton
+                    variant="select-light"
+                    icon={SvgHourglass}
+                    onClick={toggleDeepResearch}
+                    state={deepResearchEnabled ? "selected" : "empty"}
+                    foldable={!deepResearchEnabled}
+                  >
+                    Deep Research
+                  </SelectButton>
+                </Disabled>
               )
             )}
 
@@ -510,20 +513,20 @@ const AppInputBar = React.memo(
                   return null;
                 }
                 return (
-                  <SelectButton
-                    variant="select-light"
-                    key={toolId}
-                    icon={getIconForAction(tool)}
-                    onClick={() => {
-                      setForcedToolIds(
-                        forcedToolIds.filter((id) => id !== toolId)
-                      );
-                    }}
-                    state="selected"
-                    disabled={disabled}
-                  >
-                    {tool.display_name}
-                  </SelectButton>
+                  <Disabled disabled={disabled} key={toolId}>
+                    <SelectButton
+                      variant="select-light"
+                      icon={getIconForAction(tool)}
+                      onClick={() => {
+                        setForcedToolIds(
+                          forcedToolIds.filter((id) => id !== toolId)
+                        );
+                      }}
+                      state="selected"
+                    >
+                      {tool.display_name}
+                    </SelectButton>
+                  </Disabled>
                 );
               })}
           </div>
@@ -541,28 +544,31 @@ const AppInputBar = React.memo(
               disabled={disabled}
             />
           </div>
-          <Button
-            id="onyx-chat-input-send-button"
-            icon={
-              isClassifying
-                ? SimpleLoader
-                : chatState === "input"
-                  ? SvgArrowUp
-                  : SvgStop
-            }
+          <Disabled
             disabled={
               (chatState === "input" && !message) ||
               hasUploadingFiles ||
               isClassifying
             }
-            onClick={() => {
-              if (chatState == "streaming") {
-                stopGenerating();
-              } else if (message) {
-                onSubmit(message);
+          >
+            <Button
+              id="onyx-chat-input-send-button"
+              icon={
+                isClassifying
+                  ? SimpleLoader
+                  : chatState === "input"
+                    ? SvgArrowUp
+                    : SvgStop
               }
-            }}
-          />
+              onClick={() => {
+                if (chatState == "streaming") {
+                  stopGenerating();
+                } else if (message) {
+                  onSubmit(message);
+                }
+              }}
+            />
+          </Disabled>
         </div>
       </div>
     );
@@ -706,25 +712,29 @@ const AppInputBar = React.memo(
 
             {isSearchMode && (
               <Section flexDirection="row" width="fit" gap={0}>
-                <Button
-                  icon={SvgX}
-                  disabled={!message || isClassifying}
-                  onClick={() => setMessage("")}
-                  prominence="tertiary"
-                />
-                <Button
-                  id="onyx-chat-input-send-button"
-                  icon={isClassifying ? SimpleLoader : SvgSearch}
+                <Disabled disabled={!message || isClassifying}>
+                  <Button
+                    icon={SvgX}
+                    onClick={() => setMessage("")}
+                    prominence="tertiary"
+                  />
+                </Disabled>
+                <Disabled
                   disabled={!message || isClassifying || hasUploadingFiles}
-                  onClick={() => {
-                    if (chatState == "streaming") {
-                      stopGenerating();
-                    } else if (message) {
-                      onSubmit(message);
-                    }
-                  }}
-                  prominence="tertiary"
-                />
+                >
+                  <Button
+                    id="onyx-chat-input-send-button"
+                    icon={isClassifying ? SimpleLoader : SvgSearch}
+                    onClick={() => {
+                      if (chatState == "streaming") {
+                        stopGenerating();
+                      } else if (message) {
+                        onSubmit(message);
+                      }
+                    }}
+                    prominence="tertiary"
+                  />
+                </Disabled>
                 <Spacer horizontal rem={0.25} />
               </Section>
             )}

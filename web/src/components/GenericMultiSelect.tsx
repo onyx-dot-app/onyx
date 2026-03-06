@@ -2,7 +2,7 @@ import { FormikProps, ErrorMessage } from "formik";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox/InputComboBox";
-import { Disabled } from "@/refresh-components/Disabled";
+import { Disabled } from "@opal/core";
 import { SvgX } from "@opal/icons";
 export type GenericMultiSelectFormType<T extends string> = {
   [K in T]: number[];

@@ -11,6 +11,7 @@ import InputSelect from "@/refresh-components/inputs/InputSelect";
 import Separator from "@/refresh-components/Separator";
 import Text from "@/refresh-components/texts/Text";
 import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import { cn, noProp } from "@/lib/utils";
 import { SvgAlertCircle, SvgRefreshCw } from "@opal/icons";
 import { WellKnownLLMProviderDescriptor } from "@/interfaces/llm";
@@ -348,33 +349,36 @@ function BedrockFormFields(props: OnboardingFormChildProps<BedrockFormValues>) {
                   disabled || isFetchingModels || modelOptions.length === 0
                 }
                 rightSection={
-                  <Button
-                    prominence="tertiary"
-                    size="sm"
-                    icon={({ className }) => (
-                      <SvgRefreshCw
-                        className={cn(
-                          className,
-                          isFetchingModels && "animate-spin"
-                        )}
-                      />
-                    )}
-                    onClick={noProp((e) => {
-                      e.preventDefault();
-                      if (!isFetchDisabled) {
-                        handleFetchModels();
-                      }
-                    })}
-                    tooltip={
-                      isFetchDisabled
-                        ? !formikProps.values.custom_config?.AWS_REGION_NAME
-                          ? "Select an AWS region first"
-                          : "Complete authentication first"
-                        : "Fetch available models"
-                    }
-                    aria-label="Fetch available models"
+                  <Disabled
                     disabled={disabled || isFetchingModels || isFetchDisabled}
-                  />
+                  >
+                    <Button
+                      prominence="tertiary"
+                      size="sm"
+                      icon={({ className }) => (
+                        <SvgRefreshCw
+                          className={cn(
+                            className,
+                            isFetchingModels && "animate-spin"
+                          )}
+                        />
+                      )}
+                      onClick={noProp((e) => {
+                        e.preventDefault();
+                        if (!isFetchDisabled) {
+                          handleFetchModels();
+                        }
+                      })}
+                      tooltip={
+                        isFetchDisabled
+                          ? !formikProps.values.custom_config?.AWS_REGION_NAME
+                            ? "Select an AWS region first"
+                            : "Complete authentication first"
+                          : "Fetch available models"
+                      }
+                      aria-label="Fetch available models"
+                    />
+                  </Disabled>
                 }
                 onBlur={field.onBlur}
                 placeholder="Select a model"

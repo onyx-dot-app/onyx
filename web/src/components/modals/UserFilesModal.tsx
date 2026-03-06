@@ -25,6 +25,7 @@ import {
 import { Section } from "@/layouts/general-layouts";
 import useFilter from "@/hooks/useFilter";
 import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
 
 function getIcon(
@@ -275,13 +276,14 @@ export default function UserFilesModal({
                   onClick={() => setShowOnlySelected(!showOnlySelected)}
                   interaction={showOnlySelected ? "hover" : "rest"}
                 />
-                <Button
-                  icon={SvgXCircle}
-                  prominence="tertiary"
-                  size="sm"
-                  onClick={handleDeselectAll}
-                  disabled={selectedCount === 0}
-                />
+                <Disabled disabled={selectedCount === 0}>
+                  <Button
+                    icon={SvgXCircle}
+                    prominence="tertiary"
+                    size="sm"
+                    onClick={handleDeselectAll}
+                  />
+                </Disabled>
               </Section>
             )}
 
