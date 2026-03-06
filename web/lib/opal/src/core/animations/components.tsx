@@ -39,7 +39,7 @@ interface HoverableRootProps
   extends WithoutStyles<React.HTMLAttributes<HTMLDivElement>> {
   children: React.ReactNode;
   group: string;
-  /** Width preset. @default "auto" */
+  /** Width preset. @default "fit" */
   widthVariant?: WidthVariant;
   /** Ref forwarded to the root `<div>`. */
   ref?: React.Ref<HTMLDivElement>;
@@ -84,7 +84,7 @@ interface HoverableItemProps
 function HoverableRoot({
   group,
   children,
-  widthVariant = "auto",
+  widthVariant = "fit",
   ref,
   onMouseEnter: consumerMouseEnter,
   onMouseLeave: consumerMouseLeave,
@@ -116,7 +116,7 @@ function HoverableRoot({
         {...props}
         ref={ref}
         className={
-          widthVariant !== "auto" ? cn(widthVariants[widthVariant]) : undefined
+          widthVariant !== "fit" ? cn(widthVariants[widthVariant]) : undefined
         }
         onMouseEnter={onMouseEnter}
         onMouseLeave={onMouseLeave}
