@@ -53,7 +53,7 @@ export const WebSearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
     return children([
       {
         icon: SvgGlobe,
-        status: null,
+        status: "Searching the web",
         content: <div />,
         supportsCollapsible: false,
         timelineLayout: "timeline",
