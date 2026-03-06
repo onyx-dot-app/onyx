@@ -190,48 +190,6 @@ def deactivate_tts_provider(*, db_session: Session, provider_id: int) -> VoicePr
 # User voice preferences
 
 
-def update_user_voice_auto_send(
-    db_session: Session, user_id: UUID, auto_send: bool
-) -> None:
-    """Update user's voice auto-send setting."""
-    db_session.execute(
-        update(User).where(User.id == user_id).values(voice_auto_send=auto_send)  # type: ignore[arg-type]
-    )
-    db_session.commit()
-
-
-def update_user_voice_auto_playback(
-    db_session: Session, user_id: UUID, auto_playback: bool
-) -> None:
-    """Update user's voice auto-playback setting."""
-    db_session.execute(
-        update(User).where(User.id == user_id).values(voice_auto_playback=auto_playback)  # type: ignore[arg-type]
-    )
-    db_session.commit()
-
-
-def update_user_voice_playback_speed(
-    db_session: Session, user_id: UUID, speed: float
-) -> None:
-    """Update user's voice playback speed setting."""
-    # Clamp to valid range
-    speed = max(0.5, min(2.0, speed))
-    db_session.execute(
-        update(User).where(User.id == user_id).values(voice_playback_speed=speed)  # type: ignore[arg-type]
-    )
-    db_session.commit()
-
-
-def update_user_preferred_voice(
-    db_session: Session, user_id: UUID, voice: str | None
-) -> None:
-    """Update user's preferred voice setting."""
-    db_session.execute(
-        update(User).where(User.id == user_id).values(preferred_voice=voice)  # type: ignore[arg-type]
-    )
-    db_session.commit()
-
-
 def update_user_voice_settings(
     db_session: Session,
     user_id: UUID,

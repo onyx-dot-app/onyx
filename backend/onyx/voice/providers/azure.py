@@ -6,6 +6,7 @@ import wave
 from collections.abc import AsyncIterator
 from typing import Any
 from xml.sax.saxutils import escape
+from xml.sax.saxutils import quoteattr
 
 import aiohttp
 
@@ -167,13 +168,20 @@ class AzureStreamingTranscriber(StreamingTranscriberProtocol):
 class AzureStreamingSynthesizer(StreamingSynthesizerProtocol):
     """Real-time streaming TTS using Azure Speech SDK."""
 
-    def __init__(self, api_key: str, region: str, voice: str = "en-US-JennyNeural"):
+    def __init__(
+        self,
+        api_key: str,
+        region: str,
+        voice: str = "en-US-JennyNeural",
+        speed: float = 1.0,
+    ):
         from onyx.utils.logger import setup_logger
 
         self._logger = setup_logger()
         self.api_key = api_key
         self.region = region
         self.voice = voice
+        self.speed = max(0.5, min(2.0, speed))
         self._audio_queue: asyncio.Queue[bytes | None] = asyncio.Queue()
         self._synthesizer: Any = None
         self._closed = False
@@ -230,10 +238,18 @@ class AzureStreamingSynthesizer(StreamingSynthesizerProtocol):
             self._loop.call_soon_threadsafe(self._audio_queue.put_nowait, None)
 
     async def send_text(self, text: str) -> None:
-        """Send text to be synthesized."""
+        """Send text to be synthesized using SSML for prosody control."""
         if self._synthesizer and not self._closed:
-            # Start synthesis asynchronously
-            self._synthesizer.speak_text_async(text)
+            # Build SSML with prosody for speed control
+            rate = f"{int((self.speed - 1) * 100):+d}%"
+            escaped_text = escape(text)
+            ssml = f"""<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='en-US'>
+                <voice name={quoteattr(self.voice)}>
+                    <prosody rate='{rate}'>{escaped_text}</prosody>
+                </voice>
+            </speak>"""
+            # Use speak_ssml_async for SSML support (includes speed/prosody)
+            self._synthesizer.speak_ssml_async(ssml)
 
     async def receive_audio(self) -> bytes | None:
         """Receive next audio chunk."""
@@ -281,18 +297,24 @@ class AzureVoiceProvider(VoiceProviderInterface):
 
     @staticmethod
     def _extract_speech_region_from_uri(uri: str | None) -> str | None:
-        """Extract Azure speech region from endpoint URI."""
+        """Extract Azure speech region from endpoint URI.
+
+        Note: Custom domains (*.cognitiveservices.azure.com) contain the resource
+        name, not the region. For custom domains, the region must be specified
+        explicitly via custom_config["speech_region"].
+        """
         if not uri:
             return None
         # Accepted examples:
         # - https://eastus.tts.speech.microsoft.com/cognitiveservices/v1
         # - https://eastus.stt.speech.microsoft.com/speech/recognition/...
         # - https://westus.api.cognitive.microsoft.com/
-        # - https://<resource>.cognitiveservices.azure.com/  (fallback to first label)
+        #
+        # NOT supported (requires explicit speech_region config):
+        # - https://<resource>.cognitiveservices.azure.com/ (resource name != region)
         patterns = [
             r"https?://([^.]+)\.(?:tts|stt)\.speech\.microsoft\.com",
             r"https?://([^.]+)\.api\.cognitive\.microsoft\.com",
-            r"https?://([^.]+)\.cognitiveservices\.azure\.com",
         ]
         for pattern in patterns:
             match = re.search(pattern, uri)
@@ -386,10 +408,10 @@ class AzureVoiceProvider(VoiceProviderInterface):
         speed = max(0.5, min(2.0, speed))
         rate = f"{int((speed - 1) * 100):+d}%"  # e.g., 1.0 -> "+0%", 1.5 -> "+50%"
 
-        # Build SSML with escaped text to prevent injection
+        # Build SSML with escaped text and quoted attributes to prevent injection
         escaped_text = escape(text)
         ssml = f"""<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='en-US'>
-            <voice name='{voice_name}'>
+            <voice name={quoteattr(voice_name)}>
                 <prosody rate='{rate}'>{escaped_text}</prosody>
             </voice>
         </speak>"""
@@ -457,7 +479,6 @@ class AzureVoiceProvider(VoiceProviderInterface):
         self, voice: str | None = None, speed: float = 1.0
     ) -> AzureStreamingSynthesizer:
         """Create a streaming TTS session."""
-        _ = speed  # Azure SDK streaming path does not currently support runtime speed control.
         if not self.api_key:
             raise ValueError("API key required for streaming TTS")
         if not self.speech_region:
@@ -466,6 +487,7 @@ class AzureVoiceProvider(VoiceProviderInterface):
             api_key=self.api_key,
             region=self.speech_region,
             voice=voice or self.default_voice or "en-US-JennyNeural",
+            speed=speed,
         )
         await synthesizer.connect()
         return synthesizer

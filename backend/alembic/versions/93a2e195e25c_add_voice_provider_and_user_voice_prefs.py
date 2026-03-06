@@ -1,7 +1,7 @@
 """add_voice_provider_and_user_voice_prefs
 
 Revision ID: 93a2e195e25c
-Revises: 631fd2504136
+Revises: a3b8d9e2f1c4
 Create Date: 2026-02-23 15:16:39.507304
 
 """

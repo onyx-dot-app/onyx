@@ -127,7 +127,16 @@ async def synthesize_speech(
 
         # Use request voice, or user's preferred voice, or provider default
         final_voice = voice or user.preferred_voice or provider_db.default_voice
-        final_speed = speed or user.voice_playback_speed or 1.0
+        # Use explicit None checks to avoid falsy float issues (0.0 would be skipped with `or`)
+        final_speed = (
+            speed
+            if speed is not None
+            else (
+                user.voice_playback_speed
+                if user.voice_playback_speed is not None
+                else 1.0
+            )
+        )
 
         logger.info(
             f"TTS using provider: {provider_db.provider_type}, voice: {final_voice}, speed: {final_speed}"

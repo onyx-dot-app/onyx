@@ -770,18 +770,9 @@ const AppInputBar = React.memo(
 
           {chatControls}
 
-          {/* Recording waveform - position depends on session state:
-              - Fresh chat (input centered): bar floats BELOW input
-              - Subsequent turns (input at bottom): bar floats ABOVE input */}
+          {/* Recording waveform - shown below input when recording */}
           {isRecording && (
-            <div
-              className={cn(
-                "absolute left-0 right-0 px-1.5",
-                appFocus.isNewSession()
-                  ? "-bottom-[46px]" // Fresh chat: below input
-                  : "-top-[46px]" // Subsequent turns: above input
-              )}
-            >
+            <div className="absolute left-0 right-0 -bottom-12 px-1">
               <RecordingWaveform
                 isRecording={isRecording}
                 isMuted={isMuted}

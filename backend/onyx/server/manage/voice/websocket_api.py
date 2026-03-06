@@ -114,7 +114,7 @@ async def handle_streaming_transcription(
             # Send if text changed OR if VAD detected end of speech (for auto-send trigger)
             if result.text and (result.text != last_transcript or result.is_vad_end):
                 last_transcript = result.text
-                logger.info(
+                logger.debug(
                     f"Streaming transcription: got transcript: {result.text[:50]}... "
                     f"(is_vad_end={result.is_vad_end})"
                 )
@@ -152,7 +152,7 @@ async def handle_streaming_transcription(
             elif "text" in message:
                 try:
                     data = json.loads(message["text"])
-                    logger.info(
+                    logger.debug(
                         f"Streaming transcription: received text message: {data}"
                     )
                     if data.get("type") == "end":
@@ -226,7 +226,7 @@ async def handle_chunked_transcription(
 
             transcript = await transcriber.add_chunk(message["bytes"])
             if transcript:
-                logger.info(
+                logger.debug(
                     f"Chunked transcription: got transcript: {transcript[:50]}..."
                 )
                 await websocket.send_json(
@@ -240,7 +240,7 @@ async def handle_chunked_transcription(
         elif "text" in message:
             try:
                 data = json.loads(message["text"])
-                logger.info(f"Chunked transcription: received text message: {data}")
+                logger.debug(f"Chunked transcription: received text message: {data}")
                 if data.get("type") == "end":
                     logger.info("Chunked transcription: end signal received, flushing")
                     final_transcript = await transcriber.flush()
@@ -452,11 +452,9 @@ async def handle_streaming_synthesis(
         while not disconnected:
             try:
                 message = await websocket.receive()
-            except RuntimeError as e:
-                if "disconnect" in str(e).lower():
-                    logger.info("Streaming synthesis: client disconnected")
-                    break
-                raise
+            except WebSocketDisconnect:
+                logger.info("Streaming synthesis: client disconnected")
+                break
 
             msg_type = message.get("type", "unknown")  # type: ignore[possibly-undefined]
 
@@ -479,7 +477,7 @@ async def handle_streaming_synthesis(
                         if text:
                             # Buffer text instead of sending immediately
                             text_buffer.append(text)
-                            logger.info(
+                            logger.debug(
                                 f"Streaming synthesis: buffered text ({len(text)} chars), "
                                 f"total buffered: {len(text_buffer)} chunks"
                             )
@@ -525,9 +523,10 @@ async def handle_streaming_synthesis(
                         f"Streaming synthesis: failed to parse JSON: {message.get('text', '')[:100]}"
                     )
 
+    except WebSocketDisconnect:
+        logger.debug("Streaming synthesis: client disconnected during synthesis")
     except Exception as e:
-        if "disconnect" not in str(e).lower():
-            logger.error(f"Streaming synthesis: error: {e}", exc_info=True)
+        logger.error(f"Streaming synthesis: error: {e}", exc_info=True)
     finally:
         if send_task and not send_task.done():
             logger.info("Streaming synthesis: waiting for send_task to finish")
@@ -583,7 +582,7 @@ async def handle_chunked_synthesis(websocket: WebSocket, provider: Any) -> None:
                             break
                 if text:
                     text_buffer.append(text)
-                    logger.info(
+                    logger.debug(
                         f"Chunked synthesis: buffered text ({len(text)} chars), "
                         f"total buffered: {len(text_buffer)} chunks"
                     )
@@ -617,10 +616,11 @@ async def handle_chunked_synthesis(websocket: WebSocket, provider: Any) -> None:
                     f"Chunked synthesis: sent audio_done after {chunk_count} chunks, {total_bytes} bytes"
                 )
                 break
+    except WebSocketDisconnect:
+        logger.debug("Chunked synthesis: client disconnected")
     except Exception as e:
-        if "disconnect" not in str(e).lower():
-            logger.error(f"Chunked synthesis: error: {e}", exc_info=True)
-            raise
+        logger.error(f"Chunked synthesis: error: {e}", exc_info=True)
+        raise
     finally:
         logger.info("Chunked synthesis: handler finished")
 
@@ -750,21 +750,12 @@ async def websocket_synthesize(
 
     except WebSocketDisconnect:
         logger.debug("WebSocket synthesize: client disconnected")
-    except RuntimeError as e:
-        if "disconnect" in str(e).lower():
-            logger.debug("WebSocket synthesize: client disconnected")
-        else:
-            logger.error(f"WebSocket synthesize: runtime error: {e}")
     except Exception as e:
-        error_str = str(e).lower()
-        if "disconnect" in error_str or "websocket.close" in error_str:
-            logger.debug("WebSocket synthesize: client disconnected")
-        else:
-            logger.error(f"WebSocket synthesize: unhandled error: {e}", exc_info=True)
-            try:
-                await websocket.send_json({"type": "error", "message": str(e)})
-            except Exception:
-                pass
+        logger.error(f"WebSocket synthesize: unhandled error: {e}", exc_info=True)
+        try:
+            await websocket.send_json({"type": "error", "message": str(e)})
+        except Exception:
+            pass
     finally:
         if streaming_synthesizer:
             try:
