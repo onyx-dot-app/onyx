@@ -445,6 +445,17 @@ def put_llm_provider(
         not existing_provider or not existing_provider.is_auto_mode
     )
 
+    # Before the upsert, check if this provider currently owns the global
+    # CHAT default. The upsert may cascade-delete model_configurations
+    # (and their flow mappings), so we need to remember this beforehand.
+    was_default_provider = False
+    if existing_provider and transitioning_to_auto_mode:
+        current_default = fetch_default_llm_model(db_session)
+        was_default_provider = (
+            current_default is not None
+            and current_default.llm_provider_id == existing_provider.id
+        )
+
     try:
         result = upsert_llm_provider(
             llm_provider_upsert_request=llm_provider_upsert_request,
@@ -467,6 +478,20 @@ def put_llm_provider(
                         updated_provider,
                         config,
                     )
+
+                    # If this provider was the default before the transition,
+                    # restore the default using the recommended model.
+                    if was_default_provider:
+                        recommended = config.get_default_model(
+                            llm_provider_upsert_request.provider
+                        )
+                        if recommended:
+                            update_default_provider(
+                                provider_id=updated_provider.id,
+                                model_name=recommended.name,
+                                db_session=db_session,
+                            )
+
                     # Refresh result with synced models
                     result = LLMProviderView.from_model(updated_provider)
 

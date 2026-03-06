@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useRef } from "react";
 import {
   useSensors,
   useSensor,
@@ -49,6 +49,8 @@ interface DraggableRowsReturn {
   isDragging: boolean;
   /** Whether DnD is enabled. */
   isEnabled: boolean;
+  /** Ref that is `true` briefly after a drag ends, used to suppress the trailing click. */
+  wasDraggingRef: React.RefObject<boolean>;
 }
 
 // ---------------------------------------------------------------------------
@@ -75,6 +77,7 @@ export default function useDraggableRows<TData>(
   const { data, getRowId, enabled = true, onReorder } = options;
 
   const [activeId, setActiveId] = useState<string | null>(null);
+  const wasDraggingRef = useRef(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -108,6 +111,11 @@ export default function useDraggableRows<TData>(
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
       setActiveId(null);
+      // Suppress the trailing click event that the browser fires after pointerup.
+      wasDraggingRef.current = true;
+      requestAnimationFrame(() => {
+        wasDraggingRef.current = false;
+      });
       if (event.activatorEvent instanceof PointerEvent) {
         (document.activeElement as HTMLElement)?.blur();
       }
@@ -152,5 +160,6 @@ export default function useDraggableRows<TData>(
     activeId,
     isDragging: activeId !== null,
     isEnabled: enabled,
+    wasDraggingRef,
   };
 }

@@ -100,12 +100,28 @@ export type OnyxColumnDef<TData> =
   | OnyxActionsColumn<TData>;
 
 // ---------------------------------------------------------------------------
+// Server-side pagination / sorting / search
+// ---------------------------------------------------------------------------
+
+/** Server-side configuration for DataTable. */
+export interface ServerSideConfig {
+  /** Total row count from the server. Used to compute page count. */
+  totalItems: number;
+  /** Whether data is currently being fetched. Shows loading state. */
+  isLoading?: boolean;
+  /** Fired when sorting state changes. */
+  onSortingChange: (sorting: SortingState) => void;
+  /** Fired when pagination changes (including page resets from sort/search). */
+  onPaginationChange: (pageIndex: number, pageSize: number) => void;
+  /** Fired when searchTerm changes. */
+  onSearchTermChange: (searchTerm: string) => void;
+}
+
+// ---------------------------------------------------------------------------
 // DataTable props
 // ---------------------------------------------------------------------------
 
-export interface DataTableDraggableConfig<TData> {
-  /** Extract a unique string ID from each row. */
-  getRowId: (row: TData) => string;
+export interface DataTableDraggableConfig {
   /** Called after a successful reorder with the new ID order and changed positions. */
   onReorder: (
     ids: string[],
@@ -117,8 +133,8 @@ export interface DataTableFooterSelection {
   mode: "selection";
   /** Whether the table supports selecting multiple rows. @default true */
   multiSelect?: boolean;
-  /** Handler for the "View" button. */
-  onView?: () => void;
+  /** When true, shows a "View" button that filters the table to only selected rows. @default false */
+  showView?: boolean;
   /** Handler for the "Clear" button. When omitted, the default clearSelection is used. */
   onClear?: () => void;
 }
@@ -136,6 +152,8 @@ export interface DataTableProps<TData> {
   data: TData[];
   /** Column definitions created via `createTableColumns()`. */
   columns: OnyxColumnDef<TData>[];
+  /** Extract a unique string ID from each row. Used for stable row identity. */
+  getRowId: (row: TData) => string;
   /** Rows per page. Set `Infinity` to disable pagination. @default 10 */
   pageSize?: number;
   /** Initial sorting state. */
@@ -143,13 +161,18 @@ export interface DataTableProps<TData> {
   /** Initial column visibility state. */
   initialColumnVisibility?: VisibilityState;
   /** Enable drag-and-drop row reordering. */
-  draggable?: DataTableDraggableConfig<TData>;
+  draggable?: DataTableDraggableConfig;
   /** Footer configuration. */
   footer?: DataTableFooterConfig;
   /** Table size variant. @default "regular" */
   size?: TableSize;
+  /** Called whenever the set of selected row IDs changes. Receives IDs produced by `getRowId`. */
+  onSelectionChange?: (selectedIds: string[]) => void;
   /** Called when a row is clicked (replaces the default selection toggle). */
   onRowClick?: (row: TData) => void;
+  /** Search term for global text filtering. When provided, rows are filtered
+   *  to those containing the term in any accessor column value (case-insensitive). */
+  searchTerm?: string;
   /**
    * Max height of the scrollable table area. When set, the table body scrolls
    * vertically while the header stays pinned at the top.
@@ -159,4 +182,12 @@ export interface DataTableProps<TData> {
   /** Background color for the sticky header row, preventing rows from showing
    *  through when scrolling. Accepts any CSS color value. */
   headerBackground?: string;
+  /**
+   * Enable server-side mode. When provided:
+   * - TanStack uses manualPagination/manualSorting/manualFiltering
+   * - `data` should contain only the current page's rows
+   * - Dragging is automatically disabled
+   * - Fires separate callbacks for sorting, pagination, and search changes
+   */
+  serverSide?: ServerSideConfig;
 }
