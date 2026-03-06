@@ -17,11 +17,10 @@ type slashCommand struct {
 
 var slashCommands = []slashCommand{
 	{"/help", "Show help message"},
-	{"/new", "Start a new chat session"},
+	{"/clear", "Clear chat and start a new session"},
 	{"/agent", "List and switch agents"},
 	{"/attach", "Attach a file to next message"},
 	{"/sessions", "Browse and resume previous sessions"},
-	{"/clear", "Clear the chat display"},
 	{"/configure", "Re-run connection setup"},
 	{"/connectors", "Open connectors in browser"},
 	{"/settings", "Open settings in browser"},

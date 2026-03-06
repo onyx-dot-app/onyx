@@ -3,11 +3,10 @@ package tui
 const helpText = `Onyx CLI Commands
 
   /help              Show this help message
-  /new               Start a new chat session
+  /clear             Clear chat and start a new session
   /agent             List and switch agents
   /attach <path>     Attach a file to next message
   /sessions          Browse and resume previous sessions
-  /clear             Clear the chat display
   /configure         Re-run connection setup
   /connectors        Open connectors page in browser
   /settings          Open Onyx settings in browser

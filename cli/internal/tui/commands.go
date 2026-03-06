@@ -26,9 +26,6 @@ func handleSlashCommand(m Model, text string) (Model, tea.Cmd) {
 		m.viewport.addInfo(helpText)
 		return m, nil
 
-	case "/new":
-		return cmdNew(m)
-
 	case "/agent":
 		if arg != "" {
 			return cmdSelectAgent(m, arg)
@@ -48,7 +45,7 @@ func handleSlashCommand(m Model, text string) (Model, tea.Cmd) {
 		m.viewport.addInfo("Run 'onyx-cli configure' to change connection settings.")
 		return m, nil
 
-	case "/clear":
+	case "/clear", "/new":
 		return cmdNew(m)
 
 	case "/connectors":
