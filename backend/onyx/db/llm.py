@@ -270,10 +270,34 @@ def upsert_llm_provider(
         mc.name for mc in llm_provider_upsert_request.model_configurations
     }
 
+    default_model = fetch_default_llm_model(db_session)
+
+    # Build a lookup of requested visibility by model name
+    requested_visibility = {
+        mc.name: mc.is_visible
+        for mc in llm_provider_upsert_request.model_configurations
+    }
+
     # Delete removed models
     removed_ids = [
         mc.id for name, mc in existing_by_name.items() if name not in models_to_exist
     ]
+
+    # Prevent removing and hiding the default model
+    if default_model:
+        for name, mc in existing_by_name.items():
+            if mc.id == default_model.id:
+                if name not in models_to_exist:
+                    raise ValueError(
+                        f"Cannot remove the default model '{name}'. "
+                        "Please change the default model before removing."
+                    )
+                if not requested_visibility.get(name, True):
+                    raise ValueError(
+                        f"Cannot hide the default model '{name}'. "
+                        "Please change the default model before hiding."
+                    )
+
     if removed_ids:
         db_session.query(ModelConfiguration).filter(
             ModelConfiguration.id.in_(removed_ids)
