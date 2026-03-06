@@ -1744,11 +1744,12 @@ def get_oauth_router(
             CSRF_TOKEN_KEY: csrf_token,
         }
         state = generate_state_token(state_data, state_secret)
-        pkce_cookie_name = get_pkce_cookie_name(state)
-        code_verifier = ""
+        pkce_cookie_name: str | None = None
+        code_verifier: str | None = None
 
         if enable_pkce:
             code_verifier, code_challenge = generate_pkce_pair()
+            pkce_cookie_name = get_pkce_cookie_name(state)
             authorization_url = await oauth_client.get_authorization_url(
                 authorize_redirect_url,
                 state,
@@ -1783,6 +1784,11 @@ def get_oauth_router(
                 samesite=csrf_token_cookie_samesite,
             )
             if enable_pkce:
+                if pkce_cookie_name is None or code_verifier is None:
+                    raise OnyxError(
+                        OnyxErrorCode.INTERNAL_ERROR,
+                        "PKCE state was not initialized",
+                    )
                 redirect_response.set_cookie(
                     key=pkce_cookie_name,
                     value=code_verifier,
@@ -1806,6 +1812,11 @@ def get_oauth_router(
             samesite=csrf_token_cookie_samesite,
         )
         if enable_pkce:
+            if pkce_cookie_name is None or code_verifier is None:
+                raise OnyxError(
+                    OnyxErrorCode.INTERNAL_ERROR,
+                    "PKCE state was not initialized",
+                )
             response.set_cookie(
                 key=pkce_cookie_name,
                 value=code_verifier,
