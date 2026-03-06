@@ -246,16 +246,18 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyEnter:
-		// If picker is active, handle selection
-		if m.viewport.pickerActive && len(m.viewport.pickerItems) > 0 {
-			item := m.viewport.pickerItems[m.viewport.pickerIndex]
-			m.viewport.pickerActive = false
-			switch m.viewport.pickerType {
-			case pickerSession:
-				return cmdResume(m, item.id)
-			case pickerAgent:
-				return cmdSelectAgent(m, item.id)
+		if m.viewport.pickerActive {
+			if len(m.viewport.pickerItems) > 0 {
+				item := m.viewport.pickerItems[m.viewport.pickerIndex]
+				m.viewport.pickerActive = false
+				switch m.viewport.pickerType {
+				case pickerSession:
+					return cmdResume(m, item.id)
+				case pickerAgent:
+					return cmdSelectAgent(m, item.id)
+				}
 			}
+			return m, nil
 		}
 
 	case tea.KeyUp:

@@ -1,9 +1,11 @@
 package cmd
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/onyx-dot-app/onyx/cli/internal/api"
 	"github.com/onyx-dot-app/onyx/cli/internal/config"
@@ -33,10 +35,13 @@ func newAskCmd() *cobra.Command {
 				agentID = askAgentID
 			}
 
+			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+			defer stop()
+
 			client := api.NewClient(cfg)
 			parentID := -1
 			ch := client.SendMessageStream(
-				context.Background(),
+				ctx,
 				question,
 				nil,
 				agentID,
@@ -44,9 +49,14 @@ func newAskCmd() *cobra.Command {
 				nil,
 			)
 
+			var sessionID string
 			var lastErr error
 			gotStop := false
 			for event := range ch {
+				if e, ok := event.(models.SessionCreatedEvent); ok {
+					sessionID = e.ChatSessionID
+				}
+
 				if askJSON {
 					wrapped := struct {
 						Type  string             `json:"type"`
@@ -78,6 +88,16 @@ func newAskCmd() *cobra.Command {
 					fmt.Println()
 					return nil
 				}
+			}
+
+			if ctx.Err() != nil {
+				if sessionID != "" {
+					client.StopChatSession(sessionID)
+				}
+				if !askJSON {
+					fmt.Println()
+				}
+				return nil
 			}
 
 			if lastErr != nil {
