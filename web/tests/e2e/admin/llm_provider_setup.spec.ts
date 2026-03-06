@@ -21,6 +21,11 @@ type DefaultModelInfo = {
   model_name: string;
 } | null;
 
+type ProviderModelConfig = {
+  name: string;
+  is_visible: boolean;
+};
+
 function uniqueName(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -50,6 +55,18 @@ async function createPublicProvider(
   providerName: string,
   modelName: string = "gpt-4o"
 ): Promise<number> {
+  return createPublicProviderWithModels(page, providerName, [
+    { name: modelName, is_visible: true },
+  ]);
+}
+
+async function createPublicProviderWithModels(
+  page: Page,
+  providerName: string,
+  modelConfigurations: ProviderModelConfig[]
+): Promise<number> {
+  expect(modelConfigurations.length).toBeGreaterThan(0);
+
   const response = await page.request.put(
     `${BASE_URL}/api/admin/llm/provider?is_creation=true`,
     {
@@ -60,13 +77,52 @@ async function createPublicProvider(
         is_public: true,
         groups: [],
         personas: [],
-        model_configurations: [{ name: modelName, is_visible: true }],
+        model_configurations: modelConfigurations,
       },
     }
   );
   expect(response.ok()).toBeTruthy();
   const data = (await response.json()) as { id: number };
   return data.id;
+}
+
+async function navigateToAdminLlmPageFromChat(page: Page): Promise<void> {
+  await page.getByRole("link", { name: "Admin Panel" }).click();
+  await page.waitForURL("**/admin/**");
+
+  await page.locator('a[href="/admin/configuration/llm"]').click();
+  await page.waitForURL("**/admin/configuration/llm**");
+  await expect(page.getByLabel("admin-page-title")).toHaveText(
+    /^Language Models/
+  );
+}
+
+async function exitAdminToChat(page: Page): Promise<void> {
+  await page.getByRole("link", { name: "Exit Admin" }).click();
+  await page.waitForURL("**/app**");
+  await page.waitForSelector("#onyx-chat-input-textarea", { timeout: 15000 });
+}
+
+async function expectModelInChatSelector(
+  page: Page,
+  modelName: string,
+  expectedCount: number
+): Promise<void> {
+  await page.getByTestId("AppInputBar/llm-popover-trigger").click();
+  await page.waitForSelector('[role="dialog"]', {
+    state: "visible",
+    timeout: 10000,
+  });
+
+  const dialog = page.locator('[role="dialog"]');
+  await dialog.getByPlaceholder("Search models...").fill(modelName);
+  await expect(dialog.locator("[data-selected]")).toHaveCount(expectedCount);
+
+  await page.keyboard.press("Escape");
+  await page.waitForSelector('[role="dialog"]', {
+    state: "hidden",
+    timeout: 10000,
+  });
 }
 
 async function getProviderByName(
@@ -271,5 +327,95 @@ test.describe("LLM Provider Setup @exclusive", () => {
         }
       }
     }
+  });
+
+  test("adding a hidden model on an existing provider shows it in chat after one save", async ({
+    page,
+  }) => {
+    await page.route("**/api/admin/llm/test", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ success: true }),
+      });
+    });
+
+    const providerName = uniqueName("PW Provider Add Model");
+    const alwaysVisibleModel = `pw-visible-${Date.now()}-base`;
+    const modelToEnable = `pw-hidden-${Date.now()}-to-enable`;
+
+    const providerId = await createPublicProviderWithModels(
+      page,
+      providerName,
+      [
+        { name: alwaysVisibleModel, is_visible: true },
+        { name: modelToEnable, is_visible: false },
+      ]
+    );
+    providersToCleanup.push(providerId);
+
+    await page.goto("/app");
+    await page.waitForLoadState("networkidle");
+    await page.waitForSelector("#onyx-chat-input-textarea", { timeout: 15000 });
+
+    await expectModelInChatSelector(page, modelToEnable, 0);
+
+    await navigateToAdminLlmPageFromChat(page);
+
+    const editModal = await openProviderEditModal(page, providerName);
+    await editModal.getByText(modelToEnable, { exact: true }).click();
+
+    const updateButton = editModal.getByRole("button", { name: "Update" });
+    await expect(updateButton).toBeEnabled({ timeout: 10000 });
+    await updateButton.click();
+    await expect(editModal).not.toBeVisible({ timeout: 30000 });
+
+    await exitAdminToChat(page);
+    await expectModelInChatSelector(page, modelToEnable, 1);
+  });
+
+  test("removing a visible model on an existing provider hides it in chat after one save", async ({
+    page,
+  }) => {
+    await page.route("**/api/admin/llm/test", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ success: true }),
+      });
+    });
+
+    const providerName = uniqueName("PW Provider Remove Model");
+    const alwaysVisibleModel = `pw-visible-${Date.now()}-base`;
+    const modelToDisable = `pw-visible-${Date.now()}-to-disable`;
+
+    const providerId = await createPublicProviderWithModels(
+      page,
+      providerName,
+      [
+        { name: alwaysVisibleModel, is_visible: true },
+        { name: modelToDisable, is_visible: true },
+      ]
+    );
+    providersToCleanup.push(providerId);
+
+    await page.goto("/app");
+    await page.waitForLoadState("networkidle");
+    await page.waitForSelector("#onyx-chat-input-textarea", { timeout: 15000 });
+
+    await expectModelInChatSelector(page, modelToDisable, 1);
+
+    await navigateToAdminLlmPageFromChat(page);
+
+    const editModal = await openProviderEditModal(page, providerName);
+    await editModal.getByText(modelToDisable, { exact: true }).click();
+
+    const updateButton = editModal.getByRole("button", { name: "Update" });
+    await expect(updateButton).toBeEnabled({ timeout: 10000 });
+    await updateButton.click();
+    await expect(editModal).not.toBeVisible({ timeout: 30000 });
+
+    await exitAdminToChat(page);
+    await expectModelInChatSelector(page, modelToDisable, 0);
   });
 });
