@@ -117,12 +117,26 @@ Fixed-width column rendered at the trailing edge. Houses column visibility and s
 | `showColumnVisibility` | `boolean` | `true` | Show the column visibility popover |
 | `showSorting` | `boolean` | `true` | Show the sorting popover |
 | `sortingFooterText` | `string` | - | Footer text inside the sorting popover |
+| `cell` | `(row: TData) => ReactNode` | - | Row-level cell renderer for action buttons |
 
 Width is fixed: 88px at `"regular"`, 20px at `"small"`.
 
 ```ts
 tc.actions({
   sortingFooterText: "Everyone will see agents in this order.",
+})
+```
+
+Row-level actions — the `cell` callback receives the row data and renders content in each body row. Clicks inside the cell automatically call `stopPropagation`, so they won't trigger row selection.
+
+```tsx
+tc.actions({
+  cell: (row) => (
+    <div className="flex gap-x-1">
+      <IconButton icon={SvgPencil} onClick={() => openEdit(row.id)} />
+      <IconButton icon={SvgTrash} onClick={() => confirmDelete(row.id)} />
+    </div>
+  ),
 })
 ```
 
@@ -143,6 +157,8 @@ tc.actions({
 | `onRowClick` | `(row: TData) => void` | toggles selection | Called on row click, replaces default selection toggle |
 | `height` | `number \| string` | - | Max height for scrollable body (header stays pinned). `300` or `"50vh"` |
 | `headerBackground` | `string` | - | CSS color for the sticky header (prevents content showing through) |
+| `searchTerm` | `string` | - | Search term for client-side global text filtering (case-insensitive match across all accessor columns) |
+| `serverSide` | `ServerSideConfig` | - | Enable server-side mode for manual pagination, sorting, and filtering ([see below](#server-side-mode)) |
 
 ## Footer Config
 
@@ -192,6 +208,110 @@ Enable drag-and-drop row reordering. DnD is automatically disabled when column s
 |---|---|---|
 | `getRowId` | `(row: TData) => string` | Extract a unique string ID from each row |
 | `onReorder` | `(ids: string[], changedOrders: Record<string, number>) => void \| Promise<void>` | Called after a successful reorder |
+
+## Server-Side Mode
+
+Pass the `serverSide` prop to switch from client-side to server-side pagination, sorting, and filtering. In this mode `data` should contain **only the current page slice** — TanStack operates with `manualPagination`, `manualSorting`, and `manualFiltering` enabled. Drag-and-drop is automatically disabled.
+
+### `ServerSideConfig`
+
+| Prop | Type | Description |
+|---|---|---|
+| `totalItems` | `number` | Total row count from the server, used to compute page count |
+| `isLoading` | `boolean` | Shows a loading overlay (opacity + pointer-events-none) while data is being fetched |
+| `onSortingChange` | `(sorting: SortingState) => void` | Fired when the user clicks a column header |
+| `onPaginationChange` | `(pageIndex: number, pageSize: number) => void` | Fired on page navigation and on automatic resets from sort/search changes |
+| `onSearchTermChange` | `(searchTerm: string) => void` | Fired when the `searchTerm` prop changes |
+
+### Callback contract
+
+The callbacks fire in a predictable order:
+
+- **Sort change** — `onSortingChange` fires first, then the page resets to 0 and `onPaginationChange(0, pageSize)` fires.
+- **Page navigation** — only `onPaginationChange` fires.
+- **Search change** — `onSearchTermChange` fires, and the page resets to 0. `onPaginationChange` only fires if the page was actually on a non-zero page. When already on page 0, `searchTerm` drives the re-fetch independently (e.g. via your SWR key) — no `onPaginationChange` is needed.
+
+Your data-fetching layer should include `searchTerm` in its fetch dependencies (e.g. SWR key) so that search changes trigger re-fetches regardless of pagination state.
+
+### Full example
+
+```tsx
+import { useState } from "react";
+import useSWR from "swr";
+import type { SortingState } from "@tanstack/react-table";
+import DataTable from "@/refresh-components/table/DataTable";
+import { createTableColumns } from "@/refresh-components/table/columns";
+import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+
+interface User {
+  id: string;
+  name: string;
+  email: string;
+}
+
+const tc = createTableColumns<User>();
+const columns = [
+  tc.qualifier(),
+  tc.column("name", { header: "Name", weight: 40, minWidth: 120 }),
+  tc.column("email", { header: "Email", weight: 60, minWidth: 150 }),
+  tc.actions(),
+];
+
+function UsersTable() {
+  const [searchTerm, setSearchTerm] = useState("");
+  const [sorting, setSorting] = useState<SortingState>([]);
+  const [pageIndex, setPageIndex] = useState(0);
+  const [pageSize, setPageSize] = useState(10);
+
+  const { data: response, isLoading } = useSWR(
+    ["/api/users", sorting, pageIndex, pageSize, searchTerm],
+    ([url, sorting, pageIndex, pageSize, searchTerm]) =>
+      fetch(
+        `${url}?` +
+          new URLSearchParams({
+            page: String(pageIndex),
+            size: String(pageSize),
+            search: searchTerm,
+            ...(sorting[0] && {
+              sortBy: sorting[0].id,
+              sortDir: sorting[0].desc ? "desc" : "asc",
+            }),
+          })
+      ).then((r) => r.json())
+  );
+
+  return (
+    <div className="space-y-4">
+      <InputTypeIn
+        value={searchTerm}
+        onChange={(e) => setSearchTerm(e.target.value)}
+        placeholder="Search users..."
+      />
+      <DataTable
+        data={response?.items ?? []}
+        columns={columns}
+        getRowId={(row) => row.id}
+        searchTerm={searchTerm}
+        pageSize={pageSize}
+        footer={{ mode: "summary" }}
+        serverSide={{
+          totalItems: response?.total ?? 0,
+          isLoading,
+          onSortingChange: setSorting,
+          onPaginationChange: (idx, size) => {
+            setPageIndex(idx);
+            setPageSize(size);
+          },
+          onSearchTermChange: () => {
+            // search state is already managed above via searchTerm prop;
+            // this callback is useful for analytics or debouncing
+          },
+        }}
+      />
+    </div>
+  );
+}
+```
 
 ## Sizing
 
@@ -291,6 +411,31 @@ tc.qualifier({
     footer={{ mode: "selection" }}
   />
 </div>
+```
+
+### Server-side pagination
+
+Minimal wiring for server-side mode — manage sorting/pagination state externally and pass the current page slice as `data`.
+
+```tsx
+<DataTable
+  data={currentPageRows}
+  columns={columns}
+  getRowId={(row) => row.id}
+  searchTerm={searchTerm}
+  pageSize={pageSize}
+  footer={{ mode: "summary" }}
+  serverSide={{
+    totalItems: totalCount,
+    isLoading,
+    onSortingChange: setSorting,
+    onPaginationChange: (idx, size) => {
+      setPageIndex(idx);
+      setPageSize(size);
+    },
+    onSearchTermChange: (term) => setSearchTerm(term),
+  }}
+/>
 ```
 
 ### Custom row click handler

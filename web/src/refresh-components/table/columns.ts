@@ -83,13 +83,15 @@ interface DisplayColumnConfig<TData> {
 // Actions column config
 // ---------------------------------------------------------------------------
 
-interface ActionsConfig {
+interface ActionsConfig<TData = any> {
   /** Show column visibility popover. @default true */
   showColumnVisibility?: boolean;
   /** Show sorting popover. @default true */
   showSorting?: boolean;
   /** Footer text for the sorting popover. */
   sortingFooterText?: string;
+  /** Optional cell renderer for row-level action buttons. */
+  cell?: (row: TData) => ReactNode;
 }
 
 // ---------------------------------------------------------------------------
@@ -110,7 +112,7 @@ interface TableColumnsBuilder<TData> {
   displayColumn(config: DisplayColumnConfig<TData>): OnyxDisplayColumn<TData>;
 
   /** Create an actions column (visibility/sorting popovers). */
-  actions(config?: ActionsConfig): OnyxActionsColumn<TData>;
+  actions(config?: ActionsConfig<TData>): OnyxActionsColumn<TData>;
 }
 
 // ---------------------------------------------------------------------------
@@ -226,7 +228,7 @@ export function createTableColumns<TData>(): TableColumnsBuilder<TData> {
       };
     },
 
-    actions(config?: ActionsConfig): OnyxActionsColumn<TData> {
+    actions(config?: ActionsConfig<TData>): OnyxActionsColumn<TData> {
       const def: ColumnDef<TData, any> = {
         id: "__actions",
         enableHiding: false,
@@ -234,7 +236,9 @@ export function createTableColumns<TData>(): TableColumnsBuilder<TData> {
         enableResizing: false,
         // Header rendering is handled by DataTable based on the actions config
         header: () => null,
-        cell: () => null,
+        cell: config?.cell
+          ? (info: CellContext<TData, any>) => config.cell!(info.row.original)
+          : () => null,
       };
 
       return {
