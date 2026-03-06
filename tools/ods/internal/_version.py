@@ -4,7 +4,7 @@ import os
 import re
 
 # Must match tag_prefix in pyproject.toml [tool.hatch.build.targets.wheel.hooks.custom]
-TAG_PREFIX = "ods"
+TAG_PREFIX: str = "ods"
 
 _tag = os.environ.get("GITHUB_REF_NAME", "v0.0.0-dev").removeprefix(f"{TAG_PREFIX}/")
 _match = re.search(r"v?(\d+\.\d+\.\d+)", _tag)
