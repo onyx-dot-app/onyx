@@ -193,20 +193,35 @@ def build_vespa_filters(
         ]
     filter_str += _build_or_filters(METADATA_LIST, tag_attributes)
 
-    # Document sets
-    filter_str += _build_or_filters(DOCUMENT_SETS, filters.document_set)
+    # Knowledge scope filters: document_sets, user_file_ids, project_id,
+    # and persona_id all define what knowledge the assistant can access.
+    # When multiple are present they must be OR'd (a document from a
+    # document set won't have a user-file UUID, and vice versa).
+    knowledge_scope_parts: list[str] = []
 
-    # Convert UUIDs to strings for user_file_ids
+    doc_set_clause = _build_or_filters(DOCUMENT_SETS, filters.document_set)
+    if doc_set_clause:
+        knowledge_scope_parts.append(doc_set_clause.removesuffix(" and "))
+
     user_file_ids_str = (
         [str(uuid) for uuid in filters.user_file_ids] if filters.user_file_ids else None
     )
-    filter_str += _build_or_filters(DOCUMENT_ID, user_file_ids_str)
+    user_file_clause = _build_or_filters(DOCUMENT_ID, user_file_ids_str)
+    if user_file_clause:
+        knowledge_scope_parts.append(user_file_clause.removesuffix(" and "))
 
-    # User project filter (array<int> attribute membership)
-    filter_str += _build_user_project_filter(filters.project_id)
+    project_clause = _build_user_project_filter(filters.project_id)
+    if project_clause:
+        knowledge_scope_parts.append(project_clause.removesuffix(" and "))
 
-    # Persona filter (array<int> attribute membership)
-    filter_str += _build_persona_filter(filters.persona_id)
+    persona_clause = _build_persona_filter(filters.persona_id)
+    if persona_clause:
+        knowledge_scope_parts.append(persona_clause.removesuffix(" and "))
+
+    if len(knowledge_scope_parts) > 1:
+        filter_str += "(" + " or ".join(knowledge_scope_parts) + ") and "
+    elif len(knowledge_scope_parts) == 1:
+        filter_str += knowledge_scope_parts[0] + " and "
 
     # Time filter
     filter_str += _build_time_filter(filters.time_cutoff)
