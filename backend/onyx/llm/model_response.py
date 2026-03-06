@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 from typing import List
 from typing import TYPE_CHECKING
@@ -174,6 +175,79 @@ def _usage_from_usage_data(usage_data: dict[str, Any]) -> Usage:
         )
         or 0,
     )
+
+
+def make_think_tag_processor() -> Callable[[ModelResponseStream], ModelResponseStream]:
+    """Return a stateful function that extracts ``<think>``/``</think>`` tags
+    from streaming content and routes the enclosed text to
+    ``reasoning_content``.
+
+    Works universally across all providers.  When ``reasoning_content`` is
+    already populated on a chunk (e.g. Ollama with our monkey-patch, or
+    providers that natively support structured reasoning), the chunk is
+    returned unchanged so there is no double-processing.
+    """
+    in_think_block = False
+
+    def _process(response: ModelResponseStream) -> ModelResponseStream:
+        nonlocal in_think_block
+        delta = response.choice.delta
+
+        # Provider already supplies structured reasoning — leave it alone.
+        if delta.reasoning_content is not None:
+            return response
+
+        content = delta.content
+        if not content:
+            return response
+
+        reasoning_text = ""
+        content_text = ""
+
+        i = 0
+        while i < len(content):
+            if not in_think_block:
+                tag_start = content.find("<think>", i)
+                if tag_start == -1:
+                    content_text += content[i:]
+                    break
+                content_text += content[i:tag_start]
+                in_think_block = True
+                i = tag_start + len("<think>")
+            else:
+                tag_end = content.find("</think>", i)
+                if tag_end == -1:
+                    reasoning_text += content[i:]
+                    break
+                reasoning_text += content[i:tag_end]
+                in_think_block = False
+                i = tag_end + len("</think>")
+
+        new_content = content_text or None
+        new_reasoning = reasoning_text or None
+
+        # Fast path: nothing changed.
+        if new_content == delta.content and new_reasoning is None:
+            return response
+
+        new_delta = Delta(
+            content=new_content,
+            reasoning_content=new_reasoning,
+            tool_calls=delta.tool_calls,
+        )
+        new_choice = StreamingChoice(
+            finish_reason=response.choice.finish_reason,
+            index=response.choice.index,
+            delta=new_delta,
+        )
+        return ModelResponseStream(
+            id=response.id,
+            created=response.created,
+            choice=new_choice,
+            usage=response.usage,
+        )
+
+    return _process
 
 
 def from_litellm_model_response_stream(

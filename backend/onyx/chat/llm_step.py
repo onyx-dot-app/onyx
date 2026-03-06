@@ -1085,6 +1085,13 @@ def run_llm_step_pkt_generator(
                 )
                 reasoning_start = False
 
+        # Buffer whitespace-only content until we see real text.  Open-weight
+        # models (e.g. Qwen 3.5 via LM Studio) frequently emit "\n\n" before
+        # tool calls.  If we emit AgentResponseStart for that whitespace, the
+        # frontend thinks the final answer has started and renders incorrectly
+        # when tool packets follow.
+        pending_whitespace = ""
+
         def _emit_content_chunk(content_chunk: str) -> Generator[Packet, None, None]:
             nonlocal accumulated_answer
             nonlocal accumulated_reasoning
@@ -1092,6 +1099,7 @@ def run_llm_step_pkt_generator(
             nonlocal reasoning_start
             nonlocal turn_index
             nonlocal sub_turn_index
+            nonlocal pending_whitespace
 
             # When tool_choice is REQUIRED, content before tool calls is reasoning/thinking
             # about which tool to call, not an actual answer to the user.
@@ -1113,6 +1121,18 @@ def run_llm_step_pkt_generator(
                 return
 
             # Normal flow for AUTO or NONE tool choice
+
+            # Buffer whitespace-only content so we don't prematurely emit
+            # AgentResponseStart before tool calls arrive.
+            if not answer_start and content_chunk.strip() == "":
+                pending_whitespace += content_chunk
+                return
+
+            # Flush any buffered whitespace now that real content has arrived.
+            if pending_whitespace:
+                content_chunk = pending_whitespace + content_chunk
+                pending_whitespace = ""
+
             yield from _close_reasoning_if_active()
 
             if not answer_start:
@@ -1221,6 +1241,10 @@ def run_llm_step_pkt_generator(
                     yield from _emit_content_chunk(filtered_content)
 
             if delta.tool_calls:
+                # Discard any buffered whitespace — it was junk before tool calls,
+                # not part of the actual answer.
+                pending_whitespace = ""
+
                 yield from _close_reasoning_if_active()
 
                 for tool_call_delta in delta.tool_calls:
