@@ -76,9 +76,7 @@
 .interactive[data-interactive-variant="select-heavy"][data-interactive-state="filled"][data-interaction="active"]:not(
     [data-disabled]
   ) {
-  @apply bg-background-neutral-00;
-  --interactive-foreground: var(--text-05);
-  --interactive-foreground-icon: var(--text-05);
+  @apply bg-background-tint-00;
 }
 .interactive[data-interactive-variant="select-heavy"][data-interactive-state="filled"][data-disabled] {
   @apply bg-transparent;
@@ -175,9 +173,7 @@
 .interactive[data-interactive-variant="select-light"][data-interactive-state="filled"][data-interaction="active"]:not(
     [data-disabled]
   ) {
-  @apply bg-background-neutral-00;
-  --interactive-foreground: var(--text-05);
-  --interactive-foreground-icon: var(--text-05);
+  @apply bg-background-tint-00;
 }
 .interactive[data-interactive-variant="select-light"][data-interactive-state="filled"][data-disabled] {
   @apply bg-transparent;
