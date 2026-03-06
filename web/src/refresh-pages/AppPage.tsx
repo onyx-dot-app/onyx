@@ -193,7 +193,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       onSubmit({
         message,
         currentMessageFiles,
-        deepResearch: deepResearchEnabled,
+        deepResearch: deepResearchEnabledForCurrentWorkflow,
       });
     }
   }
@@ -218,6 +218,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     chatSessionId: currentChatSessionId,
     agentId: selectedAgent?.id,
   });
+  const deepResearchEnabledForCurrentWorkflow =
+    currentProjectId === null && deepResearchEnabled;
 
   const [presentingDocument, setPresentingDocument] =
     useState<MinimalOnyxDocument | null>(null);
@@ -435,10 +437,15 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     onSubmit({
       message: lastUserMsg.message,
       currentMessageFiles: currentMessageFiles,
-      deepResearch: deepResearchEnabled,
+      deepResearch: deepResearchEnabledForCurrentWorkflow,
       messageIdToResend: lastUserMsg.messageId,
     });
-  }, [messageHistory, onSubmit, currentMessageFiles, deepResearchEnabled]);
+  }, [
+    messageHistory,
+    onSubmit,
+    currentMessageFiles,
+    deepResearchEnabledForCurrentWorkflow,
+  ]);
 
   const toggleDocumentSidebar = useCallback(() => {
     if (!documentSidebarVisible) {
@@ -458,7 +465,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       onSubmit({
         message,
         currentMessageFiles,
-        deepResearch: deepResearchEnabled,
+        deepResearch: deepResearchEnabledForCurrentWorkflow,
       });
       if (showOnboarding || !onboardingDismissed) {
         finishOnboarding();
@@ -468,7 +475,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       resetInputBar,
       onSubmit,
       currentMessageFiles,
-      deepResearchEnabled,
+      deepResearchEnabledForCurrentWorkflow,
       showOnboarding,
       onboardingDismissed,
       finishOnboarding,
@@ -503,7 +510,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
         onSubmit({
           message,
           currentMessageFiles,
-          deepResearch: deepResearchEnabled,
+          deepResearch: deepResearchEnabledForCurrentWorkflow,
         });
         if (showOnboarding || !onboardingDismissed) {
           finishOnboarding();
@@ -524,7 +531,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       resetInputBar,
       onSubmit,
       currentMessageFiles,
-      deepResearchEnabled,
+      deepResearchEnabledForCurrentWorkflow,
       showOnboarding,
       onboardingDismissed,
       finishOnboarding,
@@ -709,7 +716,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
             >
               {/* Main content grid — 3 rows, animated */}
               <div
-                className="flex-1 w-full grid min-h-0 transition-[grid-template-rows] duration-150 ease-in-out"
+                className="flex-1 w-full grid min-h-0 px-4 transition-[grid-template-rows] duration-150 ease-in-out"
                 style={gridStyle}
               >
                 {/* ── Top row: ChatUI / WelcomeMessage / ProjectUI ── */}
@@ -732,7 +739,9 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       <ChatUI
                         liveAgent={liveAgent!}
                         llmManager={llmManager}
-                        deepResearchEnabled={deepResearchEnabled}
+                        deepResearchEnabled={
+                          deepResearchEnabledForCurrentWorkflow
+                        }
                         currentMessageFiles={currentMessageFiles}
                         setPresentingDocument={setPresentingDocument}
                         onSubmit={onSubmit}
@@ -828,14 +837,12 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       />
                       <AppInputBar
                         ref={chatInputBarRef}
-                        deepResearchEnabled={deepResearchEnabled}
+                        deepResearchEnabled={
+                          deepResearchEnabledForCurrentWorkflow
+                        }
                         toggleDeepResearch={toggleDeepResearch}
-                        toggleDocumentSidebar={toggleDocumentSidebar}
                         filterManager={filterManager}
                         llmManager={llmManager}
-                        removeDocs={() => setSelectedDocuments([])}
-                        retrievalEnabled={retrievalEnabled}
-                        selectedDocuments={selectedDocuments}
                         initialMessage={
                           searchParams?.get(SEARCH_PARAM_NAMES.USER_PROMPT) ||
                           ""

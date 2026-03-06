@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
 import { Dialog } from "@headlessui/react";
 import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import { toast } from "@/hooks/useToast";
 import { useUser } from "@/providers/UserProvider";
 import { useModalContext } from "../context/ModalContext";
@@ -190,16 +191,17 @@ export default function NewTeamModal() {
                 Your join request can be approved by any admin of {appDomain}.
               </p>
               <div className="flex flex-col items-center justify-center gap-4 mt-4">
-                <Button
-                  onClick={handleRequestInvite}
-                  width="full"
-                  disabled={isSubmitting}
-                  icon={isSubmitting ? SimpleLoader : SvgArrowUp}
-                >
-                  {isSubmitting
-                    ? "Sending request..."
-                    : "Request to join your team"}
-                </Button>
+                <Disabled disabled={isSubmitting}>
+                  <Button
+                    onClick={handleRequestInvite}
+                    width="full"
+                    icon={isSubmitting ? SimpleLoader : SvgArrowUp}
+                  >
+                    {isSubmitting
+                      ? "Sending request..."
+                      : "Request to join your team"}
+                  </Button>
+                </Disabled>
               </div>
               <Button
                 onClick={handleContinueToNewOrg}

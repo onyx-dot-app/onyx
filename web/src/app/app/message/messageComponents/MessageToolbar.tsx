@@ -28,7 +28,7 @@ import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import FeedbackModal, {
   FeedbackModalProps,
 } from "@/sections/modals/FeedbackModal";
-import { Button } from "@opal/components";
+import { Button, SelectButton } from "@opal/components";
 
 // Wrapper component for SourceTag in toolbar to handle memoization
 const SourcesTagWrapper = React.memo(function SourcesTagWrapper({
@@ -246,21 +246,19 @@ export default function MessageToolbar({
               getHtmlContent={() => finalAnswerRef.current?.innerHTML || ""}
               data-testid="AgentMessage/copy-button"
             />
-            <Button
+            <SelectButton
               icon={SvgThumbsUp}
               onClick={() => handleFeedbackClick("like")}
-              variant="select"
-              selected={isFeedbackTransient("like")}
+              state={isFeedbackTransient("like") ? "selected" : "empty"}
               tooltip={
                 currentFeedback === "like" ? "Remove Like" : "Good Response"
               }
               data-testid="AgentMessage/like-button"
             />
-            <Button
+            <SelectButton
               icon={SvgThumbsDown}
               onClick={() => handleFeedbackClick("dislike")}
-              variant="select"
-              selected={isFeedbackTransient("dislike")}
+              state={isFeedbackTransient("dislike") ? "selected" : "empty"}
               tooltip={
                 currentFeedback === "dislike"
                   ? "Remove Dislike"

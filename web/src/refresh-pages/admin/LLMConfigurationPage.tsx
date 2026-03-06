@@ -20,6 +20,7 @@ import {
   getProviderIcon,
   getProviderProductName,
 } from "@/lib/llmConfig/providers";
+import { refreshLlmProviderCaches } from "@/lib/llmConfig/cache";
 import { deleteLlmProvider, setDefaultLlmModel } from "@/lib/llmConfig/svc";
 import Text from "@/refresh-components/texts/Text";
 import { Horizontal as HorizontalInput } from "@/layouts/input-layouts";
@@ -33,7 +34,6 @@ import {
   LLMProviderView,
   WellKnownLLMProviderDescriptor,
 } from "@/interfaces/llm";
-import { LLM_PROVIDERS_ADMIN_URL } from "@/lib/llmConfig/constants";
 import { getModalForExistingProvider } from "@/sections/modals/llmConfig/getModal";
 import { OpenAIModal } from "@/sections/modals/llmConfig/OpenAIModal";
 import { AnthropicModal } from "@/sections/modals/llmConfig/AnthropicModal";
@@ -43,6 +43,7 @@ import { BedrockModal } from "@/sections/modals/llmConfig/BedrockModal";
 import { VertexAIModal } from "@/sections/modals/llmConfig/VertexAIModal";
 import { OpenRouterModal } from "@/sections/modals/llmConfig/OpenRouterModal";
 import { CustomModal } from "@/sections/modals/llmConfig/CustomModal";
+import { LMStudioForm } from "@/sections/modals/llmConfig/LMStudioForm";
 import { Section } from "@/layouts/general-layouts";
 
 const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.LLM_MODELS]!;
@@ -108,6 +109,13 @@ const PROVIDER_MODAL_MAP: Record<
       onOpenChange={onOpenChange}
     />
   ),
+  lm_studio: (d, open, onOpenChange) => (
+    <LMStudioForm
+      shouldMarkAsDefault={d}
+      open={open}
+      onOpenChange={onOpenChange}
+    />
+  ),
 };
 
 // ============================================================================
@@ -132,7 +140,7 @@ function ExistingProviderCard({
   const handleDelete = async () => {
     try {
       await deleteLlmProvider(provider.id);
-      mutate(LLM_PROVIDERS_ADMIN_URL);
+      await refreshLlmProviderCaches(mutate);
       deleteModal.toggle(false);
       toast.success("Provider deleted successfully!");
     } catch (e) {
@@ -337,7 +345,7 @@ export default function LLMConfigurationPage() {
 
     try {
       await setDefaultLlmModel(providerId, modelName);
-      mutate(LLM_PROVIDERS_ADMIN_URL);
+      await refreshLlmProviderCaches(mutate);
       toast.success("Default model updated successfully!");
     } catch (e) {
       const message = e instanceof Error ? e.message : "Unknown error";

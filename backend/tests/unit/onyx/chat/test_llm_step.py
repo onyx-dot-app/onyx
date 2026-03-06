@@ -8,7 +8,6 @@ from onyx.chat.llm_step import _extract_tool_call_kickoffs
 from onyx.chat.llm_step import _increment_turns
 from onyx.chat.llm_step import _parse_tool_args_to_dict
 from onyx.chat.llm_step import _resolve_tool_arguments
-from onyx.chat.llm_step import _sanitize_llm_output
 from onyx.chat.llm_step import _XmlToolCallContentFilter
 from onyx.chat.llm_step import extract_tool_calls_from_response_text
 from onyx.chat.llm_step import translate_history_to_llm_format
@@ -21,48 +20,49 @@ from onyx.llm.models import AssistantMessage
 from onyx.llm.models import ToolMessage
 from onyx.llm.models import UserMessage
 from onyx.server.query_and_chat.placement import Placement
+from onyx.utils.postgres_sanitization import sanitize_string
 
 
 class TestSanitizeLlmOutput:
-    """Tests for the _sanitize_llm_output function."""
+    """Tests for the sanitize_string function."""
 
     def test_removes_null_bytes(self) -> None:
         """Test that NULL bytes are removed from strings."""
-        assert _sanitize_llm_output("hello\x00world") == "helloworld"
-        assert _sanitize_llm_output("\x00start") == "start"
-        assert _sanitize_llm_output("end\x00") == "end"
-        assert _sanitize_llm_output("\x00\x00\x00") == ""
+        assert sanitize_string("hello\x00world") == "helloworld"
+        assert sanitize_string("\x00start") == "start"
+        assert sanitize_string("end\x00") == "end"
+        assert sanitize_string("\x00\x00\x00") == ""
 
     def test_removes_surrogates(self) -> None:
         """Test that UTF-16 surrogates are removed from strings."""
         # Low surrogate
-        assert _sanitize_llm_output("hello\ud800world") == "helloworld"
+        assert sanitize_string("hello\ud800world") == "helloworld"
         # High surrogate
-        assert _sanitize_llm_output("hello\udfffworld") == "helloworld"
+        assert sanitize_string("hello\udfffworld") == "helloworld"
         # Middle of surrogate range
-        assert _sanitize_llm_output("test\uda00value") == "testvalue"
+        assert sanitize_string("test\uda00value") == "testvalue"
 
     def test_removes_mixed_bad_characters(self) -> None:
         """Test removal of both NULL bytes and surrogates together."""
-        assert _sanitize_llm_output("a\x00b\ud800c\udfffd") == "abcd"
+        assert sanitize_string("a\x00b\ud800c\udfffd") == "abcd"
 
     def test_preserves_valid_unicode(self) -> None:
         """Test that valid Unicode characters are preserved."""
         # Emojis
-        assert _sanitize_llm_output("hello 👋 world") == "hello 👋 world"
+        assert sanitize_string("hello 👋 world") == "hello 👋 world"
         # Chinese characters
-        assert _sanitize_llm_output("你好世界") == "你好世界"
+        assert sanitize_string("你好世界") == "你好世界"
         # Mixed scripts
-        assert _sanitize_llm_output("Hello мир 世界") == "Hello мир 世界"
+        assert sanitize_string("Hello мир 世界") == "Hello мир 世界"
 
     def test_empty_string(self) -> None:
         """Test that empty strings are handled correctly."""
-        assert _sanitize_llm_output("") == ""
+        assert sanitize_string("") == ""
 
     def test_normal_ascii(self) -> None:
         """Test that normal ASCII strings pass through unchanged."""
-        assert _sanitize_llm_output("hello world") == "hello world"
-        assert _sanitize_llm_output('{"key": "value"}') == '{"key": "value"}'
+        assert sanitize_string("hello world") == "hello world"
+        assert sanitize_string('{"key": "value"}') == '{"key": "value"}'
 
 
 class TestParseToolArgsToDict:

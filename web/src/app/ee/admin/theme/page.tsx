@@ -3,6 +3,7 @@
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
 import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import {
   AppearanceThemeSettings,
   AppearanceThemeSettingsRef,
@@ -217,21 +218,26 @@ export default function ThemePage() {
                 description="Customize how the application appears to users across your organization."
                 icon={route.icon}
                 rightChildren={
-                  <Button
-                    type="button"
+                  <Disabled
                     disabled={isSubmitting || (!dirty && !hasLogoChange)}
-                    onClick={async () => {
-                      const errors = await validateForm();
-                      if (Object.keys(errors).length > 0) {
-                        setErrors(errors);
-                        appearanceSettingsRef.current?.focusFirstError(errors);
-                        return;
-                      }
-                      await submitForm();
-                    }}
                   >
-                    {isSubmitting ? "Applying..." : "Apply Changes"}
-                  </Button>
+                    <Button
+                      type="button"
+                      onClick={async () => {
+                        const errors = await validateForm();
+                        if (Object.keys(errors).length > 0) {
+                          setErrors(errors);
+                          appearanceSettingsRef.current?.focusFirstError(
+                            errors
+                          );
+                          return;
+                        }
+                        await submitForm();
+                      }}
+                    >
+                      {isSubmitting ? "Applying..." : "Apply Changes"}
+                    </Button>
+                  </Disabled>
                 }
               />
               <SettingsLayouts.Body>

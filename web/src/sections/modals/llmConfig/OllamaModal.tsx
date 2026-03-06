@@ -26,6 +26,7 @@ import { DisplayModels } from "./components/DisplayModels";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchOllamaModels } from "@/app/admin/configuration/llm/utils";
 import debounce from "lodash/debounce";
+import { ScopedMutator } from "swr";
 
 export const OLLAMA_PROVIDER_NAME = "ollama_chat";
 const DEFAULT_API_BASE = "http://127.0.0.1:11434";
@@ -44,7 +45,7 @@ interface OllamaModalContentProps {
   setFetchedModels: (models: ModelConfiguration[]) => void;
   isTesting: boolean;
   testError: string;
-  mutate: () => void;
+  mutate: ScopedMutator;
   onClose: () => void;
   isFormValid: boolean;
 }

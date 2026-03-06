@@ -16,6 +16,7 @@ import {
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import Separator from "@/refresh-components/Separator";
 import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import { toast } from "@/hooks/useToast";
 import { ModalCreationInterface } from "@/refresh-components/contexts/ModalContext";
 import { SvgCheckCircle, SvgServer, SvgUnplug } from "@opal/icons";
@@ -237,26 +238,26 @@ export default function AddMCPServerModal({
               </Modal.Body>
 
               <Modal.Footer>
-                <Button
-                  prominence="secondary"
-                  type="button"
-                  onClick={() => handleModalClose(false)}
-                  disabled={isSubmitting}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={isSubmitting || !isValid || !dirty}
-                >
-                  {isSubmitting
-                    ? isEditMode
-                      ? "Saving..."
-                      : "Adding..."
-                    : isEditMode
-                      ? "Save Changes"
-                      : "Add Server"}
-                </Button>
+                <Disabled disabled={isSubmitting}>
+                  <Button
+                    prominence="secondary"
+                    type="button"
+                    onClick={() => handleModalClose(false)}
+                  >
+                    Cancel
+                  </Button>
+                </Disabled>
+                <Disabled disabled={isSubmitting || !isValid || !dirty}>
+                  <Button type="submit">
+                    {isSubmitting
+                      ? isEditMode
+                        ? "Saving..."
+                        : "Adding..."
+                      : isEditMode
+                        ? "Save Changes"
+                        : "Add Server"}
+                  </Button>
+                </Disabled>
               </Modal.Footer>
             </Form>
           )}

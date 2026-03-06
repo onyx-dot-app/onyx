@@ -46,8 +46,8 @@ export interface Settings {
   // Onyx Craft (Build Mode) feature flag
   onyx_craft_enabled?: boolean;
 
-  // Enterprise features flag - controlled by license enforcement at runtime
-  // True when user has a valid license, False for community edition
+  // Whether EE features are unlocked (user has a valid enterprise license).
+  // Controls UI visibility of EE features like user groups, analytics, RBAC.
   ee_features_enabled?: boolean;
 
   // Seat usage - populated when seat limit is exceeded

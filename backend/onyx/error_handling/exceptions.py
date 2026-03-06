@@ -48,10 +48,11 @@ class OnyxError(Exception):
         *,
         status_code_override: int | None = None,
     ) -> None:
+        resolved_message = message or error_code.code
+        super().__init__(resolved_message)
         self.error_code = error_code
-        self.message = message or error_code.code
+        self.message = resolved_message
         self._status_code_override = status_code_override
-        super().__init__(self.message)
 
     @property
     def status_code(self) -> int:

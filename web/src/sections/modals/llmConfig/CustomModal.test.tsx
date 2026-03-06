@@ -164,6 +164,18 @@ describe("Custom LLM Provider Configuration Workflow", () => {
 
     // Verify SWR cache was invalidated
     expect(mockMutate).toHaveBeenCalledWith("/api/admin/llm/provider");
+    expect(mockMutate).toHaveBeenCalledWith("/api/llm/provider");
+
+    const personaProvidersMutateCall = mockMutate.mock.calls.find(
+      ([key]) => typeof key === "function"
+    );
+    expect(personaProvidersMutateCall).toBeDefined();
+
+    const personaProviderFilter = personaProvidersMutateCall?.[0] as (
+      key: unknown
+    ) => boolean;
+    expect(personaProviderFilter("/api/llm/persona/42/providers")).toBe(true);
+    expect(personaProviderFilter("/api/llm/provider")).toBe(false);
   });
 
   test("shows error when test configuration fails", async () => {

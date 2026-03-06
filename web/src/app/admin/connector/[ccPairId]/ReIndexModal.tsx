@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import { useState } from "react";
 import { toast } from "@/hooks/useToast";
 import { triggerIndexing } from "@/app/admin/connector/[ccPairId]/lib";
@@ -115,9 +116,9 @@ export default function ReIndexModal({ hide, onRunIndex }: ReIndexModalProps) {
             This will pull in and index all documents that have changed and/or
             have been added since the last successful indexing run.
           </Text>
-          <Button onClick={() => handleRunIndex(false)} disabled={isProcessing}>
-            Run Update
-          </Button>
+          <Disabled disabled={isProcessing}>
+            <Button onClick={() => handleRunIndex(false)}>Run Update</Button>
+          </Disabled>
 
           <Separator />
 
@@ -130,9 +131,11 @@ export default function ReIndexModal({ hide, onRunIndex }: ReIndexModalProps) {
             in the source, this may take a long time.
           </Text>
 
-          <Button onClick={() => handleRunIndex(true)} disabled={isProcessing}>
-            Run Complete Re-Indexing
-          </Button>
+          <Disabled disabled={isProcessing}>
+            <Button onClick={() => handleRunIndex(true)}>
+              Run Complete Re-Indexing
+            </Button>
+          </Disabled>
         </Modal.Body>
       </Modal.Content>
     </Modal>

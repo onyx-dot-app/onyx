@@ -1,4 +1,5 @@
 import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
 import { SvgChevronLeft, SvgChevronRight } from "@opal/icons";
@@ -67,12 +68,13 @@ export default function Pagination({
   return (
     <Section flexDirection="row" gap={0.25}>
       {/* Previous button */}
-      <Button
-        onClick={() => onPageChange(currentPage - 1)}
-        disabled={currentPage === 1}
-        prominence="tertiary"
-        icon={SvgChevronLeft}
-      />
+      <Disabled disabled={currentPage === 1}>
+        <Button
+          onClick={() => onPageChange(currentPage - 1)}
+          prominence="tertiary"
+          icon={SvgChevronLeft}
+        />
+      </Disabled>
 
       {/* Page numbers */}
       <Section flexDirection="row" gap={0} width="fit">
@@ -93,7 +95,7 @@ export default function Pagination({
               key={pageNum}
               onClick={() => onPageChange(pageNum)}
               prominence="tertiary"
-              transient={isActive}
+              interaction={isActive ? "hover" : "rest"}
               icon={({ className }) => (
                 <div className={cn(className, "flex flex-col justify-center")}>
                   <Text>{pageNum}</Text>
@@ -105,12 +107,13 @@ export default function Pagination({
       </Section>
 
       {/* Next button */}
-      <Button
-        onClick={() => onPageChange(currentPage + 1)}
-        disabled={currentPage === totalPages}
-        prominence="tertiary"
-        icon={SvgChevronRight}
-      />
+      <Disabled disabled={currentPage === totalPages}>
+        <Button
+          onClick={() => onPageChange(currentPage + 1)}
+          prominence="tertiary"
+          icon={SvgChevronRight}
+        />
+      </Disabled>
     </Section>
   );
 }

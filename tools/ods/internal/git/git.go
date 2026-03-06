@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
@@ -173,6 +174,26 @@ func IsCherryPickInProgress() bool {
 	return cmd.Run() == nil
 }
 
+// CountUniqueCommits returns the number of commits on branch that are not on upstream.
+func CountUniqueCommits(branch, upstream string) (int, error) {
+	cmd := exec.Command("git", "rev-list", "--count", fmt.Sprintf("%s..%s", upstream, branch))
+	output, err := cmd.Output()
+	if err != nil {
+		return 0, fmt.Errorf("git rev-list --count failed: %w", err)
+	}
+	count, err := strconv.Atoi(strings.TrimSpace(string(output)))
+	if err != nil {
+		return 0, fmt.Errorf("failed to parse commit count: %w", err)
+	}
+	return count, nil
+}
+
+// IsRebaseInProgress checks if a rebase is currently in progress
+func IsRebaseInProgress() bool {
+	cmd := exec.Command("git", "rev-parse", "--verify", "--quiet", "REBASE_HEAD")
+	return cmd.Run() == nil
+}
+
 // HasStagedChanges checks if there are staged changes in the index
 func HasStagedChanges() bool {
 	cmd := exec.Command("git", "diff", "--quiet", "--cached")
@@ -214,6 +235,23 @@ func IsCommitAppliedOnBranch(commitSHA, branchName string) bool {
 		}
 	}
 	return false
+}
+
+// ResolvePRToMergeCommit resolves a GitHub PR number to its merge commit SHA
+func ResolvePRToMergeCommit(prNumber string) (string, error) {
+	cmd := exec.Command("gh", "pr", "view", prNumber, "--json", "mergeCommit", "--jq", ".mergeCommit.oid")
+	output, err := cmd.Output()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return "", fmt.Errorf("gh pr view failed: %w: %s", err, string(exitErr.Stderr))
+		}
+		return "", fmt.Errorf("gh pr view failed: %w", err)
+	}
+	sha := strings.TrimSpace(string(output))
+	if sha == "" || sha == "null" {
+		return "", fmt.Errorf("PR #%s has no merge commit (is it merged?)", prNumber)
+	}
+	return sha, nil
 }
 
 // RunCherryPickContinue runs git cherry-pick --continue --no-edit

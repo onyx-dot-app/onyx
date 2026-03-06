@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, ReactNode } from "react";
-import useSWR, { useSWRConfig, KeyedMutator } from "swr";
+import useSWR, { useSWRConfig, ScopedMutator } from "swr";
 import { toast } from "@/hooks/useToast";
 import {
   LLMProviderView,
@@ -14,12 +14,12 @@ import { Button } from "@opal/components";
 import { SvgSettings } from "@opal/icons";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { LLM_PROVIDERS_ADMIN_URL } from "@/lib/llmConfig/constants";
+import { refreshLlmProviderCaches } from "@/lib/llmConfig/cache";
 import { setDefaultLlmModel } from "@/lib/llmConfig/svc";
 
 export interface ProviderFormContext {
   onClose: () => void;
-  mutate: KeyedMutator<any>;
+  mutate: ScopedMutator;
   isTesting: boolean;
   setIsTesting: (testing: boolean) => void;
   testError: string;
@@ -95,7 +95,7 @@ export function ProviderFormEntrypointWrapper({
 
     try {
       await setDefaultLlmModel(existingLlmProvider.id, firstVisibleModel.name);
-      await mutate(LLM_PROVIDERS_ADMIN_URL);
+      await refreshLlmProviderCaches(mutate);
       toast.success("Provider set as default successfully!");
     } catch (e) {
       const message = e instanceof Error ? e.message : "Unknown error";
