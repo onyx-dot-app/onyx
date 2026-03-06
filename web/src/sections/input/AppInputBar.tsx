@@ -200,9 +200,16 @@ const AppInputBar = React.memo(
       const textarea = textAreaRef.current;
       if (!wrapper || !textarea) return;
 
+      // Reset so scrollHeight reflects actual content size
       wrapper.style.height = `${MIN_INPUT_HEIGHT}px`;
+
+      // scrollHeight doesn't include the wrapper's padding, so add it back
+      const paddingTop = parseFloat(getComputedStyle(wrapper).paddingTop);
+      const paddingBottom = parseFloat(getComputedStyle(wrapper).paddingBottom);
+      const contentHeight = textarea.scrollHeight + paddingTop + paddingBottom;
+
       wrapper.style.height = `${Math.min(
-        Math.max(textarea.scrollHeight, MIN_INPUT_HEIGHT),
+        Math.max(contentHeight, MIN_INPUT_HEIGHT),
         MAX_INPUT_HEIGHT
       )}px`;
     }, [message, isSearchMode]);
