@@ -10,8 +10,10 @@ from fastapi import Response
 from fastapi.testclient import TestClient
 from fastapi_users.authentication import AuthenticationBackend
 from fastapi_users.authentication import CookieTransport
+from httpx_oauth.oauth2 import GetAccessTokenError
 
 from onyx.auth.users import get_oauth_router
+from onyx.auth.users import get_pkce_cookie_name
 from onyx.auth.users import PKCE_COOKIE_NAME_PREFIX
 
 
@@ -153,6 +155,38 @@ def test_oidc_callback_fails_when_pkce_cookie_missing() -> None:
 
     assert response.status_code == 400
     assert oauth_client.access_token_calls == []
+    assert "Max-Age=0" in response.headers.get("set-cookie", "")
+
+
+def test_oidc_callback_rejects_bad_state_before_token_exchange() -> None:
+    client, oauth_client, _ = _build_test_client(enable_pkce=True)
+    client.get("/auth/oidc/authorize")
+    tampered_state = "not-a-valid-state-jwt"
+    client.cookies.set(get_pkce_cookie_name(tampered_state), "verifier123")
+
+    response = client.get(
+        "/auth/oidc/callback", params={"code": "abc123", "state": tampered_state}
+    )
+
+    assert response.status_code == 400
+    assert oauth_client.access_token_calls == []
+    assert "Max-Age=0" in response.headers.get("set-cookie", "")
+
+
+def test_oidc_callback_get_access_token_error_is_400() -> None:
+    client, oauth_client, _ = _build_test_client(enable_pkce=True)
+    authorize_response = client.get("/auth/oidc/authorize")
+    state = _extract_state_from_authorize_response(authorize_response)
+    oauth_client.get_access_token = AsyncMock(
+        side_effect=GetAccessTokenError("token exchange failed")
+    )
+
+    response = client.get(
+        "/auth/oidc/callback", params={"code": "abc123", "state": state}
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error_code"] == "VALIDATION_ERROR"
 
 
 def test_oidc_callback_uses_code_verifier_when_pkce_enabled() -> None:
