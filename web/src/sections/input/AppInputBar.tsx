@@ -148,7 +148,7 @@ const AppInputBar = React.memo(
       classification === "search";
 
     const { forcedToolIds, setForcedToolIds } = useForcedTools();
-    const { currentMessageFiles, setCurrentMessageFiles } =
+    const { currentMessageFiles, setCurrentMessageFiles, currentProjectId } =
       useProjectsContext();
 
     const currentIndexingFiles = useMemo(() => {
@@ -366,13 +366,19 @@ const AppInputBar = React.memo(
     const showDeepResearch = useMemo(() => {
       const deepResearchGloballyEnabled =
         combinedSettings?.settings?.deep_research_enabled ?? true;
+      const isProjectWorkflow = currentProjectId !== null;
+
+      // TODO(@yuhong): Re-enable Deep Research in Projects workflow once it is fully supported.
+      // https://linear.app/onyx-app/issue/ENG-3818/re-enable-deep-research-in-projects
       return (
+        !isProjectWorkflow &&
         deepResearchGloballyEnabled &&
         hasSearchToolsAvailable(selectedAgent?.tools || [])
       );
     }, [
       selectedAgent?.tools,
       combinedSettings?.settings?.deep_research_enabled,
+      currentProjectId,
     ]);
 
     function handleKeyDownForPromptShortcuts(
