@@ -107,7 +107,7 @@
   --interactive-foreground-icon: var(--text-05);
 }
 .interactive[data-interactive-variant="default"][data-interactive-prominence="tertiary"][data-disabled] {
-  @apply bg-transparent opacity-50;
+  @apply bg-transparent;
   --interactive-foreground: var(--text-01);
   --interactive-foreground-icon: var(--text-01);
 }
@@ -141,7 +141,7 @@
   --interactive-foreground-icon: var(--text-05);
 }
 .interactive[data-interactive-variant="default"][data-interactive-prominence="internal"][data-disabled] {
-  @apply bg-transparent opacity-50;
+  @apply bg-transparent;
   --interactive-foreground: var(--text-01);
   --interactive-foreground-icon: var(--text-01);
 }
@@ -231,7 +231,7 @@
   @apply bg-background-tint-00;
 }
 .interactive[data-interactive-variant="action"][data-interactive-prominence="tertiary"][data-disabled] {
-  @apply bg-transparent opacity-50;
+  @apply bg-transparent;
   --interactive-foreground: var(--action-link-03);
   --interactive-foreground-icon: var(--action-link-03);
 }
@@ -261,7 +261,7 @@
   @apply bg-background-tint-00;
 }
 .interactive[data-interactive-variant="action"][data-interactive-prominence="internal"][data-disabled] {
-  @apply bg-transparent opacity-50;
+  @apply bg-transparent;
   --interactive-foreground: var(--action-link-03);
   --interactive-foreground-icon: var(--action-link-03);
 }
@@ -351,7 +351,7 @@
   @apply bg-background-tint-00;
 }
 .interactive[data-interactive-variant="danger"][data-interactive-prominence="tertiary"][data-disabled] {
-  @apply bg-transparent opacity-50;
+  @apply bg-transparent;
   --interactive-foreground: var(--action-danger-03);
   --interactive-foreground-icon: var(--action-danger-03);
 }
@@ -381,7 +381,7 @@
   @apply bg-background-tint-00;
 }
 .interactive[data-interactive-variant="danger"][data-interactive-prominence="internal"][data-disabled] {
-  @apply bg-transparent opacity-50;
+  @apply bg-transparent;
   --interactive-foreground: var(--action-danger-03);
   --interactive-foreground-icon: var(--action-danger-03);
 }

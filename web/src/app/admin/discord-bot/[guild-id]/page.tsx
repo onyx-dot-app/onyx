@@ -13,6 +13,7 @@ import Card from "@/refresh-components/cards/Card";
 import { Callout } from "@/components/ui/callout";
 import Message from "@/refresh-components/messages/Message";
 import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import { SvgServer } from "@opal/icons";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import {
@@ -104,20 +105,16 @@ function GuildDetailContent({
                 width="fit"
                 gap={0.5}
               >
-                <Button
-                  prominence="secondary"
-                  onClick={handleEnableAll}
-                  disabled={disabled}
-                >
-                  Enable All
-                </Button>
-                <Button
-                  prominence="secondary"
-                  onClick={handleDisableAll}
-                  disabled={disabled}
-                >
-                  Disable All
-                </Button>
+                <Disabled disabled={disabled}>
+                  <Button prominence="secondary" onClick={handleEnableAll}>
+                    Enable All
+                  </Button>
+                </Disabled>
+                <Disabled disabled={disabled}>
+                  <Button prominence="secondary" onClick={handleDisableAll}>
+                    Disable All
+                  </Button>
+                </Disabled>
               </Section>
             ) : undefined
           }
@@ -338,9 +335,9 @@ export default function Page({ params }: Props) {
         description={registeredText}
         backButton
         rightChildren={
-          <Button onClick={handleSaveChanges} disabled={isUpdateDisabled}>
-            Update Configuration
-          </Button>
+          <Disabled disabled={isUpdateDisabled}>
+            <Button onClick={handleSaveChanges}>Update Configuration</Button>
+          </Disabled>
         }
       />
       <SettingsLayouts.Body>

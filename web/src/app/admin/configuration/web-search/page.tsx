@@ -12,6 +12,7 @@ import { ThreeDotsLoader } from "@/components/Loading";
 import { Callout } from "@/components/ui/callout";
 import Button from "@/refresh-components/buttons/Button";
 import { Button as OpalButton } from "@opal/components";
+import { Disabled } from "@opal/core";
 import { cn } from "@/lib/utils";
 import {
   SvgArrowExchange,
@@ -1011,25 +1012,28 @@ export default function Page() {
                             {buttonState.label}
                           </HoverIconButton>
                         ) : (
-                          <OpalButton
-                            prominence="tertiary"
+                          <Disabled
                             disabled={
                               buttonState.disabled || !buttonState.onClick
                             }
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              buttonState.onClick?.();
-                            }}
-                            rightIcon={
-                              buttonState.icon === "arrow"
-                                ? SvgArrowExchange
-                                : buttonState.icon === "arrow-circle"
-                                  ? SvgArrowRightCircle
-                                  : undefined
-                            }
                           >
-                            {buttonState.label}
-                          </OpalButton>
+                            <OpalButton
+                              prominence="tertiary"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                buttonState.onClick?.();
+                              }}
+                              rightIcon={
+                                buttonState.icon === "arrow"
+                                  ? SvgArrowExchange
+                                  : buttonState.icon === "arrow-circle"
+                                    ? SvgArrowRightCircle
+                                    : undefined
+                              }
+                            >
+                              {buttonState.label}
+                            </OpalButton>
+                          </Disabled>
                         )}
                       </div>
                     </div>
@@ -1202,25 +1206,28 @@ export default function Page() {
                           {buttonState.label}
                         </HoverIconButton>
                       ) : (
-                        <OpalButton
-                          prominence="tertiary"
+                        <Disabled
                           disabled={
                             buttonState.disabled || !buttonState.onClick
                           }
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            buttonState.onClick?.();
-                          }}
-                          rightIcon={
-                            buttonState.icon === "arrow"
-                              ? SvgArrowExchange
-                              : buttonState.icon === "arrow-circle"
-                                ? SvgArrowRightCircle
-                                : undefined
-                          }
                         >
-                          {buttonState.label}
-                        </OpalButton>
+                          <OpalButton
+                            prominence="tertiary"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              buttonState.onClick?.();
+                            }}
+                            rightIcon={
+                              buttonState.icon === "arrow"
+                                ? SvgArrowExchange
+                                : buttonState.icon === "arrow-circle"
+                                  ? SvgArrowRightCircle
+                                  : undefined
+                            }
+                          >
+                            {buttonState.label}
+                          </OpalButton>
+                        </Disabled>
                       )}
                     </div>
                   </div>

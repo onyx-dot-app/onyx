@@ -41,6 +41,7 @@ import MCPLineItem, {
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import { SvgActions, SvgChevronRight, SvgKey, SvgSliders } from "@opal/icons";
 import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 
 function buildTooltipMessage(
   actionDescription: string,
@@ -1027,13 +1028,14 @@ export default function ActionsPopover({
       <Popover open={open} onOpenChange={handleOpenChange}>
         <Popover.Trigger asChild>
           <div data-testid="action-management-toggle">
-            <Button
-              icon={SvgSliders}
-              interaction={open ? "hover" : "rest"}
-              prominence="tertiary"
-              tooltip="Manage Actions"
-              disabled={disabled}
-            />
+            <Disabled disabled={disabled}>
+              <Button
+                icon={SvgSliders}
+                interaction={open ? "hover" : "rest"}
+                prominence="tertiary"
+                tooltip="Manage Actions"
+              />
+            </Disabled>
           </div>
         </Popover.Trigger>
         <Popover.Content side="bottom" align="start" width="lg">

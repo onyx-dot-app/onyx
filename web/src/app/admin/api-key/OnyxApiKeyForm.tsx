@@ -3,6 +3,7 @@ import { toast } from "@/hooks/useToast";
 import { createApiKey, updateApiKey } from "./lib";
 import Modal from "@/refresh-components/Modal";
 import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox";
@@ -138,9 +139,11 @@ export default function OnyxApiKeyForm({
               </Modal.Body>
 
               <Modal.Footer>
-                <Button type="submit" disabled={isSubmitting}>
-                  {isUpdate ? "Update" : "Create"}
-                </Button>
+                <Disabled disabled={isSubmitting}>
+                  <Button type="submit">
+                    {isUpdate ? "Update" : "Create"}
+                  </Button>
+                </Disabled>
               </Modal.Footer>
             </Form>
           )}

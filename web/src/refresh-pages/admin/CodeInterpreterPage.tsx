@@ -14,6 +14,7 @@ import {
 import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
 import { Section } from "@/layouts/general-layouts";
 import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import Text from "@/refresh-components/texts/Text";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
@@ -120,22 +121,24 @@ function ActionButtons({
       gap={0.25}
       padding={0.25}
     >
-      <Button
-        prominence="tertiary"
-        size="sm"
-        icon={SvgUnplug}
-        onClick={onDisconnect}
-        tooltip="Disconnect"
-        disabled={disabled}
-      />
-      <Button
-        prominence="tertiary"
-        size="sm"
-        icon={SvgRefreshCw}
-        onClick={onRefresh}
-        tooltip="Refresh"
-        disabled={disabled}
-      />
+      <Disabled disabled={disabled}>
+        <Button
+          prominence="tertiary"
+          size="sm"
+          icon={SvgUnplug}
+          onClick={onDisconnect}
+          tooltip="Disconnect"
+        />
+      </Disabled>
+      <Disabled disabled={disabled}>
+        <Button
+          prominence="tertiary"
+          size="sm"
+          icon={SvgRefreshCw}
+          onClick={onRefresh}
+          tooltip="Refresh"
+        />
+      </Disabled>
     </Section>
   );
 }

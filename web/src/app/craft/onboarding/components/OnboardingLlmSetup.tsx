@@ -2,7 +2,7 @@
 
 import { SvgCheckCircle } from "@opal/icons";
 import { cn } from "@/lib/utils";
-import { Disabled } from "@/refresh-components/Disabled";
+import { Disabled } from "@opal/core";
 import Text from "@/refresh-components/texts/Text";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import { LLMProviderName, LLMProviderDescriptor } from "@/interfaces/llm";

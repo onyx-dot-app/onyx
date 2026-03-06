@@ -36,6 +36,7 @@ import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 import { getSourceMetadata } from "@/lib/sources";
 import { deleteConnector } from "@/app/craft/services/apiServices";
 import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import {
   OAUTH_STATE_KEY,
   getDemoDataEnabled,
@@ -376,19 +377,18 @@ export default function BuildConfigPage() {
           description="Select data sources and your default LLM"
           rightChildren={
             <div className="flex items-center gap-2">
-              <Button
-                prominence="secondary"
-                onClick={handleRestoreChanges}
-                disabled={!hasChanges || isUpdating}
-              >
-                Restore Changes
-              </Button>
-              <Button
-                onClick={handleUpdate}
+              <Disabled disabled={!hasChanges || isUpdating}>
+                <Button prominence="secondary" onClick={handleRestoreChanges}>
+                  Restore Changes
+                </Button>
+              </Disabled>
+              <Disabled
                 disabled={!hasChanges || isUpdating || isPreProvisioning}
               >
-                {isUpdating || isPreProvisioning ? "Updating..." : "Update"}
-              </Button>
+                <Button onClick={handleUpdate}>
+                  {isUpdating || isPreProvisioning ? "Updating..." : "Update"}
+                </Button>
+              </Disabled>
             </div>
           }
         />
