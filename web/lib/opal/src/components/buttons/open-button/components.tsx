@@ -11,6 +11,7 @@ import type { IconFunctionComponent, IconProps } from "@opal/types";
 import { SvgChevronDownSmall } from "@opal/icons";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import { cn } from "@opal/utils";
+import { iconWrapper } from "@opal/components/buttons/icon-wrapper";
 
 // ---------------------------------------------------------------------------
 // Chevron (stable identity — never causes React to remount the SVG)
@@ -89,11 +90,7 @@ function OpenButton({
         }
       >
         <div className="opal-button interactive-foreground flex flex-row items-center gap-1">
-          {Icon && (
-            <div className="interactive-foreground-icon p-0.5">
-              <Icon className="shrink-0 h-[1rem] w-[1rem]" />
-            </div>
-          )}
+          {iconWrapper(Icon, size, false)}
           {children && (
             <span
               className={cn(
@@ -104,9 +101,7 @@ function OpenButton({
               {children}
             </span>
           )}
-          <div className="interactive-foreground-icon p-0.5">
-            <ChevronIcon className="shrink-0 h-[1rem] w-[1rem]" />
-          </div>
+          {iconWrapper(ChevronIcon, size, false)}
         </div>
       </Interactive.Container>
     </Interactive.Stateful>
