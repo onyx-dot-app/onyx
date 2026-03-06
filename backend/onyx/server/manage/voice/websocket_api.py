@@ -381,7 +381,10 @@ async def websocket_transcribe(
     except Exception as e:
         logger.error(f"WebSocket transcribe: unhandled error: {e}", exc_info=True)
         try:
-            await websocket.send_json({"type": "error", "message": str(e)})
+            # Send generic error to avoid leaking sensitive details
+            await websocket.send_json(
+                {"type": "error", "message": "An unexpected error occurred"}
+            )
         except Exception:
             pass
     finally:
@@ -772,7 +775,10 @@ async def websocket_synthesize(
     except Exception as e:
         logger.error(f"WebSocket synthesize: unhandled error: {e}", exc_info=True)
         try:
-            await websocket.send_json({"type": "error", "message": str(e)})
+            # Send generic error to avoid leaking sensitive details
+            await websocket.send_json(
+                {"type": "error", "message": "An unexpected error occurred"}
+            )
         except Exception:
             pass
     finally:

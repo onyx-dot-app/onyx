@@ -212,9 +212,18 @@ export default function VoiceProviderSetupModal({
   );
 
   const handleSubmit = async () => {
-    if (!isEditing && !apiKey && !selectedLlmProviderId) {
-      toast.error("API key is required");
-      return;
+    // API key required for new providers, or when explicitly changed during edit
+    if (!selectedLlmProviderId) {
+      if (!isEditing && !apiKey) {
+        toast.error("API key is required");
+        return;
+      }
+      if (isEditing && apiKeyChanged && !apiKey) {
+        toast.error(
+          "API key cannot be empty. Leave blank to keep existing key."
+        );
+        return;
+      }
     }
 
     if (providerType === "azure" && !isEditing && !targetUri) {

@@ -10,6 +10,7 @@
  */
 export class HTTPStreamingTTSPlayer {
   private mediaSource: MediaSource | null = null;
+  private mediaSourceUrl: string | null = null;
   private sourceBuffer: SourceBuffer | null = null;
   private audioElement: HTMLAudioElement | null = null;
   private pendingChunks: Uint8Array[] = [];
@@ -66,7 +67,8 @@ export class HTTPStreamingTTSPlayer {
     // Create MediaSource and audio element
     this.mediaSource = new MediaSource();
     this.audioElement = new Audio();
-    this.audioElement.src = URL.createObjectURL(this.mediaSource);
+    this.mediaSourceUrl = URL.createObjectURL(this.mediaSource);
+    this.audioElement.src = this.mediaSourceUrl;
 
     // Set up audio element event handlers
     this.audioElement.onplay = () => {
@@ -290,6 +292,12 @@ export class HTTPStreamingTTSPlayer {
    * Cleanup all resources.
    */
   private cleanup(): void {
+    // Revoke Object URL to prevent memory leak
+    if (this.mediaSourceUrl) {
+      URL.revokeObjectURL(this.mediaSourceUrl);
+      this.mediaSourceUrl = null;
+    }
+
     // Stop and cleanup audio element
     if (this.audioElement) {
       this.audioElement.pause();
@@ -334,6 +342,7 @@ export class HTTPStreamingTTSPlayer {
 export class WebSocketStreamingTTSPlayer {
   private websocket: WebSocket | null = null;
   private mediaSource: MediaSource | null = null;
+  private mediaSourceUrl: string | null = null;
   private sourceBuffer: SourceBuffer | null = null;
   private audioElement: HTMLAudioElement | null = null;
   private pendingChunks: Uint8Array[] = [];
@@ -383,7 +392,8 @@ export class WebSocketStreamingTTSPlayer {
     // Create MediaSource and audio element
     this.mediaSource = new MediaSource();
     this.audioElement = new Audio();
-    this.audioElement.src = URL.createObjectURL(this.mediaSource);
+    this.mediaSourceUrl = URL.createObjectURL(this.mediaSource);
+    this.audioElement.src = this.mediaSourceUrl;
 
     this.audioElement.onplay = () => {
       if (!this.isPlaying) {
@@ -548,6 +558,12 @@ export class WebSocketStreamingTTSPlayer {
     if (this.websocket) {
       this.websocket.close();
       this.websocket = null;
+    }
+
+    // Revoke Object URL to prevent memory leak
+    if (this.mediaSourceUrl) {
+      URL.revokeObjectURL(this.mediaSourceUrl);
+      this.mediaSourceUrl = null;
     }
 
     if (this.audioElement) {

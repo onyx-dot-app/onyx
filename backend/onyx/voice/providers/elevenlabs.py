@@ -284,6 +284,7 @@ class ElevenLabsStreamingTranscriber(StreamingTranscriberProtocol):
             self._logger.info("send_audio: message sent successfully")
         except Exception as e:
             self._logger.error(f"send_audio: failed to send: {e}", exc_info=True)
+            raise
 
     async def receive_transcript(self) -> TranscriptResult | None:
         """Receive next transcript. Returns None when done."""
