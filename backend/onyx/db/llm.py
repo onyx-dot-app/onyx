@@ -832,6 +832,7 @@ def sync_auto_mode_models(
         )
 
         if owns_chat_default:
+            # Only update the global default if this provider currently owns it
             current_default = fetch_default_model(db_session, LLMModelFlowType.CHAT)
             if (
                 current_default is None
