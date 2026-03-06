@@ -292,7 +292,10 @@ test.describe("Assistant Creation and Edit Verification", () => {
       expect(agentIdMatch).toBeTruthy();
       const agentId = agentIdMatch ? agentIdMatch[1] : null;
       expect(agentId).not.toBeNull();
-      await expectScreenshot(page, { name: "welcome-page-with-assistant" });
+      await expectScreenshot(page, {
+        name: "welcome-page-with-assistant",
+        hide: ["[data-testid='AppInputBar/llm-popover-trigger']"],
+      });
 
       // Store assistant ID for cleanup
       knowledgeAssistantId = Number(agentId);
