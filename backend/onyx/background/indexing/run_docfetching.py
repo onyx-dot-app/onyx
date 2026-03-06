@@ -58,8 +58,6 @@ from onyx.file_store.document_batch_storage import DocumentBatchStorage
 from onyx.file_store.document_batch_storage import get_document_batch_storage
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.indexing.indexing_pipeline import index_doc_batch_prepare
-from onyx.indexing.postgres_sanitization import sanitize_document_for_postgres
-from onyx.indexing.postgres_sanitization import sanitize_hierarchy_nodes_for_postgres
 from onyx.redis.redis_hierarchy import cache_hierarchy_nodes_batch
 from onyx.redis.redis_hierarchy import ensure_source_node_exists
 from onyx.redis.redis_hierarchy import get_node_id_from_raw_id
@@ -71,6 +69,8 @@ from onyx.server.features.build.indexing.persistent_document_writer import (
 )
 from onyx.utils.logger import setup_logger
 from onyx.utils.middleware import make_randomized_onyx_request_id
+from onyx.utils.postgres_sanitization import sanitize_document_for_postgres
+from onyx.utils.postgres_sanitization import sanitize_hierarchy_nodes_for_postgres
 from onyx.utils.variable_functionality import global_version
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import INDEX_ATTEMPT_INFO_CONTEXTVAR

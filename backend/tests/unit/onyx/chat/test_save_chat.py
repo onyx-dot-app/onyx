@@ -1,10 +1,13 @@
-"""Tests for _extract_referenced_file_descriptors in save_chat.py.
+"""Tests for save_chat.py.
 
-Verifies that only code interpreter generated files actually referenced
-in the assistant's message text are extracted as FileDescriptors for
-cross-turn persistence.
+Covers _extract_referenced_file_descriptors and sanitization in save_chat_turn.
 """
 
+from unittest.mock import MagicMock
+
+from pytest import MonkeyPatch
+
+from onyx.chat import save_chat
 from onyx.chat.save_chat import _extract_referenced_file_descriptors
 from onyx.file_store.models import ChatFileType
 from onyx.tools.models import PythonExecutionFile
@@ -27,6 +30,9 @@ def _make_tool_call_info(
         tool_call_response="{}",
         generated_files=generated_files,
     )
+
+
+# ---- _extract_referenced_file_descriptors tests ----
 
 
 def test_returns_empty_when_no_generated_files() -> None:
@@ -176,3 +182,34 @@ def test_skips_tool_calls_without_generated_files() -> None:
 
     assert len(result) == 1
     assert result[0]["id"] == file_id
+
+
+# ---- save_chat_turn sanitization test ----
+
+
+def test_save_chat_turn_sanitizes_message_and_reasoning(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    mock_tokenizer = MagicMock()
+    mock_tokenizer.encode.return_value = [1, 2, 3]
+    monkeypatch.setattr(save_chat, "get_tokenizer", lambda *_a, **_kw: mock_tokenizer)
+
+    mock_msg = MagicMock()
+    mock_msg.id = 1
+    mock_msg.chat_session_id = "test"
+    mock_msg.files = None
+
+    mock_session = MagicMock()
+
+    save_chat.save_chat_turn(
+        message_text="hello\x00world\ud800",
+        reasoning_tokens="think\x00ing\udfff",
+        tool_calls=[],
+        citation_to_doc={},
+        all_search_docs={},
+        db_session=mock_session,
+        assistant_message=mock_msg,
+    )
+
+    assert mock_msg.message == "helloworld"
+    assert mock_msg.reasoning_tokens == "thinking"
