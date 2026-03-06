@@ -65,6 +65,7 @@ from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.server.manage.llm.models import LMStudioFinalModelResponse
 from onyx.server.manage.llm.models import LMStudioModelsRequest
+from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from onyx.server.manage.llm.models import OllamaFinalModelResponse
 from onyx.server.manage.llm.models import OllamaModelDetails
 from onyx.server.manage.llm.models import OllamaModelsRequest
@@ -445,16 +446,17 @@ def put_llm_provider(
         not existing_provider or not existing_provider.is_auto_mode
     )
 
-    # Before the upsert, check if this provider currently owns the global
-    # CHAT default. The upsert may cascade-delete model_configurations
-    # (and their flow mappings), so we need to remember this beforehand.
-    was_default_provider = False
-    if existing_provider and transitioning_to_auto_mode:
-        current_default = fetch_default_llm_model(db_session)
-        was_default_provider = (
-            current_default is not None
-            and current_default.llm_provider_id == existing_provider.id
-        )
+    # When transitioning to auto mode, preserve existing model configurations
+    # so the upsert doesn't try to delete them (which would trip the default
+    # model protection guard). sync_auto_mode_models will handle the model
+    # lifecycle afterward — adding new models, hiding removed ones, and
+    # updating the default. This is safe even if sync fails: the provider
+    # keeps its old models and default rather than losing them.
+    if transitioning_to_auto_mode and existing_provider:
+        llm_provider_upsert_request.model_configurations = [
+            ModelConfigurationUpsertRequest.from_model(mc)
+            for mc in existing_provider.model_configurations
+        ]
 
     try:
         result = upsert_llm_provider(
@@ -468,7 +470,6 @@ def put_llm_provider(
 
             config = fetch_llm_recommendations_from_github()
             if config and llm_provider_upsert_request.provider in config.providers:
-                # Refetch the provider to get the updated model
                 updated_provider = fetch_existing_llm_provider_by_id(
                     id=result.id, db_session=db_session
                 )
@@ -478,20 +479,6 @@ def put_llm_provider(
                         updated_provider,
                         config,
                     )
-
-                    # If this provider was the default before the transition,
-                    # restore the default using the recommended model.
-                    if was_default_provider:
-                        recommended = config.get_default_model(
-                            llm_provider_upsert_request.provider
-                        )
-                        if recommended:
-                            update_default_provider(
-                                provider_id=updated_provider.id,
-                                model_name=recommended.name,
-                                db_session=db_session,
-                            )
-
                     # Refresh result with synced models
                     result = LLMProviderView.from_model(updated_provider)
 
