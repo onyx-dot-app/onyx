@@ -397,17 +397,17 @@
    =========================================================================== */
 
 .opal-content-xl[data-interactive] .opal-content-xl-title {
-  color: var(--interactive-foreground);
+  color: var(--interactive-foreground, var(--text-04));
 }
 
 .opal-content-lg[data-interactive] .opal-content-lg-title {
-  color: var(--interactive-foreground);
+  color: var(--interactive-foreground, var(--text-04));
 }
 
 .opal-content-md[data-interactive] .opal-content-md-title {
-  color: var(--interactive-foreground);
+  color: var(--interactive-foreground, var(--text-04));
 }
 
 .opal-content-sm[data-interactive] .opal-content-sm-title {
-  color: var(--interactive-foreground);
+  color: var(--interactive-foreground, var(--text-04));
 }

@@ -36,9 +36,9 @@ Disabled                          <- disabled
 
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
-| `size` | `SizeVariant` | `"lg"` | Container height |
+| `size` | `Exclude<SizeVariant, "fit">` | `"lg"` | Container height |
 | `width` | `WidthVariant` | `"full"` | Container width |
-| `type` | `"submit" \| "button" \| "reset"` | — | HTML button type |
+| `type` | `"submit" \| "button" \| "reset"` | `"button"` | HTML button type |
 | `tooltip` | `string` | — | Tooltip text shown on hover |
 | `tooltipSide` | `TooltipSide` | `"top"` | Tooltip side |
 
@@ -53,7 +53,7 @@ Disabled                          <- disabled
 | `variant` | `ContentVariant` | `"heading"` | Content layout variant |
 | `rightChildren` | `ReactNode` | — | Content after the label (e.g. action button) |
 
-All other `ContentAction` / `Content` props (`editable`, `onTitleChange`, `optional`, `auxIcon`, `tag`, `withInteractive`, etc.) are also passed through.
+All other `ContentAction` / `Content` props (`editable`, `onTitleChange`, `optional`, `auxIcon`, `tag`, etc.) are also passed through. Note: `withInteractive` is always `true` inside `LineItemButton` and cannot be overridden.
 
 ## Usage
 

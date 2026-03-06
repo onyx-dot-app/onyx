@@ -45,12 +45,12 @@ interface LineItemButtonProps extends ContentPassthroughProps {
   ref?: React.Ref<HTMLElement>;
 
   /** Container height. @default "lg" */
-  size?: SizeVariant;
+  size?: Exclude<SizeVariant, "fit">;
 
   /** Container width. @default "full" */
   width?: WidthVariant;
 
-  /** HTML button type. */
+  /** HTML button type. @default "button" */
   type?: "submit" | "button" | "reset";
 
   /** Tooltip text shown on hover. */
@@ -78,7 +78,7 @@ function LineItemButton({
   // Sizing
   size = "lg",
   width = "full",
-  type,
+  type = "button",
   tooltip,
   tooltipSide = "top",
 
