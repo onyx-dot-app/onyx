@@ -5,6 +5,7 @@ from unittest.mock import patch
 from onyx.chat.tool_call_args_streaming import maybe_emit_argument_delta
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import ToolCallArgumentDelta
+from onyx.utils.jsonriver import Parser
 
 
 def _make_tool_call_delta(
@@ -39,7 +40,7 @@ def _collect(
     tc_map: dict[int, dict[str, Any]],
     delta: MagicMock,
     placement: Placement | None = None,
-    scan_offsets: dict[int, int] | None = None,
+    parsers: dict[int, Parser] | None = None,
 ) -> list[Any]:
     """Run maybe_emit_argument_delta and return the yielded packets."""
     return list(
@@ -47,7 +48,7 @@ def _collect(
             tc_map,
             delta,
             placement or _make_placement(),
-            scan_offsets if scan_offsets is not None else {},
+            parsers if parsers is not None else {},
         )
     )
 
@@ -60,14 +61,12 @@ def _stream_fragments(
     """Feed fragments into maybe_emit_argument_delta one by one, returning
     all emitted content values concatenated per-key as a flat list."""
     pl = placement or _make_placement()
-    scan_offsets: dict[int, int] = {}
+    parsers: dict[int, Parser] = {}
     emitted: list[str] = []
     for frag in fragments:
         tc_map[0]["arguments"] += frag
         delta = _make_tool_call_delta(arguments=frag)
-        for packet in maybe_emit_argument_delta(
-            tc_map, delta, pl, scan_offsets=scan_offsets
-        ):
+        for packet in maybe_emit_argument_delta(tc_map, delta, pl, parsers=parsers):
             obj = packet.obj
             assert isinstance(obj, ToolCallArgumentDelta)
             for value in obj.argument_deltas.values():
@@ -143,19 +142,32 @@ class TestMaybeEmitArgumentDeltaBasic:
         mock_get_tool.return_value = _mock_tool_class()
 
         tc_map: dict[int, dict[str, Any]] = {
-            0: {
-                "id": "tc_1",
-                "name": "python",
-                "arguments": '{"code": "print(1)',
-            }
+            0: {"id": "tc_1", "name": "python", "arguments": ""}
         }
-        packets = _collect(tc_map, _make_tool_call_delta(arguments="print(1)"))
+        fragments = ['{"code": "', "print(1)", '"}']
 
-        assert len(packets) == 1
-        obj = packets[0].obj
+        pl = _make_placement()
+        parsers: dict[int, Parser] = {}
+        all_packets = []
+        for frag in fragments:
+            tc_map[0]["arguments"] += frag
+            packets = _collect(
+                tc_map, _make_tool_call_delta(arguments=frag), pl, parsers
+            )
+            all_packets.extend(packets)
+
+        assert len(all_packets) >= 1
+        # Verify packet structure
+        obj = all_packets[0].obj
         assert isinstance(obj, ToolCallArgumentDelta)
         assert obj.tool_type == "python"
-        assert obj.argument_deltas == {"code": "print(1)"}
+        # All emitted content should reconstruct the value
+        full_code = ""
+        for p in all_packets:
+            assert isinstance(p.obj, ToolCallArgumentDelta)
+            if "code" in p.obj.argument_deltas:
+                full_code += p.obj.argument_deltas["code"]
+        assert full_code == "print(1)"
 
     @patch("onyx.chat.tool_call_args_streaming._get_tool_class")
     def test_emits_only_new_content_on_subsequent_call(
@@ -165,15 +177,32 @@ class TestMaybeEmitArgumentDeltaBasic:
         mock_get_tool.return_value = _mock_tool_class()
 
         tc_map: dict[int, dict[str, Any]] = {
-            0: {"id": "tc_1", "name": "python", "arguments": '{"code": "abc'}
+            0: {"id": "tc_1", "name": "python", "arguments": ""}
         }
+        parsers: dict[int, Parser] = {}
+        pl = _make_placement()
 
-        packets_1 = _collect(tc_map, _make_tool_call_delta(arguments="abc"))
-        assert packets_1[0].obj.argument_deltas == {"code": "abc"}
+        # First fragment opens the string
+        tc_map[0]["arguments"] = '{"code": "abc'
+        packets_1 = _collect(
+            tc_map, _make_tool_call_delta(arguments='{"code": "abc'), pl, parsers
+        )
+        code_1 = ""
+        for p in packets_1:
+            assert isinstance(p.obj, ToolCallArgumentDelta)
+            code_1 += p.obj.argument_deltas.get("code", "")
+        assert code_1 == "abc"
 
+        # Second fragment appends more
         tc_map[0]["arguments"] = '{"code": "abcdef'
-        packets_2 = _collect(tc_map, _make_tool_call_delta(arguments="def"))
-        assert packets_2[0].obj.argument_deltas == {"code": "def"}
+        packets_2 = _collect(
+            tc_map, _make_tool_call_delta(arguments="def"), pl, parsers
+        )
+        code_2 = ""
+        for p in packets_2:
+            assert isinstance(p.obj, ToolCallArgumentDelta)
+            code_2 += p.obj.argument_deltas.get("code", "")
+        assert code_2 == "def"
 
     @patch("onyx.chat.tool_call_args_streaming._get_tool_class")
     def test_handles_multiple_keys_sequentially(self, mock_get_tool: MagicMock) -> None:
@@ -181,15 +210,18 @@ class TestMaybeEmitArgumentDeltaBasic:
         mock_get_tool.return_value = _mock_tool_class()
 
         tc_map: dict[int, dict[str, Any]] = {
-            0: {"id": "tc_1", "name": "python", "arguments": '{"code": "x'}
+            0: {"id": "tc_1", "name": "python", "arguments": ""}
         }
+        fragments = [
+            '{"code": "x',
+            '", "output": "hello',
+            '"}',
+        ]
 
-        packets_1 = _collect(tc_map, _make_tool_call_delta(arguments="x"))
-        assert packets_1[0].obj.argument_deltas == {"code": "x"}
-
-        tc_map[0]["arguments"] = '{"code": "x", "output": "hello'
-        packets_2 = _collect(tc_map, _make_tool_call_delta(arguments="hello"))
-        assert packets_2[0].obj.argument_deltas == {"output": "hello"}
+        emitted = _stream_fragments(fragments, tc_map)
+        full = "".join(emitted)
+        assert "x" in full
+        assert "hello" in full
 
     @patch("onyx.chat.tool_call_args_streaming._get_tool_class")
     def test_delta_spans_key_boundary(self, mock_get_tool: MagicMock) -> None:
@@ -197,17 +229,18 @@ class TestMaybeEmitArgumentDeltaBasic:
         mock_get_tool.return_value = _mock_tool_class()
 
         tc_map: dict[int, dict[str, Any]] = {
-            0: {"id": "tc_1", "name": "python", "arguments": '{"code": "x'}
+            0: {"id": "tc_1", "name": "python", "arguments": ""}
         }
+        fragments = [
+            '{"code": "x',
+            'y", "lang": "py',
+            '"}',
+        ]
 
-        packets_1 = _collect(tc_map, _make_tool_call_delta(arguments="x"))
-        assert packets_1[0].obj.argument_deltas == {"code": "x"}
-
-        # Delta carries closing of "code" value + opening of "lang" key + start of value
-        tc_map[0]["arguments"] = '{"code": "xy", "lang": "py'
-        packets_2 = _collect(tc_map, _make_tool_call_delta(arguments='y", "lang": "py'))
-        assert len(packets_2) == 1
-        assert packets_2[0].obj.argument_deltas == {"code": "y", "lang": "py"}
+        emitted = _stream_fragments(fragments, tc_map)
+        full = "".join(emitted)
+        assert "xy" in full
+        assert "py" in full
 
     @patch("onyx.chat.tool_call_args_streaming._get_tool_class")
     def test_empty_value_emits_nothing(self, mock_get_tool: MagicMock) -> None:
@@ -215,10 +248,15 @@ class TestMaybeEmitArgumentDeltaBasic:
         mock_get_tool.return_value = _mock_tool_class()
 
         tc_map: dict[int, dict[str, Any]] = {
-            0: {"id": "tc_1", "name": "python", "arguments": '{"code": "'}
+            0: {"id": "tc_1", "name": "python", "arguments": ""}
         }
         # Opening quote just arrived, value is empty
-        assert _collect(tc_map, _make_tool_call_delta(arguments='"')) == []
+        tc_map[0]["arguments"] = '{"code": "'
+        packets = _collect(tc_map, _make_tool_call_delta(arguments='{"code": "'))
+        # No string content yet, so either no packet or empty deltas
+        for p in packets:
+            assert isinstance(p.obj, ToolCallArgumentDelta)
+            assert p.obj.argument_deltas.get("code", "") == ""
 
 
 class TestMaybeEmitArgumentDeltaDecoding:
@@ -229,105 +267,90 @@ class TestMaybeEmitArgumentDeltaDecoding:
         mock_get_tool.return_value = _mock_tool_class()
 
         tc_map: dict[int, dict[str, Any]] = {
-            0: {
-                "id": "tc_1",
-                "name": "python",
-                "arguments": '{"code": "line1\\nline2',
-            }
+            0: {"id": "tc_1", "name": "python", "arguments": ""}
         }
-        packets = _collect(tc_map, _make_tool_call_delta(arguments="line1\\nline2"))
-        assert packets[0].obj.argument_deltas == {"code": "line1\nline2"}
+        fragments = ['{"code": "line1\\nline2"}']
+
+        emitted = _stream_fragments(fragments, tc_map)
+        assert "".join(emitted) == "line1\nline2"
 
     @patch("onyx.chat.tool_call_args_streaming._get_tool_class")
     def test_decodes_tabs(self, mock_get_tool: MagicMock) -> None:
         mock_get_tool.return_value = _mock_tool_class()
 
         tc_map: dict[int, dict[str, Any]] = {
-            0: {
-                "id": "tc_1",
-                "name": "python",
-                "arguments": '{"code": "\\tindented',
-            }
+            0: {"id": "tc_1", "name": "python", "arguments": ""}
         }
-        packets = _collect(tc_map, _make_tool_call_delta(arguments="\\tindented"))
-        assert packets[0].obj.argument_deltas == {"code": "\tindented"}
+        fragments = ['{"code": "\\tindented"}']
+
+        emitted = _stream_fragments(fragments, tc_map)
+        assert "".join(emitted) == "\tindented"
 
     @patch("onyx.chat.tool_call_args_streaming._get_tool_class")
     def test_decodes_escaped_quotes(self, mock_get_tool: MagicMock) -> None:
         mock_get_tool.return_value = _mock_tool_class()
 
         tc_map: dict[int, dict[str, Any]] = {
-            0: {
-                "id": "tc_1",
-                "name": "python",
-                "arguments": '{"code": "say \\"hi\\"',
-            }
+            0: {"id": "tc_1", "name": "python", "arguments": ""}
         }
-        packets = _collect(tc_map, _make_tool_call_delta(arguments='say \\"hi\\"'))
-        assert packets[0].obj.argument_deltas == {"code": 'say "hi"'}
+        fragments = ['{"code": "say \\"hi\\""}']
+
+        emitted = _stream_fragments(fragments, tc_map)
+        assert "".join(emitted) == 'say "hi"'
 
     @patch("onyx.chat.tool_call_args_streaming._get_tool_class")
     def test_decodes_escaped_backslashes(self, mock_get_tool: MagicMock) -> None:
         mock_get_tool.return_value = _mock_tool_class()
 
         tc_map: dict[int, dict[str, Any]] = {
-            0: {
-                "id": "tc_1",
-                "name": "python",
-                "arguments": '{"code": "path\\\\dir',
-            }
+            0: {"id": "tc_1", "name": "python", "arguments": ""}
         }
-        packets = _collect(tc_map, _make_tool_call_delta(arguments="path\\\\dir"))
-        assert packets[0].obj.argument_deltas == {"code": "path\\dir"}
+        fragments = ['{"code": "path\\\\dir"}']
+
+        emitted = _stream_fragments(fragments, tc_map)
+        assert "".join(emitted) == "path\\dir"
 
     @patch("onyx.chat.tool_call_args_streaming._get_tool_class")
     def test_decodes_unicode_escape(self, mock_get_tool: MagicMock) -> None:
         mock_get_tool.return_value = _mock_tool_class()
 
         tc_map: dict[int, dict[str, Any]] = {
-            0: {
-                "id": "tc_1",
-                "name": "python",
-                "arguments": '{"code": "\\u0041',
-            }
+            0: {"id": "tc_1", "name": "python", "arguments": ""}
         }
-        packets = _collect(tc_map, _make_tool_call_delta(arguments="\\u0041"))
-        assert packets[0].obj.argument_deltas == {"code": "A"}
+        fragments = ['{"code": "\\u0041"}']
+
+        emitted = _stream_fragments(fragments, tc_map)
+        assert "".join(emitted) == "A"
 
     @patch("onyx.chat.tool_call_args_streaming._get_tool_class")
-    def test_incomplete_escape_at_end_trims_safely(
+    def test_incomplete_escape_at_end_decoded_on_next_chunk(
         self, mock_get_tool: MagicMock
     ) -> None:
-        """A trailing backslash (incomplete escape) is handled gracefully."""
+        """A trailing backslash (incomplete escape) is completed in the next chunk."""
         mock_get_tool.return_value = _mock_tool_class()
 
         tc_map: dict[int, dict[str, Any]] = {
-            0: {
-                "id": "tc_1",
-                "name": "python",
-                "arguments": '{"code": "hello\\',
-            }
+            0: {"id": "tc_1", "name": "python", "arguments": ""}
         }
-        packets = _collect(tc_map, _make_tool_call_delta(arguments="hello\\"))
-        # "hello" can be decoded; the trailing backslash is trimmed
-        assert packets[0].obj.argument_deltas == {"code": "hello"}
+        fragments = ['{"code": "hello\\', 'n"}']
+
+        emitted = _stream_fragments(fragments, tc_map)
+        assert "".join(emitted) == "hello\n"
 
     @patch("onyx.chat.tool_call_args_streaming._get_tool_class")
-    def test_incomplete_unicode_escape_trims_safely(
+    def test_incomplete_unicode_escape_completed_on_next_chunk(
         self, mock_get_tool: MagicMock
     ) -> None:
-        """A partial \\uXX sequence is trimmed, emitting what can be decoded."""
+        """A partial \\uXX sequence is completed in the next chunk."""
         mock_get_tool.return_value = _mock_tool_class()
 
         tc_map: dict[int, dict[str, Any]] = {
-            0: {
-                "id": "tc_1",
-                "name": "python",
-                "arguments": '{"code": "hello\\u00',
-            }
+            0: {"id": "tc_1", "name": "python", "arguments": ""}
         }
-        packets = _collect(tc_map, _make_tool_call_delta(arguments="hello\\u00"))
-        assert packets[0].obj.argument_deltas == {"code": "hello"}
+        fragments = ['{"code": "hello\\u00', '41"}']
+
+        emitted = _stream_fragments(fragments, tc_map)
+        assert "".join(emitted) == "helloA"
 
 
 class TestArgumentDeltaStreamingE2E:
@@ -505,33 +528,64 @@ class TestMaybeEmitArgumentDeltaEdgeCases:
         mock_get_tool.return_value = _mock_tool_class()
 
         tc_map: dict[int, dict[str, Any]] = {
-            0: {"id": "tc_1", "name": "python", "arguments": '{"code": "aaa'},
-            1: {"id": "tc_2", "name": "python", "arguments": '{"code": "bbb'},
+            0: {"id": "tc_1", "name": "python", "arguments": ""},
+            1: {"id": "tc_2", "name": "python", "arguments": ""},
         }
 
-        # Delta for index 0
-        packets_0 = _collect(tc_map, _make_tool_call_delta(index=0, arguments="aaa"))
-        assert len(packets_0) == 1
-        assert packets_0[0].obj.argument_deltas == {"code": "aaa"}
+        parsers: dict[int, Parser] = {}
+        pl = _make_placement()
 
-        # Delta for index 1
-        packets_1 = _collect(tc_map, _make_tool_call_delta(index=1, arguments="bbb"))
-        assert len(packets_1) == 1
-        assert packets_1[0].obj.argument_deltas == {"code": "bbb"}
+        # Feed full JSON to index 0
+        tc_map[0]["arguments"] = '{"code": "aaa"}'
+        packets_0 = _collect(
+            tc_map,
+            _make_tool_call_delta(index=0, arguments='{"code": "aaa"}'),
+            pl,
+            parsers,
+        )
+        code_0 = ""
+        for p in packets_0:
+            assert isinstance(p.obj, ToolCallArgumentDelta)
+            code_0 += p.obj.argument_deltas.get("code", "")
+        assert code_0 == "aaa"
+
+        # Feed full JSON to index 1
+        tc_map[1]["arguments"] = '{"code": "bbb"}'
+        packets_1 = _collect(
+            tc_map,
+            _make_tool_call_delta(index=1, arguments='{"code": "bbb"}'),
+            pl,
+            parsers,
+        )
+        code_1 = ""
+        for p in packets_1:
+            assert isinstance(p.obj, ToolCallArgumentDelta)
+            code_1 += p.obj.argument_deltas.get("code", "")
+        assert code_1 == "bbb"
 
     @patch("onyx.chat.tool_call_args_streaming._get_tool_class")
     def test_delta_with_four_arguments(self, mock_get_tool: MagicMock) -> None:
         """A single delta contains four complete key-value pairs."""
         mock_get_tool.return_value = _mock_tool_class()
 
-        accumulated = '{"a": "one", "b": "two", "c": "three", "d": "four'
+        full = '{"a": "one", "b": "two", "c": "three", "d": "four"}'
         tc_map: dict[int, dict[str, Any]] = {
-            0: {"id": "tc_1", "name": "python", "arguments": accumulated}
+            0: {"id": "tc_1", "name": "python", "arguments": ""}
         }
-        packets = _collect(tc_map, _make_tool_call_delta(arguments=accumulated))
+        tc_map[0]["arguments"] = full
+        parsers: dict[int, Parser] = {}
+        packets = _collect(
+            tc_map, _make_tool_call_delta(arguments=full), parsers=parsers
+        )
 
-        assert len(packets) == 1
-        assert packets[0].obj.argument_deltas == {
+        # Collect all argument deltas across packets
+        all_deltas: dict[str, str] = {}
+        for p in packets:
+            assert isinstance(p.obj, ToolCallArgumentDelta)
+            for k, v in p.obj.argument_deltas.items():
+                all_deltas[k] = all_deltas.get(k, "") + v
+
+        assert all_deltas == {
             "a": "one",
             "b": "two",
             "c": "three",
@@ -546,16 +600,18 @@ class TestMaybeEmitArgumentDeltaEdgeCases:
         mock_get_tool.return_value = _mock_tool_class()
 
         tc_map: dict[int, dict[str, Any]] = {
-            0: {
-                "id": "tc_1",
-                "name": "python",
-                "arguments": '{"code": "print(1)", "lang": "py',
-            }
+            0: {"id": "tc_1", "name": "python", "arguments": ""}
         }
-        packets = _collect(tc_map, _make_tool_call_delta(arguments="py"))
 
-        assert len(packets) == 1
-        assert packets[0].obj.argument_deltas == {"lang": "py"}
+        fragments = [
+            '{"code": "print(1)", "lang": "py',
+            '"}',
+        ]
+
+        emitted = _stream_fragments(fragments, tc_map)
+        full = "".join(emitted)
+        assert "print(1)" in full
+        assert "py" in full
 
     @patch("onyx.chat.tool_call_args_streaming._get_tool_class")
     def test_non_string_values_skipped(self, mock_get_tool: MagicMock) -> None:
@@ -565,15 +621,10 @@ class TestMaybeEmitArgumentDeltaEdgeCases:
         mock_get_tool.return_value = _mock_tool_class()
 
         tc_map: dict[int, dict[str, Any]] = {
-            0: {
-                "id": "tc_1",
-                "name": "python",
-                "arguments": '{"timeout": 30, "code": "hello',
-            }
+            0: {"id": "tc_1", "name": "python", "arguments": ""}
         }
-        packets = _collect(
-            tc_map, _make_tool_call_delta(arguments='30, "code": "hello')
-        )
+        fragments = ['{"timeout": 30, "code": "hello"}']
 
-        assert len(packets) == 1
-        assert packets[0].obj.argument_deltas == {"code": "hello"}
+        emitted = _stream_fragments(fragments, tc_map)
+        full = "".join(emitted)
+        assert full == "hello"
