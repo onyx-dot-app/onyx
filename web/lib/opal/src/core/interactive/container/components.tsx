@@ -150,7 +150,7 @@ function InteractiveContainer({
   if (type) {
     const ariaDisabled = (rest as Record<string, unknown>)["aria-disabled"];
     const nativeDisabled =
-      !allowClick &&
+      (type === "submit" || !allowClick) &&
       (ariaDisabled === true || ariaDisabled === "true" || undefined);
     return (
       <button
