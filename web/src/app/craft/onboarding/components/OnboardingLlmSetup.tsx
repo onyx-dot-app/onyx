@@ -34,8 +34,8 @@ export const PROVIDERS: ProviderConfig[] = [
     providerName: LLMProviderName.ANTHROPIC,
     recommended: true,
     models: [
-      { name: "claude-opus-4-5", label: "Claude Opus 4.5", recommended: true },
-      { name: "claude-sonnet-4-5", label: "Claude Sonnet 4.5" },
+      { name: "claude-opus-4-6", label: "Claude Opus 4.6", recommended: true },
+      { name: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
     ],
     apiKeyPlaceholder: "sk-ant-...",
     apiKeyUrl: "https://console.anthropic.com/dashboard",

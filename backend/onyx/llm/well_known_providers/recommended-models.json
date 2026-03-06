@@ -17,6 +17,10 @@
           "display_name": "Claude Opus 4.6"
         },
         {
+          "name": "claude-sonnet-4-6",
+          "display_name": "Claude Sonnet 4.6"
+        },
+        {
           "name": "claude-opus-4-5",
           "display_name": "Claude Opus 4.5"
         },

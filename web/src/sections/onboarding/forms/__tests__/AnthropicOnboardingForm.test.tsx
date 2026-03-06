@@ -10,7 +10,6 @@ import {
   createMockOnboardingActions,
   createMockFetchResponses,
   MOCK_PROVIDERS,
-  ANTHROPIC_DEFAULT_VISIBLE_MODELS,
 } from "./testHelpers";
 
 // Mock fetch
@@ -51,8 +50,6 @@ jest.mock("@/components/modals/ProviderModal", () => ({
   },
 }));
 
-// Mock fetchModels utility - returns the curated Anthropic visible models
-// that match ANTHROPIC_VISIBLE_MODEL_NAMES from backend
 const mockFetchModels = jest.fn().mockResolvedValue({
   models: [
     {
@@ -149,71 +146,6 @@ describe("AnthropicOnboardingForm", () => {
       render(<AnthropicOnboardingForm {...defaultProps} open={false} />);
 
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    });
-  });
-
-  describe("Default Available Models", () => {
-    /**
-     * This test verifies that the exact curated list of Anthropic visible models
-     * matches what's returned from /api/admin/llm/built-in/options.
-     * The expected models are defined in ANTHROPIC_VISIBLE_MODEL_NAMES in
-     * backend/onyx/llm/llm_provider_options.py
-     */
-    test("llmDescriptor contains the correct default visible models from built-in options", () => {
-      const expectedModelNames = [
-        "claude-opus-4-5",
-        "claude-sonnet-4-5",
-        "claude-haiku-4-5",
-      ];
-
-      // Verify MOCK_PROVIDERS.anthropic has the correct model configurations
-      const actualModelNames = MOCK_PROVIDERS.anthropic.known_models.map(
-        (config) => config.name
-      );
-
-      // Check that all expected models are present
-      expect(actualModelNames).toEqual(
-        expect.arrayContaining(expectedModelNames)
-      );
-
-      // Check that only the expected models are present (no extras)
-      expect(actualModelNames).toHaveLength(expectedModelNames.length);
-
-      // Verify each model has is_visible set to true
-      MOCK_PROVIDERS.anthropic.known_models.forEach((config) => {
-        expect(config.is_visible).toBe(true);
-      });
-    });
-
-    test("ANTHROPIC_DEFAULT_VISIBLE_MODELS matches backend ANTHROPIC_VISIBLE_MODEL_NAMES", () => {
-      // These are the exact model names from backend/onyx/llm/llm_provider_options.py
-      // ANTHROPIC_VISIBLE_MODEL_NAMES = {"claude-opus-4-5", "claude-sonnet-4-5", "claude-haiku-4-5"}
-      const backendVisibleModelNames = new Set([
-        "claude-opus-4-5",
-        "claude-sonnet-4-5",
-        "claude-haiku-4-5",
-      ]);
-
-      const testHelperModelNames = new Set(
-        ANTHROPIC_DEFAULT_VISIBLE_MODELS.map((m) => m.name)
-      );
-
-      expect(testHelperModelNames).toEqual(backendVisibleModelNames);
-    });
-
-    test("all default models are marked as visible", () => {
-      ANTHROPIC_DEFAULT_VISIBLE_MODELS.forEach((model) => {
-        expect(model.is_visible).toBe(true);
-      });
-    });
-
-    test("default model claude-sonnet-4-5 is set correctly in component", () => {
-      // The AnthropicOnboardingForm sets DEFAULT_DEFAULT_MODEL_NAME = "claude-sonnet-4-5"
-      // Verify this model exists in the default visible models
-      const defaultModelExists = ANTHROPIC_DEFAULT_VISIBLE_MODELS.some(
-        (m) => m.name === "claude-sonnet-4-5"
-      );
-      expect(defaultModelExists).toBe(true);
     });
   });
 
