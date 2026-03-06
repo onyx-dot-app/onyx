@@ -39,35 +39,41 @@ log_info "Domain: $DOMAIN"
 log_info "IP: $DROPLET_IP"
 
 # Phase 1: Install Docker and dependencies
-log_info "Phase 1: Installing Docker and Docker Compose..."
-sudo apt-get update
-sudo apt-get install -y \
-    apt-transport-https \
-    ca-certificates \
-    curl \
-    gnupg \
-    lsb-release \
-    git
+log_info "Phase 1: Checking Docker installation..."
 
-# Add Docker GPG key
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+if command -v docker &> /dev/null; then
+    log_info "Docker is already installed, skipping installation"
+else
+    log_info "Installing Docker and Docker Compose..."
+    sudo apt-get update
+    sudo apt-get install -y \
+        apt-transport-https \
+        ca-certificates \
+        curl \
+        gnupg \
+        lsb-release \
+        git
 
-# Add Docker repository
-echo \
-  "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu \
-  $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+    # Add Docker GPG key
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
 
-# Install Docker
-sudo apt-get update
-sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker compose-plugin
+    # Add Docker repository
+    echo \
+      "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu \
+      $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 
-# Enable Docker daemon
-sudo systemctl enable docker
-sudo systemctl start docker
+    # Install Docker
+    sudo apt-get update
+    sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
 
-# Add current user to docker group
-sudo usermod -aG docker $(whoami)
-log_info "Docker installed successfully"
+    # Enable Docker daemon
+    sudo systemctl enable docker
+    sudo systemctl start docker
+fi
+
+# Ensure docker group membership
+sudo usermod -aG docker $(whoami) 2>/dev/null || true
+log_info "Docker ready"
 
 # Phase 2: Clone repository
 log_info "Phase 2: Cloning Onyx repository..."
