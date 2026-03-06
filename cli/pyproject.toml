@@ -14,7 +14,13 @@ keywords = [
 classifiers = [
     "Programming Language :: Go",
     "License :: OSI Approved :: MIT License",
-    "Operating System :: OS Independent",
+classifiers = [
+    "Programming Language :: Go",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+]
 ]
 dynamic = ["version"]
 
