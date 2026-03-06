@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import { useKeyPress } from "@/hooks/useKeyPress";
 import * as InputLayouts from "@/layouts/input-layouts";
@@ -68,9 +69,9 @@ export default function CreateProjectModal({
             <Button prominence="secondary" onClick={() => modal.toggle(false)}>
               Cancel
             </Button>
-            <Button disabled={!projectName.trim()} onClick={handleSubmit}>
-              Create Project
-            </Button>
+            <Disabled disabled={!projectName.trim()}>
+              <Button onClick={handleSubmit}>Create Project</Button>
+            </Disabled>
           </Modal.Footer>
         </Modal.Content>
       </Modal>

@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
 import { SvgChevronLeft, SvgChevronRight } from "@opal/icons";
@@ -156,23 +157,25 @@ function NavButtons({
 }: NavButtonsProps) {
   return (
     <>
-      <Button
-        icon={SvgChevronLeft}
-        onClick={() => onPageChange(currentPage - 1)}
-        disabled={currentPage <= 1}
-        size={size}
-        prominence="tertiary"
-        tooltip="Previous page"
-      />
+      <Disabled disabled={currentPage <= 1}>
+        <Button
+          icon={SvgChevronLeft}
+          onClick={() => onPageChange(currentPage - 1)}
+          size={size}
+          prominence="tertiary"
+          tooltip="Previous page"
+        />
+      </Disabled>
       {children}
-      <Button
-        icon={SvgChevronRight}
-        onClick={() => onPageChange(currentPage + 1)}
-        disabled={currentPage >= totalPages}
-        size={size}
-        prominence="tertiary"
-        tooltip="Next page"
-      />
+      <Disabled disabled={currentPage >= totalPages}>
+        <Button
+          icon={SvgChevronRight}
+          onClick={() => onPageChange(currentPage + 1)}
+          size={size}
+          prominence="tertiary"
+          tooltip="Next page"
+        />
+      </Disabled>
     </>
   );
 }
@@ -373,7 +376,7 @@ function ListPaginationInner({
                   onClick={() => onPageChange(pageNum)}
                   size={size}
                   prominence="tertiary"
-                  transient={isActive}
+                  interaction={isActive ? "hover" : "rest"}
                   icon={({ className: iconClassName }) => (
                     <PageNumberIcon
                       className={iconClassName}

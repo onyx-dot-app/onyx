@@ -1,7 +1,7 @@
 "use client";
 "use no memo";
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { flexRender } from "@tanstack/react-table";
 import useDataTable, {
   toOnyxSortDirection,
@@ -24,6 +24,7 @@ import { ColumnVisibilityPopover } from "@/refresh-components/table/ColumnVisibi
 import { SortingPopover } from "@/refresh-components/table/SortingPopover";
 import type { WidthConfig } from "@/refresh-components/table/hooks/useColumnWidths";
 import type { ColumnDef } from "@tanstack/react-table";
+import { cn } from "@/lib/utils";
 import type {
   DataTableProps,
   DataTableFooterConfig,
@@ -33,8 +34,6 @@ import type {
   OnyxActionsColumn,
 } from "@/refresh-components/table/types";
 import type { TableSize } from "@/refresh-components/table/TableSizeContext";
-
-const noopGetRowId = () => "";
 
 // ---------------------------------------------------------------------------
 // Internal: resolve size-dependent widths and build TanStack columns
@@ -121,15 +120,19 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
   const {
     data,
     columns,
+    getRowId,
     pageSize,
     initialSorting,
     initialColumnVisibility,
     draggable,
     footer,
     size = "regular",
+    onSelectionChange,
     onRowClick,
+    searchTerm,
     height,
     headerBackground,
+    serverSide,
   } = props;
 
   const effectivePageSize = pageSize ?? (footer ? 10 : data.length);
@@ -148,15 +151,30 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
     pageSize: resolvedPageSize,
     selectionState,
     selectedCount,
+    selectedRowIds,
     clearSelection,
     toggleAllPageRowsSelected,
     isAllPageRowsSelected,
+    isViewingSelected,
+    enterViewMode,
+    exitViewMode,
   } = useDataTable({
     data,
     columns: tanstackColumns,
     pageSize: effectivePageSize,
     initialSorting,
     initialColumnVisibility,
+    getRowId,
+    onSelectionChange,
+    searchTerm,
+    serverSide: serverSide
+      ? {
+          totalItems: serverSide.totalItems,
+          onSortingChange: serverSide.onSortingChange,
+          onPaginationChange: serverSide.onPaginationChange,
+          onSearchTermChange: serverSide.onSearchTermChange,
+        }
+      : undefined,
   });
 
   // 3. Call useColumnWidths
@@ -165,15 +183,34 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
     ...widthConfig,
   });
 
-  // 4. Call useDraggableRows (conditional)
+  // 4. Call useDraggableRows (conditional — disabled in server-side mode)
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "production" && serverSide && draggable) {
+      console.warn(
+        "DataTable: `draggable` is ignored when `serverSide` is enabled. " +
+          "Drag-and-drop reordering is not supported with server-side pagination."
+      );
+    }
+  }, [!!serverSide, !!draggable]); // eslint-disable-line react-hooks/exhaustive-deps
+  const footerShowView =
+    footer?.mode === "selection" ? footer.showView : undefined;
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "production" && serverSide && footerShowView) {
+      console.warn(
+        "DataTable: `showView` is ignored when `serverSide` is enabled. " +
+          "View mode requires client-side filtering."
+      );
+    }
+  }, [!!serverSide, !!footerShowView]); // eslint-disable-line react-hooks/exhaustive-deps
+  const effectiveDraggable = serverSide ? undefined : draggable;
   const draggableReturn = useDraggableRows({
     data,
-    getRowId: draggable?.getRowId ?? noopGetRowId,
-    enabled: !!draggable && table.getState().sorting.length === 0,
-    onReorder: draggable?.onReorder,
+    getRowId,
+    enabled: !!effectiveDraggable && table.getState().sorting.length === 0,
+    onReorder: effectiveDraggable?.onReorder,
   });
 
-  const hasDraggable = !!draggable;
+  const hasDraggable = !!effectiveDraggable;
   const rowVariant = hasDraggable ? "table" : "list";
 
   const isSelectable =
@@ -183,11 +220,71 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
   // Render
   // ---------------------------------------------------------------------------
 
-  function renderContent() {
+  const isServerLoading = !!serverSide?.isLoading;
+
+  function renderFooter(footerConfig: DataTableFooterConfig) {
+    if (footerConfig.mode === "selection") {
+      return (
+        <Footer
+          mode="selection"
+          multiSelect={footerConfig.multiSelect !== false}
+          selectionState={selectionState}
+          selectedCount={selectedCount}
+          onClear={
+            footerConfig.onClear ??
+            (() => {
+              if (isViewingSelected) exitViewMode();
+              clearSelection();
+            })
+          }
+          onView={
+            footerConfig.showView
+              ? isViewingSelected
+                ? exitViewMode
+                : enterViewMode
+              : undefined
+          }
+          pageSize={resolvedPageSize}
+          totalItems={totalItems}
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={setPage}
+        />
+      );
+    }
+
+    // Summary mode
+    const rangeStart =
+      totalItems === 0
+        ? 0
+        : !isFinite(resolvedPageSize)
+          ? 1
+          : (currentPage - 1) * resolvedPageSize + 1;
+    const rangeEnd = !isFinite(resolvedPageSize)
+      ? totalItems
+      : Math.min(currentPage * resolvedPageSize, totalItems);
+
     return (
+      <Footer
+        mode="summary"
+        rangeStart={rangeStart}
+        rangeEnd={rangeEnd}
+        totalItems={totalItems}
+        currentPage={currentPage}
+        totalPages={totalPages}
+        onPageChange={setPage}
+      />
+    );
+  }
+
+  return (
+    <TableSizeProvider size={size}>
       <div>
         <div
-          className="overflow-x-auto"
+          className={cn(
+            "overflow-x-auto transition-opacity duration-150",
+            isServerLoading && "opacity-50 pointer-events-none"
+          )}
           ref={containerRef}
           style={{
             ...(height != null
@@ -315,19 +412,24 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
                   ? (activeId) => {
                       const row = table
                         .getRowModel()
-                        .rows.find(
-                          (r) => draggable!.getRowId(r.original) === activeId
-                        );
+                        .rows.find((r) => getRowId(r.original) === activeId);
                       if (!row) return null;
-                      return <DragOverlayRow row={row} variant={rowVariant} />;
+                      return (
+                        <DragOverlayRow
+                          row={row}
+                          variant={rowVariant}
+                          columnWidths={columnWidths}
+                          columnKindMap={columnKindMap}
+                          qualifierColumn={qualifierColumn}
+                          isSelectable={isSelectable}
+                        />
+                      );
                     }
                   : undefined
               }
             >
               {table.getRowModel().rows.map((row) => {
-                const rowId = hasDraggable
-                  ? draggable!.getRowId(row.original)
-                  : undefined;
+                const rowId = hasDraggable ? getRowId(row.original) : undefined;
 
                 return (
                   <TableRow
@@ -336,6 +438,12 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
                     sortableId={rowId}
                     selected={row.getIsSelected()}
                     onClick={() => {
+                      if (
+                        hasDraggable &&
+                        draggableReturn.wasDraggingRef.current
+                      ) {
+                        return;
+                      }
                       if (onRowClick) {
                         onRowClick(row.original);
                       } else if (isSelectable) {
@@ -377,7 +485,11 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
                       // Actions cell
                       if (cellColDef?.kind === "actions") {
                         return (
-                          <ActionsContainer key={cell.id} type="cell">
+                          <ActionsContainer
+                            key={cell.id}
+                            type="cell"
+                            onClick={(e) => e.stopPropagation()}
+                          >
                             {flexRender(
                               cell.column.columnDef.cell,
                               cell.getContext()
@@ -405,51 +517,6 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
 
         {footer && renderFooter(footer)}
       </div>
-    );
-  }
-
-  function renderFooter(footerConfig: DataTableFooterConfig) {
-    if (footerConfig.mode === "selection") {
-      return (
-        <Footer
-          mode="selection"
-          multiSelect={footerConfig.multiSelect !== false}
-          selectionState={selectionState}
-          selectedCount={selectedCount}
-          onClear={footerConfig.onClear ?? clearSelection}
-          onView={footerConfig.onView}
-          pageSize={resolvedPageSize}
-          totalItems={totalItems}
-          currentPage={currentPage}
-          totalPages={totalPages}
-          onPageChange={setPage}
-        />
-      );
-    }
-
-    // Summary mode
-    const rangeStart =
-      totalItems === 0
-        ? 0
-        : !isFinite(resolvedPageSize)
-          ? 1
-          : (currentPage - 1) * resolvedPageSize + 1;
-    const rangeEnd = !isFinite(resolvedPageSize)
-      ? totalItems
-      : Math.min(currentPage * resolvedPageSize, totalItems);
-
-    return (
-      <Footer
-        mode="summary"
-        rangeStart={rangeStart}
-        rangeEnd={rangeEnd}
-        totalItems={totalItems}
-        currentPage={currentPage}
-        totalPages={totalPages}
-        onPageChange={setPage}
-      />
-    );
-  }
-
-  return <TableSizeProvider size={size}>{renderContent()}</TableSizeProvider>;
+    </TableSizeProvider>
+  );
 }

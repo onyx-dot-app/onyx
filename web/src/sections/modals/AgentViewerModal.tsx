@@ -404,7 +404,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
               />
               <div className="grid grid-cols-2 gap-1 w-full">
                 {agent.starter_messages.map((starter, index) => (
-                  <Interactive.Base
+                  <Interactive.Stateless
                     key={index}
                     onClick={() => handleStartChat(starter.message)}
                     prominence="tertiary"
@@ -419,7 +419,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
                         widthVariant="full"
                       />
                     </Interactive.Container>
-                  </Interactive.Base>
+                  </Interactive.Stateless>
                 ))}
               </div>
             </>

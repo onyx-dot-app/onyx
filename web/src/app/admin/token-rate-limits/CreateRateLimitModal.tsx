@@ -2,6 +2,7 @@
 
 import * as Yup from "yup";
 import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import { useEffect, useState } from "react";
 import Modal from "@/refresh-components/Modal";
 import { Form, Formik } from "formik";
@@ -147,9 +148,9 @@ export default function CreateRateLimitModal({
                   type="number"
                   placeholder=""
                 />
-                <Button type="submit" disabled={isSubmitting}>
-                  Create
-                </Button>
+                <Disabled disabled={isSubmitting}>
+                  <Button type="submit">Create</Button>
+                </Disabled>
               </Form>
             )}
           </Formik>

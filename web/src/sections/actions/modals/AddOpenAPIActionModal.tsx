@@ -10,6 +10,7 @@ import Separator from "@/refresh-components/Separator";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import { MethodSpec, ToolSnapshot } from "@/lib/tools/interfaces";
 import {
   validateToolDefinition,
@@ -374,31 +375,29 @@ function FormContent({
                   onDisconnectTool(existingTool);
                 }}
               />
-              <Button
-                prominence="secondary"
-                type="button"
-                onClick={handleEditAuthenticationClick}
-                disabled={!onEditAuthentication}
-              >
-                Edit Configs
-              </Button>
+              <Disabled disabled={!onEditAuthentication}>
+                <Button
+                  prominence="secondary"
+                  type="button"
+                  onClick={handleEditAuthenticationClick}
+                >
+                  Edit Configs
+                </Button>
+              </Disabled>
             </Section>
           </Section>
         )}
       </Modal.Body>
 
       <Modal.Footer>
-        <Button
-          prominence="secondary"
-          type="button"
-          onClick={handleClose}
-          disabled={isSubmitting}
-        >
-          Cancel
-        </Button>
-        <Button type="submit" disabled={isSubmitting || !dirty}>
-          {primaryButtonLabel}
-        </Button>
+        <Disabled disabled={isSubmitting}>
+          <Button prominence="secondary" type="button" onClick={handleClose}>
+            Cancel
+          </Button>
+        </Disabled>
+        <Disabled disabled={isSubmitting || !dirty}>
+          <Button type="submit">{primaryButtonLabel}</Button>
+        </Disabled>
       </Modal.Footer>
     </Form>
   );
@@ -457,8 +456,14 @@ export default function AddOpenAPIActionModal({
           name?: string;
           description?: string;
           definition: Record<string, any>;
+          custom_headers?: { key: string; value: string }[];
+          passthrough_auth?: boolean;
+          oauth_config_id?: number | null;
         } = {
           definition: parsedDefinition,
+          custom_headers: existingTool.custom_headers,
+          passthrough_auth: existingTool.passthrough_auth,
+          oauth_config_id: existingTool.oauth_config_id,
         };
 
         if (derivedName) {

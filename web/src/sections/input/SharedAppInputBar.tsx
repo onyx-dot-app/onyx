@@ -1,7 +1,8 @@
 "use client";
 
 import Text from "@/refresh-components/texts/Text";
-import { Button, OpenButton } from "@opal/components";
+import { Button, OpenButton, SelectButton } from "@opal/components";
+import { Disabled } from "@opal/core";
 import { OpenAISVG } from "@/components/icons/icons";
 import {
   SvgPlusCircle,
@@ -26,17 +27,25 @@ export default function SharedAppInputBar() {
         <div className="flex justify-between items-center w-full p-1 min-h-[40px]">
           {/* Left side controls */}
           <div className="flex flex-row items-center">
-            <Button icon={SvgPlusCircle} prominence="tertiary" disabled />
-            <Button icon={SvgSliders} prominence="tertiary" disabled />
-            <Button icon={SvgHourglass} variant="select" disabled />
+            <Disabled disabled>
+              <Button icon={SvgPlusCircle} prominence="tertiary" />
+            </Disabled>
+            <Disabled disabled>
+              <Button icon={SvgSliders} prominence="tertiary" />
+            </Disabled>
+            <Disabled disabled>
+              <SelectButton icon={SvgHourglass} />
+            </Disabled>
           </div>
 
           {/* Right side controls */}
           <div className="flex flex-row items-center gap-1">
-            <OpenButton icon={OpenAISVG} foldable disabled>
-              GPT-4o
-            </OpenButton>
-            <Button icon={SvgArrowUp} disabled />
+            <Disabled disabled>
+              <OpenButton icon={OpenAISVG}>GPT-4o</OpenButton>
+            </Disabled>
+            <Disabled disabled>
+              <Button icon={SvgArrowUp} />
+            </Disabled>
           </div>
         </div>
       </div>

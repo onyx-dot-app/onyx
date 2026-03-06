@@ -1,4 +1,5 @@
 import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import { toast } from "@/hooks/useToast";
 import React, { useState, useEffect } from "react";
 import { useSWRConfig } from "swr";
@@ -570,9 +571,11 @@ export const GmailAuthSection = ({
                   subtext="Enter the email of an admin/owner of the Google Organization that owns the Gmail account(s) you want to index."
                 />
                 <div className="flex">
-                  <Button type="submit" disabled={isSubmitting}>
-                    {isSubmitting ? "Creating..." : "Create Credential"}
-                  </Button>
+                  <Disabled disabled={isSubmitting}>
+                    <Button type="submit">
+                      {isSubmitting ? "Creating..." : "Create Credential"}
+                    </Button>
+                  </Disabled>
                 </div>
               </Form>
             )}
@@ -591,35 +594,36 @@ export const GmailAuthSection = ({
             read access to the emails you have access to in your Gmail account.
           </p>
         </div>
-        <Button
-          disabled={isAuthenticating}
-          onClick={async () => {
-            setIsAuthenticating(true);
-            try {
-              if (buildMode) {
-                Cookies.set(CRAFT_OAUTH_COOKIE_NAME, "true", {
-                  path: "/",
+        <Disabled disabled={isAuthenticating}>
+          <Button
+            onClick={async () => {
+              setIsAuthenticating(true);
+              try {
+                if (buildMode) {
+                  Cookies.set(CRAFT_OAUTH_COOKIE_NAME, "true", {
+                    path: "/",
+                  });
+                }
+                const [authUrl, errorMsg] = await setupGmailOAuth({
+                  isAdmin: true,
                 });
-              }
-              const [authUrl, errorMsg] = await setupGmailOAuth({
-                isAdmin: true,
-              });
 
-              if (authUrl) {
-                onOAuthRedirect?.();
-                router.push(authUrl as Route);
-              } else {
-                toast.error(errorMsg);
+                if (authUrl) {
+                  onOAuthRedirect?.();
+                  router.push(authUrl as Route);
+                } else {
+                  toast.error(errorMsg);
+                  setIsAuthenticating(false);
+                }
+              } catch (error) {
+                toast.error(`Failed to authenticate with Gmail - ${error}`);
                 setIsAuthenticating(false);
               }
-            } catch (error) {
-              toast.error(`Failed to authenticate with Gmail - ${error}`);
-              setIsAuthenticating(false);
-            }
-          }}
-        >
-          {isAuthenticating ? "Authenticating..." : "Authenticate with Gmail"}
-        </Button>
+            }}
+          >
+            {isAuthenticating ? "Authenticating..." : "Authenticate with Gmail"}
+          </Button>
+        </Disabled>
       </div>
     );
   }

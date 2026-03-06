@@ -3,6 +3,7 @@ import { ContentAction } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import Card from "@/refresh-components/cards/Card";
 import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import Text from "@/refresh-components/texts/Text";
 import Separator from "@/refresh-components/Separator";
 import { timeAgo } from "@/lib/time";
@@ -53,13 +54,11 @@ export default function ScimSyncCard({
               Regenerate Token
             </Button>
           ) : (
-            <Button
-              rightIcon={SvgKey}
-              onClick={onGenerate}
-              disabled={isSubmitting}
-            >
-              Generate SCIM Token
-            </Button>
+            <Disabled disabled={isSubmitting}>
+              <Button rightIcon={SvgKey} onClick={onGenerate}>
+                Generate SCIM Token
+              </Button>
+            </Disabled>
           )
         }
       />

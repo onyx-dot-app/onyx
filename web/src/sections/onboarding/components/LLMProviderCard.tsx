@@ -5,7 +5,7 @@ import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { cn, noProp } from "@/lib/utils";
-import { Disabled } from "@/refresh-components/Disabled";
+import { Disabled } from "@opal/core";
 import {
   SvgArrowExchange,
   SvgCheckCircle,
