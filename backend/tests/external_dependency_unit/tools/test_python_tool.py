@@ -1297,7 +1297,6 @@ def test_code_interpreter_replay_packets_include_code_and_output(
                     placement=create_placement(0),
                     obj=ToolCallArgumentDelta(
                         tool_type="python",
-                        tool_id="call_replay_test",
                         argument_deltas={"code": code},
                     ),
                 ),
