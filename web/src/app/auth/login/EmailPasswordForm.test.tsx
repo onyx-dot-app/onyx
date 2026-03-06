@@ -22,9 +22,6 @@ describe("Email/Password Login Workflow", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     fetchSpy = jest.spyOn(global, "fetch");
-    // Mock window.location.href for redirect testing
-    delete (window as any).location;
-    window.location = { href: "" } as any;
   });
 
   afterEach(() => {
@@ -53,9 +50,9 @@ describe("Email/Password Login Workflow", () => {
     const loginButton = screen.getByRole("button", { name: /sign in/i });
     await user.click(loginButton);
 
-    // After successful login, user should be redirected to /chat
+    // Verify success message is shown after login
     await waitFor(() => {
-      expect(window.location.href).toBe("/app");
+      expect(screen.getByText(/signed in successfully\./i)).toBeInTheDocument();
     });
 
     // Verify API was called with correct credentials
@@ -114,9 +111,6 @@ describe("Email/Password Signup Workflow", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     fetchSpy = jest.spyOn(global, "fetch");
-    // Mock window.location.href
-    delete (window as any).location;
-    window.location = { href: "" } as any;
   });
 
   afterEach(() => {
