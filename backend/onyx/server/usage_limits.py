@@ -2,7 +2,6 @@
 
 from collections.abc import Callable
 
-from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import ANTHROPIC_DEFAULT_API_KEY
@@ -12,6 +11,8 @@ from onyx.configs.app_configs import OPENROUTER_DEFAULT_API_KEY
 from onyx.db.usage import check_usage_limit
 from onyx.db.usage import UsageLimitExceededError
 from onyx.db.usage import UsageType
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.tenant_usage_limits import TenantUsageLimitKeys
 from onyx.server.tenant_usage_limits import TenantUsageLimitOverrides
 from onyx.utils.logger import setup_logger
@@ -185,7 +186,7 @@ def check_llm_cost_limit_for_provider(
         llm_provider_api_key: The API key of the LLM provider that will be used
 
     Raises:
-        HTTPException: 429 Too Many Requests if limit exceeded
+        OnyxError: RATE_LIMITED if limit exceeded
     """
     if not is_usage_limits_enabled():
         return
@@ -209,7 +210,7 @@ def check_usage_and_raise(
     pending_amount: float | int = 0,
 ) -> None:
     """
-    Check if usage limit would be exceeded and raise HTTPException if so.
+    Check if usage limit would be exceeded and raise OnyxError if so.
 
     Args:
         db_session: Database session for the tenant
@@ -218,7 +219,7 @@ def check_usage_and_raise(
         pending_amount: Amount about to be used
 
     Raises:
-        HTTPException: 429 Too Many Requests if limit exceeded
+        OnyxError: RATE_LIMITED if limit exceeded
     """
     if not is_usage_limits_enabled():
         return
@@ -267,4 +268,4 @@ def check_usage_and_raise(
                 "Please upgrade your plan or wait for the next billing period."
             )
 
-        raise HTTPException(status_code=429, detail=detail)
+        raise OnyxError(OnyxErrorCode.RATE_LIMITED, detail)

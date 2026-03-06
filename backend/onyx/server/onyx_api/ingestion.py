@@ -3,7 +3,6 @@ from datetime import timezone
 
 from fastapi import APIRouter
 from fastapi import Depends
-from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_curator_or_admin_user
@@ -23,6 +22,8 @@ from onyx.db.search_settings import get_active_search_settings
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.search_settings import get_secondary_search_settings
 from onyx.document_index.factory import get_all_document_indices
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.indexing.adapters.document_indexing_adapter import (
     DocumentIndexingBatchAdapter,
 )
@@ -98,8 +99,9 @@ def upsert_ingestion_doc(
         cc_pair_id=doc_info.cc_pair_id or DEFAULT_CC_PAIR_ID,
     )
     if cc_pair is None:
-        raise HTTPException(
-            status_code=400, detail="Connector-Credential Pair specified does not exist"
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Connector-Credential Pair specified does not exist",
         )
 
     # Need to index for both the primary and secondary index if possible
@@ -187,12 +189,12 @@ def delete_ingestion_doc(
     # Verify the document exists and was created via the ingestion API
     document = get_document(document_id=document_id, db_session=db_session)
     if document is None:
-        raise HTTPException(status_code=404, detail="Document not found")
+        raise OnyxError(OnyxErrorCode.DOCUMENT_NOT_FOUND, "Document not found")
 
     if not document.from_ingestion_api:
-        raise HTTPException(
-            status_code=400,
-            detail="Document was not created via the ingestion API",
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Document was not created via the ingestion API",
         )
 
     active_search_settings = get_active_search_settings(db_session)
