@@ -28,7 +28,12 @@ type Client struct {
 
 // NewClient creates a new API client from config.
 func NewClient(cfg config.OnyxCliConfig) *Client {
-	transport := http.DefaultTransport.(*http.Transport).Clone()
+	var transport *http.Transport
+	if t, ok := http.DefaultTransport.(*http.Transport); ok {
+		transport = t.Clone()
+	} else {
+		transport = &http.Transport{}
+	}
 	return &Client{
 		baseURL: strings.TrimRight(cfg.ServerURL, "/"),
 		apiKey:  cfg.APIKey,
