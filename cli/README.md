@@ -121,38 +121,32 @@ staticcheck ./...
 
 The CLI is distributed as a Python package via [PyPI](https://pypi.org/project/onyx-cli/). The build system uses [hatchling](https://hatch.pypa.io/) with [manygo](https://github.com/nicholasgasior/manygo) to cross-compile Go binaries into platform-specific wheels.
 
-### Manual release (single platform)
+### CI release (recommended)
+
+Tag a release and push — the `release-cli.yml` workflow builds wheels for all platforms and publishes to PyPI automatically:
 
 ```shell
-# Build a wheel for your current platform
-pip install build
-python -m build --wheel
-
-# Upload to PyPI (requires PyPI credentials)
-pip install twine
-twine upload dist/*
-```
-
-### Cross-platform release (all targets)
-
-To build wheels for all supported platforms, set `GOOS` and `GOARCH` before building:
-
-```shell
-# Example: build for Linux amd64
-GOOS=linux GOARCH=amd64 python -m build --wheel
-
-# Example: build for macOS arm64
-GOOS=darwin GOARCH=arm64 python -m build --wheel
-```
-
-### Versioning
-
-Versions are derived from git tags with the `cli/` prefix:
-
-```shell
-# Tag a release
 git tag cli/v0.1.0
 git push origin cli/v0.1.0
 ```
 
-The tag is parsed by `internal/_version.py` and injected into the Go binary via `-ldflags` at build time. In CI, the `GITHUB_REF_NAME` and `GITHUB_SHA` environment variables are used automatically.
+The workflow builds wheels for: linux/amd64, linux/arm64, darwin/amd64, darwin/arm64, windows/amd64, windows/arm64.
+
+### Manual release
+
+Build a wheel locally with `uv`. Set `GOOS` and `GOARCH` to cross-compile for other platforms (Go handles this natively — no cross-compiler needed):
+
+```shell
+# Build for current platform
+uv build --wheel
+
+# Cross-compile for a different platform
+GOOS=linux GOARCH=amd64 uv build --wheel
+
+# Upload to PyPI
+uv publish
+```
+
+### Versioning
+
+Versions are derived from git tags with the `cli/` prefix (e.g. `cli/v0.1.0`). The tag is parsed by `internal/_version.py` and injected into the Go binary via `-ldflags` at build time.
