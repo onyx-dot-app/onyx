@@ -27,6 +27,7 @@ import { DisplayModels } from "./components/DisplayModels";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchModels } from "@/app/admin/configuration/llm/utils";
 import debounce from "lodash/debounce";
+import { ScopedMutator } from "swr";
 
 const DEFAULT_API_BASE = "http://localhost:1234";
 
@@ -46,7 +47,7 @@ interface LMStudioFormContentProps {
   setHasFetched: (value: boolean) => void;
   isTesting: boolean;
   testError: string;
-  mutate: () => void;
+  mutate: ScopedMutator;
   onClose: () => void;
   isFormValid: boolean;
 }
