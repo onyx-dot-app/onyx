@@ -6,6 +6,7 @@ import {
 } from "@/providers/ProjectsContext";
 import { SettingsContext } from "@/providers/SettingsProvider";
 import { CombinedSettings } from "@/interfaces/settings";
+import type { ProjectFile } from "@/app/app/projects/projectsService";
 
 const mockUploadFiles = jest.fn();
 const mockGetRecentFiles = jest.fn();
@@ -96,7 +97,7 @@ describe("ProjectsContext beginUpload size precheck", () => {
       type: "text/plain",
     });
 
-    let optimisticFiles: { name: string }[] = [];
+    let optimisticFiles: ProjectFile[] = [];
     await act(async () => {
       optimisticFiles = await result.current.beginUpload(
         [valid, oversized],
@@ -111,6 +112,30 @@ describe("ProjectsContext beginUpload size precheck", () => {
     expect(mockToastWarning).toHaveBeenCalledTimes(1);
   });
 
+  it("uploads all files when none are oversized", async () => {
+    const { result } = renderHook(() => useProjectsContext(), { wrapper });
+
+    const first = new File(["small"], "first.txt", { type: "text/plain" });
+    const second = new File(["small"], "second.txt", { type: "text/plain" });
+
+    let optimisticFiles: ProjectFile[] = [];
+    await act(async () => {
+      optimisticFiles = await result.current.beginUpload([first, second], null);
+    });
+
+    expect(mockUploadFiles).toHaveBeenCalledTimes(1);
+    const [uploadedFiles] = mockUploadFiles.mock.calls[0];
+    expect((uploadedFiles as File[]).map((f) => f.name)).toEqual([
+      "first.txt",
+      "second.txt",
+    ]);
+    expect(mockToastWarning).not.toHaveBeenCalled();
+    expect(optimisticFiles.map((f) => f.name)).toEqual([
+      "first.txt",
+      "second.txt",
+    ]);
+  });
+
   it("does not call upload API when all files are oversized", async () => {
     const { result } = renderHook(() => useProjectsContext(), { wrapper });
 
@@ -122,7 +147,7 @@ describe("ProjectsContext beginUpload size precheck", () => {
     const onSuccess = jest.fn();
     const onFailure = jest.fn();
 
-    let optimisticFiles: { name: string }[] = [];
+    let optimisticFiles: ProjectFile[] = [];
     await act(async () => {
       optimisticFiles = await result.current.beginUpload(
         [oversized],
