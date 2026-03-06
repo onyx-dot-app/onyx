@@ -4,6 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "onyx-cli"
+readme = "README.md"
 description = "Terminal interface for chatting with your Onyx agent"
 authors = [{ name = "Onyx AI", email = "founders@onyx.app" }]
 requires-python = ">=3.9"
@@ -21,7 +22,7 @@ dynamic = ["version"]
 Repository = "https://github.com/onyx-dot-app/onyx"
 
 [tool.hatch.build]
-include = ["go.mod", "go.sum", "main.go", "**/*.go", "**/*.py"]
+include = ["go.mod", "go.sum", "main.go", "**/*.go", "**/*.py", "README.md"]
 
 [tool.hatch.version]
 source = "code"
