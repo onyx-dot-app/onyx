@@ -66,11 +66,11 @@ type SizeVariant = keyof typeof sizeVariants;
  *
  * | Key    | Tailwind class |
  * |--------|----------------|
- * | `fit`  | `w-fit`        |
+ * | `auto` | `w-auto`       |
  * | `full` | `w-full`       |
  */
 const widthVariants = {
-  fit: "w-fit",
+  auto: "w-fit",
   full: "w-full",
 } as const;
 

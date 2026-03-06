@@ -78,7 +78,7 @@ interface InteractiveContainerProps
   /**
    * Width preset controlling the container's horizontal size.
    *
-   * @default "fit"
+   * @default "auto"
    */
   widthVariant?: WidthVariant;
 }
@@ -101,7 +101,7 @@ function InteractiveContainer({
   border,
   roundingVariant = "default",
   heightVariant = "lg",
-  widthVariant = "fit",
+  widthVariant = "auto",
   ...props
 }: InteractiveContainerProps) {
   const { allowClick } = useDisabled();
