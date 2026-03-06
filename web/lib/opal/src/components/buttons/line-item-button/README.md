@@ -35,7 +35,7 @@ Interactive.Stateful         <- selectVariant, state, interaction, onClick, href
 
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
-| `size` | `Exclude<SizeVariant, "fit">` | `"lg"` | Container height |
+| `size` | `Exclude<SizeVariant, "fit">` | `"lg"` | Corner rounding preset (height is content-driven) |
 | `width` | `WidthVariant` | `"full"` | Container width |
 | `type` | `"submit" \| "button" \| "reset"` | `"button"` | HTML button type |
 | `tooltip` | `string` | — | Tooltip text shown on hover |
