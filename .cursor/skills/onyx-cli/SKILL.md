@@ -108,11 +108,11 @@ Outputs JSON-encoded parsed stream events (one object per line). Key event objec
 
 | Event Type | Description |
 |------------|-------------|
-| `MessageDeltaEvent` | Content token — concatenate all `content` fields for the full answer |
-| `StopEvent` | Stream complete |
-| `ErrorEvent` | Error with `error` message field |
-| `SearchStartEvent` | Onyx started searching documents |
-| `CitationEvent` | Source citation with `citation_number` and `document_id` |
+| `message_delta` | Content token — concatenate all `content` fields for the full answer |
+| `stop` | Stream complete |
+| `error` | Error with `error` message field |
+| `search_tool_start` | Onyx started searching documents |
+| `citation_info` | Source citation with `citation_number` and `document_id` |
 
 ### Specify an agent
 
