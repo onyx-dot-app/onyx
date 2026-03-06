@@ -127,7 +127,7 @@ func (c *Client) TestConnection() error {
 		return fmt.Errorf("server reachable but API error: %w", err)
 	}
 
-	resp2, err := c.longHTTPClient.Do(req2)
+	resp2, err := c.httpClient.Do(req2)
 	if err != nil {
 		return fmt.Errorf("server reachable but API error: %w", err)
 	}
