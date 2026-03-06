@@ -10,6 +10,8 @@ from pydantic import Field
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import FILE_TOKEN_COUNT_THRESHOLD
+from onyx.configs.app_configs import USER_FILE_MAX_UPLOAD_SIZE_BYTES
+from onyx.configs.app_configs import USER_FILE_MAX_UPLOAD_SIZE_MB
 from onyx.db.llm import fetch_default_llm_model
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_processing.extract_file_text import get_file_ext
@@ -33,6 +35,27 @@ def get_safe_filename(upload: UploadFile) -> str:
         logger.warning("Received upload with no filename")
         return UNKNOWN_FILENAME
     return upload.filename
+
+
+def get_upload_size_bytes(upload: UploadFile) -> int | None:
+    """Best-effort file size in bytes without consuming the stream."""
+    if upload.size is not None:
+        return upload.size
+
+    try:
+        current_pos = upload.file.tell()
+        upload.file.seek(0, 2)
+        size = upload.file.tell()
+        upload.file.seek(current_pos)
+        return size
+    except Exception:
+        return None
+
+
+def is_upload_too_large(upload: UploadFile, max_bytes: int) -> bool:
+    """Return True when upload size is known and exceeds max_bytes."""
+    size_bytes = get_upload_size_bytes(upload)
+    return size_bytes is not None and size_bytes > max_bytes
 
 
 # Guard against extremely large images
@@ -159,6 +182,16 @@ def categorize_uploaded_files(
     for upload in files:
         try:
             filename = get_safe_filename(upload)
+
+            if is_upload_too_large(upload, USER_FILE_MAX_UPLOAD_SIZE_BYTES):
+                results.rejected.append(
+                    RejectedFile(
+                        filename=filename,
+                        reason=f"Exceeds {USER_FILE_MAX_UPLOAD_SIZE_MB} MB file size limit",
+                    )
+                )
+                continue
+
             extension = get_file_ext(filename)
 
             # If image, estimate tokens via dedicated method first
