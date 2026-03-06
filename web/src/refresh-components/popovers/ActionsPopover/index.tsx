@@ -1029,7 +1029,7 @@ export default function ActionsPopover({
           <div data-testid="action-management-toggle">
             <Button
               icon={SvgSliders}
-              transient={open}
+              interaction={open ? "hover" : "rest"}
               prominence="tertiary"
               tooltip="Manage Actions"
               disabled={disabled}

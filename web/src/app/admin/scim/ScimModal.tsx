@@ -84,7 +84,7 @@ export default function ScimModal({
               onClose={onClose}
             />
             <Modal.Body>
-              <Interactive.Base
+              <Interactive.Stateless
                 group="group/token"
                 onClick={() => copyToClipboard(view.rawToken)}
               >
@@ -104,7 +104,7 @@ export default function ScimModal({
                     </div>
                   }
                 />
-              </Interactive.Base>
+              </Interactive.Stateless>
             </Modal.Body>
             <Modal.Footer>
               <BasicModalFooter

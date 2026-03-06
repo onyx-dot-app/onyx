@@ -29,7 +29,7 @@ export default function DocumentSetCard({
       disabled={!disabled || !disabledTooltip}
     >
       <div className="max-w-[12rem]">
-        <Interactive.Base
+        <Interactive.Stateless
           onClick={
             disabled || isSelected === undefined
               ? undefined
@@ -64,7 +64,7 @@ export default function DocumentSetCard({
             />
             <Spacer horizontal rem={0.5} />
           </Interactive.Container>
-        </Interactive.Base>
+        </Interactive.Stateless>
       </div>
     </SimpleTooltip>
   );

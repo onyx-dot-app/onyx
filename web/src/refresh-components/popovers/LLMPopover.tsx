@@ -364,7 +364,6 @@ export default function LLMPopover({
                     llmManager.currentLlm.modelName
                   )
             }
-            foldable={folded}
             disabled={disabled}
           >
             {currentLlmDisplayName}

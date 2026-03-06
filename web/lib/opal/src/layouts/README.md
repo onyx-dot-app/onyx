@@ -8,9 +8,9 @@ Layout primitives for composing content blocks. These components handle sizing, 
 
 | Component | Description | Docs |
 |---|---|---|
-| [`Content`](./Content/README.md) | Icon + title + description row. Routes to an internal layout (`ContentXl`, `ContentLg`, `ContentMd`, or `ContentSm`) based on `sizePreset` and `variant`. | [Content README](./Content/README.md) |
-| [`ContentAction`](./ContentAction/README.md) | Wraps `Content` in a flex-row with an optional `rightChildren` slot for action buttons. Adds padding alignment via the shared `SizeVariant` scale. | [ContentAction README](./ContentAction/README.md) |
-| [`IllustrationContent`](./IllustrationContent/README.md) | Center-aligned illustration + title + description stack for empty states, error pages, and placeholders. | [IllustrationContent README](./IllustrationContent/README.md) |
+| [`Content`](./content/README.md) | Icon + title + description row. Routes to an internal layout (`ContentXl`, `ContentLg`, `ContentMd`, or `ContentSm`) based on `sizePreset` and `variant`. | [Content README](./content/README.md) |
+| [`ContentAction`](./content-action/README.md) | Wraps `Content` in a flex-row with an optional `rightChildren` slot for action buttons. Adds padding alignment via the shared `SizeVariant` scale. | [ContentAction README](./content-action/README.md) |
+| [`IllustrationContent`](./illustration-content/README.md) | Center-aligned illustration + title + description stack for empty states, error pages, and placeholders. | [IllustrationContent README](./illustration-content/README.md) |
 
 ## Quick Start
 
@@ -69,7 +69,7 @@ import SvgNoResult from "@opal/illustrations/no-result";
 - **`sizePreset`** — controls sizing tokens (icon size, padding, gap, font, line-height).
 - **`variant`** — controls structural layout (icon placement, description rendering).
 
-Valid preset/variant combinations are enforced at the type level via a discriminated union. See the [Content README](./Content/README.md) for the full matrix.
+Valid preset/variant combinations are enforced at the type level via a discriminated union. See the [Content README](./content/README.md) for the full matrix.
 
 ### Shared size scale (`ContentAction`)
 
@@ -99,7 +99,7 @@ These are not exported — `Content` routes to them automatically:
 
 | Layout | Used when | File |
 |---|---|---|
-| `ContentXl` | `sizePreset` is `headline` or `section` with `variant="heading"` | `Content/ContentXl.tsx` |
-| `ContentLg` | `sizePreset` is `headline` or `section` with `variant="section"` | `Content/ContentLg.tsx` |
-| `ContentMd` | `sizePreset` is `main-content`, `main-ui`, or `secondary` with `variant="section"` | `Content/ContentMd.tsx` |
-| `ContentSm` | `variant="body"` | `Content/ContentSm.tsx` |
+| `ContentXl` | `sizePreset` is `headline` or `section` with `variant="heading"` | `content/ContentXl.tsx` |
+| `ContentLg` | `sizePreset` is `headline` or `section` with `variant="section"` | `content/ContentLg.tsx` |
+| `ContentMd` | `sizePreset` is `main-content`, `main-ui`, or `secondary` with `variant="section"` | `content/ContentMd.tsx` |
+| `ContentSm` | `variant="body"` | `content/ContentSm.tsx` |

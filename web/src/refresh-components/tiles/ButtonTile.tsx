@@ -31,7 +31,7 @@ export default function ButtonTile({
   const Icon = icon;
 
   return (
-    <Interactive.Base
+    <Interactive.Stateless
       variant="default"
       prominence="secondary"
       group="group/Tile"
@@ -72,6 +72,6 @@ export default function ButtonTile({
           </div>
         )}
       </div>
-    </Interactive.Base>
+    </Interactive.Stateless>
   );
 }

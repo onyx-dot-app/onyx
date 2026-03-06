@@ -100,7 +100,7 @@ const ToolsList: React.FC<ToolsListProps> = ({
                   prominence="tertiary"
                   size="sm"
                   onClick={onToggleShowOnlyEnabled}
-                  transient={showOnlyEnabled}
+                  interaction={showOnlyEnabled ? "hover" : "rest"}
                   tooltip={
                     showOnlyEnabled ? "Show all tools" : "Show only enabled"
                   }

@@ -210,7 +210,7 @@ const Header = React.forwardRef<HTMLDivElement, SimpleCollapsibleHeaderProps>(
             icon={open ? SvgFold : SvgExpand}
             prominence="tertiary"
             size="sm"
-            transient={inside}
+            interaction={inside ? "hover" : "rest"}
             tooltip={open ? "Fold" : "Expand"}
           />
         </div>

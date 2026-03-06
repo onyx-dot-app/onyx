@@ -93,7 +93,7 @@ export default function Pagination({
               key={pageNum}
               onClick={() => onPageChange(pageNum)}
               prominence="tertiary"
-              transient={isActive}
+              interaction={isActive ? "hover" : "rest"}
               icon={({ className }) => (
                 <div className={cn(className, "flex flex-col justify-center")}>
                   <Text>{pageNum}</Text>

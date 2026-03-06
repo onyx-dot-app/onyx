@@ -50,7 +50,7 @@ import {
   SvgStop,
   SvgX,
 } from "@opal/icons";
-import { Button } from "@opal/components";
+import { Button, SelectButton } from "@opal/components";
 import Popover from "@/refresh-components/Popover";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { useQueryController } from "@/providers/QueryControllerProvider";
@@ -442,7 +442,7 @@ const AppInputBar = React.memo(
               <Button
                 icon={SvgPlusCircle}
                 tooltip="Attach Files"
-                transient={open}
+                interaction={open ? "hover" : "rest"}
                 disabled={disabled}
                 prominence="tertiary"
               />
@@ -467,12 +467,10 @@ const AppInputBar = React.memo(
               />
             )}
             {onToggleTabReading ? (
-              <Button
+              <SelectButton
                 icon={SvgGlobe}
                 onClick={onToggleTabReading}
-                variant="select"
-                selected={tabReadingEnabled}
-                foldable={!tabReadingEnabled}
+                state={tabReadingEnabled ? "selected" : "empty"}
                 disabled={disabled}
               >
                 {tabReadingEnabled
@@ -486,19 +484,19 @@ const AppInputBar = React.memo(
                       })()
                     : "Reading tab..."
                   : "Read this tab"}
-              </Button>
+              </SelectButton>
             ) : (
               showDeepResearch && (
-                <Button
+                <SelectButton
+                  variant="select-light"
                   icon={SvgHourglass}
                   onClick={toggleDeepResearch}
-                  variant="select"
-                  selected={deepResearchEnabled}
+                  state={deepResearchEnabled ? "selected" : "empty"}
                   foldable={!deepResearchEnabled}
                   disabled={disabled}
                 >
                   Deep Research
-                </Button>
+                </SelectButton>
               )
             )}
 
@@ -512,7 +510,8 @@ const AppInputBar = React.memo(
                   return null;
                 }
                 return (
-                  <Button
+                  <SelectButton
+                    variant="select-light"
                     key={toolId}
                     icon={getIconForAction(tool)}
                     onClick={() => {
@@ -520,12 +519,11 @@ const AppInputBar = React.memo(
                         forcedToolIds.filter((id) => id !== toolId)
                       );
                     }}
-                    variant="select"
-                    selected
+                    state="selected"
                     disabled={disabled}
                   >
                     {tool.display_name}
-                  </Button>
+                  </SelectButton>
                 );
               })}
           </div>
