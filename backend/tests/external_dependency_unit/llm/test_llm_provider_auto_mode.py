@@ -1042,14 +1042,19 @@ class TestAutoModeTransitionsAndResync:
             assert visibility["gpt-4o"] is False, "Removed default should be hidden"
             assert visibility["gpt-4o-mini"] is True, "New default should be visible"
 
-            # The LLMModelFlow row for gpt-4o still exists (is_default=True),
-            # but the model is hidden. fetch_default_llm_model filters on
-            # is_visible=True, so it should NOT return gpt-4o.
+            # The old default (gpt-4o) is now hidden. sync_auto_mode_models
+            # should update the global default to the new recommended default
+            # (gpt-4o-mini) so that it is not silently lost.
             db_session.expire_all()
             default_after = fetch_default_llm_model(db_session)
-            assert (
-                default_after is None or default_after.name != "gpt-4o"
-            ), "Hidden model should not be returned as the default"
+            assert default_after is not None, (
+                "Default model should not be None — sync should set the new "
+                "recommended default when the old one is hidden"
+            )
+            assert default_after.name == "gpt-4o-mini", (
+                f"Default should be updated to the new recommended model "
+                f"'gpt-4o-mini', but got '{default_after.name}'"
+            )
 
         finally:
             db_session.rollback()

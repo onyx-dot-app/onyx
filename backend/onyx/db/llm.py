@@ -812,6 +812,39 @@ def sync_auto_mode_models(
             changes += 1
 
     db_session.commit()
+
+    # In Auto mode, default model is controlled by GitHub config.
+    # Update the default if this provider currently holds the global CHAT default
+    # (including defaults on models that were just marked invisible above).
+    recommended_default = llm_recommendations.get_default_model(provider.provider)
+    if recommended_default:
+        owns_chat_default = (
+            db_session.scalar(
+                select(LLMModelFlow.id)
+                .join(ModelConfiguration)
+                .where(
+                    ModelConfiguration.llm_provider_id == provider.id,
+                    LLMModelFlow.llm_model_flow_type == LLMModelFlowType.CHAT,
+                    LLMModelFlow.is_default == True,  # noqa: E712
+                )
+            )
+            is not None
+        )
+
+        if owns_chat_default:
+            current_default = fetch_default_model(db_session, LLMModelFlowType.CHAT)
+            if (
+                current_default is None
+                or current_default.name != recommended_default.name
+            ):
+                _update_default_model(
+                    db_session=db_session,
+                    provider_id=provider.id,
+                    model=recommended_default.name,
+                    flow_type=LLMModelFlowType.CHAT,
+                )
+                changes += 1
+
     return changes
 
 
