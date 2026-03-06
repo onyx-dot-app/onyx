@@ -126,6 +126,12 @@ The CLI is distributed as a Python package via [PyPI](https://pypi.org/project/o
 Tag a release and push — the `release-cli.yml` workflow builds wheels for all platforms and publishes to PyPI automatically:
 
 ```shell
+tag --prefix cli
+```
+
+To do this manually:
+
+```shell
 git tag cli/v0.1.0
 git push origin cli/v0.1.0
 ```
