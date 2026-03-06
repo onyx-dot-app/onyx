@@ -68,17 +68,17 @@ onyx-cli agents --json
 | `ask` | Ask a one-shot question (non-interactive) |
 | `agents` | List available agents |
 | `configure` | Configure server URL and API key |
+| `validate-config` | Validate configuration and test connection |
 
 ## Slash Commands (in TUI)
 
 | Command | Description |
 |---------|-------------|
 | `/help` | Show help message |
-| `/new` | Start a new chat session |
+| `/clear` | Clear chat and start a new session |
 | `/agent` | List and switch agents |
 | `/attach <path>` | Attach a file to next message |
 | `/sessions` | List recent chat sessions |
-| `/clear` | Clear the chat display |
 | `/configure` | Re-run connection setup |
 | `/connectors` | Open connectors in browser |
 | `/settings` | Open settings in browser |
@@ -116,3 +116,43 @@ go build -o onyx-cli .
 # Lint
 staticcheck ./...
 ```
+
+## Publishing to PyPI
+
+The CLI is distributed as a Python package via [PyPI](https://pypi.org/project/onyx-cli/). The build system uses [hatchling](https://hatch.pypa.io/) with [manygo](https://github.com/nicholasgasior/manygo) to cross-compile Go binaries into platform-specific wheels.
+
+### CI release (recommended)
+
+Tag a release and push — the `release-cli.yml` workflow builds wheels for all platforms and publishes to PyPI automatically:
+
+```shell
+tag --prefix cli
+```
+
+To do this manually:
+
+```shell
+git tag cli/v0.1.0
+git push origin cli/v0.1.0
+```
+
+The workflow builds wheels for: linux/amd64, linux/arm64, darwin/amd64, darwin/arm64, windows/amd64, windows/arm64.
+
+### Manual release
+
+Build a wheel locally with `uv`. Set `GOOS` and `GOARCH` to cross-compile for other platforms (Go handles this natively — no cross-compiler needed):
+
+```shell
+# Build for current platform
+uv build --wheel
+
+# Cross-compile for a different platform
+GOOS=linux GOARCH=amd64 uv build --wheel
+
+# Upload to PyPI
+uv publish
+```
+
+### Versioning
+
+Versions are derived from git tags with the `cli/` prefix (e.g. `cli/v0.1.0`). The tag is parsed by `internal/_version.py` and injected into the Go binary via `-ldflags` at build time.

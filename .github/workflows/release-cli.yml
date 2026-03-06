@@ -1,0 +1,40 @@
+name: Release CLI
+
+on:
+  push:
+    tags:
+      - "cli/v*.*.*"
+
+jobs:
+  pypi:
+    runs-on: ubuntu-latest
+    environment:
+      name: release-cli
+    permissions:
+      id-token: write
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        os-arch:
+          - { goos: "linux", goarch: "amd64" }
+          - { goos: "linux", goarch: "arm64" }
+          - { goos: "windows", goarch: "amd64" }
+          - { goos: "windows", goarch: "arm64" }
+          - { goos: "darwin", goarch: "amd64" }
+          - { goos: "darwin", goarch: "arm64" }
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b # ratchet:astral-sh/setup-uv@v7
+        with:
+          enable-cache: false
+          version: "0.9.9"
+      - run: |
+          GOOS="${{ matrix.os-arch.goos }}" \
+          GOARCH="${{ matrix.os-arch.goarch }}" \
+          uv build --wheel
+        working-directory: cli
+      - run: uv publish
+        working-directory: cli
