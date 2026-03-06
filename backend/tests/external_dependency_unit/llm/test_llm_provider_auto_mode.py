@@ -720,8 +720,8 @@ class TestAutoModeTransitionsAndResync:
 
         auto_config = _create_mock_llm_recommendations(
             provider=LlmProviderNames.OPENAI,
-            default_model_name="gpt-4o",
-            additional_models=["gpt-4o-mini"],
+            default_model_name="gpt-4o-mini",
+            additional_models=["gpt-4o"],
         )
 
         try:
@@ -782,8 +782,8 @@ class TestAutoModeTransitionsAndResync:
             assert (
                 default_after.llm_provider_id == provider.id
             ), "Default should still belong to the same provider after transition"
-            assert default_after.name == "gpt-4o", (
-                f"Default should be the recommended model 'gpt-4o', "
+            assert default_after.name == "gpt-4o-mini", (
+                f"Default should be updated to the recommended model 'gpt-4o-mini', "
                 f"got '{default_after.name}'"
             )
 
