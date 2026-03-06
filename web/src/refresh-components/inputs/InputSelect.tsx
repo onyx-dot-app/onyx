@@ -369,10 +369,7 @@ function InputSelectItem({
     <SelectPrimitive.Item
       ref={ref}
       value={value}
-      className={cn(
-        "group/InputSelectItem outline-none focus:outline-none rounded-08",
-        !isSelected && "data-[highlighted]:bg-background-tint-02"
-      )}
+      className="group/InputSelectItem outline-none focus:outline-none rounded-08 data-[highlighted]:bg-background-tint-02"
       onSelect={onClick}
     >
       {/* Hidden ItemText for Radix to track selection */}
