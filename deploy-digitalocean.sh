@@ -83,11 +83,12 @@ sudo chown $(whoami):$(whoami) $DEPLOY_DIR
 cd $DEPLOY_DIR || exit 1
 
 if [ ! -d ".git" ]; then
-    git clone --branch main $REPO_URL .
+    git clone --branch develop $REPO_URL .
     log_info "Repository cloned"
 else
     log_info "Repository already cloned, pulling latest..."
-    git pull origin main
+    git fetch origin develop
+    git reset --hard origin/develop
 fi
 
 # Phase 3: Create data directories
