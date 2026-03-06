@@ -20,8 +20,6 @@ from onyx.document_index.vespa_constants import TENANT_ID
 from onyx.document_index.vespa_constants import USER_PROJECT
 from shared_configs.configs import MULTI_TENANT
 
-# Import the function under test
-
 
 class TestBuildVespaFilters:
     def test_empty_filters(self) -> None:
@@ -190,7 +188,7 @@ class TestBuildVespaFilters:
         result = build_vespa_filters(filters)
         assert f"!({HIDDEN}=true) and " == result
 
-        # project_id with document_set → both OR'd
+        # project_id with user_file_ids → both OR'd
         id1 = UUID("00000000-0000-0000-0000-000000000123")
         filters = IndexFilters(
             access_control_list=[], project_id=789, user_file_ids=[id1]
