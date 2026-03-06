@@ -1,4 +1,5 @@
 from typing import Any
+from typing import cast
 from unittest.mock import AsyncMock
 from unittest.mock import MagicMock
 from unittest.mock import patch
@@ -10,6 +11,7 @@ from fastapi import Response
 from fastapi.testclient import TestClient
 from fastapi_users.authentication import AuthenticationBackend
 from fastapi_users.authentication import CookieTransport
+from httpx_oauth.oauth2 import BaseOAuth2
 from httpx_oauth.oauth2 import GetAccessTokenError
 
 from onyx.auth.users import get_oauth_router
@@ -92,7 +94,7 @@ def _build_test_client(
         return user_manager
 
     router = get_oauth_router(
-        oauth_client=oauth_client,
+        oauth_client=cast(BaseOAuth2[Any], oauth_client),
         backend=backend,
         get_user_manager=get_user_manager,
         state_secret="test-secret",
@@ -177,13 +179,14 @@ def test_oidc_callback_get_access_token_error_is_400() -> None:
     client, oauth_client, _ = _build_test_client(enable_pkce=True)
     authorize_response = client.get("/auth/oidc/authorize")
     state = _extract_state_from_authorize_response(authorize_response)
-    oauth_client.get_access_token = AsyncMock(
-        side_effect=GetAccessTokenError("token exchange failed")
-    )
-
-    response = client.get(
-        "/auth/oidc/callback", params={"code": "abc123", "state": state}
-    )
+    with patch.object(
+        oauth_client,
+        "get_access_token",
+        AsyncMock(side_effect=GetAccessTokenError("token exchange failed")),
+    ):
+        response = client.get(
+            "/auth/oidc/callback", params={"code": "abc123", "state": state}
+        )
 
     assert response.status_code == 400
     assert response.json()["error_code"] == "VALIDATION_ERROR"
