@@ -167,14 +167,14 @@ log_info "Environment configuration created at .env"
 log_info "Phase 5: Setting up docker compose configuration..."
 
 # Copy prod compose file as base if available
-if [ -f "deployment/docker_compose/docker compose.prod.yml" ]; then
-    log_info "Using production docker compose configuration"
-    cp deployment/docker_compose/docker compose.prod.yml docker compose.yml
-elif [ -f "deployment/docker_compose/docker compose.yml" ]; then
-    log_info "Using standard docker compose configuration"
-    cp deployment/docker_compose/docker compose.yml docker compose.yml
+if [ -f "deployment/docker_compose/docker-compose.prod.yml" ]; then
+    log_info "Using production docker-compose configuration"
+    cp deployment/docker_compose/docker-compose.prod.yml docker-compose.yml
+elif [ -f "deployment/docker_compose/docker-compose.yml" ]; then
+    log_info "Using standard docker-compose configuration"
+    cp deployment/docker_compose/docker-compose.yml docker-compose.yml
 else
-    log_error "Could not find docker compose files in deployment/docker_compose/"
+    log_error "Could not find docker-compose files in deployment/docker_compose/"
     exit 1
 fi
 
