@@ -111,19 +111,27 @@ def _normalize_text_with_mapping(text: str) -> tuple[str, list[int]]:
     # Step 1: NFC normalization with position mapping
     nfc_text = unicodedata.normalize("NFC", text)
 
-    # Build mapping from NFC positions to original start positions
+    # Build mapping from NFC positions to original positions via NFD
+    # as an intermediary. NFD(original) == NFD(NFC(original)) is a
+    # Unicode guarantee, so NFD serves as a stable common form.
+
+    # Map NFD positions → original positions.
+    # NFD only decomposes, so each original char produces 1+ NFD chars.
+    nfd_to_orig: list[int] = []
+    for orig_idx, orig_char in enumerate(original_text):
+        nfd_of_char = unicodedata.normalize("NFD", orig_char)
+        for _ in nfd_of_char:
+            nfd_to_orig.append(orig_idx)
+
+    # Map NFC positions → NFD positions.
+    # Each NFC char, when decomposed, tells us exactly how many NFD
+    # chars it was composed from.
     nfc_to_orig: list[int] = []
-    orig_idx = 0
+    nfd_idx = 0
     for nfc_char in nfc_text:
-        nfc_to_orig.append(orig_idx)
-        # Find how many original chars contributed to this NFC char
-        for length in range(1, len(original_text) - orig_idx + 1):
-            substr = original_text[orig_idx : orig_idx + length]
-            if unicodedata.normalize("NFC", substr) == nfc_char:
-                orig_idx += length
-                break
-        else:
-            orig_idx += 1  # Fallback
+        nfc_to_orig.append(nfd_to_orig[nfd_idx])
+        nfd_of_nfc = unicodedata.normalize("NFD", nfc_char)
+        nfd_idx += len(nfd_of_nfc)
 
     # Work with NFC text from here
     text = nfc_text
