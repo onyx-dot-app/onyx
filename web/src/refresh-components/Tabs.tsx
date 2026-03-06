@@ -16,6 +16,7 @@ import { IconProps } from "@opal/types";
 import { SvgChevronLeft, SvgChevronRight } from "@opal/icons";
 import Text from "./texts/Text";
 import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 
 /* =============================================================================
    CONTEXT
@@ -503,22 +504,24 @@ const TabsList = React.forwardRef<
               ref={scrollArrowsRef}
               className="flex items-center gap-1 pl-2 flex-shrink-0"
             >
-              <Button
-                prominence="tertiary"
-                size="sm"
-                icon={SvgChevronLeft}
-                onClick={handleScrollLeft}
-                disabled={!canScrollLeft}
-                tooltip="Scroll tabs left"
-              />
-              <Button
-                prominence="tertiary"
-                size="sm"
-                icon={SvgChevronRight}
-                onClick={handleScrollRight}
-                disabled={!canScrollRight}
-                tooltip="Scroll tabs right"
-              />
+              <Disabled disabled={!canScrollLeft}>
+                <Button
+                  prominence="tertiary"
+                  size="sm"
+                  icon={SvgChevronLeft}
+                  onClick={handleScrollLeft}
+                  tooltip="Scroll tabs left"
+                />
+              </Disabled>
+              <Disabled disabled={!canScrollRight}>
+                <Button
+                  prominence="tertiary"
+                  size="sm"
+                  icon={SvgChevronRight}
+                  onClick={handleScrollRight}
+                  tooltip="Scroll tabs right"
+                />
+              </Disabled>
             </div>
           )}
 

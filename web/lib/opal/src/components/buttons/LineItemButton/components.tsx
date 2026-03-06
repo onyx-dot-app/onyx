@@ -1,5 +1,5 @@
 import "@opal/components/tooltip.css";
-import { Interactive, type InteractiveBaseProps } from "@opal/core";
+import { Disabled, Interactive, type InteractiveBaseProps } from "@opal/core";
 import type { SizeVariant, WidthVariant } from "@opal/shared";
 import type { TooltipSide } from "@opal/components";
 import type { ContentActionProps } from "@opal/layouts/ContentAction/components";
@@ -86,34 +86,35 @@ function LineItemButton({
   ...contentActionProps
 }: LineItemButtonProps) {
   const item = (
-    <Interactive.Base
-      variant="select"
-      prominence={prominence}
-      selected={selected}
-      disabled={disabled}
-      onClick={onClick}
-      href={href}
-      target={target}
-      group={group}
-      transient={transient}
-      ref={ref}
-    >
-      <Interactive.Container
-        type={type}
-        widthVariant={width}
-        heightVariant={size}
-        roundingVariant={
-          size === "lg" ? "default" : size === "2xs" ? "mini" : "compact"
-        }
+    <Disabled disabled={disabled}>
+      <Interactive.Base
+        variant="select"
+        prominence={prominence}
+        selected={selected}
+        onClick={onClick}
+        href={href}
+        target={target}
+        group={group}
+        transient={transient}
+        ref={ref}
       >
-        <ContentAction
-          {...(contentActionProps as ContentActionProps)}
-          withInteractive
-          paddingVariant="fit"
-          widthVariant="full"
-        />
-      </Interactive.Container>
-    </Interactive.Base>
+        <Interactive.Container
+          type={type}
+          widthVariant={width}
+          heightVariant={size}
+          roundingVariant={
+            size === "lg" ? "default" : size === "2xs" ? "mini" : "compact"
+          }
+        >
+          <ContentAction
+            {...(contentActionProps as ContentActionProps)}
+            withInteractive
+            paddingVariant="fit"
+            widthVariant="full"
+          />
+        </Interactive.Container>
+      </Interactive.Base>
+    </Disabled>
   );
 
   if (!tooltip) return item;

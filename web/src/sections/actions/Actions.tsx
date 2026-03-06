@@ -2,6 +2,7 @@
 import { ActionStatus } from "@/lib/tools/interfaces";
 import React from "react";
 import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import {
   SvgArrowExchange,
   SvgChevronDown,
@@ -166,15 +167,16 @@ const Actions = React.memo(
           )}
         </div>
         {showViewToolsButton && (
-          <Button
-            prominence="tertiary"
-            onClick={onToggleTools}
-            rightIcon={SvgChevronDown}
-            aria-label={`View tools for ${serverName}`}
-            disabled
-          >
-            {`View ${toolCount ?? 0} tool${toolCount !== 1 ? "s" : ""}`}
-          </Button>
+          <Disabled disabled>
+            <Button
+              prominence="tertiary"
+              onClick={onToggleTools}
+              rightIcon={SvgChevronDown}
+              aria-label={`View tools for ${serverName}`}
+            >
+              {`View ${toolCount ?? 0} tool${toolCount !== 1 ? "s" : ""}`}
+            </Button>
+          </Disabled>
         )}
       </div>
     );

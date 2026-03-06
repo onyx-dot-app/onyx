@@ -147,7 +147,51 @@ The foundational layer for all clickable surfaces in the design system. Defines 
 | Sub-component | Role |
 |---|---|
 | `Interactive.Base` | Applies the `.interactive` CSS class and data-attributes for variant and transient states via Radix Slot. |
-| `Interactive.Container` | Structural `<div>` with flex layout, border, padding, rounding, and height variant presets. |
+| `Interactive.Container` | Structural `<div>` (or `<button>` / `<a>`) with flex layout, border, padding, rounding, and height variant presets. |
+
+## Interactive.Base Props
+
+| Prop | Type | Default | Description |
+|---|---|---|---|
+| `variant` | `"default" \| "action" \| "danger" \| "select" \| "sidebar" \| "none"` | `"default"` | Visual variant. Determines colour table used. `"none"` disables all background/foreground styling. |
+| `prominence` | Depends on `variant` (see below) | Depends on `variant` | Visual weight within the variant. |
+| `selected` | `boolean` | — | Only for `"select"` and `"sidebar"` variants. Switches foreground to action-link colours (select) or active-item state (sidebar). |
+| `group` | `string` | — | Tailwind group class (e.g. `"group/Card"`) for `group-hover:*` utilities on descendants. |
+| `transient` | `boolean` | `false` | Forces the hover visual state regardless of actual pointer state. |
+| `href` | `string` | — | URL to navigate to. Passed through Slot to the child (Container renders an `<a>`). |
+| `target` | `string` | — | Link target (e.g. `"_blank"`). Only used when `href` is provided. |
+| `onClick` | `MouseEventHandler<HTMLElement>` | — | Click handler. Blocked when disabled. |
+| `ref` | `React.Ref<HTMLElement>` | — | Ref forwarded to the underlying element via Radix Slot. |
+
+### Variant → Prominence mapping
+
+| `variant` | Allowed `prominence` | Default prominence |
+|---|---|---|
+| `"default"` | `"primary" \| "secondary" \| "tertiary" \| "internal"` | `"primary"` |
+| `"action"` | `"primary" \| "secondary" \| "tertiary" \| "internal"` | `"primary"` |
+| `"danger"` | `"primary" \| "secondary" \| "tertiary" \| "internal"` | `"primary"` |
+| `"select"` | `"light" \| "heavy"` | `"light"` |
+| `"sidebar"` | `"light"` | `"light"` |
+| `"none"` | *(not accepted)* | — |
+
+## Interactive.Container Props
+
+| Prop | Type | Default | Description |
+|---|---|---|---|
+| `type` | `"submit" \| "button" \| "reset"` | — | When provided, renders a `<button>` instead of a `<div>`. Mutually exclusive with `href` from Base. |
+| `border` | `boolean` | `false` | Applies a 1px border using the theme's border colour. |
+| `roundingVariant` | `"default" \| "compact" \| "mini"` | `"default"` | Border-radius preset (see table below). |
+| `heightVariant` | `SizeVariant` | `"lg"` | Height, min-width, and padding preset from the shared `SizeVariant` scale. |
+| `widthVariant` | `WidthVariant` | `"auto"` | `"auto"` shrink-wraps, `"full"` stretches to fill parent. |
+| `ref` | `React.Ref<HTMLElement>` | — | Ref forwarded to the root element (`<div>`, `<button>`, or `<a>`). |
+
+### `roundingVariant` reference
+
+| Value | Class | Radius |
+|---|---|---|
+| `"default"` | `rounded-12` | 0.75rem (12px) |
+| `"compact"` | `rounded-08` | 0.5rem (8px) |
+| `"mini"` | `rounded-04` | 0.25rem (4px) |
 
 ## Foreground colour (`--interactive-foreground`)
 

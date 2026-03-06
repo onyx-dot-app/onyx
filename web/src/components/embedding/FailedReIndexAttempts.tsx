@@ -4,6 +4,7 @@ import { IndexAttemptStatus } from "@/components/Status";
 import { deleteCCPair } from "@/lib/documentDeletion";
 import { FailedConnectorIndexingStatus } from "@/lib/types";
 import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 import {
   Table,
@@ -128,42 +129,44 @@ export function FailedReIndexAttempts({
                       </Link>
                     </TableCell>
                     <TableCell>
-                      <Button
-                        variant="danger"
-                        onClick={async () => {
-                          if (shouldConfirmConnectorDeletion) {
-                            setPendingConnectorDeletion({
-                              connectorId: reindexingProgress.connector_id,
-                              credentialId: reindexingProgress.credential_id,
-                              ccPairId: reindexingProgress.cc_pair_id,
-                              name: reindexingProgress.name ?? "this connector",
-                            });
-                            return;
-                          }
+                      <Disabled disabled={!reindexingProgress.is_deletable}>
+                        <Button
+                          variant="danger"
+                          onClick={async () => {
+                            if (shouldConfirmConnectorDeletion) {
+                              setPendingConnectorDeletion({
+                                connectorId: reindexingProgress.connector_id,
+                                credentialId: reindexingProgress.credential_id,
+                                ccPairId: reindexingProgress.cc_pair_id,
+                                name:
+                                  reindexingProgress.name ?? "this connector",
+                              });
+                              return;
+                            }
 
-                          try {
-                            await deleteCCPair(
-                              reindexingProgress.connector_id,
-                              reindexingProgress.credential_id,
-                              () =>
-                                mutate(
-                                  buildCCPairInfoUrl(
-                                    reindexingProgress.cc_pair_id
+                            try {
+                              await deleteCCPair(
+                                reindexingProgress.connector_id,
+                                reindexingProgress.credential_id,
+                                () =>
+                                  mutate(
+                                    buildCCPairInfoUrl(
+                                      reindexingProgress.cc_pair_id
+                                    )
                                   )
-                                )
-                            );
-                          } catch (error) {
-                            console.error("Error deleting connector:", error);
-                            toast.error(
-                              "Failed to delete connector. Please try again."
-                            );
-                          }
-                        }}
-                        icon={SvgTrash}
-                        disabled={!reindexingProgress.is_deletable}
-                      >
-                        Delete
-                      </Button>
+                              );
+                            } catch (error) {
+                              console.error("Error deleting connector:", error);
+                              toast.error(
+                                "Failed to delete connector. Please try again."
+                              );
+                            }
+                          }}
+                          icon={SvgTrash}
+                        >
+                          Delete
+                        </Button>
+                      </Disabled>
                     </TableCell>
                   </TableRow>
                 );

@@ -13,6 +13,7 @@ import {
 import { LibraryEntry } from "@/app/craft/types/user-library";
 import Text from "@/refresh-components/texts/Text";
 import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import Modal from "@/refresh-components/Modal";
 import ShadowDiv from "@/refresh-components/ShadowDiv";
 import { Section } from "@/layouts/general-layouts";
@@ -260,14 +261,15 @@ export default function UserLibraryModal({
                     disabled={isUploading}
                     accept=".xlsx,.xls,.docx,.doc,.pptx,.ppt,.csv,.json,.txt,.pdf,.zip"
                   />
-                  <Button
-                    prominence="secondary"
-                    icon={SvgUploadCloud}
-                    onClick={() => handleUploadToFolder("/")}
-                    disabled={isUploading}
-                    tooltip={isUploading ? "Uploading..." : "Upload"}
-                    aria-label={isUploading ? "Uploading..." : "Upload"}
-                  />
+                  <Disabled disabled={isUploading}>
+                    <Button
+                      prominence="secondary"
+                      icon={SvgUploadCloud}
+                      onClick={() => handleUploadToFolder("/")}
+                      tooltip={isUploading ? "Uploading..." : "Upload"}
+                      aria-label={isUploading ? "Uploading..." : "Upload"}
+                    />
+                  </Disabled>
                 </Section>
 
                 {isLoading ? (
@@ -381,12 +383,9 @@ export default function UserLibraryModal({
             >
               Cancel
             </Button>
-            <Button
-              onClick={handleCreateDirectory}
-              disabled={!newFolderName.trim()}
-            >
-              Create
-            </Button>
+            <Disabled disabled={!newFolderName.trim()}>
+              <Button onClick={handleCreateDirectory}>Create</Button>
+            </Disabled>
           </Modal.Footer>
         </Modal.Content>
       </Modal>

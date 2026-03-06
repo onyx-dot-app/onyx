@@ -4,6 +4,10 @@
 }
 .interactive[data-disabled] {
   @apply cursor-not-allowed;
+  /* Override baseline pointer-events: none from Disabled's > * selector.
+     Interactive handles click-blocking in JS; it needs pointer events for
+     hover/tooltips on disabled elements. */
+  pointer-events: auto;
 }
 
 /* Interactive — container */

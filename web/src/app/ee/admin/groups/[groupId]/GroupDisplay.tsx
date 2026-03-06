@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/table";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import { DeleteButton } from "@/components/DeleteButton";
 import { Bubble } from "@/components/Bubble";
 import { BookmarkIcon, RobotIcon } from "@/components/icons/icons";
@@ -278,16 +279,17 @@ export const GroupDisplay = ({
         tooltip="Cannot update group while sync is occurring"
         disabled={userGroup.is_up_to_date}
       >
-        <Button
-          disabled={!userGroup.is_up_to_date}
-          onClick={() => {
-            if (userGroup.is_up_to_date) {
-              setAddMemberFormVisible(true);
-            }
-          }}
-        >
-          Add Users
-        </Button>
+        <Disabled disabled={!userGroup.is_up_to_date}>
+          <Button
+            onClick={() => {
+              if (userGroup.is_up_to_date) {
+                setAddMemberFormVisible(true);
+              }
+            }}
+          >
+            Add Users
+          </Button>
+        </Disabled>
       </SimpleTooltip>
       {addMemberFormVisible && (
         <AddMemberForm
@@ -378,16 +380,17 @@ export const GroupDisplay = ({
         tooltip="Cannot update group while sync is occurring"
         disabled={userGroup.is_up_to_date}
       >
-        <Button
-          disabled={!userGroup.is_up_to_date}
-          onClick={() => {
-            if (userGroup.is_up_to_date) {
-              setAddConnectorFormVisible(true);
-            }
-          }}
-        >
-          Add Connectors
-        </Button>
+        <Disabled disabled={!userGroup.is_up_to_date}>
+          <Button
+            onClick={() => {
+              if (userGroup.is_up_to_date) {
+                setAddConnectorFormVisible(true);
+              }
+            }}
+          >
+            Add Connectors
+          </Button>
+        </Disabled>
       </SimpleTooltip>
 
       {addConnectorFormVisible && (

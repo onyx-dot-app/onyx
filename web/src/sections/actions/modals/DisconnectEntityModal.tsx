@@ -3,6 +3,7 @@
 import { useRef } from "react";
 import Modal from "@/refresh-components/Modal";
 import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
 import { SvgUnplug } from "@opal/icons";
@@ -66,31 +67,31 @@ export default function DisconnectEntityModal({
         </Modal.Body>
 
         <Modal.Footer>
-          <Button
-            prominence="secondary"
-            onClick={onClose}
-            disabled={isDisconnecting}
-          >
-            Cancel
-          </Button>
+          <Disabled disabled={isDisconnecting}>
+            <Button prominence="secondary" onClick={onClose}>
+              Cancel
+            </Button>
+          </Disabled>
           {onConfirmDisconnectAndDelete && (
+            <Disabled disabled={isDisconnecting}>
+              <Button
+                variant="danger"
+                prominence="secondary"
+                onClick={onConfirmDisconnectAndDelete}
+              >
+                Disconnect &amp; Delete
+              </Button>
+            </Disabled>
+          )}
+          <Disabled disabled={isDisconnecting}>
             <Button
               variant="danger"
-              prominence="secondary"
-              onClick={onConfirmDisconnectAndDelete}
-              disabled={isDisconnecting}
+              onClick={onConfirmDisconnect}
+              ref={disconnectButtonRef}
             >
-              Disconnect &amp; Delete
+              {isDisconnecting ? "Disconnecting..." : "Disconnect"}
             </Button>
-          )}
-          <Button
-            variant="danger"
-            onClick={onConfirmDisconnect}
-            disabled={isDisconnecting}
-            ref={disconnectButtonRef}
-          >
-            {isDisconnecting ? "Disconnecting..." : "Disconnect"}
-          </Button>
+          </Disabled>
         </Modal.Footer>
       </Modal.Content>
     </Modal>
