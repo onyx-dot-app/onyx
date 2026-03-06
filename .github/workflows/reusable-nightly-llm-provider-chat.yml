@@ -48,6 +48,10 @@ on:
         required: false
         default: true
         type: boolean
+    secrets:
+      AWS_OIDC_ROLE_ARN:
+        description: "AWS role ARN for OIDC auth"
+        required: true
 
 permissions:
   contents: read
