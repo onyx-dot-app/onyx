@@ -203,7 +203,7 @@ class TestDefaultModelProtection:
                 api_key_changed=True,
                 model_configurations=[
                     ModelConfigurationUpsertRequest(
-                        name="gpt-4o", is_visible=True, support_image_input=True
+                        name="gpt-4o", is_visible=True, supports_image_input=True
                     ),
                     ModelConfigurationUpsertRequest(
                         name="gpt-4o-mini", is_visible=False
