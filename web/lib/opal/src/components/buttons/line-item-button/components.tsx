@@ -4,8 +4,9 @@ import {
   type InteractiveStatefulState,
   type InteractiveStatefulInteraction,
   type InteractiveStatefulProps,
+  InteractiveContainerRoundingVariant,
 } from "@opal/core";
-import type { SizeVariant, WidthVariant } from "@opal/shared";
+import { type WidthVariant } from "@opal/shared";
 import type { TooltipSide } from "@opal/components";
 import type { DistributiveOmit } from "@opal/types";
 import type { ContentActionProps } from "@opal/layouts/content-action/components";
@@ -47,7 +48,7 @@ type LineItemButtonOwnProps = {
   ref?: React.Ref<HTMLElement>;
 
   /** Corner rounding preset (height is always content-driven). @default "lg" */
-  size?: Exclude<SizeVariant, "fit">;
+  roundingVariant?: InteractiveContainerRoundingVariant;
 
   /** Container width. @default "full" */
   width?: WidthVariant;
@@ -80,7 +81,7 @@ function LineItemButton({
   ref,
 
   // Sizing
-  size = "lg",
+  roundingVariant = "default",
   width = "full",
   type = "button",
   tooltip,
@@ -104,9 +105,7 @@ function LineItemButton({
         type={type}
         widthVariant={width}
         heightVariant="fit"
-        roundingVariant={
-          size === "lg" ? "default" : size === "2xs" ? "mini" : "compact"
-        }
+        roundingVariant={roundingVariant}
       >
         <ContentAction
           {...(contentActionProps as ContentActionProps)}
