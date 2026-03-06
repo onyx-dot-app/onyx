@@ -108,11 +108,11 @@ function ConnectionStatus({
   isLoading,
   onIconHover,
 }: ConnectionStatusProps) {
-  if (isLoading) {
+  if (isLoading || !status) {
     return <CheckingStatus />;
   }
 
-  const { label, icon: Icon, iconColor } = STATUS_CONFIG[status!];
+  const { label, icon: Icon, iconColor } = STATUS_CONFIG[status];
   const hasError = status !== "healthy";
 
   return (
