@@ -25,7 +25,10 @@ from onyx.server.manage.embedding.models import CloudEmbeddingProvider
 from onyx.server.manage.embedding.models import CloudEmbeddingProviderCreationRequest
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import LLMProviderView
+from onyx.utils.logger import setup_logger
 from shared_configs.enums import EmbeddingProvider
+
+logger = setup_logger()
 
 
 def update_group_llm_provider_relationships__no_commit(
@@ -813,9 +816,7 @@ def sync_auto_mode_models(
 
     db_session.commit()
 
-    # In Auto mode, default model is controlled by GitHub config.
     # Update the default if this provider currently holds the global CHAT default
-    # (including defaults on models that were just marked invisible above).
     recommended_default = llm_recommendations.get_default_model(provider.provider)
     if recommended_default:
         owns_chat_default = (
@@ -833,11 +834,7 @@ def sync_auto_mode_models(
 
         if owns_chat_default:
             # Only update the global default if this provider currently owns it
-            current_default = fetch_default_model(db_session, LLMModelFlowType.CHAT)
-            if (
-                current_default is None
-                or current_default.name != recommended_default.name
-            ):
+            try:
                 _update_default_model(
                     db_session=db_session,
                     provider_id=provider.id,
@@ -845,6 +842,13 @@ def sync_auto_mode_models(
                     flow_type=LLMModelFlowType.CHAT,
                 )
                 changes += 1
+            except ValueError:
+                logger.warning(
+                    "Recommended default model '%s' not found "
+                    "for provider_id=%s; skipping default update.",
+                    recommended_default.name,
+                    provider.id,
+                )
 
     return changes
 
