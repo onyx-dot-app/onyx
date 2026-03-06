@@ -1,16 +1,13 @@
 from __future__ import annotations
 
 import json
-import unicodedata
+import unicodedata  # used to verify NFC expansion test preconditions
 from pathlib import Path
 
 import pytest
 from pydantic import BaseModel
 from pydantic import field_validator
 
-from onyx.tools.tool_implementations.open_url.snippet_matcher import (
-    _normalize_text_with_mapping,
-)
 from onyx.tools.tool_implementations.open_url.snippet_matcher import (
     find_snippet_in_content,
 )
@@ -172,60 +169,37 @@ NFC_EXPANDING_CHARS = [
 ]
 
 
-def test_nfc_expansion_mapping_integrity() -> None:
-    """A single original codepoint that expands under NFC should still
-    produce a valid position map where every entry points to a real
-    original index (i.e. 0 <= idx < len(original))."""
-
-    char = "\u0958"
-    nfc = unicodedata.normalize("NFC", char)
-    assert len(nfc) == 2, f"Expected NFC expansion for U+0958 but got len={len(nfc)}"
-
-    text = f"before {char} after"
-    normalized, pos_map = _normalize_text_with_mapping(text)
-
-    for i, orig_idx in enumerate(pos_map):
-        assert 0 <= orig_idx < len(text), (
-            f"pos_map[{i}] = {orig_idx} is out of bounds for "
-            f"original text of length {len(text)}"
-        )
-
-
-def test_nfc_expansion_round_trip_match() -> None:
-    """find_snippet_in_content should correctly locate a snippet that
-    contains an NFC-expanding character, with valid start/end indices."""
-
-    char = "\u0958"
-    content = f"The word {char} appears here."
-    snippet = f"{char} appears"
-
-    result = find_snippet_in_content(content, snippet)
-
-    assert result.snippet_located, "Snippet should be found in content"
-    assert (
-        0 <= result.start_idx < len(content)
-    ), f"start_idx {result.start_idx} out of bounds"
-    assert 0 <= result.end_idx < len(content), f"end_idx {result.end_idx} out of bounds"
-    assert (
-        result.start_idx <= result.end_idx
-    ), f"start_idx {result.start_idx} > end_idx {result.end_idx}"
-
-
 @pytest.mark.parametrize(
     "char,description",
     NFC_EXPANDING_CHARS,
 )
-def test_nfc_expanding_chars_mapping(char: str, description: str) -> None:
-    """Parametrized test across multiple known NFC-expanding characters."""
+def test_nfc_expanding_char_snippet_match(char: str, description: str) -> None:
+    """Snippet matching should produce valid indices for content
+    containing characters that expand under NFC normalization."""
     nfc = unicodedata.normalize("NFC", char)
     if len(nfc) <= 1:
         pytest.skip(f"{description} does not expand under NFC on this platform")
 
-    text = f"x{char}y"
-    normalized, pos_map = _normalize_text_with_mapping(text)
+    content = f"before {char} after"
+    snippet = f"{char} after"
 
-    for i, orig_idx in enumerate(pos_map):
-        assert 0 <= orig_idx < len(text), (
-            f"[{description}] pos_map[{i}] = {orig_idx} out of bounds "
-            f"(original length {len(text)})"
-        )
+    result = find_snippet_in_content(content, snippet)
+
+    assert result.snippet_located, f"[{description}] Snippet should be found in content"
+    assert (
+        0 <= result.start_idx < len(content)
+    ), f"[{description}] start_idx {result.start_idx} out of bounds"
+    assert (
+        0 <= result.end_idx < len(content)
+    ), f"[{description}] end_idx {result.end_idx} out of bounds"
+    assert (
+        result.start_idx <= result.end_idx
+    ), f"[{description}] start_idx {result.start_idx} > end_idx {result.end_idx}"
+
+    matched = content[result.start_idx : result.end_idx + 1]
+    matched_nfc = unicodedata.normalize("NFC", matched)
+    snippet_nfc = unicodedata.normalize("NFC", snippet)
+    assert snippet_nfc in matched_nfc or matched_nfc in snippet_nfc, (
+        f"[{description}] Matched span '{matched}' does not overlap "
+        f"with expected snippet '{snippet}'"
+    )

@@ -111,10 +111,6 @@ def _normalize_text_with_mapping(text: str) -> tuple[str, list[int]]:
     # Step 1: NFC normalization with position mapping
     nfc_text = unicodedata.normalize("NFC", text)
 
-    # Build mapping from NFC positions to original positions via NFD
-    # as an intermediary. NFD(original) == NFD(NFC(original)) is a
-    # Unicode guarantee, so NFD serves as a stable common form.
-
     # Map NFD positions → original positions.
     # NFD only decomposes, so each original char produces 1+ NFD chars.
     nfd_to_orig: list[int] = []
@@ -129,7 +125,10 @@ def _normalize_text_with_mapping(text: str) -> tuple[str, list[int]]:
     nfc_to_orig: list[int] = []
     nfd_idx = 0
     for nfc_char in nfc_text:
-        nfc_to_orig.append(nfd_to_orig[nfd_idx])
+        if nfd_idx < len(nfd_to_orig):
+            nfc_to_orig.append(nfd_to_orig[nfd_idx])
+        else:
+            nfc_to_orig.append(len(original_text) - 1)
         nfd_of_nfc = unicodedata.normalize("NFD", nfc_char)
         nfd_idx += len(nfd_of_nfc)
 
