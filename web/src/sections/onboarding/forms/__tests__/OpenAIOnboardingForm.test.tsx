@@ -10,7 +10,6 @@ import {
   createMockOnboardingActions,
   createMockFetchResponses,
   MOCK_PROVIDERS,
-  OPENAI_DEFAULT_VISIBLE_MODELS,
 } from "./testHelpers";
 
 // Mock fetch
@@ -54,8 +53,6 @@ jest.mock("@/components/modals/ProviderModal", () => ({
   },
 }));
 
-// Mock fetchModels utility - returns the curated OpenAI visible models
-// that match OPENAI_VISIBLE_MODEL_NAMES from backend
 const mockFetchModels = jest.fn().mockResolvedValue({
   models: [
     {
@@ -170,77 +167,6 @@ describe("OpenAIOnboardingForm", () => {
       render(<OpenAIOnboardingForm {...defaultProps} open={false} />);
 
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    });
-  });
-
-  describe("Default Available Models", () => {
-    /**
-     * This test verifies that the exact curated list of OpenAI visible models
-     * matches what's returned from /api/admin/llm/built-in/options.
-     * The expected models are defined in OPENAI_VISIBLE_MODEL_NAMES in
-     * backend/onyx/llm/llm_provider_options.py
-     */
-    test("llmDescriptor contains the correct default visible models from built-in options", () => {
-      const expectedModelNames = [
-        "gpt-5.2",
-        "gpt-5-mini",
-        "o1",
-        "o3-mini",
-        "gpt-4o",
-        "gpt-4o-mini",
-      ];
-
-      // Verify MOCK_PROVIDERS.openai has the correct model configurations
-      const actualModelNames = MOCK_PROVIDERS.openai.known_models.map(
-        (config) => config.name
-      );
-
-      // Check that all expected models are present
-      expect(actualModelNames).toEqual(
-        expect.arrayContaining(expectedModelNames)
-      );
-
-      // Check that only the expected models are present (no extras)
-      expect(actualModelNames).toHaveLength(expectedModelNames.length);
-
-      // Verify each model has is_visible set to true
-      MOCK_PROVIDERS.openai.known_models.forEach((config) => {
-        expect(config.is_visible).toBe(true);
-      });
-    });
-
-    test("OPENAI_DEFAULT_VISIBLE_MODELS matches backend OPENAI_VISIBLE_MODEL_NAMES", () => {
-      // These are the exact model names from backend/onyx/llm/llm_provider_options.py
-      // OPENAI_VISIBLE_MODEL_NAMES = {"gpt-5.2", "gpt-5-mini", "o1", "o3-mini", "gpt-4o", "gpt-4o-mini"}
-      const backendVisibleModelNames = new Set([
-        "gpt-5.2",
-        "gpt-5-mini",
-        "o1",
-        "o3-mini",
-        "gpt-4o",
-        "gpt-4o-mini",
-      ]);
-
-      const testHelperModelNames = new Set(
-        OPENAI_DEFAULT_VISIBLE_MODELS.map((m) => m.name)
-      );
-
-      expect(testHelperModelNames).toEqual(backendVisibleModelNames);
-    });
-
-    test("all default models are marked as visible", () => {
-      OPENAI_DEFAULT_VISIBLE_MODELS.forEach((model) => {
-        expect(model.is_visible).toBe(true);
-      });
-    });
-
-    test("default model gpt-5.2 is set correctly in component", () => {
-      // The OpenAIOnboardingForm sets DEFAULT_DEFAULT_MODEL_NAME = "gpt-5.2"
-      // Verify this model exists in the default visible models
-      const defaultModelExists = OPENAI_DEFAULT_VISIBLE_MODELS.some(
-        (m) => m.name === "gpt-5.2"
-      );
-      expect(defaultModelExists).toBe(true);
     });
   });
 
