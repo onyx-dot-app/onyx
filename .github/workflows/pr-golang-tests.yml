@@ -41,7 +41,6 @@ jobs:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
-          fetch-depth: 0
       - uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # zizmor: ignore[cache-poisoning]
         with:
           go-version: ${{ env.GO_VERSION }}
