@@ -204,8 +204,9 @@ const AppInputBar = React.memo(
       wrapper.style.height = `${MIN_INPUT_HEIGHT}px`;
 
       // scrollHeight doesn't include the wrapper's padding, so add it back
-      const paddingTop = parseFloat(getComputedStyle(wrapper).paddingTop);
-      const paddingBottom = parseFloat(getComputedStyle(wrapper).paddingBottom);
+      const wrapperStyle = getComputedStyle(wrapper);
+      const paddingTop = parseFloat(wrapperStyle.paddingTop);
+      const paddingBottom = parseFloat(wrapperStyle.paddingBottom);
       const contentHeight = textarea.scrollHeight + paddingTop + paddingBottom;
 
       wrapper.style.height = `${Math.min(
