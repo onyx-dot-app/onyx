@@ -108,7 +108,6 @@ function LineItemButton({
             {...(contentActionProps as ContentActionProps)}
             withInteractive
             paddingVariant="fit"
-            widthVariant="full"
           />
         </Interactive.Container>
       </Interactive.Stateful>

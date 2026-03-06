@@ -10,12 +10,12 @@ A composite component that wraps `Interactive.Stateful > Interactive.Container >
 Disabled                          <- disabled
   └─ Interactive.Stateful         <- selectVariant, selected→state, onClick, href, ref
        └─ Interactive.Container   <- type, width, size, rounding (derived from size)
-            └─ ContentAction      <- withInteractive, paddingVariant="fit", widthVariant="full"
+            └─ ContentAction      <- withInteractive, paddingVariant="fit"
                  ├─ Content       <- icon, title, description, sizePreset, variant, ...
                  └─ rightChildren
 ```
 
-`paddingVariant` is hardcoded to `"fit"` (Container owns the padding) and `widthVariant` is hardcoded to `"full"`. These are not exposed as props.
+`paddingVariant` is hardcoded to `"fit"` (Container owns the padding). These are not exposed as props.
 
 ## Props
 

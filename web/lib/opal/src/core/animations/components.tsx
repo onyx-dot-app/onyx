@@ -115,7 +115,9 @@ function HoverableRoot({
       <div
         {...props}
         ref={ref}
-        className={cn(widthVariants[widthVariant])}
+        className={
+          widthVariant !== "auto" ? cn(widthVariants[widthVariant]) : undefined
+        }
         onMouseEnter={onMouseEnter}
         onMouseLeave={onMouseLeave}
       >
