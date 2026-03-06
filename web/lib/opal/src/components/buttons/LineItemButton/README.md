@@ -26,7 +26,6 @@ import Checkbox from "@/refresh-components/inputs/Checkbox";
 |------|------|---------|-------------|
 | `prominence` | `"light" \| "heavy"` | `"light"` | Interactive select prominence |
 | `selected` | `boolean` | — | Whether the item appears selected |
-| `disabled` | `boolean` | — | Disables interaction |
 | `size` | `SizeVariant` | `"lg"` | Container height |
 | `width` | `WidthVariant` | `"full"` | Container width |
 | `title` | `string` | **(required)** | Row label |
