@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import unicodedata  # used to verify NFC expansion test preconditions
 from pathlib import Path
 
 import pytest
@@ -157,4 +158,48 @@ def test_snippet_finding(test_data: TestSchema) -> None:
     ), (
         f"end_idx mismatch: expected {test_data.expected_result.expected_end_idx}, "
         f"got {result.end_idx}"
+    )
+
+
+# Characters confirmed to expand from 1 → 2 codepoints under NFC
+NFC_EXPANDING_CHARS = [
+    ("\u0958", "Devanagari letter qa"),
+    ("\u0959", "Devanagari letter khha"),
+    ("\u095a", "Devanagari letter ghha"),
+]
+
+
+@pytest.mark.parametrize(
+    "char,description",
+    NFC_EXPANDING_CHARS,
+)
+def test_nfc_expanding_char_snippet_match(char: str, description: str) -> None:
+    """Snippet matching should produce valid indices for content
+    containing characters that expand under NFC normalization."""
+    nfc = unicodedata.normalize("NFC", char)
+    if len(nfc) <= 1:
+        pytest.skip(f"{description} does not expand under NFC on this platform")
+
+    content = f"before {char} after"
+    snippet = f"{char} after"
+
+    result = find_snippet_in_content(content, snippet)
+
+    assert result.snippet_located, f"[{description}] Snippet should be found in content"
+    assert (
+        0 <= result.start_idx < len(content)
+    ), f"[{description}] start_idx {result.start_idx} out of bounds"
+    assert (
+        0 <= result.end_idx < len(content)
+    ), f"[{description}] end_idx {result.end_idx} out of bounds"
+    assert (
+        result.start_idx <= result.end_idx
+    ), f"[{description}] start_idx {result.start_idx} > end_idx {result.end_idx}"
+
+    matched = content[result.start_idx : result.end_idx + 1]
+    matched_nfc = unicodedata.normalize("NFC", matched)
+    snippet_nfc = unicodedata.normalize("NFC", snippet)
+    assert snippet_nfc in matched_nfc or matched_nfc in snippet_nfc, (
+        f"[{description}] Matched span '{matched}' does not overlap "
+        f"with expected snippet '{snippet}'"
     )
