@@ -64,6 +64,7 @@
     "cmdk": "^1.0.0",
     "cookies-next": "^5.1.0",
     "date-fns": "^3.6.0",
+    "docx-preview": "^0.3.7",
     "favicon-fetch": "^1.0.0",
     "formik": "^2.2.9",
     "highlight.js": "^11.11.1",
