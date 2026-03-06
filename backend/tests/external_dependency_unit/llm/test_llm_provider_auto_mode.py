@@ -698,6 +698,99 @@ class TestAutoModeMissingFlows:
 class TestAutoModeTransitionsAndResync:
     """Tests for auto/manual transitions, config evolution, and sync idempotency."""
 
+    def test_transition_to_auto_mode_preserves_default(
+        self,
+        db_session: Session,
+        provider_name: str,
+    ) -> None:
+        """When the default provider transitions from manual to auto mode,
+        the global default should be preserved (set to the recommended model).
+
+        Steps:
+        1. Create a manual-mode provider with models, set it as global default.
+        2. Transition to auto mode (model_configurations=[] triggers cascade
+           delete of old ModelConfigurations and their LLMModelFlow rows).
+        3. Verify the provider is still the global default, now using the
+           recommended default model from the GitHub config.
+        """
+        initial_models = [
+            ModelConfigurationUpsertRequest(name="gpt-4o", is_visible=True),
+            ModelConfigurationUpsertRequest(name="gpt-4o-mini", is_visible=True),
+        ]
+
+        auto_config = _create_mock_llm_recommendations(
+            provider=LlmProviderNames.OPENAI,
+            default_model_name="gpt-4o-mini",
+            additional_models=["gpt-4o"],
+        )
+
+        try:
+            # Step 1: Create manual-mode provider and set as default
+            put_llm_provider(
+                llm_provider_upsert_request=LLMProviderUpsertRequest(
+                    name=provider_name,
+                    provider=LlmProviderNames.OPENAI,
+                    api_key="sk-test-key-00000000000000000000000000000000000",
+                    api_key_changed=True,
+                    is_auto_mode=False,
+                    model_configurations=initial_models,
+                ),
+                is_creation=True,
+                _=_create_mock_admin(),
+                db_session=db_session,
+            )
+
+            db_session.expire_all()
+            provider = fetch_existing_llm_provider(
+                name=provider_name, db_session=db_session
+            )
+            assert provider is not None
+            update_default_provider(provider.id, "gpt-4o", db_session)
+
+            default_before = fetch_default_llm_model(db_session)
+            assert default_before is not None
+            assert default_before.name == "gpt-4o"
+            assert default_before.llm_provider_id == provider.id
+
+            # Step 2: Transition to auto mode
+            with patch(
+                "onyx.server.manage.llm.api.fetch_llm_recommendations_from_github",
+                return_value=auto_config,
+            ):
+                put_llm_provider(
+                    llm_provider_upsert_request=LLMProviderUpsertRequest(
+                        id=provider.id,
+                        name=provider_name,
+                        provider=LlmProviderNames.OPENAI,
+                        api_key=None,
+                        api_key_changed=False,
+                        is_auto_mode=True,
+                        model_configurations=[],
+                    ),
+                    is_creation=False,
+                    _=_create_mock_admin(),
+                    db_session=db_session,
+                )
+
+            # Step 3: Default should be preserved on this provider
+            db_session.expire_all()
+            default_after = fetch_default_llm_model(db_session)
+            assert default_after is not None, (
+                "Default model should not be None after transitioning to auto mode — "
+                "the provider was the default before and should remain so"
+            )
+            assert (
+                default_after.llm_provider_id == provider.id
+            ), "Default should still belong to the same provider after transition"
+            assert default_after.name == "gpt-4o-mini", (
+                f"Default should be updated to the recommended model 'gpt-4o-mini', "
+                f"got '{default_after.name}'"
+            )
+
+        finally:
+            db_session.rollback()
+            _cleanup_provider(db_session, provider_name)
+
     def test_auto_to_manual_mode_preserves_models_and_stops_syncing(
         self,
         db_session: Session,
@@ -1042,14 +1135,19 @@ class TestAutoModeTransitionsAndResync:
             assert visibility["gpt-4o"] is False, "Removed default should be hidden"
             assert visibility["gpt-4o-mini"] is True, "New default should be visible"
 
-            # The LLMModelFlow row for gpt-4o still exists (is_default=True),
-            # but the model is hidden. fetch_default_llm_model filters on
-            # is_visible=True, so it should NOT return gpt-4o.
+            # The old default (gpt-4o) is now hidden. sync_auto_mode_models
+            # should update the global default to the new recommended default
+            # (gpt-4o-mini) so that it is not silently lost.
             db_session.expire_all()
             default_after = fetch_default_llm_model(db_session)
-            assert (
-                default_after is None or default_after.name != "gpt-4o"
-            ), "Hidden model should not be returned as the default"
+            assert default_after is not None, (
+                "Default model should not be None — sync should set the new "
+                "recommended default when the old one is hidden"
+            )
+            assert default_after.name == "gpt-4o-mini", (
+                f"Default should be updated to the new recommended model "
+                f"'gpt-4o-mini', but got '{default_after.name}'"
+            )
 
         finally:
             db_session.rollback()
