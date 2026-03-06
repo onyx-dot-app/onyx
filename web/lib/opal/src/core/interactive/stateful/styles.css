@@ -59,8 +59,8 @@
    --------------------------------------------------------------------------- */
 .interactive[data-interactive-variant="select-heavy"][data-interactive-state="filled"] {
   @apply bg-transparent;
-  --interactive-foreground: var(--text-04);
-  --interactive-foreground-icon: var(--text-04);
+  --interactive-foreground: var(--action-link-05);
+  --interactive-foreground-icon: var(--action-link-05);
 }
 .interactive[data-interactive-variant="select-heavy"][data-interactive-state="filled"]:hover:not(
     [data-disabled]
@@ -158,8 +158,8 @@
    --------------------------------------------------------------------------- */
 .interactive[data-interactive-variant="select-light"][data-interactive-state="filled"] {
   @apply bg-transparent;
-  --interactive-foreground: var(--text-04);
-  --interactive-foreground-icon: var(--text-04);
+  --interactive-foreground: var(--action-link-05);
+  --interactive-foreground-icon: var(--action-link-05);
 }
 .interactive[data-interactive-variant="select-light"][data-interactive-state="filled"]:hover:not(
     [data-disabled]

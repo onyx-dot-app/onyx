@@ -70,7 +70,7 @@ type SizeVariant = keyof typeof sizeVariants;
  * | `full` | `w-full`       |
  */
 const widthVariants = {
-  auto: "w-auto",
+  auto: "w-fit",
   full: "w-full",
 } as const;
 

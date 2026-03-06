@@ -391,23 +391,39 @@
    Interactive-foreground opt-in
 
    When a Content variant is nested inside an Interactive and
-   `withInteractive` is set, the title delegates its color to the
-   `--interactive-foreground` CSS variable controlled by the ancestor
-   Interactive variant.
+   `withInteractive` is set, the title and icon delegate their color to the
+   `--interactive-foreground` / `--interactive-foreground-icon` CSS variables
+   controlled by the ancestor Interactive variant.
    =========================================================================== */
 
 .opal-content-xl[data-interactive] .opal-content-xl-title {
   color: var(--interactive-foreground, var(--text-04));
 }
 
+.opal-content-xl[data-interactive] .opal-content-xl-icon {
+  color: var(--interactive-foreground-icon, var(--text-04));
+}
+
 .opal-content-lg[data-interactive] .opal-content-lg-title {
   color: var(--interactive-foreground, var(--text-04));
+}
+
+.opal-content-lg[data-interactive] .opal-content-lg-icon {
+  color: var(--interactive-foreground-icon, var(--text-04));
 }
 
 .opal-content-md[data-interactive] .opal-content-md-title {
   color: var(--interactive-foreground, var(--text-04));
 }
 
+.opal-content-md[data-interactive] .opal-content-md-icon {
+  color: var(--interactive-foreground-icon, var(--text-04));
+}
+
 .opal-content-sm[data-interactive] .opal-content-sm-title {
   color: var(--interactive-foreground, var(--text-04));
+}
+
+.opal-content-sm[data-interactive] .opal-content-sm-icon {
+  color: var(--interactive-foreground-icon, var(--text-03));
 }

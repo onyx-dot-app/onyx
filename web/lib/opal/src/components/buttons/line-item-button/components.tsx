@@ -1,7 +1,8 @@
 import "@opal/components/tooltip.css";
 import {
-  Disabled,
   Interactive,
+  type InteractiveStatefulState,
+  type InteractiveStatefulInteraction,
   type InteractiveStatefulProps,
 } from "@opal/core";
 import type { SizeVariant, WidthVariant } from "@opal/shared";
@@ -23,11 +24,11 @@ interface LineItemButtonProps extends ContentPassthroughProps {
   /** Interactive select variant. @default "select-light" */
   selectVariant?: "select-light" | "select-heavy";
 
-  /** Whether this item is selected. */
-  selected?: boolean;
+  /** Value state. @default "empty" */
+  state?: InteractiveStatefulState;
 
-  /** Whether this item is disabled. */
-  disabled?: boolean;
+  /** JS-controllable interaction state override. @default "rest" */
+  interaction?: InteractiveStatefulInteraction;
 
   /** Click handler. */
   onClick?: InteractiveStatefulProps["onClick"];
@@ -67,8 +68,8 @@ interface LineItemButtonProps extends ContentPassthroughProps {
 function LineItemButton({
   // Interactive surface
   selectVariant = "select-light",
-  selected,
-  disabled,
+  state,
+  interaction,
   onClick,
   href,
   target,
@@ -86,32 +87,31 @@ function LineItemButton({
   ...contentActionProps
 }: LineItemButtonProps) {
   const item = (
-    <Disabled disabled={disabled}>
-      <Interactive.Stateful
-        variant={selectVariant}
-        state={selected ? "selected" : "empty"}
-        onClick={onClick}
-        href={href}
-        target={target}
-        group={group}
-        ref={ref}
+    <Interactive.Stateful
+      variant={selectVariant}
+      state={state}
+      interaction={interaction}
+      onClick={onClick}
+      href={href}
+      target={target}
+      group={group}
+      ref={ref}
+    >
+      <Interactive.Container
+        type={type}
+        widthVariant={width}
+        heightVariant="fit"
+        roundingVariant={
+          size === "lg" ? "default" : size === "2xs" ? "mini" : "compact"
+        }
       >
-        <Interactive.Container
-          type={type}
-          widthVariant={width}
-          heightVariant={size}
-          roundingVariant={
-            size === "lg" ? "default" : size === "2xs" ? "mini" : "compact"
-          }
-        >
-          <ContentAction
-            {...(contentActionProps as ContentActionProps)}
-            withInteractive
-            paddingVariant="fit"
-          />
-        </Interactive.Container>
-      </Interactive.Stateful>
-    </Disabled>
+        <ContentAction
+          {...(contentActionProps as ContentActionProps)}
+          withInteractive
+          paddingVariant="lg"
+        />
+      </Interactive.Container>
+    </Interactive.Stateful>
   );
 
   if (!tooltip) return item;
