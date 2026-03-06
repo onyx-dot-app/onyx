@@ -92,15 +92,16 @@ describe("ProjectsContext beginUpload size precheck", () => {
     const { result } = renderHook(() => useProjectsContext(), { wrapper });
 
     const valid = new File(["small"], "small.txt", { type: "text/plain" });
-    const oversized = new File(
-      [new Uint8Array(2 * 1024 * 1024)],
-      "big.txt",
-      { type: "text/plain" }
-    );
+    const oversized = new File([new Uint8Array(2 * 1024 * 1024)], "big.txt", {
+      type: "text/plain",
+    });
 
     let optimisticFiles: { name: string }[] = [];
     await act(async () => {
-      optimisticFiles = await result.current.beginUpload([valid, oversized], null);
+      optimisticFiles = await result.current.beginUpload(
+        [valid, oversized],
+        null
+      );
     });
 
     expect(mockUploadFiles).toHaveBeenCalledTimes(1);
