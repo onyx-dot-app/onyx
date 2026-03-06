@@ -31,12 +31,12 @@ class CustomBuildHook(BuildHookInterface):
         commit = os.getenv("GITHUB_SHA", "none")
 
         # Build the Go binary if it doesn't exist
-        if not os.path.exists(binary_name):
-            print(f"Building Go binary '{binary_name}'...")
-            pkg = "github.com/onyx-dot-app/onyx/cli/cmd"
-            ldflags = f"-X {pkg}.version={tag}" f" -X {pkg}.commit={commit}" " -s -w"
-            subprocess.check_call(  # noqa: S603
-                ["go", "build", f"-ldflags={ldflags}", "-o", binary_name],
-            )
+        # Build the Go binary (always rebuild to ensure correct version injection)
+        print(f"Building Go binary '{binary_name}'...")
+        pkg = "github.com/onyx-dot-app/onyx/cli/cmd"
+        ldflags = f"-X {pkg}.version={tag}" f" -X {pkg}.commit={commit}" " -s -w"
+        subprocess.check_call(  # noqa: S603
+            ["go", "build", f"-ldflags={ldflags}", "-o", binary_name],
+        )
 
         build_data["shared_scripts"] = {binary_name: binary_name}
