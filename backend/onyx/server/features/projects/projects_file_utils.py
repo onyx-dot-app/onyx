@@ -48,14 +48,25 @@ def get_upload_size_bytes(upload: UploadFile) -> int | None:
         size = upload.file.tell()
         upload.file.seek(current_pos)
         return size
-    except Exception:
+    except Exception as e:
+        logger.warning(
+            "Could not determine upload size via stream seek "
+            f"(filename='{get_safe_filename(upload)}', "
+            f"error_type={type(e).__name__}, error={e})"
+        )
         return None
 
 
 def is_upload_too_large(upload: UploadFile, max_bytes: int) -> bool:
     """Return True when upload size is known and exceeds max_bytes."""
     size_bytes = get_upload_size_bytes(upload)
-    return size_bytes is not None and size_bytes > max_bytes
+    if size_bytes is None:
+        logger.warning(
+            "Could not determine upload size; skipping size-limit check for "
+            f"'{get_safe_filename(upload)}'"
+        )
+        return False
+    return size_bytes > max_bytes
 
 
 # Guard against extremely large images

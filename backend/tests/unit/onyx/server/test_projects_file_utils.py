@@ -12,6 +12,14 @@ class _Tokenizer:
         return [1] * len(text)
 
 
+class _NonSeekableFile:
+    def tell(self) -> int:
+        raise OSError("tell not supported")
+
+    def seek(self, *_args: object, **_kwargs: object) -> int:
+        raise OSError("seek not supported")
+
+
 def _make_upload(filename: str, size: int, content: bytes | None = None) -> UploadFile:
     payload = content if content is not None else (b"x" * size)
     return UploadFile(filename=filename, file=BytesIO(payload), size=size)
@@ -31,6 +39,34 @@ def test_get_upload_size_bytes_falls_back_to_stream_size() -> None:
 
     assert size == 6
     assert upload.file.tell() == 2
+
+
+def test_get_upload_size_bytes_logs_warning_when_stream_size_unavailable(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    upload = UploadFile(filename="non_seekable.txt", file=_NonSeekableFile(), size=None)
+
+    caplog.set_level("WARNING")
+    size = utils.get_upload_size_bytes(upload)
+
+    assert size is None
+    assert "Could not determine upload size via stream seek" in caplog.text
+    assert "non_seekable.txt" in caplog.text
+
+
+def test_is_upload_too_large_logs_warning_when_size_unknown(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    upload = _make_upload("size_unknown.txt", size=1)
+    monkeypatch.setattr(utils, "get_upload_size_bytes", lambda _upload: None)
+
+    caplog.set_level("WARNING")
+    is_too_large = utils.is_upload_too_large(upload, max_bytes=100)
+
+    assert is_too_large is False
+    assert "Could not determine upload size; skipping size-limit check" in caplog.text
+    assert "size_unknown.txt" in caplog.text
 
 
 def test_categorize_uploaded_files_accepts_size_under_limit(
