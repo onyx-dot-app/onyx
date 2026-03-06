@@ -142,6 +142,7 @@ export const docxVariant: PreviewVariant = {
 
   renderContent: (ctx: PreviewContext) => {
     if (isLegacyDoc(ctx.fileName)) {
+      lastDocxResult = null;
       return (
         <Section justifyContent="center" alignItems="center" padding={1.5}>
           <Text text03 mainUiBody>

@@ -243,12 +243,8 @@ test.describe("File preview modal from chat file links", () => {
     const mockContent = `Here is your document: [report.docx](/api/chat/file/${MOCK_FILE_ID})`;
 
     // Serve a real .docx fixture so docx-preview can parse it
-    const fixtureDir = path.resolve(
-      __dirname,
-      "../../../backend/tests/integration/common_utils/test_files"
-    );
     const docxBuffer = fs.readFileSync(
-      path.join(fixtureDir, "three_images.docx")
+      path.join(__dirname, "../fixtures/three_images.docx")
     );
 
     await page.route(`**/api/chat/file/${MOCK_FILE_ID}`, async (route) => {
