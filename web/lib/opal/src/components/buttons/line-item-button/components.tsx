@@ -104,13 +104,13 @@ function LineItemButton({
       <Interactive.Container
         type={type}
         widthVariant={width}
-        heightVariant="fit"
+        heightVariant="lg"
         roundingVariant={roundingVariant}
       >
         <ContentAction
           {...(contentActionProps as ContentActionProps)}
           withInteractive
-          paddingVariant="lg"
+          paddingVariant="fit"
         />
       </Interactive.Container>
     </Interactive.Stateful>
