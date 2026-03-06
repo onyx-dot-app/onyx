@@ -720,6 +720,7 @@ async def websocket_synthesize(
         # Use native streaming if provider supports it
         if provider.supports_streaming_tts():
             logger.info("WebSocket synthesize: using native streaming TTS")
+            message = None  # Initialize to avoid UnboundLocalError in except block
             try:
                 # Wait for initial config message with voice/speed
                 message = await websocket.receive()
