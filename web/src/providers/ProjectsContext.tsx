@@ -347,8 +347,12 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
           : DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB;
       const maxUploadSizeBytes = maxUploadSizeMb * 1024 * 1024;
 
-      const oversizedFiles = files.filter((file) => file.size > maxUploadSizeBytes);
-      const validFiles = files.filter((file) => file.size <= maxUploadSizeBytes);
+      const oversizedFiles = files.filter(
+        (file) => file.size > maxUploadSizeBytes
+      );
+      const validFiles = files.filter(
+        (file) => file.size <= maxUploadSizeBytes
+      );
 
       if (oversizedFiles.length > 0) {
         const skippedNames = oversizedFiles.map((file) => file.name).join(", ");
