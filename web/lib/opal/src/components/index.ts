@@ -19,6 +19,12 @@ export {
   type OpenButtonProps,
 } from "@opal/components/buttons/open-button/components";
 
+/* LineItemButton */
+export {
+  LineItemButton,
+  type LineItemButtonProps,
+} from "@opal/components/buttons/line-item-button/components";
+
 /* Tag */
 export {
   Tag,
