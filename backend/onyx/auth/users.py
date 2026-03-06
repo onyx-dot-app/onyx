@@ -1,3 +1,5 @@
+import base64
+import hashlib
 import json
 import random
 import secrets
@@ -54,6 +56,7 @@ from fastapi_users.router.common import ErrorModel
 from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
 from httpx_oauth.integrations.fastapi import OAuth2AuthorizeCallback
 from httpx_oauth.oauth2 import BaseOAuth2
+from httpx_oauth.oauth2 import GetAccessTokenError
 from httpx_oauth.oauth2 import OAuth2Token
 from pydantic import BaseModel
 from sqlalchemy import nulls_last
@@ -1608,6 +1611,7 @@ STATE_TOKEN_AUDIENCE = "fastapi-users:oauth-state"
 STATE_TOKEN_LIFETIME_SECONDS = 3600
 CSRF_TOKEN_KEY = "csrftoken"
 CSRF_TOKEN_COOKIE_NAME = "fastapiusersoauthcsrf"
+PKCE_COOKIE_NAME_PREFIX = "fastapiusersoauthpkce"
 
 
 class OAuth2AuthorizeResponse(BaseModel):
@@ -1628,6 +1632,21 @@ def generate_csrf_token() -> str:
     return secrets.token_urlsafe(32)
 
 
+def _base64url_encode(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
+
+
+def generate_pkce_pair() -> tuple[str, str]:
+    verifier = secrets.token_urlsafe(64)
+    challenge = _base64url_encode(hashlib.sha256(verifier.encode("ascii")).digest())
+    return verifier, challenge
+
+
+def get_pkce_cookie_name(state: str) -> str:
+    state_hash = hashlib.sha256(state.encode("utf-8")).hexdigest()
+    return f"{PKCE_COOKIE_NAME_PREFIX}_{state_hash}"
+
+
 # refer to https://github.com/fastapi-users/fastapi-users/blob/42ddc241b965475390e2bce887b084152ae1a2cd/fastapi_users/fastapi_users.py#L91
 def create_onyx_oauth_router(
     oauth_client: BaseOAuth2,
@@ -1636,6 +1655,7 @@ def create_onyx_oauth_router(
     redirect_url: Optional[str] = None,
     associate_by_email: bool = False,
     is_verified_by_default: bool = False,
+    enable_pkce: bool = False,
 ) -> APIRouter:
     return get_oauth_router(
         oauth_client,
@@ -1645,6 +1665,7 @@ def create_onyx_oauth_router(
         redirect_url,
         associate_by_email,
         is_verified_by_default,
+        enable_pkce=enable_pkce,
     )
 
 
@@ -1663,6 +1684,7 @@ def get_oauth_router(
     csrf_token_cookie_secure: Optional[bool] = None,
     csrf_token_cookie_httponly: bool = True,
     csrf_token_cookie_samesite: Optional[Literal["lax", "strict", "none"]] = "lax",
+    enable_pkce: bool = False,
 ) -> APIRouter:
     """Generate a router with the OAuth routes."""
     router = APIRouter()
@@ -1678,6 +1700,13 @@ def get_oauth_router(
             oauth_client,
             route_name=callback_route_name,
         )
+
+    async def null_access_token_state() -> None:
+        return None
+
+    access_token_state_dependency = (
+        oauth2_authorize_callback if not enable_pkce else null_access_token_state
+    )
 
     if csrf_token_cookie_secure is None:
         csrf_token_cookie_secure = WEB_DOMAIN.startswith("https")
@@ -1712,13 +1741,25 @@ def get_oauth_router(
             CSRF_TOKEN_KEY: csrf_token,
         }
         state = generate_state_token(state_data, state_secret)
+        pkce_cookie_name = get_pkce_cookie_name(state)
+        code_verifier: str | None = None
 
-        # Get the basic authorization URL
-        authorization_url = await oauth_client.get_authorization_url(
-            authorize_redirect_url,
-            state,
-            scopes,
-        )
+        if enable_pkce:
+            code_verifier, code_challenge = generate_pkce_pair()
+            authorization_url = await oauth_client.get_authorization_url(
+                authorize_redirect_url,
+                state,
+                scopes,
+                code_challenge=code_challenge,
+                code_challenge_method="S256",
+            )
+        else:
+            # Get the basic authorization URL
+            authorization_url = await oauth_client.get_authorization_url(
+                authorize_redirect_url,
+                state,
+                scopes,
+            )
 
         # For Google OAuth, add parameters to request refresh tokens
         if oauth_client.name == "google":
@@ -1738,6 +1779,17 @@ def get_oauth_router(
                 httponly=csrf_token_cookie_httponly,
                 samesite=csrf_token_cookie_samesite,
             )
+            if enable_pkce and code_verifier:
+                redirect_response.set_cookie(
+                    key=pkce_cookie_name,
+                    value=code_verifier,
+                    max_age=STATE_TOKEN_LIFETIME_SECONDS,
+                    path=csrf_token_cookie_path,
+                    domain=csrf_token_cookie_domain,
+                    secure=csrf_token_cookie_secure,
+                    httponly=csrf_token_cookie_httponly,
+                    samesite=csrf_token_cookie_samesite,
+                )
             return redirect_response
 
         response.set_cookie(
@@ -1750,6 +1802,17 @@ def get_oauth_router(
             httponly=csrf_token_cookie_httponly,
             samesite=csrf_token_cookie_samesite,
         )
+        if enable_pkce and code_verifier:
+            response.set_cookie(
+                key=pkce_cookie_name,
+                value=code_verifier,
+                max_age=STATE_TOKEN_LIFETIME_SECONDS,
+                path=csrf_token_cookie_path,
+                domain=csrf_token_cookie_domain,
+                secure=csrf_token_cookie_secure,
+                httponly=csrf_token_cookie_httponly,
+                samesite=csrf_token_cookie_samesite,
+            )
 
         return OAuth2AuthorizeResponse(authorization_url=authorization_url)
 
@@ -1780,13 +1843,58 @@ def get_oauth_router(
     )
     async def callback(
         request: Request,
-        access_token_state: Tuple[OAuth2Token, str] = Depends(
-            oauth2_authorize_callback
+        access_token_state: Tuple[OAuth2Token, Optional[str]] | None = Depends(
+            access_token_state_dependency
         ),
+        code: Optional[str] = None,
+        state: Optional[str] = None,
+        error: Optional[str] = None,
         user_manager: BaseUserManager[models.UP, models.ID] = Depends(get_user_manager),
         strategy: Strategy[models.UP, models.ID] = Depends(backend.get_strategy),
     ) -> RedirectResponse:
-        token, state = access_token_state
+        pkce_cookie_name: str | None = None
+        if enable_pkce:
+            if code is None or error is not None:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=error if error is not None else None,
+                )
+            if state is None:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=getattr(
+                        ErrorCode, "OAUTH_INVALID_STATE", "OAUTH_INVALID_STATE"
+                    ),
+                )
+            if redirect_url is not None:
+                callback_redirect_url = redirect_url
+            else:
+                callback_path = request.app.url_path_for(callback_route_name)
+                callback_redirect_url = f"{WEB_DOMAIN}{callback_path}"
+
+            pkce_cookie_name = get_pkce_cookie_name(state)
+            code_verifier = request.cookies.get(pkce_cookie_name)
+            if not code_verifier:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=getattr(
+                        ErrorCode, "OAUTH_INVALID_STATE", "OAUTH_INVALID_STATE"
+                    ),
+                )
+
+            try:
+                token: OAuth2Token = await oauth_client.get_access_token(
+                    code, callback_redirect_url, code_verifier
+                )
+            except GetAccessTokenError as e:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=e.message
+                ) from e
+        else:
+            if access_token_state is None:
+                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            token, state = access_token_state
+
         account_id, account_email = await oauth_client.get_id_email(
             token["access_token"]
         )
@@ -1871,8 +1979,8 @@ def get_oauth_router(
         # Prepare redirect response
         if tenant_id is None:
             # Use URL utility to add parameters
-            redirect_url = add_url_params(next_url, {"new_team": "true"})
-            redirect_response = RedirectResponse(redirect_url, status_code=302)
+            redirect_destination = add_url_params(next_url, {"new_team": "true"})
+            redirect_response = RedirectResponse(redirect_destination, status_code=302)
         else:
             # No parameters to add
             redirect_response = RedirectResponse(next_url, status_code=302)
@@ -1892,6 +2000,16 @@ def get_oauth_router(
             redirect_response.status_code = response.status_code
         if hasattr(response, "media_type"):
             redirect_response.media_type = response.media_type
+
+        if enable_pkce and pkce_cookie_name:
+            redirect_response.delete_cookie(
+                key=pkce_cookie_name,
+                path=csrf_token_cookie_path,
+                domain=csrf_token_cookie_domain,
+                secure=csrf_token_cookie_secure,
+                httponly=csrf_token_cookie_httponly,
+                samesite=csrf_token_cookie_samesite,
+            )
 
         return redirect_response
 
