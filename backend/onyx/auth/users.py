@@ -1745,7 +1745,7 @@ def get_oauth_router(
         }
         state = generate_state_token(state_data, state_secret)
         pkce_cookie_name = get_pkce_cookie_name(state)
-        code_verifier: str | None = None
+        code_verifier = ""
 
         if enable_pkce:
             code_verifier, code_challenge = generate_pkce_pair()
@@ -1782,7 +1782,7 @@ def get_oauth_router(
                 httponly=csrf_token_cookie_httponly,
                 samesite=csrf_token_cookie_samesite,
             )
-            if enable_pkce and code_verifier:
+            if enable_pkce:
                 redirect_response.set_cookie(
                     key=pkce_cookie_name,
                     value=code_verifier,
@@ -1805,7 +1805,7 @@ def get_oauth_router(
             httponly=csrf_token_cookie_httponly,
             samesite=csrf_token_cookie_samesite,
         )
-        if enable_pkce and code_verifier:
+        if enable_pkce:
             response.set_cookie(
                 key=pkce_cookie_name,
                 value=code_verifier,
@@ -1925,6 +1925,9 @@ def get_oauth_router(
 
             return state_data
 
+        token: OAuth2Token
+        state_data: Dict[str, str]
+
         if enable_pkce:
             if code is None or error is not None:
                 return build_error_response(
@@ -1983,82 +1986,98 @@ def get_oauth_router(
                 )
             state_data = decode_and_validate_state(callback_state)
 
-        account_id, account_email = await oauth_client.get_id_email(
-            token["access_token"]
-        )
-
-        if account_email is None:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=ErrorCode.OAUTH_NOT_AVAILABLE_EMAIL,
+        async def complete_login_flow(
+            token: OAuth2Token, state_data: Dict[str, str]
+        ) -> RedirectResponse:
+            account_id, account_email = await oauth_client.get_id_email(
+                token["access_token"]
             )
 
-        next_url = state_data.get("next_url", "/")
-        referral_source = state_data.get("referral_source", None)
-        try:
-            tenant_id = fetch_ee_implementation_or_noop(
-                "onyx.server.tenants.user_mapping", "get_tenant_id_for_email", None
-            )(account_email)
-        except exceptions.UserNotExists:
-            tenant_id = None
+            if account_email is None:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=ErrorCode.OAUTH_NOT_AVAILABLE_EMAIL,
+                )
 
-        request.state.referral_source = referral_source
+            next_url = state_data.get("next_url", "/")
+            referral_source = state_data.get("referral_source", None)
+            try:
+                tenant_id = fetch_ee_implementation_or_noop(
+                    "onyx.server.tenants.user_mapping", "get_tenant_id_for_email", None
+                )(account_email)
+            except exceptions.UserNotExists:
+                tenant_id = None
 
-        # Proceed to authenticate or create the user
-        try:
-            user = await user_manager.oauth_callback(
-                oauth_client.name,
-                token["access_token"],
-                account_id,
-                account_email,
-                token.get("expires_at"),
-                token.get("refresh_token"),
-                request,
-                associate_by_email=associate_by_email,
-                is_verified_by_default=is_verified_by_default,
-            )
-        except UserAlreadyExists:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=ErrorCode.OAUTH_USER_ALREADY_EXISTS,
-            )
+            request.state.referral_source = referral_source
 
-        if not user.is_active:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=ErrorCode.LOGIN_BAD_CREDENTIALS,
-            )
+            # Proceed to authenticate or create the user
+            try:
+                user = await user_manager.oauth_callback(
+                    oauth_client.name,
+                    token["access_token"],
+                    account_id,
+                    account_email,
+                    token.get("expires_at"),
+                    token.get("refresh_token"),
+                    request,
+                    associate_by_email=associate_by_email,
+                    is_verified_by_default=is_verified_by_default,
+                )
+            except UserAlreadyExists:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=ErrorCode.OAUTH_USER_ALREADY_EXISTS,
+                )
 
-        # Login user
-        response = await backend.login(strategy, user)
-        await user_manager.on_after_login(user, request, response)
+            if not user.is_active:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=ErrorCode.LOGIN_BAD_CREDENTIALS,
+                )
 
-        # Prepare redirect response
-        if tenant_id is None:
-            # Use URL utility to add parameters
-            redirect_destination = add_url_params(next_url, {"new_team": "true"})
-            redirect_response = RedirectResponse(redirect_destination, status_code=302)
-        else:
-            # No parameters to add
-            redirect_response = RedirectResponse(next_url, status_code=302)
+            # Login user
+            response = await backend.login(strategy, user)
+            await user_manager.on_after_login(user, request, response)
 
-        # Copy headers from auth response to redirect response, with special handling for Set-Cookie
-        for header_name, header_value in response.headers.items():
-            # FastAPI can have multiple Set-Cookie headers as a list
-            if header_name.lower() == "set-cookie" and isinstance(header_value, list):
-                for cookie_value in header_value:
-                    redirect_response.headers.append(header_name, cookie_value)
+            # Prepare redirect response
+            if tenant_id is None:
+                # Use URL utility to add parameters
+                redirect_destination = add_url_params(next_url, {"new_team": "true"})
+                redirect_response = RedirectResponse(
+                    redirect_destination, status_code=302
+                )
             else:
-                redirect_response.headers[header_name] = header_value
+                # No parameters to add
+                redirect_response = RedirectResponse(next_url, status_code=302)
 
-        if hasattr(response, "body"):
-            redirect_response.body = response.body
-        if hasattr(response, "status_code"):
-            redirect_response.status_code = response.status_code
-        if hasattr(response, "media_type"):
-            redirect_response.media_type = response.media_type
+            # Copy headers from auth response to redirect response, with special handling for Set-Cookie
+            for header_name, header_value in response.headers.items():
+                # FastAPI can have multiple Set-Cookie headers as a list
+                if header_name.lower() == "set-cookie" and isinstance(
+                    header_value, list
+                ):
+                    for cookie_value in header_value:
+                        redirect_response.headers.append(header_name, cookie_value)
+                else:
+                    redirect_response.headers[header_name] = header_value
 
-        delete_pkce_cookie(redirect_response)
-        return redirect_response
+            if hasattr(response, "body"):
+                redirect_response.body = response.body
+            if hasattr(response, "status_code"):
+                redirect_response.status_code = response.status_code
+            if hasattr(response, "media_type"):
+                redirect_response.media_type = response.media_type
+
+            return redirect_response
+
+        if enable_pkce:
+            try:
+                redirect_response = await complete_login_flow(token, state_data)
+            except (OnyxError, HTTPException) as e:
+                return build_error_response(e)
+            delete_pkce_cookie(redirect_response)
+            return redirect_response
+
+        return await complete_login_flow(token, state_data)
 
     return router
