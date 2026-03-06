@@ -47,7 +47,7 @@ type LineItemButtonOwnProps = {
   /** Forwarded ref. */
   ref?: React.Ref<HTMLElement>;
 
-  /** Corner rounding preset (height is always content-driven). @default "lg" */
+  /** Corner rounding preset (height is always content-driven). @default "default" */
   roundingVariant?: InteractiveContainerRoundingVariant;
 
   /** Container width. @default "full" */

@@ -8,7 +8,7 @@ A composite component that wraps `Interactive.Stateful > Interactive.Container >
 
 ```
 Interactive.Stateful         <- selectVariant, state, interaction, onClick, href, ref
-  └─ Interactive.Container   <- type, width, size, rounding (derived from size)
+  └─ Interactive.Container   <- type, width, roundingVariant
        └─ ContentAction      <- withInteractive, paddingVariant="lg"
             ├─ Content       <- icon, title, description, sizePreset, variant, ...
             └─ rightChildren
@@ -35,7 +35,7 @@ Interactive.Stateful         <- selectVariant, state, interaction, onClick, href
 
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
-| `size` | `Exclude<SizeVariant, "fit">` | `"lg"` | Corner rounding preset (height is content-driven) |
+| `roundingVariant` | `InteractiveContainerRoundingVariant` | `"default"` | Corner rounding preset (height is content-driven) |
 | `width` | `WidthVariant` | `"full"` | Container width |
 | `type` | `"submit" \| "button" \| "reset"` | `"button"` | HTML button type |
 | `tooltip` | `string` | — | Tooltip text shown on hover |
@@ -63,7 +63,7 @@ import { LineItemButton } from "@opal/components";
 <LineItemButton
   selectVariant="select-heavy"
   state={isSelected ? "selected" : "empty"}
-  size="md"
+  roundingVariant="compact"
   onClick={handleClick}
   title="gpt-4o"
   sizePreset="main-ui"
