@@ -492,7 +492,7 @@ const AppInputBar = React.memo(
                   icon={SvgHourglass}
                   onClick={toggleDeepResearch}
                   state={deepResearchEnabled ? "selected" : "empty"}
-                  foldable={deepResearchEnabled ? false : true}
+                  foldable={!deepResearchEnabled}
                   disabled={disabled}
                 >
                   Deep Research
