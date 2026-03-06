@@ -23,12 +23,6 @@ which onyx-cli
 pip install onyx-cli
 ```
 
-**Via `go install`:**
-
-```bash
-go install github.com/onyx-dot-app/onyx/cli@latest
-```
-
 **From source (Go):**
 
 ```bash
