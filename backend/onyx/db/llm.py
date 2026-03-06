@@ -562,7 +562,6 @@ def fetch_default_model(
         .options(selectinload(ModelConfiguration.llm_provider))
         .join(LLMModelFlow)
         .where(
-            ModelConfiguration.is_visible == True,  # noqa: E712
             LLMModelFlow.llm_model_flow_type == flow_type,
             LLMModelFlow.is_default == True,  # noqa: E712
         )
