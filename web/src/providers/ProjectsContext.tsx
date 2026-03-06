@@ -340,10 +340,10 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
       onSuccess?: (uploaded: CategorizedFiles) => void,
       onFailure?: (failedTempIds: string[]) => void
     ): Promise<ProjectFile[]> => {
+      const rawMax = settingsContext?.settings?.user_file_max_upload_size_mb;
       const maxUploadSizeMb =
-        settingsContext?.settings.user_file_max_upload_size_mb &&
-        settingsContext.settings.user_file_max_upload_size_mb > 0
-          ? settingsContext.settings.user_file_max_upload_size_mb
+        rawMax && rawMax > 0
+          ? rawMax
           : DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB;
       const maxUploadSizeBytes = maxUploadSizeMb * 1024 * 1024;
 
