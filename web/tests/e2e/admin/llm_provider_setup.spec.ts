@@ -91,10 +91,7 @@ async function createPublicProviderWithModels(
 }
 
 async function navigateToAdminLlmPageFromChat(page: Page): Promise<void> {
-  await page.getByRole("link", { name: "Admin Panel" }).click();
-  await page.waitForURL("**/admin/**");
-
-  await page.locator('a[href="/admin/configuration/llm"]').click();
+  await page.goto(LLM_SETUP_URL);
   await page.waitForURL("**/admin/configuration/llm**");
   await expect(page.getByLabel("admin-page-title")).toHaveText(
     /^Language Models/
@@ -102,11 +99,43 @@ async function navigateToAdminLlmPageFromChat(page: Page): Promise<void> {
 }
 
 async function exitAdminToChat(page: Page): Promise<void> {
-  await page.getByRole("link", { name: "Exit Admin" }).click();
+  await page.goto("/app");
   await page.waitForURL("**/app**");
   await page
     .locator("#onyx-chat-input-textarea")
     .waitFor({ state: "visible", timeout: 15000 });
+}
+
+async function isModelVisibleInChatProviders(
+  page: Page,
+  modelName: string
+): Promise<boolean> {
+  const response = await page.request.get(`${BASE_URL}/api/llm/provider`);
+  expect(response.ok()).toBeTruthy();
+
+  const data = (await response.json()) as {
+    providers: {
+      model_configurations: { name: string; is_visible: boolean }[];
+    }[];
+  };
+
+  return data.providers.some((provider) =>
+    provider.model_configurations.some(
+      (model) => model.name === modelName && model.is_visible
+    )
+  );
+}
+
+async function expectModelVisibilityInChatProviders(
+  page: Page,
+  modelName: string,
+  expectedVisible: boolean
+): Promise<void> {
+  await expect
+    .poll(() => isModelVisibleInChatProviders(page, modelName), {
+      timeout: 30000,
+    })
+    .toBe(expectedVisible);
 }
 
 async function getModelCountInChatSelector(
@@ -135,15 +164,6 @@ async function getModelCountInChatSelector(
   await dialog.waitFor({ state: "hidden", timeout: 10000 });
 
   return count;
-}
-
-async function expectModelInChatSelector(
-  page: Page,
-  modelName: string,
-  expectedCount: number
-): Promise<void> {
-  const count = await getModelCountInChatSelector(page, modelName);
-  expect(count).toBe(expectedCount);
 }
 
 async function getProviderByName(
@@ -375,6 +395,7 @@ test.describe("LLM Provider Setup @exclusive", () => {
       ]
     );
     providersToCleanup.push(providerId);
+    await expectModelVisibilityInChatProviders(page, modelToEnable, false);
 
     await page.goto("/app");
     await page.waitForLoadState("networkidle");
@@ -382,7 +403,11 @@ test.describe("LLM Provider Setup @exclusive", () => {
       .locator("#onyx-chat-input-textarea")
       .waitFor({ state: "visible", timeout: 15000 });
 
-    await expectModelInChatSelector(page, modelToEnable, 0);
+    await expect
+      .poll(() => getModelCountInChatSelector(page, modelToEnable), {
+        timeout: 15000,
+      })
+      .toBe(0);
 
     await navigateToAdminLlmPageFromChat(page);
 
@@ -399,6 +424,7 @@ test.describe("LLM Provider Setup @exclusive", () => {
     await updateButton.click();
     await providerUpdateResponsePromise;
     await expect(editModal).not.toBeVisible({ timeout: 30000 });
+    await expectModelVisibilityInChatProviders(page, modelToEnable, true);
 
     await exitAdminToChat(page);
     await expect
@@ -433,6 +459,7 @@ test.describe("LLM Provider Setup @exclusive", () => {
       ]
     );
     providersToCleanup.push(providerId);
+    await expectModelVisibilityInChatProviders(page, modelToDisable, true);
 
     await page.goto("/app");
     await page.waitForLoadState("networkidle");
@@ -440,7 +467,11 @@ test.describe("LLM Provider Setup @exclusive", () => {
       .locator("#onyx-chat-input-textarea")
       .waitFor({ state: "visible", timeout: 15000 });
 
-    await expectModelInChatSelector(page, modelToDisable, 1);
+    await expect
+      .poll(() => getModelCountInChatSelector(page, modelToDisable), {
+        timeout: 15000,
+      })
+      .toBe(1);
 
     await navigateToAdminLlmPageFromChat(page);
 
@@ -457,6 +488,7 @@ test.describe("LLM Provider Setup @exclusive", () => {
     await updateButton.click();
     await providerUpdateResponsePromise;
     await expect(editModal).not.toBeVisible({ timeout: 30000 });
+    await expectModelVisibilityInChatProviders(page, modelToDisable, false);
 
     await exitAdminToChat(page);
     await expect
