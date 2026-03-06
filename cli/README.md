@@ -31,7 +31,7 @@ Environment variables override config file values:
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `ONYX_SERVER_URL` | No | Server base URL (default: `http://localhost:3000`) |
+| `ONYX_SERVER_URL` | No | Server base URL (default: `https://cloud.onyx.app`) |
 | `ONYX_API_KEY` | Yes | API key for authentication |
 | `ONYX_PERSONA_ID` | No | Default agent/persona ID |
 
