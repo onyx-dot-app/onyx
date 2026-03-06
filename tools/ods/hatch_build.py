@@ -26,20 +26,16 @@ class CustomBuildHook(BuildHookInterface):
 
         # Get config and environment
         binary_name = self.config["binary_name"]
-        tag = os.getenv("GITHUB_REF_NAME", "dev").removeprefix(f"{binary_name}/")
+        tag_prefix = self.config.get("tag_prefix", binary_name)
+        tag = os.getenv("GITHUB_REF_NAME", "dev").removeprefix(f"{tag_prefix}/")
         commit = os.getenv("GITHUB_SHA", "none")
 
         # Build the Go binary if it doesn't exist
         if not os.path.exists(binary_name):
             print(f"Building Go binary '{binary_name}'...")
+            ldflags = f"-X main.version={tag} -X main.commit={commit} -s -w"
             subprocess.check_call(  # noqa: S603
-                [
-                    "go",
-                    "build",
-                    f"-ldflags=-X main.version={tag} -X main.commit={commit} -s -w",
-                    "-o",
-                    binary_name,
-                ],
+                ["go", "build", f"-ldflags={ldflags}", "-o", binary_name],
             )
 
         build_data["shared_scripts"] = {binary_name: binary_name}
