@@ -319,7 +319,7 @@ func (m Model) cancelStream() (Model, tea.Cmd) {
 	}
 	if m.chatSessionID != nil {
 		sid := *m.chatSessionID
-		go m.client.StopChatSession(sid)
+		go m.client.StopChatSession(context.Background(), sid)
 	}
 	m, cmd := m.finishStream(nil)
 	m.viewport.addInfo("Generation stopped.")
@@ -473,7 +473,7 @@ func (m Model) finishStream(err error) (Model, tea.Cmd) {
 		sessionID := *m.chatSessionID
 		client := m.client
 		go func() {
-			_, _ = client.RenameChatSession(sessionID, nil)
+			_, _ = client.RenameChatSession(context.Background(), sessionID, nil)
 		}()
 	}
 

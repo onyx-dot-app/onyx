@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -99,7 +100,7 @@ func cmdShowAgents(m Model) (Model, tea.Cmd) {
 	m.viewport.addInfo("Loading agents...")
 	client := m.client
 	return m, func() tea.Msg {
-		agents, err := client.ListAgents()
+		agents, err := client.ListAgents(context.Background())
 		return AgentsLoadedMsg{Agents: agents, Err: err}
 	}
 }
@@ -146,7 +147,7 @@ func cmdAttach(m Model, pathStr string) (Model, tea.Cmd) {
 
 	client := m.client
 	return m, func() tea.Msg {
-		fd, err := client.UploadFile(pathStr)
+		fd, err := client.UploadFile(context.Background(), pathStr)
 		if err != nil {
 			return FileUploadedMsg{Err: err, FileName: pathStr}
 		}
@@ -158,7 +159,7 @@ func cmdSessions(m Model) (Model, tea.Cmd) {
 	m.viewport.addInfo("Loading sessions...")
 	client := m.client
 	return m, func() tea.Msg {
-		sessions, err := client.ListChatSessions()
+		sessions, err := client.ListChatSessions(context.Background())
 		return SessionsLoadedMsg{Sessions: sessions, Err: err}
 	}
 }
@@ -166,26 +167,23 @@ func cmdSessions(m Model) (Model, tea.Cmd) {
 func cmdResume(m Model, sessionIDStr string) (Model, tea.Cmd) {
 	client := m.client
 	return m, func() tea.Msg {
-		// Try to find session by prefix match
-		sessions, err := client.ListChatSessions()
-		if err != nil {
-			return SessionResumedMsg{Err: err}
-		}
+		targetID := sessionIDStr
 
-		var targetID string
-		for _, s := range sessions {
-			if strings.HasPrefix(s.ID, sessionIDStr) {
-				targetID = s.ID
-				break
+		// Short prefix — scan the list for a match
+		if len(sessionIDStr) < 36 {
+			sessions, err := client.ListChatSessions(context.Background())
+			if err != nil {
+				return SessionResumedMsg{Err: err}
+			}
+			for _, s := range sessions {
+				if strings.HasPrefix(s.ID, sessionIDStr) {
+					targetID = s.ID
+					break
+				}
 			}
 		}
 
-		if targetID == "" {
-			// Try as full UUID
-			targetID = sessionIDStr
-		}
-
-		detail, err := client.GetChatSession(targetID)
+		detail, err := client.GetChatSession(context.Background(), targetID)
 		if err != nil {
 			return SessionResumedMsg{Err: fmt.Errorf("session not found: %s", sessionIDStr)}
 		}
@@ -196,7 +194,7 @@ func cmdResume(m Model, sessionIDStr string) (Model, tea.Cmd) {
 // loadAgentsCmd returns a tea.Cmd that loads agents from the API.
 func loadAgentsCmd(client *api.Client) tea.Cmd {
 	return func() tea.Msg {
-		agents, err := client.ListAgents()
+		agents, err := client.ListAgents(context.Background())
 		return InitDoneMsg{Agents: agents, Err: err}
 	}
 }

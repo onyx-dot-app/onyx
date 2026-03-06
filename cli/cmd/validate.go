@@ -30,7 +30,7 @@ func newValidateConfigCmd() *cobra.Command {
 
 			// Test connection
 			client := api.NewClient(cfg)
-			if err := client.TestConnection(); err != nil {
+			if err := client.TestConnection(cmd.Context()); err != nil {
 				return fmt.Errorf("connection failed: %w", err)
 			}
 

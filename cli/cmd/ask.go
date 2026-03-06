@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -92,7 +93,7 @@ func newAskCmd() *cobra.Command {
 
 			if ctx.Err() != nil {
 				if sessionID != "" {
-					client.StopChatSession(sessionID)
+					client.StopChatSession(context.Background(), sessionID)
 				}
 				if !askJSON {
 					fmt.Println()

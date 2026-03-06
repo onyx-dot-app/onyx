@@ -89,6 +89,11 @@ func (v *viewport) addSplash(height int) {
 func (v *viewport) setWidth(w int) {
 	v.width = w
 	v.renderer = newMarkdownRenderer(w)
+	for i := range v.entries {
+		if v.entries[i].kind == entryAgent && v.entries[i].content != "" {
+			v.entries[i].rendered = v.renderAgentContent(v.entries[i].content)
+		}
+	}
 }
 
 func (v *viewport) addUserMessage(msg string) {
@@ -121,19 +126,7 @@ func (v *viewport) finishAgent() {
 		return
 	}
 
-	// Render markdown with Glamour (zero left margin style)
-	rendered := v.renderMarkdown(v.streamBuf)
-	rendered = strings.TrimLeft(rendered, "\n")
-	rendered = strings.TrimRight(rendered, "\n")
-	lines := strings.Split(rendered, "\n")
-	// Prefix first line with dot, indent continuation lines
-	if len(lines) > 0 {
-		lines[0] = agentDot + " " + lines[0]
-		for i := 1; i < len(lines); i++ {
-			lines[i] = "  " + lines[i]
-		}
-	}
-	rendered = strings.Join(lines, "\n")
+	rendered := v.renderAgentContent(v.streamBuf)
 
 	v.entries = append(v.entries, chatEntry{
 		kind:     entryAgent,
@@ -142,6 +135,20 @@ func (v *viewport) finishAgent() {
 	})
 	v.streaming = false
 	v.streamBuf = ""
+}
+
+func (v *viewport) renderAgentContent(content string) string {
+	rendered := v.renderMarkdown(content)
+	rendered = strings.TrimLeft(rendered, "\n")
+	rendered = strings.TrimRight(rendered, "\n")
+	lines := strings.Split(rendered, "\n")
+	if len(lines) > 0 {
+		lines[0] = agentDot + " " + lines[0]
+		for i := 1; i < len(lines); i++ {
+			lines[i] = "  " + lines[i]
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (v *viewport) renderMarkdown(md string) string {

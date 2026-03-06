@@ -3,6 +3,7 @@ package onboarding
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -91,7 +92,7 @@ func Run(existing *config.OnyxCliConfig) *config.OnyxCliConfig {
 	fmt.Println("\n  " + yellowStyle.Render("Testing connection..."))
 
 	client := api.NewClient(cfg)
-	if err := client.TestConnection(); err != nil {
+	if err := client.TestConnection(context.Background()); err != nil {
 		fmt.Println("  " + redStyle.Render("Connection failed.") + " " + err.Error())
 		fmt.Println()
 		fmt.Println("  " + dimStyle.Render("Run ") + boldStyle.Render("onyx-cli configure") + dimStyle.Render(" to try again."))

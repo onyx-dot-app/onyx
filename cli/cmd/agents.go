@@ -23,7 +23,7 @@ func newAgentsCmd() *cobra.Command {
 			}
 
 			client := api.NewClient(cfg)
-			agents, err := client.ListAgents()
+			agents, err := client.ListAgents(cmd.Context())
 			if err != nil {
 				return fmt.Errorf("failed to list agents: %w", err)
 			}

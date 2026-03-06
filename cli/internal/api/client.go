@@ -54,8 +54,8 @@ func (c *Client) UpdateConfig(cfg config.OnyxCliConfig) {
 	c.apiKey = cfg.APIKey
 }
 
-func (c *Client) newRequest(method, path string, body io.Reader) (*http.Request, error) {
-	req, err := http.NewRequestWithContext(context.Background(), method, c.baseURL+path, body)
+func (c *Client) newRequest(ctx context.Context, method, path string, body io.Reader) (*http.Request, error) {
+	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, body)
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +67,7 @@ func (c *Client) newRequest(method, path string, body io.Reader) (*http.Request,
 	return req, nil
 }
 
-func (c *Client) doJSON(method, path string, reqBody any, result any) error {
+func (c *Client) doJSON(ctx context.Context, method, path string, reqBody any, result any) error {
 	var body io.Reader
 	if reqBody != nil {
 		data, err := json.Marshal(reqBody)
@@ -77,7 +77,7 @@ func (c *Client) doJSON(method, path string, reqBody any, result any) error {
 		body = bytes.NewReader(data)
 	}
 
-	req, err := c.newRequest(method, path, body)
+	req, err := c.newRequest(ctx, method, path, body)
 	if err != nil {
 		return err
 	}
@@ -104,9 +104,9 @@ func (c *Client) doJSON(method, path string, reqBody any, result any) error {
 
 // TestConnection checks if the server is reachable and credentials are valid.
 // Returns nil on success, or an error with a descriptive message on failure.
-func (c *Client) TestConnection() error {
+func (c *Client) TestConnection(ctx context.Context) error {
 	// Step 1: Basic reachability
-	req, err := c.newRequest("GET", "/", nil)
+	req, err := c.newRequest(ctx, "GET", "/", nil)
 	if err != nil {
 		return fmt.Errorf("cannot connect to %s: %w", c.baseURL, err)
 	}
@@ -127,7 +127,7 @@ func (c *Client) TestConnection() error {
 	}
 
 	// Step 2: Authenticated check
-	req2, err := c.newRequest("GET", "/api/me", nil)
+	req2, err := c.newRequest(ctx, "GET", "/api/me", nil)
 	if err != nil {
 		return fmt.Errorf("server reachable but API error: %w", err)
 	}
@@ -165,9 +165,9 @@ func (c *Client) TestConnection() error {
 }
 
 // ListAgents returns visible agents.
-func (c *Client) ListAgents() ([]models.AgentSummary, error) {
+func (c *Client) ListAgents(ctx context.Context) ([]models.AgentSummary, error) {
 	var raw []models.AgentSummary
-	if err := c.doJSON("GET", "/api/persona", nil, &raw); err != nil {
+	if err := c.doJSON(ctx, "GET", "/api/persona", nil, &raw); err != nil {
 		return nil, err
 	}
 	var result []models.AgentSummary
@@ -180,27 +180,27 @@ func (c *Client) ListAgents() ([]models.AgentSummary, error) {
 }
 
 // ListChatSessions returns recent chat sessions.
-func (c *Client) ListChatSessions() ([]models.ChatSessionDetails, error) {
+func (c *Client) ListChatSessions(ctx context.Context) ([]models.ChatSessionDetails, error) {
 	var resp struct {
 		Sessions []models.ChatSessionDetails `json:"sessions"`
 	}
-	if err := c.doJSON("GET", "/api/chat/get-user-chat-sessions", nil, &resp); err != nil {
+	if err := c.doJSON(ctx, "GET", "/api/chat/get-user-chat-sessions", nil, &resp); err != nil {
 		return nil, err
 	}
 	return resp.Sessions, nil
 }
 
 // GetChatSession returns full details for a session.
-func (c *Client) GetChatSession(sessionID string) (*models.ChatSessionDetailResponse, error) {
+func (c *Client) GetChatSession(ctx context.Context, sessionID string) (*models.ChatSessionDetailResponse, error) {
 	var resp models.ChatSessionDetailResponse
-	if err := c.doJSON("GET", "/api/chat/get-chat-session/"+sessionID, nil, &resp); err != nil {
+	if err := c.doJSON(ctx, "GET", "/api/chat/get-chat-session/"+sessionID, nil, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil
 }
 
 // RenameChatSession renames a session. If name is empty, the backend auto-generates one.
-func (c *Client) RenameChatSession(sessionID string, name *string) (string, error) {
+func (c *Client) RenameChatSession(ctx context.Context, sessionID string, name *string) (string, error) {
 	payload := map[string]any{
 		"chat_session_id": sessionID,
 	}
@@ -210,14 +210,14 @@ func (c *Client) RenameChatSession(sessionID string, name *string) (string, erro
 	var resp struct {
 		NewName string `json:"new_name"`
 	}
-	if err := c.doJSON("PUT", "/api/chat/rename-chat-session", payload, &resp); err != nil {
+	if err := c.doJSON(ctx, "PUT", "/api/chat/rename-chat-session", payload, &resp); err != nil {
 		return "", err
 	}
 	return resp.NewName, nil
 }
 
 // UploadFile uploads a file and returns a file descriptor.
-func (c *Client) UploadFile(filePath string) (*models.FileDescriptorPayload, error) {
+func (c *Client) UploadFile(ctx context.Context, filePath string) (*models.FileDescriptorPayload, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
 		return nil, err
@@ -236,7 +236,7 @@ func (c *Client) UploadFile(filePath string) (*models.FileDescriptorPayload, err
 	}
 	_ = writer.Close()
 
-	req, err := c.newRequest("POST", "/api/user/projects/file/upload", &buf)
+	req, err := c.newRequest(ctx, "POST", "/api/user/projects/file/upload", &buf)
 	if err != nil {
 		return nil, err
 	}
@@ -271,8 +271,8 @@ func (c *Client) UploadFile(filePath string) (*models.FileDescriptorPayload, err
 }
 
 // StopChatSession sends a stop signal for a streaming session (best-effort).
-func (c *Client) StopChatSession(sessionID string) {
-	req, err := c.newRequest("POST", "/api/chat/stop-chat-session/"+sessionID, nil)
+func (c *Client) StopChatSession(ctx context.Context, sessionID string) {
+	req, err := c.newRequest(ctx, "POST", "/api/chat/stop-chat-session/"+sessionID, nil)
 	if err != nil {
 		return
 	}
