@@ -52,6 +52,9 @@ interface HeadingLayoutProps {
 
   /** Variant controls icon placement. `"heading"` = top, `"section"` = inline. Default: `"heading"`. */
   variant?: HeadingVariant;
+
+  /** Ref forwarded to the root `<div>`. */
+  ref?: React.Ref<HTMLDivElement>;
 }
 
 // ---------------------------------------------------------------------------
@@ -91,6 +94,7 @@ function HeadingLayout({
   description,
   editable,
   onTitleChange,
+  ref,
 }: HeadingLayoutProps) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(title);
@@ -112,6 +116,7 @@ function HeadingLayout({
 
   return (
     <div
+      ref={ref}
       className="opal-content-heading"
       data-icon-placement={iconPlacement}
       style={{ gap: iconPlacement === "left" ? config.gap : undefined }}
