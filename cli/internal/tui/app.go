@@ -249,6 +249,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.viewport.pickerActive {
 			if len(m.viewport.pickerItems) > 0 {
 				item := m.viewport.pickerItems[m.viewport.pickerIndex]
+				if item.id == "" {
+					return m, nil
+				}
 				m.viewport.pickerActive = false
 				switch m.viewport.pickerType {
 				case pickerSession:
@@ -541,9 +544,10 @@ func (m Model) handleSessionsLoaded(msg SessionsLoadedMsg) (tea.Model, tea.Cmd) 
 
 	m.viewport.addInfo("Select a session to resume (Enter to select, Esc to cancel):")
 
+	const maxSessions = 15
 	var items []pickerItem
 	for i, s := range msg.Sessions {
-		if i >= 15 {
+		if i >= maxSessions {
 			break
 		}
 		name := "Untitled"
@@ -557,6 +561,12 @@ func (m Model) handleSessionsLoaded(msg SessionsLoadedMsg) (tea.Model, tea.Cmd) 
 		items = append(items, pickerItem{
 			id:    s.ID,
 			label: sid + "  " + name + "  (" + s.Created + ")",
+		})
+	}
+	if len(msg.Sessions) > maxSessions {
+		items = append(items, pickerItem{
+			id:    "",
+			label: fmt.Sprintf("… and %d more (use /resume <id> to open)", len(msg.Sessions)-maxSessions),
 		})
 	}
 	m.viewport.showPicker(pickerSession, items)
