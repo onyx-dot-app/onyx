@@ -53,10 +53,10 @@ interface ContentBaseProps {
    * Width preset controlling the component's horizontal size.
    * Uses the shared `WidthVariant` scale from `@opal/shared`.
    *
-   * - `"auto"` — Shrink-wraps to content width
+   * - `"fit"` — Shrink-wraps to content width
    * - `"full"` — Stretches to fill the parent's width
    *
-   * @default "auto"
+   * @default "fit"
    */
   widthVariant?: WidthVariant;
 
@@ -127,7 +127,7 @@ function Content(props: ContentProps) {
   const {
     sizePreset = "headline",
     variant = "heading",
-    widthVariant = "auto",
+    widthVariant = "fit",
     withInteractive,
     ref,
     ...rest
@@ -194,9 +194,9 @@ function Content(props: ContentProps) {
       `Content: no layout matched for sizePreset="${sizePreset}" variant="${variant}"`
     );
 
-  // "auto" → return layout directly (a block div with w-auto still
-  // stretches to its parent, defeating shrink-to-content).
-  if (widthVariant === "auto") return layout;
+  // "fit" → return layout directly (no wrapper needed; the layout
+  // element itself shrink-wraps to its content).
+  if (widthVariant === "fit") return layout;
 
   return <div className={widthClass}>{layout}</div>;
 }

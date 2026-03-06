@@ -7,15 +7,14 @@ A composite component that wraps `Interactive.Stateful > Interactive.Container >
 ## Architecture
 
 ```
-Disabled                          <- disabled
-  └─ Interactive.Stateful         <- selectVariant, selected→state, onClick, href, ref
-       └─ Interactive.Container   <- type, width, size, rounding (derived from size)
-            └─ ContentAction      <- withInteractive, paddingVariant="fit"
-                 ├─ Content       <- icon, title, description, sizePreset, variant, ...
-                 └─ rightChildren
+Interactive.Stateful         <- selectVariant, state, interaction, onClick, href, ref
+  └─ Interactive.Container   <- type, width, size, rounding (derived from size)
+       └─ ContentAction      <- withInteractive, paddingVariant="lg"
+            ├─ Content       <- icon, title, description, sizePreset, variant, ...
+            └─ rightChildren
 ```
 
-`paddingVariant` is hardcoded to `"fit"` (Container owns the padding). These are not exposed as props.
+`paddingVariant` is hardcoded to `"lg"` and `withInteractive` is always `true`. These are not exposed as props.
 
 ## Props
 
@@ -24,8 +23,8 @@ Disabled                          <- disabled
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
 | `selectVariant` | `"select-light" \| "select-heavy"` | `"select-light"` | Interactive select variant |
-| `selected` | `boolean` | — | Whether the item appears selected |
-| `disabled` | `boolean` | — | Disables interaction |
+| `state` | `InteractiveStatefulState` | `"empty"` | Value state (`"empty"`, `"filled"`, `"selected"`) |
+| `interaction` | `InteractiveStatefulInteraction` | `"rest"` | JS-controlled interaction state override |
 | `onClick` | `MouseEventHandler<HTMLElement>` | — | Click handler |
 | `href` | `string` | — | Renders an anchor instead of a div |
 | `target` | `string` | — | Anchor target (e.g. `"_blank"`) |
@@ -63,7 +62,7 @@ import { LineItemButton } from "@opal/components";
 // Simple selectable row
 <LineItemButton
   selectVariant="select-heavy"
-  selected={isSelected}
+  state={isSelected ? "selected" : "empty"}
   size="md"
   onClick={handleClick}
   title="gpt-4o"
@@ -74,7 +73,7 @@ import { LineItemButton } from "@opal/components";
 // With right-side action
 <LineItemButton
   selectVariant="select-heavy"
-  selected={isSelected}
+  state={isSelected ? "selected" : "empty"}
   onClick={handleClick}
   title="claude-opus-4"
   sizePreset="main-ui"
