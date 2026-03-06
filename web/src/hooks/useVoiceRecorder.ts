@@ -401,47 +401,66 @@ export function useVoiceRecorder(
     setError(null);
     setLiveTranscript("");
 
-    // Create VAD stop handler that will stop the session
-    const handleVADStop = () => {
-      if (sessionRef.current) {
-        sessionRef.current.stop().then(() => {
-          setIsRecording(false);
-        });
-      }
-    };
+    // Clear any stale, inactive session before starting a new one.
+    if (sessionRef.current && !sessionRef.current.recording) {
+      sessionRef.current.cleanup();
+      sessionRef.current = null;
+    }
 
-    sessionRef.current = new VoiceRecorderSession(
+    // Create VAD stop handler that will stop the session
+    const currentSession = new VoiceRecorderSession(
       setLiveTranscript,
       (text) => onFinalTranscriptRef.current?.(text),
       setError,
       undefined, // onSilenceTimeout
       autoStopOnSilenceRef.current,
-      handleVADStop
+      () => {
+        // Stop only this session instance, and only clear recording state if it
+        // is still the active session when stop resolves.
+        currentSession.stop().then(() => {
+          if (sessionRef.current === currentSession) {
+            setIsRecording(false);
+            setIsMutedState(false);
+            sessionRef.current = null;
+          }
+        });
+      }
     );
+    sessionRef.current = currentSession;
 
     try {
-      await sessionRef.current.start();
-      setIsRecording(true);
+      await currentSession.start();
+      if (sessionRef.current === currentSession) {
+        setIsRecording(true);
+      }
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to start recording"
       );
+      if (sessionRef.current === currentSession) {
+        sessionRef.current = null;
+      }
       throw err;
     }
   }, []);
 
   const stopRecording = useCallback(async (): Promise<string | null> => {
     if (!sessionRef.current) return null;
+    const currentSession = sessionRef.current;
 
     setIsProcessing(true);
 
     try {
-      const transcript = await sessionRef.current.stop();
+      const transcript = await currentSession.stop();
       return transcript;
     } finally {
-      setIsRecording(false);
+      // Only clear state if this is still the active session.
+      if (sessionRef.current === currentSession) {
+        setIsRecording(false);
+        setIsMutedState(false); // Reset mute state when recording stops
+        sessionRef.current = null;
+      }
       setIsProcessing(false);
-      setIsMutedState(false); // Reset mute state when recording stops
     }
   }, []);
 

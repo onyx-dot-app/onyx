@@ -2,6 +2,7 @@ import asyncio
 import base64
 import json
 from collections.abc import AsyncIterator
+from typing import Any
 
 import aiohttp
 
@@ -115,13 +116,21 @@ class ElevenLabsStreamingTranscriber(StreamingTranscriberProtocol):
                     f"ElevenLabsStreamingTranscriber: raw message type: {msg.type}"
                 )
                 if msg.type == aiohttp.WSMsgType.TEXT:
+                    parsed_data: Any = None
+                    data: dict[str, Any]
                     try:
-                        data = json.loads(msg.data)
+                        parsed_data = json.loads(msg.data)
                     except json.JSONDecodeError:
                         self._logger.error(
                             f"ElevenLabsStreamingTranscriber: failed to parse JSON: {msg.data[:200]}"
                         )
                         continue
+                    if not isinstance(parsed_data, dict):
+                        self._logger.error(
+                            "ElevenLabsStreamingTranscriber: expected object JSON payload"
+                        )
+                        continue
+                    data = parsed_data
 
                     # ElevenLabs uses message_type field - fail fast if missing
                     if "message_type" not in data and "type" not in data:

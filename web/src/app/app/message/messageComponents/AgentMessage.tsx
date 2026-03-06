@@ -1,6 +1,12 @@
 "use client";
 
-import React, { useRef, RefObject, useMemo, useEffect } from "react";
+import React, {
+  useRef,
+  RefObject,
+  useMemo,
+  useEffect,
+  useLayoutEffect,
+} from "react";
 import { Packet, StopReason } from "@/app/app/services/streamingModels";
 import { FullChatState } from "@/app/app/message/messageComponents/interfaces";
 import { FeedbackType } from "@/app/app/interfaces";
@@ -163,7 +169,7 @@ const AgentMessage = React.memo(function AgentMessage({
   });
 
   // Streaming TTS integration
-  const { streamTTS, resetTTS } = useVoiceMode();
+  const { streamTTS, resetTTS, stopTTS } = useVoiceMode();
   const ttsCompletedRef = useRef(false);
   const streamTTSRef = useRef(streamTTS);
 
@@ -175,20 +181,33 @@ const AgentMessage = React.memo(function AgentMessage({
   // Stream TTS as text content arrives - only for messages still streaming
   // Uses ref for streamTTS to avoid re-triggering when its identity changes
   // Note: packetCount is used instead of rawPackets because the array is mutated in place
-  useEffect(() => {
+  useLayoutEffect(() => {
     // Skip if we've already finished TTS for this message
     if (ttsCompletedRef.current) return;
 
+    // If user cancelled generation, do not send more text to TTS.
+    if (stopPacketSeen && stopReason === StopReason.USER_CANCELLED) {
+      ttsCompletedRef.current = true;
+      return;
+    }
+
     const textContent = removeThinkingTokens(getTextContent(rawPackets));
     if (typeof textContent === "string" && textContent.length > 0) {
-      streamTTSRef.current(textContent, isComplete);
+      streamTTSRef.current(textContent, isComplete, nodeId);
 
       // Mark as completed once the message is done streaming
       if (isComplete) {
         ttsCompletedRef.current = true;
       }
     }
-  }, [packetCount, isComplete, rawPackets]); // packetCount triggers on new packets since rawPackets is mutated in place
+  }, [packetCount, isComplete, rawPackets, nodeId, stopPacketSeen, stopReason]); // packetCount triggers on new packets since rawPackets is mutated in place
+
+  // Stop TTS immediately when user cancels generation.
+  useEffect(() => {
+    if (stopPacketSeen && stopReason === StopReason.USER_CANCELLED) {
+      stopTTS({ manual: true });
+    }
+  }, [stopPacketSeen, stopReason, stopTTS]);
 
   // Reset TTS completed flag when nodeId changes (new message)
   useEffect(() => {
@@ -239,6 +258,8 @@ const AgentMessage = React.memo(function AgentMessage({
                 key={`${displayGroup.turn_index}-${displayGroup.tab_index}`}
                 packets={displayGroup.packets}
                 chatState={effectiveChatState}
+                messageNodeId={nodeId}
+                hasTimelineThinking={pacedTurnGroups.length > 0 || hasSteps}
                 onComplete={() => {
                   // Only mark complete on the last display group
                   // Hook handles the finalAnswerComing check internally

@@ -178,6 +178,8 @@ export { default as SvgUserManage } from "@opal/icons/user-manage";
 export { default as SvgUserPlus } from "@opal/icons/user-plus";
 export { default as SvgUserSync } from "@opal/icons/user-sync";
 export { default as SvgUsers } from "@opal/icons/users";
+export { default as SvgVolume } from "@opal/icons/volume";
+export { default as SvgVolumeOff } from "@opal/icons/volume-off";
 export { default as SvgWallet } from "@opal/icons/wallet";
 export { default as SvgWorkflow } from "@opal/icons/workflow";
 export { default as SvgX } from "@opal/icons/x";

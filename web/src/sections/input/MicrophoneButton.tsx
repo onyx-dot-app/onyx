@@ -36,6 +36,8 @@ interface MicrophoneButtonProps {
   onMuteChange?: (isMuted: boolean) => void;
   /** Ref to expose setMuted function to parent */
   setMutedRef?: React.MutableRefObject<((muted: boolean) => void) | null>;
+  /** Whether current chat is a new session (used to reset auto-listen arming) */
+  isNewSession?: boolean;
 }
 
 function MicrophoneButton({
@@ -50,14 +52,21 @@ function MicrophoneButton({
   onRecordingStart,
   onMuteChange,
   setMutedRef,
+  isNewSession = false,
 }: MicrophoneButtonProps) {
-  const { isTTSPlaying, isTTSLoading, manualStopCount } = useVoiceMode();
+  const {
+    isTTSPlaying,
+    isTTSLoading,
+    isAwaitingAutoPlaybackStart,
+    manualStopCount,
+  } = useVoiceMode();
 
   // Refs for tracking state across renders
   const wasTTSPlayingRef = useRef(false);
   const manualStopRequestedRef = useRef(false);
   const lastHandledManualStopCountRef = useRef(manualStopCount);
   const autoListenCooldownTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const hasManualRecordStartRef = useRef(false);
 
   // Handler for VAD-triggered auto-send (when server detects silence)
   const handleFinalTranscript = useCallback(
@@ -119,7 +128,18 @@ function MicrophoneButton({
       // When recording, clicking the mic button stops recording
       manualStopRequestedRef.current = true;
       try {
-        await stopRecording();
+        const finalTranscript = await stopRecording();
+        if (finalTranscript) {
+          onTranscription(finalTranscript);
+        }
+        if (
+          autoSend &&
+          onAutoSend &&
+          chatState === "input" &&
+          finalTranscript?.trim()
+        ) {
+          onAutoSend(finalTranscript);
+        }
       } finally {
         manualStopRequestedRef.current = false;
       }
@@ -128,11 +148,22 @@ function MicrophoneButton({
         // Clear input before starting recording
         onRecordingStart?.();
         await startRecording();
+        // Arm auto-listen only after first manual mic start in this session.
+        hasManualRecordStartRef.current = true;
       } catch {
         toast.error("Could not access microphone");
       }
     }
-  }, [isRecording, startRecording, stopRecording, onRecordingStart]);
+  }, [
+    isRecording,
+    startRecording,
+    stopRecording,
+    onRecordingStart,
+    onTranscription,
+    autoSend,
+    onAutoSend,
+    chatState,
+  ]);
 
   // Auto-start listening shortly after TTS finishes (only if autoListen is enabled).
   // Small cooldown reduces playback bleed being re-captured by the microphone.
@@ -149,7 +180,9 @@ function MicrophoneButton({
       wasTTSPlayingRef.current &&
       !isTTSPlaying &&
       !isTTSLoading &&
+      !isAwaitingAutoPlaybackStart &&
       autoListen &&
+      hasManualRecordStartRef.current &&
       !disabled &&
       !isRecording &&
       !stoppedManually
@@ -161,12 +194,13 @@ function MicrophoneButton({
           disabled ||
           isRecording ||
           isTTSPlaying ||
-          isTTSLoading
+          isTTSLoading ||
+          isAwaitingAutoPlaybackStart
         ) {
           return;
         }
         startRecording().catch(() => {
-          // Silently ignore auto-start failures
+          toast.error("Could not auto-start microphone");
         });
       }, 400);
     }
@@ -175,16 +209,25 @@ function MicrophoneButton({
       lastHandledManualStopCountRef.current = manualStopCount;
     }
 
-    wasTTSPlayingRef.current = isTTSPlaying || isTTSLoading;
+    wasTTSPlayingRef.current =
+      isTTSPlaying || isTTSLoading || isAwaitingAutoPlaybackStart;
   }, [
     isTTSPlaying,
     isTTSLoading,
+    isAwaitingAutoPlaybackStart,
     autoListen,
     disabled,
     isRecording,
     startRecording,
     manualStopCount,
   ]);
+
+  // New sessions must start with an explicit manual mic press.
+  useEffect(() => {
+    if (isNewSession) {
+      hasManualRecordStartRef.current = false;
+    }
+  }, [isNewSession]);
 
   useEffect(() => {
     return () => {
@@ -205,7 +248,12 @@ function MicrophoneButton({
   const icon = isProcessing ? SimpleLoader : SvgMicrophone;
 
   // Disable when processing or TTS is playing (don't want to pick up TTS audio)
-  const isDisabled = disabled || isProcessing || isTTSPlaying || isTTSLoading;
+  const isDisabled =
+    disabled ||
+    isProcessing ||
+    isTTSPlaying ||
+    isTTSLoading ||
+    isAwaitingAutoPlaybackStart;
 
   // Recording = darkened (primary), not recording = light (tertiary)
   const prominence = isRecording ? "primary" : "tertiary";

@@ -17,14 +17,34 @@ interface VoiceModeContextType {
   isTTSLoading: boolean;
   /** Text that has been spoken so far (for synced display) */
   spokenText: string;
+  /** Node id of the assistant message currently being spoken */
+  activeMessageNodeId: number | null;
   /** Stream text for TTS - speaks sentences as they complete */
-  streamTTS: (text: string, isComplete?: boolean) => void;
+  streamTTS: (
+    text: string,
+    isComplete?: boolean,
+    messageNodeId?: number
+  ) => void;
   /** Stop TTS playback */
   stopTTS: (options?: { manual?: boolean }) => void;
   /** Increments when TTS is manually stopped by the user */
   manualStopCount: number;
   /** Reset state for new message */
   resetTTS: () => void;
+  /** Audio playback progress (0-1) based on currentTime vs estimated duration */
+  audioProgress: number;
+  /** Number of clean characters to reveal based on audio progress */
+  revealedCharCount: number;
+  /** Whether audio sync is active for progressive text reveal */
+  isAudioSyncActive: boolean;
+  /** Whether auto-playback is enabled in user preferences */
+  autoPlayback: boolean;
+  /** True after text is queued for autoplay but before audio starts playing */
+  isAwaitingAutoPlaybackStart: boolean;
+  /** Whether TTS audio is muted */
+  isTTSMuted: boolean;
+  /** Toggle TTS mute state */
+  toggleTTSMute: () => void;
 }
 
 const VoiceModeContext = createContext<VoiceModeContextType | null>(null);
@@ -91,7 +111,18 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
   const [isTTSPlaying, setIsTTSPlaying] = useState(false);
   const [isTTSLoading, setIsTTSLoading] = useState(false);
   const [spokenText, setSpokenText] = useState("");
+  const [activeMessageNodeId, setActiveMessageNodeId] = useState<number | null>(
+    null
+  );
+  const [isAwaitingAutoPlaybackStart, setIsAwaitingAutoPlaybackStart] =
+    useState(false);
   const [manualStopCount, setManualStopCount] = useState(0);
+  const [isTTSMuted, setIsTTSMuted] = useState(false);
+
+  // Audio progress tracking for progressive text reveal
+  const [audioProgress, setAudioProgress] = useState(0);
+  const [totalSpokenCharCount, setTotalSpokenCharCount] = useState(0);
+  const [revealedCharCount, setRevealedCharCount] = useState(0);
 
   // WebSocket and audio state
   const wsRef = useRef<WebSocket | null>(null);
@@ -103,6 +134,11 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
   const isAppendingRef = useRef(false);
   const isPlayingRef = useRef(false);
   const hasStartedPlaybackRef = useRef(false);
+
+  // Audio progress tracking refs
+  const totalBytesReceivedRef = useRef(0);
+  const animationFrameRef = useRef<number | null>(null);
+  const lastRevealedCharCountRef = useRef(0);
 
   // Text tracking
   const committedPositionRef = useRef(0);
@@ -188,17 +224,15 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      // Check if audio has ended (either via ended property or by reaching duration)
-      const hasEnded =
-        audioEl.ended ||
-        audioEl.paused ||
-        (audioEl.duration > 0 &&
-          audioEl.currentTime >= audioEl.duration - 0.1) ||
-        audioEl.readyState === 0;
+      // Only check audio.ended - don't use duration comparison as it's unreliable
+      // with MediaSource streaming (duration updates as chunks arrive)
+      const hasEnded = audioEl.ended;
 
       if (hasEnded && isPlayingRef.current) {
         isPlayingRef.current = false;
         setIsTTSPlaying(false);
+        setActiveMessageNodeId(null);
+        setIsAwaitingAutoPlaybackStart(false);
         if (endCheckIntervalRef.current) {
           clearInterval(endCheckIntervalRef.current);
           endCheckIntervalRef.current = null;
@@ -206,18 +240,9 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
       }
     }, 200);
 
-    // Fallback: if audio doesn't finish playing within 10s after stream ends,
-    // reset the playing state to prevent mic button from being stuck disabled
-    setTimeout(() => {
-      if (endCheckIntervalRef.current) {
-        clearInterval(endCheckIntervalRef.current);
-        endCheckIntervalRef.current = null;
-      }
-      if (isPlayingRef.current) {
-        isPlayingRef.current = false;
-        setIsTTSPlaying(false);
-      }
-    }, 10000);
+    // No fixed timeout fallback here.
+    // Long responses can legitimately continue playing well past 10s after stream end.
+    // We rely on onended / interval end detection instead.
   }, []);
 
   // Initialize MediaSource for streaming audio
@@ -237,17 +262,22 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
       if (!isPlayingRef.current) {
         isPlayingRef.current = true;
         setIsTTSPlaying(true);
+        setIsAwaitingAutoPlaybackStart(false);
       }
     };
 
     audioElementRef.current.onended = () => {
       isPlayingRef.current = false;
       setIsTTSPlaying(false);
+      setActiveMessageNodeId(null);
+      setIsAwaitingAutoPlaybackStart(false);
     };
 
     audioElementRef.current.onerror = () => {
       isPlayingRef.current = false;
       setIsTTSPlaying(false);
+      setActiveMessageNodeId(null);
+      setIsAwaitingAutoPlaybackStart(false);
     };
 
     // Wait for MediaSource to be ready
@@ -287,6 +317,13 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
   // Handle incoming audio data from WebSocket
   const handleAudioData = useCallback(
     async (data: ArrayBuffer) => {
+      // Track total bytes for duration estimation
+      totalBytesReceivedRef.current += data.byteLength;
+
+      // If we are receiving audio bytes, playback startup is no longer pending.
+      // This avoids UI getting stuck in "thinking" when onplay is delayed.
+      setIsAwaitingAutoPlaybackStart(false);
+
       pendingChunksRef.current.push(new Uint8Array(data));
       processNextChunk();
 
@@ -403,12 +440,14 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
       ws.onerror = () => {
         isConnectingRef.current = false;
         setIsTTSLoading(false);
+        setIsAwaitingAutoPlaybackStart(false);
       };
 
       ws.onclose = () => {
         wsRef.current = null;
         isConnectingRef.current = false;
         setIsTTSLoading(false);
+        setIsAwaitingAutoPlaybackStart(false);
         finalizeStream();
       };
 
@@ -431,7 +470,12 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
       if (!text.trim()) return;
 
       setIsTTSLoading(true);
+      setIsAwaitingAutoPlaybackStart(true);
       setSpokenText((prev) => (prev ? prev + " " + text : text));
+
+      // Track character count for progressive text reveal
+      // Note: text is already cleaned (from cleanTextForTTS) when called from streamTTS
+      setTotalSpokenCharCount((prev) => prev + text.length);
 
       // Set a timeout to reset loading state if TTS doesn't complete
       if (loadingTimeoutRef.current) {
@@ -453,9 +497,15 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
   );
 
   const streamTTS = useCallback(
-    (text: string, isComplete: boolean = false) => {
+    (text: string, isComplete: boolean = false, messageNodeId?: number) => {
       if (!autoPlayback) {
         return;
+      }
+
+      if (typeof messageNodeId === "number") {
+        setActiveMessageNodeId((prev) =>
+          prev === messageNodeId ? prev : messageNodeId
+        );
       }
 
       // Skip if text hasn't changed
@@ -681,6 +731,7 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
 
     setIsTTSPlaying(false);
     setIsTTSLoading(false);
+    setIsAwaitingAutoPlaybackStart(false);
     if (options?.manual) {
       setManualStopCount((count) => count + 1);
     }
@@ -693,7 +744,99 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
     hasSpokenFirstChunkRef.current = false;
     hasSignaledEndRef.current = false;
     setSpokenText("");
+    setActiveMessageNodeId(null);
+    setIsAwaitingAutoPlaybackStart(false);
+    setIsTTSMuted(false);
+
+    // Reset audio progress tracking
+    totalBytesReceivedRef.current = 0;
+    setAudioProgress(0);
+    setTotalSpokenCharCount(0);
+    setRevealedCharCount(0);
+    lastRevealedCharCountRef.current = 0;
+
+    // Cancel animation frame if running
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
   }, [stopTTS]);
+
+  // Toggle TTS mute state
+  const toggleTTSMute = useCallback(() => {
+    setIsTTSMuted((prev) => {
+      const newMuted = !prev;
+      if (audioElementRef.current) {
+        audioElementRef.current.muted = newMuted;
+      }
+      return newMuted;
+    });
+  }, []);
+
+  // Animation loop to track audio playback progress for progressive text reveal
+  useEffect(() => {
+    if (!isTTSPlaying || !audioElementRef.current) {
+      return;
+    }
+
+    // Calibration constants for text/audio sync.
+    // Keep a slight lead so text feels aligned or slightly ahead.
+    const BASE_CHARS_PER_SECOND = 15;
+    const REVEAL_LEAD_SECONDS = 0.28;
+    const MAX_CATCHUP_CHARS_PER_FRAME = 8;
+
+    const updateProgress = () => {
+      const audio = audioElementRef.current;
+      if (!audio) return;
+
+      // Use playback position + a small lead.
+      const effectiveSeconds = Math.max(
+        audio.currentTime + REVEAL_LEAD_SECONDS,
+        0
+      );
+      const hasDuration = Number.isFinite(audio.duration) && audio.duration > 0;
+      const rawTargetChars = hasDuration
+        ? Math.floor(
+            Math.min(effectiveSeconds / audio.duration, 1) *
+              totalSpokenCharCount
+          )
+        : Math.floor(effectiveSeconds * BASE_CHARS_PER_SECOND * playbackSpeed);
+      const targetChars = Math.max(
+        0,
+        Math.min(rawTargetChars, totalSpokenCharCount)
+      );
+
+      // Smooth catch-up to avoid sudden end-of-response jumps.
+      const prevChars = lastRevealedCharCountRef.current;
+      const nextChars =
+        targetChars > prevChars + MAX_CATCHUP_CHARS_PER_FRAME
+          ? prevChars + MAX_CATCHUP_CHARS_PER_FRAME
+          : targetChars;
+      lastRevealedCharCountRef.current = nextChars;
+      setRevealedCharCount(nextChars);
+
+      // Calculate progress as ratio of chars revealed to total
+      let progress = 0;
+      if (totalSpokenCharCount > 0) {
+        progress = Math.min(nextChars / totalSpokenCharCount, 1);
+      }
+
+      setAudioProgress(progress);
+
+      if (isTTSPlaying) {
+        animationFrameRef.current = requestAnimationFrame(updateProgress);
+      }
+    };
+
+    animationFrameRef.current = requestAnimationFrame(updateProgress);
+
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+    };
+  }, [isTTSPlaying, totalSpokenCharCount]);
 
   // Reset TTS state when voice auto-playback is disabled
   // This prevents the mic button from being stuck disabled
@@ -714,6 +857,8 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
       if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
       if (endCheckIntervalRef.current)
         clearInterval(endCheckIntervalRef.current);
+      if (animationFrameRef.current)
+        cancelAnimationFrame(animationFrameRef.current);
       if (audioUrlRef.current) {
         URL.revokeObjectURL(audioUrlRef.current);
       }
@@ -745,16 +890,26 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  const isAudioSyncActive = autoPlayback && (isTTSPlaying || isTTSLoading);
+
   return (
     <VoiceModeContext.Provider
       value={{
         isTTSPlaying,
         isTTSLoading,
         spokenText,
+        activeMessageNodeId,
         streamTTS,
         stopTTS,
         manualStopCount,
         resetTTS,
+        audioProgress,
+        revealedCharCount,
+        isAudioSyncActive,
+        autoPlayback,
+        isAwaitingAutoPlaybackStart,
+        isTTSMuted,
+        toggleTTSMute,
       }}
     >
       {children}

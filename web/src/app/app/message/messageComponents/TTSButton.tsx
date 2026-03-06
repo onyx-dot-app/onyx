@@ -16,9 +16,11 @@ interface TTSButtonProps {
 
 function TTSButton({ text, voice, speed }: TTSButtonProps) {
   const { isPlaying, isLoading, error, play, pause, stop } = useVoicePlayback();
-  const { isTTSPlaying, isTTSLoading, stopTTS } = useVoiceMode();
+  const { isTTSPlaying, isTTSLoading, isAwaitingAutoPlaybackStart, stopTTS } =
+    useVoiceMode();
 
-  const isGlobalTTSActive = isTTSPlaying || isTTSLoading;
+  const isGlobalTTSActive =
+    isTTSPlaying || isTTSLoading || isAwaitingAutoPlaybackStart;
   const isButtonPlaying = isGlobalTTSActive || isPlaying;
   const isButtonLoading = !isGlobalTTSActive && isLoading;
 

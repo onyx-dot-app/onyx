@@ -405,11 +405,7 @@ async def handle_streaming_synthesis(
     websocket: WebSocket,
     synthesizer: StreamingSynthesizerProtocol,
 ) -> None:
-    """Handle TTS using native streaming API.
-
-    Buffers all text, then sends to ElevenLabs when complete.
-    This is more reliable than streaming chunks incrementally.
-    """
+    """Handle TTS using native streaming API."""
     logger.info("Streaming synthesis: starting handler")
 
     async def send_audio() -> None:
@@ -449,7 +445,6 @@ async def handle_streaming_synthesis(
             logger.error(f"Streaming synthesis: send_audio error: {e}")
 
     send_task: asyncio.Task | None = None
-    text_buffer: list[str] = []  # Buffer text chunks until "end"
     disconnected = False
 
     try:
@@ -479,47 +474,36 @@ async def handle_streaming_synthesis(
                                     text = value
                                     break
                         if text:
-                            # Buffer text instead of sending immediately
-                            text_buffer.append(text)
+                            # Start audio receiver on first text chunk so playback
+                            # can begin before the full assistant response completes.
+                            if send_task is None:
+                                send_task = asyncio.create_task(send_audio())
                             logger.debug(
-                                f"Streaming synthesis: buffered text ({len(text)} chars), "
-                                f"total buffered: {len(text_buffer)} chunks"
+                                f"Streaming synthesis: forwarding text chunk ({len(text)} chars)"
                             )
+                            await synthesizer.send_text(text)
 
                     elif data.get("type") == "end":
                         logger.info("Streaming synthesis: end signal received")
 
-                        if text_buffer:
-                            # Combine all buffered text
-                            full_text = " ".join(text_buffer)
-                            logger.info(
-                                f"Streaming synthesis: sending full text ({len(full_text)} chars): "
-                                f"'{full_text[:100]}...'"
-                            )
-
-                            # Start audio receiver
+                        # Ensure receiver is active even if no prior text chunks arrived.
+                        if send_task is None:
                             send_task = asyncio.create_task(send_audio())
 
-                            # Send all text at once
-                            await synthesizer.send_text(full_text)
-                            logger.info(
-                                "Streaming synthesis: full text sent to synthesizer"
-                            )
+                        # Signal end of input
+                        if hasattr(synthesizer, "flush"):
+                            await synthesizer.flush()
 
-                            # Signal end of input
-                            if hasattr(synthesizer, "flush"):
-                                await synthesizer.flush()
-
-                            # Wait for all audio to be sent
-                            logger.info(
-                                "Streaming synthesis: waiting for audio stream to complete"
+                        # Wait for all audio to be sent
+                        logger.info(
+                            "Streaming synthesis: waiting for audio stream to complete"
+                        )
+                        try:
+                            await asyncio.wait_for(send_task, timeout=60.0)
+                        except asyncio.TimeoutError:
+                            logger.warning(
+                                "Streaming synthesis: timeout waiting for audio"
                             )
-                            try:
-                                await asyncio.wait_for(send_task, timeout=60.0)
-                            except asyncio.TimeoutError:
-                                logger.warning(
-                                    "Streaming synthesis: timeout waiting for audio"
-                                )
                         break
 
                 except json.JSONDecodeError:

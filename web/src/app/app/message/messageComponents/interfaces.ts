@@ -62,6 +62,10 @@ export type MessageRenderer<
 > = React.ComponentType<{
   packets: T[];
   state: S;
+  /** Node id for the message currently being rendered */
+  messageNodeId?: number;
+  /** True when timeline/thinking UI is already shown above this text block */
+  hasTimelineThinking?: boolean;
   onComplete: () => void;
   renderType: RenderType;
   animate: boolean;
