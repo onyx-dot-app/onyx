@@ -107,7 +107,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.MouseMsg:
 		switch msg.Button {
 		case tea.MouseButtonWheelUp:
-			m.viewport.scrollUp(3)
+			m.viewport.scrollUp(3, m.viewportHeight())
 			return m, nil
 		case tea.MouseButtonWheelDown:
 			m.viewport.scrollDown(3)
@@ -275,7 +275,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 
 	case tea.KeyPgUp:
-		m.viewport.scrollUp(m.viewportHeight() / 2)
+		m.viewport.scrollUp(m.viewportHeight()/2, m.viewportHeight())
 		return m, nil
 
 	case tea.KeyPgDown:
@@ -283,7 +283,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyShiftUp:
-		m.viewport.scrollUp(3)
+		m.viewport.scrollUp(3, m.viewportHeight())
 		return m, nil
 
 	case tea.KeyShiftDown:

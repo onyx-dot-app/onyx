@@ -57,7 +57,6 @@ type viewport struct {
 	pickerIndex  int
 	pickerType   pickerKind
 	scrollOffset int // lines scrolled up from bottom (0 = pinned to bottom)
-	lastHeight   int // viewport height from last render
 }
 
 // newMarkdownRenderer creates a Glamour renderer with zero left margin.
@@ -215,18 +214,14 @@ func (v *viewport) showPicker(kind pickerKind, items []pickerItem) {
 	v.pickerIndex = 0
 }
 
-func (v *viewport) maxScroll() int {
-	ms := v.totalLines() - v.lastHeight
-	if ms < 0 {
-		return 0
-	}
-	return ms
-}
-
-func (v *viewport) scrollUp(n int) {
+func (v *viewport) scrollUp(n int, height int) {
 	v.scrollOffset += n
-	if ms := v.maxScroll(); v.scrollOffset > ms {
-		v.scrollOffset = ms
+	maxScroll := v.totalLines() - height
+	if maxScroll < 0 {
+		maxScroll = 0
+	}
+	if v.scrollOffset > maxScroll {
+		v.scrollOffset = maxScroll
 	}
 }
 
@@ -415,7 +410,6 @@ func (v *viewport) view(height int) string {
 	contentLines := strings.Split(content, "\n")
 	total := len(contentLines)
 
-	v.lastHeight = height
 	maxScroll := total - height
 	if maxScroll < 0 {
 		maxScroll = 0
