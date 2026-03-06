@@ -89,7 +89,7 @@ function InteractiveStateless({
   target,
   ...props
 }: InteractiveStatelessProps) {
-  const { isDisabled } = useDisabled();
+  const { isDisabled, allowClick } = useDisabled();
 
   // onClick/href are always passed directly — Stateless is the outermost Slot,
   // so Radix Slot-injected handlers don't bypass this guard.
@@ -125,11 +125,11 @@ function InteractiveStateless({
       {...linkAttrs}
       {...slotProps}
       onClick={
-        isDisabled && href
-          ? (e: React.MouseEvent) => e.preventDefault()
-          : isDisabled
-            ? undefined
-            : onClick
+        isDisabled && !allowClick
+          ? href
+            ? (e: React.MouseEvent) => e.preventDefault()
+            : undefined
+          : onClick
       }
     />
   );

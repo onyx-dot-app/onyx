@@ -46,7 +46,7 @@ interface DisabledProps extends React.HTMLAttributes<HTMLElement> {
    */
   allowClick?: boolean;
 
-  children: React.ReactNode;
+  children: React.ReactElement;
 }
 
 // ---------------------------------------------------------------------------
