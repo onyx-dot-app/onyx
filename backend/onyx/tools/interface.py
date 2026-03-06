@@ -94,5 +94,5 @@ class Tool(abc.ABC, Generic[TOverride]):
         raise NotImplementedError
 
     @classmethod
-    def do_emit_argument_deltas(cls) -> bool:
+    def should_emit_argument_deltas(cls) -> bool:
         return False

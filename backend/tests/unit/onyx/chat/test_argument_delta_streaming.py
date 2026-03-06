@@ -31,7 +31,7 @@ def _make_placement() -> Placement:
 
 def _mock_tool_class(emit: bool = True) -> MagicMock:
     cls = MagicMock()
-    cls.do_emit_argument_deltas.return_value = emit
+    cls.should_emit_argument_deltas.return_value = emit
     return cls
 
 
@@ -82,7 +82,7 @@ class TestMaybeEmitArgumentDeltaGuards:
     def test_no_emission_when_tool_does_not_opt_in(
         self, mock_get_tool: MagicMock
     ) -> None:
-        """Tools that return False from do_emit_argument_deltas emit nothing."""
+        """Tools that return False from should_emit_argument_deltas emit nothing."""
         mock_get_tool.return_value = _mock_tool_class(emit=False)
 
         tc_map: dict[int, dict[str, Any]] = {
