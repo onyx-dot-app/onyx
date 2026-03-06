@@ -360,6 +360,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
       }
 
       if (validFiles.length === 0) {
+        onFailure?.([]);
         return [];
       }
 

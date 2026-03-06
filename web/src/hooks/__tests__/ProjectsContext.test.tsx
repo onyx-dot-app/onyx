@@ -119,14 +119,23 @@ describe("ProjectsContext beginUpload size precheck", () => {
       "too-big.txt",
       { type: "text/plain" }
     );
+    const onSuccess = jest.fn();
+    const onFailure = jest.fn();
 
     let optimisticFiles: { name: string }[] = [];
     await act(async () => {
-      optimisticFiles = await result.current.beginUpload([oversized], null);
+      optimisticFiles = await result.current.beginUpload(
+        [oversized],
+        null,
+        onSuccess,
+        onFailure
+      );
     });
 
     expect(mockUploadFiles).not.toHaveBeenCalled();
     expect(optimisticFiles).toEqual([]);
     expect(mockToastWarning).toHaveBeenCalledTimes(1);
+    expect(onSuccess).not.toHaveBeenCalled();
+    expect(onFailure).toHaveBeenCalledWith([]);
   });
 });
