@@ -44,6 +44,7 @@ from onyx.db.models import UserFile
 from onyx.db.search_settings import get_active_search_settings
 from onyx.db.search_settings import get_active_search_settings_list
 from onyx.document_index.factory import get_all_document_indices
+from onyx.document_index.interfaces import VespaDocumentFields
 from onyx.document_index.interfaces import VespaDocumentUserFields
 from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
 from onyx.file_store.file_store import get_default_file_store
@@ -821,14 +822,22 @@ def project_sync_user_file_impl(
                     for document_index in document_indices
                 ]
 
+                from onyx.access.access import get_access_for_user_files
+
                 project_ids = [project.id for project in user_file.projects]
                 persona_ids = [p.id for p in user_file.assistants if not p.deleted]
+
+                # update to current file access
+                file_id_str = str(user_file.id)
+                access_map = get_access_for_user_files([file_id_str], db_session)
+                access = access_map.get(file_id_str)
+
                 for retry_document_index in retry_document_indices:
                     retry_document_index.update_single(
-                        doc_id=str(user_file.id),
+                        doc_id=file_id_str,
                         tenant_id=tenant_id,
                         chunk_count=user_file.chunk_count,
-                        fields=None,
+                        fields=VespaDocumentFields(access=access) if access else None,
                         user_fields=VespaDocumentUserFields(
                             user_projects=project_ids,
                             personas=persona_ids,

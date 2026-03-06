@@ -10,6 +10,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import PUBLIC_DOC_PAT
 from onyx.db.document import get_access_info_for_document
 from onyx.db.document import get_access_info_for_documents
+from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.db.models import UserFile
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
@@ -132,19 +133,62 @@ def get_access_for_user_files(
     user_file_ids: list[str],
     db_session: Session,
 ) -> dict[str, DocumentAccess]:
+    versioned_fn = fetch_versioned_implementation(
+        "onyx.access.access", "get_access_for_user_files_impl"
+    )
+    return versioned_fn(user_file_ids, db_session)
+
+
+def get_access_for_user_files_impl(
+    user_file_ids: list[str],
+    db_session: Session,
+) -> dict[str, DocumentAccess]:
     user_files = (
         db_session.query(UserFile)
-        .options(joinedload(UserFile.user))  # Eager load the user relationship
+        .options(
+            joinedload(UserFile.user),
+            joinedload(UserFile.assistants).joinedload(Persona.users),
+        )
         .filter(UserFile.id.in_(user_file_ids))
         .all()
     )
-    return {
-        str(user_file.id): DocumentAccess.build(
-            user_emails=[user_file.user.email] if user_file.user else [],
+
+    result: dict[str, DocumentAccess] = {}
+    for user_file in user_files:
+        if user_file.user is None:
+            result[str(user_file.id)] = DocumentAccess.build(
+                user_emails=[],
+                user_groups=[],
+                is_public=True,
+                external_user_emails=[],
+                external_user_group_ids=[],
+            )
+            continue
+
+        emails, is_public = _collect_user_file_access(user_file)
+        result[str(user_file.id)] = DocumentAccess.build(
+            user_emails=list(emails),
             user_groups=[],
-            is_public=True if user_file.user is None else False,
+            is_public=is_public,
             external_user_emails=[],
             external_user_group_ids=[],
         )
-        for user_file in user_files
-    }
+    return result
+
+
+def _collect_user_file_access(user_file: UserFile) -> tuple[set[str], bool]:
+    """Collect all user emails that should have access to this user file.
+    Includes the owner plus any users who have access via shared personas.
+    Returns (emails, is_public)."""
+    emails: set[str] = {user_file.user.email}
+    is_public = False
+    for persona in user_file.assistants:
+        if persona.deleted:
+            continue
+        if persona.is_public:
+            is_public = True
+        if persona.user_id is not None and persona.user:
+            emails.add(persona.user.email)
+        for shared_user in persona.users:
+            emails.add(shared_user.email)
+    return emails, is_public
