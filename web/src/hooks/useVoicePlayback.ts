@@ -77,10 +77,13 @@ export function useVoicePlayback(): UseVoicePlaybackReturn {
         const audio = new Audio(audioUrl);
         audioRef.current = audio;
 
+        // Capture audioUrl in closure to avoid race condition where an old
+        // audio callback revokes a newer audio's object URL
         audio.onended = () => {
           setIsPlaying(false);
-          if (audioUrlRef.current) {
-            URL.revokeObjectURL(audioUrlRef.current);
+          // Only revoke if this is still the current audio URL
+          if (audioUrlRef.current === audioUrl) {
+            URL.revokeObjectURL(audioUrl);
             audioUrlRef.current = null;
           }
         };
@@ -88,8 +91,9 @@ export function useVoicePlayback(): UseVoicePlaybackReturn {
         audio.onerror = () => {
           setError("Audio playback failed");
           setIsPlaying(false);
-          if (audioUrlRef.current) {
-            URL.revokeObjectURL(audioUrlRef.current);
+          // Only revoke if this is still the current audio URL
+          if (audioUrlRef.current === audioUrl) {
+            URL.revokeObjectURL(audioUrl);
             audioUrlRef.current = null;
           }
         };

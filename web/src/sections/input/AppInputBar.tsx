@@ -572,7 +572,10 @@ const AppInputBar = React.memo(
             stopRecordingRef={stopRecordingRef}
             onRecordingStart={() => setMessage("")}
             onAutoSend={(text) => {
-              handleSubmit(text);
+              // Guard against empty transcription
+              if (text.trim()) {
+                handleSubmit(text);
+              }
             }}
             onMuteChange={setIsMuted}
             setMutedRef={setMutedRef}

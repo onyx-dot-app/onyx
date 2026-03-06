@@ -1,12 +1,12 @@
 from abc import ABC
 from abc import abstractmethod
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
 from typing import Protocol
 
+from pydantic import BaseModel
 
-@dataclass
-class TranscriptResult:
+
+class TranscriptResult(BaseModel):
     """Result from streaming transcription."""
 
     text: str

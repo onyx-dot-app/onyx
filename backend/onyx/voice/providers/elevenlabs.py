@@ -123,8 +123,13 @@ class ElevenLabsStreamingTranscriber(StreamingTranscriberProtocol):
                         )
                         continue
 
-                    # ElevenLabs uses message_type field
-                    msg_type = data.get("message_type", data.get("type", ""))  # type: ignore[possibly-undefined]
+                    # ElevenLabs uses message_type field - fail fast if missing
+                    if "message_type" not in data and "type" not in data:
+                        self._logger.error(
+                            f"ElevenLabsStreamingTranscriber: malformed packet missing 'message_type' field: {data}"
+                        )
+                        continue
+                    msg_type = data.get("message_type", data.get("type", ""))
                     self._logger.info(
                         f"ElevenLabsStreamingTranscriber: received message_type: '{msg_type}', data keys: {list(data.keys())}"
                     )

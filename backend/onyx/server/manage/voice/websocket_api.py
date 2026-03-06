@@ -544,16 +544,32 @@ async def handle_streaming_synthesis(
         logger.info("Streaming synthesis: handler finished")
 
 
-async def handle_chunked_synthesis(websocket: WebSocket, provider: Any) -> None:
-    """Fallback TTS handler using provider.synthesize_stream."""
+async def handle_chunked_synthesis(
+    websocket: WebSocket, provider: Any, first_message: dict | None = None
+) -> None:
+    """Fallback TTS handler using provider.synthesize_stream.
+
+    Args:
+        websocket: The WebSocket connection
+        provider: Voice provider instance
+        first_message: Optional first message already received (used when falling
+            back from streaming mode, where the first message was already consumed)
+    """
     logger.info("Chunked synthesis: starting handler")
     text_buffer: list[str] = []
     voice: str | None = None
     speed = 1.0
 
+    # Process pre-received message if provided
+    pending_message = first_message
+
     try:
         while True:
-            message = await websocket.receive()
+            if pending_message is not None:
+                message = pending_message
+                pending_message = None
+            else:
+                message = await websocket.receive()
             msg_type = message.get("type", "unknown")
 
             if msg_type == "websocket.disconnect":
@@ -733,7 +749,10 @@ async def websocket_synthesize(
                 logger.info(
                     "WebSocket synthesize: falling back to chunked TTS synthesis"
                 )
-                await handle_chunked_synthesis(websocket, provider)
+                # Pass the first message so it's not lost in the fallback
+                await handle_chunked_synthesis(
+                    websocket, provider, first_message=message
+                )
         else:
             if VOICE_DISABLE_STREAMING_FALLBACK:
                 await websocket.send_json(

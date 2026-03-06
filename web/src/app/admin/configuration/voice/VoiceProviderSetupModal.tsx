@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { FunctionComponent, useMemo, useState, useEffect } from "react";
+import { FunctionComponent, useState, useEffect } from "react";
 import Modal from "@/refresh-components/Modal";
 import Button from "@/refresh-components/buttons/Button";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
@@ -190,28 +190,26 @@ export default function VoiceProviderSetupModal({
   const isEditing = !!existingProvider;
   const label = PROVIDER_LABELS[providerType] ?? providerType;
 
-  // Create a logo arrangement component for the modal header
-  const LogoArrangement: FunctionComponent<IconProps> = useMemo(() => {
-    const Component: FunctionComponent<IconProps> = () => (
-      <div className="flex items-center gap-1">
-        <div className="flex items-center justify-center size-7 shrink-0 overflow-clip">
-          <Image
-            src={PROVIDER_LOGO_URLS[providerType] ?? "/Openai.svg"}
-            alt={`${label} logo`}
-            width={24}
-            height={24}
-          />
-        </div>
-        <div className="flex items-center justify-center size-4 p-0.5 shrink-0">
-          <SvgArrowExchange className="size-3 text-text-04" />
-        </div>
-        <div className="flex items-center justify-center size-7 p-0.5 shrink-0 overflow-clip">
-          <SvgOnyxLogo size={24} className="text-text-04 shrink-0" />
-        </div>
+  // Logo arrangement component for the modal header
+  // No useMemo needed - providerType and label are stable props
+  const LogoArrangement: FunctionComponent<IconProps> = () => (
+    <div className="flex items-center gap-1">
+      <div className="flex items-center justify-center size-7 shrink-0 overflow-clip">
+        <Image
+          src={PROVIDER_LOGO_URLS[providerType] ?? "/Openai.svg"}
+          alt={`${label} logo`}
+          width={24}
+          height={24}
+        />
       </div>
-    );
-    return Component;
-  }, [providerType, label]);
+      <div className="flex items-center justify-center size-4 p-0.5 shrink-0">
+        <SvgArrowExchange className="size-3 text-text-04" />
+      </div>
+      <div className="flex items-center justify-center size-7 p-0.5 shrink-0 overflow-clip">
+        <SvgOnyxLogo size={24} className="text-text-04 shrink-0" />
+      </div>
+    </div>
+  );
 
   const handleSubmit = async () => {
     if (!isEditing && !apiKey && !selectedLlmProviderId) {

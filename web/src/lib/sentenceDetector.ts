@@ -21,10 +21,12 @@ export function detectSentences(
     return { sentences: [], buffer: text };
   }
 
-  // Check if text ends with sentence-ending punctuation
+  // Check if text ends with sentence-ending punctuation or newline
+  // (newlines are sentence boundaries since newline_boundaries: true)
   const endsWithPunctuation = /[.!?]["']?\s*$/.test(text.trim());
+  const endsWithNewline = /\n\s*$/.test(text);
 
-  if (isComplete || endsWithPunctuation) {
+  if (isComplete || endsWithPunctuation || endsWithNewline) {
     // All sentences are complete
     return { sentences: sentences.map((s) => s.trim()), buffer: "" };
   }

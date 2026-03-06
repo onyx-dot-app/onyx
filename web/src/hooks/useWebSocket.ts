@@ -93,6 +93,7 @@ export function useWebSocket<TReceive = unknown, TSend = unknown>({
       };
 
       ws.onclose = () => {
+        clearTimeout(timeout);
         setStatus("disconnected");
         onCloseRef.current?.();
         wsRef.current = null;
