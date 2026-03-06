@@ -723,18 +723,19 @@ class DocumentQuery:
             # document's metadata list.
             filter_clauses.append(_get_tag_filter(tags))
 
-        # Knowledge scope: document_sets, user_file_ids, project_id,
-        # persona_id, attached_document_ids, and hierarchy_node_ids all
-        # define what knowledge the assistant can access.  They must be
-        # OR'd — a connector document is in a document set but won't
-        # have a user-file UUID or persona tag, and vice versa.
+        # Knowledge scope: explicit knowledge attachments restrict what
+        # an assistant can see.  When none are set the assistant
+        # searches everything.
+        #
+        # project_id / persona_id are additive: they make overflowing
+        # user files findable but must NOT trigger the restriction on
+        # their own (an agent with no explicit knowledge should search
+        # everything).
         has_knowledge_scope = (
             attached_document_ids
             or hierarchy_node_ids
             or user_file_ids
             or document_sets
-            or project_id is not None
-            or persona_id is not None
         )
 
         if has_knowledge_scope:
@@ -757,6 +758,9 @@ class DocumentQuery:
                 knowledge_filter["bool"]["should"].append(
                     _get_document_set_filter(document_sets)
                 )
+            # Additive: widen scope to also cover overflowing user
+            # files, but only when an explicit restriction is already
+            # in effect.
             if project_id is not None:
                 knowledge_filter["bool"]["should"].append(
                     _get_user_project_filter(project_id)

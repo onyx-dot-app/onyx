@@ -179,11 +179,27 @@ class TestBuildVespaFilters:
         assert f"!({HIDDEN}=true) and " == result
 
     def test_user_project_filter(self) -> None:
-        """Test user project filtering (replacement for user folder IDs)."""
-        # Single project id
+        """Test user project filtering.
+
+        project_id alone does NOT trigger a knowledge scope restriction
+        (an agent with no explicit knowledge should search everything).
+        It only participates when explicit knowledge filters are present.
+        """
+        # project_id alone → no restriction
         filters = IndexFilters(access_control_list=[], project_id=789)
         result = build_vespa_filters(filters)
-        assert f'!({HIDDEN}=true) and ({USER_PROJECT} contains "789") and ' == result
+        assert f"!({HIDDEN}=true) and " == result
+
+        # project_id with document_set → both OR'd
+        id1 = UUID("00000000-0000-0000-0000-000000000123")
+        filters = IndexFilters(
+            access_control_list=[], project_id=789, user_file_ids=[id1]
+        )
+        result = build_vespa_filters(filters)
+        assert (
+            f'!({HIDDEN}=true) and (({DOCUMENT_ID} contains "{str(id1)}") or ({USER_PROJECT} contains "789")) and '
+            == result
+        )
 
         # No project id
         filters = IndexFilters(access_control_list=[], project_id=None)

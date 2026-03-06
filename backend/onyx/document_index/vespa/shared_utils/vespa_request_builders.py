@@ -193,10 +193,14 @@ def build_vespa_filters(
         ]
     filter_str += _build_or_filters(METADATA_LIST, tag_attributes)
 
-    # Knowledge scope filters: document_sets, user_file_ids, project_id,
-    # and persona_id all define what knowledge the assistant can access.
-    # When multiple are present they must be OR'd (a document from a
-    # document set won't have a user-file UUID, and vice versa).
+    # Knowledge scope: explicit knowledge attachments (document_sets,
+    # user_file_ids) restrict what an assistant can see.  When none are
+    # set, the assistant can see everything.
+    #
+    # project_id / persona_id are additive: they make overflowing user
+    # files findable in Vespa but must NOT trigger the restriction on
+    # their own (an agent with no explicit knowledge should search
+    # everything).
     knowledge_scope_parts: list[str] = []
 
     doc_set_clause = _build_or_filters(DOCUMENT_SETS, filters.document_set)
@@ -210,13 +214,17 @@ def build_vespa_filters(
     if user_file_clause:
         knowledge_scope_parts.append(user_file_clause.removesuffix(" and "))
 
-    project_clause = _build_user_project_filter(filters.project_id)
-    if project_clause:
-        knowledge_scope_parts.append(project_clause.removesuffix(" and "))
+    # Only include project/persona scopes when an explicit knowledge
+    # restriction is already in effect — they widen the scope to also
+    # cover overflowing user files but never restrict on their own.
+    if knowledge_scope_parts:
+        project_clause = _build_user_project_filter(filters.project_id)
+        if project_clause:
+            knowledge_scope_parts.append(project_clause.removesuffix(" and "))
 
-    persona_clause = _build_persona_filter(filters.persona_id)
-    if persona_clause:
-        knowledge_scope_parts.append(persona_clause.removesuffix(" and "))
+        persona_clause = _build_persona_filter(filters.persona_id)
+        if persona_clause:
+            knowledge_scope_parts.append(persona_clause.removesuffix(" and "))
 
     if len(knowledge_scope_parts) > 1:
         filter_str += "(" + " or ".join(knowledge_scope_parts) + ") and "
