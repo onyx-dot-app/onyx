@@ -369,7 +369,10 @@ function InputSelectItem({
     <SelectPrimitive.Item
       ref={ref}
       value={value}
-      className="outline-none focus:outline-none"
+      className={cn(
+        "group/InputSelectItem outline-none focus:outline-none rounded-08",
+        !isSelected && "data-[highlighted]:bg-background-tint-02"
+      )}
       onSelect={onClick}
     >
       {/* Hidden ItemText for Radix to track selection */}
@@ -383,7 +386,7 @@ function InputSelectItem({
         selected={isSelected}
         emphasized
         description={description}
-        onClick={noProp((event) => event.preventDefault())}
+        interactive={false}
       >
         {children}
       </LineItem>
