@@ -43,6 +43,7 @@ import { useAppRouter } from "@/hooks/appNavigation";
 import { ChatFileType } from "@/app/app/interfaces";
 import { toast } from "@/hooks/useToast";
 import { useProjects } from "@/lib/hooks/useProjects";
+import { SettingsContext } from "@/providers/SettingsProvider";
 
 export type { Project, ProjectFile } from "@/app/app/projects/projectsService";
 
@@ -83,6 +84,8 @@ function buildFileKey(file: File): string {
   const namePrefix = (file.name ?? "").slice(0, 50);
   return `${file.size}|${namePrefix}`;
 }
+
+const DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB = 50;
 
 interface ProjectsContextType {
   projects: Project[];
@@ -157,6 +160,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
     new Map()
   );
   const route = useAppRouter();
+  const settingsContext = useContext(SettingsContext);
 
   // Use SWR's mutate to refresh projects - returns the new data
   const fetchProjects = useCallback(async (): Promise<Project[]> => {
@@ -336,16 +340,37 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
       onSuccess?: (uploaded: CategorizedFiles) => void,
       onFailure?: (failedTempIds: string[]) => void
     ): Promise<ProjectFile[]> => {
-      const optimisticFiles = files.map((f) =>
+      const maxUploadSizeMb =
+        settingsContext?.settings.user_file_max_upload_size_mb &&
+        settingsContext.settings.user_file_max_upload_size_mb > 0
+          ? settingsContext.settings.user_file_max_upload_size_mb
+          : DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB;
+      const maxUploadSizeBytes = maxUploadSizeMb * 1024 * 1024;
+
+      const oversizedFiles = files.filter((file) => file.size > maxUploadSizeBytes);
+      const validFiles = files.filter((file) => file.size <= maxUploadSizeBytes);
+
+      if (oversizedFiles.length > 0) {
+        const skippedNames = oversizedFiles.map((file) => file.name).join(", ");
+        toast.warning(
+          `Skipped ${oversizedFiles.length} oversized file(s) (>${maxUploadSizeMb} MB): ${skippedNames}`
+        );
+      }
+
+      if (validFiles.length === 0) {
+        return [];
+      }
+
+      const optimisticFiles = validFiles.map((f) =>
         createOptimisticFile(f, projectId)
       );
-      const tempIdMap = getTempIdMap(files, optimisticFiles);
+      const tempIdMap = getTempIdMap(validFiles, optimisticFiles);
       setAllRecentFiles((prev) => [...optimisticFiles, ...prev]);
       if (projectId) {
         setAllCurrentProjectFiles((prev) => [...optimisticFiles, ...prev]);
         projectToUploadFilesMapRef.current.set(projectId, optimisticFiles);
       }
-      svcUploadFiles(files, projectId, tempIdMap)
+      svcUploadFiles(validFiles, projectId, tempIdMap)
         .then((uploaded) => {
           const uploadedFiles = uploaded.user_files || [];
           const tempIdToUploadedFileMap = new Map(
@@ -445,6 +470,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
       refreshCurrentProjectDetails,
       refreshRecentFiles,
       removeOptimisticFilesByTempIds,
+      settingsContext,
     ]
   );
 
