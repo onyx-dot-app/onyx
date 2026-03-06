@@ -4,14 +4,15 @@ import Button from "@/refresh-components/buttons/Button";
 import { Button as OpalButton } from "@opal/components";
 import { SvgTrash } from "@opal/icons";
 import { LLMProviderView } from "@/interfaces/llm";
-import { LLM_PROVIDERS_ADMIN_URL } from "@/lib/llmConfig/constants";
+import { refreshLlmProviderCaches } from "@/lib/llmConfig/cache";
 import { deleteLlmProvider } from "@/lib/llmConfig/svc";
+import { ScopedMutator } from "swr";
 
 interface FormActionButtonsProps {
   isTesting: boolean;
   testError: string;
   existingLlmProvider?: LLMProviderView;
-  mutate: (key: string) => void;
+  mutate: ScopedMutator;
   onClose: () => void;
   isFormValid: boolean;
 }
@@ -29,7 +30,7 @@ export function FormActionButtons({
 
     try {
       await deleteLlmProvider(existingLlmProvider.id);
-      mutate(LLM_PROVIDERS_ADMIN_URL);
+      await refreshLlmProviderCaches(mutate);
       onClose();
     } catch (e) {
       const message = e instanceof Error ? e.message : "Unknown error";

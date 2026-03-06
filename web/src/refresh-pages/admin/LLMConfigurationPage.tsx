@@ -20,6 +20,7 @@ import {
   getProviderIcon,
   getProviderProductName,
 } from "@/lib/llmConfig/providers";
+import { refreshLlmProviderCaches } from "@/lib/llmConfig/cache";
 import { deleteLlmProvider, setDefaultLlmModel } from "@/lib/llmConfig/svc";
 import Text from "@/refresh-components/texts/Text";
 import { Horizontal as HorizontalInput } from "@/layouts/input-layouts";
@@ -33,7 +34,6 @@ import {
   LLMProviderView,
   WellKnownLLMProviderDescriptor,
 } from "@/interfaces/llm";
-import { LLM_PROVIDERS_ADMIN_URL } from "@/lib/llmConfig/constants";
 import { getModalForExistingProvider } from "@/sections/modals/llmConfig/getModal";
 import { OpenAIModal } from "@/sections/modals/llmConfig/OpenAIModal";
 import { AnthropicModal } from "@/sections/modals/llmConfig/AnthropicModal";
@@ -140,7 +140,7 @@ function ExistingProviderCard({
   const handleDelete = async () => {
     try {
       await deleteLlmProvider(provider.id);
-      mutate(LLM_PROVIDERS_ADMIN_URL);
+      await refreshLlmProviderCaches(mutate);
       deleteModal.toggle(false);
       toast.success("Provider deleted successfully!");
     } catch (e) {
@@ -345,7 +345,7 @@ export default function LLMConfigurationPage() {
 
     try {
       await setDefaultLlmModel(providerId, modelName);
-      mutate(LLM_PROVIDERS_ADMIN_URL);
+      await refreshLlmProviderCaches(mutate);
       toast.success("Default model updated successfully!");
     } catch (e) {
       const message = e instanceof Error ? e.message : "Unknown error";
