@@ -163,6 +163,16 @@ EOF
 
 log_info "Environment configuration created at .env"
 
+# Create nginx environment file
+cat > .env.nginx << 'EOF'
+DOMAIN=klugermax.com
+EMAIL=robimoller@gmail.com
+SSL_CERT_FILE_NAME=ssl.cert
+SSL_CERT_KEY_FILE_NAME=ssl.key
+EOF
+
+log_info "Nginx environment configuration created at .env.nginx"
+
 # Phase 5: Update docker compose for production
 log_info "Phase 5: Setting up docker compose configuration..."
 
