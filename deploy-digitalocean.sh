@@ -59,7 +59,7 @@ echo \
 
 # Install Docker
 sudo apt-get update
-sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker compose-plugin
 
 # Enable Docker daemon
 sudo systemctl enable docker
@@ -156,28 +156,28 @@ EOF
 
 log_info "Environment configuration created at .env"
 
-# Phase 5: Update docker-compose for production
-log_info "Phase 5: Setting up docker-compose configuration..."
+# Phase 5: Update docker compose for production
+log_info "Phase 5: Setting up docker compose configuration..."
 
 # Copy prod compose file as base if available
-if [ -f "deployment/docker_compose/docker-compose.prod.yml" ]; then
-    log_info "Using production docker-compose configuration"
-    cp deployment/docker_compose/docker-compose.prod.yml docker-compose.yml
-elif [ -f "deployment/docker_compose/docker-compose.yml" ]; then
-    log_info "Using standard docker-compose configuration"
-    cp deployment/docker_compose/docker-compose.yml docker-compose.yml
+if [ -f "deployment/docker_compose/docker compose.prod.yml" ]; then
+    log_info "Using production docker compose configuration"
+    cp deployment/docker_compose/docker compose.prod.yml docker compose.yml
+elif [ -f "deployment/docker_compose/docker compose.yml" ]; then
+    log_info "Using standard docker compose configuration"
+    cp deployment/docker_compose/docker compose.yml docker compose.yml
 else
-    log_error "Could not find docker-compose files in deployment/docker_compose/"
+    log_error "Could not find docker compose files in deployment/docker_compose/"
     exit 1
 fi
 
 # Phase 6: Pull images
 log_info "Phase 6: Pulling Docker images (this may take a few minutes)..."
-sudo docker-compose pull
+sudo docker compose pull
 
 # Phase 7: Start services
 log_info "Phase 7: Starting Onyx services..."
-sudo docker-compose up -d
+sudo docker compose up -d
 
 log_info "Waiting for services to initialize..."
 sleep 10
@@ -188,7 +188,7 @@ attempt=0
 max_attempts=30
 
 while [ $attempt -lt $max_attempts ]; do
-    if sudo docker-compose ps | grep -q "healthy\|running"; then
+    if sudo docker compose ps | grep -q "healthy\|running"; then
         log_info "Services are running"
         break
     fi
@@ -199,7 +199,7 @@ done
 
 # Phase 9: Run database migrations
 log_info "Phase 9: Running database migrations..."
-sudo docker-compose exec -T backend alembic upgrade head
+sudo docker compose exec -T backend alembic upgrade head
 
 log_info ""
 log_info "==================================================="
@@ -214,12 +214,12 @@ log_info "   - HTTP:  http://$DOMAIN"
 log_info "   - HTTPS: https://$DOMAIN (after DNS propagates)"
 log_info ""
 log_info "To check service logs:"
-log_info "   cd $DEPLOY_DIR && sudo docker-compose logs -f"
+log_info "   cd $DEPLOY_DIR && sudo docker compose logs -f"
 log_info ""
 log_info "To check specific service:"
-log_info "   cd $DEPLOY_DIR && sudo docker-compose logs -f backend"
+log_info "   cd $DEPLOY_DIR && sudo docker compose logs -f backend"
 log_info ""
 log_info "To stop services:"
-log_info "   cd $DEPLOY_DIR && sudo docker-compose down"
+log_info "   cd $DEPLOY_DIR && sudo docker compose down"
 log_info ""
 log_info "==================================================="
