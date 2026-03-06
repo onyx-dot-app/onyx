@@ -40,6 +40,12 @@ interface ContentSmProps {
 
   /** Title prominence. Default: `"default"`. */
   prominence?: ContentSmProminence;
+
+  /** When `true`, the title color hooks into `Interactive`'s `--interactive-foreground` variable. */
+  withInteractive?: boolean;
+
+  /** Ref forwarded to the root `<div>`. */
+  ref?: React.Ref<HTMLDivElement>;
 }
 
 // ---------------------------------------------------------------------------
@@ -80,14 +86,18 @@ function ContentSm({
   sizePreset = "main-ui",
   orientation = "inline",
   prominence = "default",
+  withInteractive,
+  ref,
 }: ContentSmProps) {
   const config = CONTENT_SM_PRESETS[sizePreset];
 
   return (
     <div
+      ref={ref}
       className="opal-content-sm"
       data-orientation={orientation}
       data-prominence={prominence}
+      data-interactive={withInteractive || undefined}
       style={{ gap: config.gap }}
     >
       {Icon && (

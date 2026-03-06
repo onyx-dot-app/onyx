@@ -61,6 +61,9 @@ interface LabelLayoutProps {
 
   /** Size preset. Default: `"main-ui"`. */
   sizePreset?: LabelSizePreset;
+
+  /** Ref forwarded to the root `<div>`. */
+  ref?: React.Ref<HTMLDivElement>;
 }
 
 // ---------------------------------------------------------------------------
@@ -130,6 +133,7 @@ function LabelLayout({
   auxIcon,
   tag,
   sizePreset = "main-ui",
+  ref,
 }: LabelLayoutProps) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(title);
@@ -149,7 +153,7 @@ function LabelLayout({
   }
 
   return (
-    <div className="opal-content-label" style={{ gap: config.gap }}>
+    <div ref={ref} className="opal-content-label" style={{ gap: config.gap }}>
       {Icon && (
         <div
           className={cn(
