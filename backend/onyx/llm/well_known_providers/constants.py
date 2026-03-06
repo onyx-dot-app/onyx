@@ -1,3 +1,5 @@
+from onyx.llm.constants import LlmProviderNames
+
 OPENAI_PROVIDER_NAME = "openai"
 # Curated list of OpenAI models to show by default in the UI
 OPENAI_VISIBLE_MODEL_NAMES = {
@@ -34,6 +36,15 @@ def _fallback_bedrock_regions() -> list[str]:
 
 OLLAMA_PROVIDER_NAME = "ollama_chat"
 OLLAMA_API_KEY_CONFIG_KEY = "OLLAMA_API_KEY"
+
+LM_STUDIO_PROVIDER_NAME = "lm_studio"
+LM_STUDIO_API_KEY_CONFIG_KEY = "LM_STUDIO_API_KEY"
+
+# Providers that use optional Bearer auth from custom_config
+PROVIDERS_WITH_SPECIAL_API_KEY_HANDLING: dict[str, str] = {
+    LlmProviderNames.OLLAMA_CHAT: OLLAMA_API_KEY_CONFIG_KEY,
+    LlmProviderNames.LM_STUDIO: LM_STUDIO_API_KEY_CONFIG_KEY,
+}
 
 # OpenRouter
 OPENROUTER_PROVIDER_NAME = "openrouter"
