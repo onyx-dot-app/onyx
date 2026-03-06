@@ -75,11 +75,10 @@ export function useOnboardingModal(): OnboardingModalController {
     level: existingPersona?.level,
   };
 
-  // Check if user has completed initial onboarding
+  // Check if user has completed initial onboarding (only role required, not name)
   const hasUserInfo = useMemo(() => {
-    const existingPersona = getBuildUserPersona();
-    return !!(user?.personalization?.name && existingPersona?.workArea);
-  }, [user?.personalization?.name]);
+    return !!getBuildUserPersona()?.workArea;
+  }, [user]);
 
   // Check if all providers are configured (skip LLM step entirely if so)
   const allProvidersConfigured = useMemo(
@@ -94,7 +93,7 @@ export function useOnboardingModal(): OnboardingModalController {
   );
 
   // Auto-open initial onboarding modal on first load
-  // Shows if: user info is missing OR (admin AND no providers configured)
+  // Shows if: user info (role) missing OR (admin AND no providers configured)
   useEffect(() => {
     if (hasInitialized || isLoadingLlm || !user) return;
 
