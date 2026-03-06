@@ -10,7 +10,7 @@ Structural container shared by both `Interactive.Stateless` and `Interactive.Sta
 |------|------|---------|-------------|
 | `heightVariant` | `SizeVariant` | `"lg"` | Height preset (`2xs`–`lg`, `fit`) |
 | `roundingVariant` | `"default" \| "compact" \| "mini"` | `"default"` | Border-radius preset |
-| `widthVariant` | `WidthVariant` | — | Width preset (`auto`, `full`) |
+| `widthVariant` | `WidthVariant` | — | Width preset (`"fit"`, `"full"`) |
 | `border` | `boolean` | `false` | Renders a 1px border |
 | `type` | `"submit" \| "button" \| "reset"` | — | When set, renders a `<button>` element |
 
