@@ -40,6 +40,8 @@ OPENROUTER_PROVIDER_NAME = "openrouter"
 
 ANTHROPIC_PROVIDER_NAME = "anthropic"
 
+AVIAN_PROVIDER_NAME = "avian"
+
 # Curated list of Anthropic models to show by default in the UI
 ANTHROPIC_VISIBLE_MODEL_NAMES = {
     "claude-opus-4-5",

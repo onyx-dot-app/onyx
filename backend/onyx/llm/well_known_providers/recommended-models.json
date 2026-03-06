@@ -59,6 +59,27 @@
           "display_name": "Kimi K2 0905"
         }
       ]
+    },
+    "avian": {
+      "default_model": "deepseek/deepseek-v3.2",
+      "additional_visible_models": [
+        {
+          "name": "deepseek/deepseek-v3.2",
+          "display_name": "DeepSeek V3.2"
+        },
+        {
+          "name": "moonshotai/kimi-k2.5",
+          "display_name": "Kimi K2.5"
+        },
+        {
+          "name": "z-ai/glm-5",
+          "display_name": "GLM 5"
+        },
+        {
+          "name": "minimax/minimax-m2.5",
+          "display_name": "MiniMax M2.5"
+        }
+      ]
     }
   }
 }
