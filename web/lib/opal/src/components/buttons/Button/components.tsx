@@ -1,6 +1,6 @@
-import "@opal/components/buttons/Button/styles.css";
+import "@opal/components/buttons/button/styles.css";
 import "@opal/components/tooltip.css";
-import { Interactive, type InteractiveBaseProps } from "@opal/core";
+import { Interactive, type InteractiveStatelessProps } from "@opal/core";
 import type { SizeVariant, WidthVariant } from "@opal/shared";
 import type { TooltipSide } from "@opal/components";
 import type { IconFunctionComponent } from "@opal/types";
@@ -42,41 +42,24 @@ function iconWrapper(
 // Types
 // ---------------------------------------------------------------------------
 
-/**
- * Content props — a discriminated union on `foldable` that enforces:
- *
- * - `foldable: true`  → `icon` and `children` are required (icon stays visible,
- *                        label + rightIcon fold away)
- * - `foldable?: false` → at least one of `icon` or `children` must be provided
- */
 type ButtonContentProps =
   | {
-      foldable: true;
-      icon: IconFunctionComponent;
-      children: string;
-      rightIcon?: IconFunctionComponent;
-      responsiveHideText?: never;
-    }
-  | {
-      foldable?: false;
       icon?: IconFunctionComponent;
       children: string;
       rightIcon?: IconFunctionComponent;
       responsiveHideText?: never;
     }
   | {
-      foldable?: false;
       icon: IconFunctionComponent;
       children?: string;
       rightIcon?: IconFunctionComponent;
       responsiveHideText?: boolean;
     };
 
-type ButtonProps = InteractiveBaseProps &
+type ButtonProps = InteractiveStatelessProps &
   ButtonContentProps & {
     /**
      * Size preset — controls gap, text size, and Container height/rounding.
-     * Uses the shared `SizeVariant` scale from `@opal/shared`.
      */
     size?: SizeVariant;
 
@@ -102,13 +85,12 @@ function Button({
   children,
   rightIcon: RightIcon,
   size = "lg",
-  foldable,
   type = "button",
   width,
   tooltip,
   tooltipSide = "top",
   responsiveHideText = false,
-  ...interactiveBaseProps
+  ...interactiveProps
 }: ButtonProps) {
   const isLarge = size === "lg";
 
@@ -125,61 +107,33 @@ function Button({
   ) : null;
 
   const button = (
-    <Interactive.Base {...interactiveBaseProps}>
+    <Interactive.Stateless {...interactiveProps}>
       <Interactive.Container
         type={type}
-        border={interactiveBaseProps.prominence === "secondary"}
+        border={interactiveProps.prominence === "secondary"}
         heightVariant={size}
         widthVariant={width}
         roundingVariant={
           isLarge ? "default" : size === "2xs" ? "mini" : "compact"
         }
       >
-        <div
-          className={cn(
-            "opal-button interactive-foreground",
-            foldable && "opal-button--foldable"
-          )}
-        >
-          {iconWrapper(Icon, size, !foldable && !!children)}
+        <div className={cn("opal-button interactive-foreground")}>
+          {iconWrapper(Icon, size, !!children)}
 
-          {foldable ? (
-            <div className="opal-button-foldable">
-              <div className="opal-button-foldable-inner">
-                {labelEl}
-                {responsiveHideText ? (
-                  <span className="hidden md:inline-flex">
-                    {iconWrapper(RightIcon, size, !!children)}
-                  </span>
-                ) : (
-                  iconWrapper(RightIcon, size, !!children)
-                )}
-              </div>
-            </div>
+          {labelEl}
+          {responsiveHideText ? (
+            <span className="hidden md:inline-flex">
+              {iconWrapper(RightIcon, size, !!children)}
+            </span>
           ) : (
-            <>
-              {labelEl}
-              {responsiveHideText ? (
-                <span className="hidden md:inline-flex">
-                  {iconWrapper(RightIcon, size, !!children)}
-                </span>
-              ) : (
-                iconWrapper(RightIcon, size, !!children)
-              )}
-            </>
+            iconWrapper(RightIcon, size, !!children)
           )}
         </div>
       </Interactive.Container>
-    </Interactive.Base>
+    </Interactive.Stateless>
   );
 
-  const resolvedTooltip =
-    tooltip ??
-    (foldable && interactiveBaseProps.disabled && children
-      ? children
-      : undefined);
-
-  if (!resolvedTooltip) return button;
+  if (!tooltip) return button;
 
   return (
     <TooltipPrimitive.Root>
@@ -190,7 +144,7 @@ function Button({
           side={tooltipSide}
           sideOffset={4}
         >
-          {resolvedTooltip}
+          {tooltip}
         </TooltipPrimitive.Content>
       </TooltipPrimitive.Portal>
     </TooltipPrimitive.Root>

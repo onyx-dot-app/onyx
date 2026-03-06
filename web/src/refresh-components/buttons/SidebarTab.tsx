@@ -54,9 +54,9 @@ export default function SidebarTab({
 
   const content = (
     <div className="relative">
-      <Interactive.Base
+      <Interactive.Stateful
         variant="sidebar"
-        selected={selected}
+        state={selected ? "selected" : "empty"}
         onClick={onClick}
         group="group/SidebarTab"
       >
@@ -110,7 +110,7 @@ export default function SidebarTab({
             </div>
           )}
         </Interactive.Container>
-      </Interactive.Base>
+      </Interactive.Stateful>
     </div>
   );
 

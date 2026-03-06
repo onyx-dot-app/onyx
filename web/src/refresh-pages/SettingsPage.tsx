@@ -447,7 +447,7 @@ function GeneralSettings() {
                 prominence="secondary"
                 onClick={() => setShowDeleteConfirmation(true)}
                 icon={SvgTrash}
-                transient={showDeleteConfirmation}
+                interaction={showDeleteConfirmation ? "hover" : "rest"}
               >
                 Delete All Chats
               </Button>
@@ -1270,7 +1270,7 @@ function AccountsAccessSettings() {
                   prominence="secondary"
                   icon={SvgLock}
                   onClick={() => setShowPasswordModal(true)}
-                  transient={showPasswordModal}
+                  interaction={showPasswordModal ? "hover" : "rest"}
                 >
                   Change Password
                 </Button>

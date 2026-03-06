@@ -1,4 +1,4 @@
-import { Content, type ContentProps } from "@opal/layouts/Content/components";
+import { Content, type ContentProps } from "@opal/layouts/content/components";
 import { sizeVariants, type SizeVariant } from "@opal/shared";
 import { cn } from "@opal/utils";
 

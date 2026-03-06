@@ -273,7 +273,7 @@ export default function UserFilesModal({
                   prominence="tertiary"
                   size="sm"
                   onClick={() => setShowOnlySelected(!showOnlySelected)}
-                  transient={showOnlySelected}
+                  interaction={showOnlySelected ? "hover" : "rest"}
                 />
                 <Button
                   icon={SvgXCircle}

@@ -1,7 +1,7 @@
 "use client";
 
 import Text from "@/refresh-components/texts/Text";
-import { Button, OpenButton } from "@opal/components";
+import { Button, OpenButton, SelectButton } from "@opal/components";
 import { OpenAISVG } from "@/components/icons/icons";
 import {
   SvgPlusCircle,
@@ -28,12 +28,12 @@ export default function SharedAppInputBar() {
           <div className="flex flex-row items-center">
             <Button icon={SvgPlusCircle} prominence="tertiary" disabled />
             <Button icon={SvgSliders} prominence="tertiary" disabled />
-            <Button icon={SvgHourglass} variant="select" disabled />
+            <SelectButton icon={SvgHourglass} disabled />
           </div>
 
           {/* Right side controls */}
           <div className="flex flex-row items-center gap-1">
-            <OpenButton icon={OpenAISVG} foldable disabled>
+            <OpenButton icon={OpenAISVG} disabled>
               GPT-4o
             </OpenButton>
             <Button icon={SvgArrowUp} disabled />

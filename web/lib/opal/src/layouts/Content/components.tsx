@@ -1,22 +1,22 @@
-import "@opal/layouts/Content/styles.css";
+import "@opal/layouts/content/styles.css";
 import {
   ContentSm,
   type ContentSmOrientation,
   type ContentSmProminence,
-} from "@opal/layouts/Content/ContentSm";
+} from "@opal/layouts/content/ContentSm";
 import {
   ContentXl,
   type ContentXlProps,
-} from "@opal/layouts/Content/ContentXl";
+} from "@opal/layouts/content/ContentXl";
 import {
   ContentLg,
   type ContentLgProps,
-} from "@opal/layouts/Content/ContentLg";
+} from "@opal/layouts/content/ContentLg";
 import {
   ContentMd,
   type ContentMdProps,
-} from "@opal/layouts/Content/ContentMd";
-import type { TagProps } from "@opal/components/Tag/components";
+} from "@opal/layouts/content/ContentMd";
+import type { TagProps } from "@opal/components/tag/components";
 import type { IconFunctionComponent } from "@opal/types";
 import { widthVariants, type WidthVariant } from "@opal/shared";
 

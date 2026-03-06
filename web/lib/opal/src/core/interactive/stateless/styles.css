@@ -1,0 +1,387 @@
+/* ============================================================================
+   Stateless — variant x prominence color matrix
+
+   Each combination sets:
+     - background-color (via @apply)
+     - --interactive-foreground (CSS custom property for descendant text color)
+     - --interactive-foreground-icon (CSS custom property for descendant icon color)
+
+   Both foreground variables are registered as <color> via @property in
+   shared.css, so the browser interpolates them on the parent element.
+   Children read the variables with no independent transitions.
+
+   Interaction override: `data-interaction="hover"` and `data-interaction="active"`
+   allow JS-controlled visual state overrides without actual pointer events.
+============================================================================ */
+
+/* ---------------------------------------------------------------------------
+   Default + Primary
+   --------------------------------------------------------------------------- */
+.interactive[data-interactive-variant="default"][data-interactive-prominence="primary"] {
+  @apply bg-[var(--theme-primary-05)];
+  --interactive-foreground: var(--text-inverted-05);
+  --interactive-foreground-icon: var(--text-inverted-05);
+}
+.interactive[data-interactive-variant="default"][data-interactive-prominence="primary"]:hover:not(
+    [data-disabled]
+  ),
+.interactive[data-interactive-variant="default"][data-interactive-prominence="primary"][data-interaction="hover"]:not(
+    [data-disabled]
+  ) {
+  @apply bg-[var(--theme-primary-04)];
+}
+.interactive[data-interactive-variant="default"][data-interactive-prominence="primary"]:active:not(
+    [data-disabled]
+  ),
+.interactive[data-interactive-variant="default"][data-interactive-prominence="primary"][data-interaction="active"]:not(
+    [data-disabled]
+  ) {
+  @apply bg-[var(--theme-primary-06)];
+}
+.interactive[data-interactive-variant="default"][data-interactive-prominence="primary"][data-disabled] {
+  @apply bg-background-neutral-04;
+  --interactive-foreground: var(--text-inverted-04);
+  --interactive-foreground-icon: var(--text-inverted-04);
+}
+
+/* ---------------------------------------------------------------------------
+   Default + Secondary
+   --------------------------------------------------------------------------- */
+.interactive[data-interactive-variant="default"][data-interactive-prominence="secondary"] {
+  @apply bg-background-tint-01;
+  --interactive-foreground: var(--text-03);
+  --interactive-foreground-icon: var(--text-03);
+}
+.interactive[data-interactive-variant="default"][data-interactive-prominence="secondary"]:hover:not(
+    [data-disabled]
+  ),
+.interactive[data-interactive-variant="default"][data-interactive-prominence="secondary"][data-interaction="hover"]:not(
+    [data-disabled]
+  ) {
+  @apply bg-background-tint-02;
+  --interactive-foreground: var(--text-04);
+  --interactive-foreground-icon: var(--text-04);
+}
+.interactive[data-interactive-variant="default"][data-interactive-prominence="secondary"]:active:not(
+    [data-disabled]
+  ),
+.interactive[data-interactive-variant="default"][data-interactive-prominence="secondary"][data-interaction="active"]:not(
+    [data-disabled]
+  ) {
+  @apply bg-background-tint-00;
+  --interactive-foreground: var(--text-05);
+  --interactive-foreground-icon: var(--text-05);
+}
+.interactive[data-interactive-variant="default"][data-interactive-prominence="secondary"][data-disabled] {
+  @apply bg-background-neutral-03;
+  --interactive-foreground: var(--text-01);
+  --interactive-foreground-icon: var(--text-01);
+}
+
+/* ---------------------------------------------------------------------------
+   Default + Tertiary
+   --------------------------------------------------------------------------- */
+.interactive[data-interactive-variant="default"][data-interactive-prominence="tertiary"] {
+  @apply bg-transparent;
+  --interactive-foreground: var(--text-03);
+  --interactive-foreground-icon: var(--text-03);
+}
+.interactive[data-interactive-variant="default"][data-interactive-prominence="tertiary"]:hover:not(
+    [data-disabled]
+  ),
+.interactive[data-interactive-variant="default"][data-interactive-prominence="tertiary"][data-interaction="hover"]:not(
+    [data-disabled]
+  ) {
+  @apply bg-background-tint-02;
+  --interactive-foreground: var(--text-04);
+  --interactive-foreground-icon: var(--text-04);
+}
+.interactive[data-interactive-variant="default"][data-interactive-prominence="tertiary"]:active:not(
+    [data-disabled]
+  ),
+.interactive[data-interactive-variant="default"][data-interactive-prominence="tertiary"][data-interaction="active"]:not(
+    [data-disabled]
+  ) {
+  @apply bg-background-tint-00;
+  --interactive-foreground: var(--text-05);
+  --interactive-foreground-icon: var(--text-05);
+}
+.interactive[data-interactive-variant="default"][data-interactive-prominence="tertiary"][data-disabled] {
+  @apply bg-transparent opacity-50;
+  --interactive-foreground: var(--text-01);
+  --interactive-foreground-icon: var(--text-01);
+}
+
+/* ---------------------------------------------------------------------------
+   Default + Internal
+   --------------------------------------------------------------------------- */
+.interactive[data-interactive-variant="default"][data-interactive-prominence="internal"] {
+  @apply bg-transparent;
+  --interactive-foreground: var(--text-03);
+  --interactive-foreground-icon: var(--text-03);
+}
+.interactive[data-interactive-variant="default"][data-interactive-prominence="internal"]:hover:not(
+    [data-disabled]
+  ),
+.interactive[data-interactive-variant="default"][data-interactive-prominence="internal"][data-interaction="hover"]:not(
+    [data-disabled]
+  ) {
+  @apply bg-background-tint-00;
+  --interactive-foreground: var(--text-04);
+  --interactive-foreground-icon: var(--text-04);
+}
+.interactive[data-interactive-variant="default"][data-interactive-prominence="internal"]:active:not(
+    [data-disabled]
+  ),
+.interactive[data-interactive-variant="default"][data-interactive-prominence="internal"][data-interaction="active"]:not(
+    [data-disabled]
+  ) {
+  @apply bg-background-tint-00;
+  --interactive-foreground: var(--text-05);
+  --interactive-foreground-icon: var(--text-05);
+}
+.interactive[data-interactive-variant="default"][data-interactive-prominence="internal"][data-disabled] {
+  @apply bg-transparent opacity-50;
+  --interactive-foreground: var(--text-01);
+  --interactive-foreground-icon: var(--text-01);
+}
+
+/* ---------------------------------------------------------------------------
+   Action + Primary
+   --------------------------------------------------------------------------- */
+.interactive[data-interactive-variant="action"][data-interactive-prominence="primary"] {
+  @apply bg-[var(--action-link-05)];
+  --interactive-foreground: var(--text-light-05);
+  --interactive-foreground-icon: var(--text-light-05);
+}
+.interactive[data-interactive-variant="action"][data-interactive-prominence="primary"]:hover:not(
+    [data-disabled]
+  ),
+.interactive[data-interactive-variant="action"][data-interactive-prominence="primary"][data-interaction="hover"]:not(
+    [data-disabled]
+  ) {
+  @apply bg-[var(--action-link-04)];
+}
+.interactive[data-interactive-variant="action"][data-interactive-prominence="primary"]:active:not(
+    [data-disabled]
+  ),
+.interactive[data-interactive-variant="action"][data-interactive-prominence="primary"][data-interaction="active"]:not(
+    [data-disabled]
+  ) {
+  @apply bg-[var(--action-link-06)];
+}
+.interactive[data-interactive-variant="action"][data-interactive-prominence="primary"][data-disabled] {
+  @apply bg-[var(--action-link-02)];
+  --interactive-foreground: var(--text-01);
+  --interactive-foreground-icon: var(--text-01);
+}
+
+/* ---------------------------------------------------------------------------
+   Action + Secondary
+   --------------------------------------------------------------------------- */
+.interactive[data-interactive-variant="action"][data-interactive-prominence="secondary"] {
+  @apply bg-background-tint-01;
+  --interactive-foreground: var(--action-text-link-05);
+  --interactive-foreground-icon: var(--action-text-link-05);
+}
+.interactive[data-interactive-variant="action"][data-interactive-prominence="secondary"]:hover:not(
+    [data-disabled]
+  ),
+.interactive[data-interactive-variant="action"][data-interactive-prominence="secondary"][data-interaction="hover"]:not(
+    [data-disabled]
+  ) {
+  @apply bg-background-tint-02;
+}
+.interactive[data-interactive-variant="action"][data-interactive-prominence="secondary"]:active:not(
+    [data-disabled]
+  ),
+.interactive[data-interactive-variant="action"][data-interactive-prominence="secondary"][data-interaction="active"]:not(
+    [data-disabled]
+  ) {
+  @apply bg-background-tint-00;
+}
+.interactive[data-interactive-variant="action"][data-interactive-prominence="secondary"][data-disabled] {
+  @apply bg-background-neutral-02;
+  --interactive-foreground: var(--action-link-03);
+  --interactive-foreground-icon: var(--action-link-03);
+}
+
+/* ---------------------------------------------------------------------------
+   Action + Tertiary
+   --------------------------------------------------------------------------- */
+.interactive[data-interactive-variant="action"][data-interactive-prominence="tertiary"] {
+  @apply bg-transparent;
+  --interactive-foreground: var(--action-text-link-05);
+  --interactive-foreground-icon: var(--action-text-link-05);
+}
+.interactive[data-interactive-variant="action"][data-interactive-prominence="tertiary"]:hover:not(
+    [data-disabled]
+  ),
+.interactive[data-interactive-variant="action"][data-interactive-prominence="tertiary"][data-interaction="hover"]:not(
+    [data-disabled]
+  ) {
+  @apply bg-background-tint-02;
+}
+.interactive[data-interactive-variant="action"][data-interactive-prominence="tertiary"]:active:not(
+    [data-disabled]
+  ),
+.interactive[data-interactive-variant="action"][data-interactive-prominence="tertiary"][data-interaction="active"]:not(
+    [data-disabled]
+  ) {
+  @apply bg-background-tint-00;
+}
+.interactive[data-interactive-variant="action"][data-interactive-prominence="tertiary"][data-disabled] {
+  @apply bg-transparent opacity-50;
+  --interactive-foreground: var(--action-link-03);
+  --interactive-foreground-icon: var(--action-link-03);
+}
+
+/* ---------------------------------------------------------------------------
+   Action + Internal
+   --------------------------------------------------------------------------- */
+.interactive[data-interactive-variant="action"][data-interactive-prominence="internal"] {
+  @apply bg-transparent;
+  --interactive-foreground: var(--action-text-link-05);
+  --interactive-foreground-icon: var(--action-text-link-05);
+}
+.interactive[data-interactive-variant="action"][data-interactive-prominence="internal"]:hover:not(
+    [data-disabled]
+  ),
+.interactive[data-interactive-variant="action"][data-interactive-prominence="internal"][data-interaction="hover"]:not(
+    [data-disabled]
+  ) {
+  @apply bg-background-tint-00;
+}
+.interactive[data-interactive-variant="action"][data-interactive-prominence="internal"]:active:not(
+    [data-disabled]
+  ),
+.interactive[data-interactive-variant="action"][data-interactive-prominence="internal"][data-interaction="active"]:not(
+    [data-disabled]
+  ) {
+  @apply bg-background-tint-00;
+}
+.interactive[data-interactive-variant="action"][data-interactive-prominence="internal"][data-disabled] {
+  @apply bg-transparent opacity-50;
+  --interactive-foreground: var(--action-link-03);
+  --interactive-foreground-icon: var(--action-link-03);
+}
+
+/* ---------------------------------------------------------------------------
+   Danger + Primary
+   --------------------------------------------------------------------------- */
+.interactive[data-interactive-variant="danger"][data-interactive-prominence="primary"] {
+  @apply bg-[var(--action-danger-05)];
+  --interactive-foreground: var(--text-light-05);
+  --interactive-foreground-icon: var(--text-light-05);
+}
+.interactive[data-interactive-variant="danger"][data-interactive-prominence="primary"]:hover:not(
+    [data-disabled]
+  ),
+.interactive[data-interactive-variant="danger"][data-interactive-prominence="primary"][data-interaction="hover"]:not(
+    [data-disabled]
+  ) {
+  @apply bg-[var(--action-danger-04)];
+}
+.interactive[data-interactive-variant="danger"][data-interactive-prominence="primary"]:active:not(
+    [data-disabled]
+  ),
+.interactive[data-interactive-variant="danger"][data-interactive-prominence="primary"][data-interaction="active"]:not(
+    [data-disabled]
+  ) {
+  @apply bg-[var(--action-danger-06)];
+}
+.interactive[data-interactive-variant="danger"][data-interactive-prominence="primary"][data-disabled] {
+  @apply bg-[var(--action-danger-02)];
+  --interactive-foreground: var(--text-01);
+  --interactive-foreground-icon: var(--text-01);
+}
+
+/* ---------------------------------------------------------------------------
+   Danger + Secondary
+   --------------------------------------------------------------------------- */
+.interactive[data-interactive-variant="danger"][data-interactive-prominence="secondary"] {
+  @apply bg-background-tint-01;
+  --interactive-foreground: var(--action-text-danger-05);
+  --interactive-foreground-icon: var(--action-text-danger-05);
+}
+.interactive[data-interactive-variant="danger"][data-interactive-prominence="secondary"]:hover:not(
+    [data-disabled]
+  ),
+.interactive[data-interactive-variant="danger"][data-interactive-prominence="secondary"][data-interaction="hover"]:not(
+    [data-disabled]
+  ) {
+  @apply bg-background-tint-02;
+}
+.interactive[data-interactive-variant="danger"][data-interactive-prominence="secondary"]:active:not(
+    [data-disabled]
+  ),
+.interactive[data-interactive-variant="danger"][data-interactive-prominence="secondary"][data-interaction="active"]:not(
+    [data-disabled]
+  ) {
+  @apply bg-background-tint-00;
+}
+.interactive[data-interactive-variant="danger"][data-interactive-prominence="secondary"][data-disabled] {
+  @apply bg-background-neutral-02;
+  --interactive-foreground: var(--action-danger-03);
+  --interactive-foreground-icon: var(--action-danger-03);
+}
+
+/* ---------------------------------------------------------------------------
+   Danger + Tertiary
+   --------------------------------------------------------------------------- */
+.interactive[data-interactive-variant="danger"][data-interactive-prominence="tertiary"] {
+  @apply bg-transparent;
+  --interactive-foreground: var(--action-text-danger-05);
+  --interactive-foreground-icon: var(--action-text-danger-05);
+}
+.interactive[data-interactive-variant="danger"][data-interactive-prominence="tertiary"]:hover:not(
+    [data-disabled]
+  ),
+.interactive[data-interactive-variant="danger"][data-interactive-prominence="tertiary"][data-interaction="hover"]:not(
+    [data-disabled]
+  ) {
+  @apply bg-background-tint-02;
+}
+.interactive[data-interactive-variant="danger"][data-interactive-prominence="tertiary"]:active:not(
+    [data-disabled]
+  ),
+.interactive[data-interactive-variant="danger"][data-interactive-prominence="tertiary"][data-interaction="active"]:not(
+    [data-disabled]
+  ) {
+  @apply bg-background-tint-00;
+}
+.interactive[data-interactive-variant="danger"][data-interactive-prominence="tertiary"][data-disabled] {
+  @apply bg-transparent opacity-50;
+  --interactive-foreground: var(--action-danger-03);
+  --interactive-foreground-icon: var(--action-danger-03);
+}
+
+/* ---------------------------------------------------------------------------
+   Danger + Internal
+   --------------------------------------------------------------------------- */
+.interactive[data-interactive-variant="danger"][data-interactive-prominence="internal"] {
+  @apply bg-transparent;
+  --interactive-foreground: var(--action-text-danger-05);
+  --interactive-foreground-icon: var(--action-text-danger-05);
+}
+.interactive[data-interactive-variant="danger"][data-interactive-prominence="internal"]:hover:not(
+    [data-disabled]
+  ),
+.interactive[data-interactive-variant="danger"][data-interactive-prominence="internal"][data-interaction="hover"]:not(
+    [data-disabled]
+  ) {
+  @apply bg-background-tint-00;
+}
+.interactive[data-interactive-variant="danger"][data-interactive-prominence="internal"]:active:not(
+    [data-disabled]
+  ),
+.interactive[data-interactive-variant="danger"][data-interactive-prominence="internal"][data-interaction="active"]:not(
+    [data-disabled]
+  ) {
+  @apply bg-background-tint-00;
+}
+.interactive[data-interactive-variant="danger"][data-interactive-prominence="internal"][data-disabled] {
+  @apply bg-transparent opacity-50;
+  --interactive-foreground: var(--action-danger-03);
+  --interactive-foreground-icon: var(--action-danger-03);
+}

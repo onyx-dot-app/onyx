@@ -1,7 +1,7 @@
 "use client";
 
-import { Button } from "@opal/components/buttons/Button/components";
-import { Tag, type TagProps } from "@opal/components/Tag/components";
+import { Button } from "@opal/components/buttons/button/components";
+import { Tag, type TagProps } from "@opal/components/tag/components";
 import type { SizeVariant } from "@opal/shared";
 import SvgAlertCircle from "@opal/icons/alert-circle";
 import SvgAlertTriangle from "@opal/icons/alert-triangle";

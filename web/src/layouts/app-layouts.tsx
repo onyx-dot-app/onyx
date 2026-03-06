@@ -394,7 +394,7 @@ function Header() {
               <Button
                 icon={SvgShare}
                 prominence="tertiary"
-                transient={showShareModal}
+                interaction={showShareModal ? "hover" : "rest"}
                 responsiveHideText
                 onClick={() => setShowShareModal(true)}
                 aria-label="share-chat-button"

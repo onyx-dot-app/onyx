@@ -1,0 +1,54 @@
+/* ---------------------------------------------------------------------------
+   Foldable — CSS grid collapse/expand animation.
+
+   Expands when an ancestor `.interactive` element is hovered or has
+   `data-interaction="hover"` / `data-interaction="active"`.
+
+   Structure:
+     .interactive-foldable-host   — flex parent, gap transitions 0 → 0.25rem
+       [always-visible content]
+       .interactive-foldable      — grid container, column 0fr ↔ 1fr
+         .interactive-foldable-inner — single grid item, flex + overflow clip
+           [foldable content]
+   --------------------------------------------------------------------------- */
+
+/* Host: the flex parent that includes both persistent + foldable content */
+.interactive-foldable-host {
+  gap: 0;
+  transition: gap 200ms ease-in-out;
+}
+
+.interactive:hover:not([data-disabled]) .interactive-foldable-host,
+.interactive[data-interaction="hover"]:not([data-disabled])
+  .interactive-foldable-host,
+.interactive[data-interaction="active"]:not([data-disabled])
+  .interactive-foldable-host {
+  gap: 0.25rem;
+}
+
+/* Grid container — collapse animation */
+.interactive-foldable {
+  display: grid;
+  grid-template-columns: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-columns 200ms ease-in-out,
+    opacity 200ms ease-in-out;
+}
+
+/* Single grid item — content layout + overflow clipping */
+.interactive-foldable-inner {
+  @apply flex items-center gap-1;
+  overflow: hidden;
+  min-width: 0;
+}
+
+/* Expanded: hovered or interaction override */
+.interactive:hover:not([data-disabled]) .interactive-foldable,
+.interactive[data-interaction="hover"]:not([data-disabled])
+  .interactive-foldable,
+.interactive[data-interaction="active"]:not([data-disabled])
+  .interactive-foldable {
+  grid-template-columns: 1fr;
+  opacity: 1;
+}

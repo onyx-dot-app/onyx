@@ -1,4 +1,4 @@
-import "@opal/components/Tag/styles.css";
+import "@opal/components/tag/styles.css";
 
 import type { IconFunctionComponent } from "@opal/types";
 import { cn } from "@opal/utils";

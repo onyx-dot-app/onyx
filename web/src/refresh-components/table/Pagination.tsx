@@ -373,7 +373,7 @@ function ListPaginationInner({
                   onClick={() => onPageChange(pageNum)}
                   size={size}
                   prominence="tertiary"
-                  transient={isActive}
+                  interaction={isActive ? "hover" : "rest"}
                   icon={({ className: iconClassName }) => (
                     <PageNumberIcon
                       className={iconClassName}

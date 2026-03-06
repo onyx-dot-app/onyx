@@ -2,7 +2,7 @@
 
 **Import:** `import { ContentAction, type ContentActionProps } from "@opal/layouts";`
 
-A row layout that pairs a [`Content`](../Content/README.md) block with optional right-side action children (buttons, badges, icons, etc.).
+A row layout that pairs a [`Content`](../content/README.md) block with optional right-side action children (buttons, badges, icons, etc.).
 
 ## Why ContentAction?
 
@@ -10,7 +10,7 @@ A row layout that pairs a [`Content`](../Content/README.md) block with optional 
 
 ## Props
 
-Inherits **all** props from [`Content`](../Content/README.md) (same discriminated-union API) plus:
+Inherits **all** props from [`Content`](../content/README.md) (same discriminated-union API) plus:
 
 | Prop | Type | Default | Description |
 |---|---|---|---|
