@@ -9,7 +9,6 @@ from onyx.server.query_and_chat.streaming_models import ToolCallArgumentDelta
 
 def _make_tool_call_delta(
     index: int = 0,
-    tool_id: str | None = None,
     name: str | None = None,
     arguments: str | None = None,
     function_is_none: bool = False,
@@ -17,7 +16,6 @@ def _make_tool_call_delta(
     """Create a mock tool_call_delta matching the LiteLLM streaming shape."""
     delta = MagicMock()
     delta.index = index
-    delta.id = tool_id
     if function_is_none:
         delta.function = None
     else:
@@ -157,7 +155,6 @@ class TestMaybeEmitArgumentDeltaBasic:
         obj = packets[0].obj
         assert isinstance(obj, ToolCallArgumentDelta)
         assert obj.tool_type == "python"
-        assert obj.tool_id == "tc_1"
         assert obj.argument_deltas == {"code": "print(1)"}
 
     @patch("onyx.chat.tool_call_args_streaming._get_tool_class")
@@ -515,13 +512,11 @@ class TestMaybeEmitArgumentDeltaEdgeCases:
         # Delta for index 0
         packets_0 = _collect(tc_map, _make_tool_call_delta(index=0, arguments="aaa"))
         assert len(packets_0) == 1
-        assert packets_0[0].obj.tool_id == "tc_1"
         assert packets_0[0].obj.argument_deltas == {"code": "aaa"}
 
         # Delta for index 1
         packets_1 = _collect(tc_map, _make_tool_call_delta(index=1, arguments="bbb"))
         assert len(packets_1) == 1
-        assert packets_1[0].obj.tool_id == "tc_2"
         assert packets_1[0].obj.argument_deltas == {"code": "bbb"}
 
     @patch("onyx.chat.tool_call_args_streaming._get_tool_class")

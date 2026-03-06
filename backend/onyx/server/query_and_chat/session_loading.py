@@ -45,6 +45,7 @@ from onyx.server.query_and_chat.streaming_models import SearchToolDocumentsDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolQueriesDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolStart
 from onyx.server.query_and_chat.streaming_models import SectionEnd
+from onyx.server.query_and_chat.streaming_models import ToolCallArgumentDelta
 from onyx.server.query_and_chat.streaming_models import TopLevelBranching
 from onyx.tools.tool_implementations.file_reader.file_reader_tool import FileReaderTool
 from onyx.tools.tool_implementations.images.image_generation_tool import (
@@ -393,6 +394,18 @@ def create_python_tool_packets(
     on page reload."""
     packets: list[Packet] = []
     placement = Placement(turn_index=turn_index, tab_index=tab_index)
+
+    packets.append(
+        Packet(
+            placement=placement,
+            obj=ToolCallArgumentDelta(
+                tool_type="python",
+                argument_deltas={
+                    "code": code,
+                },
+            ),
+        )
+    )
 
     packets.append(Packet(placement=placement, obj=PythonToolStart(code=code)))
 

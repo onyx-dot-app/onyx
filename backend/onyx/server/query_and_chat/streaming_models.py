@@ -266,7 +266,6 @@ class ToolCallArgumentDelta(BaseObj):
     )
 
     tool_type: str
-    tool_id: str
     argument_deltas: dict[str, Any]
 
 

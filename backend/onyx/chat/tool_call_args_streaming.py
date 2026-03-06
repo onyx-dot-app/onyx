@@ -230,7 +230,6 @@ def maybe_emit_argument_delta(
         placement=placement,
         obj=ToolCallArgumentDelta(
             tool_type=tc_data.get("name", ""),
-            tool_id=tc_data.get("id", ""),
             argument_deltas=argument_deltas,
         ),
     )
