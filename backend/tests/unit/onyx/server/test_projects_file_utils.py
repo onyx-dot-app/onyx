@@ -25,6 +25,10 @@ def _make_upload(filename: str, size: int, content: bytes | None = None) -> Uplo
     return UploadFile(filename=filename, file=BytesIO(payload), size=size)
 
 
+def _make_upload_no_size(filename: str, content: bytes) -> UploadFile:
+    return UploadFile(filename=filename, file=BytesIO(content), size=None)
+
+
 def _patch_common_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(utils, "fetch_default_llm_model", lambda _db: None)
     monkeypatch.setattr(utils, "get_tokenizer", lambda **_kwargs: _Tokenizer())
@@ -84,6 +88,21 @@ def test_categorize_uploaded_files_accepts_size_under_limit(
     assert len(result.rejected) == 0
 
 
+def test_categorize_uploaded_files_uses_seek_fallback_when_upload_size_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_common_dependencies(monkeypatch)
+    monkeypatch.setattr(utils, "USER_FILE_MAX_UPLOAD_SIZE_BYTES", 100)
+    monkeypatch.setattr(utils, "USER_FILE_MAX_UPLOAD_SIZE_MB", 1)
+    monkeypatch.setattr(utils, "estimate_image_tokens_for_upload", lambda _upload: 10)
+
+    upload = _make_upload_no_size("small.png", content=b"x" * 99)
+    result = utils.categorize_uploaded_files([upload], MagicMock())
+
+    assert len(result.acceptable) == 1
+    assert len(result.rejected) == 0
+
+
 def test_categorize_uploaded_files_accepts_size_at_limit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -131,6 +150,22 @@ def test_categorize_uploaded_files_mixed_batch_keeps_valid_and_rejects_oversized
     assert [file.filename for file in result.acceptable] == ["small.png"]
     assert len(result.rejected) == 1
     assert result.rejected[0].filename == "large.png"
+    assert result.rejected[0].reason == "Exceeds 1 MB file size limit"
+
+
+def test_categorize_uploaded_files_enforces_size_limit_even_when_threshold_is_skipped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_common_dependencies(monkeypatch)
+    monkeypatch.setattr(utils, "SKIP_USERFILE_THRESHOLD", True)
+    monkeypatch.setattr(utils, "USER_FILE_MAX_UPLOAD_SIZE_BYTES", 100)
+    monkeypatch.setattr(utils, "USER_FILE_MAX_UPLOAD_SIZE_MB", 1)
+
+    upload = _make_upload("oversized.pdf", size=101)
+    result = utils.categorize_uploaded_files([upload], MagicMock())
+
+    assert len(result.acceptable) == 0
+    assert len(result.rejected) == 1
     assert result.rejected[0].reason == "Exceeds 1 MB file size limit"
 
 

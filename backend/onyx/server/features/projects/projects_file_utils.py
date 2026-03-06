@@ -194,6 +194,8 @@ def categorize_uploaded_files(
         try:
             filename = get_safe_filename(upload)
 
+            # Size limit is a hard safety cap and is enforced even when token
+            # threshold checks are skipped via SKIP_USERFILE_THRESHOLD settings.
             if is_upload_too_large(upload, USER_FILE_MAX_UPLOAD_SIZE_BYTES):
                 results.rejected.append(
                     RejectedFile(
