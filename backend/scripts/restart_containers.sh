@@ -3,8 +3,8 @@ set -e
 
 cleanup() {
   echo "Error occurred. Cleaning up..."
-  docker stop onyx_postgres onyx_vespa onyx_redis onyx_minio 2>/dev/null || true
-  docker rm onyx_postgres onyx_vespa onyx_redis onyx_minio 2>/dev/null || true
+  docker stop onyx_postgres onyx_vespa onyx_redis onyx_minio onyx_code_interpreter 2>/dev/null || true
+  docker rm onyx_postgres onyx_vespa onyx_redis onyx_minio onyx_code_interpreter 2>/dev/null || true
 }
 
 # Trap errors and output a message, then cleanup
@@ -20,8 +20,8 @@ MINIO_VOLUME=${4:-""}  # Default is empty if not provided
 
 # Stop and remove the existing containers
 echo "Stopping and removing existing containers..."
-docker stop onyx_postgres onyx_vespa onyx_redis onyx_minio 2>/dev/null || true
-docker rm onyx_postgres onyx_vespa onyx_redis onyx_minio 2>/dev/null || true
+docker stop onyx_postgres onyx_vespa onyx_redis onyx_minio onyx_code_interpreter 2>/dev/null || true
+docker rm onyx_postgres onyx_vespa onyx_redis onyx_minio onyx_code_interpreter 2>/dev/null || true
 
 # Start the PostgreSQL container with optional volume
 echo "Starting PostgreSQL container..."
@@ -54,6 +54,10 @@ if [[ -n "$MINIO_VOLUME" ]]; then
 else
     docker run --detach --name onyx_minio --publish 9004:9000 --publish 9005:9001 -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin minio/minio server /data --console-address ":9001"
 fi
+
+# Start the Code Interpreter container
+echo "Starting Code Interpreter container..."
+docker run --detach --name onyx_code_interpreter --publish 8000:8000 --user root -v /var/run/docker.sock:/var/run/docker.sock onyxdotapp/code-interpreter:latest bash ./entrypoint.sh code-interpreter-api
 
 # Ensure alembic runs in the correct directory (backend/)
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
