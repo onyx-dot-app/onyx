@@ -34,6 +34,7 @@ import {
 } from "@opal/icons";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import TypewriterText from "@/app/craft/components/TypewriterText";
 import {
@@ -271,22 +272,25 @@ function BuildSessionButton({
           twoTone={!isDeleting && !deleteSuccess && !deleteError}
           submit={
             deleteSuccess ? (
-              <Button variant="action" disabled icon={SvgCheckCircle}>
-                Done
-              </Button>
+              <Disabled disabled>
+                <Button variant="action" icon={SvgCheckCircle}>
+                  Done
+                </Button>
+              </Disabled>
             ) : deleteError ? (
               <Button variant="danger" onClick={closeModal}>
                 Close
               </Button>
             ) : (
-              <Button
-                variant="danger"
-                onClick={handleConfirmDelete}
-                disabled={isDeleting}
-                icon={isDeleting ? SimpleLoader : undefined}
-              >
-                {isDeleting ? "Deleting..." : "Delete"}
-              </Button>
+              <Disabled disabled={isDeleting}>
+                <Button
+                  variant="danger"
+                  onClick={handleConfirmDelete}
+                  icon={isDeleting ? SimpleLoader : undefined}
+                >
+                  {isDeleting ? "Deleting..." : "Delete"}
+                </Button>
+              </Disabled>
             )
           }
         >

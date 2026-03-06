@@ -1,0 +1,14 @@
+.opal-disabled {
+  display: contents;
+}
+
+/* Baseline disabled visuals — applied to direct children */
+.opal-disabled[data-disabled] > * {
+  @apply opacity-50 cursor-not-allowed select-none;
+  pointer-events: none;
+}
+
+/* allowClick mode — let pointer events through */
+.opal-disabled[data-disabled][data-allow-click] > * {
+  pointer-events: auto;
+}

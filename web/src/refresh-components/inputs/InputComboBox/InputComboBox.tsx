@@ -95,6 +95,7 @@ import { cn, noProp } from "@/lib/utils";
 import InputTypeIn from "../InputTypeIn";
 import { FieldContext } from "../../form/FieldContext";
 import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import { FieldMessage } from "../../messages/FieldMessage";
 
 // Hooks
@@ -394,16 +395,17 @@ const InputComboBox = ({
                 </div>
               )}
               {hasOptions && (
-                <Button
-                  prominence="tertiary"
-                  size="sm"
-                  onClick={noProp(toggleDropdown)}
-                  disabled={disabled}
-                  icon={isOpen ? SvgChevronUp : SvgChevronDown}
-                  aria-label={isOpen ? "Close dropdown" : "Open dropdown"}
-                  tabIndex={-1}
-                  type="button"
-                />
+                <Disabled disabled={disabled}>
+                  <Button
+                    prominence="tertiary"
+                    size="sm"
+                    onClick={noProp(toggleDropdown)}
+                    icon={isOpen ? SvgChevronUp : SvgChevronDown}
+                    aria-label={isOpen ? "Close dropdown" : "Open dropdown"}
+                    tabIndex={-1}
+                    type="button"
+                  />
+                </Disabled>
               )}
             </>
           }

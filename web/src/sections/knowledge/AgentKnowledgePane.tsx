@@ -38,7 +38,7 @@ import {
 } from "@/app/admin/agents/interfaces";
 import { timeAgo } from "@/lib/time";
 import Spacer from "@/refresh-components/Spacer";
-import { Disabled } from "@/refresh-components/Disabled";
+import { Disabled } from "@opal/core";
 import SourceHierarchyBrowser from "./SourceHierarchyBrowser";
 
 // Knowledge pane view states

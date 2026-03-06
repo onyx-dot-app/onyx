@@ -21,6 +21,7 @@ import Separator from "@/refresh-components/Separator";
 import { Section } from "@/layouts/general-layouts";
 import { Hoverable } from "@opal/core";
 import { SvgRefreshCw } from "@opal/icons";
+import { Disabled } from "@opal/core";
 
 export function FieldSeparator() {
   return <Separator noPadding className="px-2" />;
@@ -163,13 +164,11 @@ export function FetchModelsButton({
     <div className="flex flex-col gap-y-1">
       <SimpleTooltip tooltip={isDisabled ? disabledHint : undefined} side="top">
         <div className="w-fit">
-          <OpalButton
-            type="button"
-            onClick={handleFetchModels}
-            disabled={isFetchingModels || isDisabled}
-          >
-            Fetch Available Models
-          </OpalButton>
+          <Disabled disabled={isFetchingModels || isDisabled}>
+            <OpalButton type="button" onClick={handleFetchModels}>
+              Fetch Available Models
+            </OpalButton>
+          </Disabled>
         </div>
       </SimpleTooltip>
       {fetchModelsError && (
@@ -313,14 +312,15 @@ export function DisplayModelsField<T extends BaseLLMFormValues>({
           nonInteractive
         >
           <Section flexDirection="row" gap={0}>
-            <OpalButton
-              prominence="tertiary"
-              size="md"
-              disabled={isAutoMode}
-              onClick={handleSelectAll}
-            >
-              Select All
-            </OpalButton>
+            <Disabled disabled={isAutoMode}>
+              <OpalButton
+                prominence="tertiary"
+                size="md"
+                onClick={handleSelectAll}
+              >
+                Select All
+              </OpalButton>
+            </Disabled>
             {onRefetch && (
               <OpalButton
                 prominence="tertiary"

@@ -52,7 +52,7 @@ import useOpenApiTools from "@/hooks/useOpenApiTools";
 import * as ExpandableCard from "@/layouts/expandable-card-layouts";
 import * as ActionsLayouts from "@/layouts/actions-layouts";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
-import Disabled from "@/refresh-components/Disabled";
+import { Disabled } from "@opal/core";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import useFilter from "@/hooks/useFilter";
 import { MCPServer } from "@/lib/tools/interfaces";

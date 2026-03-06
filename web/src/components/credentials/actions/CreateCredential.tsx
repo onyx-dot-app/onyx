@@ -1,6 +1,7 @@
 import { useState } from "react";
 import Button from "@/refresh-components/buttons/Button";
 import { Button as OpalButton } from "@opal/components";
+import { Disabled } from "@opal/core";
 import { ValidSources, AccessType } from "@/lib/types";
 import { FaAccusoft } from "react-icons/fa";
 import { submitCredential } from "@/components/admin/connectors/CredentialForm";
@@ -36,13 +37,11 @@ const CreateButton = ({
   isAdmin: boolean;
   groups: number[];
 }) => (
-  <OpalButton
-    onClick={onClick}
-    disabled={isSubmitting || (!isAdmin && groups.length === 0)}
-    icon={SvgPlusCircle}
-  >
-    Create
-  </OpalButton>
+  <Disabled disabled={isSubmitting || (!isAdmin && groups.length === 0)}>
+    <OpalButton onClick={onClick} icon={SvgPlusCircle}>
+      Create
+    </OpalButton>
+  </Disabled>
 );
 
 type formType = IsPublicGroupSelectorFormType & {

@@ -1,6 +1,7 @@
 import { Formik, Form } from "formik";
 import Modal from "@/refresh-components/Modal";
 import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import { TextFormField } from "@/components/Field";
 import { SvgEdit } from "@opal/icons";
 export interface EditPropertyModalProps {
@@ -52,16 +53,17 @@ export default function EditPropertyModal({
                 />
 
                 <Modal.Footer>
-                  <Button
-                    type="submit"
+                  <Disabled
                     disabled={
                       isSubmitting ||
                       !isValid ||
                       values.propertyValue === propertyValue
                     }
                   >
-                    {isSubmitting ? "Updating..." : "Update property"}
-                  </Button>
+                    <Button type="submit">
+                      {isSubmitting ? "Updating..." : "Update property"}
+                    </Button>
+                  </Disabled>
                 </Modal.Footer>
               </Form>
             )}

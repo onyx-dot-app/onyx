@@ -1,6 +1,10 @@
 import "@opal/components/buttons/Button/styles.css";
 import "@opal/components/tooltip.css";
-import { Interactive, type InteractiveBaseProps } from "@opal/core";
+import {
+  Interactive,
+  type InteractiveBaseProps,
+  useDisabled,
+} from "@opal/core";
 import type { SizeVariant, WidthVariant } from "@opal/shared";
 import type { TooltipSide } from "@opal/components";
 import type { IconFunctionComponent } from "@opal/types";
@@ -110,6 +114,7 @@ function Button({
   responsiveHideText = false,
   ...interactiveBaseProps
 }: ButtonProps) {
+  const { isDisabled } = useDisabled();
   const isLarge = size === "lg";
 
   const labelEl = children ? (
@@ -174,10 +179,7 @@ function Button({
   );
 
   const resolvedTooltip =
-    tooltip ??
-    (foldable && interactiveBaseProps.disabled && children
-      ? children
-      : undefined);
+    tooltip ?? (foldable && isDisabled && children ? children : undefined);
 
   if (!resolvedTooltip) return button;
 

@@ -1,3 +1,10 @@
+/* Disabled */
+export {
+  Disabled,
+  type DisabledProps,
+  useDisabled,
+} from "@opal/core/disabled/components";
+
 /* Hoverable */
 export {
   Hoverable,

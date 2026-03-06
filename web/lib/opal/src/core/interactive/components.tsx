@@ -11,6 +11,7 @@ import {
   widthVariants,
   type WidthVariant,
 } from "@opal/shared";
+import { useDisabled } from "@opal/core/disabled/components";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -121,18 +122,6 @@ interface InteractiveBasePropsBase
   transient?: boolean;
 
   /**
-   * When `true`, disables the interactive element.
-   *
-   * Sets `data-disabled` and `aria-disabled` attributes. CSS uses `data-disabled`
-   * to apply disabled styles (muted colors, `cursor-not-allowed`). Click handlers
-   * and `href` navigation are blocked in JS, but hover events still fire to
-   * support tooltips explaining why the element is disabled.
-   *
-   * @default false
-   */
-  disabled?: boolean;
-
-  /**
    * URL to navigate to when clicked.
    *
    * Passed through Slot to the child element (typically `Interactive.Container`),
@@ -224,11 +213,11 @@ function InteractiveBase({
   selected,
   group,
   transient,
-  disabled,
   href,
   target,
   ...props
 }: InteractiveBaseProps) {
+  const { isDisabled, allowClick } = useDisabled();
   const effectiveProminence =
     prominence ??
     (variant === "select" || variant === "sidebar" ? "light" : "primary");
@@ -244,17 +233,20 @@ function InteractiveBase({
       variant !== "none" ? effectiveProminence : undefined,
     "data-transient": transient ? "true" : undefined,
     "data-selected": selected ? "true" : undefined,
-    "data-disabled": disabled ? "true" : undefined,
-    "aria-disabled": disabled || undefined,
+    "data-disabled": isDisabled ? "true" : undefined,
+    "aria-disabled": isDisabled || undefined,
   };
 
   const { onClick, ...slotProps } = props;
+
+  // When disabled and allowClick is false, block href navigation and clicks.
+  const blockInteraction = isDisabled && !allowClick;
 
   // href, target, and rel are passed through Slot to the child element
   // (typically Interactive.Container), which renders an <a> when href is present.
   const linkAttrs = href
     ? {
-        href: disabled ? undefined : href,
+        href: blockInteraction ? undefined : href,
         target,
         rel: target === "_blank" ? "noopener noreferrer" : undefined,
       }
@@ -268,9 +260,9 @@ function InteractiveBase({
       {...linkAttrs}
       {...slotProps}
       onClick={
-        disabled && href
+        blockInteraction && href
           ? (e: React.MouseEvent) => e.preventDefault()
-          : disabled
+          : blockInteraction
             ? undefined
             : onClick
       }

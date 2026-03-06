@@ -2,6 +2,7 @@ import { ReactNode } from "react";
 import { Form } from "formik";
 import Modal from "@/refresh-components/Modal";
 import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import { SvgArrowExchange } from "@opal/icons";
 import SvgOnyxLogo from "@opal/icons/onyx-logo";
 import {
@@ -58,9 +59,11 @@ export function LLMConfigurationModalWrapper({
             <Button prominence="secondary" onClick={onClose} type="button">
               Cancel
             </Button>
-            <Button type="submit" disabled={!isFormValid || isTesting}>
-              {isTesting ? "Connecting..." : "Connect"}
-            </Button>
+            <Disabled disabled={!isFormValid || isTesting}>
+              <Button type="submit">
+                {isTesting ? "Connecting..." : "Connect"}
+              </Button>
+            </Disabled>
           </Modal.Footer>
         </Form>
       </Modal.Content>

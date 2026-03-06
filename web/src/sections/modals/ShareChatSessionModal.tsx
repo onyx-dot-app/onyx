@@ -9,6 +9,7 @@ import { copyAll } from "@/app/app/message/copyingUtils";
 import { Section } from "@/layouts/general-layouts";
 import Modal from "@/refresh-components/Modal";
 import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import Text from "@/refresh-components/texts/Text";
@@ -243,15 +244,16 @@ export default function ShareChatSessionModal({
               Cancel
             </Button>
           )}
-          <Button
-            onClick={handleSubmit}
-            disabled={isLoading}
-            icon={isShared ? SvgLink : undefined}
-            width={isShared ? "full" : undefined}
-            aria-label="share-modal-submit"
-          >
-            {submitButtonText}
-          </Button>
+          <Disabled disabled={isLoading}>
+            <Button
+              onClick={handleSubmit}
+              icon={isShared ? SvgLink : undefined}
+              width={isShared ? "full" : undefined}
+              aria-label="share-modal-submit"
+            >
+              {submitButtonText}
+            </Button>
+          </Disabled>
         </Modal.Footer>
       </Modal.Content>
     </Modal>

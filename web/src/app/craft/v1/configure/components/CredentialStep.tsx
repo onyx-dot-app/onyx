@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Section } from "@/layouts/general-layouts";
 import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import Modal from "@/refresh-components/Modal";
 import { SvgKey } from "@opal/icons";
 import {
@@ -228,31 +229,31 @@ export default function CredentialStep({
                     connectorType as ConfigurableSources
                   ) &&
                     (NEXT_PUBLIC_CLOUD_ENABLED || NEXT_PUBLIC_TEST_ENV) && (
-                      <Button
-                        variant="action"
-                        onClick={handleAuthorize}
-                        disabled={isAuthorizing}
-                        hidden={!isAuthorizeVisible}
-                      >
-                        {isAuthorizing
-                          ? "Authorizing..."
-                          : `Authorize with ${getSourceDisplayName(
-                              connectorType
-                            )}`}
-                      </Button>
+                      <Disabled disabled={isAuthorizing}>
+                        <Button
+                          variant="action"
+                          onClick={handleAuthorize}
+                          hidden={!isAuthorizeVisible}
+                        >
+                          {isAuthorizing
+                            ? "Authorizing..."
+                            : `Authorize with ${getSourceDisplayName(
+                                connectorType
+                              )}`}
+                        </Button>
+                      </Disabled>
                     )}
                 </div>
                 {hasCredentials && (
-                  <Button
-                    onClick={isSingleStep ? handleConnect : onContinue}
-                    disabled={!selectedCredential || isConnecting}
-                  >
-                    {isSingleStep
-                      ? isConnecting
-                        ? "Connecting..."
-                        : "Connect"
-                      : "Continue"}
-                  </Button>
+                  <Disabled disabled={!selectedCredential || isConnecting}>
+                    <Button onClick={isSingleStep ? handleConnect : onContinue}>
+                      {isSingleStep
+                        ? isConnecting
+                          ? "Connecting..."
+                          : "Connect"
+                        : "Continue"}
+                    </Button>
+                  </Disabled>
                 )}
               </div>
             )}

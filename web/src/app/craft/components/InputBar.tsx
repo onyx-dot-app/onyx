@@ -14,7 +14,7 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import { cn, isImageFile } from "@/lib/utils";
-import { Disabled } from "@/refresh-components/Disabled";
+import { Disabled } from "@opal/core";
 import {
   useUploadFilesContext,
   BuildFile,
@@ -373,13 +373,14 @@ const InputBar = memo(
               {/* Bottom left controls */}
               <div className="flex flex-row items-center gap-1">
                 {/* (+) button for file upload */}
-                <Button
-                  icon={SvgPaperclip}
-                  tooltip="Attach Files"
-                  prominence="tertiary"
-                  disabled={disabled}
-                  onClick={() => fileInputRef.current?.click()}
-                />
+                <Disabled disabled={disabled}>
+                  <Button
+                    icon={SvgPaperclip}
+                    tooltip="Attach Files"
+                    prominence="tertiary"
+                    onClick={() => fileInputRef.current?.click()}
+                  />
+                </Disabled>
                 {/* Demo Data indicator pill - only show on welcome page (no session) when demo data is enabled */}
                 {demoDataEnabled && isWelcomePage && (
                   <SimpleTooltip

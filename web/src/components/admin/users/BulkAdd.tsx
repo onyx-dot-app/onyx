@@ -2,6 +2,7 @@
 
 import { withFormik, FormikProps, FormikErrors, Form, Field } from "formik";
 import Button from "@/refresh-components/buttons/Button";
+import { Disabled } from "@opal/core";
 
 const WHITESPACE_SPLIT = /\s+/;
 const EMAIL_REGEX = /[^@]+@[^.]+\.[^.]/;
@@ -61,9 +62,11 @@ const AddUserFormRenderer = ({
       <div className="text-error text-sm">{errors.emails}</div>
     )}
     {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
-    <Button type="submit" disabled={isSubmitting} className="self-end">
-      Add
-    </Button>
+    <Disabled disabled={isSubmitting}>
+      <Button type="submit" className="self-end">
+        Add
+      </Button>
+    </Disabled>
   </Form>
 );
 
