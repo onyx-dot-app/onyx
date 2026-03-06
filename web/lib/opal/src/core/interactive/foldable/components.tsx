@@ -1,4 +1,5 @@
 import "@opal/core/interactive/foldable/styles.css";
+import React from "react";
 import type { WithoutStyles } from "@opal/types";
 
 // ---------------------------------------------------------------------------

@@ -81,6 +81,7 @@ function OpenButton({
       {...statefulProps}
     >
       <Interactive.Container
+        type="button"
         heightVariant={size}
         widthVariant={width}
         roundingVariant={
