@@ -5,6 +5,7 @@ import {
   useProjectsContext,
 } from "@/providers/ProjectsContext";
 import { SettingsContext } from "@/providers/SettingsProvider";
+import { CombinedSettings } from "@/interfaces/settings";
 
 const mockUploadFiles = jest.fn();
 const mockGetRecentFiles = jest.fn();
@@ -57,11 +58,16 @@ jest.mock("@/app/app/projects/projectsService", () => {
   };
 });
 
-const settingsValue = {
+const settingsValue: CombinedSettings = {
   settings: {
     user_file_max_upload_size_mb: 1,
-  },
-} as any;
+  } as CombinedSettings["settings"],
+  enterpriseSettings: null,
+  customAnalyticsScript: null,
+  webVersion: null,
+  webDomain: null,
+  isSearchModeAvailable: true,
+};
 
 const wrapper = ({ children }: PropsWithChildren) => (
   <SettingsContext.Provider value={settingsValue}>
