@@ -1856,9 +1856,6 @@ def get_oauth_router(
         strategy: Strategy[models.UP, models.ID] = Depends(backend.get_strategy),
     ) -> Response:
         pkce_cookie_name: str | None = None
-        code_verifier: str | None = None
-        callback_redirect_url: str | None = None
-        token: OAuth2Token | None = None
 
         def delete_pkce_cookie(response: Response) -> None:
             if enable_pkce and pkce_cookie_name:
@@ -1871,48 +1868,28 @@ def get_oauth_router(
                     samesite=csrf_token_cookie_samesite,
                 )
 
-        try:
-            if enable_pkce:
-                if state is not None:
-                    pkce_cookie_name = get_pkce_cookie_name(state)
-                if code is None or error is not None:
-                    raise OnyxError(
-                        OnyxErrorCode.VALIDATION_ERROR,
-                        error or "Missing authorization code in OAuth callback",
-                    )
-                if state is None:
-                    raise OnyxError(
-                        OnyxErrorCode.VALIDATION_ERROR,
-                        "Missing state parameter in OAuth callback",
-                    )
-
-                if redirect_url is not None:
-                    callback_redirect_url = redirect_url
-                else:
-                    callback_path = request.app.url_path_for(callback_route_name)
-                    callback_redirect_url = f"{WEB_DOMAIN}{callback_path}"
-
-                pkce_cookie_name = get_pkce_cookie_name(state)
-                code_verifier = request.cookies.get(pkce_cookie_name)
-                if not code_verifier:
-                    raise OnyxError(
-                        OnyxErrorCode.VALIDATION_ERROR,
-                        "Missing PKCE verifier cookie in OAuth callback",
-                    )
+        def build_error_response(
+            exc: OnyxError | HTTPException,
+        ) -> JSONResponse:
+            if isinstance(exc, OnyxError):
+                error_response = JSONResponse(
+                    status_code=exc.status_code,
+                    content=exc.error_code.detail(exc.message),
+                )
             else:
-                if access_token_state is None:
-                    raise OnyxError(
-                        OnyxErrorCode.INTERNAL_ERROR, "Missing OAuth callback state"
-                    )
-                token, state = access_token_state
-                if state is None:
-                    raise OnyxError(
-                        OnyxErrorCode.VALIDATION_ERROR,
-                        "Missing state parameter in OAuth callback",
-                    )
+                error_response = JSONResponse(
+                    status_code=exc.status_code,
+                    content={"detail": exc.detail},
+                    headers=exc.headers,
+                )
+            delete_pkce_cookie(error_response)
+            return error_response
 
+        def decode_and_validate_state(state_value: str) -> Dict[str, str]:
             try:
-                state_data = decode_jwt(state, state_secret, [STATE_TOKEN_AUDIENCE])
+                state_data = decode_jwt(
+                    state_value, state_secret, [STATE_TOKEN_AUDIENCE]
+                )
             except jwt.DecodeError:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
@@ -1946,116 +1923,142 @@ def get_oauth_router(
                     ),
                 )
 
-            if enable_pkce:
-                assert code is not None
-                assert callback_redirect_url is not None
-                assert code_verifier is not None
-                try:
-                    token = await oauth_client.get_access_token(
-                        code, callback_redirect_url, code_verifier
+            return state_data
+
+        if enable_pkce:
+            if code is None or error is not None:
+                return build_error_response(
+                    OnyxError(
+                        OnyxErrorCode.VALIDATION_ERROR,
+                        error or "Missing authorization code in OAuth callback",
                     )
-                except GetAccessTokenError as e:
-                    raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, e.message) from e
-
-            assert token is not None
-            account_id, account_email = await oauth_client.get_id_email(
-                token["access_token"]
-            )
-
-            if account_email is None:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=ErrorCode.OAUTH_NOT_AVAILABLE_EMAIL,
+                )
+            if state is None:
+                return build_error_response(
+                    OnyxError(
+                        OnyxErrorCode.VALIDATION_ERROR,
+                        "Missing state parameter in OAuth callback",
+                    )
                 )
 
-            next_url = state_data.get("next_url", "/")
-            referral_source = state_data.get("referral_source", None)
-            try:
-                tenant_id = fetch_ee_implementation_or_noop(
-                    "onyx.server.tenants.user_mapping", "get_tenant_id_for_email", None
-                )(account_email)
-            except exceptions.UserNotExists:
-                tenant_id = None
+            state_value = state
+            pkce_cookie_name = get_pkce_cookie_name(state_value)
 
-            request.state.referral_source = referral_source
-
-            # Proceed to authenticate or create the user
-            try:
-                user = await user_manager.oauth_callback(
-                    oauth_client.name,
-                    token["access_token"],
-                    account_id,
-                    account_email,
-                    token.get("expires_at"),
-                    token.get("refresh_token"),
-                    request,
-                    associate_by_email=associate_by_email,
-                    is_verified_by_default=is_verified_by_default,
-                )
-            except UserAlreadyExists:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=ErrorCode.OAUTH_USER_ALREADY_EXISTS,
-                )
-
-            if not user.is_active:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=ErrorCode.LOGIN_BAD_CREDENTIALS,
-                )
-
-            # Login user
-            response = await backend.login(strategy, user)
-            await user_manager.on_after_login(user, request, response)
-
-            # Prepare redirect response
-            if tenant_id is None:
-                # Use URL utility to add parameters
-                redirect_destination = add_url_params(next_url, {"new_team": "true"})
-                redirect_response = RedirectResponse(
-                    redirect_destination, status_code=302
-                )
+            if redirect_url is not None:
+                callback_redirect_url = redirect_url
             else:
-                # No parameters to add
-                redirect_response = RedirectResponse(next_url, status_code=302)
+                callback_path = request.app.url_path_for(callback_route_name)
+                callback_redirect_url = f"{WEB_DOMAIN}{callback_path}"
 
-            # Copy headers from auth response to redirect response, with special handling for Set-Cookie
-            for header_name, header_value in response.headers.items():
-                # FastAPI can have multiple Set-Cookie headers as a list
-                if header_name.lower() == "set-cookie" and isinstance(
-                    header_value, list
-                ):
-                    for cookie_value in header_value:
-                        redirect_response.headers.append(header_name, cookie_value)
-                else:
-                    redirect_response.headers[header_name] = header_value
+            code_verifier = request.cookies.get(pkce_cookie_name)
+            if not code_verifier:
+                return build_error_response(
+                    OnyxError(
+                        OnyxErrorCode.VALIDATION_ERROR,
+                        "Missing PKCE verifier cookie in OAuth callback",
+                    )
+                )
 
-            if hasattr(response, "body"):
-                redirect_response.body = response.body
-            if hasattr(response, "status_code"):
-                redirect_response.status_code = response.status_code
-            if hasattr(response, "media_type"):
-                redirect_response.media_type = response.media_type
+            try:
+                state_data = decode_and_validate_state(state_value)
+                token = await oauth_client.get_access_token(
+                    code, callback_redirect_url, code_verifier
+                )
+            except GetAccessTokenError as e:
+                return build_error_response(
+                    OnyxError(OnyxErrorCode.VALIDATION_ERROR, e.message)
+                )
+            except (OnyxError, HTTPException) as e:
+                return build_error_response(e)
+        else:
+            if access_token_state is None:
+                raise OnyxError(
+                    OnyxErrorCode.INTERNAL_ERROR, "Missing OAuth callback state"
+                )
+            token, callback_state = access_token_state
+            if callback_state is None:
+                raise OnyxError(
+                    OnyxErrorCode.VALIDATION_ERROR,
+                    "Missing state parameter in OAuth callback",
+                )
+            state_data = decode_and_validate_state(callback_state)
 
-            delete_pkce_cookie(redirect_response)
-            return redirect_response
-        except OnyxError as e:
-            if not (enable_pkce and pkce_cookie_name):
-                raise
-            error_response = JSONResponse(
-                status_code=e.status_code, content=e.error_code.detail(e.message)
+        account_id, account_email = await oauth_client.get_id_email(
+            token["access_token"]
+        )
+
+        if account_email is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=ErrorCode.OAUTH_NOT_AVAILABLE_EMAIL,
             )
-            delete_pkce_cookie(error_response)
-            return error_response
-        except HTTPException as e:
-            if not (enable_pkce and pkce_cookie_name):
-                raise
-            error_response = JSONResponse(
-                status_code=e.status_code,
-                content={"detail": e.detail},
-                headers=e.headers,
+
+        next_url = state_data.get("next_url", "/")
+        referral_source = state_data.get("referral_source", None)
+        try:
+            tenant_id = fetch_ee_implementation_or_noop(
+                "onyx.server.tenants.user_mapping", "get_tenant_id_for_email", None
+            )(account_email)
+        except exceptions.UserNotExists:
+            tenant_id = None
+
+        request.state.referral_source = referral_source
+
+        # Proceed to authenticate or create the user
+        try:
+            user = await user_manager.oauth_callback(
+                oauth_client.name,
+                token["access_token"],
+                account_id,
+                account_email,
+                token.get("expires_at"),
+                token.get("refresh_token"),
+                request,
+                associate_by_email=associate_by_email,
+                is_verified_by_default=is_verified_by_default,
             )
-            delete_pkce_cookie(error_response)
-            return error_response
+        except UserAlreadyExists:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=ErrorCode.OAUTH_USER_ALREADY_EXISTS,
+            )
+
+        if not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=ErrorCode.LOGIN_BAD_CREDENTIALS,
+            )
+
+        # Login user
+        response = await backend.login(strategy, user)
+        await user_manager.on_after_login(user, request, response)
+
+        # Prepare redirect response
+        if tenant_id is None:
+            # Use URL utility to add parameters
+            redirect_destination = add_url_params(next_url, {"new_team": "true"})
+            redirect_response = RedirectResponse(redirect_destination, status_code=302)
+        else:
+            # No parameters to add
+            redirect_response = RedirectResponse(next_url, status_code=302)
+
+        # Copy headers from auth response to redirect response, with special handling for Set-Cookie
+        for header_name, header_value in response.headers.items():
+            # FastAPI can have multiple Set-Cookie headers as a list
+            if header_name.lower() == "set-cookie" and isinstance(header_value, list):
+                for cookie_value in header_value:
+                    redirect_response.headers.append(header_name, cookie_value)
+            else:
+                redirect_response.headers[header_name] = header_value
+
+        if hasattr(response, "body"):
+            redirect_response.body = response.body
+        if hasattr(response, "status_code"):
+            redirect_response.status_code = response.status_code
+        if hasattr(response, "media_type"):
+            redirect_response.media_type = response.media_type
+
+        delete_pkce_cookie(redirect_response)
+        return redirect_response
 
     return router
