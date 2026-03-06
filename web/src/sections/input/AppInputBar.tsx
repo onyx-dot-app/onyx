@@ -56,6 +56,10 @@ import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { Section } from "@/layouts/general-layouts";
 import Spacer from "@/refresh-components/Spacer";
+import MicrophoneButton from "@/sections/input/MicrophoneButton";
+import RecordingWaveform from "@/sections/input/RecordingWaveform";
+import SpeakingWaveform from "@/sections/input/SpeakingWaveform";
+import { useVoiceMode } from "@/providers/VoiceModeProvider";
 
 const MIN_INPUT_HEIGHT = 44;
 const MAX_INPUT_HEIGHT = 200;
@@ -114,6 +118,13 @@ const AppInputBar = React.memo(
   }: AppInputBarProps) => {
     // Internal message state - kept local to avoid parent re-renders on every keystroke
     const [message, setMessage] = useState(initialMessage);
+    const [isRecording, setIsRecording] = useState(false);
+    const [recordingCycleCount, setRecordingCycleCount] = useState(0);
+    const [isMuted, setIsMuted] = useState(false);
+    const stopRecordingRef = useRef<(() => Promise<string | null>) | null>(
+      null
+    );
+    const setMutedRef = useRef<((muted: boolean) => void) | null>(null);
     const textAreaRef = useRef<HTMLTextAreaElement>(null);
     const textAreaWrapperRef = useRef<HTMLDivElement>(null);
     const filesWrapperRef = useRef<HTMLDivElement>(null);
@@ -121,6 +132,36 @@ const AppInputBar = React.memo(
     const containerRef = useRef<HTMLDivElement>(null);
     const { user } = useUser();
     const { isClassifying, classification } = useQueryController();
+    const {
+      stopTTS,
+      isTTSPlaying,
+      isTTSLoading,
+      isAwaitingAutoPlaybackStart,
+      isTTSMuted,
+      toggleTTSMute,
+    } = useVoiceMode();
+    const isVoicePlaybackActive =
+      isTTSPlaying || isTTSLoading || isAwaitingAutoPlaybackStart;
+    const isVoicePlaybackControllable = isVoicePlaybackActive && !isRecording;
+    const isTTSActuallySpeaking = isTTSPlaying;
+
+    const handleRecordingChange = useCallback((nextIsRecording: boolean) => {
+      setIsRecording((prevIsRecording) => {
+        if (!prevIsRecording && nextIsRecording) {
+          setRecordingCycleCount((count) => count + 1);
+        }
+        return nextIsRecording;
+      });
+    }, []);
+
+    // Wrapper for onSubmit that stops TTS first to prevent overlapping voices
+    const handleSubmit = useCallback(
+      (text: string) => {
+        stopTTS();
+        onSubmit(text);
+      },
+      [stopTTS, onSubmit]
+    );
 
     // Expose reset and focus methods to parent via ref
     React.useImperativeHandle(ref, () => ({
@@ -143,9 +184,13 @@ const AppInputBar = React.memo(
 
     const { appMode } = useAppMode();
     const appFocus = useAppFocus();
+    const isNewSession = appFocus.isNewSession();
     const isSearchMode =
-      (appFocus.isNewSession() && appMode === "search") ||
-      classification === "search";
+      (isNewSession && appMode === "search") || classification === "search";
+    const shouldShowRecordingWaveformBelow =
+      isRecording &&
+      !isVoicePlaybackActive &&
+      (isNewSession || recordingCycleCount === 1);
 
     const { forcedToolIds, setForcedToolIds } = useForcedTools();
     const { currentMessageFiles, setCurrentMessageFiles } =
@@ -543,23 +588,47 @@ const AppInputBar = React.memo(
               disabled={disabled}
             />
           </div>
+          <MicrophoneButton
+            onTranscription={(text) => setMessage(text)}
+            disabled={disabled || chatState === "streaming"}
+            autoSend={user?.preferences?.voice_auto_send ?? false}
+            autoListen={user?.preferences?.voice_auto_playback ?? false}
+            isNewSession={isNewSession}
+            chatState={chatState}
+            onRecordingChange={handleRecordingChange}
+            stopRecordingRef={stopRecordingRef}
+            onRecordingStart={() => setMessage("")}
+            onAutoSend={(text) => {
+              // Guard against empty transcription
+              if (text.trim()) {
+                handleSubmit(text);
+              }
+            }}
+            onMuteChange={setIsMuted}
+            setMutedRef={setMutedRef}
+          />
           <Button
             id="onyx-chat-input-send-button"
             icon={
               isClassifying
                 ? SimpleLoader
-                : chatState === "input"
-                  ? SvgArrowUp
-                  : SvgStop
+                : chatState === "streaming" || isVoicePlaybackControllable
+                  ? SvgStop
+                  : SvgArrowUp
             }
             disabled={
-              (chatState === "input" && !message) ||
+              (chatState === "input" &&
+                !isVoicePlaybackControllable &&
+                !message) ||
               hasUploadingFiles ||
               isClassifying
             }
             onClick={() => {
               if (chatState == "streaming") {
+                stopTTS({ manual: true });
                 stopGenerating();
+              } else if (isVoicePlaybackControllable) {
+                stopTTS({ manual: true });
               } else if (message) {
                 onSubmit(message);
               }
@@ -575,7 +644,7 @@ const AppInputBar = React.memo(
           ref={containerRef}
           id="onyx-chat-input"
           className={cn(
-            "w-full flex flex-col shadow-01 bg-background-neutral-00 rounded-16"
+            "w-full flex flex-col shadow-01 bg-background-neutral-00 rounded-16 relative"
             // # Note (from @raunakab):
             //
             // `shadow-01` extends ~14px below the element (2px offset + 12px blur).
@@ -639,9 +708,13 @@ const AppInputBar = React.memo(
                     style={{ scrollbarWidth: "thin" }}
                     aria-multiline={true}
                     placeholder={
-                      isSearchMode
-                        ? "Search connected sources"
-                        : "How can I help you today?"
+                      isRecording
+                        ? "Listening..."
+                        : isVoicePlaybackActive
+                          ? "Onyx is speaking..."
+                          : isSearchMode
+                            ? "Search connected sources"
+                            : "How can I help you today?"
                     }
                     value={message}
                     onKeyDown={(event) => {
@@ -658,7 +731,7 @@ const AppInputBar = React.memo(
                           !isClassifying &&
                           !hasUploadingFiles
                         ) {
-                          onSubmit(message);
+                          handleSubmit(message);
                         }
                       }
                     }}
@@ -722,7 +795,7 @@ const AppInputBar = React.memo(
                     if (chatState == "streaming") {
                       stopGenerating();
                     } else if (message) {
-                      onSubmit(message);
+                      handleSubmit(message);
                     }
                   }}
                   prominence="tertiary"
@@ -733,6 +806,42 @@ const AppInputBar = React.memo(
           </div>
 
           {chatControls}
+
+          {/* Voice waveform - always shown in a consistent top slot */}
+          {isTTSActuallySpeaking ? (
+            <div className="absolute left-0 right-0 -top-12 flex justify-start px-1">
+              <SpeakingWaveform
+                isSpeaking={isTTSActuallySpeaking}
+                isMuted={isTTSMuted}
+                onMuteToggle={toggleTTSMute}
+              />
+            </div>
+          ) : isRecording &&
+            !isVoicePlaybackActive &&
+            !shouldShowRecordingWaveformBelow ? (
+            <div className="absolute left-0 right-0 -top-12 px-1">
+              <RecordingWaveform
+                isRecording={isRecording}
+                isMuted={isMuted}
+                onMuteToggle={() => {
+                  setMutedRef.current?.(!isMuted);
+                }}
+              />
+            </div>
+          ) : null}
+
+          {/* First recording cycle appears below input bar */}
+          {shouldShowRecordingWaveformBelow && (
+            <div className="absolute left-0 right-0 -bottom-12 px-1">
+              <RecordingWaveform
+                isRecording={isRecording}
+                isMuted={isMuted}
+                onMuteToggle={() => {
+                  setMutedRef.current?.(!isMuted);
+                }}
+              />
+            </div>
+          )}
         </div>
       </Disabled>
     );

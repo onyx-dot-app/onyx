@@ -159,6 +159,8 @@ function MixedContentHandler({
   chatPackets,
   imagePackets,
   chatState,
+  messageNodeId,
+  hasTimelineThinking,
   onComplete,
   animate,
   stopPacketSeen,
@@ -168,6 +170,8 @@ function MixedContentHandler({
   chatPackets: Packet[];
   imagePackets: Packet[];
   chatState: FullChatState;
+  messageNodeId?: number;
+  hasTimelineThinking?: boolean;
   onComplete: () => void;
   animate: boolean;
   stopPacketSeen: boolean;
@@ -178,6 +182,8 @@ function MixedContentHandler({
     <MessageTextRenderer
       packets={chatPackets as ChatPacket[]}
       state={chatState}
+      messageNodeId={messageNodeId}
+      hasTimelineThinking={hasTimelineThinking}
       onComplete={() => {}}
       animate={animate}
       renderType={RenderType.FULL}
@@ -205,6 +211,8 @@ function MixedContentHandler({
 interface RendererComponentProps {
   packets: Packet[];
   chatState: FullChatState;
+  messageNodeId?: number;
+  hasTimelineThinking?: boolean;
   onComplete: () => void;
   animate: boolean;
   stopPacketSeen: boolean;
@@ -231,6 +239,8 @@ function areRendererPropsEqual(
 export const RendererComponent = memo(function RendererComponent({
   packets,
   chatState,
+  messageNodeId,
+  hasTimelineThinking,
   onComplete,
   animate,
   stopPacketSeen,
@@ -265,6 +275,8 @@ export const RendererComponent = memo(function RendererComponent({
         chatPackets={chatPackets}
         imagePackets={imagePackets}
         chatState={chatState}
+        messageNodeId={messageNodeId}
+        hasTimelineThinking={hasTimelineThinking}
         onComplete={onComplete}
         animate={animate}
         stopPacketSeen={stopPacketSeen}
@@ -285,6 +297,8 @@ export const RendererComponent = memo(function RendererComponent({
     <RendererFn
       packets={packets as any}
       state={chatState}
+      messageNodeId={messageNodeId}
+      hasTimelineThinking={hasTimelineThinking}
       onComplete={onComplete}
       animate={animate}
       renderType={RenderType.FULL}

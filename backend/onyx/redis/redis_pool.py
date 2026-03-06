@@ -419,12 +419,15 @@ async def get_async_redis_connection() -> aioredis.Redis:
     return _async_redis_connection
 
 
-async def retrieve_auth_token_data_from_redis(request: Request) -> dict | None:
-    token = request.cookies.get(FASTAPI_USERS_AUTH_COOKIE_NAME)
-    if not token:
-        logger.debug("No auth token cookie found")
-        return None
+async def retrieve_auth_token_data(token: str) -> dict | None:
+    """Validate auth token against Redis and return token data.
 
+    Args:
+        token: The raw authentication token string.
+
+    Returns:
+        Token data dict if valid, None if invalid/expired.
+    """
     try:
         redis = await get_async_redis_connection()
         redis_key = REDIS_AUTH_KEY_PREFIX + token
@@ -439,12 +442,67 @@ async def retrieve_auth_token_data_from_redis(request: Request) -> dict | None:
         logger.error("Error decoding token data from Redis")
         return None
     except Exception as e:
-        logger.error(
-            f"Unexpected error in retrieve_auth_token_data_from_redis: {str(e)}"
-        )
-        raise ValueError(
-            f"Unexpected error in retrieve_auth_token_data_from_redis: {str(e)}"
-        )
+        logger.error(f"Unexpected error in retrieve_auth_token_data: {str(e)}")
+        raise ValueError(f"Unexpected error in retrieve_auth_token_data: {str(e)}")
+
+
+async def retrieve_auth_token_data_from_redis(request: Request) -> dict | None:
+    """Validate auth token from request cookie. Wrapper for backwards compatibility."""
+    token = request.cookies.get(FASTAPI_USERS_AUTH_COOKIE_NAME)
+    if not token:
+        logger.debug("No auth token cookie found")
+        return None
+    return await retrieve_auth_token_data(token)
+
+
+# WebSocket token prefix (separate from regular auth tokens)
+REDIS_WS_TOKEN_PREFIX = "ws_token:"
+# WebSocket tokens expire after 60 seconds
+WS_TOKEN_TTL_SECONDS = 60
+
+
+async def store_ws_token(token: str, user_id: str) -> None:
+    """Store a short-lived WebSocket authentication token in Redis.
+
+    Args:
+        token: The generated WS token.
+        user_id: The user ID to associate with this token.
+    """
+    redis = await get_async_redis_connection()
+    redis_key = REDIS_WS_TOKEN_PREFIX + token
+    token_data = json.dumps({"sub": user_id})
+    await redis.set(redis_key, token_data, ex=WS_TOKEN_TTL_SECONDS)
+
+
+async def retrieve_ws_token_data(token: str) -> dict | None:
+    """Validate a WebSocket token and return the token data.
+
+    This uses GETDEL for atomic get-and-delete to prevent race conditions
+    where the same token could be used twice.
+
+    Args:
+        token: The WS token to validate.
+
+    Returns:
+        Token data dict with 'sub' (user ID) if valid, None if invalid/expired.
+    """
+    try:
+        redis = await get_async_redis_connection()
+        redis_key = REDIS_WS_TOKEN_PREFIX + token
+
+        # Atomic get-and-delete to prevent race conditions (Redis 6.2+)
+        token_data_str = await redis.getdel(redis_key)
+
+        if not token_data_str:
+            return None
+
+        return json.loads(token_data_str)
+    except json.JSONDecodeError:
+        logger.error("Error decoding WS token data from Redis")
+        return None
+    except Exception as e:
+        logger.error(f"Unexpected error in retrieve_ws_token_data: {str(e)}")
+        return None
 
 
 def redis_lock_dump(lock: RedisLock, r: Redis) -> None:
