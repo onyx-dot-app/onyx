@@ -8,6 +8,9 @@ from sqlalchemy.orm import Session
 from onyx.db.models import User
 from onyx.db.models import VoiceProvider
 
+# Sentinel value to distinguish "not provided" from "explicitly set to None"
+_UNSET: Any = object()
+
 
 def fetch_voice_providers(db_session: Session) -> list[VoiceProvider]:
     """Fetch all voice providers."""
@@ -196,9 +199,14 @@ def update_user_voice_settings(
     auto_send: bool | None = None,
     auto_playback: bool | None = None,
     playback_speed: float | None = None,
-    preferred_voice: str | None = None,
+    preferred_voice: str | None = _UNSET,
 ) -> None:
-    """Update user's voice settings. Only updates fields that are not None."""
+    """Update user's voice settings.
+
+    For most fields, None means "don't update this field".
+    For preferred_voice, use None to clear the preference (reset to default),
+    or omit the parameter to leave it unchanged.
+    """
     values: dict[str, Any] = {}
 
     if auto_send is not None:
@@ -207,9 +215,10 @@ def update_user_voice_settings(
         values["voice_auto_playback"] = auto_playback
     if playback_speed is not None:
         values["voice_playback_speed"] = max(0.5, min(2.0, playback_speed))
-    if preferred_voice is not None:
+    # preferred_voice uses sentinel: _UNSET means "don't update", None means "clear"
+    if preferred_voice is not _UNSET:
         values["preferred_voice"] = preferred_voice
 
     if values:
         db_session.execute(update(User).where(User.id == user_id).values(**values))  # type: ignore[arg-type]
-        db_session.commit()
+        db_session.flush()

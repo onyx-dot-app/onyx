@@ -1,5 +1,6 @@
 import secrets
 from collections.abc import AsyncIterator
+from typing import Any
 
 from fastapi import APIRouter
 from fastapi import Depends
@@ -183,15 +184,24 @@ def update_voice_settings(
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> dict[str, str]:
-    """Update user's voice settings."""
-    update_user_voice_settings(
-        db_session=db_session,
-        user_id=user.id,
-        auto_send=request.auto_send,
-        auto_playback=request.auto_playback,
-        playback_speed=request.playback_speed,
-        preferred_voice=request.preferred_voice,
-    )
+    """Update user's voice settings.
+
+    To clear preferred_voice back to default, explicitly send {"preferred_voice": null}.
+    Omitting the field leaves it unchanged.
+    """
+    # Build kwargs, only including preferred_voice if explicitly provided
+    # This allows distinguishing between "not provided" and "set to null"
+    kwargs: dict[str, Any] = {
+        "db_session": db_session,
+        "user_id": user.id,
+        "auto_send": request.auto_send,
+        "auto_playback": request.auto_playback,
+        "playback_speed": request.playback_speed,
+    }
+    if "preferred_voice" in request.model_fields_set:
+        kwargs["preferred_voice"] = request.preferred_voice
+
+    update_user_voice_settings(**kwargs)
     return {"status": "ok"}
 
 

@@ -477,6 +477,9 @@ async def store_ws_token(token: str, user_id: str) -> None:
 async def retrieve_ws_token_data(token: str) -> dict | None:
     """Validate a WebSocket token and return the token data.
 
+    This uses GETDEL for atomic get-and-delete to prevent race conditions
+    where the same token could be used twice.
+
     Args:
         token: The WS token to validate.
 
@@ -486,13 +489,12 @@ async def retrieve_ws_token_data(token: str) -> dict | None:
     try:
         redis = await get_async_redis_connection()
         redis_key = REDIS_WS_TOKEN_PREFIX + token
-        token_data_str = await redis.get(redis_key)
+
+        # Atomic get-and-delete to prevent race conditions (Redis 6.2+)
+        token_data_str = await redis.getdel(redis_key)
 
         if not token_data_str:
             return None
-
-        # Delete the token after retrieval (single-use)
-        await redis.delete(redis_key)
 
         return json.loads(token_data_str)
     except json.JSONDecodeError:
