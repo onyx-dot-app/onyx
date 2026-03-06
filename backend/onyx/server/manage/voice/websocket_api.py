@@ -4,6 +4,7 @@ import asyncio
 import io
 import json
 import os
+from collections.abc import MutableMapping
 from typing import Any
 
 from fastapi import APIRouter
@@ -548,7 +549,9 @@ async def handle_streaming_synthesis(
 
 
 async def handle_chunked_synthesis(
-    websocket: WebSocket, provider: Any, first_message: dict | None = None
+    websocket: WebSocket,
+    provider: Any,
+    first_message: MutableMapping[str, Any] | None = None,
 ) -> None:
     """Fallback TTS handler using provider.synthesize_stream.
 
