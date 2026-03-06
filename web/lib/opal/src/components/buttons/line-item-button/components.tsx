@@ -7,6 +7,7 @@ import {
 } from "@opal/core";
 import type { SizeVariant, WidthVariant } from "@opal/shared";
 import type { TooltipSide } from "@opal/components";
+import type { DistributiveOmit } from "@opal/types";
 import type { ContentActionProps } from "@opal/layouts/content-action/components";
 import { ContentAction } from "@opal/layouts";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
@@ -15,12 +16,12 @@ import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 // Types
 // ---------------------------------------------------------------------------
 
-type ContentPassthroughProps = Omit<
+type ContentPassthroughProps = DistributiveOmit<
   ContentActionProps,
   "paddingVariant" | "widthVariant" | "ref" | "withInteractive"
 >;
 
-interface LineItemButtonProps extends ContentPassthroughProps {
+type LineItemButtonOwnProps = {
   /** Interactive select variant. @default "select-light" */
   selectVariant?: "select-light" | "select-heavy";
 
@@ -59,7 +60,9 @@ interface LineItemButtonProps extends ContentPassthroughProps {
 
   /** Which side the tooltip appears on. @default "top" */
   tooltipSide?: TooltipSide;
-}
+};
+
+type LineItemButtonProps = ContentPassthroughProps & LineItemButtonOwnProps;
 
 // ---------------------------------------------------------------------------
 // LineItemButton
