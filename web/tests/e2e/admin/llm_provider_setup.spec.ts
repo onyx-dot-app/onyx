@@ -30,6 +30,10 @@ function uniqueName(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function escapeRegex(input: string): string {
+  return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 async function getAdminLLMProviderResponse(page: Page) {
   const response = await page.request.get(`${BASE_URL}/api/admin/llm/provider`);
   expect(response.ok()).toBeTruthy();
@@ -100,7 +104,29 @@ async function navigateToAdminLlmPageFromChat(page: Page): Promise<void> {
 async function exitAdminToChat(page: Page): Promise<void> {
   await page.getByRole("link", { name: "Exit Admin" }).click();
   await page.waitForURL("**/app**");
-  await page.waitForSelector("#onyx-chat-input-textarea", { timeout: 15000 });
+  await page
+    .locator("#onyx-chat-input-textarea")
+    .waitFor({ state: "visible", timeout: 15000 });
+}
+
+async function getModelCountInChatSelector(
+  page: Page,
+  modelName: string
+): Promise<number> {
+  await page.getByTestId("AppInputBar/llm-popover-trigger").click();
+  const dialog = page.locator('[role="dialog"]').first();
+  await dialog.waitFor({ state: "visible", timeout: 10000 });
+
+  await dialog.getByPlaceholder("Search models...").fill(modelName);
+  const matchingModelOptions = dialog
+    .locator("[data-selected]")
+    .filter({ hasText: new RegExp(`^${escapeRegex(modelName)}$`) });
+  const count = await matchingModelOptions.count();
+
+  await page.keyboard.press("Escape");
+  await dialog.waitFor({ state: "hidden", timeout: 10000 });
+
+  return count;
 }
 
 async function expectModelInChatSelector(
@@ -108,21 +134,8 @@ async function expectModelInChatSelector(
   modelName: string,
   expectedCount: number
 ): Promise<void> {
-  await page.getByTestId("AppInputBar/llm-popover-trigger").click();
-  await page.waitForSelector('[role="dialog"]', {
-    state: "visible",
-    timeout: 10000,
-  });
-
-  const dialog = page.locator('[role="dialog"]');
-  await dialog.getByPlaceholder("Search models...").fill(modelName);
-  await expect(dialog.locator("[data-selected]")).toHaveCount(expectedCount);
-
-  await page.keyboard.press("Escape");
-  await page.waitForSelector('[role="dialog"]', {
-    state: "hidden",
-    timeout: 10000,
-  });
+  const count = await getModelCountInChatSelector(page, modelName);
+  expect(count).toBe(expectedCount);
 }
 
 async function getProviderByName(
@@ -341,8 +354,9 @@ test.describe("LLM Provider Setup @exclusive", () => {
     });
 
     const providerName = uniqueName("PW Provider Add Model");
-    const alwaysVisibleModel = `pw-visible-${Date.now()}-base`;
-    const modelToEnable = `pw-hidden-${Date.now()}-to-enable`;
+    const ts = Date.now();
+    const alwaysVisibleModel = `pw-visible-${ts}-base`;
+    const modelToEnable = `pw-hidden-${ts}-to-enable`;
 
     const providerId = await createPublicProviderWithModels(
       page,
@@ -356,7 +370,9 @@ test.describe("LLM Provider Setup @exclusive", () => {
 
     await page.goto("/app");
     await page.waitForLoadState("networkidle");
-    await page.waitForSelector("#onyx-chat-input-textarea", { timeout: 15000 });
+    await page
+      .locator("#onyx-chat-input-textarea")
+      .waitFor({ state: "visible", timeout: 15000 });
 
     await expectModelInChatSelector(page, modelToEnable, 0);
 
@@ -366,12 +382,22 @@ test.describe("LLM Provider Setup @exclusive", () => {
     await editModal.getByText(modelToEnable, { exact: true }).click();
 
     const updateButton = editModal.getByRole("button", { name: "Update" });
+    const providerUpdateResponsePromise = page.waitForResponse(
+      (response) =>
+        response.url().includes("/api/admin/llm/provider") &&
+        response.request().method() === "PUT"
+    );
     await expect(updateButton).toBeEnabled({ timeout: 10000 });
     await updateButton.click();
+    await providerUpdateResponsePromise;
     await expect(editModal).not.toBeVisible({ timeout: 30000 });
 
     await exitAdminToChat(page);
-    await expectModelInChatSelector(page, modelToEnable, 1);
+    await expect
+      .poll(() => getModelCountInChatSelector(page, modelToEnable), {
+        timeout: 15000,
+      })
+      .toBe(1);
   });
 
   test("removing a visible model on an existing provider hides it in chat after one save", async ({
@@ -386,8 +412,9 @@ test.describe("LLM Provider Setup @exclusive", () => {
     });
 
     const providerName = uniqueName("PW Provider Remove Model");
-    const alwaysVisibleModel = `pw-visible-${Date.now()}-base`;
-    const modelToDisable = `pw-visible-${Date.now()}-to-disable`;
+    const ts = Date.now();
+    const alwaysVisibleModel = `pw-visible-${ts}-base`;
+    const modelToDisable = `pw-visible-${ts}-to-disable`;
 
     const providerId = await createPublicProviderWithModels(
       page,
@@ -401,7 +428,9 @@ test.describe("LLM Provider Setup @exclusive", () => {
 
     await page.goto("/app");
     await page.waitForLoadState("networkidle");
-    await page.waitForSelector("#onyx-chat-input-textarea", { timeout: 15000 });
+    await page
+      .locator("#onyx-chat-input-textarea")
+      .waitFor({ state: "visible", timeout: 15000 });
 
     await expectModelInChatSelector(page, modelToDisable, 1);
 
@@ -411,11 +440,21 @@ test.describe("LLM Provider Setup @exclusive", () => {
     await editModal.getByText(modelToDisable, { exact: true }).click();
 
     const updateButton = editModal.getByRole("button", { name: "Update" });
+    const providerUpdateResponsePromise = page.waitForResponse(
+      (response) =>
+        response.url().includes("/api/admin/llm/provider") &&
+        response.request().method() === "PUT"
+    );
     await expect(updateButton).toBeEnabled({ timeout: 10000 });
     await updateButton.click();
+    await providerUpdateResponsePromise;
     await expect(editModal).not.toBeVisible({ timeout: 30000 });
 
     await exitAdminToChat(page);
-    await expectModelInChatSelector(page, modelToDisable, 0);
+    await expect
+      .poll(() => getModelCountInChatSelector(page, modelToDisable), {
+        timeout: 15000,
+      })
+      .toBe(0);
   });
 });
