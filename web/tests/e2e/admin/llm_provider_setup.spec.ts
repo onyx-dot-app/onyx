@@ -113,8 +113,16 @@ async function getModelCountInChatSelector(
   page: Page,
   modelName: string
 ): Promise<number> {
-  await page.getByTestId("AppInputBar/llm-popover-trigger").click();
   const dialog = page.locator('[role="dialog"]').first();
+
+  // When used in expect.poll retries, a previous attempt may leave the
+  // popover open. Ensure a clean state before toggling it.
+  if (await dialog.isVisible()) {
+    await page.keyboard.press("Escape");
+    await dialog.waitFor({ state: "hidden", timeout: 5000 });
+  }
+
+  await page.getByTestId("AppInputBar/llm-popover-trigger").click();
   await dialog.waitFor({ state: "visible", timeout: 10000 });
 
   await dialog.getByPlaceholder("Search models...").fill(modelName);
