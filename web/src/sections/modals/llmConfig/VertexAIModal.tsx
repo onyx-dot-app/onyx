@@ -1,23 +1,30 @@
-import { Form, Formik } from "formik";
-import { TextFormField, FileUploadFormField } from "@/components/Field";
+"use client";
+
+import { useState } from "react";
+import { useSWRConfig } from "swr";
+import { Formik } from "formik";
+import { FileUploadFormField } from "@/components/Field";
+import InputTypeInField from "@/refresh-components/form/InputTypeInField";
+import * as InputLayouts from "@/layouts/input-layouts";
 import { LLMProviderFormProps } from "@/interfaces/llm";
 import * as Yup from "yup";
-import {
-  ProviderFormEntrypointWrapper,
-  ProviderFormContext,
-} from "./components/FormWrapper";
-import { DisplayNameField } from "./components/DisplayNameField";
-import { FormActionButtons } from "./components/FormActionButtons";
+import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
+import { LLMConfigurationModalWrapper } from "./LLMConfigurationModalWrapper";
 import {
   buildDefaultInitialValues,
   buildDefaultValidationSchema,
   buildAvailableModelConfigurations,
   submitLLMProvider,
+  submitOnboardingProvider,
+  buildOnboardingInitialValues,
   BaseLLMFormValues,
-  LLM_FORM_CLASS_NAME,
 } from "./formUtils";
-import { AdvancedOptions } from "./components/AdvancedOptions";
-import { DisplayModels } from "./components/DisplayModels";
+import {
+  AdvancedOptions,
+  DisplayModelsField,
+  DisplayNameField,
+  SingleDefaultModelField,
+} from "./shared";
 import Separator from "@/refresh-components/Separator";
 
 export const VERTEXAI_PROVIDER_NAME = "vertex_ai";
@@ -33,143 +40,182 @@ interface VertexAIModalValues extends BaseLLMFormValues {
 }
 
 export function VertexAIModal({
+  variant = "llm-configuration",
   existingLlmProvider,
   shouldMarkAsDefault,
   open,
   onOpenChange,
+  onboardingState,
+  onboardingActions,
+  llmDescriptor,
 }: LLMProviderFormProps) {
-  return (
-    <ProviderFormEntrypointWrapper
-      providerName={VERTEXAI_DISPLAY_NAME}
-      providerEndpoint={VERTEXAI_PROVIDER_NAME}
-      existingLlmProvider={existingLlmProvider}
-      open={open}
-      onOpenChange={onOpenChange}
-    >
-      {({
-        onClose,
-        mutate,
-        isTesting,
-        setIsTesting,
-        testError,
-        setTestError,
-        wellKnownLLMProvider,
-      }: ProviderFormContext) => {
-        const modelConfigurations = buildAvailableModelConfigurations(
-          existingLlmProvider,
-          wellKnownLLMProvider
-        );
-        const initialValues: VertexAIModalValues = {
-          ...buildDefaultInitialValues(
-            existingLlmProvider,
-            modelConfigurations
+  const isOnboarding = variant === "onboarding";
+  const [isTesting, setIsTesting] = useState(false);
+  const { mutate } = useSWRConfig();
+  const { wellKnownLLMProvider } = useWellKnownLLMProvider(
+    VERTEXAI_PROVIDER_NAME
+  );
+
+  if (open === false) return null;
+
+  const onClose = () => onOpenChange?.(false);
+
+  const modelConfigurations = buildAvailableModelConfigurations(
+    existingLlmProvider,
+    wellKnownLLMProvider ?? llmDescriptor
+  );
+
+  const initialValues: VertexAIModalValues = isOnboarding
+    ? ({
+        ...buildOnboardingInitialValues(),
+        name: VERTEXAI_PROVIDER_NAME,
+        provider: VERTEXAI_PROVIDER_NAME,
+        default_model_name: VERTEXAI_DEFAULT_MODEL,
+        custom_config: {
+          vertex_credentials: "",
+          vertex_location: VERTEXAI_DEFAULT_LOCATION,
+        },
+      } as VertexAIModalValues)
+    : {
+        ...buildDefaultInitialValues(existingLlmProvider, modelConfigurations),
+        default_model_name:
+          wellKnownLLMProvider?.recommended_default_model?.name ??
+          VERTEXAI_DEFAULT_MODEL,
+        is_auto_mode: existingLlmProvider?.is_auto_mode ?? true,
+        custom_config: {
+          vertex_credentials:
+            (existingLlmProvider?.custom_config
+              ?.vertex_credentials as string) ?? "",
+          vertex_location:
+            (existingLlmProvider?.custom_config?.vertex_location as string) ??
+            VERTEXAI_DEFAULT_LOCATION,
+        },
+      };
+
+  const validationSchema = isOnboarding
+    ? Yup.object().shape({
+        default_model_name: Yup.string().required("Model name is required"),
+        custom_config: Yup.object({
+          vertex_credentials: Yup.string().required(
+            "Credentials file is required"
           ),
-          default_model_name:
-            wellKnownLLMProvider?.recommended_default_model?.name ??
-            VERTEXAI_DEFAULT_MODEL,
-          // Default to auto mode for new Vertex AI providers
-          is_auto_mode: existingLlmProvider?.is_auto_mode ?? true,
-          custom_config: {
-            vertex_credentials:
-              (existingLlmProvider?.custom_config
-                ?.vertex_credentials as string) ?? "",
-            vertex_location:
-              (existingLlmProvider?.custom_config?.vertex_location as string) ??
-              VERTEXAI_DEFAULT_LOCATION,
-          },
+          vertex_location: Yup.string(),
+        }),
+      })
+    : buildDefaultValidationSchema().shape({
+        custom_config: Yup.object({
+          vertex_credentials: Yup.string().required(
+            "Credentials file is required"
+          ),
+          vertex_location: Yup.string(),
+        }),
+      });
+
+  return (
+    <Formik
+      initialValues={initialValues}
+      validationSchema={validationSchema}
+      validateOnMount={true}
+      onSubmit={async (values, { setSubmitting }) => {
+        const filteredCustomConfig = Object.fromEntries(
+          Object.entries(values.custom_config || {}).filter(
+            ([key, v]) => key === "vertex_credentials" || v !== ""
+          )
+        );
+
+        const submitValues = {
+          ...values,
+          custom_config:
+            Object.keys(filteredCustomConfig).length > 0
+              ? filteredCustomConfig
+              : undefined,
         };
 
-        const validationSchema = buildDefaultValidationSchema().shape({
-          custom_config: Yup.object({
-            vertex_credentials: Yup.string().required(
-              "Credentials file is required"
-            ),
-            vertex_location: Yup.string(),
-          }),
-        });
+        if (isOnboarding && onboardingState && onboardingActions) {
+          const modelConfigsToUse =
+            (wellKnownLLMProvider ?? llmDescriptor)?.known_models ?? [];
 
-        return (
-          <Formik
-            initialValues={initialValues}
-            validationSchema={validationSchema}
-            validateOnMount={true}
-            onSubmit={async (values, { setSubmitting }) => {
-              // Filter out empty custom_config values except for required ones
-              const filteredCustomConfig = Object.fromEntries(
-                Object.entries(values.custom_config || {}).filter(
-                  ([key, v]) => key === "vertex_credentials" || v !== ""
-                )
-              );
-
-              const submitValues = {
-                ...values,
-                custom_config:
-                  Object.keys(filteredCustomConfig).length > 0
-                    ? filteredCustomConfig
-                    : undefined,
-              };
-
-              await submitLLMProvider({
-                providerName: VERTEXAI_PROVIDER_NAME,
-                values: submitValues,
-                initialValues,
-                modelConfigurations,
-                existingLlmProvider,
-                shouldMarkAsDefault,
-                setIsTesting,
-                setTestError,
-                mutate,
-                onClose,
-                setSubmitting,
-              });
-            }}
-          >
-            {(formikProps) => {
-              return (
-                <Form className={LLM_FORM_CLASS_NAME}>
-                  <DisplayNameField disabled={!!existingLlmProvider} />
-
-                  <FileUploadFormField
-                    name="custom_config.vertex_credentials"
-                    label="Credentials File"
-                    subtext="Upload your Google Cloud service account JSON credentials file."
-                  />
-
-                  <TextFormField
-                    name="custom_config.vertex_location"
-                    label="Location"
-                    placeholder={VERTEXAI_DEFAULT_LOCATION}
-                    subtext="The Google Cloud region for your Vertex AI models (e.g., global, us-east1, us-central1, europe-west1). See [Google's documentation](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/locations#google_model_endpoint_locations) to find the appropriate region for your model."
-                    optional
-                  />
-
-                  <Separator />
-
-                  <DisplayModels
-                    modelConfigurations={modelConfigurations}
-                    formikProps={formikProps}
-                    recommendedDefaultModel={
-                      wellKnownLLMProvider?.recommended_default_model ?? null
-                    }
-                    shouldShowAutoUpdateToggle={true}
-                  />
-
-                  <AdvancedOptions formikProps={formikProps} />
-
-                  <FormActionButtons
-                    isTesting={isTesting}
-                    testError={testError}
-                    existingLlmProvider={existingLlmProvider}
-                    mutate={mutate}
-                    onClose={onClose}
-                    isFormValid={formikProps.isValid}
-                  />
-                </Form>
-              );
-            }}
-          </Formik>
-        );
+          await submitOnboardingProvider({
+            providerName: VERTEXAI_PROVIDER_NAME,
+            payload: {
+              ...submitValues,
+              model_configurations: modelConfigsToUse,
+              is_auto_mode:
+                values.default_model_name === VERTEXAI_DEFAULT_MODEL,
+            },
+            onboardingState,
+            onboardingActions,
+            isCustomProvider: false,
+            onClose,
+            setIsSubmitting: setSubmitting,
+            setApiStatus: () => {},
+            setShowApiMessage: () => {},
+          });
+        } else {
+          await submitLLMProvider({
+            providerName: VERTEXAI_PROVIDER_NAME,
+            values: submitValues,
+            initialValues,
+            modelConfigurations,
+            existingLlmProvider,
+            shouldMarkAsDefault,
+            setIsTesting,
+            mutate,
+            onClose,
+            setSubmitting,
+          });
+        }
       }}
-    </ProviderFormEntrypointWrapper>
+    >
+      {(formikProps) => (
+        <LLMConfigurationModalWrapper
+          providerEndpoint={VERTEXAI_PROVIDER_NAME}
+          providerName={VERTEXAI_DISPLAY_NAME}
+          existingProviderName={existingLlmProvider?.name}
+          onClose={onClose}
+          isFormValid={formikProps.isValid}
+          isTesting={isTesting}
+        >
+          {!isOnboarding && (
+            <DisplayNameField disabled={!!existingLlmProvider} />
+          )}
+
+          <FileUploadFormField
+            name="custom_config.vertex_credentials"
+            label="Credentials File"
+            subtext="Upload your Google Cloud service account JSON credentials file."
+          />
+
+          <InputLayouts.Vertical
+            name="custom_config.vertex_location"
+            title="Location"
+            description="The Google Cloud region for your Vertex AI models (e.g., global, us-east1, us-central1, europe-west1)."
+            optional
+          >
+            <InputTypeInField
+              name="custom_config.vertex_location"
+              placeholder={VERTEXAI_DEFAULT_LOCATION}
+            />
+          </InputLayouts.Vertical>
+
+          <Separator />
+
+          {isOnboarding ? (
+            <SingleDefaultModelField placeholder="E.g. gemini-2.5-pro" />
+          ) : (
+            <DisplayModelsField
+              modelConfigurations={modelConfigurations}
+              formikProps={formikProps}
+              recommendedDefaultModel={
+                wellKnownLLMProvider?.recommended_default_model ?? null
+              }
+              shouldShowAutoUpdateToggle={true}
+            />
+          )}
+
+          {!isOnboarding && <AdvancedOptions formikProps={formikProps} />}
+        </LLMConfigurationModalWrapper>
+      )}
+    </Formik>
   );
 }

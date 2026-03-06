@@ -21,9 +21,9 @@ import {
 import { LLMProviderDescriptor } from "@/interfaces/llm";
 import { LLM_PROVIDERS_ADMIN_URL } from "@/lib/llmConfig/constants";
 import {
-  buildInitialValues,
+  buildOnboardingInitialValues as buildInitialValues,
   testApiKeyHelper,
-} from "@/sections/onboarding/components/llmConnectionHelpers";
+} from "@/sections/modals/llmConfig/formUtils";
 import OnboardingInfoPages from "@/app/craft/onboarding/components/OnboardingInfoPages";
 import OnboardingUserInfo from "@/app/craft/onboarding/components/OnboardingUserInfo";
 import OnboardingLlmSetup, {
