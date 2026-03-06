@@ -92,6 +92,8 @@ function InteractiveStateless({
   target,
   ...props
 }: InteractiveStatelessProps) {
+  // onClick/href are always passed directly — Stateless is the outermost Slot,
+  // so Radix Slot-injected handlers don't bypass this guard.
   const classes = cn(
     "interactive",
     !props.onClick && !href && "!cursor-default !select-auto",

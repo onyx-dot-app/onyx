@@ -76,6 +76,9 @@ type SelectButtonProps = InteractiveStatefulProps &
      */
     size?: SizeVariant;
 
+    /** HTML button type. Container renders a `<button>` element. */
+    type?: "submit" | "button" | "reset";
+
     /** Tooltip text shown on hover. */
     tooltip?: string;
 
@@ -95,6 +98,7 @@ function SelectButton({
   children,
   rightIcon: RightIcon,
   size = "lg",
+  type = "button",
   foldable,
   width,
   tooltip,
@@ -117,6 +121,7 @@ function SelectButton({
   const button = (
     <Interactive.Stateful {...statefulProps}>
       <Interactive.Container
+        type={type}
         heightVariant={size}
         widthVariant={width}
         roundingVariant={
