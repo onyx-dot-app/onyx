@@ -231,6 +231,7 @@ class DocumentSource(str, Enum):
     NOT_APPLICABLE = "not_applicable"
     DISCORD = "discord"
     FRESHDESK = "freshdesk"
+    FRESHDESK_SOLUTIONS = "freshdesk_solutions"
     FIREFLIES = "fireflies"
     EGNYTE = "egnyte"
     AIRTABLE = "airtable"
@@ -686,6 +687,7 @@ project management, and collaboration tools into a single, customizable platform
     DocumentSource.XENFORO: "xenforo - forum data",
     DocumentSource.DISCORD: "discord - chat and collaboration",
     DocumentSource.FRESHDESK: "freshdesk - customer support data",
+    DocumentSource.FRESHDESK_SOLUTIONS: "freshdesk solutions - knowledge base data",
     DocumentSource.FIREFLIES: "fireflies - call transcripts",
     DocumentSource.EGNYTE: "egnyte - files",
     DocumentSource.AIRTABLE: "airtable - database",
