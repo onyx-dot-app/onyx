@@ -14,4 +14,6 @@ COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
 COPY --from=builder /app/onyx-cli /onyx-cli
 
+USER 65534:65534
+
 ENTRYPOINT ["/onyx-cli"]
