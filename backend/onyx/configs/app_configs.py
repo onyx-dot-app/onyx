@@ -1128,6 +1128,13 @@ DISCORD_BOT_TOKEN = os.environ.get("DISCORD_BOT_TOKEN")
 DISCORD_BOT_INVOKE_CHAR = os.environ.get("DISCORD_BOT_INVOKE_CHAR", "!")
 
 
+## Teams Bot Configuration
+TEAMS_BOT_APP_ID = os.environ.get("TEAMS_BOT_APP_ID")
+TEAMS_BOT_APP_SECRET = os.environ.get("TEAMS_BOT_APP_SECRET")
+TEAMS_BOT_AZURE_TENANT_ID = os.environ.get("TEAMS_BOT_AZURE_TENANT_ID")
+TEAMS_BOT_PORT = int(os.environ.get("TEAMS_BOT_PORT") or "3978")
+
+
 ## Stripe Configuration
 # URL to fetch the Stripe publishable key from a public S3 bucket.
 # Publishable keys are safe to expose publicly - they can only initialize
