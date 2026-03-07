@@ -7,6 +7,7 @@ COPY ./ .
 
 ARG TARGETARCH
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -ldflags="-s -w" -a -o onyx-cli .
+RUN mkdir -p /home/onyx/.config
 
 FROM scratch
 
