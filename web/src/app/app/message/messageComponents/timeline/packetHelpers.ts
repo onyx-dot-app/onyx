@@ -80,14 +80,6 @@ export const stepHasCollapsedStreamingContent = (
 
   // Python tool renders code/output from the start packet onward
   if (
-    packetTypes.has(PacketType.CUSTOM_TOOL_START) ||
-    packetTypes.has(PacketType.CUSTOM_TOOL_DELTA)
-  ) {
-    return true;
-  }
-
-  // Custom tool shows running/completed state after start
-  if (
     packetTypes.has(PacketType.PYTHON_TOOL_START) ||
     packetTypes.has(PacketType.PYTHON_TOOL_DELTA) ||
     packets.some(
@@ -99,6 +91,14 @@ export const stepHasCollapsedStreamingContent = (
     return true;
   }
 
+  // Custom tool shows running/completed state after start
+  if (
+    packetTypes.has(PacketType.CUSTOM_TOOL_START) ||
+    packetTypes.has(PacketType.CUSTOM_TOOL_DELTA)
+  ) {
+    return true;
+  }
+  
   // Research agent has meaningful content from start (task) or report deltas
   if (
     packetTypes.has(PacketType.RESEARCH_AGENT_START) ||
