@@ -86,8 +86,16 @@ def main() -> None:
     if args.all_tenants:
         tenant_ids = get_all_tenant_ids()
         print(f"Found {len(tenant_ids)} tenant(s)")
+        failed_tenants: list[str] = []
         for tid in tenant_ids:
-            _run_for_tenant(tid, old_key, dry_run=args.dry_run)
+            try:
+                _run_for_tenant(tid, old_key, dry_run=args.dry_run)
+            except Exception as e:
+                print(f"  ERROR for tenant {tid}: {e}")
+                failed_tenants.append(tid)
+        if failed_tenants:
+            print(f"FAILED tenants ({len(failed_tenants)}): {failed_tenants}")
+            sys.exit(1)
     else:
         tenant_id = args.tenant_id or POSTGRES_DEFAULT_SCHEMA
         _run_for_tenant(tenant_id, old_key, dry_run=args.dry_run)
