@@ -43,6 +43,7 @@ from onyx.llm.well_known_providers.constants import (
     AWS_SECRET_ACCESS_KEY_KWARG_ENV_VAR_FORMAT,
 )
 from onyx.llm.well_known_providers.constants import LM_STUDIO_API_KEY_CONFIG_KEY
+from onyx.llm.well_known_providers.constants import NOVITA_API_KEY_CONFIG_KEY
 from onyx.llm.well_known_providers.constants import OLLAMA_API_KEY_CONFIG_KEY
 from onyx.llm.well_known_providers.constants import VERTEX_CREDENTIALS_FILE_KWARG
 from onyx.llm.well_known_providers.constants import (
@@ -253,6 +254,9 @@ class LitellmLLM(LLM):
                 elif model_provider == LlmProviderNames.LM_STUDIO:
                     if k == LM_STUDIO_API_KEY_CONFIG_KEY:
                         model_kwargs["api_key"] = v
+                elif model_provider == LlmProviderNames.NOVITA:
+                    if k == NOVITA_API_KEY_CONFIG_KEY:
+                        model_kwargs["api_key"] = v
                 elif model_provider == LlmProviderNames.BEDROCK:
                     if k == AWS_REGION_NAME_KWARG:
                         model_kwargs[k] = v
@@ -281,6 +285,16 @@ class LitellmLLM(LLM):
                 base = self._api_base.rstrip("/")
                 self._api_base = base if base.endswith("/v1") else f"{base}/v1"
                 model_kwargs["api_base"] = self._api_base
+
+        if model_provider == LlmProviderNames.NOVITA:
+            if self._api_base is None:
+                self._api_base = "https://api.novita.ai/openai"
+
+            # Check for API key in environment if not provided
+            if not self._api_key and not model_kwargs.get("api_key"):
+                self._api_key = os.environ.get("NOVITA_API_KEY")
+
+            self._custom_llm_provider = "openai"
 
         # Default vertex_location to "global" if not provided for Vertex AI
         # Latest gemini models are only available through the global region

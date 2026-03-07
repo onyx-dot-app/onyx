@@ -7,6 +7,7 @@ export enum LLMProviderName {
   OPENROUTER = "openrouter",
   VERTEX_AI = "vertex_ai",
   BEDROCK = "bedrock",
+  NOVITA = "novita",
   CUSTOM = "custom",
 }
 

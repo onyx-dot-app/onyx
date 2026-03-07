@@ -18,6 +18,7 @@ from onyx.llm.well_known_providers.constants import BEDROCK_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import LM_STUDIO_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import OLLAMA_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import OPENAI_PROVIDER_NAME
+from onyx.llm.well_known_providers.constants import NOVITA_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import OPENROUTER_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import VERTEXAI_PROVIDER_NAME
 from onyx.llm.well_known_providers.models import WellKnownLLMProviderDescriptor
@@ -41,6 +42,7 @@ def _get_provider_to_models_map() -> dict[str, list[str]]:
     """
     return {
         OPENAI_PROVIDER_NAME: get_openai_model_names(),
+        NOVITA_PROVIDER_NAME: get_novita_model_names(),
         BEDROCK_PROVIDER_NAME: [],  # Dynamic - fetched from AWS API
         ANTHROPIC_PROVIDER_NAME: get_anthropic_model_names(),
         VERTEXAI_PROVIDER_NAME: get_vertexai_model_names(),
@@ -170,6 +172,19 @@ def get_openai_model_names() -> list[str]:
         ),
         reverse=True,
     )
+
+
+def get_novita_model_names() -> list[str]:
+    """Get Novita model names.
+    Since Novita is OpenAI-compatible, we can list some popular models here.
+    Novita also supports many other models; users can always enter them manually."""
+    return [
+        "deepseek/deepseek-v3",
+        "deepseek/deepseek-r1",
+        "meta-llama/llama-3.3-70b-instruct",
+        "meta-llama/llama-3.1-70b-instruct",
+        "meta-llama/llama-3.1-8b-instruct",
+    ]
 
 
 def get_anthropic_model_names() -> list[str]:
@@ -330,6 +345,7 @@ def get_provider_display_name(provider_name: str) -> str:
         AZURE_PROVIDER_NAME: "Azure OpenAI",
         BEDROCK_PROVIDER_NAME: "Amazon Bedrock",
         VERTEXAI_PROVIDER_NAME: "Google Vertex AI",
+        NOVITA_PROVIDER_NAME: "Novita",
         OPENROUTER_PROVIDER_NAME: "OpenRouter",
     }
 

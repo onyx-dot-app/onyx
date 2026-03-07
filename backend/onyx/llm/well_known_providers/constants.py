@@ -2,6 +2,8 @@ from onyx.llm.constants import LlmProviderNames
 
 OPENAI_PROVIDER_NAME = "openai"
 
+NOVITA_PROVIDER_NAME = "novita"
+
 BEDROCK_PROVIDER_NAME = "bedrock"
 
 
@@ -11,10 +13,13 @@ OLLAMA_API_KEY_CONFIG_KEY = "OLLAMA_API_KEY"
 LM_STUDIO_PROVIDER_NAME = "lm_studio"
 LM_STUDIO_API_KEY_CONFIG_KEY = "LM_STUDIO_API_KEY"
 
+NOVITA_API_KEY_CONFIG_KEY = "NOVITA_API_KEY"
+
 # Providers that use optional Bearer auth from custom_config
 PROVIDERS_WITH_SPECIAL_API_KEY_HANDLING: dict[str, str] = {
     LlmProviderNames.OLLAMA_CHAT: OLLAMA_API_KEY_CONFIG_KEY,
     LlmProviderNames.LM_STUDIO: LM_STUDIO_API_KEY_CONFIG_KEY,
+    LlmProviderNames.NOVITA: NOVITA_API_KEY_CONFIG_KEY,
 }
 
 # OpenRouter
