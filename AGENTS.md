@@ -544,6 +544,8 @@ To run them:
 npx playwright test <TEST_NAME>
 ```
 
+For shared fixtures, best practices, and detailed guidance, see `backend/tests/README.md`.
+
 ## Logs
 
 When (1) writing integration tests or (2) doing live tests (e.g. curl / playwright) you can get access

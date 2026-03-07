@@ -57,6 +57,12 @@ export interface LineItemProps
     WithoutStyles<React.HTMLAttributes<HTMLDivElement>>,
     "children"
   > {
+  /**
+   * Whether the row should behave like a standalone interactive button.
+   * Set to false when nested inside another interactive primitive
+   * (e.g. Radix Select.Item) to avoid nested focus targets.
+   */
+  interactive?: boolean;
   // line-item variants
   strikethrough?: boolean;
   danger?: boolean;
@@ -131,6 +137,7 @@ export interface LineItemProps
  * - The component automatically adds a `data-selected="true"` attribute for custom styling
  */
 export default function LineItem({
+  interactive = true,
   selected,
   strikethrough,
   danger,
@@ -164,6 +171,11 @@ export default function LineItem({
   const emphasisKey = emphasized ? "emphasized" : "normal";
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!interactive) {
+      props.onKeyDown?.(e);
+      return;
+    }
+
     if (e.key === "Enter") {
       e.preventDefault();
       (e.currentTarget as HTMLDivElement).click();
@@ -174,6 +186,11 @@ export default function LineItem({
   };
 
   const handleKeyUp = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!interactive) {
+      props.onKeyUp?.(e);
+      return;
+    }
+
     if (e.key === " ") {
       e.preventDefault();
       (e.currentTarget as HTMLDivElement).click();
@@ -184,8 +201,8 @@ export default function LineItem({
   const content = (
     <div
       ref={ref}
-      role="button"
-      tabIndex={0}
+      role={interactive ? "button" : undefined}
+      tabIndex={interactive ? 0 : undefined}
       className={cn(
         "flex flex-row w-full items-start p-2 rounded-08 group/LineItem gap-2",
         !!(children && description) ? "items-start" : "items-center",
