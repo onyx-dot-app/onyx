@@ -2370,6 +2370,34 @@ class SyncRecord(Base):
     )
 
 
+class HierarchyNodeByConnectorCredentialPair(Base):
+    """Tracks which cc_pairs reference each hierarchy node.
+
+    During pruning, stale entries are removed for the current cc_pair.
+    Hierarchy nodes with zero remaining entries are then deleted.
+    """
+
+    __tablename__ = "hierarchy_node_by_connector_credential_pair"
+
+    hierarchy_node_id: Mapped[int] = mapped_column(
+        ForeignKey("hierarchy_node.id", ondelete="CASCADE"), primary_key=True
+    )
+    connector_id: Mapped[int] = mapped_column(
+        ForeignKey("connector.id", ondelete="CASCADE"), primary_key=True
+    )
+    credential_id: Mapped[int] = mapped_column(
+        ForeignKey("credential.id", ondelete="CASCADE"), primary_key=True
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_hierarchy_node_cc_pair_connector_credential",
+            "connector_id",
+            "credential_id",
+        ),
+    )
+
+
 class DocumentByConnectorCredentialPair(Base):
     """Represents an indexing of a document by a specific connector / credential pair"""
 

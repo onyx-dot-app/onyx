@@ -204,6 +204,33 @@ def cache_hierarchy_nodes_batch(
     redis_client.expire(raw_id_key, HIERARCHY_CACHE_TTL_SECONDS)
 
 
+def evict_hierarchy_nodes_from_cache(
+    redis_client: Redis,
+    source: DocumentSource,
+    raw_node_ids: list[str],
+) -> None:
+    """Remove specific hierarchy nodes from the Redis cache.
+
+    Deletes entries from both the parent-chain hash and the raw_id→node_id hash.
+    """
+    if not raw_node_ids:
+        return
+
+    cache_key = _cache_key(source)
+    raw_id_key = _raw_id_cache_key(source)
+
+    # Look up node_ids so we can remove them from the parent-chain hash
+    node_id_strs = [
+        v
+        for rid in raw_node_ids
+        if (v := redis_client.hget(raw_id_key, rid)) is not None
+    ]
+
+    if node_id_strs:
+        redis_client.hdel(cache_key, *node_id_strs)
+    redis_client.hdel(raw_id_key, *raw_node_ids)
+
+
 def get_node_id_from_raw_id(
     redis_client: Redis,
     source: DocumentSource,
