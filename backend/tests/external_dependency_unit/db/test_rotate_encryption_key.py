@@ -79,16 +79,16 @@ class TestDiscoverEncryptedColumns:
     def test_discovers_credential_json(self) -> None:
         results = _discover_encrypted_columns()
         found = {
-            (model.__tablename__, col_name, is_json)
-            for model, col_name, _, is_json in results
+            (model_cls.__tablename__, col_name, is_json)  # type: ignore[attr-defined]
+            for model_cls, col_name, _, is_json in results
         }
         assert ("credential", "credential_json", True) in found
 
     def test_discovers_internet_search_provider_api_key(self) -> None:
         results = _discover_encrypted_columns()
         found = {
-            (model.__tablename__, col_name, is_json)
-            for model, col_name, _, is_json in results
+            (model_cls.__tablename__, col_name, is_json)  # type: ignore[attr-defined]
+            for model_cls, col_name, _, is_json in results
         }
         assert ("internet_search_provider", "api_key", False) in found
 
@@ -98,7 +98,7 @@ class TestDiscoverEncryptedColumns:
             col = getattr(model_cls, col_name).property.columns[0]
             if isinstance(col.type, EncryptedString):
                 assert not is_json, (
-                    f"{model_cls.__tablename__}.{col_name} is EncryptedString "
+                    f"{model_cls.__tablename__}.{col_name} is EncryptedString "  # type: ignore[attr-defined]
                     f"but is_json={is_json}"
                 )
 
@@ -108,7 +108,7 @@ class TestDiscoverEncryptedColumns:
             col = getattr(model_cls, col_name).property.columns[0]
             if isinstance(col.type, EncryptedJson):
                 assert is_json, (
-                    f"{model_cls.__tablename__}.{col_name} is EncryptedJson "
+                    f"{model_cls.__tablename__}.{col_name} is EncryptedJson "  # type: ignore[attr-defined]
                     f"but is_json={is_json}"
                 )
 

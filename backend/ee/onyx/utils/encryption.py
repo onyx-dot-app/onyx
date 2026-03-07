@@ -52,8 +52,8 @@ def _decrypt_bytes(input_bytes: bytes, key: str | None = None) -> str:
     if not effective_key:
         return input_bytes.decode()
 
+    trimmed = _get_trimmed_key(effective_key)
     try:
-        trimmed = _get_trimmed_key(effective_key)
         iv = input_bytes[:16]
         encrypted_data = input_bytes[16:]
 
@@ -67,7 +67,7 @@ def _decrypt_bytes(input_bytes: bytes, key: str | None = None) -> str:
         decrypted_data = unpadder.update(decrypted_padded_data) + unpadder.finalize()
 
         return decrypted_data.decode()
-    except Exception:
+    except (ValueError, UnicodeDecodeError):
         if key is not None:
             # Explicit key was provided — don't fall back silently
             raise

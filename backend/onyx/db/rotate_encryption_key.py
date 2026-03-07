@@ -12,7 +12,6 @@ safely resumed by re-running.
 import json
 from typing import Any
 
-from sqlalchemy import inspect as sa_inspect
 from sqlalchemy import LargeBinary
 from sqlalchemy import select
 from sqlalchemy import update
@@ -52,7 +51,7 @@ def _discover_encrypted_columns() -> list[tuple[type, str, list[str], bool]]:
 
     for mapper in Base.registry.mappers:
         model_cls = mapper.class_
-        pk_names = [col.key for col in sa_inspect(model_cls).mapper.primary_key]
+        pk_names = [col.key for col in mapper.primary_key]
 
         for prop in mapper.column_attrs:
             for col in prop.columns:
@@ -84,6 +83,12 @@ def rotate_encryption_key(
     is preserved on crash. Already-rotated rows are detected and skipped,
     making the operation safe to re-run.
     """
+    if not ENCRYPTION_KEY_SECRET:
+        raise RuntimeError(
+            "ENCRYPTION_KEY_SECRET is not set — cannot rotate. "
+            "Set the target encryption key in the environment before running."
+        )
+
     encrypted_columns = _discover_encrypted_columns()
     totals: dict[str, int] = {}
 
@@ -113,12 +118,11 @@ def rotate_encryption_key(
                     decrypted_str = raw_bytes.decode("utf-8")
                 else:
                     decrypted_str = decrypt_bytes_to_string(raw_bytes, key=old_key)
-            except Exception as e:
-                logger.error(f"Error decrypting {table_name}.{col_name}: {e}")
+            except (ValueError, UnicodeDecodeError) as e:
                 pk_vals = [row[i] for i in range(len(pk_names))]
                 logger.warning(
                     f"Could not decrypt {table_name}.{col_name} "
-                    f"row {pk_vals} — skipping"
+                    f"row {pk_vals} — skipping: {e}"
                 )
                 continue
 
