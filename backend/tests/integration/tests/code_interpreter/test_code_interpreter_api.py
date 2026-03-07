@@ -10,15 +10,17 @@ CODE_INTERPRETER_HEALTH_URL = f"{CODE_INTERPRETER_URL}/health"
 def test_get_code_interpreter_health_as_admin(
     admin_user: DATestUser,
 ) -> None:
-    """Health endpoint should return a JSON object with a 'healthy' boolean."""
+    """Health endpoint should return a JSON object with 'connected' and 'error'."""
     response = requests.get(
         CODE_INTERPRETER_HEALTH_URL,
         headers=admin_user.headers,
     )
     assert response.status_code == 200
     data = response.json()
-    assert "healthy" in data
-    assert isinstance(data["healthy"], bool)
+    assert "connected" in data
+    assert isinstance(data["connected"], bool)
+    assert "error" in data
+    assert isinstance(data["error"], str)
 
 
 def test_get_code_interpreter_status_as_admin(
