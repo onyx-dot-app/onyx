@@ -27,8 +27,6 @@ def _get_trimmed_key(key: str) -> bytes:
         if key_length >= size:
             return encoded_key[:size]
 
-    return encoded_key[:16]
-
 
 def _encrypt_string(input_str: str, key: str | None = None) -> bytes:
     effective_key = key if key is not None else ENCRYPTION_KEY_SECRET

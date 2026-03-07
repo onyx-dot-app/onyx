@@ -19,7 +19,7 @@ def _encrypt_string(input_str: str, key: str | None = None) -> bytes:
 
 # IMPORTANT DO NOT DELETE, THIS IS USED BY fetch_versioned_implementation
 def _decrypt_bytes(input_bytes: bytes, key: str | None = None) -> str:  # noqa: ARG001
-    if key:
+    if key is not None:
         logger.warning(
             "MIT version of Onyx does not support decryption with a provided key."
         )
