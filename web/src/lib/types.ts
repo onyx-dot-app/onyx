@@ -474,6 +474,7 @@ export enum ValidSources {
   Outline = "outline",
   Confluence = "confluence",
   Jira = "jira",
+  JiraServiceManagement = "jira_service_management",
   Productboard = "productboard",
   Slab = "slab",
   Coda = "coda",
