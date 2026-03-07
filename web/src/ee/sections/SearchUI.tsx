@@ -21,7 +21,7 @@ import Text from "@/refresh-components/texts/Text";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { Section } from "@/layouts/general-layouts";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
-import { SvgCheck, SvgClock, SvgTag } from "@opal/icons";
+import { SvgCheck, SvgClock, SvgTag, SvgUser } from "@opal/icons";
 import FilterButton from "@/refresh-components/buttons/FilterButton";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import useFilter from "@/hooks/useFilter";
@@ -83,6 +83,8 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
   const [timeFilterOpen, setTimeFilterOpen] = useState(false);
   const [selectedTags, setSelectedTags] = useState<Tag[]>([]);
   const [tagFilterOpen, setTagFilterOpen] = useState(false);
+  const [selectedOwners, setSelectedOwners] = useState<Set<string>>(new Set());
+  const [ownerFilterOpen, setOwnerFilterOpen] = useState(false);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -113,14 +115,31 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
     };
   };
 
-  // Reset source filter and pagination when results change
+  // Reset pagination when results change
   useEffect(() => {
-    setSelectedSources([]);
     setCurrentPage(1);
   }, [results]);
 
   // Create a set for fast lookup of LLM-selected docs
   const llmSelectedSet = new Set(llmSelectedDocIds ?? []);
+
+  // Extract unique owners from results
+  const uniqueOwners = useMemo(() => {
+    const ownerSet = new Set<string>();
+    for (const doc of results) {
+      for (const owner of doc.primary_owners ?? []) {
+        ownerSet.add(owner);
+      }
+    }
+    return Array.from(ownerSet).sort((a, b) => a.localeCompare(b));
+  }, [results]);
+
+  const ownerExtractor = useCallback((owner: string) => owner, []);
+  const {
+    query: ownerQuery,
+    setQuery: setOwnerQuery,
+    filtered: filteredOwners,
+  } = useFilter(uniqueOwners, ownerExtractor);
 
   // Filter and sort results
   const filteredAndSortedResults = useMemo(() => {
@@ -128,6 +147,14 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
       // Source filter (client-side)
       if (selectedSources.length > 0) {
         if (!doc.source_type || !selectedSources.includes(doc.source_type)) {
+          return false;
+        }
+      }
+
+      // Owner filter (client-side)
+      if (selectedOwners.size > 0) {
+        const docOwners = doc.primary_owners ?? [];
+        if (!docOwners.some((owner) => selectedOwners.has(owner))) {
           return false;
         }
       }
@@ -145,7 +172,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
 
       return (b.score ?? 0) - (a.score ?? 0);
     });
-  }, [results, selectedSources, llmSelectedSet]);
+  }, [results, selectedSources, selectedOwners, llmSelectedSet]);
 
   // Pagination
   const totalPages = Math.max(
@@ -215,6 +242,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
                 <FilterButton
                   leftIcon={SvgClock}
                   active={!!timeFilter}
+                  transient={timeFilterOpen}
                   onClear={() => {
                     setTimeFilter(null);
                     onRefineSearch(buildFilters({ time: null }));
@@ -244,12 +272,70 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
               </Popover.Content>
             </Popover>
 
+            {/* Owner filter */}
+            <Popover open={ownerFilterOpen} onOpenChange={setOwnerFilterOpen}>
+              <Popover.Trigger asChild>
+                <FilterButton
+                  leftIcon={SvgUser}
+                  active={selectedOwners.size > 0}
+                  transient={ownerFilterOpen}
+                  onClear={() => {
+                    setSelectedOwners(new Set());
+                    setCurrentPage(1);
+                  }}
+                >
+                  {selectedOwners.size === 0
+                    ? "Everyone"
+                    : selectedOwners.size === 1
+                      ? Array.from(selectedOwners)[0]
+                      : `${selectedOwners.size} people`}
+                </FilterButton>
+              </Popover.Trigger>
+              <Popover.Content align="start" width="lg">
+                <PopoverMenu>
+                  <InputTypeIn
+                    leftSearchIcon
+                    placeholder="Filter owners..."
+                    value={ownerQuery}
+                    onChange={(e) => setOwnerQuery(e.target.value)}
+                    onClear={() => setOwnerQuery("")}
+                    variant="internal"
+                  />
+                  {filteredOwners.map((owner) => {
+                    const isSelected = selectedOwners.has(owner);
+                    return (
+                      <LineItem
+                        key={owner}
+                        onClick={() => {
+                          setSelectedOwners((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(owner)) {
+                              next.delete(owner);
+                            } else {
+                              next.add(owner);
+                            }
+                            return next;
+                          });
+                          setCurrentPage(1);
+                        }}
+                        selected={isSelected}
+                        icon={isSelected ? SvgCheck : SvgUser}
+                      >
+                        {owner}
+                      </LineItem>
+                    );
+                  })}
+                </PopoverMenu>
+              </Popover.Content>
+            </Popover>
+
             {/* Tag filter */}
             <Popover open={tagFilterOpen} onOpenChange={setTagFilterOpen}>
               <Popover.Trigger asChild>
                 <FilterButton
                   leftIcon={SvgTag}
                   active={selectedTags.length > 0}
+                  transient={tagFilterOpen}
                   onClear={() => {
                     setSelectedTags([]);
                     onRefineSearch(buildFilters({ tags: [] }));

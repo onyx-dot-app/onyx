@@ -5,6 +5,7 @@ import { SourceIcon } from "@/components/SourceIcon";
 import { WebResultIcon } from "@/components/WebResultIcon";
 import Text from "@/refresh-components/texts/Text";
 import Chip from "@/refresh-components/Chip";
+import { Tag } from "@opal/components";
 import { buildDocumentSummaryDisplay } from "@/components/search/DocumentDisplay";
 import { ValidSources } from "@/lib/types";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
@@ -13,6 +14,7 @@ import { Interactive } from "@opal/core";
 import Truncated from "@/refresh-components/texts/Truncated";
 import { timeAgo } from "@/lib/time";
 import { useMemo } from "react";
+import { SvgUser } from "@opal/icons";
 
 export interface SearchResultCardProps {
   /** The search result document to display */
@@ -82,7 +84,7 @@ export default function SearchCard({
               {/* Metadata */}
               <Section flexDirection="row" justifyContent="start" gap={0.25}>
                 {(document.primary_owners ?? []).map((owner, index) => (
-                  <Chip key={index}>{owner}</Chip>
+                  <Tag key={index} title={owner} icon={SvgUser} />
                 ))}
                 {document.metadata?.tags &&
                   (Array.isArray(document.metadata.tags)
