@@ -1,4 +1,12 @@
-import { Packet, PacketType } from "@/app/app/services/streamingModels";
+import {
+  Packet,
+  PacketType,
+  ToolCallArgumentDelta,
+} from "@/app/app/services/streamingModels";
+
+// Packet types with renderers supporting collapsed streaming mode.
+// TOOL_CALL_ARGUMENT_DELTA is intentionally excluded here because it requires
+// a tool_type check — it's handled separately in stepSupportsCollapsedStreaming.
 
 // Packet types with renderers supporting collapsed streaming mode
 export const COLLAPSED_STREAMING_PACKET_TYPES = new Set<PacketType>([
@@ -21,7 +29,12 @@ export const isSearchToolPackets = (packets: Packet[]): boolean =>
 
 // Check if packets belong to a python tool
 export const isPythonToolPackets = (packets: Packet[]): boolean =>
-  packets.some((p) => p.obj.type === PacketType.PYTHON_TOOL_START);
+  packets.some(
+    (p) =>
+      p.obj.type === PacketType.PYTHON_TOOL_START ||
+      (p.obj.type === PacketType.TOOL_CALL_ARGUMENT_DELTA &&
+        (p.obj as ToolCallArgumentDelta).tool_type === "python")
+  );
 
 // Check if packets belong to reasoning
 export const isReasoningPackets = (packets: Packet[]): boolean =>
@@ -29,8 +42,11 @@ export const isReasoningPackets = (packets: Packet[]): boolean =>
 
 // Check if step supports collapsed streaming rendering mode
 export const stepSupportsCollapsedStreaming = (packets: Packet[]): boolean =>
-  packets.some((p) =>
-    COLLAPSED_STREAMING_PACKET_TYPES.has(p.obj.type as PacketType)
+  packets.some(
+    (p) =>
+      COLLAPSED_STREAMING_PACKET_TYPES.has(p.obj.type as PacketType) ||
+      (p.obj.type === PacketType.TOOL_CALL_ARGUMENT_DELTA &&
+        (p.obj as ToolCallArgumentDelta).tool_type === "python")
   );
 
 // Check if packets have content worth rendering in collapsed streaming mode.
@@ -74,8 +90,13 @@ export const stepHasCollapsedStreamingContent = (
 
   // Custom tool shows running/completed state after start
   if (
-    packetTypes.has(PacketType.CUSTOM_TOOL_START) ||
-    packetTypes.has(PacketType.CUSTOM_TOOL_DELTA)
+    packetTypes.has(PacketType.PYTHON_TOOL_START) ||
+    packetTypes.has(PacketType.PYTHON_TOOL_DELTA) ||
+    packets.some(
+      (p) =>
+        p.obj.type === PacketType.TOOL_CALL_ARGUMENT_DELTA &&
+        (p.obj as ToolCallArgumentDelta).tool_type === "python"
+    )
   ) {
     return true;
   }
