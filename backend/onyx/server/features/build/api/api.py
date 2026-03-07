@@ -5,7 +5,6 @@ from uuid import UUID
 import httpx
 from fastapi import APIRouter
 from fastapi import Depends
-from fastapi import HTTPException
 from fastapi import Request
 from fastapi import Response
 from fastapi.responses import RedirectResponse
@@ -24,6 +23,8 @@ from onyx.db.enums import SharingScope
 from onyx.db.index_attempt import get_latest_index_attempt_for_cc_pair_id
 from onyx.db.models import BuildSession
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.api.messages_api import router as messages_router
 from onyx.server.features.build.api.models import BuildConnectorInfo
 from onyx.server.features.build.api.models import BuildConnectorListResponse
@@ -44,13 +45,10 @@ logger = setup_logger()
 def require_onyx_craft_enabled(user: User = Depends(current_user)) -> User:
     """
     Dependency that checks if Onyx Craft is enabled for the user.
-    Raises HTTP 403 if Onyx Craft is disabled via feature flag.
+    Raises OnyxError(UNAUTHORIZED) if Onyx Craft is disabled via feature flag.
     """
     if not is_onyx_craft_enabled(user):
-        raise HTTPException(
-            status_code=403,
-            detail="Onyx Craft is not available",
-        )
+        raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "Onyx Craft is not available")
     return user
 
 
@@ -290,20 +288,20 @@ def _get_sandbox_url(session_id: UUID, db_session: Session) -> str:
         Internal URL to proxy requests to
 
     Raises:
-        HTTPException: If session not found, port not allocated, or sandbox not found
+        OnyxError: If session not found, port not allocated, or sandbox not found
     """
 
     session = db_session.get(BuildSession, session_id)
     if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND, "Session not found")
     if session.nextjs_port is None:
-        raise HTTPException(status_code=503, detail="Session port not allocated")
+        raise OnyxError(OnyxErrorCode.SERVICE_UNAVAILABLE, "Session port not allocated")
     if session.user_id is None:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise OnyxError(OnyxErrorCode.USER_NOT_FOUND, "User not found")
 
     sandbox = get_sandbox_by_user_id(db_session, session.user_id)
     if sandbox is None:
-        raise HTTPException(status_code=404, detail="Sandbox not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Sandbox not found")
 
     sandbox_manager = get_sandbox_manager()
     return sandbox_manager.get_webapp_url(sandbox.id, session.nextjs_port)
@@ -364,10 +362,10 @@ def _proxy_request(
 
     except httpx.TimeoutException:
         logger.error(f"Timeout while proxying request to {target_url}")
-        raise HTTPException(status_code=504, detail="Gateway timeout")
+        raise OnyxError(OnyxErrorCode.GATEWAY_TIMEOUT, "Gateway timeout")
     except httpx.RequestError as e:
         logger.error(f"Error proxying request to {target_url}: {e}")
-        raise HTTPException(status_code=502, detail="Bad gateway")
+        raise OnyxError(OnyxErrorCode.BAD_GATEWAY, "Bad gateway")
 
 
 def _check_webapp_access(
@@ -381,13 +379,13 @@ def _check_webapp_access(
     """
     session = db_session.get(BuildSession, session_id)
     if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND, "Session not found")
     if session.sharing_scope == SharingScope.PUBLIC_GLOBAL:
         return session
     if user is None:
-        raise HTTPException(status_code=401, detail="Authentication required")
+        raise OnyxError(OnyxErrorCode.UNAUTHENTICATED, "Authentication required")
     if session.sharing_scope == SharingScope.PRIVATE and session.user_id != user.id:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND, "Session not found")
     return session
 
 
@@ -427,13 +425,13 @@ def get_webapp(
     """
     try:
         _check_webapp_access(session_id, user, db_session)
-    except HTTPException as e:
+    except OnyxError as e:
         if e.status_code == 401:
             return RedirectResponse(url="/auth/login", status_code=302)
         raise
     try:
         return _proxy_request(path, request, session_id, db_session)
-    except HTTPException as e:
+    except OnyxError as e:
         if e.status_code in (502, 503, 504):
             return _offline_html_response()
         raise
@@ -462,19 +460,13 @@ def reset_sandbox(
     try:
         success = session_manager.terminate_user_sandbox(user.id)
         if not success:
-            raise HTTPException(
-                status_code=404,
-                detail="No sandbox found for user",
-            )
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "No sandbox found for user")
         db_session.commit()
-    except HTTPException:
+    except OnyxError:
         raise
     except Exception as e:
         db_session.rollback()
         logger.error(f"Failed to reset sandbox for user {user.id}: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to reset sandbox: {e}",
-        )
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, f"Failed to reset sandbox: {e}")
 
     return Response(status_code=204)

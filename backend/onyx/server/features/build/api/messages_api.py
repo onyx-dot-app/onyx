@@ -5,7 +5,6 @@ from uuid import UUID
 
 from fastapi import APIRouter
 from fastapi import Depends
-from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -14,6 +13,8 @@ from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.api.models import MessageListResponse
 from onyx.server.features.build.api.models import MessageRequest
 from onyx.server.features.build.api.models import MessageResponse
@@ -36,7 +37,7 @@ def check_build_rate_limits(
     """
     Dependency to check build mode rate limits before processing the request.
 
-    Raises HTTPException(429) if rate limit is exceeded.
+    Raises OnyxError(RATE_LIMITED) if rate limit is exceeded.
     Follows the same pattern as chat's check_token_rate_limits.
     """
     session_manager = SessionManager(db_session)
@@ -44,10 +45,7 @@ def check_build_rate_limits(
     try:
         session_manager.check_rate_limit(user)
     except RateLimitError as e:
-        raise HTTPException(
-            status_code=429,
-            detail=str(e),
-        )
+        raise OnyxError(OnyxErrorCode.RATE_LIMITED, str(e))
 
 
 @router.get("/sessions/{session_id}/messages", tags=PUBLIC_API_TAGS)
@@ -58,14 +56,14 @@ def list_messages(
 ) -> MessageListResponse:
     """Get all messages for a build session."""
     if user is None:
-        raise HTTPException(status_code=401, detail="Authentication required")
+        raise OnyxError(OnyxErrorCode.UNAUTHENTICATED, "Authentication required")
 
     session_manager = SessionManager(db_session)
 
     messages = session_manager.list_messages(session_id, user.id)
 
     if messages is None:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND, "Session not found")
 
     return MessageListResponse(
         messages=[MessageResponse.from_model(msg) for msg in messages]
