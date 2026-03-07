@@ -6,7 +6,7 @@ WORKDIR /app
 COPY ./ .
 
 ARG TARGETARCH
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -ldflags="-s -w" -a -installsuffix static -o onyx-cli .
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -ldflags="-s -w" -a -o onyx-cli .
 
 FROM scratch
 
