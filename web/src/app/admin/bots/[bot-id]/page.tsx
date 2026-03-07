@@ -2,8 +2,7 @@
 
 import { use } from "react";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { ThreeDotsLoader } from "@/components/Loading";
-import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
+import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import SlackChannelConfigsTable from "./SlackChannelConfigsTable";
 import { useSlackBot, useSlackChannelConfigsByBot } from "./hooks";
 import { ExistingSlackBotForm } from "../SlackBotUpdateForm";
@@ -26,11 +25,7 @@ function SlackBotEditContent({ botId }: { botId: string }) {
   } = useSlackChannelConfigsByBot(Number(botId));
 
   if (isSlackBotLoading || isSlackChannelConfigsLoading) {
-    return (
-      <div className="flex justify-center items-center h-screen">
-        <ThreeDotsLoader />
-      </div>
-    );
+    return <SimpleLoader />;
   }
 
   if (slackBotError || !slackBot) {
@@ -61,8 +56,6 @@ function SlackBotEditContent({ botId }: { botId: string }) {
 
   return (
     <>
-      <InstantSSRAutoRefresh />
-
       <ExistingSlackBotForm
         existingSlackBot={slackBot}
         refreshSlackBot={refreshSlackBot}
