@@ -641,16 +641,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   const hasStarterMessages = (liveAgent?.starter_messages?.length ?? 0) > 0;
 
   const isSearch = classification === "search";
-  const gridStyle = {
-    gridTemplateColumns: "1fr",
-    gridTemplateRows: isSearch
-      ? "0fr auto 1fr"
-      : appFocus.isChat()
-        ? "1fr auto 0fr"
-        : appFocus.isProject()
-          ? "auto auto 1fr"
-          : "1fr auto 1fr",
-  };
 
   if (!isReady) return <OnyxInitializingLoader />;
 
@@ -714,13 +704,21 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
               className="h-full w-full flex flex-col items-center outline-none relative"
               {...getRootProps({ tabIndex: -1 })}
             >
-              {/* Main content grid — 3 rows, animated */}
-              <div
-                className="flex-1 w-full grid min-h-0 px-4 transition-[grid-template-rows] duration-150 ease-in-out"
-                style={gridStyle}
-              >
+              {/* Main content — 3 flex rows, animated */}
+              <div className="flex-1 w-full flex flex-col min-h-0 px-4">
                 {/* ── Top row: ChatUI / WelcomeMessage / ProjectUI ── */}
-                <div className="row-start-1 min-h-0 overflow-hidden flex flex-col items-center">
+                <div
+                  className={cn(
+                    "min-h-0 overflow-hidden flex flex-col items-center transition-[flex] duration-150 ease-in-out",
+                    isSearch
+                      ? "flex-[0_0_0px]"
+                      : appFocus.isChat()
+                        ? "flex-[1_1_0px]"
+                        : appFocus.isProject()
+                          ? "flex-[0_0_auto]"
+                          : "flex-[1_1_0px]"
+                  )}
+                >
                   {/* ChatUI */}
                   <Fade
                     show={
@@ -781,7 +779,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                 </div>
 
                 {/* ── Middle-center: AppInputBar ── */}
-                <div className="row-start-2 flex flex-col items-center">
+                <div className="flex-shrink-0 flex flex-col items-center">
                   <div className="relative w-full max-w-[var(--app-page-main-content-width)] flex flex-col">
                     {/* Scroll to bottom button - positioned absolutely above AppInputBar */}
                     {appFocus.isChat() && showScrollButton && (
@@ -881,7 +879,16 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                 </div>
 
                 {/* ── Bottom: SearchResults + SourceFilter / Suggestions / ProjectChatList ── */}
-                <div className="row-start-3 min-h-0 overflow-hidden flex flex-col items-center w-full">
+                <div
+                  className={cn(
+                    "min-h-0 overflow-hidden flex flex-col items-center w-full transition-[flex] duration-150 ease-in-out",
+                    isSearch
+                      ? "flex-[1_1_0px]"
+                      : appFocus.isChat()
+                        ? "flex-[0_0_0px]"
+                        : "flex-[1_1_0px]"
+                  )}
+                >
                   {/* Agent description below input */}
                   {(appFocus.isNewSession() || appFocus.isAgent()) &&
                     !isDefaultAgent && (
@@ -913,7 +920,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                   {/* SearchUI */}
                   <Fade
                     show={isSearch}
-                    className="h-full flex-1 w-full max-w-[var(--app-page-main-content-width)] px-1 flex flex-col"
+                    className="h-full flex-1 min-h-0 w-full max-w-[var(--app-page-main-content-width)] px-1 flex flex-col"
                   >
                     <Spacer rem={0.75} />
                     <SearchUI onDocumentClick={handleSearchDocumentClick} />
