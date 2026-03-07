@@ -188,6 +188,25 @@ else
     exit 1
 fi
 
+# Add port mappings for api_server and web_server for direct access
+log_info "Configuring service port mappings..."
+
+# Add ports to api_server (port 8080)
+if ! grep -q "api_server:" docker-compose.yml | grep -A 50 "ports:"; then
+    sed -i '/api_server:/,/environment:/ {
+      /restart: unless-stopped/a\    ports:\n      - "8080:8080"
+    }' docker-compose.yml
+    log_info "Added port mapping for api_server (8080)"
+fi
+
+# Add ports to web_server (port 3000)
+if ! grep -q "web_server:" docker-compose.yml | grep -A 50 "ports:"; then
+    sed -i '/web_server:/,/environment:/ {
+      /restart: unless-stopped/a\    ports:\n      - "3000:3000"
+    }' docker-compose.yml
+    log_info "Added port mapping for web_server (3000)"
+fi
+
 # Phase 6: Pull images
 log_info "Phase 6: Pulling Docker images (this may take a few minutes)..."
 sudo docker compose pull
@@ -218,25 +237,133 @@ done
 log_info "Phase 9: Running database migrations..."
 sudo docker compose exec -T backend alembic upgrade head
 
+# Phase 10: Set up Nginx reverse proxy
+log_info "Phase 10: Setting up Nginx reverse proxy..."
+
+cat > nginx-simple.conf << 'NGINXEOF'
+events {
+    worker_connections 1024;
+}
+
+http {
+    upstream api {
+        server api_server:8080;
+    }
+
+    upstream web {
+        server web_server:3000;
+    }
+
+    # Redirect HTTP to HTTPS
+    server {
+        listen 80;
+        server_name $DOMAIN www.$DOMAIN;
+
+        # Allow Let's Encrypt validation
+        location /.well-known/acme-challenge/ {
+            root /var/www/certbot;
+        }
+
+        # Redirect everything else to HTTPS
+        location / {
+            return 301 https://$host$request_uri;
+        }
+    }
+
+    # HTTPS server
+    server {
+        listen 443 ssl;
+        server_name $DOMAIN www.$DOMAIN;
+        client_max_body_size 100M;
+
+        # SSL certificates
+        ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
+
+        ssl_protocols TLSv1.2 TLSv1.3;
+        ssl_ciphers HIGH:!aNULL:!MD5;
+
+        # API routes - strip /api prefix
+        location /api/ {
+            proxy_pass http://api/;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto https;
+        }
+
+        # Web frontend
+        location / {
+            proxy_pass http://web;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto https;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+        }
+    }
+}
+NGINXEOF
+
+log_info "Nginx configuration created"
+
+# Phase 11: Get SSL certificate from Let's Encrypt
+log_info "Phase 11: Getting SSL certificate from Let's Encrypt..."
+
+sudo docker run --rm \
+  -v /etc/letsencrypt:/etc/letsencrypt \
+  -p 80:80 \
+  -p 443:443 \
+  certbot/certbot certonly \
+  --standalone \
+  -d $DOMAIN \
+  -d www.$DOMAIN \
+  --non-interactive \
+  --agree-tos \
+  --email $SSL_EMAIL
+
+if [ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
+    log_info "SSL certificate obtained successfully"
+else
+    log_warn "SSL certificate generation failed - HTTPS may not work"
+fi
+
+# Phase 12: Start Nginx reverse proxy
+log_info "Phase 12: Starting Nginx reverse proxy..."
+
+# Stop old nginx proxy if it exists
+sudo docker stop onyx-proxy 2>/dev/null || true
+sudo docker rm onyx-proxy 2>/dev/null || true
+
+sudo docker run -d \
+  --name onyx-proxy \
+  --network onyx_default \
+  -p 80:80 \
+  -p 443:443 \
+  -v $(pwd)/nginx-simple.conf:/etc/nginx/nginx.conf:ro \
+  -v /etc/letsencrypt:/etc/letsencrypt:ro \
+  -v /var/www/certbot:/var/www/certbot \
+  nginx:alpine
+
+log_info "Nginx proxy started on ports 80 and 443"
+
 log_info ""
 log_info "==================================================="
 log_info "✓ Onyx deployment complete!"
 log_info "==================================================="
 log_info ""
-log_info "Next steps:"
-log_info "1. Verify DNS: Visit your domain DNS settings and confirm A record points to $DROPLET_IP"
-log_info "2. Wait for DNS propagation (5-15 minutes typically)"
-log_info "3. Access your instance:"
-log_info "   - HTTP:  http://$DOMAIN"
-log_info "   - HTTPS: https://$DOMAIN (after DNS propagates)"
+log_info "✓ Deployment successful!"
 log_info ""
-log_info "To check service logs:"
-log_info "   cd $DEPLOY_DIR && sudo docker compose logs -f"
+log_info "Access your instance:"
+log_info "   HTTPS: https://$DOMAIN (secure with Let's Encrypt SSL)"
+log_info "   HTTP:  http://$DOMAIN (auto-redirects to HTTPS)"
 log_info ""
-log_info "To check specific service:"
-log_info "   cd $DEPLOY_DIR && sudo docker compose logs -f backend"
-log_info ""
-log_info "To stop services:"
-log_info "   cd $DEPLOY_DIR && sudo docker compose down"
+log_info "Useful commands:"
+log_info "   # View all logs: cd $DEPLOY_DIR && sudo docker compose logs -f"
+log_info "   # View backend: cd $DEPLOY_DIR && sudo docker compose logs -f api_server"
+log_info "   # Service status: cd $DEPLOY_DIR && sudo docker compose ps"
+log_info "   # Stop services: cd $DEPLOY_DIR && sudo docker compose down"
 log_info ""
 log_info "==================================================="
