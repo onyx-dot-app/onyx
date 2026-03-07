@@ -197,7 +197,7 @@ jobs:
           ARM64_DIGEST: ${{ needs.docker-arm64.outputs.digest }}
           TAG: ${{ github.ref_name }}
         run: |
-          SANITIZED_TAG=$(echo "$TAG" | tr '/' '-')
+          SANITIZED_TAG="${TAG#cli/}"
           IMAGES="${REGISTRY_IMAGE}@${AMD64_DIGEST} ${REGISTRY_IMAGE}@${ARM64_DIGEST}"
 
           if [[ "$TAG" =~ ^cli/v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
