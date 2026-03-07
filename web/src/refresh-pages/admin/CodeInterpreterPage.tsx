@@ -4,7 +4,6 @@ import React, { useEffect, useRef, useState } from "react";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { Card, type CardProps } from "@/refresh-components/cards";
 import {
-  SvgAlertCircle,
   SvgArrowExchange,
   SvgCheckCircle,
   SvgRefreshCw,
