@@ -1,8 +1,8 @@
 #!/bin/bash
 
-set -e
+set -euo pipefail
 
-# Expected resource requirements
+# Expected resource requirements (overridden below if --lite)
 EXPECTED_DOCKER_RAM_GB=10
 EXPECTED_DISK_GB=32
 
@@ -10,6 +10,10 @@ EXPECTED_DISK_GB=32
 SHUTDOWN_MODE=false
 DELETE_DATA_MODE=false
 INCLUDE_CRAFT=false  # Disabled by default, use --include-craft to enable
+LITE_MODE=false       # Disabled by default, use --lite to enable
+NO_PROMPT=false
+DRY_RUN=false
+VERBOSE=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -25,6 +29,22 @@ while [[ $# -gt 0 ]]; do
             INCLUDE_CRAFT=true
             shift
             ;;
+        --lite)
+            LITE_MODE=true
+            shift
+            ;;
+        --no-prompt)
+            NO_PROMPT=true
+            shift
+            ;;
+        --dry-run)
+            DRY_RUN=true
+            shift
+            ;;
+        --verbose)
+            VERBOSE=true
+            shift
+            ;;
         --help|-h)
             echo "Onyx Installation Script"
             echo ""
@@ -32,15 +52,21 @@ while [[ $# -gt 0 ]]; do
             echo ""
             echo "Options:"
             echo "  --include-craft  Enable Onyx Craft (AI-powered web app building)"
+            echo "  --lite           Deploy Onyx Lite (no Vespa, Redis, or model servers)"
             echo "  --shutdown       Stop (pause) Onyx containers"
             echo "  --delete-data    Remove all Onyx data (containers, volumes, and files)"
+            echo "  --no-prompt      Run non-interactively with defaults (for CI/automation)"
+            echo "  --dry-run        Show what would be done without making changes"
+            echo "  --verbose        Show detailed output for debugging"
             echo "  --help, -h       Show this help message"
             echo ""
             echo "Examples:"
             echo "  $0                    # Install Onyx"
+            echo "  $0 --lite             # Install Onyx Lite (minimal deployment)"
             echo "  $0 --include-craft    # Install Onyx with Craft enabled"
             echo "  $0 --shutdown         # Pause Onyx services"
             echo "  $0 --delete-data      # Completely remove Onyx and all data"
+            echo "  $0 --no-prompt        # Non-interactive install with defaults"
             exit 0
             ;;
         *)
@@ -51,7 +77,115 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+if [[ "$VERBOSE" = true ]]; then
+    set -x
+fi
+
+if [[ "$LITE_MODE" = true ]] && [[ "$INCLUDE_CRAFT" = true ]]; then
+    echo "ERROR: --lite and --include-craft cannot be used together."
+    echo "Craft requires services (Vespa, Redis, background workers) that lite mode disables."
+    exit 1
+fi
+
+# Lite mode needs far fewer resources (no Vespa, Redis, or model servers)
+if [[ "$LITE_MODE" = true ]]; then
+    EXPECTED_DOCKER_RAM_GB=4
+    EXPECTED_DISK_GB=16
+fi
+
 INSTALL_ROOT="${INSTALL_PREFIX:-onyx_data}"
+
+LITE_COMPOSE_FILE="docker-compose.onyx-lite.yml"
+
+# Build the -f flags for docker compose. For shutdown/delete-data we auto-detect
+# whether the lite overlay was previously downloaded; for install we use --lite.
+compose_file_args() {
+    local args="-f docker-compose.yml"
+    if [[ "$LITE_MODE" = true ]] || [[ -f "${INSTALL_ROOT}/deployment/${LITE_COMPOSE_FILE}" ]]; then
+        args="$args -f ${LITE_COMPOSE_FILE}"
+    fi
+    echo "$args"
+}
+
+# --- Temp file cleanup ---
+TMPFILES=()
+cleanup_tmpfiles() {
+    local f
+    for f in "${TMPFILES[@]:-}"; do
+        rm -rf "$f" 2>/dev/null || true
+    done
+}
+trap cleanup_tmpfiles EXIT
+
+mktempfile() {
+    local f
+    f="$(mktemp)"
+    TMPFILES+=("$f")
+    echo "$f"
+}
+
+# --- Downloader detection (curl with wget fallback) ---
+DOWNLOADER=""
+detect_downloader() {
+    if command -v curl &> /dev/null; then
+        DOWNLOADER="curl"
+        return 0
+    fi
+    if command -v wget &> /dev/null; then
+        DOWNLOADER="wget"
+        return 0
+    fi
+    echo "ERROR: Neither curl nor wget found. Please install one and retry."
+    exit 1
+}
+detect_downloader
+
+download_file() {
+    local url="$1"
+    local output="$2"
+    if [[ "$DOWNLOADER" == "curl" ]]; then
+        curl -fsSL --retry 3 --retry-delay 2 --retry-connrefused -o "$output" "$url"
+    else
+        wget -q --tries=3 --timeout=20 -O "$output" "$url"
+    fi
+}
+
+# --- Interactive prompt helpers ---
+is_interactive() {
+    [[ "$NO_PROMPT" = false ]] && [[ -t 0 ]]
+}
+
+prompt_or_default() {
+    local prompt_text="$1"
+    local default_value="$2"
+    if is_interactive; then
+        read -p "$prompt_text" -r REPLY
+        if [[ -z "$REPLY" ]]; then
+            REPLY="$default_value"
+        fi
+    else
+        REPLY="$default_value"
+    fi
+}
+
+prompt_yn_or_default() {
+    local prompt_text="$1"
+    local default_value="$2"
+    if is_interactive; then
+        read -p "$prompt_text" -n 1 -r
+        echo ""
+    else
+        REPLY="$default_value"
+    fi
+}
+
+prompt_enter_or_skip() {
+    local prompt_text="$1"
+    if is_interactive; then
+        echo -e "$prompt_text"
+        read -r
+    fi
+}
 
 # Colors for output
 RED='\033[0;31m'
@@ -111,7 +245,7 @@ if [ "$SHUTDOWN_MODE" = true ]; then
             fi
 
             # Stop containers (without removing them)
-            (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD -f docker-compose.yml stop)
+            (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args) stop)
             if [ $? -eq 0 ]; then
                 print_success "Onyx containers stopped (paused)"
             else
@@ -140,12 +274,17 @@ if [ "$DELETE_DATA_MODE" = true ]; then
     echo "  • All downloaded files and configurations"
     echo "  • All user data and documents"
     echo ""
-    read -p "Are you sure you want to continue? Type 'DELETE' to confirm: " -r
-    echo ""
-
-    if [ "$REPLY" != "DELETE" ]; then
-        print_info "Operation cancelled."
-        exit 0
+    if is_interactive; then
+        read -p "Are you sure you want to continue? Type 'DELETE' to confirm: " -r
+        echo ""
+        if [ "$REPLY" != "DELETE" ]; then
+            print_info "Operation cancelled."
+            exit 0
+        fi
+    else
+        print_error "Cannot confirm destructive operation in non-interactive mode."
+        print_info "Run interactively or remove the ${INSTALL_ROOT} directory manually."
+        exit 1
     fi
 
     print_info "Removing Onyx containers and volumes..."
@@ -164,7 +303,7 @@ if [ "$DELETE_DATA_MODE" = true ]; then
             fi
 
             # Stop and remove containers with volumes
-            (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD -f docker-compose.yml down -v)
+            (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args) down -v)
             if [ $? -eq 0 ]; then
                 print_success "Onyx containers and volumes removed"
             else
@@ -198,8 +337,13 @@ echo " \____/|_| |_|\__, /_/\_\ "
 echo "               __/ |      "
 echo "              |___/       "
 echo -e "${NC}"
-echo "Welcome to Onyx Installation Script"
-echo "===================================="
+if [[ "$LITE_MODE" = true ]]; then
+    echo "Welcome to Onyx Lite Installation Script"
+    echo "========================================="
+else
+    echo "Welcome to Onyx Installation Script"
+    echo "===================================="
+fi
 echo ""
 
 # User acknowledgment section
@@ -207,16 +351,40 @@ echo -e "${YELLOW}${BOLD}This script will:${NC}"
 echo "1. Download deployment files for Onyx into a new '${INSTALL_ROOT}' directory"
 echo "2. Check your system resources (Docker, memory, disk space)"
 echo "3. Guide you through deployment options (version, authentication)"
+if [[ "$LITE_MODE" = true ]]; then
+    echo ""
+    echo -e "${YELLOW}${BOLD}Lite mode:${NC} Vespa, Redis, and model servers will NOT be started."
+    echo "This gives you the core chat experience with lower resource requirements."
+fi
 echo ""
 
-# Only prompt for acknowledgment if running interactively
-if [ -t 0 ]; then
+if is_interactive; then
     echo -e "${YELLOW}${BOLD}Please acknowledge and press Enter to continue...${NC}"
     read -r
     echo ""
 else
     echo -e "${YELLOW}${BOLD}Running in non-interactive mode - proceeding automatically...${NC}"
     echo ""
+fi
+
+# Detect OS (including WSL)
+IS_WSL=false
+if [[ -n "${WSL_DISTRO_NAME:-}" ]] || grep -qi microsoft /proc/version 2>/dev/null; then
+    IS_WSL=true
+fi
+
+# Dry-run: show plan and exit
+if [[ "$DRY_RUN" = true ]]; then
+    print_info "Dry run mode — showing what would happen:"
+    echo "  • Install root: ${INSTALL_ROOT}"
+    echo "  • Lite mode: ${LITE_MODE}"
+    echo "  • Include Craft: ${INCLUDE_CRAFT}"
+    echo "  • OS type: ${OSTYPE:-unknown} (WSL: ${IS_WSL})"
+    echo "  • Downloader: ${DOWNLOADER}"
+    echo "  • Min RAM: ${EXPECTED_DOCKER_RAM_GB}GB, Min disk: ${EXPECTED_DISK_GB}GB"
+    echo ""
+    print_success "Dry run complete (no changes made)"
+    exit 0
 fi
 
 # GitHub repo base URL - using main branch
@@ -260,41 +428,35 @@ else
     exit 1
 fi
 
-# Function to compare version numbers
+# Returns 0 if $1 <= $2, 1 if $1 > $2
+# Handles missing or non-numeric parts gracefully (treats them as 0)
 version_compare() {
-    # Returns 0 if $1 <= $2, 1 if $1 > $2
-    local version1=$1
-    local version2=$2
+    local version1="${1:-0.0.0}"
+    local version2="${2:-0.0.0}"
 
-    # Split versions into components
-    local v1_major=$(echo $version1 | cut -d. -f1)
-    local v1_minor=$(echo $version1 | cut -d. -f2)
-    local v1_patch=$(echo $version1 | cut -d. -f3)
+    local v1_major v1_minor v1_patch v2_major v2_minor v2_patch
+    v1_major=$(echo "$version1" | cut -d. -f1)
+    v1_minor=$(echo "$version1" | cut -d. -f2)
+    v1_patch=$(echo "$version1" | cut -d. -f3)
+    v2_major=$(echo "$version2" | cut -d. -f1)
+    v2_minor=$(echo "$version2" | cut -d. -f2)
+    v2_patch=$(echo "$version2" | cut -d. -f3)
 
-    local v2_major=$(echo $version2 | cut -d. -f1)
-    local v2_minor=$(echo $version2 | cut -d. -f2)
-    local v2_patch=$(echo $version2 | cut -d. -f3)
+    # Default non-numeric or empty parts to 0
+    [[ "$v1_major" =~ ^[0-9]+$ ]] || v1_major=0
+    [[ "$v1_minor" =~ ^[0-9]+$ ]] || v1_minor=0
+    [[ "$v1_patch" =~ ^[0-9]+$ ]] || v1_patch=0
+    [[ "$v2_major" =~ ^[0-9]+$ ]] || v2_major=0
+    [[ "$v2_minor" =~ ^[0-9]+$ ]] || v2_minor=0
+    [[ "$v2_patch" =~ ^[0-9]+$ ]] || v2_patch=0
 
-    # Compare major version
-    if [ "$v1_major" -lt "$v2_major" ]; then
-        return 0
-    elif [ "$v1_major" -gt "$v2_major" ]; then
-        return 1
-    fi
+    if [ "$v1_major" -lt "$v2_major" ]; then return 0
+    elif [ "$v1_major" -gt "$v2_major" ]; then return 1; fi
 
-    # Compare minor version
-    if [ "$v1_minor" -lt "$v2_minor" ]; then
-        return 0
-    elif [ "$v1_minor" -gt "$v2_minor" ]; then
-        return 1
-    fi
+    if [ "$v1_minor" -lt "$v2_minor" ]; then return 0
+    elif [ "$v1_minor" -gt "$v2_minor" ]; then return 1; fi
 
-    # Compare patch version
-    if [ "$v1_patch" -le "$v2_patch" ]; then
-        return 0
-    else
-        return 1
-    fi
+    [ "$v1_patch" -le "$v2_patch" ]
 }
 
 # Check Docker daemon
@@ -371,8 +533,7 @@ if [ "$RESOURCE_WARNING" = true ]; then
     echo ""
     print_warning "Onyx recommends at least ${EXPECTED_DOCKER_RAM_GB}GB RAM and ${EXPECTED_DISK_GB}GB disk space for optimal performance."
     echo ""
-    read -p "Do you want to continue anyway? (y/N): " -n 1 -r
-    echo ""
+    prompt_yn_or_default "Do you want to continue anyway? (y/N): " "y"
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
         print_info "Installation cancelled. Please allocate more resources and try again."
         exit 1
@@ -397,6 +558,9 @@ print_info "This step downloads all necessary configuration files from GitHub...
 echo ""
 print_info "Downloading the following files:"
 echo "  • docker-compose.yml - Main Docker Compose configuration"
+if [[ "$LITE_MODE" = true ]]; then
+    echo "  • ${LITE_COMPOSE_FILE} - Lite mode overlay"
+fi
 echo "  • env.template - Environment variables template"
 echo "  • nginx/app.conf.template - Nginx web server configuration"
 echo "  • nginx/run-nginx.sh - Nginx startup script"
@@ -406,7 +570,7 @@ echo ""
 # Download Docker Compose file
 COMPOSE_FILE="${INSTALL_ROOT}/deployment/docker-compose.yml"
 print_info "Downloading docker-compose.yml..."
-if curl -fsSL -o "$COMPOSE_FILE" "${GITHUB_RAW_URL}/docker-compose.yml" 2>/dev/null; then
+if download_file "${GITHUB_RAW_URL}/docker-compose.yml" "$COMPOSE_FILE" 2>/dev/null; then
     print_success "Docker Compose file downloaded successfully"
 
     # Check if Docker Compose version is older than 2.24.0 and show warning
@@ -431,8 +595,7 @@ if curl -fsSL -o "$COMPOSE_FILE" "${GITHUB_RAW_URL}/docker-compose.yml" 2>/dev/n
         echo ""
         print_warning "The installation will continue, but may fail if Docker Compose cannot parse the file."
         echo ""
-        read -p "Do you want to continue anyway? (y/N): " -n 1 -r
-        echo ""
+        prompt_yn_or_default "Do you want to continue anyway? (y/N): " "y"
         if [[ ! $REPLY =~ ^[Yy]$ ]]; then
             print_info "Installation cancelled. Please upgrade Docker Compose or manually edit the docker-compose.yml file."
             exit 1
@@ -445,10 +608,23 @@ else
     exit 1
 fi
 
+# Download lite overlay if --lite was requested
+if [[ "$LITE_MODE" = true ]]; then
+    LITE_FILE="${INSTALL_ROOT}/deployment/${LITE_COMPOSE_FILE}"
+    print_info "Downloading ${LITE_COMPOSE_FILE} (lite overlay)..."
+    if download_file "${GITHUB_RAW_URL}/${LITE_COMPOSE_FILE}" "$LITE_FILE" 2>/dev/null; then
+        print_success "Lite overlay downloaded successfully"
+    else
+        print_error "Failed to download lite overlay"
+        print_info "Please ensure you have internet connection and try again"
+        exit 1
+    fi
+fi
+
 # Download env.template file
 ENV_TEMPLATE="${INSTALL_ROOT}/deployment/env.template"
 print_info "Downloading env.template..."
-if curl -fsSL -o "$ENV_TEMPLATE" "${GITHUB_RAW_URL}/env.template" 2>/dev/null; then
+if download_file "${GITHUB_RAW_URL}/env.template" "$ENV_TEMPLATE" 2>/dev/null; then
     print_success "Environment template downloaded successfully"
 else
     print_error "Failed to download env.template"
@@ -462,7 +638,7 @@ NGINX_BASE_URL="https://raw.githubusercontent.com/onyx-dot-app/onyx/main/deploym
 # Download app.conf.template
 NGINX_CONFIG="${INSTALL_ROOT}/data/nginx/app.conf.template"
 print_info "Downloading nginx configuration template..."
-if curl -fsSL -o "$NGINX_CONFIG" "$NGINX_BASE_URL/app.conf.template" 2>/dev/null; then
+if download_file "$NGINX_BASE_URL/app.conf.template" "$NGINX_CONFIG" 2>/dev/null; then
     print_success "Nginx configuration template downloaded"
 else
     print_error "Failed to download nginx configuration template"
@@ -473,7 +649,7 @@ fi
 # Download run-nginx.sh script
 NGINX_RUN_SCRIPT="${INSTALL_ROOT}/data/nginx/run-nginx.sh"
 print_info "Downloading nginx startup script..."
-if curl -fsSL -o "$NGINX_RUN_SCRIPT" "$NGINX_BASE_URL/run-nginx.sh" 2>/dev/null; then
+if download_file "$NGINX_BASE_URL/run-nginx.sh" "$NGINX_RUN_SCRIPT" 2>/dev/null; then
     chmod +x "$NGINX_RUN_SCRIPT"
     print_success "Nginx startup script downloaded and made executable"
 else
@@ -485,7 +661,7 @@ fi
 # Download README file
 README_FILE="${INSTALL_ROOT}/README.md"
 print_info "Downloading README.md..."
-if curl -fsSL -o "$README_FILE" "${GITHUB_RAW_URL}/README.md" 2>/dev/null; then
+if download_file "${GITHUB_RAW_URL}/README.md" "$README_FILE" 2>/dev/null; then
     print_success "README.md downloaded successfully"
 else
     print_error "Failed to download README.md"
@@ -513,7 +689,7 @@ if [ -d "${INSTALL_ROOT}/deployment" ] && [ -f "${INSTALL_ROOT}/deployment/docke
 
     if [ -n "$COMPOSE_CMD" ]; then
         # Check if any containers are running
-        RUNNING_CONTAINERS=$(cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD -f docker-compose.yml ps -q 2>/dev/null | wc -l)
+        RUNNING_CONTAINERS=$(cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args) ps -q 2>/dev/null | wc -l)
         if [ "$RUNNING_CONTAINERS" -gt 0 ]; then
             print_error "Onyx services are currently running!"
             echo ""
@@ -534,7 +710,7 @@ if [ -f "$ENV_FILE" ]; then
     echo "• Press Enter to restart with current configuration"
     echo "• Type 'update' to update to a newer version"
     echo ""
-    read -p "Choose an option [default: restart]: " -r
+    prompt_or_default "Choose an option [default: restart]: " ""
     echo ""
 
     if [ "$REPLY" = "update" ]; then
@@ -543,22 +719,19 @@ if [ -f "$ENV_FILE" ]; then
         echo "• Press Enter for latest (recommended)"
         echo "• Type a specific tag (e.g., v0.1.0)"
         echo ""
-        # If --include-craft was passed, default to craft-latest
         if [ "$INCLUDE_CRAFT" = true ]; then
-            read -p "Enter tag [default: craft-latest]: " -r VERSION
+            prompt_or_default "Enter tag [default: craft-latest]: " "craft-latest"
+            VERSION="$REPLY"
         else
-            read -p "Enter tag [default: latest]: " -r VERSION
+            prompt_or_default "Enter tag [default: latest]: " "latest"
+            VERSION="$REPLY"
         fi
         echo ""
 
-        if [ -z "$VERSION" ]; then
-            if [ "$INCLUDE_CRAFT" = true ]; then
-                VERSION="craft-latest"
-                print_info "Selected: craft-latest (Craft enabled)"
-            else
-                VERSION="latest"
-                print_info "Selected: Latest version"
-            fi
+        if [ "$INCLUDE_CRAFT" = true ] && [ "$VERSION" = "craft-latest" ]; then
+            print_info "Selected: craft-latest (Craft enabled)"
+        elif [ "$VERSION" = "latest" ]; then
+            print_info "Selected: Latest version"
         else
             print_info "Selected: $VERSION"
         fi
@@ -595,23 +768,21 @@ else
         echo "• Press Enter for craft-latest (recommended for Craft)"
         echo "• Type a specific tag (e.g., craft-v1.0.0)"
         echo ""
-        read -p "Enter tag [default: craft-latest]: " -r VERSION
+        prompt_or_default "Enter tag [default: craft-latest]: " "craft-latest"
+        VERSION="$REPLY"
     else
         echo "• Press Enter for latest (recommended)"
         echo "• Type a specific tag (e.g., v0.1.0)"
         echo ""
-        read -p "Enter tag [default: latest]: " -r VERSION
+        prompt_or_default "Enter tag [default: latest]: " "latest"
+        VERSION="$REPLY"
     fi
     echo ""
 
-    if [ -z "$VERSION" ]; then
-        if [ "$INCLUDE_CRAFT" = true ]; then
-            VERSION="craft-latest"
-            print_info "Selected: craft-latest (Craft enabled)"
-        else
-            VERSION="latest"
-            print_info "Selected: Latest tag"
-        fi
+    if [ "$INCLUDE_CRAFT" = true ] && [ "$VERSION" = "craft-latest" ]; then
+        print_info "Selected: craft-latest (Craft enabled)"
+    elif [ "$VERSION" = "latest" ]; then
+        print_info "Selected: Latest tag"
     else
         print_info "Selected: $VERSION"
     fi
@@ -684,6 +855,13 @@ else
     echo "  • Domain settings (for production)"
     echo "  • Onyx Craft (set ENABLE_CRAFT=true)"
     echo ""
+fi
+
+# Reject craft image tags when running in lite mode
+if [[ "$LITE_MODE" = true ]] && [[ "${VERSION:-}" == craft-* ]]; then
+    print_error "Cannot use a craft image tag (${VERSION}) with --lite."
+    print_info "Craft requires services (Vespa, Redis, background workers) that lite mode disables."
+    exit 1
 fi
 
 # Function to check if a port is available
@@ -771,7 +949,7 @@ print_step "Pulling Docker images"
 print_info "This may take several minutes depending on your internet connection..."
 echo ""
 print_info "Downloading Docker images (this may take a while)..."
-(cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD -f docker-compose.yml pull --quiet)
+(cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args) pull --quiet)
 if [ $? -eq 0 ]; then
     print_success "Docker images downloaded successfully"
 else
@@ -785,9 +963,9 @@ print_info "Launching containers..."
 echo ""
 if [ "$USE_LATEST" = true ]; then
     print_info "Force pulling latest images and recreating containers..."
-    (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD -f docker-compose.yml up -d --pull always --force-recreate)
+    (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args) up -d --pull always --force-recreate)
 else
-    (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD -f docker-compose.yml up -d)
+    (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args) up -d)
 fi
 if [ $? -ne 0 ]; then
     print_error "Failed to start Onyx services"
@@ -809,7 +987,7 @@ echo ""
 # Check for restart loops
 print_info "Checking container health status..."
 RESTART_ISSUES=false
-CONTAINERS=$(cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD -f docker-compose.yml ps -q 2>/dev/null)
+CONTAINERS=$(cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args) ps -q 2>/dev/null)
 
 for CONTAINER in $CONTAINERS; do
     PROJECT_NAME="$(basename "$INSTALL_ROOT")_deployment_"
@@ -838,7 +1016,7 @@ if [ "$RESTART_ISSUES" = true ]; then
     print_error "Some containers are experiencing issues!"
     echo ""
     print_info "Please check the logs for more information:"
-    echo "  (cd \"${INSTALL_ROOT}/deployment\" && $COMPOSE_CMD -f docker-compose.yml logs)"
+    echo "  (cd \"${INSTALL_ROOT}/deployment\" && $COMPOSE_CMD $(compose_file_args) logs)"
 
     echo ""
     print_info "If the issue persists, please contact: founders@onyx.app"
@@ -857,8 +1035,12 @@ check_onyx_health() {
     echo ""
 
     while [ $attempt -le $max_attempts ]; do
-        # Check for successful HTTP responses (200, 301, 302, etc.)
-        local http_code=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:$port")
+        local http_code=""
+        if [[ "$DOWNLOADER" == "curl" ]]; then
+            http_code=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:$port" 2>/dev/null || echo "000")
+        else
+            http_code=$(wget -q --spider -S "http://localhost:$port" 2>&1 | grep "HTTP/" | tail -1 | awk '{print $2}' || echo "000")
+        fi
         if echo "$http_code" | grep -qE "^(200|301|302|303|307|308)$"; then
             return 0
         fi
@@ -913,6 +1095,18 @@ echo ""
 print_info "If authentication is enabled, you can create your admin account here:"
 echo "   • Visit http://localhost:${HOST_PORT}/auth/signup to create your admin account"
 echo "   • The first user created will automatically have admin privileges"
+echo ""
+if [[ "$LITE_MODE" = true ]]; then
+    echo ""
+    print_info "Running in Lite mode — the following services are NOT started:"
+    echo "  • Vespa (vector database)"
+    echo "  • Redis (cache)"
+    echo "  • Model servers (embedding/inference)"
+    echo "  • Background workers (Celery)"
+    echo ""
+    print_info "Connectors and RAG search are disabled. LLM chat, tools, user file"
+    print_info "uploads, Projects, Agent knowledge, and code interpreter still work."
+fi
 echo ""
 print_info "Refer to the README in the ${INSTALL_ROOT} directory for more information."
 echo ""
