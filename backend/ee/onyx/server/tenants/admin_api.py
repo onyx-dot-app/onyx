@@ -1,6 +1,5 @@
 from fastapi import APIRouter
 from fastapi import Depends
-from fastapi import HTTPException
 from fastapi import Response
 from fastapi_users import exceptions
 
@@ -12,6 +11,8 @@ from onyx.auth.users import get_redis_strategy
 from onyx.auth.users import User
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.users import get_user_by_email
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -30,7 +31,7 @@ async def impersonate_user(
     except exceptions.UserNotExists:
         detail = f"User has no tenant mapping: {impersonate_request.email=}"
         logger.warning(detail)
-        raise HTTPException(status_code=422, detail=detail)
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, detail)
 
     with get_session_with_tenant(tenant_id=tenant_id) as tenant_session:
         user_to_impersonate = get_user_by_email(
@@ -41,7 +42,7 @@ async def impersonate_user(
                 f"User not found in tenant: {impersonate_request.email=} {tenant_id=}"
             )
             logger.warning(detail)
-            raise HTTPException(status_code=422, detail=detail)
+            raise OnyxError(OnyxErrorCode.USER_NOT_FOUND, detail)
 
         token = await get_redis_strategy().write_token(user_to_impersonate)
 
