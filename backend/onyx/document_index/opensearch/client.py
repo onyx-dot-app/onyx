@@ -61,6 +61,25 @@ class SearchHit(BaseModel, Generic[SchemaDocumentModel]):
     explanation: dict[str, Any] | None = None
 
 
+class IndexInfo(BaseModel):
+    """
+    Represents information about an OpenSearch index.
+    """
+
+    model_config = {"frozen": True}
+
+    name: str
+    health: str
+    status: str
+    num_primary_shards: str
+    num_replica_shards: str
+    docs_count: str
+    docs_deleted: str
+    created_at: str
+    total_size: str
+    primary_shards_size: str
+
+
 def get_new_body_without_vectors(body: dict[str, Any]) -> dict[str, Any]:
     """Recursively replaces vectors in the body with their length.
 
@@ -159,8 +178,8 @@ class OpenSearchClient(AbstractContextManager):
         Raises:
             Exception: There was an error creating the search pipeline.
         """
-        result = self._client.search_pipeline.put(id=pipeline_id, body=pipeline_body)
-        if not result.get("acknowledged", False):
+        response = self._client.search_pipeline.put(id=pipeline_id, body=pipeline_body)
+        if not response.get("acknowledged", False):
             raise RuntimeError(f"Failed to create search pipeline {pipeline_id}.")
 
     @log_function_time(print_only=True, debug_only=True, include_args=True)
@@ -173,8 +192,8 @@ class OpenSearchClient(AbstractContextManager):
         Raises:
             Exception: There was an error deleting the search pipeline.
         """
-        result = self._client.search_pipeline.delete(id=pipeline_id)
-        if not result.get("acknowledged", False):
+        response = self._client.search_pipeline.delete(id=pipeline_id)
+        if not response.get("acknowledged", False):
             raise RuntimeError(f"Failed to delete search pipeline {pipeline_id}.")
 
     @log_function_time(print_only=True, debug_only=True, include_args=True)
@@ -197,6 +216,34 @@ class OpenSearchClient(AbstractContextManager):
         else:
             logger.error(f"Failed to put cluster settings: {response}.")
             return False
+
+    @log_function_time(print_only=True, debug_only=True)
+    def list_indices_with_info(self) -> list[IndexInfo]:
+        """
+        Lists the indices in the OpenSearch cluster with information about each
+        index.
+
+        Returns:
+            A list of IndexInfo objects for each index.
+        """
+        response = self._client.cat.indices(format="json")
+        indices: list[IndexInfo] = []
+        for raw_index_info in response:
+            indices.append(
+                IndexInfo(
+                    name=raw_index_info.get("index", ""),
+                    health=raw_index_info.get("health", ""),
+                    status=raw_index_info.get("status", ""),
+                    num_primary_shards=raw_index_info.get("pri", ""),
+                    num_replica_shards=raw_index_info.get("rep", ""),
+                    docs_count=raw_index_info.get("docs.count", ""),
+                    docs_deleted=raw_index_info.get("docs.deleted", ""),
+                    created_at=raw_index_info.get("creation.date.string", ""),
+                    total_size=raw_index_info.get("store.size", ""),
+                    primary_shards_size=raw_index_info.get("pri.store.size", ""),
+                )
+            )
+        return indices
 
     @log_function_time(print_only=True, debug_only=True)
     def ping(self) -> bool:

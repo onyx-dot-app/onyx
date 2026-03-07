@@ -2,7 +2,8 @@
 
 import { toast } from "@/hooks/useToast";
 import { basicLogin, basicSignup } from "@/lib/user";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import { Form, Formik } from "formik";
 import * as Yup from "yup";
 import { requestEmailVerification } from "../lib";
@@ -18,6 +19,7 @@ import { validateInternalRedirect } from "@/lib/auth/redirectValidation";
 import { APIFormFieldState } from "@/refresh-components/form/types";
 import { SvgArrowRightCircle } from "@opal/icons";
 import { useCaptcha } from "@/lib/hooks/useCaptcha";
+import Spacer from "@/refresh-components/Spacer";
 
 interface EmailPasswordFormProps {
   isSignup?: boolean;
@@ -239,14 +241,16 @@ export default function EmailPasswordForm({
                 )}
               />
 
-              <Button
-                type="submit"
-                className="w-full mt-1"
-                disabled={isSubmitting || !isValid || !dirty}
-                rightIcon={SvgArrowRightCircle}
-              >
-                {isJoin ? "Join" : isSignup ? "Create Account" : "Sign In"}
-              </Button>
+              <Spacer rem={0.25} />
+              <Disabled disabled={isSubmitting || !isValid || !dirty}>
+                <Button
+                  type="submit"
+                  width="full"
+                  rightIcon={SvgArrowRightCircle}
+                >
+                  {isJoin ? "Join" : isSignup ? "Create Account" : "Sign In"}
+                </Button>
+              </Disabled>
               {user?.is_anonymous_user && (
                 <Link
                   href="/app"

@@ -268,10 +268,11 @@ jobs:
           persist-credentials: false
 
       - name: Setup node
+        # zizmor: ignore[cache-poisoning] ephemeral runners; no release artifacts
         uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # ratchet:actions/setup-node@v4
         with:
           node-version: 22
-          cache: "npm"
+          cache: "npm" # zizmor: ignore[cache-poisoning]
           cache-dependency-path: ./web/package-lock.json
 
       - name: Install node dependencies
@@ -279,6 +280,7 @@ jobs:
         run: npm ci
 
       - name: Cache playwright cache
+        # zizmor: ignore[cache-poisoning] ephemeral runners; no release artifacts
         uses: runs-on/cache@50350ad4242587b6c8c2baa2e740b1bc11285ff4 # ratchet:runs-on/cache@v4
         with:
           path: ~/.cache/ms-playwright
@@ -459,7 +461,7 @@ jobs:
       # --- Visual Regression Diff ---
       - name: Configure AWS credentials
         if: always()
-        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -590,6 +592,108 @@ jobs:
           name: docker-logs-${{ matrix.project }}-${{ github.run_id }}
           path: ${{ github.workspace }}/docker-compose.log
 
+  playwright-tests-lite:
+    needs: [build-web-image, build-backend-image]
+    name: Playwright Tests (lite)
+    runs-on:
+      - runs-on
+      - runner=4cpu-linux-arm64
+      - "run-id=${{ github.run_id }}-playwright-tests-lite"
+      - "extras=ecr-cache"
+    timeout-minutes: 30
+    steps:
+      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Setup node
+        # zizmor: ignore[cache-poisoning] ephemeral runners; no release artifacts
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # ratchet:actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "npm" # zizmor: ignore[cache-poisoning]
+          cache-dependency-path: ./web/package-lock.json
+
+      - name: Install node dependencies
+        working-directory: ./web
+        run: npm ci
+
+      - name: Cache playwright cache
+        # zizmor: ignore[cache-poisoning] ephemeral runners; no release artifacts
+        uses: runs-on/cache@50350ad4242587b6c8c2baa2e740b1bc11285ff4 # ratchet:runs-on/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-npm-${{ hashFiles('web/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-npm-
+
+      - name: Install playwright browsers
+        working-directory: ./web
+        run: npx playwright install --with-deps
+
+      - name: Create .env file for Docker Compose
+        env:
+          OPENAI_API_KEY_VALUE: ${{ env.OPENAI_API_KEY }}
+          ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          cat <<EOF > deployment/docker_compose/.env
+          ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
+          LICENSE_ENFORCEMENT_ENABLED=false
+          AUTH_TYPE=basic
+          INTEGRATION_TESTS_MODE=true
+          GEN_AI_API_KEY=${OPENAI_API_KEY_VALUE}
+          MOCK_LLM_RESPONSE=true
+          REQUIRE_EMAIL_VERIFICATION=false
+          DISABLE_TELEMETRY=true
+          ONYX_BACKEND_IMAGE=${ECR_CACHE}:playwright-test-backend-${RUN_ID}
+          ONYX_WEB_SERVER_IMAGE=${ECR_CACHE}:playwright-test-web-${RUN_ID}
+          EOF
+
+      # needed for pulling external images otherwise, we hit the "Unauthenticated users" limit
+      # https://docs.docker.com/docker-hub/usage/
+      - name: Login to Docker Hub
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # ratchet:docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+
+      - name: Start Docker containers (lite)
+        run: |
+          cd deployment/docker_compose
+          docker compose -f docker-compose.yml -f docker-compose.onyx-lite.yml -f docker-compose.dev.yml up -d
+        id: start_docker
+
+      - name: Run Playwright tests (lite)
+        working-directory: ./web
+        run: npx playwright test --project lite
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        if: always()
+        with:
+          name: playwright-test-results-lite-${{ github.run_id }}
+          path: ./web/output/playwright/
+          retention-days: 30
+
+      - name: Save Docker logs
+        if: success() || failure()
+        env:
+          WORKSPACE: ${{ github.workspace }}
+        run: |
+          cd deployment/docker_compose
+          docker compose logs > docker-compose.log
+          mv docker-compose.log ${WORKSPACE}/docker-compose.log
+
+      - name: Upload logs
+        if: success() || failure()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: docker-logs-lite-${{ github.run_id }}
+          path: ${{ github.workspace }}/docker-compose.log
+
   # Post a single combined visual regression comment after all matrix jobs finish
   visual-regression-comment:
     needs: [playwright-tests]
@@ -686,7 +790,7 @@ jobs:
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
     runs-on: ubuntu-slim
     timeout-minutes: 45
-    needs: [playwright-tests]
+    needs: [playwright-tests, playwright-tests-lite]
     if: ${{ always() }}
     steps:
       - name: Check job status

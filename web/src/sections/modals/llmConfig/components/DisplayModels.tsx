@@ -194,6 +194,7 @@ export function DisplayModels<T extends BaseLLMFormValues>({
               }
               aria-label="Select all models"
             />
+            {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
             <Button
               main
               internal
@@ -217,6 +218,7 @@ export function DisplayModels<T extends BaseLLMFormValues>({
             </Button>
           </Section>
           {areSomeModelsSelected && (
+            // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
             <Button
               main
               internal
@@ -348,6 +350,7 @@ export function DisplayModels<T extends BaseLLMFormValues>({
                         {modelConfiguration.name}
                       </Text>
                     </div>
+                    {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
                     <Button
                       main
                       internal

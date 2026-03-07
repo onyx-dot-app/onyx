@@ -10,6 +10,7 @@ import {
 import Text from "@/components/ui/text";
 import Title from "@/components/ui/title";
 import Button from "@/refresh-components/buttons/Button";
+import { Button as OpalButton } from "@opal/components";
 import { useMemo, useState } from "react";
 import useSWR, { mutate } from "swr";
 import { ReindexingProgressTable } from "../../../../components/embedding/ReindexingProgressTable";
@@ -23,6 +24,7 @@ import { FailedReIndexAttempts } from "@/components/embedding/FailedReIndexAttem
 import { useConnectorIndexingStatusWithPagination } from "@/lib/hooks";
 import { SvgX } from "@opal/icons";
 import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
+import { useVectorDbEnabled } from "@/providers/SettingsProvider";
 
 export default function UpgradingPage({
   futureEmbeddingModel,
@@ -30,11 +32,12 @@ export default function UpgradingPage({
   futureEmbeddingModel: CloudEmbeddingModel | HostedEmbeddingModel;
 }) {
   const [isCancelling, setIsCancelling] = useState<boolean>(false);
+  const vectorDbEnabled = useVectorDbEnabled();
 
   const { data: connectors, isLoading: isLoadingConnectors } = useSWR<
     Connector<any>[]
-  >("/api/manage/connector", errorHandlingFetcher, {
-    refreshInterval: 5000, // 5 seconds
+  >(vectorDbEnabled ? "/api/manage/connector" : null, errorHandlingFetcher, {
+    refreshInterval: 5000,
   });
 
   const {
@@ -42,7 +45,8 @@ export default function UpgradingPage({
     isLoading: isLoadingOngoingReIndexingStatus,
   } = useConnectorIndexingStatusWithPagination(
     { secondary_index: true, get_all_connectors: true },
-    5000
+    5000,
+    vectorDbEnabled
   ) as {
     data: ConnectorIndexingStatusLiteResponse[];
     isLoading: boolean;
@@ -51,9 +55,11 @@ export default function UpgradingPage({
   const { data: failedIndexingStatus } = useSWR<
     FailedConnectorIndexingStatus[]
   >(
-    "/api/manage/admin/connector/failed-indexing-status?secondary_index=true",
+    vectorDbEnabled
+      ? "/api/manage/admin/connector/failed-indexing-status?secondary_index=true"
+      : null,
     errorHandlingFetcher,
-    { refreshInterval: 5000 } // 5 seconds
+    { refreshInterval: 5000 }
   );
 
   const onCancel = async () => {
@@ -140,10 +146,13 @@ export default function UpgradingPage({
               </div>
             </Modal.Body>
             <Modal.Footer>
-              <Button onClick={onCancel}>Confirm</Button>
-              <Button onClick={() => setIsCancelling(false)} secondary>
+              <OpalButton onClick={onCancel}>Confirm</OpalButton>
+              <OpalButton
+                prominence="secondary"
+                onClick={() => setIsCancelling(false)}
+              >
                 Cancel
-              </Button>
+              </OpalButton>
             </Modal.Footer>
           </Modal.Content>
         </Modal>
@@ -158,6 +167,7 @@ export default function UpgradingPage({
               {futureEmbeddingModel.model_name}
             </div>
 
+            {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
             <Button
               danger
               className="mt-4"

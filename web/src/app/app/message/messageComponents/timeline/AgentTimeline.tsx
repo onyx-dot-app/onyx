@@ -36,7 +36,7 @@ import { TimelineHeaderRow } from "@/app/app/message/messageComponents/timeline/
 // =============================================================================
 
 interface TimelineContainerProps {
-  agent: FullChatState["assistant"];
+  agent: FullChatState["agent"];
   headerContent?: React.ReactNode;
   children?: React.ReactNode;
 }
@@ -343,7 +343,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
   if (uiState === TimelineUIState.EMPTY) {
     return (
       <TimelineContainer
-        agent={chatState.assistant}
+        agent={chatState.agent}
         headerContent={
           <div className="flex w-full h-full items-center pl-[var(--timeline-header-padding-left)] pr-[var(--timeline-header-padding-right)]">
             <Text
@@ -362,12 +362,12 @@ export const AgentTimeline = React.memo(function AgentTimeline({
 
   // Display content only (no timeline steps) - but show header for image generation
   if (uiState === TimelineUIState.DISPLAY_CONTENT_ONLY) {
-    return <TimelineContainer agent={chatState.assistant} />;
+    return <TimelineContainer agent={chatState.agent} />;
   }
 
   return (
     <TimelineContainer
-      agent={chatState.assistant}
+      agent={chatState.agent}
       headerContent={
         <div
           className={cn(

@@ -120,7 +120,6 @@ from onyx.db.models import User
 from onyx.db.pat import fetch_user_for_pat
 from onyx.db.users import get_user_by_email
 from onyx.redis.redis_pool import get_async_redis_connection
-from onyx.redis.redis_pool import get_redis_client
 from onyx.server.settings.store import load_settings
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
@@ -201,13 +200,14 @@ def user_needs_to_be_verified() -> bool:
 
 
 def anonymous_user_enabled(*, tenant_id: str | None = None) -> bool:
-    redis_client = get_redis_client(tenant_id=tenant_id)
-    value = redis_client.get(OnyxRedisLocks.ANONYMOUS_USER_ENABLED)
+    from onyx.cache.factory import get_cache_backend
+
+    cache = get_cache_backend(tenant_id=tenant_id)
+    value = cache.get(OnyxRedisLocks.ANONYMOUS_USER_ENABLED)
 
     if value is None:
         return False
 
-    assert isinstance(value, bytes)
     return int(value.decode("utf-8")) == 1
 
 
@@ -725,11 +725,19 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         if user_by_session:
                             user = user_by_session
 
+                # If the user is inactive, check seat availability before
+                # upgrading role — otherwise they'd become an inactive BASIC
+                # user who still can't log in.
+                if not user.is_active:
+                    with get_session_with_current_tenant() as sync_db:
+                        enforce_seat_limit(sync_db)
+
                 await self.user_db.update(
                     user,
                     {
                         "is_verified": is_verified_by_default,
                         "role": UserRole.BASIC,
+                        **({"is_active": True} if not user.is_active else {}),
                     },
                 )
 

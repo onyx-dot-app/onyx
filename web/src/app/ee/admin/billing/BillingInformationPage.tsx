@@ -15,7 +15,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { SubscriptionSummary } from "./SubscriptionSummary";
 import { BillingAlerts } from "./BillingAlerts";
 import { SvgClipboard, SvgWallet } from "@opal/icons";
@@ -97,8 +97,8 @@ export default function BillingInformationPage() {
         <CardContent>
           <Button
             onClick={handleManageSubscription}
-            className="w-full"
-            leftIcon={SvgClipboard}
+            width="full"
+            icon={SvgClipboard}
           >
             Manage Subscription
           </Button>

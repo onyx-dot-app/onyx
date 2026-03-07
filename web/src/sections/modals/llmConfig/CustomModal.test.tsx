@@ -164,6 +164,18 @@ describe("Custom LLM Provider Configuration Workflow", () => {
 
     // Verify SWR cache was invalidated
     expect(mockMutate).toHaveBeenCalledWith("/api/admin/llm/provider");
+    expect(mockMutate).toHaveBeenCalledWith("/api/llm/provider");
+
+    const personaProvidersMutateCall = mockMutate.mock.calls.find(
+      ([key]) => typeof key === "function"
+    );
+    expect(personaProvidersMutateCall).toBeDefined();
+
+    const personaProviderFilter = personaProvidersMutateCall?.[0] as (
+      key: unknown
+    ) => boolean;
+    expect(personaProviderFilter("/api/llm/persona/42/providers")).toBe(true);
+    expect(personaProviderFilter("/api/llm/provider")).toBe(false);
   });
 
   test("shows error when test configuration fails", async () => {
@@ -412,7 +424,7 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       }),
     } as Response);
 
-    // Mock POST /api/admin/llm/provider/5/default
+    // Mock POST /api/admin/llm/default
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => ({}),
@@ -431,14 +443,20 @@ describe("Custom LLM Provider Configuration Workflow", () => {
     const submitButton = screen.getByRole("button", { name: /enable/i });
     await user.click(submitButton);
 
-    // Verify set as default API was called
+    // Verify set as default API was called with correct endpoint and body
     await waitFor(() => {
-      expect(fetchSpy).toHaveBeenCalledWith(
-        "/api/admin/llm/provider/5/default",
-        expect.objectContaining({
-          method: "POST",
-        })
+      const defaultCall = fetchSpy.mock.calls.find(
+        ([url]) => url === "/api/admin/llm/default"
       );
+      expect(defaultCall).toBeDefined();
+
+      const [, options] = defaultCall!;
+      expect(options.method).toBe("POST");
+      expect(options.headers).toEqual({ "Content-Type": "application/json" });
+
+      const body = JSON.parse(options.body);
+      expect(body.provider_id).toBe(5);
+      expect(body).toHaveProperty("model_name");
     });
   });
 

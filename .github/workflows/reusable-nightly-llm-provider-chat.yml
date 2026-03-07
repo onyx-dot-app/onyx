@@ -49,27 +49,13 @@ on:
         default: true
         type: boolean
     secrets:
-      openai_api_key:
-        required: false
-      anthropic_api_key:
-        required: false
-      bedrock_api_key:
-        required: false
-      vertex_ai_custom_config_json:
-        required: false
-      azure_api_key:
-        required: false
-      ollama_api_key:
-        required: false
-      openrouter_api_key:
-        required: false
-      DOCKER_USERNAME:
-        required: true
-      DOCKER_TOKEN:
+      AWS_OIDC_ROLE_ARN:
+        description: "AWS role ARN for OIDC auth"
         required: true
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   build-backend-image:
@@ -81,6 +67,7 @@ jobs:
         "extras=ecr-cache",
       ]
     timeout-minutes: 45
+    environment: ci-protected
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
 
@@ -88,6 +75,19 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: us-east-2
+
+      - name: Get AWS Secrets
+        uses: aws-actions/aws-secretsmanager-get-secrets@a9a7eb4e2f2871d30dc5b892576fde60a2ecc802
+        with:
+          secret-ids: |
+            DOCKER_USERNAME, test/docker-username
+            DOCKER_TOKEN, test/docker-token
 
       - name: Build backend image
         uses: ./.github/actions/build-backend-image
@@ -97,8 +97,8 @@ jobs:
           pr-number: ${{ github.event.pull_request.number }}
           github-sha: ${{ github.sha }}
           run-id: ${{ github.run_id }}
-          docker-username: ${{ secrets.DOCKER_USERNAME }}
-          docker-token: ${{ secrets.DOCKER_TOKEN }}
+          docker-username: ${{ env.DOCKER_USERNAME }}
+          docker-token: ${{ env.DOCKER_TOKEN }}
           docker-no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' && 'true' || 'false' }}
 
   build-model-server-image:
@@ -110,6 +110,7 @@ jobs:
         "extras=ecr-cache",
       ]
     timeout-minutes: 45
+    environment: ci-protected
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
 
@@ -117,6 +118,19 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: us-east-2
+
+      - name: Get AWS Secrets
+        uses: aws-actions/aws-secretsmanager-get-secrets@a9a7eb4e2f2871d30dc5b892576fde60a2ecc802
+        with:
+          secret-ids: |
+            DOCKER_USERNAME, test/docker-username
+            DOCKER_TOKEN, test/docker-token
 
       - name: Build model server image
         uses: ./.github/actions/build-model-server-image
@@ -126,8 +140,8 @@ jobs:
           pr-number: ${{ github.event.pull_request.number }}
           github-sha: ${{ github.sha }}
           run-id: ${{ github.run_id }}
-          docker-username: ${{ secrets.DOCKER_USERNAME }}
-          docker-token: ${{ secrets.DOCKER_TOKEN }}
+          docker-username: ${{ env.DOCKER_USERNAME }}
+          docker-token: ${{ env.DOCKER_TOKEN }}
 
   build-integration-image:
     runs-on:
@@ -138,6 +152,7 @@ jobs:
         "extras=ecr-cache",
       ]
     timeout-minutes: 45
+    environment: ci-protected
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
 
@@ -145,6 +160,19 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: us-east-2
+
+      - name: Get AWS Secrets
+        uses: aws-actions/aws-secretsmanager-get-secrets@a9a7eb4e2f2871d30dc5b892576fde60a2ecc802
+        with:
+          secret-ids: |
+            DOCKER_USERNAME, test/docker-username
+            DOCKER_TOKEN, test/docker-token
 
       - name: Build integration image
         uses: ./.github/actions/build-integration-image
@@ -154,8 +182,8 @@ jobs:
           pr-number: ${{ github.event.pull_request.number }}
           github-sha: ${{ github.sha }}
           run-id: ${{ github.run_id }}
-          docker-username: ${{ secrets.DOCKER_USERNAME }}
-          docker-token: ${{ secrets.DOCKER_TOKEN }}
+          docker-username: ${{ env.DOCKER_USERNAME }}
+          docker-token: ${{ env.DOCKER_TOKEN }}
 
   provider-chat-test:
     needs:
@@ -170,56 +198,56 @@ jobs:
         include:
           - provider: openai
             models: ${{ inputs.openai_models }}
-            api_key_secret: openai_api_key
-            custom_config_secret: ""
+            api_key_env: OPENAI_API_KEY
+            custom_config_env: ""
             api_base: ""
             api_version: ""
             deployment_name: ""
             required: true
           - provider: anthropic
             models: ${{ inputs.anthropic_models }}
-            api_key_secret: anthropic_api_key
-            custom_config_secret: ""
+            api_key_env: ANTHROPIC_API_KEY
+            custom_config_env: ""
             api_base: ""
             api_version: ""
             deployment_name: ""
             required: true
           - provider: bedrock
             models: ${{ inputs.bedrock_models }}
-            api_key_secret: bedrock_api_key
-            custom_config_secret: ""
+            api_key_env: BEDROCK_API_KEY
+            custom_config_env: ""
             api_base: ""
             api_version: ""
             deployment_name: ""
             required: false
           - provider: vertex_ai
             models: ${{ inputs.vertex_ai_models }}
-            api_key_secret: ""
-            custom_config_secret: vertex_ai_custom_config_json
+            api_key_env: ""
+            custom_config_env: NIGHTLY_LLM_VERTEX_AI_CUSTOM_CONFIG_JSON
             api_base: ""
             api_version: ""
             deployment_name: ""
             required: false
           - provider: azure
             models: ${{ inputs.azure_models }}
-            api_key_secret: azure_api_key
-            custom_config_secret: ""
+            api_key_env: AZURE_API_KEY
+            custom_config_env: ""
             api_base: ${{ inputs.azure_api_base }}
             api_version: "2025-04-01-preview"
             deployment_name: ""
             required: false
           - provider: ollama_chat
             models: ${{ inputs.ollama_models }}
-            api_key_secret: ollama_api_key
-            custom_config_secret: ""
+            api_key_env: OLLAMA_API_KEY
+            custom_config_env: ""
             api_base: "https://ollama.com"
             api_version: ""
             deployment_name: ""
             required: false
           - provider: openrouter
             models: ${{ inputs.openrouter_models }}
-            api_key_secret: openrouter_api_key
-            custom_config_secret: ""
+            api_key_env: OPENROUTER_API_KEY
+            custom_config_env: ""
             api_base: "https://openrouter.ai/api/v1"
             api_version: ""
             deployment_name: ""
@@ -230,6 +258,7 @@ jobs:
       - "run-id=${{ github.run_id }}-nightly-${{ matrix.provider }}-provider-chat-test"
       - extras=ecr-cache
     timeout-minutes: 45
+    environment: ci-protected
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
 
@@ -238,21 +267,43 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: us-east-2
+
+      - name: Get AWS Secrets
+        uses: aws-actions/aws-secretsmanager-get-secrets@a9a7eb4e2f2871d30dc5b892576fde60a2ecc802
+        with:
+          # Keep JSON values unparsed so vertex custom config is passed as raw JSON.
+          parse-json-secrets: false
+          secret-ids: |
+            DOCKER_USERNAME, test/docker-username
+            DOCKER_TOKEN, test/docker-token
+            OPENAI_API_KEY, test/openai-api-key
+            ANTHROPIC_API_KEY, test/anthropic-api-key
+            BEDROCK_API_KEY, test/bedrock-api-key
+            NIGHTLY_LLM_VERTEX_AI_CUSTOM_CONFIG_JSON, test/nightly-llm-vertex-ai-custom-config-json
+            AZURE_API_KEY, test/azure-api-key
+            OLLAMA_API_KEY, test/ollama-api-key
+            OPENROUTER_API_KEY, test/openrouter-api-key
+
       - name: Run nightly provider chat test
         uses: ./.github/actions/run-nightly-provider-chat-test
         with:
           provider: ${{ matrix.provider }}
           models: ${{ matrix.models }}
-          provider-api-key: ${{ matrix.api_key_secret && secrets[matrix.api_key_secret] || '' }}
+          provider-api-key: ${{ matrix.api_key_env && env[matrix.api_key_env] || '' }}
           strict: ${{ inputs.strict && 'true' || 'false' }}
           api-base: ${{ matrix.api_base }}
           api-version: ${{ matrix.api_version }}
           deployment-name: ${{ matrix.deployment_name }}
-          custom-config-json: ${{ matrix.custom_config_secret && secrets[matrix.custom_config_secret] || '' }}
+          custom-config-json: ${{ matrix.custom_config_env && env[matrix.custom_config_env] || '' }}
           runs-on-ecr-cache: ${{ env.RUNS_ON_ECR_CACHE }}
           run-id: ${{ github.run_id }}
-          docker-username: ${{ secrets.DOCKER_USERNAME }}
-          docker-token: ${{ secrets.DOCKER_TOKEN }}
+          docker-username: ${{ env.DOCKER_USERNAME }}
+          docker-token: ${{ env.DOCKER_TOKEN }}
 
       - name: Dump API server logs
         if: always()

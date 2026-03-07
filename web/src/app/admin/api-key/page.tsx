@@ -1,8 +1,8 @@
 "use client";
 
 import { ThreeDotsLoader } from "@/components/Loading";
-import { AdminPageTitle } from "@/components/admin/Title";
 import { errorHandlingFetcher } from "@/lib/fetcher";
+import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import useSWR, { mutate } from "swr";
 import Separator from "@/refresh-components/Separator";
@@ -27,11 +27,14 @@ import {
   DISCORD_SERVICE_API_KEY_NAME,
 } from "@/app/admin/api-key/types";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import Text from "@/refresh-components/texts/Text";
 import { SvgEdit, SvgKey, SvgRefreshCw } from "@opal/icons";
 import { useCloudSubscription } from "@/hooks/useCloudSubscription";
+import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
+
+const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.API_KEYS]!;
 
 function Main() {
   const {
@@ -158,11 +161,11 @@ function Main() {
                 <TableRow key={apiKey.api_key_id}>
                   <TableCell>
                     <Button
-                      internal
+                      prominence="internal"
                       onClick={() => handleEdit(apiKey)}
-                      leftIcon={SvgEdit}
+                      icon={SvgEdit}
                     >
-                      {apiKey.api_key_name || <i>null</i>}
+                      {apiKey.api_key_name || "null"}
                     </Button>
                   </TableCell>
                   <TableCell className="max-w-64">
@@ -173,8 +176,8 @@ function Main() {
                   </TableCell>
                   <TableCell>
                     <Button
-                      internal
-                      leftIcon={SvgRefreshCw}
+                      prominence="internal"
+                      icon={SvgRefreshCw}
                       onClick={async () => {
                         setKeyIsGenerating(true);
                         const response = await regenerateApiKey(apiKey);
@@ -233,10 +236,11 @@ function Main() {
 
 export default function Page() {
   return (
-    <>
-      <AdminPageTitle title="API Keys" icon={SvgKey} />
-
-      <Main />
-    </>
+    <SettingsLayouts.Root>
+      <SettingsLayouts.Header title={route.title} icon={route.icon} separator />
+      <SettingsLayouts.Body>
+        <Main />
+      </SettingsLayouts.Body>
+    </SettingsLayouts.Root>
   );
 }

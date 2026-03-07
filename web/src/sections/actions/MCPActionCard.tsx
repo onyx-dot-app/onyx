@@ -22,8 +22,8 @@ import useServerTools from "@/hooks/useServerTools";
 import { KeyedMutator } from "swr";
 import type { IconProps } from "@opal/types";
 import { SvgRefreshCw, SvgServer, SvgTrash } from "@opal/icons";
-import IconButton from "@/refresh-components/buttons/IconButton";
-import Button from "@/refresh-components/buttons/Button";
+import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
+import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { timeAgo } from "@/lib/time";
 import { cn } from "@/lib/utils";
@@ -247,13 +247,12 @@ export default function MCPActionCard({
 
     return (
       <div className="flex items-center gap-2">
-        <IconButton
-          icon={SvgRefreshCw}
-          internal
+        <Button
+          icon={isToolsRefreshing ? SimpleLoader : SvgRefreshCw}
+          prominence="internal"
           onClick={handleRefreshTools}
           tooltip="Refresh tools"
           aria-label="Refresh tools"
-          className={cn(isToolsRefreshing && "animate-spin")}
         />
         {lastRefreshedText && (
           <Text as="p" text03 mainUiBody className="whitespace-nowrap">
@@ -333,7 +332,7 @@ export default function MCPActionCard({
           onClose={() => deleteModal.toggle(false)}
           submit={
             <Button
-              danger
+              variant="danger"
               onClick={async () => {
                 if (!onDelete) return;
                 try {

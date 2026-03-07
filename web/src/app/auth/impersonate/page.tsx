@@ -1,7 +1,7 @@
 "use client";
 
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
-import { HealthCheckBanner } from "@/components/health/healthcheck";
+
 import { useUser } from "@/providers/UserProvider";
 import { redirect, useRouter } from "next/navigation";
 import type { Route } from "next";
@@ -9,7 +9,8 @@ import { Formik, Form, FormikHelpers } from "formik";
 import * as Yup from "yup";
 import { toast } from "@/hooks/useToast";
 import { TextFormField } from "@/components/Field";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import Text from "@/refresh-components/texts/Text";
 
 const ImpersonateSchema = Yup.object().shape({
@@ -61,10 +62,6 @@ export default function ImpersonatePage() {
 
   return (
     <AuthFlowContainer>
-      <div className="absolute top-10x w-full">
-        <HealthCheckBanner />
-      </div>
-
       <div className="flex flex-col w-full justify-center">
         <div className="w-full flex flex-col items-center justify-center">
           <Text as="p" headingH3 className="mb-6 text-center">
@@ -93,9 +90,11 @@ export default function ImpersonatePage() {
                 placeholder="Enter API Key"
               />
 
-              <Button type="submit" className="w-full" disabled={isSubmitting}>
-                Impersonate User
-              </Button>
+              <Disabled disabled={isSubmitting}>
+                <Button type="submit" width="full">
+                  Impersonate User
+                </Button>
+              </Disabled>
             </Form>
           )}
         </Formik>

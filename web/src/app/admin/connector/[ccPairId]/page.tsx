@@ -62,8 +62,10 @@ import { DropdownMenuItemWithTooltip } from "@/components/ui/dropdown-menu-with-
 import { timeAgo } from "@/lib/time";
 import { useStatusChange } from "./useStatusChange";
 import { useReIndexModal } from "./ReIndexModal";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { SvgSettings } from "@opal/icons";
+import { UserRole } from "@/lib/types";
+import { useUser } from "@/providers/UserProvider";
 // synchronize these validations with the SQLAlchemy connector class until we have a
 // centralized schema for both frontend and backend
 const RefreshFrequencySchema = Yup.object().shape({
@@ -89,6 +91,7 @@ const PAGES_PER_BATCH = 8;
 
 function Main({ ccPairId }: { ccPairId: number }) {
   const router = useRouter();
+  const { user } = useUser();
 
   const {
     data: ccPair,
@@ -176,6 +179,12 @@ function Main({ ccPairId }: { ccPairId: number }) {
   }, [ccPair, refresh]);
 
   const latestIndexAttempt = indexAttempts?.[0];
+  const canManageInlineFileConnectorFiles =
+    ccPair?.connector.source === "file" &&
+    (ccPair.is_editable_for_current_user ||
+      (user?.role === UserRole.GLOBAL_CURATOR &&
+        ccPair.access_type === "public"));
+
   const isResolvingErrors =
     (latestIndexAttempt?.status === "in_progress" ||
       latestIndexAttempt?.status === "not_started") &&
@@ -447,7 +456,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
           {ccPair.is_editable_for_current_user && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button leftIcon={SvgSettings} secondary>
+                <Button prominence="secondary" icon={SvgSettings}>
                   Manage
                 </Button>
               </DropdownMenuTrigger>
@@ -691,15 +700,14 @@ function Main({ ccPairId }: { ccPairId: number }) {
               />
 
               {/* Inline file management for file connectors */}
-              {ccPair.connector.source === "file" &&
-                ccPair.is_editable_for_current_user && (
-                  <div className="mt-6">
-                    <InlineFileManagement
-                      connectorId={ccPair.connector.id}
-                      onRefresh={refresh}
-                    />
-                  </div>
-                )}
+              {canManageInlineFileConnectorFiles && (
+                <div className="mt-6">
+                  <InlineFileManagement
+                    connectorId={ccPair.connector.id}
+                    onRefresh={refresh}
+                  />
+                </div>
+              )}
             </Card>
           </>
         )}

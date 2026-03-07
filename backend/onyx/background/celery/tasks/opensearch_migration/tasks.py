@@ -30,6 +30,7 @@ from onyx.background.celery.tasks.opensearch_migration.transformer import (
     transform_vespa_chunks_to_opensearch_chunks,
 )
 from onyx.configs.app_configs import ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
+from onyx.configs.app_configs import VESPA_MIGRATION_REQUEST_TIMEOUT_S
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -47,6 +48,7 @@ from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.opensearch_document_index import (
     OpenSearchDocumentIndex,
 )
+from onyx.document_index.vespa.shared_utils.utils import get_vespa_http_client
 from onyx.document_index.vespa.vespa_document_index import VespaDocumentIndex
 from onyx.indexing.models import IndexingSetting
 from onyx.redis.redis_pool import get_redis_client
@@ -146,7 +148,12 @@ def migrate_chunks_from_vespa_to_opensearch_task(
             task_logger.error(err_str)
             return False
 
-        with get_session_with_current_tenant() as db_session:
+        with (
+            get_session_with_current_tenant() as db_session,
+            get_vespa_http_client(
+                timeout=VESPA_MIGRATION_REQUEST_TIMEOUT_S
+            ) as vespa_client,
+        ):
             try_insert_opensearch_tenant_migration_record_with_commit(db_session)
             search_settings = get_current_search_settings(db_session)
             tenant_state = TenantState(tenant_id=tenant_id, multitenant=MULTI_TENANT)
@@ -161,6 +168,7 @@ def migrate_chunks_from_vespa_to_opensearch_task(
                 index_name=search_settings.index_name,
                 tenant_state=tenant_state,
                 large_chunks_enabled=False,
+                httpx_client=vespa_client,
             )
 
             sanitized_doc_start_time = time.monotonic()

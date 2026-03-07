@@ -16,8 +16,6 @@ import { cn } from "@/lib/utils";
 
 const CsvContent: React.FC<ContentComponentProps> = ({
   fileDescriptor,
-  isLoading,
-  fadeIn,
   expanded = false,
 }) => {
   const [data, setData] = useState<Record<string, string>[]>([]);
@@ -94,7 +92,7 @@ const CsvContent: React.FC<ContentComponentProps> = ({
     }
   };
 
-  if (isLoading || isFetching) {
+  if (isFetching) {
     return (
       <div className="flex items-center justify-center h-[300px]">
         <SimpleLoader />

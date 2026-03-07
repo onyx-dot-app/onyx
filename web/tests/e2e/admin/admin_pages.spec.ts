@@ -30,7 +30,7 @@ const ADMIN_PAGES: AdminPageSnapshot[] = [
   },
   {
     name: "Custom Agents - Agents",
-    path: "assistants",
+    path: "agents",
     pageTitle: "Agents",
     options: {
       paragraphText:
@@ -78,7 +78,7 @@ const ADMIN_PAGES: AdminPageSnapshot[] = [
   {
     name: "Configuration - LLM",
     path: "configuration/llm",
-    pageTitle: "LLM Models",
+    pageTitle: "Language Models",
   },
   {
     name: "Connectors - Existing Connectors",

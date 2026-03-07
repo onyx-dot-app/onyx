@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import Card from "@/refresh-components/cards/Card";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import Text from "@/refresh-components/texts/Text";
 import InputFile from "@/refresh-components/inputs/InputFile";
 import { Section } from "@/layouts/general-layouts";
@@ -119,11 +120,11 @@ export default function LicenseActivationCard({
             </Text>
           </Section>
           <Section flexDirection="row" gap={0.5} height="auto" width="auto">
-            <Button main secondary onClick={() => setShowInput(true)}>
+            <Button prominence="secondary" onClick={() => setShowInput(true)}>
               Update Key
             </Button>
             {!hideClose && (
-              <Button main tertiary onClick={handleClose}>
+              <Button prominence="tertiary" onClick={handleClose}>
                 Close
               </Button>
             )}
@@ -146,9 +147,11 @@ export default function LicenseActivationCard({
           <Text headingH3>
             {hasLicense ? "Update License Key" : "Activate License Key"}
           </Text>
-          <Button secondary onClick={handleClose} disabled={isActivating}>
-            Cancel
-          </Button>
+          <Disabled disabled={isActivating}>
+            <Button prominence="secondary" onClick={handleClose}>
+              Cancel
+            </Button>
+          </Disabled>
         </Section>
         <Text secondaryBody text03>
           Manually add and activate a license for this Onyx instance.
@@ -218,18 +221,15 @@ export default function LicenseActivationCard({
 
       {/* Footer */}
       <Section flexDirection="row" justifyContent="end" padding={1}>
-        <Button
-          main
-          primary
-          onClick={handleActivate}
-          disabled={isActivating || !licenseKey.trim() || success}
-        >
-          {isActivating
-            ? "Activating..."
-            : hasLicense
-              ? "Update License"
-              : "Activate License"}
-        </Button>
+        <Disabled disabled={isActivating || !licenseKey.trim() || success}>
+          <Button onClick={handleActivate}>
+            {isActivating
+              ? "Activating..."
+              : hasLicense
+                ? "Update License"
+                : "Activate License"}
+          </Button>
+        </Disabled>
       </Section>
     </Card>
   );

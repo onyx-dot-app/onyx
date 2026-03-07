@@ -62,8 +62,8 @@ type Credentials = {
 type FlowArtifacts = {
   serverId: number;
   serverName: string;
-  assistantId: number;
-  assistantName: string;
+  agentId: number;
+  agentName: string;
   toolName: string;
   toolId: number | null;
 };
@@ -615,9 +615,9 @@ async function completeOauthFlow(
     if (url.includes(returnSubstring)) {
       return true;
     }
-    // Re-auth flows can return to a chat session URL instead of assistantId URL.
+    // Re-auth flows can return to a chat session URL instead of agentId URL.
     if (
-      returnSubstring.includes("/app?assistantId=") &&
+      returnSubstring.includes("/app?agentId=") &&
       url.includes("/app?chatId=")
     ) {
       return true;
@@ -962,11 +962,11 @@ async function openActionsPopover(page: Page) {
   await ensureActionPopoverInPrimaryView(page);
 }
 
-async function restoreAssistantContext(page: Page, assistantId: number) {
-  const assistantPath = `/app?assistantId=${assistantId}`;
+async function restoreAssistantContext(page: Page, agentId: number) {
+  const assistantPath = `/app?agentId=${agentId}`;
   logOauthEvent(
     page,
-    `Restoring assistant context for assistantId=${assistantId} (current url=${page.url()})`
+    `Restoring assistant context for agentId=${agentId} (current url=${page.url()})`
   );
 
   // Clear chat-focused URL state first, then explicitly reselect assistant.
@@ -975,14 +975,12 @@ async function restoreAssistantContext(page: Page, assistantId: number) {
     .waitForLoadState("networkidle", { timeout: 10000 })
     .catch(() => {});
 
-  const assistantLink = page
-    .locator(`a[href*="assistantId=${assistantId}"]`)
-    .first();
+  const assistantLink = page.locator(`a[href*="agentId=${agentId}"]`).first();
   if ((await assistantLink.count()) > 0) {
     await clickAndWaitForPossibleUrlChange(
       page,
       () => assistantLink.click(),
-      `Restore assistant ${assistantId} from sidebar`
+      `Restore assistant ${agentId} from sidebar`
     );
   } else {
     await page.goto(`${APP_BASE_URL}${assistantPath}`, {
@@ -1343,7 +1341,7 @@ async function ensureServerVisibleInActions(
   page: Page,
   serverName: string,
   options?: {
-    assistantId?: number;
+    agentId?: number;
   }
 ) {
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -1366,12 +1364,12 @@ async function ensureServerVisibleInActions(
     );
     await page.keyboard.press("Escape").catch(() => {});
 
-    if (attempt === 0 && options?.assistantId) {
+    if (attempt === 0 && options?.agentId) {
       logOauthEvent(
         page,
-        `Server ${serverName} missing in actions, retrying after restoring assistant ${options.assistantId} context`
+        `Server ${serverName} missing in actions, retrying after restoring assistant ${options.agentId} context`
       );
-      await restoreAssistantContext(page, options.assistantId);
+      await restoreAssistantContext(page, options.agentId);
       continue;
     }
 
@@ -1397,12 +1395,12 @@ async function waitForUserRecord(
 
 async function waitForAssistantByName(
   client: OnyxApiClient,
-  assistantName: string,
+  agentName: string,
   timeoutMs: number = 20_000
 ) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    const assistant = await client.findAssistantByName(assistantName, {
+    const assistant = await client.findAgentByName(agentName, {
       getEditable: true,
     });
     if (assistant) {
@@ -1410,18 +1408,18 @@ async function waitForAssistantByName(
     }
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
-  throw new Error(`Timed out waiting for assistant ${assistantName}`);
+  throw new Error(`Timed out waiting for assistant ${agentName}`);
 }
 
 async function waitForAssistantTools(
   client: OnyxApiClient,
-  assistantName: string,
+  agentName: string,
   requiredToolNames: string[],
   timeoutMs: number = 30_000
 ) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    const assistant = await client.findAssistantByName(assistantName, {
+    const assistant = await client.findAgentByName(agentName, {
       getEditable: true,
     });
     if (
@@ -1441,7 +1439,7 @@ async function waitForAssistantTools(
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
   throw new Error(
-    `Timed out waiting for assistant ${assistantName} to include tools: ${requiredToolNames.join(
+    `Timed out waiting for assistant ${agentName} to include tools: ${requiredToolNames.join(
       ", "
     )}`
   );
@@ -1614,11 +1612,11 @@ async function openAssistantEditor(
   options.logStep("Assistant editor loaded");
 }
 
-async function createAssistantAndWaitForTool(
+async function createAgentAndWaitForTool(
   page: Page,
   options: {
     apiClient: OnyxApiClient;
-    assistantName: string;
+    agentName: string;
     instructions: string;
     description: string;
     serverId: number;
@@ -1628,7 +1626,7 @@ async function createAssistantAndWaitForTool(
 ): Promise<number> {
   const {
     apiClient,
-    assistantName,
+    agentName,
     instructions,
     description,
     serverId,
@@ -1636,7 +1634,7 @@ async function createAssistantAndWaitForTool(
     logStep,
   } = options;
 
-  await page.locator('input[name="name"]').fill(assistantName);
+  await page.locator('input[name="name"]').fill(agentName);
   await page.locator('textarea[name="instructions"]').fill(instructions);
   await page.locator('textarea[name="description"]').fill(description);
   await selectMcpTools(page, serverId);
@@ -1645,32 +1643,26 @@ async function createAssistantAndWaitForTool(
   await page.waitForURL(
     (url) => {
       const href = typeof url === "string" ? url : url.toString();
-      return (
-        /\/app\?assistantId=\d+/.test(href) ||
-        href.includes("/admin/assistants")
-      );
+      return /\/app\?agentId=\d+/.test(href) || href.includes("/admin/agents");
     },
     { timeout: 20000 }
   );
 
-  let assistantId = getNumericQueryParam(page.url(), "assistantId");
-  if (assistantId === null) {
-    const assistantRecord = await waitForAssistantByName(
-      apiClient,
-      assistantName
-    );
-    assistantId = assistantRecord.id;
-    await page.goto(`/app?assistantId=${assistantId}`);
-    await page.waitForURL(/\/app\?assistantId=\d+/, { timeout: 20000 });
+  let agentId = getNumericQueryParam(page.url(), "agentId");
+  if (agentId === null) {
+    const assistantRecord = await waitForAssistantByName(apiClient, agentName);
+    agentId = assistantRecord.id;
+    await page.goto(`/app?agentId=${agentId}`);
+    await page.waitForURL(/\/app\?agentId=\d+/, { timeout: 20000 });
   }
-  if (assistantId === null) {
+  if (agentId === null) {
     throw new Error("Assistant ID could not be determined");
   }
-  logStep(`Assistant created with id ${assistantId}`);
+  logStep(`Assistant created with id ${agentId}`);
 
-  await waitForAssistantTools(apiClient, assistantName, [toolName]);
+  await waitForAssistantTools(apiClient, agentName, [toolName]);
   logStep("Confirmed assistant tools are available");
-  return assistantId;
+  return agentId;
 }
 
 test.describe("MCP OAuth flows", () => {
@@ -1787,15 +1779,15 @@ test.describe("MCP OAuth flows", () => {
     const adminPage = await adminContext.newPage();
     const adminClient = new OnyxApiClient(adminPage.request);
 
-    if (adminArtifacts?.assistantId) {
-      await adminClient.deleteAssistant(adminArtifacts.assistantId);
+    if (adminArtifacts?.agentId) {
+      await adminClient.deleteAgent(adminArtifacts.agentId);
     }
     if (adminArtifacts?.serverId) {
       await adminClient.deleteMcpServer(adminArtifacts.serverId);
     }
 
-    if (curatorArtifacts?.assistantId) {
-      await adminClient.deleteAssistant(curatorArtifacts.assistantId);
+    if (curatorArtifacts?.agentId) {
+      await adminClient.deleteAgent(curatorArtifacts.agentId);
     }
     if (curatorArtifacts?.serverId) {
       await adminClient.deleteMcpServer(curatorArtifacts.serverId);
@@ -1836,7 +1828,7 @@ test.describe("MCP OAuth flows", () => {
     logStep("Logged in as admin");
 
     const serverName = `PW MCP Admin ${Date.now()}`;
-    const assistantName = `PW Admin Assistant ${Date.now()}`;
+    const agentName = `PW Admin Assistant ${Date.now()}`;
 
     const serverId = await configureOauthServerAndEnableTool(page, {
       serverName,
@@ -1859,9 +1851,9 @@ test.describe("MCP OAuth flows", () => {
       },
     });
 
-    const assistantId = await createAssistantAndWaitForTool(page, {
+    const agentId = await createAgentAndWaitForTool(page, {
       apiClient: adminApiClient,
-      assistantName,
+      agentName,
       instructions: "Assist with MCP OAuth testing.",
       description: "Playwright admin MCP assistant.",
       serverId,
@@ -1874,7 +1866,7 @@ test.describe("MCP OAuth flows", () => {
       TOOL_NAMES.admin
     );
 
-    await ensureServerVisibleInActions(page, serverName, { assistantId });
+    await ensureServerVisibleInActions(page, serverName, { agentId });
     await verifyMcpToolRowVisible(page, serverName, TOOL_NAMES.admin);
     await ensureMcpToolEnabledInActions(page, serverName, TOOL_NAMES.admin);
     logStep("Verified admin MCP tool row visible before reauth");
@@ -1886,12 +1878,8 @@ test.describe("MCP OAuth flows", () => {
     );
     logStep("Verified admin MCP tool invocation before reauth");
 
-    await reauthenticateFromChat(
-      page,
-      serverName,
-      `/app?assistantId=${assistantId}`
-    );
-    await ensureServerVisibleInActions(page, serverName, { assistantId });
+    await reauthenticateFromChat(page, serverName, `/app?agentId=${agentId}`);
+    await ensureServerVisibleInActions(page, serverName, { agentId });
     await verifyMcpToolRowVisible(page, serverName, TOOL_NAMES.admin);
     await ensureMcpToolEnabledInActions(page, serverName, TOOL_NAMES.admin);
     logStep("Verified admin MCP tool row visible after reauth");
@@ -1914,8 +1902,8 @@ test.describe("MCP OAuth flows", () => {
     adminArtifacts = {
       serverId,
       serverName,
-      assistantId,
-      assistantName,
+      agentId,
+      agentName,
       toolName: TOOL_NAMES.admin,
       toolId: adminToolId,
     };
@@ -1954,7 +1942,7 @@ test.describe("MCP OAuth flows", () => {
     const curatorApiClient = new OnyxApiClient(page.request);
 
     const serverName = `PW MCP Curator ${Date.now()}`;
-    const assistantName = `PW Curator Assistant ${Date.now()}`;
+    const agentName = `PW Curator Assistant ${Date.now()}`;
 
     let curatorServerProcess: McpServerProcess | null = null;
     let curatorRuntimeMcpServerUrl = runtimeMcpServerUrl;
@@ -1980,9 +1968,9 @@ test.describe("MCP OAuth flows", () => {
 
       await openAssistantEditor(page, { logStep });
 
-      const assistantId = await createAssistantAndWaitForTool(page, {
+      const agentId = await createAgentAndWaitForTool(page, {
         apiClient: curatorApiClient,
-        assistantName,
+        agentName,
         instructions: "Curator MCP OAuth assistant.",
         description: "Playwright curator MCP assistant.",
         serverId,
@@ -1990,24 +1978,20 @@ test.describe("MCP OAuth flows", () => {
         logStep,
       });
 
-      await ensureServerVisibleInActions(page, serverName, { assistantId });
+      await ensureServerVisibleInActions(page, serverName, { agentId });
       await verifyMcpToolRowVisible(page, serverName, TOOL_NAMES.curator);
       logStep("Verified curator MCP tool row visible before reauth");
 
-      await reauthenticateFromChat(
-        page,
-        serverName,
-        `/app?assistantId=${assistantId}`
-      );
-      await ensureServerVisibleInActions(page, serverName, { assistantId });
+      await reauthenticateFromChat(page, serverName, `/app?agentId=${agentId}`);
+      await ensureServerVisibleInActions(page, serverName, { agentId });
       await verifyMcpToolRowVisible(page, serverName, TOOL_NAMES.curator);
       logStep("Verified curator MCP tool row visible after reauth");
 
       curatorArtifacts = {
         serverId,
         serverName,
-        assistantId,
-        assistantName,
+        agentId,
+        agentName,
         toolName: TOOL_NAMES.curator,
         toolId: null,
       };
@@ -2064,14 +2048,14 @@ test.describe("MCP OAuth flows", () => {
     await loginAsWorkerUser(page, testInfo.workerIndex);
     logStep("Logged in as worker user");
 
-    const assistantId = adminArtifacts!.assistantId;
+    const agentId = adminArtifacts!.agentId;
     const serverName = adminArtifacts!.serverName;
     const toolName = adminArtifacts!.toolName;
 
-    await page.goto(`/app?assistantId=${assistantId}`, {
+    await page.goto(`/app?agentId=${agentId}`, {
       waitUntil: "load",
     });
-    await ensureServerVisibleInActions(page, serverName, { assistantId });
+    await ensureServerVisibleInActions(page, serverName, { agentId });
     logStep("Opened chat as user and ensured server visible");
 
     await openActionsPopover(page);
@@ -2111,11 +2095,11 @@ test.describe("MCP OAuth flows", () => {
     }
 
     await completeOauthFlow(page, {
-      expectReturnPathContains: `/app?assistantId=${assistantId}`,
+      expectReturnPathContains: `/app?agentId=${agentId}`,
     });
     logStep("Completed user OAuth reauthentication");
 
-    await ensureServerVisibleInActions(page, serverName, { assistantId });
+    await ensureServerVisibleInActions(page, serverName, { agentId });
     await verifyMcpToolRowVisible(page, serverName, toolName);
     await ensureMcpToolEnabledInActions(page, serverName, toolName);
     logStep("Verified user MCP tool row visible after reauth");

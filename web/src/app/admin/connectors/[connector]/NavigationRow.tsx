@@ -1,5 +1,6 @@
 import { useFormContext } from "@/components/context/FormContext";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import { SvgArrowLeft, SvgArrowRight, SvgPlusCircle } from "@opal/icons";
 
 const NavigationRow = ({
@@ -22,42 +23,46 @@ const NavigationRow = ({
       <div>
         {((formStep > 0 && !noCredentials) ||
           (formStep > 1 && !noAdvanced)) && (
-          <Button secondary onClick={prevFormStep} leftIcon={SvgArrowLeft}>
+          <Button
+            prominence="secondary"
+            onClick={prevFormStep}
+            icon={SvgArrowLeft}
+          >
             Previous
           </Button>
         )}
       </div>
       <div className="flex justify-center">
         {(formStep > 0 || noCredentials) && (
-          <Button
-            disabled={!isValid}
-            rightIcon={SvgPlusCircle}
-            onClick={onSubmit}
-          >
-            Create Connector
-          </Button>
+          <Disabled disabled={!isValid}>
+            <Button rightIcon={SvgPlusCircle} onClick={onSubmit}>
+              Create Connector
+            </Button>
+          </Disabled>
         )}
       </div>
       <div className="flex justify-end">
         {formStep === 0 && (
-          <Button
-            action
-            disabled={!activatedCredential}
-            rightIcon={SvgArrowRight}
-            onClick={() => nextFormStep()}
-          >
-            Continue
-          </Button>
+          <Disabled disabled={!activatedCredential}>
+            <Button
+              variant="action"
+              rightIcon={SvgArrowRight}
+              onClick={() => nextFormStep()}
+            >
+              Continue
+            </Button>
+          </Disabled>
         )}
         {!noAdvanced && formStep === 1 && (
-          <Button
-            secondary
-            disabled={!isValid}
-            rightIcon={SvgArrowRight}
-            onClick={() => nextFormStep()}
-          >
-            Advanced
-          </Button>
+          <Disabled disabled={!isValid}>
+            <Button
+              prominence="secondary"
+              rightIcon={SvgArrowRight}
+              onClick={() => nextFormStep()}
+            >
+              Advanced
+            </Button>
+          </Disabled>
         )}
       </div>
     </div>

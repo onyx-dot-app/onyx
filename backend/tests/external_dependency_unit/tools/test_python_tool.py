@@ -1027,6 +1027,13 @@ class _MockCIHandler(BaseHTTPRequestHandler):
         else:
             self._respond_json(404, {"error": "not found"})
 
+    def do_GET(self) -> None:
+        self._capture("GET", b"")
+        if self.path == "/health":
+            self._respond_json(200, {"status": "ok"})
+        else:
+            self._respond_json(404, {"error": "not found"})
+
     def do_DELETE(self) -> None:
         self._capture("DELETE", b"")
         self.send_response(200)
@@ -1105,6 +1112,14 @@ def mock_ci_server() -> Generator[MockCodeInterpreterServer, None, None]:
     server.start()
     yield server
     server.shutdown()
+
+
+@pytest.fixture(autouse=True)
+def _clear_health_cache() -> None:
+    """Reset the health check cache before every test."""
+    import onyx.tools.tool_implementations.python.code_interpreter_client as mod
+
+    mod._health_cache = {}
 
 
 @pytest.fixture()

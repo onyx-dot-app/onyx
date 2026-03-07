@@ -1,4 +1,3 @@
-import { HealthCheckBanner } from "@/components/health/healthcheck";
 import { User } from "@/lib/types";
 import {
   getCurrentUserSS,
@@ -63,7 +62,6 @@ const Page = async (props: {
 
   return (
     <AuthFlowContainer authState="signup">
-      <HealthCheckBanner />
       <AuthErrorDisplay searchParams={searchParams} />
 
       <>

@@ -25,9 +25,9 @@ interface UserContextType {
   isCloudSuperuser: boolean;
   updateUserAutoScroll: (autoScroll: boolean) => Promise<void>;
   updateUserShortcuts: (enabled: boolean) => Promise<void>;
-  toggleAssistantPinnedStatus: (
-    currentPinnedAssistantIDs: number[],
-    assistantId: number,
+  toggleAgentPinnedStatus: (
+    currentPinnedAgentIDs: number[],
+    agentId: number,
     isPinned: boolean
   ) => Promise<boolean>;
   updateUserTemperatureOverrideEnabled: (enabled: boolean) => Promise<void>;
@@ -42,7 +42,7 @@ const mockUserContext: UserContextType = {
   isCloudSuperuser: false,
   updateUserAutoScroll: async () => {},
   updateUserShortcuts: async () => {},
-  toggleAssistantPinnedStatus: async () => true,
+  toggleAgentPinnedStatus: async () => true,
   updateUserTemperatureOverrideEnabled: async () => {},
   updateUserPersonalization: async () => {},
 };

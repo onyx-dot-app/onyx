@@ -21,7 +21,7 @@ import {
   MixedBreadIcon,
 } from "@/components/icons/icons";
 import Modal from "@/refresh-components/Modal";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { TextFormField } from "@/components/Field";
 import { SettingsContext } from "@/providers/SettingsProvider";
 import { SvgAlertTriangle, SvgKey } from "@opal/icons";

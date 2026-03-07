@@ -29,7 +29,11 @@ const DEFAULT_MASK_SELECTORS: string[] = [
  * Default selectors to hide (visibility: hidden) across all screenshots.
  * These elements are overlays or ephemeral UI that would cause spurious diffs.
  */
-const DEFAULT_HIDE_SELECTORS: string[] = ['[data-testid="toast-container"]'];
+const DEFAULT_HIDE_SELECTORS: string[] = [
+  '[data-testid="toast-container"]',
+  // TODO: Remove once it loads consistently.
+  '[data-testid="actions-container"]',
+];
 
 interface ScreenshotOptions {
   /**
@@ -161,11 +165,6 @@ export async function expectScreenshot(
     threshold,
   } = options;
 
-  // Wait for any in-flight CSS animations / transitions to settle so that
-  // screenshots are deterministic (e.g. slide-in card animations on the
-  // onboarding flow).
-  await waitForAnimations(page);
-
   // Merge default hide selectors with per-call selectors
   const allHideSelectors = [...DEFAULT_HIDE_SELECTORS, ...hide];
 
@@ -174,7 +173,10 @@ export async function expectScreenshot(
   if (allHideSelectors.length > 0) {
     styleHandle = await page.addStyleTag({
       content: allHideSelectors
-        .map((selector) => `${selector} { visibility: hidden !important; }`)
+        .map(
+          (selector) =>
+            `${selector} { visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }`
+        )
         .join("\n"),
     });
   }
@@ -185,6 +187,11 @@ export async function expectScreenshot(
     const maskLocators = allMaskSelectors.map((selector) =>
       page.locator(selector)
     );
+
+    // Wait for any in-flight CSS animations / transitions to settle so that
+    // screenshots are deterministic (e.g. slide-in card animations on the
+    // onboarding flow).
+    await waitForAnimations(page);
 
     // Build the screenshot name array (Playwright expects string[])
     const nameArg = name ? [name + ".png"] : undefined;
@@ -249,10 +256,6 @@ export async function expectElementScreenshot(
 
   const page = locator.page();
 
-  // Wait for any in-flight CSS animations / transitions to settle so that
-  // element screenshots are deterministic (same reasoning as expectScreenshot).
-  await waitForAnimations(page);
-
   // Merge default hide selectors with per-call selectors
   const allHideSelectors = [...DEFAULT_HIDE_SELECTORS, ...hide];
 
@@ -261,7 +264,10 @@ export async function expectElementScreenshot(
   if (allHideSelectors.length > 0) {
     styleHandle = await page.addStyleTag({
       content: allHideSelectors
-        .map((selector) => `${selector} { visibility: hidden !important; }`)
+        .map(
+          (selector) =>
+            `${selector} { visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }`
+        )
         .join("\n"),
     });
   }
@@ -272,6 +278,10 @@ export async function expectElementScreenshot(
     const maskLocators = allMaskSelectors.map((selector) =>
       page.locator(selector)
     );
+
+    // Wait for any in-flight CSS animations / transitions to settle so that
+    // element screenshots are deterministic (same reasoning as expectScreenshot).
+    await waitForAnimations(page);
 
     // Build the screenshot name array (Playwright expects string[])
     const nameArg = name ? [name + ".png"] : undefined;

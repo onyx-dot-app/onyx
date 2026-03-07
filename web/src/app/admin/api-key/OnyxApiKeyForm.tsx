@@ -2,10 +2,11 @@ import { Form, Formik } from "formik";
 import { toast } from "@/hooks/useToast";
 import { createApiKey, updateApiKey } from "./lib";
 import Modal from "@/refresh-components/Modal";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import InputComboBox from "@/refresh-components/inputs/InputComboBox";
+import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import { FormField } from "@/refresh-components/form/FormField";
 import { USER_ROLE_LABELS, UserRole } from "@/lib/types";
@@ -106,26 +107,25 @@ export default function OnyxApiKeyForm({
                     <FormField name="role" state={state} className="w-full">
                       <FormField.Label>Role:</FormField.Label>
                       <FormField.Control>
-                        <InputComboBox
+                        <InputSelect
                           value={field.value}
                           onValueChange={(value) => helper.setValue(value)}
-                          options={[
-                            {
-                              label: USER_ROLE_LABELS[UserRole.LIMITED],
-                              value: UserRole.LIMITED.toString(),
-                            },
-                            {
-                              label: USER_ROLE_LABELS[UserRole.BASIC],
-                              value: UserRole.BASIC.toString(),
-                            },
-                            {
-                              label: USER_ROLE_LABELS[UserRole.ADMIN],
-                              value: UserRole.ADMIN.toString(),
-                            },
-                          ]}
-                          placeholder="Select a role"
-                          strict
-                        />
+                        >
+                          <InputSelect.Trigger placeholder="Select a role" />
+                          <InputSelect.Content>
+                            <InputSelect.Item
+                              value={UserRole.LIMITED.toString()}
+                            >
+                              {USER_ROLE_LABELS[UserRole.LIMITED]}
+                            </InputSelect.Item>
+                            <InputSelect.Item value={UserRole.BASIC.toString()}>
+                              {USER_ROLE_LABELS[UserRole.BASIC]}
+                            </InputSelect.Item>
+                            <InputSelect.Item value={UserRole.ADMIN.toString()}>
+                              {USER_ROLE_LABELS[UserRole.ADMIN]}
+                            </InputSelect.Item>
+                          </InputSelect.Content>
+                        </InputSelect>
                       </FormField.Control>
                       <FormField.Description>
                         Select the role for this API key. Limited has access to
@@ -138,9 +138,11 @@ export default function OnyxApiKeyForm({
               </Modal.Body>
 
               <Modal.Footer>
-                <Button type="submit" disabled={isSubmitting}>
-                  {isUpdate ? "Update" : "Create"}
-                </Button>
+                <Disabled disabled={isSubmitting}>
+                  <Button type="submit">
+                    {isUpdate ? "Update" : "Create"}
+                  </Button>
+                </Disabled>
               </Modal.Footer>
             </Form>
           )}

@@ -9,7 +9,7 @@ import HumanMessage from "@/app/app/message/HumanMessage";
 import AgentMessage from "@/app/app/message/messageComponents/AgentMessage";
 import { Callout } from "@/components/ui/callout";
 import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
-import { Persona } from "@/app/admin/assistants/interfaces";
+import { Persona } from "@/app/admin/agents/interfaces";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import TextViewModal from "@/sections/modals/TextViewModal";
 import { UNNAMED_CHAT } from "@/lib/constants";
@@ -106,7 +106,7 @@ export default function SharedChatDisplay({
                       key={message.messageId}
                       rawPackets={message.packets}
                       chatState={{
-                        assistant: persona,
+                        agent: persona,
                         docs: message.documents,
                         citations: message.citations,
                         setPresentingDocument: setPresentingDocument,

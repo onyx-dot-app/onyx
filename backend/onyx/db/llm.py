@@ -25,7 +25,10 @@ from onyx.server.manage.embedding.models import CloudEmbeddingProvider
 from onyx.server.manage.embedding.models import CloudEmbeddingProviderCreationRequest
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import LLMProviderView
+from onyx.utils.logger import setup_logger
 from shared_configs.enums import EmbeddingProvider
+
+logger = setup_logger()
 
 
 def update_group_llm_provider_relationships__no_commit(
@@ -109,45 +112,38 @@ def can_user_access_llm_provider(
         is_admin: If True, bypass user group restrictions but still respect persona restrictions
 
     Access logic:
-    1. If is_public=True → everyone has access (public override)
-    2. If is_public=False:
-       - Both groups AND personas set → must satisfy BOTH (AND logic, admins bypass group check)
-       - Only groups set → must be in one of the groups (OR across groups, admins bypass)
-       - Only personas set → must use one of the personas (OR across personas, applies to admins)
-       - Neither set → NOBODY has access unless admin (locked, admin-only)
+    - is_public controls USER access (group bypass): when True, all users can access
+      regardless of group membership. When False, user must be in a whitelisted group
+      (or be admin).
+    - Persona restrictions are ALWAYS enforced when set, regardless of is_public.
+      This allows admins to make a provider available to all users while still
+      restricting which personas (assistants) can use it.
+
+    Decision matrix:
+    1. is_public=True, no personas set → everyone has access
+    2. is_public=True, personas set → all users, but only whitelisted personas
+    3. is_public=False, groups+personas set → must satisfy BOTH (admins bypass groups)
+    4. is_public=False, only groups set → must be in group (admins bypass)
+    5. is_public=False, only personas set → must use whitelisted persona
+    6. is_public=False, neither set → admin-only (locked)
     """
-    # Public override - everyone has access
-    if provider.is_public:
-        return True
-
-    # Extract IDs once to avoid multiple iterations
-    provider_group_ids = (
-        {group.id for group in provider.groups} if provider.groups else set()
-    )
-    provider_persona_ids = (
-        {p.id for p in provider.personas} if provider.personas else set()
-    )
-
+    provider_group_ids = {g.id for g in (provider.groups or [])}
+    provider_persona_ids = {p.id for p in (provider.personas or [])}
     has_groups = bool(provider_group_ids)
     has_personas = bool(provider_persona_ids)
 
-    # Both groups AND personas set → AND logic (must satisfy both)
-    if has_groups and has_personas:
-        # Admins bypass group check but still must satisfy persona restrictions
-        user_in_group = is_admin or bool(user_group_ids & provider_group_ids)
-        persona_allowed = persona.id in provider_persona_ids if persona else False
-        return user_in_group and persona_allowed
+    # Persona restrictions are always enforced when set, regardless of is_public
+    if has_personas and not (persona and persona.id in provider_persona_ids):
+        return False
 
-    # Only groups set → user must be in one of the groups (admins bypass)
+    if provider.is_public:
+        return True
+
     if has_groups:
         return is_admin or bool(user_group_ids & provider_group_ids)
 
-    # Only personas set → persona must be in allowed list (applies to admins too)
-    if has_personas:
-        return persona.id in provider_persona_ids if persona else False
-
-    # Neither groups nor personas set, and not public → admins can access
-    return is_admin
+    # No groups: either persona-whitelisted (already passed) or admin-only if locked
+    return has_personas or is_admin
 
 
 def validate_persona_ids_exist(
@@ -539,6 +535,7 @@ def fetch_default_model(
 ) -> ModelConfiguration | None:
     model_config = db_session.scalar(
         select(ModelConfiguration)
+        .options(selectinload(ModelConfiguration.llm_provider))
         .join(LLMModelFlow)
         .where(
             ModelConfiguration.is_visible == True,  # noqa: E712
@@ -818,6 +815,43 @@ def sync_auto_mode_models(
             changes += 1
 
     db_session.commit()
+
+    # Update the default if this provider currently holds the global CHAT default
+    recommended_default = llm_recommendations.get_default_model(provider.provider)
+    if recommended_default:
+        current_default_name = db_session.scalar(
+            select(ModelConfiguration.name)
+            .join(
+                LLMModelFlow,
+                LLMModelFlow.model_configuration_id == ModelConfiguration.id,
+            )
+            .where(
+                ModelConfiguration.llm_provider_id == provider.id,
+                LLMModelFlow.llm_model_flow_type == LLMModelFlowType.CHAT,
+                LLMModelFlow.is_default == True,  # noqa: E712
+            )
+        )
+
+        if (
+            current_default_name is not None
+            and current_default_name != recommended_default.name
+        ):
+            try:
+                _update_default_model(
+                    db_session=db_session,
+                    provider_id=provider.id,
+                    model=recommended_default.name,
+                    flow_type=LLMModelFlowType.CHAT,
+                )
+                changes += 1
+            except ValueError:
+                logger.warning(
+                    "Recommended default model '%s' not found "
+                    "for provider_id=%s; skipping default update.",
+                    recommended_default.name,
+                    provider.id,
+                )
+
     return changes
 
 

@@ -6,11 +6,13 @@ on:
       - main
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
   cherry-pick-to-latest-release:
+    permissions:
+      contents: write
+      pull-requests: write
     outputs:
       should_cherrypick: ${{ steps.gate.outputs.should_cherrypick }}
       pr_number: ${{ steps.gate.outputs.pr_number }}

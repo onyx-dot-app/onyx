@@ -51,16 +51,6 @@ function ToastContainer() {
     }, ANIMATION_DURATION);
   }, []);
 
-  // NOTE (@raunakab):
-  //
-  // Keep this here for debugging purposes.
-  // useOnMount(() => {
-  //   toast.success("Test success toast", { duration: Infinity });
-  //   toast.error("Test error toast", { duration: Infinity });
-  //   toast.warning("Test warning toast", { duration: Infinity });
-  //   toast.info("Test info toast", { duration: Infinity });
-  // });
-
   if (visible.length === 0) return null;
 
   return (

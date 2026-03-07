@@ -1,0 +1,31 @@
+# =============================================================================
+# ONYX LITE — MINIMAL DEPLOYMENT VALUES
+# =============================================================================
+# Minimal Onyx deployment: no vector database, no Redis, no model servers.
+# Only PostgreSQL is required. Connectors and RAG search are disabled, but the
+# core chat experience (LLM conversations, tools, user file uploads, Projects,
+# Agent knowledge) still works.
+#
+# Usage:
+#   helm install onyx ./deployment/helm/charts/onyx \
+#     -f ./deployment/helm/charts/onyx/values-lite.yaml
+#
+# Or merged with your own overrides:
+#   helm install onyx ./deployment/helm/charts/onyx \
+#     -f ./deployment/helm/charts/onyx/values-lite.yaml \
+#     -f my-overrides.yaml
+# =============================================================================
+
+vectorDB:
+  enabled: false
+
+vespa:
+  enabled: false
+
+redis:
+  enabled: false
+
+configMap:
+  CACHE_BACKEND: "postgres"
+  AUTH_BACKEND: "postgres"
+  FILE_STORE_BACKEND: "postgres"

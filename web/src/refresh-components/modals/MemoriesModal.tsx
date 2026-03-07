@@ -5,9 +5,9 @@ import Modal from "@/refresh-components/Modal";
 import { Section } from "@/layouts/general-layouts";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import Text from "@/refresh-components/texts/Text";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import CharacterCount from "@/refresh-components/CharacterCount";
 import Separator from "@/refresh-components/Separator";
 import TextSeparator from "@/refresh-components/TextSeparator";
@@ -102,14 +102,15 @@ function MemoryItem({
             resizable={false}
             className={cn(!isFocused && "bg-transparent")}
           />
-          <IconButton
-            icon={SvgMinusCircle}
-            onClick={() => void onRemove(originalIndex)}
-            tertiary
-            disabled={!memory.content.trim() && memory.isNew}
-            aria-label="Remove Line"
-            tooltip="Remove Line"
-          />
+          <Disabled disabled={!memory.content.trim() && memory.isNew}>
+            <Button
+              prominence="tertiary"
+              icon={SvgMinusCircle}
+              onClick={() => void onRemove(originalIndex)}
+              aria-label="Remove Line"
+              tooltip="Remove Line"
+            />
+          </Disabled>
         </Section>
         {isFocused && (
           <CharacterCount value={memory.content} limit={MAX_MEMORY_LENGTH} />
@@ -241,19 +242,20 @@ export default function MemoriesModal({
               showClearButton={false}
               className="w-full !bg-transparent !border-transparent [&:is(:hover,:active,:focus,:focus-within)]:!bg-background-neutral-00 [&:is(:hover)]:!border-border-01 [&:is(:focus,:focus-within)]:!shadow-none"
             />
-            <Button
-              onClick={onAddLine}
-              tertiary
-              rightIcon={SvgPlusCircle}
-              disabled={!canAddMemory}
-              title={
-                !canAddMemory
-                  ? `Maximum of ${MAX_MEMORY_COUNT} memories reached`
-                  : undefined
-              }
-            >
-              Add Line
-            </Button>
+            <Disabled disabled={!canAddMemory}>
+              <Button
+                prominence="tertiary"
+                onClick={onAddLine}
+                rightIcon={SvgPlusCircle}
+                title={
+                  !canAddMemory
+                    ? `Maximum of ${MAX_MEMORY_COUNT} memories reached`
+                    : undefined
+                }
+              >
+                Add Line
+              </Button>
+            </Disabled>
           </Section>
         </Modal.Header>
 
