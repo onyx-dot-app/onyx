@@ -199,7 +199,14 @@ jobs:
         run: |
           SANITIZED_TAG=$(echo "$TAG" | tr '/' '-')
           IMAGES="${REGISTRY_IMAGE}@${AMD64_DIGEST} ${REGISTRY_IMAGE}@${ARM64_DIGEST}"
-          docker buildx imagetools create \
-            -t "${REGISTRY_IMAGE}:${SANITIZED_TAG}" \
-            -t "${REGISTRY_IMAGE}:latest" \
-            $IMAGES
+
+          if [[ "$TAG" =~ ^cli/v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            docker buildx imagetools create \
+              -t "${REGISTRY_IMAGE}:${SANITIZED_TAG}" \
+              -t "${REGISTRY_IMAGE}:latest" \
+              $IMAGES
+          else
+            docker buildx imagetools create \
+              -t "${REGISTRY_IMAGE}:${SANITIZED_TAG}" \
+              $IMAGES
+          fi
