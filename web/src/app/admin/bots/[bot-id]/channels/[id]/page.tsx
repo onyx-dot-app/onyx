@@ -4,7 +4,6 @@ import { use } from "react";
 import { SlackChannelConfigCreationForm } from "@/app/admin/bots/[bot-id]/channels/SlackChannelConfigCreationForm";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
-
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { SvgSlack } from "@opal/icons";
 import { useSlackChannelConfigs } from "@/app/admin/bots/[bot-id]/hooks";
@@ -41,92 +40,76 @@ function EditSlackChannelConfigContent({ id }: { id: string }) {
     error: stdAnswerError,
   } = useStandardAnswerCategories();
 
-  if (
+  const isLoading =
     isChannelsLoading ||
     isDocSetsLoading ||
     isAgentsLoading ||
-    (isPaidEnterprise && isStdAnswerLoading)
-  ) {
-    return <SimpleLoader />;
-  }
+    (isPaidEnterprise && isStdAnswerLoading);
 
-  if (channelsError || !slackChannelConfigs) {
-    return (
-      <ErrorCallout
-        errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch Slack Channels - ${
-          channelsError?.message ?? "unknown error"
-        }`}
-      />
-    );
-  }
-
-  const slackChannelConfig = slackChannelConfigs.find(
+  const slackChannelConfig = slackChannelConfigs?.find(
     (config) => config.id === Number(id)
   );
 
-  if (!slackChannelConfig) {
-    return (
-      <ErrorCallout
-        errorTitle="Something went wrong :("
-        errorMsg={`Did not find Slack Channel config with ID: ${id}`}
-      />
-    );
-  }
-
-  if (docSetsError || !documentSets) {
-    return (
-      <ErrorCallout
-        errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch document sets - ${
-          docSetsError?.message ?? "unknown error"
-        }`}
-      />
-    );
-  }
-
-  if (agentsError) {
-    return (
-      <ErrorCallout
-        errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch personas - ${
-          agentsError?.message ?? "unknown error"
-        }`}
-      />
-    );
-  }
-
-  const standardAnswerCategoryResponse: StandardAnswerCategoryResponse =
-    isPaidEnterprise
-      ? {
-          paidEnterpriseFeaturesEnabled: true,
-          categories: standardAnswerCategories ?? [],
-          ...(stdAnswerError
-            ? { error: { message: String(stdAnswerError) } }
-            : {}),
-        }
-      : { paidEnterpriseFeaturesEnabled: false };
+  const title = slackChannelConfig?.is_default
+    ? "Edit Default Slack Config"
+    : "Edit Slack Channel Config";
 
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={SvgSlack}
-        title={
-          slackChannelConfig.is_default
-            ? "Edit Default Slack Config"
-            : "Edit Slack Channel Config"
-        }
+        title={title}
         separator
         backButton
       />
       <SettingsLayouts.Body>
-        <SlackChannelConfigCreationForm
-          slack_bot_id={slackChannelConfig.slack_bot_id}
-          documentSets={documentSets}
-          personas={agents}
-          standardAnswerCategoryResponse={standardAnswerCategoryResponse}
-          existingSlackChannelConfig={slackChannelConfig}
-        />
+        {isLoading ? (
+          <SimpleLoader />
+        ) : channelsError || !slackChannelConfigs ? (
+          <ErrorCallout
+            errorTitle="Something went wrong :("
+            errorMsg={`Failed to fetch Slack Channels - ${
+              channelsError?.message ?? "unknown error"
+            }`}
+          />
+        ) : !slackChannelConfig ? (
+          <ErrorCallout
+            errorTitle="Something went wrong :("
+            errorMsg={`Did not find Slack Channel config with ID: ${id}`}
+          />
+        ) : docSetsError || !documentSets ? (
+          <ErrorCallout
+            errorTitle="Something went wrong :("
+            errorMsg={`Failed to fetch document sets - ${
+              docSetsError?.message ?? "unknown error"
+            }`}
+          />
+        ) : agentsError ? (
+          <ErrorCallout
+            errorTitle="Something went wrong :("
+            errorMsg={`Failed to fetch agents - ${
+              agentsError?.message ?? "unknown error"
+            }`}
+          />
+        ) : (
+          <SlackChannelConfigCreationForm
+            slack_bot_id={slackChannelConfig.slack_bot_id}
+            documentSets={documentSets}
+            personas={agents}
+            standardAnswerCategoryResponse={
+              isPaidEnterprise
+                ? {
+                    paidEnterpriseFeaturesEnabled: true,
+                    categories: standardAnswerCategories ?? [],
+                    ...(stdAnswerError
+                      ? { error: { message: String(stdAnswerError) } }
+                      : {}),
+                  }
+                : { paidEnterpriseFeaturesEnabled: false }
+            }
+            existingSlackChannelConfig={slackChannelConfig}
+          />
+        )}
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );

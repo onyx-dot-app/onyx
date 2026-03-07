@@ -1,6 +1,7 @@
 "use client";
 
 import { use } from "react";
+import BackButton from "@/refresh-components/buttons/BackButton";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import SlackChannelConfigsTable from "@/app/admin/bots/[bot-id]/SlackChannelConfigsTable";
@@ -10,8 +11,6 @@ import {
 } from "@/app/admin/bots/[bot-id]/hooks";
 import { ExistingSlackBotForm } from "@/app/admin/bots/SlackBotUpdateForm";
 import Separator from "@/refresh-components/Separator";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
-import { SvgSlack } from "@opal/icons";
 
 function SlackBotEditContent({ botId }: { botId: string }) {
   const {
@@ -85,16 +84,9 @@ export default function Page({
   const unwrappedParams = use(params);
 
   return (
-    <SettingsLayouts.Root>
-      <SettingsLayouts.Header
-        icon={SvgSlack}
-        title="Edit Slack Bot"
-        backButton
-        separator
-      />
-      <SettingsLayouts.Body>
-        <SlackBotEditContent botId={unwrappedParams["bot-id"]} />
-      </SettingsLayouts.Body>
-    </SettingsLayouts.Root>
+    <>
+      <BackButton routerOverride="/admin/bots" />
+      <SlackBotEditContent botId={unwrappedParams["bot-id"]} />
+    </>
   );
 }

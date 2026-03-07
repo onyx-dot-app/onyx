@@ -1,6 +1,6 @@
 "use client";
 
-import { use } from "react";
+import { use, useEffect } from "react";
 import { SlackChannelConfigCreationForm } from "@/app/admin/bots/[bot-id]/channels/SlackChannelConfigCreationForm";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
@@ -12,7 +12,6 @@ import { useStandardAnswerCategories } from "@/app/ee/admin/standard-answer/hook
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import type { StandardAnswerCategoryResponse } from "@/components/standardAnswers/getStandardAnswerCategoriesIfEE";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
 
 function NewChannelConfigContent({ slackBotId }: { slackBotId: number }) {
   const isPaidEnterprise = usePaidEnterpriseFeaturesEnabled();
