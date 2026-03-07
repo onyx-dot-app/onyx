@@ -19,7 +19,12 @@ export const NewSlackBotForm = () => {
 
   return (
     <SettingsLayouts.Root>
-      <SettingsLayouts.Header icon={SvgSlack} title="New Slack Bot" separator />
+      <SettingsLayouts.Header
+        icon={SvgSlack}
+        title="New Slack Bot"
+        separator
+        backButton
+      />
       <SettingsLayouts.Body>
         <CardSection>
           <div className="p-4">
