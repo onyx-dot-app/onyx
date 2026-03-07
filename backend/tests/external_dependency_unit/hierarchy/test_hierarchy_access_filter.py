@@ -6,6 +6,8 @@ the `character varying[] && text[]` type mismatch error.
 """
 
 from collections.abc import Generator
+from unittest.mock import MagicMock
+from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
@@ -15,6 +17,7 @@ from ee.onyx.db.hierarchy import _get_accessible_hierarchy_nodes_for_source
 from onyx.configs.constants import DocumentSource
 from onyx.db.enums import HierarchyNodeType
 from onyx.db.models import HierarchyNode
+from onyx.server.features.hierarchy.api import _get_user_access_info
 
 
 def _make_node(
@@ -85,7 +88,7 @@ def test_group_overlap_filter(
     results = _get_accessible_hierarchy_nodes_for_source(
         db_session,
         source=DocumentSource.GOOGLE_DRIVE,
-        user_email=None,
+        user_email="",
         external_group_ids=["group_engineering"],
     )
     result_ids = {n.raw_node_id for n in results}
@@ -124,7 +127,7 @@ def test_no_credentials_returns_only_public(
     results = _get_accessible_hierarchy_nodes_for_source(
         db_session,
         source=DocumentSource.GOOGLE_DRIVE,
-        user_email=None,
+        user_email="",
         external_group_ids=[],
     )
     result_ids = {n.raw_node_id for n in results}
@@ -154,3 +157,80 @@ def test_combined_email_and_group(
     assert email_node.raw_node_id in result_ids
     assert group_node.raw_node_id in result_ids
     assert private_node.raw_node_id not in result_ids
+
+
+# Tests for _get_user_access_info helper function
+
+
+def test_get_user_access_info_returns_email_and_groups(
+    db_session: Session,
+) -> None:
+    """_get_user_access_info returns the user's email and external group IDs."""
+    mock_user = MagicMock()
+    mock_user.email = "test@example.com"
+
+    with patch(
+        "onyx.server.features.hierarchy.api.get_user_external_group_ids",
+        return_value=["group1", "group2"],
+    ):
+        email, groups = _get_user_access_info(mock_user, db_session)
+
+    assert email == "test@example.com"
+    assert groups == ["group1", "group2"]
+
+
+def test_get_user_access_info_with_no_groups(
+    db_session: Session,
+) -> None:
+    """User with no external groups returns empty list."""
+    mock_user = MagicMock()
+    mock_user.email = "solo@example.com"
+
+    with patch(
+        "onyx.server.features.hierarchy.api.get_user_external_group_ids",
+        return_value=[],
+    ):
+        email, groups = _get_user_access_info(mock_user, db_session)
+
+    assert email == "solo@example.com"
+    assert groups == []
+
+
+# Tests verifying hierarchy access works for users from different auth providers
+
+
+def test_access_with_oidc_user_groups(
+    db_session: Session,
+    seeded_nodes: list[HierarchyNode],
+) -> None:
+    """OIDC users with external groups can access group-permissioned nodes."""
+    results = _get_accessible_hierarchy_nodes_for_source(
+        db_session,
+        source=DocumentSource.GOOGLE_DRIVE,
+        user_email="oidc_user@company.com",
+        external_group_ids=["group_engineering"],
+    )
+    result_ids = {n.raw_node_id for n in results}
+
+    public_node, _, group_node, private_node = seeded_nodes
+    assert public_node.raw_node_id in result_ids
+    assert group_node.raw_node_id in result_ids
+    assert private_node.raw_node_id not in result_ids
+
+
+def test_access_with_saml_user_groups(
+    db_session: Session,
+    seeded_nodes: list[HierarchyNode],
+) -> None:
+    """SAML users with external groups can access group-permissioned nodes."""
+    results = _get_accessible_hierarchy_nodes_for_source(
+        db_session,
+        source=DocumentSource.GOOGLE_DRIVE,
+        user_email="saml_user@enterprise.org",
+        external_group_ids=["group_design"],
+    )
+    result_ids = {n.raw_node_id for n in results}
+
+    public_node, _, group_node, _ = seeded_nodes
+    assert public_node.raw_node_id in result_ids
+    assert group_node.raw_node_id in result_ids
