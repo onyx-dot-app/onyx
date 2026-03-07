@@ -96,7 +96,6 @@ class _Input:
         self._buffer = ""
         self._start_index = 0
         self.buffer_complete = False
-        self.more_content_expected = True
 
     def feed(self, chunk: str) -> None:
         """Add a chunk of data to the buffer"""
@@ -142,7 +141,6 @@ class _Input:
 
     def expect_end_of_content(self) -> None:
         """Verify no non-whitespace content remains"""
-        self.more_content_expected = False
         self.commit()
         self.skip_past_whitespace()
         if self.length != 0:
@@ -292,7 +290,6 @@ class Tokenizer:
 
                 if i == self.input.length and not self.input.buffer_complete:
                     # Need more input (numbers have no terminator)
-                    self.input.more_content_expected = False
                     return
 
                 number_chars = self.input.slice(0, i)
@@ -301,7 +298,6 @@ class Tokenizer:
                 self._handler.handle_number(number)
                 self._emitted_tokens += 1
                 self._stack.pop()
-                self.input.more_content_expected = True
                 return
 
         if self.input.try_to_take_prefix('"'):
