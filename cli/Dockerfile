@@ -5,7 +5,8 @@ RUN apk add --no-cache git
 WORKDIR /app
 COPY ./ .
 
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -a -installsuffix static -o onyx-cli .
+ARG TARGETARCH
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -ldflags="-s -w" -a -installsuffix static -o onyx-cli .
 
 FROM scratch
 

@@ -72,7 +72,6 @@ target "integration" {
 target "cli" {
   context    = "cli"
   dockerfile = "Dockerfile"
-  platforms  = ["linux/amd64", "linux/arm64"]
 
   cache-from = ["type=registry,ref=${CLI_REPOSITORY}:latest"]
   cache-to   = ["type=inline"]
