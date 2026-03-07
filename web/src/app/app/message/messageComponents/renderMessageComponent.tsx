@@ -6,7 +6,9 @@ import {
   Packet,
   PacketType,
   ReasoningPacket,
+  SearchToolStart,
   StopReason,
+  ToolCallArgumentDelta,
 } from "../../services/streamingModels";
 import {
   FullChatState,
@@ -27,10 +29,6 @@ import { DeepResearchPlanRenderer } from "./timeline/renderers/deepresearch/Deep
 import { ResearchAgentRenderer } from "./timeline/renderers/deepresearch/ResearchAgentRenderer";
 import { WebSearchToolRenderer } from "./timeline/renderers/search/WebSearchToolRenderer";
 import { InternalSearchToolRenderer } from "./timeline/renderers/search/InternalSearchToolRenderer";
-import {
-  SearchToolStart,
-  ToolCallArgumentDelta,
-} from "../../services/streamingModels";
 
 // Different types of chat packets using discriminated unions
 interface GroupedPackets {

@@ -10,6 +10,8 @@ import {
   Stop,
   ImageGenerationToolDelta,
   MessageStart,
+  ToolCallArgumentDelta,
+  CODE_INTERPRETER_TOOL_TYPES,
 } from "@/app/app/services/streamingModels";
 import { CitationMap } from "@/app/app/interfaces";
 import { OnyxDocument } from "@/lib/search/interfaces";
@@ -150,9 +152,16 @@ const CONTENT_PACKET_TYPES_SET = new Set<PacketType>([
 ]);
 
 function hasContentPackets(packets: Packet[]): boolean {
-  return packets.some((packet) =>
-    CONTENT_PACKET_TYPES_SET.has(packet.obj.type as PacketType)
-  );
+  return packets.some((packet) => {
+    const type = packet.obj.type as PacketType;
+    if (type === PacketType.TOOL_CALL_ARGUMENT_DELTA) {
+      return (
+        (packet.obj as ToolCallArgumentDelta).tool_type ===
+        CODE_INTERPRETER_TOOL_TYPES.PYTHON
+      );
+    }
+    return CONTENT_PACKET_TYPES_SET.has(type);
+  });
 }
 
 /**
