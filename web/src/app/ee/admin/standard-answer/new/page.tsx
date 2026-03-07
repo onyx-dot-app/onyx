@@ -1,28 +1,44 @@
+"use client";
+
 import { StandardAnswerCreationForm } from "@/app/ee/admin/standard-answer/StandardAnswerCreationForm";
-import { fetchSS } from "@/lib/utilsSS";
 import { ErrorCallout } from "@/components/ErrorCallout";
+import { ThreeDotsLoader } from "@/components/Loading";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
-import { StandardAnswerCategory } from "@/lib/types";
+import { useStandardAnswerCategories } from "../hooks";
 
 const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.STANDARD_ANSWERS]!;
 
-async function Page() {
-  const standardAnswerCategoriesResponse = await fetchSS(
-    "/manage/admin/standard-answer/category"
-  );
+function Main() {
+  const {
+    data: standardAnswerCategories,
+    isLoading,
+    error,
+  } = useStandardAnswerCategories();
 
-  if (!standardAnswerCategoriesResponse.ok) {
+  if (isLoading) {
+    return <ThreeDotsLoader />;
+  }
+
+  if (error || !standardAnswerCategories) {
     return (
       <ErrorCallout
         errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch standard answer categories - ${await standardAnswerCategoriesResponse.text()}`}
+        errorMsg={`Failed to fetch standard answer categories - ${
+          error?.message ?? "unknown error"
+        }`}
       />
     );
   }
-  const standardAnswerCategories =
-    (await standardAnswerCategoriesResponse.json()) as StandardAnswerCategory[];
 
+  return (
+    <StandardAnswerCreationForm
+      standardAnswerCategories={standardAnswerCategories}
+    />
+  );
+}
+
+export default function Page() {
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
@@ -32,12 +48,8 @@ async function Page() {
         separator
       />
       <SettingsLayouts.Body>
-        <StandardAnswerCreationForm
-          standardAnswerCategories={standardAnswerCategories}
-        />
+        <Main />
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );
 }
-
-export default Page;

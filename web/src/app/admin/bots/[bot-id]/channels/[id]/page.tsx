@@ -1,100 +1,138 @@
+"use client";
+
+import { use } from "react";
 import { SlackChannelConfigCreationForm } from "../SlackChannelConfigCreationForm";
-import { fetchSS } from "@/lib/utilsSS";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { DocumentSetSummary, SlackChannelConfig } from "@/lib/types";
+import { ThreeDotsLoader } from "@/components/Loading";
 import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { SvgSlack } from "@opal/icons";
-import { FetchAgentsResponse, fetchAgentsSS } from "@/lib/agentsSS";
-import { getStandardAnswerCategoriesIfEE } from "@/components/standardAnswers/getStandardAnswerCategoriesIfEE";
+import { useSlackChannelConfigs } from "../../hooks";
+import { useDocumentSets } from "@/app/admin/documents/sets/hooks";
+import { useAgents } from "@/hooks/useAgents";
+import { useStandardAnswerCategories } from "@/app/ee/admin/standard-answer/hooks";
+import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import type { StandardAnswerCategoryResponse } from "@/components/standardAnswers/getStandardAnswerCategoriesIfEE";
 
-async function EditslackChannelConfigPage(props: {
-  params: Promise<{ id: number }>;
-}) {
-  const params = await props.params;
-  const tasks = [
-    fetchSS("/manage/admin/slack-app/channel"),
-    fetchSS("/manage/document-set"),
-    fetchAgentsSS(),
-  ];
+function EditSlackChannelConfigContent({ id }: { id: number }) {
+  const isPaidEnterprise = usePaidEnterpriseFeaturesEnabled();
 
-  const [
-    slackChannelsResponse,
-    documentSetsResponse,
-    [assistants, agentsFetchError],
-  ] = (await Promise.all(tasks)) as [Response, Response, FetchAgentsResponse];
+  const {
+    data: slackChannelConfigs,
+    isLoading: isChannelsLoading,
+    error: channelsError,
+  } = useSlackChannelConfigs();
 
-  const eeStandardAnswerCategoryResponse =
-    await getStandardAnswerCategoriesIfEE();
+  const {
+    data: documentSets,
+    isLoading: isDocSetsLoading,
+    error: docSetsError,
+  } = useDocumentSets();
 
-  if (!slackChannelsResponse.ok) {
+  const {
+    agents,
+    isLoading: isAgentsLoading,
+    error: agentsError,
+  } = useAgents();
+
+  const {
+    data: standardAnswerCategories,
+    isLoading: isStdAnswerLoading,
+    error: stdAnswerError,
+  } = useStandardAnswerCategories();
+
+  if (
+    isChannelsLoading ||
+    isDocSetsLoading ||
+    isAgentsLoading ||
+    (isPaidEnterprise && isStdAnswerLoading)
+  ) {
+    return <ThreeDotsLoader />;
+  }
+
+  if (channelsError || !slackChannelConfigs) {
     return (
       <ErrorCallout
         errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch Slack Channels - ${await slackChannelsResponse.text()}`}
+        errorMsg={`Failed to fetch Slack Channels - ${
+          channelsError?.message ?? "unknown error"
+        }`}
       />
     );
   }
-  const allslackChannelConfigs =
-    (await slackChannelsResponse.json()) as SlackChannelConfig[];
 
-  const slackChannelConfig = allslackChannelConfigs.find(
-    (config) => config.id === Number(params.id)
+  const slackChannelConfig = slackChannelConfigs.find(
+    (config) => config.id === id
   );
 
   if (!slackChannelConfig) {
     return (
       <ErrorCallout
         errorTitle="Something went wrong :("
-        errorMsg={`Did not find Slack Channel config with ID: ${params.id}`}
+        errorMsg={`Did not find Slack Channel config with ID: ${id}`}
       />
     );
   }
 
-  if (!documentSetsResponse.ok) {
+  if (docSetsError || !documentSets) {
     return (
       <ErrorCallout
         errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch document sets - ${await documentSetsResponse.text()}`}
+        errorMsg={`Failed to fetch document sets - ${
+          docSetsError?.message ?? "unknown error"
+        }`}
       />
     );
   }
-  const response = await documentSetsResponse.json();
-  const documentSets = response as DocumentSetSummary[];
 
-  if (agentsFetchError) {
+  if (agentsError) {
     return (
       <ErrorCallout
         errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch personas - ${agentsFetchError}`}
+        errorMsg={`Failed to fetch personas - ${
+          agentsError?.message ?? "unknown error"
+        }`}
       />
     );
   }
+
+  const standardAnswerCategoryResponse: StandardAnswerCategoryResponse =
+    isPaidEnterprise
+      ? {
+          paidEnterpriseFeaturesEnabled: true,
+          categories: standardAnswerCategories ?? [],
+          ...(stdAnswerError
+            ? { error: { message: String(stdAnswerError) } }
+            : {}),
+        }
+      : { paidEnterpriseFeaturesEnabled: false };
+
+  return (
+    <SlackChannelConfigCreationForm
+      slack_bot_id={slackChannelConfig.slack_bot_id}
+      documentSets={documentSets}
+      personas={agents}
+      standardAnswerCategoryResponse={standardAnswerCategoryResponse}
+      existingSlackChannelConfig={slackChannelConfig}
+    />
+  );
+}
+
+export default function Page(props: { params: Promise<{ id: number }> }) {
+  const params = use(props.params);
 
   return (
     <SettingsLayouts.Root>
       <InstantSSRAutoRefresh />
       <SettingsLayouts.Header
         icon={SvgSlack}
-        title={
-          slackChannelConfig.is_default
-            ? "Edit Default Slack Config"
-            : "Edit Slack Channel Config"
-        }
+        title="Edit Slack Channel Config"
         separator
         backButton
       />
       <SettingsLayouts.Body>
-        <SlackChannelConfigCreationForm
-          slack_bot_id={slackChannelConfig.slack_bot_id}
-          documentSets={documentSets}
-          personas={assistants}
-          standardAnswerCategoryResponse={eeStandardAnswerCategoryResponse}
-          existingSlackChannelConfig={slackChannelConfig}
-        />
+        <EditSlackChannelConfigContent id={Number(params.id)} />
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );
 }
-
-export default EditslackChannelConfigPage;

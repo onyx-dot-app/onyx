@@ -1,3 +1,5 @@
+"use client";
+
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { CUSTOM_ANALYTICS_ENABLED } from "@/lib/constants";
 import { Callout } from "@/components/ui/callout";
