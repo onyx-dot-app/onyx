@@ -153,6 +153,10 @@
   }
 }
 
+.line-item-text-disabled {
+  color: var(--text-01) !important;
+}
+
 .line-item-text-strikethrough {
   color: var(--text-02) !important;
   @apply line-through decoration-2 !important;
@@ -204,6 +208,10 @@
 
 .line-item-icon-strikethrough {
   @apply stroke-text-03;
+}
+
+.line-item-icon-disabled {
+  @apply stroke-text-01;
 }
 
 .line-item-icon-danger {
