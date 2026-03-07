@@ -1182,6 +1182,8 @@ auth:
 configMap:
   # Change this for production uses unless Onyx is only accessible behind VPN
   AUTH_TYPE: "disabled"
+  # Enable PKCE for OIDC login flow. Leave empty/false for backward compatibility.
+  OIDC_PKCE_ENABLED: ""
   # 1 Day Default
   SESSION_EXPIRE_TIME_SECONDS: "86400"
   # Can be something like onyx.app, as an extra double-check

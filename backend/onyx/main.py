@@ -44,6 +44,7 @@ from onyx.configs.app_configs import LOG_ENDPOINT_LATENCY
 from onyx.configs.app_configs import OAUTH_CLIENT_ID
 from onyx.configs.app_configs import OAUTH_CLIENT_SECRET
 from onyx.configs.app_configs import OAUTH_ENABLED
+from onyx.configs.app_configs import OIDC_PKCE_ENABLED
 from onyx.configs.app_configs import OIDC_SCOPE_OVERRIDE
 from onyx.configs.app_configs import OPENID_CONFIG_URL
 from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_OVERFLOW
@@ -597,6 +598,7 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
                 associate_by_email=True,
                 is_verified_by_default=True,
                 redirect_url=f"{WEB_DOMAIN}/auth/oidc/callback",
+                enable_pkce=OIDC_PKCE_ENABLED,
             ),
             prefix="/auth/oidc",
         )
