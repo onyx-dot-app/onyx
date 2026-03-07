@@ -96,6 +96,7 @@ func Execute() error {
 	rootCmd.AddCommand(newAgentsCmd())
 	rootCmd.AddCommand(newConfigureCmd())
 	rootCmd.AddCommand(newValidateConfigCmd())
+	rootCmd.AddCommand(newServeCmd())
 
 	// Default command is chat, but intercept --version first
 	rootCmd.RunE = func(cmd *cobra.Command, args []string) error {

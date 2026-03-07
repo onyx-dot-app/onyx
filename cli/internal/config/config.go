@@ -35,8 +35,8 @@ func (c OnyxCliConfig) IsConfigured() bool {
 	return c.APIKey != ""
 }
 
-// configDir returns ~/.config/onyx-cli
-func configDir() string {
+// ConfigDir returns ~/.config/onyx-cli
+func ConfigDir() string {
 	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
 		return filepath.Join(xdg, "onyx-cli")
 	}
@@ -49,7 +49,7 @@ func configDir() string {
 
 // ConfigFilePath returns the full path to the config file.
 func ConfigFilePath() string {
-	return filepath.Join(configDir(), "config.json")
+	return filepath.Join(ConfigDir(), "config.json")
 }
 
 // ConfigExists checks if the config file exists on disk.
@@ -87,7 +87,7 @@ func Load() OnyxCliConfig {
 
 // Save writes the config to disk, creating parent directories if needed.
 func Save(cfg OnyxCliConfig) error {
-	dir := configDir()
+	dir := ConfigDir()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
