@@ -1,12 +1,12 @@
 "use client";
 
 import { toast } from "@/hooks/useToast";
-import { SlackBot, ValidSources } from "@/lib/types";
+import { SlackBot } from "@/lib/types";
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 import { updateSlackBotField } from "@/lib/updateSlackBotField";
 import { SlackTokensForm } from "./SlackTokensForm";
-import { SourceIcon } from "@/components/SourceIcon";
+
 import { EditableStringFieldDisplay } from "@/components/EditableStringFieldDisplay";
 import { deleteSlackBot } from "./new/lib";
 import GenericConfirmModal from "@/components/modals/GenericConfirmModal";
@@ -90,10 +90,7 @@ export const ExistingSlackBotForm = ({
     <div>
       <div className="flex items-center justify-between h-14">
         <div className="flex items-center gap-2">
-          <div className="my-auto">
-            <SourceIcon iconSize={32} sourceType={ValidSources.Slack} />
-          </div>
-          <div className="ml-1">
+          <div>
             <EditableStringFieldDisplay
               value={formValues.name}
               isEditable={true}
