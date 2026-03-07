@@ -20,13 +20,27 @@ import (
 	"github.com/charmbracelet/wish/activeterm"
 	"github.com/charmbracelet/wish/bubbletea"
 	"github.com/charmbracelet/wish/logging"
+	"github.com/charmbracelet/wish/ratelimiter"
 	"github.com/onyx-dot-app/onyx/cli/internal/api"
 	"github.com/onyx-dot-app/onyx/cli/internal/config"
 	"github.com/onyx-dot-app/onyx/cli/internal/tui"
 	"github.com/spf13/cobra"
+	"golang.org/x/time/rate"
 )
 
 var sessionAPIKeys sync.Map
+
+const (
+	defaultServeIdleTimeout        = 15 * time.Minute
+	defaultServeMaxSessionTimeout  = 8 * time.Hour
+	defaultServeRateLimitPerMinute = 20
+	defaultServeRateLimitBurst     = 40
+	defaultServeRateLimitCacheSize = 4096
+	maxAPIKeyLength                = 256
+	apiKeyValidationTimeout        = 15 * time.Second
+)
+
+var errAPIKeyTooLong = fmt.Errorf("API key is too long (max %d characters)", maxAPIKeyLength)
 
 // sshWriter wraps an io.Writer and tracks the first write error, allowing
 // a sequence of writes to be checked once at the end.
@@ -55,6 +69,22 @@ func sessionEnv(s ssh.Session, key string) string {
 		}
 	}
 	return ""
+}
+
+func validateAPIKey(serverURL string, apiKey string) error {
+	trimmedKey := strings.TrimSpace(apiKey)
+	if len(trimmedKey) > maxAPIKeyLength {
+		return errAPIKeyTooLong
+	}
+
+	cfg := config.OnyxCliConfig{
+		ServerURL: serverURL,
+		APIKey:    trimmedKey,
+	}
+	client := api.NewClient(cfg)
+	ctx, cancel := context.WithTimeout(context.Background(), apiKeyValidationTimeout)
+	defer cancel()
+	return client.TestConnection(ctx)
 }
 
 // readMasked reads input from the SSH session one chunk at a time, echoing '•'
@@ -94,6 +124,9 @@ func readMasked(w *sshWriter, s ssh.Session) (string, error) {
 					w.print("\b \b")
 				}
 			case b >= 32 && b < 127: // printable ASCII
+				if len(key) >= maxAPIKeyLength {
+					return "", errAPIKeyTooLong
+				}
 				key = append(key, b)
 				w.print("•")
 			}
@@ -135,6 +168,14 @@ func promptAPIKey(s ssh.Session, serverURL string) (string, error) {
 
 		key, err := readMasked(w, s)
 		if err != nil {
+			if errors.Is(err, errAPIKeyTooLong) {
+				w.print("\r\n")
+				w.printf("  \x1b[33m%s\x1b[0m\r\n\r\n", errAPIKeyTooLong.Error())
+				if w.err != nil {
+					return "", w.err
+				}
+				continue
+			}
 			w.print("\r\n")
 			return "", err
 		}
@@ -154,11 +195,7 @@ func promptAPIKey(s ssh.Session, serverURL string) (string, error) {
 			return "", w.err
 		}
 
-		cfg := config.OnyxCliConfig{ServerURL: serverURL, APIKey: key}
-		client := api.NewClient(cfg)
-		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		err = client.TestConnection(ctx)
-		cancel()
+		err = validateAPIKey(serverURL, key)
 
 		w.print("\r\x1b[2K") // clear "Validating…" line
 
@@ -180,7 +217,20 @@ func promptAPIKey(s ssh.Session, serverURL string) (string, error) {
 func authMiddleware(serverCfg config.OnyxCliConfig) wish.Middleware {
 	return func(next ssh.Handler) ssh.Handler {
 		return func(s ssh.Session) {
-			apiKey := sessionEnv(s, config.EnvAPIKey)
+			w := &sshWriter{w: s}
+			apiKey := strings.TrimSpace(sessionEnv(s, config.EnvAPIKey))
+
+			if apiKey != "" {
+				if err := validateAPIKey(serverCfg.ServerURL, apiKey); err != nil {
+					w.print("\r\n")
+					w.print("  \x1b[33mThe ONYX_API_KEY provided via SSH environment is invalid.\x1b[0m\r\n")
+					w.printf("  \x1b[1;31m%s\x1b[0m\r\n\r\n", err.Error())
+					if w.err != nil {
+						return
+					}
+					apiKey = ""
+				}
+			}
 
 			if apiKey == "" {
 				var err error
@@ -199,9 +249,14 @@ func authMiddleware(serverCfg config.OnyxCliConfig) wish.Middleware {
 
 func newServeCmd() *cobra.Command {
 	var (
-		host    string
-		port    int
-		keyPath string
+		host              string
+		port              int
+		keyPath           string
+		idleTimeout       time.Duration
+		maxSessionTimeout time.Duration
+		rateLimitPerMin   int
+		rateLimitBurst    int
+		rateLimitCache    int
 	)
 
 	cmd := &cobra.Command{
@@ -227,8 +282,22 @@ Example:
 			if serverCfg.ServerURL == "" {
 				return fmt.Errorf("server URL is not configured; run 'onyx-cli configure' first")
 			}
+			if rateLimitPerMin <= 0 {
+				return fmt.Errorf("--rate-limit-per-minute must be > 0")
+			}
+			if rateLimitBurst <= 0 {
+				return fmt.Errorf("--rate-limit-burst must be > 0")
+			}
+			if rateLimitCache <= 0 {
+				return fmt.Errorf("--rate-limit-cache must be > 0")
+			}
 
 			addr := net.JoinHostPort(host, fmt.Sprintf("%d", port))
+			connectionLimiter := ratelimiter.NewRateLimiter(
+				rate.Limit(float64(rateLimitPerMin)/60.0),
+				rateLimitBurst,
+				rateLimitCache,
+			)
 
 			handler := func(s ssh.Session) (tea.Model, []tea.ProgramOption) {
 				apiKey := ""
@@ -249,22 +318,31 @@ Example:
 				}
 			}
 
-			s, err := wish.NewServer(
+			serverOptions := []ssh.Option{
 				wish.WithAddress(addr),
 				wish.WithHostKeyPath(keyPath),
 				wish.WithMiddleware(
 					bubbletea.Middleware(handler),
 					authMiddleware(serverCfg),
 					activeterm.Middleware(),
+					ratelimiter.Middleware(connectionLimiter),
 					logging.Middleware(),
 				),
-			)
+			}
+			if idleTimeout > 0 {
+				serverOptions = append(serverOptions, wish.WithIdleTimeout(idleTimeout))
+			}
+			if maxSessionTimeout > 0 {
+				serverOptions = append(serverOptions, wish.WithMaxTimeout(maxSessionTimeout))
+			}
+
+			s, err := wish.NewServer(serverOptions...)
 			if err != nil {
 				return fmt.Errorf("could not create SSH server: %w", err)
 			}
 
 			done := make(chan os.Signal, 1)
-			signal.Notify(done, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
+			signal.Notify(done, os.Interrupt, syscall.SIGTERM)
 
 			log.Info("Starting Onyx SSH server", "addr", addr)
 			log.Info("Connect with", "cmd", fmt.Sprintf("ssh %s -p %d", host, port))
@@ -288,6 +366,36 @@ Example:
 	cmd.Flags().IntVarP(&port, "port", "p", 2222, "Port to listen on")
 	cmd.Flags().StringVar(&keyPath, "host-key", ".ssh/onyx_serve_ed25519",
 		"Path to SSH host key (auto-generated if missing)")
+	cmd.Flags().DurationVar(
+		&idleTimeout,
+		"idle-timeout",
+		defaultServeIdleTimeout,
+		"Disconnect idle clients after this duration (set 0 to disable)",
+	)
+	cmd.Flags().DurationVar(
+		&maxSessionTimeout,
+		"max-session-timeout",
+		defaultServeMaxSessionTimeout,
+		"Maximum lifetime of a client session (set 0 to disable)",
+	)
+	cmd.Flags().IntVar(
+		&rateLimitPerMin,
+		"rate-limit-per-minute",
+		defaultServeRateLimitPerMinute,
+		"Per-IP connection rate limit (new sessions per minute)",
+	)
+	cmd.Flags().IntVar(
+		&rateLimitBurst,
+		"rate-limit-burst",
+		defaultServeRateLimitBurst,
+		"Per-IP burst limit for connection attempts",
+	)
+	cmd.Flags().IntVar(
+		&rateLimitCache,
+		"rate-limit-cache",
+		defaultServeRateLimitCacheSize,
+		"Maximum number of IP limiter entries tracked in memory",
+	)
 
 	return cmd
 }
