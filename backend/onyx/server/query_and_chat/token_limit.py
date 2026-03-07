@@ -6,7 +6,6 @@ from functools import lru_cache
 
 from dateutil import tz
 from fastapi import Depends
-from fastapi import HTTPException
 from sqlalchemy import func
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -18,6 +17,8 @@ from onyx.db.models import ChatSession
 from onyx.db.models import TokenRateLimit
 from onyx.db.models import User
 from onyx.db.token_limit import fetch_all_global_token_rate_limits
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 
@@ -62,9 +63,9 @@ def _user_is_rate_limited_by_global() -> None:
             global_usage = _fetch_global_usage(global_cutoff_time, db_session)
 
             if _is_rate_limited(global_rate_limits, global_usage):
-                raise HTTPException(
-                    status_code=429,
-                    detail="Token budget exceeded for organization. Try again later.",
+                raise OnyxError(
+                    OnyxErrorCode.RATE_LIMITED,
+                    "Token budget exceeded for organization. Try again later.",
                 )
 
 
