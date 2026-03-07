@@ -4,7 +4,7 @@ import { use } from "react";
 import { SlackChannelConfigCreationForm } from "@/app/admin/bots/[bot-id]/channels/SlackChannelConfigCreationForm";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
-import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
+
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { SvgSlack } from "@opal/icons";
 import { useSlackChannelConfigs } from "@/app/admin/bots/[bot-id]/hooks";
@@ -109,7 +109,6 @@ function EditSlackChannelConfigContent({ id }: { id: string }) {
 
   return (
     <SettingsLayouts.Root>
-      <InstantSSRAutoRefresh />
       <SettingsLayouts.Header
         icon={SvgSlack}
         title={

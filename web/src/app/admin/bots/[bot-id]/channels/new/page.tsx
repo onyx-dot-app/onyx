@@ -102,7 +102,7 @@ export default function Page(props: { params: Promise<{ "bot-id": string }> }) {
   }, [slack_bot_id, router]);
 
   if (!slack_bot_id || isNaN(slack_bot_id)) {
-    return <SimpleLoader />;
+    return null;
   }
 
   return (
