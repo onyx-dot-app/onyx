@@ -1,6 +1,6 @@
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
-import { hasPaidSubscription } from "@/lib/billing/interfaces";
-import { useBillingInformation } from "@/hooks/useBillingInformation";
+import { hasPaidSubscription } from "@/lib/ee/billing/interfaces";
+import { useBillingInformation } from "@/app/ee/hooks/useBillingInformation";
 
 /**
  * Returns whether the current tenant has an active paid subscription on cloud.

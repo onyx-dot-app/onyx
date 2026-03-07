@@ -22,14 +22,14 @@ import {
   SvgFileText,
   SvgOrganization,
 } from "@opal/icons";
-import { BillingInformation, LicenseStatus } from "@/lib/billing/interfaces";
+import { BillingInformation, LicenseStatus } from "@/lib/ee/billing/interfaces";
 import {
   createCustomerPortalSession,
   resetStripeConnection,
   updateSeatCount,
   claimLicense,
   refreshLicenseCache,
-} from "@/lib/billing/svc";
+} from "@/lib/ee/billing/svc";
 import { formatDateShort } from "@/lib/dateUtils";
 import { humanReadableFormatShort } from "@/lib/time";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";

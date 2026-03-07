@@ -14,7 +14,7 @@ import {
   BillingInformation,
   hasActiveSubscription,
   claimLicense,
-} from "@/lib/billing";
+} from "@/lib/ee/billing";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { useUser } from "@/providers/UserProvider";
 

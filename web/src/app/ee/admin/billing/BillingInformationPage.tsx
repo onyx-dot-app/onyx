@@ -6,7 +6,7 @@ import {
   createCustomerPortalSession,
   useBillingInformation,
   hasActiveSubscription,
-} from "@/lib/billing";
+} from "@/lib/ee/billing";
 
 import {
   Card,
