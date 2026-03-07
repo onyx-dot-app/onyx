@@ -47,6 +47,7 @@ import {
   DrupalWikiIcon,
   EmailIcon,
   TestRailIcon,
+  OutlookIcon,
 } from "@/components/icons/icons";
 import { ValidSources } from "./types";
 import { SourceCategory, SourceMetadata } from "./search/interfaces";
@@ -316,6 +317,13 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     icon: EmailIcon,
     displayName: "Email",
     category: SourceCategory.Messaging,
+  },
+  outlook: {
+    icon: OutlookIcon,
+    displayName: "Outlook",
+    category: SourceCategory.Messaging,
+    docs: `${DOCS_ADMINS_PATH}/connectors/official/outlook`,
+    oauthSupported: true,
   },
   discord: {
     icon: ColorDiscordIcon,

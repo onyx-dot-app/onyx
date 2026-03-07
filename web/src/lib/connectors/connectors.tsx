@@ -1755,6 +1755,11 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
     ],
     advanced_values: [],
   },
+  outlook: {
+    description: "Configure Outlook connector",
+    values: [],
+    advanced_values: [],
+  },
 };
 type ConnectorField = ConnectionConfiguration["values"][number];
 
@@ -2096,3 +2101,5 @@ export interface ImapConfig {
   port?: number;
   mailboxes?: string[];
 }
+
+export interface OutlookConfig {}
