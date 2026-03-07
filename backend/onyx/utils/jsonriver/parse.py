@@ -139,7 +139,11 @@ class _Parser:
                     if cur_val != prev_val:
                         new_items = cur_val[len(prev_val) :]
                         # check if the last existing element was updated
-                        if prev_val and cur_val[len(prev_val) - 1] != prev_val[-1]:
+                        if (
+                            prev_val
+                            and len(cur_val) >= len(prev_val)
+                            and cur_val[len(prev_val) - 1] != prev_val[-1]
+                        ):
                             result[key] = [cur_val[len(prev_val) - 1]] + new_items
                         elif new_items:
                             result[key] = new_items
@@ -154,7 +158,11 @@ class _Parser:
         if isinstance(current, list) and isinstance(prev, list):
             if current != prev:
                 new_items = current[len(prev) :]
-                if prev and current[len(prev) - 1] != prev[-1]:
+                if (
+                    prev
+                    and len(current) >= len(prev)
+                    and current[len(prev) - 1] != prev[-1]
+                ):
                     return [current[len(prev) - 1]] + new_items
                 return new_items if new_items else None
             return None
