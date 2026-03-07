@@ -114,8 +114,8 @@ def test_create_duplicate_config_fails(
         headers=admin_user.headers,
     )
 
-    assert response.status_code == 400
-    assert "already exists" in response.json()["detail"]
+    assert response.status_code == 409
+    assert "already exists" in response.json()["message"]
 
 
 def test_get_all_configs(
@@ -292,7 +292,7 @@ def test_update_config_source_provider_not_found(
     )
 
     assert response.status_code == 404
-    assert "not found" in response.json()["detail"]
+    assert "not found" in response.json()["message"]
 
 
 def test_delete_config(
@@ -468,7 +468,7 @@ def test_create_config_missing_credentials(
     )
 
     assert response.status_code == 400
-    assert "No provider or source llm provided" in response.json()["detail"]
+    assert "No provider or source llm provided" in response.json()["message"]
 
 
 def test_create_config_source_provider_not_found(
@@ -488,4 +488,4 @@ def test_create_config_source_provider_not_found(
     )
 
     assert response.status_code == 404
-    assert "not found" in response.json()["detail"]
+    assert "not found" in response.json()["message"]

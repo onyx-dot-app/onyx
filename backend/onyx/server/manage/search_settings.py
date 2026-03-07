@@ -1,7 +1,5 @@
 from fastapi import APIRouter
 from fastapi import Depends
-from fastapi import HTTPException
-from fastapi import status
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_admin_user
@@ -27,6 +25,8 @@ from onyx.db.search_settings import update_current_search_settings
 from onyx.db.search_settings import update_search_settings_status
 from onyx.document_index.factory import get_all_document_indices
 from onyx.document_index.factory import get_default_document_index
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_processing.unstructured import delete_unstructured_api_key
 from onyx.file_processing.unstructured import get_unstructured_api_key
 from onyx.file_processing.unstructured import update_unstructured_api_key
@@ -49,36 +49,13 @@ def set_new_search_settings(
     _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),  # noqa: ARG001
 ) -> IdReturn:
-    """
-    Creates a new SearchSettings row and cancels the previous secondary indexing
-    if any exists.
-    """
-    if search_settings_new.index_name:
-        logger.warning("Index name was specified by request, this is not suggested")
-
-    # Disallow contextual RAG for cloud deployments.
-    if MULTI_TENANT and search_settings_new.enable_contextual_rag:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Contextual RAG disabled in Onyx Cloud",
-        )
-
-    # Validate cloud provider exists or create new LiteLLM provider.
-    if search_settings_new.provider_type is not None:
-        cloud_provider = get_embedding_provider_from_provider_type(
-            db_session, provider_type=search_settings_new.provider_type
-        )
-
-        if cloud_provider is None:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"No embedding provider exists for cloud embedding type {search_settings_new.provider_type}",
-            )
-
-    validate_contextual_rag_model(
-        provider_name=search_settings_new.contextual_rag_llm_provider,
-        model_name=search_settings_new.contextual_rag_llm_name,
-        db_session=db_session,
+    # TODO(andrei): Re-enable.
+    # NOTE Enable integration external dependency tests in test_search_settings.py
+    # when this is reenabled. They are currently skipped
+    logger.error("Setting new search settings is temporarily disabled.")
+    raise OnyxError(
+        OnyxErrorCode.NOT_IMPLEMENTED,
+        "Setting new search settings is temporarily disabled.",
     )
 
     search_settings = get_current_search_settings(db_session)
@@ -188,7 +165,7 @@ def delete_search_settings_endpoint(
             search_settings_id=deletion_request.search_settings_id,
         )
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
 
 
 @router.get("/get-current-search-settings")
@@ -238,9 +215,9 @@ def update_saved_search_settings(
 ) -> None:
     # Disallow contextual RAG for cloud deployments
     if MULTI_TENANT and search_settings.enable_contextual_rag:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Contextual RAG disabled in Onyx Cloud",
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Contextual RAG disabled in Onyx Cloud",
         )
 
     validate_contextual_rag_model(
@@ -294,7 +271,7 @@ def validate_contextual_rag_model(
         model_name=model_name,
         db_session=db_session,
     ):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_msg)
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, error_msg)
 
 
 def _validate_contextual_rag_model(
