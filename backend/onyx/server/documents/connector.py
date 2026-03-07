@@ -11,7 +11,6 @@ from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import File
 from fastapi import Form
-from fastapi import HTTPException
 from fastapi import Query
 from fastapi import Request
 from fastapi import Response
@@ -115,6 +114,8 @@ from onyx.db.models import IndexAttempt
 from onyx.db.models import IndexingStatus
 from onyx.db.models import User
 from onyx.db.models import UserRole
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_processing.file_types import PLAIN_TEXT_MIME_TYPE
 from onyx.file_processing.file_types import WORD_PROCESSING_MIME_TYPE
 from onyx.file_store.file_store import FileStore
@@ -180,7 +181,7 @@ def check_google_app_gmail_credentials_exist(
     try:
         return {"client_id": get_google_app_cred(DocumentSource.GMAIL).web.client_id}
     except KvKeyNotFoundError:
-        raise HTTPException(status_code=404, detail="Google App Credentials not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Google App Credentials not found")
 
 
 @router.put("/admin/connector/gmail/app-credential")
@@ -190,7 +191,7 @@ def upsert_google_app_gmail_credentials(
     try:
         upsert_google_app_cred(app_credentials, DocumentSource.GMAIL)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
 
     return StatusResponse(
         success=True, message="Successfully saved Google App Credentials"
@@ -206,7 +207,7 @@ def delete_google_app_gmail_credentials(
         delete_google_app_cred(DocumentSource.GMAIL)
         cleanup_gmail_credentials(db_session=db_session)
     except KvKeyNotFoundError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
 
     return StatusResponse(
         success=True, message="Successfully deleted Google App Credentials"
@@ -222,7 +223,7 @@ def check_google_app_credentials_exist(
             "client_id": get_google_app_cred(DocumentSource.GOOGLE_DRIVE).web.client_id
         }
     except KvKeyNotFoundError:
-        raise HTTPException(status_code=404, detail="Google App Credentials not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Google App Credentials not found")
 
 
 @router.put("/admin/connector/google-drive/app-credential")
@@ -232,7 +233,7 @@ def upsert_google_app_credentials(
     try:
         upsert_google_app_cred(app_credentials, DocumentSource.GOOGLE_DRIVE)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
 
     return StatusResponse(
         success=True, message="Successfully saved Google App Credentials"
@@ -248,7 +249,7 @@ def delete_google_app_credentials(
         delete_google_app_cred(DocumentSource.GOOGLE_DRIVE)
         cleanup_google_drive_credentials(db_session=db_session)
     except KvKeyNotFoundError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
 
     return StatusResponse(
         success=True, message="Successfully deleted Google App Credentials"
@@ -266,9 +267,7 @@ def check_google_service_gmail_account_key_exist(
             ).client_email
         }
     except KvKeyNotFoundError:
-        raise HTTPException(
-            status_code=404, detail="Google Service Account Key not found"
-        )
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Google Service Account Key not found")
 
 
 @router.put("/admin/connector/gmail/service-account-key")
@@ -278,7 +277,7 @@ def upsert_google_service_gmail_account_key(
     try:
         upsert_service_account_key(service_account_key, DocumentSource.GMAIL)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
 
     return StatusResponse(
         success=True, message="Successfully saved Google Service Account Key"
@@ -294,7 +293,7 @@ def delete_google_service_gmail_account_key(
         delete_service_account_key(DocumentSource.GMAIL)
         cleanup_gmail_credentials(db_session=db_session)
     except KvKeyNotFoundError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
 
     return StatusResponse(
         success=True, message="Successfully deleted Google Service Account Key"
@@ -312,9 +311,7 @@ def check_google_service_account_key_exist(
             ).client_email
         }
     except KvKeyNotFoundError:
-        raise HTTPException(
-            status_code=404, detail="Google Service Account Key not found"
-        )
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Google Service Account Key not found")
 
 
 @router.put("/admin/connector/google-drive/service-account-key")
@@ -324,7 +321,7 @@ def upsert_google_service_account_key(
     try:
         upsert_service_account_key(service_account_key, DocumentSource.GOOGLE_DRIVE)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
 
     return StatusResponse(
         success=True, message="Successfully saved Google Service Account Key"
@@ -340,7 +337,7 @@ def delete_google_service_account_key(
         delete_service_account_key(DocumentSource.GOOGLE_DRIVE)
         cleanup_google_drive_credentials(db_session=db_session)
     except KvKeyNotFoundError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
 
     return StatusResponse(
         success=True, message="Successfully deleted Google Service Account Key"
@@ -363,7 +360,7 @@ def upsert_service_account_credential(
             name="Service Account (uploaded)",
         )
     except KvKeyNotFoundError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
 
     # first delete all existing service account credentials
     delete_service_account_credentials(user, db_session, DocumentSource.GOOGLE_DRIVE)
@@ -389,7 +386,7 @@ def upsert_gmail_service_account_credential(
             primary_admin_email=service_account_credential_request.google_primary_admin,
         )
     except KvKeyNotFoundError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
 
     # first delete all existing service account credentials
     delete_service_account_credentials(user, db_session, DocumentSource.GMAIL)
@@ -440,9 +437,9 @@ def save_zip_metadata_to_file_store(
                 json.loads(metadata_bytes)
             except json.JSONDecodeError as e:
                 logger.warning(f"Unable to load {ONYX_METADATA_FILENAME}: {e}")
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Unable to load {ONYX_METADATA_FILENAME}: {e}",
+                raise OnyxError(
+                    OnyxErrorCode.VALIDATION_ERROR,
+                    f"Unable to load {ONYX_METADATA_FILENAME}: {e}",
                 )
 
             # Save to file store
@@ -500,7 +497,7 @@ def upload_files(
 
             if is_zip_file(file):
                 if seen_zip:
-                    raise HTTPException(status_code=400, detail=SEEN_ZIP_DETAIL)
+                    raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, SEEN_ZIP_DETAIL)
                 seen_zip = True
                 with zipfile.ZipFile(file.file, "r") as zf:
                     zip_metadata_file_id = save_zip_metadata_to_file_store(
@@ -554,7 +551,7 @@ def upload_files(
             deduped_file_names.append(file.filename)
 
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
     return FileUploadResponse(
         file_paths=deduped_file_paths,
         file_names=deduped_file_names,
@@ -581,9 +578,9 @@ def _fetch_and_check_file_connector_cc_pair_permissions(
 ) -> ConnectorCredentialPair:
     cc_pair = fetch_connector_credential_pair_for_connector(db_session, connector_id)
     if cc_pair is None:
-        raise HTTPException(
-            status_code=404,
-            detail="No Connector-Credential Pair found for this connector",
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            "No Connector-Credential Pair found for this connector",
         )
 
     has_requested_access = verify_user_has_access_to_cc_pair(
@@ -604,9 +601,9 @@ def _fetch_and_check_file_connector_cc_pair_permissions(
     ):
         return cc_pair
 
-    raise HTTPException(
-        status_code=403,
-        detail="Access denied. User cannot manage files for this connector.",
+    raise OnyxError(
+        OnyxErrorCode.UNAUTHORIZED,
+        "Access denied. User cannot manage files for this connector.",
     )
 
 
@@ -627,11 +624,12 @@ def list_connector_files(
     """List all files in a file connector."""
     connector = fetch_connector_by_id(connector_id, db_session)
     if connector is None:
-        raise HTTPException(status_code=404, detail="Connector not found")
+        raise OnyxError(OnyxErrorCode.CONNECTOR_NOT_FOUND, "Connector not found")
 
     if connector.source != DocumentSource.FILE:
-        raise HTTPException(
-            status_code=400, detail="This endpoint only works with file connectors"
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "This endpoint only works with file connectors",
         )
 
     _ = _fetch_and_check_file_connector_cc_pair_permissions(
@@ -700,11 +698,12 @@ def update_connector_files(
     files = files or []
     connector = fetch_connector_by_id(connector_id, db_session)
     if connector is None:
-        raise HTTPException(status_code=404, detail="Connector not found")
+        raise OnyxError(OnyxErrorCode.CONNECTOR_NOT_FOUND, "Connector not found")
 
     if connector.source != DocumentSource.FILE:
-        raise HTTPException(
-            status_code=400, detail="This endpoint only works with file connectors"
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "This endpoint only works with file connectors",
         )
 
     # Get the connector-credential pair for indexing/pruning triggers
@@ -720,12 +719,14 @@ def update_connector_files(
     try:
         file_ids_list = json.loads(file_ids_to_remove)
     except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="Invalid file_ids_to_remove format")
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR, "Invalid file_ids_to_remove format"
+        )
 
     if not isinstance(file_ids_list, list):
-        raise HTTPException(
-            status_code=400,
-            detail="file_ids_to_remove must be a JSON-encoded list",
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "file_ids_to_remove must be a JSON-encoded list",
         )
 
     # Get current connector config
@@ -750,9 +751,9 @@ def update_connector_files(
                 current_zip_metadata = loaded_metadata
         except Exception as e:
             logger.warning(f"Failed to load existing metadata file: {e}")
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to load existing connector metadata file",
+            raise OnyxError(
+                OnyxErrorCode.INTERNAL_ERROR,
+                "Failed to load existing connector metadata file",
             )
 
     # Upload new files if any
@@ -807,9 +808,9 @@ def update_connector_files(
 
     # Validate that at least one file remains
     if not final_file_locations:
-        raise HTTPException(
-            status_code=400,
-            detail="Cannot remove all files from connector. At least one file must remain.",
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Cannot remove all files from connector. At least one file must remain.",
         )
 
     # Merge and filter metadata (remove metadata for deleted files)
@@ -852,8 +853,8 @@ def update_connector_files(
 
     updated_connector = update_connector(connector_id, connector_base, db_session)
     if updated_connector is None:
-        raise HTTPException(
-            status_code=500, detail="Failed to update connector configuration"
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR, "Failed to update connector configuration"
         )
 
     # Trigger re-indexing for new files and pruning for removed files
@@ -1541,7 +1542,7 @@ def create_connector_from_model(
         return connector_response
     except ValueError as e:
         logger.error(f"Error creating connector: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
 
 
 @router.post("/admin/connector-with-mock-credential")
@@ -1619,11 +1620,12 @@ def create_connector_with_mock_credential(
         return response
 
     except ConnectorValidationError as e:
-        raise HTTPException(
-            status_code=400, detail="Connector validation error: " + str(e)
+        raise OnyxError(
+            OnyxErrorCode.CONNECTOR_VALIDATION_FAILED,
+            "Connector validation error: " + str(e),
         )
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
 
 
 @router.patch("/admin/connector/{connector_id}", tags=PUBLIC_API_TAGS)
@@ -1648,12 +1650,13 @@ def update_connector_from_model(
         )
         connector_base = connector_data.to_connector_base()
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
 
     updated_connector = update_connector(connector_id, connector_base, db_session)
     if updated_connector is None:
-        raise HTTPException(
-            status_code=404, detail=f"Connector {connector_id} does not exist"
+        raise OnyxError(
+            OnyxErrorCode.CONNECTOR_NOT_FOUND,
+            f"Connector {connector_id} does not exist",
         )
 
     return ConnectorSnapshot(
@@ -1690,7 +1693,7 @@ def delete_connector_by_id(
                 connector_id=connector_id,
             )
     except AssertionError:
-        raise HTTPException(status_code=400, detail="Connector is not deletable")
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, "Connector is not deletable")
 
 
 @router.post("/admin/connector/run-once", tags=PUBLIC_API_TAGS)
@@ -1711,9 +1714,9 @@ def connector_run_once(
             run_info.connector_id, db_session
         )
     except ValueError:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Connector by id {connector_id} does not exist.",
+        raise OnyxError(
+            OnyxErrorCode.CONNECTOR_NOT_FOUND,
+            f"Connector by id {connector_id} does not exist.",
         )
 
     if not specified_credential_ids:
@@ -1722,15 +1725,15 @@ def connector_run_once(
         if set(specified_credential_ids).issubset(set(possible_credential_ids)):
             credential_ids = specified_credential_ids
         else:
-            raise HTTPException(
-                status_code=400,
-                detail="Not all specified credentials are associated with connector",
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR,
+                "Not all specified credentials are associated with connector",
             )
 
     if not credential_ids:
-        raise HTTPException(
-            status_code=400,
-            detail="Connector has no valid credentials, cannot create index attempts.",
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Connector has no valid credentials, cannot create index attempts.",
         )
     try:
         num_triggers = trigger_indexing_for_cc_pair(
@@ -1741,7 +1744,7 @@ def connector_run_once(
             db_session,
         )
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
 
     logger.info("connector_run_once - running check_for_indexing")
 
@@ -1795,8 +1798,8 @@ def gmail_callback(
 ) -> StatusResponse:
     credential_id_cookie = request.cookies.get(_GMAIL_CREDENTIAL_ID_COOKIE_NAME)
     if credential_id_cookie is None or not credential_id_cookie.isdigit():
-        raise HTTPException(
-            status_code=401, detail="Request did not pass CSRF verification."
+        raise OnyxError(
+            OnyxErrorCode.CSRF_FAILURE, "Request did not pass CSRF verification."
         )
     credential_id = int(credential_id_cookie)
     verify_csrf(credential_id, callback.state)
@@ -1809,8 +1812,8 @@ def gmail_callback(
         GoogleOAuthAuthenticationMethod.UPLOADED,
     )
     if credentials is None:
-        raise HTTPException(
-            status_code=500, detail="Unable to fetch Gmail access tokens"
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR, "Unable to fetch Gmail access tokens"
         )
 
     return StatusResponse(success=True, message="Updated Gmail access tokens")
@@ -1825,8 +1828,8 @@ def google_drive_callback(
 ) -> StatusResponse:
     credential_id_cookie = request.cookies.get(_GOOGLE_DRIVE_CREDENTIAL_ID_COOKIE_NAME)
     if credential_id_cookie is None or not credential_id_cookie.isdigit():
-        raise HTTPException(
-            status_code=401, detail="Request did not pass CSRF verification."
+        raise OnyxError(
+            OnyxErrorCode.CSRF_FAILURE, "Request did not pass CSRF verification."
         )
     credential_id = int(credential_id_cookie)
     verify_csrf(credential_id, callback.state)
@@ -1840,8 +1843,9 @@ def google_drive_callback(
         GoogleOAuthAuthenticationMethod.UPLOADED,
     )
     if credentials is None:
-        raise HTTPException(
-            status_code=500, detail="Unable to fetch Google Drive access tokens"
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR,
+            "Unable to fetch Google Drive access tokens",
         )
 
     return StatusResponse(success=True, message="Updated Google Drive access tokens")
@@ -1881,8 +1885,9 @@ def get_connector_by_id(
 ) -> ConnectorSnapshot | StatusResponse[int]:
     connector = fetch_connector_by_id(connector_id, db_session)
     if connector is None:
-        raise HTTPException(
-            status_code=404, detail=f"Connector {connector_id} does not exist"
+        raise OnyxError(
+            OnyxErrorCode.CONNECTOR_NOT_FOUND,
+            f"Connector {connector_id} does not exist",
         )
 
     return ConnectorSnapshot(
@@ -1915,7 +1920,9 @@ def submit_connector_request(
     connector_name = request_data.connector_name.strip()
 
     if not connector_name:
-        raise HTTPException(status_code=400, detail="Connector name cannot be empty")
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR, "Connector name cannot be empty"
+        )
 
     # Get user identifier for telemetry
     user_email = user.email if user else None
