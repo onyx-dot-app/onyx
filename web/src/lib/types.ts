@@ -517,6 +517,7 @@ export enum ValidSources {
   Imap = "imap",
   Bitbucket = "bitbucket",
   TestRail = "testrail",
+  Chatwoot = "chatwoot",
 
   // Craft-specific sources
   CraftFile = "craft_file",
