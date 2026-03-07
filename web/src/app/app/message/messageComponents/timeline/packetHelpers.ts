@@ -7,8 +7,6 @@ import {
 // Packet types with renderers supporting collapsed streaming mode.
 // TOOL_CALL_ARGUMENT_DELTA is intentionally excluded here because it requires
 // a tool_type check — it's handled separately in stepSupportsCollapsedStreaming.
-
-// Packet types with renderers supporting collapsed streaming mode
 export const COLLAPSED_STREAMING_PACKET_TYPES = new Set<PacketType>([
   PacketType.SEARCH_TOOL_START,
   PacketType.FETCH_TOOL_START,
