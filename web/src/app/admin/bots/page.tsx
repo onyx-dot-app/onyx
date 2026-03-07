@@ -1,9 +1,10 @@
 "use client";
 
 import { ErrorCallout } from "@/components/ErrorCallout";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
-import { SlackBotTable } from "@/app/admin/bots/SlackBotTable";
-import { useSlackBots } from "@/app/admin/bots/[bot-id]/hooks";
+import { ThreeDotsLoader } from "@/components/Loading";
+import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
+import { SlackBotTable } from "./SlackBotTable";
+import { useSlackBots } from "./[bot-id]/hooks";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
@@ -17,7 +18,7 @@ function Main() {
   } = useSlackBots();
 
   if (isSlackBotsLoading) {
-    return <SimpleLoader />;
+    return <ThreeDotsLoader />;
   }
 
   if (slackBotsError || !slackBots) {
@@ -80,6 +81,7 @@ export default function Page() {
     <SettingsLayouts.Root>
       <SettingsLayouts.Header icon={route.icon} title={route.title} separator />
       <SettingsLayouts.Body>
+        <InstantSSRAutoRefresh />
         <Main />
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>

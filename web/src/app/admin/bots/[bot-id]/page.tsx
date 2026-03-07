@@ -3,32 +3,41 @@
 import { use } from "react";
 import BackButton from "@/refresh-components/buttons/BackButton";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
-import SlackChannelConfigsTable from "@/app/admin/bots/[bot-id]/SlackChannelConfigsTable";
-import {
-  useSlackBot,
-  useSlackChannelConfigsByBot,
-} from "@/app/admin/bots/[bot-id]/hooks";
-import { ExistingSlackBotForm } from "@/app/admin/bots/SlackBotUpdateForm";
+import { ThreeDotsLoader } from "@/components/Loading";
+import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
+import SlackChannelConfigsTable from "./SlackChannelConfigsTable";
+import { useSlackBot, useSlackChannelConfigsByBot } from "./hooks";
+import { ExistingSlackBotForm } from "../SlackBotUpdateForm";
 import Separator from "@/refresh-components/Separator";
 
-function SlackBotEditContent({ botId }: { botId: string }) {
+function SlackBotEditPage({
+  params,
+}: {
+  params: Promise<{ "bot-id": string }>;
+}) {
+  // Unwrap the params promise
+  const unwrappedParams = use(params);
+
   const {
     data: slackBot,
     isLoading: isSlackBotLoading,
     error: slackBotError,
     refreshSlackBot,
-  } = useSlackBot(Number(botId));
+  } = useSlackBot(Number(unwrappedParams["bot-id"]));
 
   const {
     data: slackChannelConfigs,
     isLoading: isSlackChannelConfigsLoading,
     error: slackChannelConfigsError,
     refreshSlackChannelConfigs,
-  } = useSlackChannelConfigsByBot(Number(botId));
+  } = useSlackChannelConfigsByBot(Number(unwrappedParams["bot-id"]));
 
   if (isSlackBotLoading || isSlackChannelConfigsLoading) {
-    return <SimpleLoader />;
+    return (
+      <div className="flex justify-center items-center h-screen">
+        <ThreeDotsLoader />
+      </div>
+    );
   }
 
   if (slackBotError || !slackBot) {
@@ -39,7 +48,7 @@ function SlackBotEditContent({ botId }: { botId: string }) {
     return (
       <ErrorCallout
         errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch Slack Bot ${botId}: ${errorMsg}`}
+        errorMsg={`Failed to fetch Slack Bot ${unwrappedParams["bot-id"]}: ${errorMsg}`}
       />
     );
   }
@@ -52,13 +61,17 @@ function SlackBotEditContent({ botId }: { botId: string }) {
     return (
       <ErrorCallout
         errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch Slack Bot ${botId}: ${errorMsg}`}
+        errorMsg={`Failed to fetch Slack Bot ${unwrappedParams["bot-id"]}: ${errorMsg}`}
       />
     );
   }
 
   return (
     <>
+      <InstantSSRAutoRefresh />
+
+      <BackButton routerOverride="/admin/bots" />
+
       <ExistingSlackBotForm
         existingSlackBot={slackBot}
         refreshSlackBot={refreshSlackBot}
@@ -81,12 +94,9 @@ export default function Page({
 }: {
   params: Promise<{ "bot-id": string }>;
 }) {
-  const unwrappedParams = use(params);
-
   return (
     <>
-      <BackButton routerOverride="/admin/bots" />
-      <SlackBotEditContent botId={unwrappedParams["bot-id"]} />
+      <SlackBotEditPage params={params} />
     </>
   );
 }
