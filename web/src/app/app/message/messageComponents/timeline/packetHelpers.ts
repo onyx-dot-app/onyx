@@ -1,4 +1,5 @@
 import {
+  CODE_INTERPRETER_TOOL_TYPES,
   Packet,
   PacketType,
   ToolCallArgumentDelta,
@@ -31,7 +32,8 @@ export const isPythonToolPackets = (packets: Packet[]): boolean =>
     (p) =>
       p.obj.type === PacketType.PYTHON_TOOL_START ||
       (p.obj.type === PacketType.TOOL_CALL_ARGUMENT_DELTA &&
-        (p.obj as ToolCallArgumentDelta).tool_type === "python")
+        (p.obj as ToolCallArgumentDelta).tool_type ===
+          CODE_INTERPRETER_TOOL_TYPES.PYTHON)
   );
 
 // Check if packets belong to reasoning
@@ -44,7 +46,8 @@ export const stepSupportsCollapsedStreaming = (packets: Packet[]): boolean =>
     (p) =>
       COLLAPSED_STREAMING_PACKET_TYPES.has(p.obj.type as PacketType) ||
       (p.obj.type === PacketType.TOOL_CALL_ARGUMENT_DELTA &&
-        (p.obj as ToolCallArgumentDelta).tool_type === "python")
+        (p.obj as ToolCallArgumentDelta).tool_type ===
+          CODE_INTERPRETER_TOOL_TYPES.PYTHON)
   );
 
 // Check if packets have content worth rendering in collapsed streaming mode.
@@ -85,7 +88,8 @@ export const stepHasCollapsedStreamingContent = (
     packets.some(
       (p) =>
         p.obj.type === PacketType.TOOL_CALL_ARGUMENT_DELTA &&
-        (p.obj as ToolCallArgumentDelta).tool_type === "python"
+        (p.obj as ToolCallArgumentDelta).tool_type ===
+          CODE_INTERPRETER_TOOL_TYPES.PYTHON
     )
   ) {
     return true;
@@ -98,7 +102,7 @@ export const stepHasCollapsedStreamingContent = (
   ) {
     return true;
   }
-  
+
   // Research agent has meaningful content from start (task) or report deltas
   if (
     packetTypes.has(PacketType.RESEARCH_AGENT_START) ||

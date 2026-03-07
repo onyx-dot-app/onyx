@@ -62,6 +62,10 @@ export enum PacketType {
   INTERMEDIATE_REPORT_CITED_DOCS = "intermediate_report_cited_docs",
 }
 
+export const CODE_INTERPRETER_TOOL_TYPES = {
+  PYTHON: "python",
+} as const;
+
 // Basic Message Packets
 export interface MessageStart extends BaseObj {
   id: string;

@@ -1,6 +1,7 @@
 import React, { JSX, memo } from "react";
 import {
   ChatPacket,
+  CODE_INTERPRETER_TOOL_TYPES,
   ImageGenerationToolPacket,
   Packet,
   PacketType,
@@ -62,7 +63,8 @@ function isPythonToolPacket(packet: Packet) {
   return (
     packet.obj.type === PacketType.PYTHON_TOOL_START ||
     (packet.obj.type === PacketType.TOOL_CALL_ARGUMENT_DELTA &&
-      (packet.obj as ToolCallArgumentDelta).tool_type === "python")
+      (packet.obj as ToolCallArgumentDelta).tool_type ===
+        CODE_INTERPRETER_TOOL_TYPES.PYTHON)
   );
 }
 
