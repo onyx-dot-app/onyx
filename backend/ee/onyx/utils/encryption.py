@@ -71,13 +71,20 @@ def _decrypt_bytes(input_bytes: bytes, key: str | None = None) -> str:
         if key is not None:
             # Explicit key was provided — don't fall back silently
             raise
-        # Read path: fall back to raw decode for key rotation compatibility.
-        # Run the re-encrypt-secrets script to rotate to the current key.
+        # Read path: attempt raw UTF-8 decode as a fallback for legacy data.
+        # Does NOT handle data encrypted with a different key — that
+        # ciphertext is not valid UTF-8 and will raise below.
         logger.warning(
             "AES decryption failed — falling back to raw decode. "
             "Run the re-encrypt secrets script to rotate to the current key."
         )
-        return input_bytes.decode()
+        try:
+            return input_bytes.decode()
+        except UnicodeDecodeError:
+            raise ValueError(
+                "Data is not valid UTF-8 — likely encrypted with a different key. "
+                "Run the re-encrypt secrets script to rotate to the current key."
+            ) from None
 
 
 def encrypt_string_to_bytes(input_str: str, key: str | None = None) -> bytes:

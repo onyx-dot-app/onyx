@@ -23,6 +23,7 @@ from onyx.db.models import EncryptedJson
 from onyx.db.models import EncryptedString
 from onyx.utils.encryption import decrypt_bytes_to_string
 from onyx.utils.logger import setup_logger
+from onyx.utils.variable_functionality import global_version
 
 logger = setup_logger()
 
@@ -83,6 +84,9 @@ def rotate_encryption_key(
     is preserved on crash. Already-rotated rows are detected and skipped,
     making the operation safe to re-run.
     """
+    if not global_version.is_ee_version():
+        raise RuntimeError("EE mode is not enabled — rotation requires EE encryption.")
+
     if not ENCRYPTION_KEY_SECRET:
         raise RuntimeError(
             "ENCRYPTION_KEY_SECRET is not set — cannot rotate. "
@@ -118,19 +122,19 @@ def rotate_encryption_key(
                     decrypted_str = raw_bytes.decode("utf-8")
                 else:
                     decrypted_str = decrypt_bytes_to_string(raw_bytes, key=old_key)
+
+                # For EncryptedJson, parse back to dict so the TypeDecorator
+                # can json.dumps() it cleanly (avoids double-encoding).
+                value: Any = json.loads(decrypted_str) if is_json else decrypted_str
             except (ValueError, UnicodeDecodeError) as e:
                 pk_vals = [row[i] for i in range(len(pk_names))]
                 logger.warning(
-                    f"Could not decrypt {table_name}.{col_name} "
+                    f"Could not decrypt/parse {table_name}.{col_name} "
                     f"row {pk_vals} — skipping: {e}"
                 )
                 continue
 
             if not dry_run:
-                # For EncryptedJson, parse back to dict so the TypeDecorator
-                # can json.dumps() it cleanly (avoids double-encoding).
-                value: Any = json.loads(decrypted_str) if is_json else decrypted_str
-
                 pk_filters = [pk_attr == row[i] for i, pk_attr in enumerate(pk_attrs)]
                 update_stmt = (
                     update(model_cls).where(*pk_filters).values({col_name: value})
