@@ -63,6 +63,31 @@ onyx-cli agents
 onyx-cli agents --json
 ```
 
+### Serve over SSH
+
+```shell
+# Start a public SSH endpoint for the CLI TUI
+onyx-cli serve --host 0.0.0.0 --port 2222
+
+# Connect as a client
+ssh your-host -p 2222
+```
+
+Clients can either:
+- paste an API key at the login prompt, or
+- skip the prompt by sending `ONYX_API_KEY` over SSH:
+
+```shell
+export ONYX_API_KEY=your-key
+ssh -o SendEnv=ONYX_API_KEY your-host -p 2222
+```
+
+Useful hardening flags:
+- `--idle-timeout` (default `15m`)
+- `--max-session-timeout` (default `8h`)
+- `--rate-limit-per-minute` (default `20`)
+- `--rate-limit-burst` (default `40`)
+
 ## Commands
 
 | Command | Description |
@@ -70,6 +95,7 @@ onyx-cli agents --json
 | `chat` | Launch the interactive chat TUI (default) |
 | `ask` | Ask a one-shot question (non-interactive) |
 | `agents` | List available agents |
+| `serve` | Serve the interactive chat TUI over SSH |
 | `configure` | Configure server URL and API key |
 | `validate-config` | Validate configuration and test connection |
 
