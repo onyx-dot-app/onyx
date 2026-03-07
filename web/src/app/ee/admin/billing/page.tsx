@@ -1,5 +1,3 @@
-"use client";
-
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import BillingInformationPage from "./BillingInformationPage";
 import { SvgCreditCard } from "@opal/icons";
