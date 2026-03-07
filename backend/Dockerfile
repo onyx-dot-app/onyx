@@ -28,13 +28,15 @@ COPY --from=ghcr.io/astral-sh/uv:0.9.9 /uv /uvx /bin/
 # Install system dependencies
 # cmake needed for psycopg (postgres)
 # libpq-dev needed for psycopg (postgres)
-# curl included just for users' convenience
 # zip for Vespa step futher down
 # ca-certificates for HTTPS
+# NOTE: Packages installed here are liable to be removed by `apt-get remove -y
+# --allow-remove-essential` below, even though they were manually installed
+# here. For useful packages like curl, prefer installing them below after the
+# remove step.
 RUN apt-get update && \
     apt-get install -y \
         cmake \
-        curl \
         zip \
         ca-certificates \
         libgnutls30 \
@@ -85,6 +87,7 @@ RUN uv pip install --system --no-cache-dir --upgrade \
     # xserver-common and xvfb included by playwright installation but not needed after
     # perl-base is part of the base Python Debian image but not needed for Onyx functionality
     # perl-base could only be removed with --allow-remove-essential
+    # NOTE: This removes packages that may have been manually installed above (such as curl).
     apt-get update && \
     apt-get remove -y --allow-remove-essential \
         perl-base \
@@ -98,6 +101,8 @@ RUN uv pip install --system --no-cache-dir --upgrade \
     # Install here to avoid some packages being cleaned up above
     apt-get install -y \
         libxmlsec1-openssl \
+        # curl is included for debugging convenience.
+        curl \
         # Install postgresql-client for easy manual tests
         postgresql-client && \
     apt-get autoremove -y && \
