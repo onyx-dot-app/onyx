@@ -80,8 +80,8 @@ export const stepHasCollapsedStreamingContent = (
 
   // Python tool renders code/output from the start packet onward
   if (
-    packetTypes.has(PacketType.PYTHON_TOOL_START) ||
-    packetTypes.has(PacketType.PYTHON_TOOL_DELTA)
+    packetTypes.has(PacketType.CUSTOM_TOOL_START) ||
+    packetTypes.has(PacketType.CUSTOM_TOOL_DELTA)
   ) {
     return true;
   }
