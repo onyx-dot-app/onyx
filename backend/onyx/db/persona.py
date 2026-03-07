@@ -240,6 +240,10 @@ def update_persona_access(
         if group_ids:
             raise NotImplementedError("Onyx MIT does not support group-based sharing")
 
+    # When sharing changes, user file ACLs need to be updated in the vector DB
+    if is_public is not None or user_ids is not None or group_ids is not None:
+        _mark_persona_user_files_for_sync(persona_id, db_session)
+
 
 def create_update_persona(
     persona_id: int | None,
@@ -849,6 +853,24 @@ def update_personas_display_priority(
 
     if commit_db_txn:
         db_session.commit()
+
+
+def _mark_persona_user_files_for_sync(
+    persona_id: int,
+    db_session: Session,
+) -> None:
+    """When persona sharing changes, mark all of its user files for sync
+    so that their ACLs get updated in the vector DB."""
+    persona = (
+        db_session.query(Persona)
+        .options(selectinload(Persona.user_files))
+        .filter(Persona.id == persona_id)
+        .first()
+    )
+    if not persona:
+        return
+    file_ids = [uf.id for uf in persona.user_files]
+    _mark_files_need_persona_sync(db_session, file_ids)
 
 
 def _mark_files_need_persona_sync(
