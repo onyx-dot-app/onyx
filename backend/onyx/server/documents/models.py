@@ -488,7 +488,7 @@ class ConnectorCredentialPairIdentifier(BaseModel):
 
 
 class ConnectorCredentialPairMetadata(BaseModel):
-    name: str | None = None
+    name: str
     access_type: AccessType
     auto_sync_options: dict[str, Any] | None = None
     groups: list[int] = Field(default_factory=list)
