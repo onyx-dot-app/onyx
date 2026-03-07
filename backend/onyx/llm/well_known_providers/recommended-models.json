@@ -63,6 +63,15 @@
           "display_name": "Kimi K2 0905"
         }
       ]
+    },
+    "novita": {
+      "default_model": { "name": "deepseek/deepseek-v3" },
+      "additional_visible_models": [
+        { "name": "deepseek/deepseek-v3" },
+        { "name": "deepseek/deepseek-r1" },
+        { "name": "meta-llama/llama-3.3-70b-instruct" },
+        { "name": "meta-llama/llama-3.1-70b-instruct" }
+      ]
     }
   }
 }

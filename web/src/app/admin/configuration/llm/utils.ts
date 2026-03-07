@@ -38,6 +38,7 @@ export const AGGREGATOR_PROVIDERS = new Set([
   "ollama_chat",
   "lm_studio",
   "vertex_ai",
+  "novita",
 ]);
 
 export const getProviderIcon = (
