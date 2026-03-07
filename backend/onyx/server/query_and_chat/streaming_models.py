@@ -41,6 +41,7 @@ class StreamingType(Enum):
     REASONING_DONE = "reasoning_done"
     CITATION_INFO = "citation_info"
     TOOL_CALL_DEBUG = "tool_call_debug"
+    TOOL_CALL_ARGUMENT_DELTA = "tool_call_argument_delta"
 
     MEMORY_TOOL_START = "memory_tool_start"
     MEMORY_TOOL_DELTA = "memory_tool_delta"
@@ -259,6 +260,15 @@ class CustomToolDelta(BaseObj):
     file_ids: list[str] | None = None
 
 
+class ToolCallArgumentDelta(BaseObj):
+    type: Literal["tool_call_argument_delta"] = (
+        StreamingType.TOOL_CALL_ARGUMENT_DELTA.value
+    )
+
+    tool_type: str
+    argument_deltas: dict[str, Any]
+
+
 ################################################
 # File Reader Packets
 ################################################
@@ -379,6 +389,7 @@ PacketObj = Union[
     # Citation Packets
     CitationInfo,
     ToolCallDebug,
+    ToolCallArgumentDelta,
     # Deep Research Packets
     DeepResearchPlanStart,
     DeepResearchPlanDelta,
