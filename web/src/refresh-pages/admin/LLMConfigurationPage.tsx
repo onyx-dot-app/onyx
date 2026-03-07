@@ -22,14 +22,12 @@ import {
 } from "@/lib/llmConfig/providers";
 import { refreshLlmProviderCaches } from "@/lib/llmConfig/cache";
 import { deleteLlmProvider, setDefaultLlmModel } from "@/lib/llmConfig/svc";
-import Text from "@/refresh-components/texts/Text";
 import { Horizontal as HorizontalInput } from "@/layouts/input-layouts";
 import Card from "@/refresh-components/cards/Card";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import Message from "@/refresh-components/messages/Message";
-import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
-import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import Separator from "@/refresh-components/Separator";
+import DeleteProviderModal from "@/sections/modals/llmConfig/components/DeleteProviderModal";
 import {
   LLMProviderView,
   WellKnownLLMProviderDescriptor,
@@ -135,13 +133,17 @@ function ExistingProviderCard({
 }: ExistingProviderCardProps) {
   const { mutate } = useSWRConfig();
   const [isOpen, setIsOpen] = useState(false);
-  const deleteModal = useCreateModal();
+  const [showForceDeleteModal, setShowForceDeleteModal] = useState(false);
 
-  const handleDelete = async () => {
+  const handleDeleteClick = async () => {
+    if (isDefault) {
+      setShowForceDeleteModal(true);
+      return;
+    }
+
     try {
       await deleteLlmProvider(provider.id);
       await refreshLlmProviderCaches(mutate);
-      deleteModal.toggle(false);
       toast.success("Provider deleted successfully!");
     } catch (e) {
       const message = e instanceof Error ? e.message : "Unknown error";
@@ -151,30 +153,14 @@ function ExistingProviderCard({
 
   return (
     <>
-      {deleteModal.isOpen && (
-        <ConfirmationModalLayout
-          icon={SvgTrash}
-          title={`Delete ${provider.name}`}
-          onClose={() => deleteModal.toggle(false)}
-          submit={
-            <Button variant="danger" onClick={handleDelete}>
-              Delete
-            </Button>
-          }
-        >
-          <Section alignItems="start" gap={0.5}>
-            <Text text03>
-              All LLM models from provider <b>{provider.name}</b> will be
-              removed and unavailable for future chats. Chat history will be
-              preserved.
-            </Text>
-            {isLastProvider && (
-              <Text text03>
-                Connect another provider to continue using chats.
-              </Text>
-            )}
-          </Section>
-        </ConfirmationModalLayout>
+      {showForceDeleteModal && (
+        <DeleteProviderModal
+          providerId={provider.id}
+          providerName={provider.name}
+          isLastProvider={isLastProvider}
+          mutate={mutate}
+          onClose={() => setShowForceDeleteModal(false)}
+        />
       )}
 
       <Hoverable.Root group="ExistingProviderCard">
@@ -196,7 +182,10 @@ function ExistingProviderCard({
                     icon={SvgTrash}
                     prominence="tertiary"
                     aria-label="Delete provider"
-                    onClick={() => deleteModal.toggle(true)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteClick();
+                    }}
                   />
                 </Hoverable.Item>
                 <Button

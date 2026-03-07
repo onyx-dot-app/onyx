@@ -49,7 +49,8 @@ export async function setDefaultLlmModel(
   });
 
   if (!response.ok) {
-    const errorMsg = (await response.json()).detail;
+    const data = await response.json();
+    const errorMsg = data.message || data.detail || "Unknown error";
     throw new Error(errorMsg);
   }
 }
@@ -59,13 +60,20 @@ export async function setDefaultLlmModel(
  * @param providerId - The provider ID to delete
  * @throws Error with the detail message from the API on failure
  */
-export async function deleteLlmProvider(providerId: number): Promise<void> {
-  const response = await fetch(`${LLM_PROVIDERS_ADMIN_URL}/${providerId}`, {
+export async function deleteLlmProvider(
+  providerId: number,
+  force?: boolean
+): Promise<void> {
+  const url = force
+    ? `${LLM_PROVIDERS_ADMIN_URL}/${providerId}?force=true`
+    : `${LLM_PROVIDERS_ADMIN_URL}/${providerId}`;
+  const response = await fetch(url, {
     method: "DELETE",
   });
 
   if (!response.ok) {
-    const errorMsg = (await response.json()).detail;
+    const data = await response.json();
+    const errorMsg = data.message || data.detail || "Unknown error";
     throw new Error(errorMsg);
   }
 }

@@ -1,12 +1,15 @@
+import { useState } from "react";
 import { LoadingAnimation } from "@/components/Loading";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
 import { Button as OpalButton } from "@opal/components";
 import { SvgTrash } from "@opal/icons";
 import { LLMProviderView } from "@/interfaces/llm";
+import { toast } from "@/hooks/useToast";
+import { ScopedMutator } from "swr";
 import { refreshLlmProviderCaches } from "@/lib/llmConfig/cache";
 import { deleteLlmProvider } from "@/lib/llmConfig/svc";
-import { ScopedMutator } from "swr";
+import DeleteProviderModal from "@/sections/modals/llmConfig/components/DeleteProviderModal";
 
 interface FormActionButtonsProps {
   isTesting: boolean;
@@ -25,6 +28,8 @@ export function FormActionButtons({
   onClose,
   isFormValid,
 }: FormActionButtonsProps) {
+  const [showForceDeleteModal, setShowForceDeleteModal] = useState(false);
+
   const handleDelete = async () => {
     if (!existingLlmProvider) return;
 
@@ -32,9 +37,14 @@ export function FormActionButtons({
       await deleteLlmProvider(existingLlmProvider.id);
       await refreshLlmProviderCaches(mutate);
       onClose();
+      toast.success("Provider deleted successfully!");
     } catch (e) {
       const message = e instanceof Error ? e.message : "Unknown error";
-      alert(`Failed to delete provider: ${message}`);
+      if (message.toLowerCase().includes("default")) {
+        setShowForceDeleteModal(true);
+      } else {
+        toast.error(`Failed to delete provider: ${message}`);
+      }
     }
   };
 
@@ -64,6 +74,16 @@ export function FormActionButtons({
           </OpalButton>
         )}
       </div>
+
+      {showForceDeleteModal && existingLlmProvider && (
+        <DeleteProviderModal
+          providerId={existingLlmProvider.id}
+          providerName={existingLlmProvider.name}
+          mutate={mutate}
+          onClose={() => setShowForceDeleteModal(false)}
+          onDeleted={onClose}
+        />
+      )}
     </>
   );
 }
