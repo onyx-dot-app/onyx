@@ -844,6 +844,26 @@ LOG_VESPA_TIMING_INFORMATION = (
 )
 LOG_ENDPOINT_LATENCY = os.environ.get("LOG_ENDPOINT_LATENCY", "").lower() == "true"
 LOG_POSTGRES_LATENCY = os.environ.get("LOG_POSTGRES_LATENCY", "").lower() == "true"
+
+#####
+# Observability / Prometheus Metrics
+#####
+# Deep profiling is opt-in (~10-20% alloc overhead from tracemalloc)
+ENABLE_DEEP_PROFILING = os.environ.get("ENABLE_DEEP_PROFILING", "").lower() == "true"
+DEEP_PROFILING_SNAPSHOT_INTERVAL_SECONDS = float(
+    os.environ.get("DEEP_PROFILING_SNAPSHOT_INTERVAL_SECONDS", "60.0")
+)
+DEEP_PROFILING_TOP_N_ALLOCATIONS = int(
+    os.environ.get("DEEP_PROFILING_TOP_N_ALLOCATIONS", "20")
+)
+DEEP_PROFILING_TOP_N_TYPES = int(os.environ.get("DEEP_PROFILING_TOP_N_TYPES", "30"))
+# Admin debug endpoints are opt-in (security — exposes process internals)
+ENABLE_ADMIN_DEBUG_ENDPOINTS = (
+    os.environ.get("ENABLE_ADMIN_DEBUG_ENDPOINTS", "").lower() == "true"
+)
+EVENT_LOOP_LAG_PROBE_INTERVAL_SECONDS = float(
+    os.environ.get("EVENT_LOOP_LAG_PROBE_INTERVAL_SECONDS", "2.0")
+)
 LOG_POSTGRES_CONN_COUNTS = (
     os.environ.get("LOG_POSTGRES_CONN_COUNTS", "").lower() == "true"
 )
