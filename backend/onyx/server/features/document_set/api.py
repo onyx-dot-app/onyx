@@ -1,6 +1,5 @@
 from fastapi import APIRouter
 from fastapi import Depends
-from fastapi import HTTPException
 from fastapi import Query
 from sqlalchemy.orm import Session
 
@@ -19,6 +18,8 @@ from onyx.db.document_set import mark_document_set_as_to_be_deleted
 from onyx.db.document_set import update_document_set
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.document_set.models import CheckDocSetPublicRequest
 from onyx.server.features.document_set.models import CheckDocSetPublicResponse
 from onyx.server.features.document_set.models import DocumentSetCreationRequest
@@ -54,7 +55,7 @@ def create_document_set(
             db_session=db_session,
         )
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
 
     if not DISABLE_VECTOR_DB:
         client_app.send_task(
@@ -75,9 +76,9 @@ def patch_document_set(
 ) -> None:
     document_set = get_document_set_by_id(db_session, document_set_update_request.id)
     if document_set is None:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Document set {document_set_update_request.id} does not exist",
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            f"Document set {document_set_update_request.id} does not exist",
         )
 
     fetch_ee_implementation_or_noop(
@@ -97,7 +98,7 @@ def patch_document_set(
             user=user,
         )
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
 
     if not DISABLE_VECTOR_DB:
         client_app.send_task(
@@ -116,9 +117,9 @@ def delete_document_set(
 ) -> None:
     document_set = get_document_set_by_id(db_session, document_set_id)
     if document_set is None:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Document set {document_set_id} does not exist",
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            f"Document set {document_set_id} does not exist",
         )
 
     # check if the user has "edit" access to the document set.
@@ -141,7 +142,7 @@ def delete_document_set(
             user=user,
         )
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
 
     if DISABLE_VECTOR_DB:
         db_session.refresh(document_set)
