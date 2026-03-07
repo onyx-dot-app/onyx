@@ -6,13 +6,19 @@ WORKDIR /app
 COPY ./ .
 
 ARG TARGETARCH
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -ldflags="-s -w" -a -o onyx-cli .
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -ldflags="-s -w" -o onyx-cli .
 RUN mkdir -p /home/onyx/.config
 
 FROM scratch
 
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+COPY --from=builder --chown=65534:65534 /home/onyx /home/onyx
 
 COPY --from=builder /app/onyx-cli /onyx-cli
+
+ENV HOME=/home/onyx
+ENV XDG_CONFIG_HOME=/home/onyx/.config
+
+USER 65534:65534
 
 ENTRYPOINT ["/onyx-cli"]
