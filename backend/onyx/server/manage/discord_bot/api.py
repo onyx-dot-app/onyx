@@ -2,8 +2,6 @@
 
 from fastapi import APIRouter
 from fastapi import Depends
-from fastapi import HTTPException
-from fastapi import status
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_admin_user
@@ -24,6 +22,8 @@ from onyx.db.discord_bot import update_discord_channel_config
 from onyx.db.discord_bot import update_guild_config
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.manage.discord_bot.models import DiscordBotConfigCreateRequest
 from onyx.server.manage.discord_bot.models import DiscordBotConfigResponse
 from onyx.server.manage.discord_bot.models import DiscordChannelConfigResponse
@@ -47,14 +47,14 @@ def _check_bot_config_api_access() -> None:
     - When DISCORD_BOT_TOKEN env var is set (managed via env)
     """
     if AUTH_TYPE == AuthType.CLOUD:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Discord bot configuration is managed by Onyx on Cloud.",
+        raise OnyxError(
+            OnyxErrorCode.UNAUTHORIZED,
+            "Discord bot configuration is managed by Onyx on Cloud.",
         )
     if DISCORD_BOT_TOKEN:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Discord bot is configured via environment variables. API access disabled.",
+        raise OnyxError(
+            OnyxErrorCode.UNAUTHORIZED,
+            "Discord bot is configured via environment variables. API access disabled.",
         )
 
 
@@ -92,9 +92,9 @@ def create_bot_request(
             bot_token=request.bot_token,
         )
     except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Discord bot config already exists. Delete it first to create a new one.",
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "Discord bot config already exists. Delete it first to create a new one.",
         )
 
     db_session.commit()
@@ -117,7 +117,7 @@ def delete_bot_config_endpoint(
     """
     deleted = delete_discord_bot_config(db_session)
     if not deleted:
-        raise HTTPException(status_code=404, detail="Bot config not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Bot config not found")
 
     # Also delete the service API key used by the Discord bot
     delete_discord_service_api_key(db_session)
@@ -144,7 +144,7 @@ def delete_service_api_key_endpoint(
     """
     deleted = delete_discord_service_api_key(db_session)
     if not deleted:
-        raise HTTPException(status_code=404, detail="Service API key not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Service API key not found")
     db_session.commit()
     return {"deleted": True}
 
@@ -189,7 +189,7 @@ def get_guild_config(
     """Get specific guild config."""
     config = get_guild_config_by_internal_id(db_session, internal_id=config_id)
     if not config:
-        raise HTTPException(status_code=404, detail="Guild config not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Guild config not found")
     return DiscordGuildConfigResponse.model_validate(config)
 
 
@@ -203,7 +203,7 @@ def update_guild_request(
     """Update guild config."""
     config = get_guild_config_by_internal_id(db_session, internal_id=config_id)
     if not config:
-        raise HTTPException(status_code=404, detail="Guild config not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Guild config not found")
 
     config = update_guild_config(
         db_session,
@@ -228,7 +228,7 @@ def delete_guild_request(
     """
     deleted = delete_guild_config(db_session, config_id)
     if not deleted:
-        raise HTTPException(status_code=404, detail="Guild config not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Guild config not found")
 
     # On Cloud, delete service API key when all guilds are removed
     if AUTH_TYPE == AuthType.CLOUD:
@@ -254,9 +254,9 @@ def list_channel_configs(
     """List whitelisted channels for a guild."""
     guild_config = get_guild_config_by_internal_id(db_session, internal_id=config_id)
     if not guild_config:
-        raise HTTPException(status_code=404, detail="Guild config not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Guild config not found")
     if not guild_config.guild_id:
-        raise HTTPException(status_code=400, detail="Guild not yet registered")
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, "Guild not yet registered")
 
     configs = get_channel_configs(db_session, config_id)
     return [DiscordChannelConfigResponse.model_validate(c) for c in configs]
@@ -278,7 +278,7 @@ def update_channel_request(
         db_session, guild_config_id, channel_config_id
     )
     if not config:
-        raise HTTPException(status_code=404, detail="Channel config not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Channel config not found")
 
     config = update_discord_channel_config(
         db_session,
