@@ -87,8 +87,8 @@ const STATUS_CONFIG: Record<
   },
   unhealthy: {
     label: "Unhealthy",
-    icon: SvgAlertCircle,
-    iconColor: "text-status-warning-05",
+    icon: SvgXOctagon,
+    iconColor: "text-status-error-05",
   },
   connection_lost: {
     label: "Connection Lost",
