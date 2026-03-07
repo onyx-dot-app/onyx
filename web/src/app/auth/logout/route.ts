@@ -35,6 +35,15 @@ export const POST = async (request: NextRequest) => {
     );
   });
 
+  // Set a short-lived cookie so the next OIDC/SAML auth request forces the
+  // IdP to show a login screen instead of silently re-authenticating.
+  headers.append(
+    "Set-Cookie",
+    `onyx_force_reauth=true; Max-Age=600; ${Object.entries(cookieOptions)
+      .map(([key, value]) => `${key}=${value}`)
+      .join("; ")}`
+  );
+
   return new Response(null, {
     status: 204,
     headers: headers,

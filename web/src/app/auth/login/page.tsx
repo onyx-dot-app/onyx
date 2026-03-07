@@ -17,7 +17,6 @@ export interface PageProps {
 
 export default async function Page(props: PageProps) {
   const searchParams = await props.searchParams;
-  const autoRedirectDisabled = searchParams?.disableAutoRedirect === "true";
   const autoRedirectToSignupDisabled =
     searchParams?.autoRedirectToSignup === "false";
   const nextUrl: string | null = Array.isArray(searchParams?.next)
@@ -86,7 +85,7 @@ export default async function Page(props: PageProps) {
     }
   }
 
-  if (authTypeMetadata?.autoRedirect && authUrl && !autoRedirectDisabled) {
+  if (authTypeMetadata?.autoRedirect && authUrl) {
     return redirect(authUrl as Route);
   }
 
