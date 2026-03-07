@@ -6,6 +6,7 @@ from typing import cast
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_admin_user
@@ -209,3 +210,32 @@ def create_deletion_attempt_for_connector_id(
         file_store = get_default_file_store()
         for file_id in connector.connector_specific_config.get("file_locations", []):
             file_store.delete_file(file_id)
+
+
+class ReencryptSecretsRequest(BaseModel):
+    old_key: str | None = None
+    dry_run: bool = False
+
+
+class ReencryptSecretsResponse(BaseModel):
+    reencrypted: dict[str, int]
+
+
+@router.post("/admin/reencrypt-secrets")
+def reencrypt_secrets_endpoint(
+    request: ReencryptSecretsRequest,
+    _: User = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
+) -> ReencryptSecretsResponse:
+    """Re-encrypt all secrets under the current encryption key.
+
+    Pass the previous encryption key as old_key so existing values can be
+    decrypted before re-encrypting. Omit old_key if values were stored
+    without a key.
+    """
+    from onyx.db.rotate_encryption_key import rotate_encryption_key
+
+    results = rotate_encryption_key(
+        db_session, old_key=request.old_key, dry_run=request.dry_run
+    )
+    return ReencryptSecretsResponse(reencrypted=results)

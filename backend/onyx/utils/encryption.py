@@ -11,14 +11,14 @@ logger = setup_logger()
 
 
 # IMPORTANT DO NOT DELETE, THIS IS USED BY fetch_versioned_implementation
-def _encrypt_string(input_str: str) -> bytes:
-    if ENCRYPTION_KEY_SECRET:
+def _encrypt_string(input_str: str, key: str | None = None) -> bytes:
+    if ENCRYPTION_KEY_SECRET or key:
         logger.warning("MIT version of Onyx does not support encryption of secrets.")
     return input_str.encode()
 
 
 # IMPORTANT DO NOT DELETE, THIS IS USED BY fetch_versioned_implementation
-def _decrypt_bytes(input_bytes: bytes) -> str:
+def _decrypt_bytes(input_bytes: bytes, key: str | None = None) -> str:  # noqa: ARG001
     # No need to double warn. If you wish to learn more about encryption features
     # refer to the Onyx EE code
     return input_bytes.decode()
@@ -86,15 +86,15 @@ def _mask_list(items: list[Any]) -> list[Any]:
     return masked
 
 
-def encrypt_string_to_bytes(intput_str: str) -> bytes:
+def encrypt_string_to_bytes(intput_str: str, key: str | None = None) -> bytes:
     versioned_encryption_fn = fetch_versioned_implementation(
         "onyx.utils.encryption", "_encrypt_string"
     )
-    return versioned_encryption_fn(intput_str)
+    return versioned_encryption_fn(intput_str, key=key)
 
 
-def decrypt_bytes_to_string(intput_bytes: bytes) -> str:
+def decrypt_bytes_to_string(intput_bytes: bytes, key: str | None = None) -> str:
     versioned_decryption_fn = fetch_versioned_implementation(
         "onyx.utils.encryption", "_decrypt_bytes"
     )
-    return versioned_decryption_fn(intput_bytes)
+    return versioned_decryption_fn(intput_bytes, key=key)
