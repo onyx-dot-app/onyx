@@ -22,9 +22,13 @@ def get_code_interpreter_health(
 ) -> CodeInterpreterServerHealth:
     try:
         client = CodeInterpreterClient()
-        return CodeInterpreterServerHealth(healthy=client.health())
-    except ValueError:
-        return CodeInterpreterServerHealth(healthy=False)
+        result = client.health()
+        return CodeInterpreterServerHealth(
+            connected=result.connected,
+            error=result.error,
+        )
+    except ValueError as e:
+        return CodeInterpreterServerHealth(connected=False, error=str(e))
 
 
 @admin_router.get("")

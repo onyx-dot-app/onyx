@@ -16,7 +16,7 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 _HEALTH_CACHE_TTL_SECONDS = 30
-_health_cache: dict[str, tuple[float, bool]] = {}
+_health_cache: dict[str, tuple[float, CodeInterpreterHealthResponse]] = {}
 
 
 class FileInput(TypedDict):
@@ -32,6 +32,13 @@ class WorkspaceFile(BaseModel):
     path: str
     kind: Literal["file", "directory"]
     file_id: str | None = None
+
+
+class CodeInterpreterHealthResponse(BaseModel):
+    """Structured health check result from the Code Interpreter service."""
+
+    connected: bool
+    error: str = ""
 
 
 class ExecuteResponse(BaseModel):
@@ -117,7 +124,7 @@ class CodeInterpreterClient:
             payload["files"] = files
         return payload
 
-    def health(self, use_cache: bool = False) -> bool:
+    def health(self, use_cache: bool = False) -> CodeInterpreterHealthResponse:
         """Check if the Code Interpreter service is healthy
 
         Args:
@@ -131,16 +138,22 @@ class CodeInterpreterClient:
                 cached_at, cached_result = cached
                 if time.monotonic() - cached_at < _HEALTH_CACHE_TTL_SECONDS:
                     return cached_result
-
         url = f"{self.base_url}/health"
         try:
             response = self.session.get(url, timeout=5)
             response.raise_for_status()
-            result = response.json().get("status") == "ok"
+            data = response.json()
+            is_healthy = data.get("status") == "ok"
+            result = CodeInterpreterHealthResponse(
+                connected=True,
+                error="" if is_healthy else (data.get("message") or "Unknown error"),
+            )
         except Exception as e:
             logger.warning(f"Exception caught when checking health, e={e}")
-            result = False
-
+            result = CodeInterpreterHealthResponse(
+                connected=False,
+                error=str(e),
+            )
         _health_cache[self.base_url] = (time.monotonic(), result)
         return result
 
