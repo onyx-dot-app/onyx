@@ -1,13 +1,13 @@
 "use client";
 
 import { use } from "react";
-import { SlackChannelConfigCreationForm } from "../SlackChannelConfigCreationForm";
+import { SlackChannelConfigCreationForm } from "@/app/admin/bots/[bot-id]/channels/SlackChannelConfigCreationForm";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { ThreeDotsLoader } from "@/components/Loading";
+import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { SvgSlack } from "@opal/icons";
-import { useSlackChannelConfigs } from "../../hooks";
+import { useSlackChannelConfigs } from "@/app/admin/bots/[bot-id]/hooks";
 import { useDocumentSets } from "@/app/admin/documents/sets/hooks";
 import { useAgents } from "@/hooks/useAgents";
 import { useStandardAnswerCategories } from "@/app/ee/admin/standard-answer/hooks";
@@ -47,7 +47,7 @@ function EditSlackChannelConfigContent({ id }: { id: string }) {
     isAgentsLoading ||
     (isPaidEnterprise && isStdAnswerLoading)
   ) {
-    return <ThreeDotsLoader />;
+    return <SimpleLoader />;
   }
 
   if (channelsError || !slackChannelConfigs) {

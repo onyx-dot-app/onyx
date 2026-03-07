@@ -3,10 +3,13 @@
 import { use } from "react";
 import { StandardAnswerCreationForm } from "@/app/ee/admin/standard-answer/StandardAnswerCreationForm";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { ThreeDotsLoader } from "@/components/Loading";
+import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
-import { useStandardAnswers, useStandardAnswerCategories } from "../hooks";
+import {
+  useStandardAnswers,
+  useStandardAnswerCategories,
+} from "@/app/ee/admin/standard-answer/hooks";
 
 const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.STANDARD_ANSWERS]!;
 
@@ -24,7 +27,7 @@ function Main({ id }: { id: string }) {
   } = useStandardAnswerCategories();
 
   if (isAnswersLoading || isCategoriesLoading) {
-    return <ThreeDotsLoader />;
+    return <SimpleLoader />;
   }
 
   if (answersError || !standardAnswers) {

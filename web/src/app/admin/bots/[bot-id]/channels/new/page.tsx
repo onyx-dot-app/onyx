@@ -1,9 +1,9 @@
 "use client";
 
 import { use } from "react";
-import { SlackChannelConfigCreationForm } from "../SlackChannelConfigCreationForm";
+import { SlackChannelConfigCreationForm } from "@/app/admin/bots/[bot-id]/channels/SlackChannelConfigCreationForm";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { ThreeDotsLoader } from "@/components/Loading";
+import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { SvgSlack } from "@opal/icons";
 import { useDocumentSets } from "@/app/admin/documents/sets/hooks";
@@ -40,7 +40,7 @@ function NewChannelConfigContent({ slackBotId }: { slackBotId: number }) {
     isAgentsLoading ||
     (isPaidEnterprise && isStdAnswerLoading)
   ) {
-    return <ThreeDotsLoader />;
+    return <SimpleLoader />;
   }
 
   if (docSetsError || !documentSets) {
@@ -102,7 +102,7 @@ export default function Page(props: { params: Promise<{ "bot-id": string }> }) {
   }, [slack_bot_id, router]);
 
   if (!slack_bot_id || isNaN(slack_bot_id)) {
-    return <ThreeDotsLoader />;
+    return <SimpleLoader />;
   }
 
   return (
