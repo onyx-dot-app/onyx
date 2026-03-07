@@ -1152,3 +1152,179 @@ class TestAutoModeTransitionsAndResync:
         finally:
             db_session.rollback()
             _cleanup_provider(db_session, provider_name)
+
+    def test_sync_updates_default_when_recommended_default_changes(
+        self,
+        db_session: Session,
+        provider_name: str,
+    ) -> None:
+        """When the provider owns the CHAT default and a sync arrives with a
+        different recommended default model (both models still in config),
+        the global default should be updated to the new recommendation.
+
+        Steps:
+        1. Create auto-mode provider with config v1: default=gpt-4o.
+        2. Set gpt-4o as the global CHAT default.
+        3. Re-sync with config v2: default=gpt-4o-mini (gpt-4o still present).
+        4. Verify the CHAT default switched to gpt-4o-mini and both models
+           remain visible.
+        """
+        config_v1 = _create_mock_llm_recommendations(
+            provider=LlmProviderNames.OPENAI,
+            default_model_name="gpt-4o",
+            additional_models=["gpt-4o-mini"],
+        )
+        config_v2 = _create_mock_llm_recommendations(
+            provider=LlmProviderNames.OPENAI,
+            default_model_name="gpt-4o-mini",
+            additional_models=["gpt-4o"],
+        )
+
+        try:
+            with patch(
+                "onyx.server.manage.llm.api.fetch_llm_recommendations_from_github",
+                return_value=config_v1,
+            ):
+                put_llm_provider(
+                    llm_provider_upsert_request=LLMProviderUpsertRequest(
+                        name=provider_name,
+                        provider=LlmProviderNames.OPENAI,
+                        api_key="sk-test-key-00000000000000000000000000000000000",
+                        api_key_changed=True,
+                        is_auto_mode=True,
+                        model_configurations=[],
+                    ),
+                    is_creation=True,
+                    _=_create_mock_admin(),
+                    db_session=db_session,
+                )
+
+            # Set gpt-4o as the global CHAT default
+            db_session.expire_all()
+            provider = fetch_existing_llm_provider(
+                name=provider_name, db_session=db_session
+            )
+            assert provider is not None
+            update_default_provider(provider.id, "gpt-4o", db_session)
+
+            default_before = fetch_default_llm_model(db_session)
+            assert default_before is not None
+            assert default_before.name == "gpt-4o"
+
+            # Re-sync with config v2 (recommended default changed)
+            db_session.expire_all()
+            provider = fetch_existing_llm_provider(
+                name=provider_name, db_session=db_session
+            )
+            assert provider is not None
+
+            changes = sync_auto_mode_models(
+                db_session=db_session,
+                provider=provider,
+                llm_recommendations=config_v2,
+            )
+            assert changes > 0, "Sync should report changes when default switches"
+
+            # Both models should remain visible
+            db_session.expire_all()
+            provider = fetch_existing_llm_provider(
+                name=provider_name, db_session=db_session
+            )
+            assert provider is not None
+            visibility = {
+                mc.name: mc.is_visible for mc in provider.model_configurations
+            }
+            assert visibility["gpt-4o"] is True
+            assert visibility["gpt-4o-mini"] is True
+
+            # The CHAT default should now be gpt-4o-mini
+            default_after = fetch_default_llm_model(db_session)
+            assert default_after is not None
+            assert (
+                default_after.name == "gpt-4o-mini"
+            ), f"Default should be updated to 'gpt-4o-mini', got '{default_after.name}'"
+
+        finally:
+            db_session.rollback()
+            _cleanup_provider(db_session, provider_name)
+
+    def test_sync_idempotent_when_default_already_matches(
+        self,
+        db_session: Session,
+        provider_name: str,
+    ) -> None:
+        """When the provider owns the CHAT default and it already matches the
+        recommended default, re-syncing should report zero changes.
+
+        This is a regression test for the bug where changes was unconditionally
+        incremented even when the default was already correct.
+        """
+        config = _create_mock_llm_recommendations(
+            provider=LlmProviderNames.OPENAI,
+            default_model_name="gpt-4o",
+            additional_models=["gpt-4o-mini"],
+        )
+
+        try:
+            with patch(
+                "onyx.server.manage.llm.api.fetch_llm_recommendations_from_github",
+                return_value=config,
+            ):
+                put_llm_provider(
+                    llm_provider_upsert_request=LLMProviderUpsertRequest(
+                        name=provider_name,
+                        provider=LlmProviderNames.OPENAI,
+                        api_key="sk-test-key-00000000000000000000000000000000000",
+                        api_key_changed=True,
+                        is_auto_mode=True,
+                        model_configurations=[],
+                    ),
+                    is_creation=True,
+                    _=_create_mock_admin(),
+                    db_session=db_session,
+                )
+
+            # Set gpt-4o (the recommended default) as global CHAT default
+            db_session.expire_all()
+            provider = fetch_existing_llm_provider(
+                name=provider_name, db_session=db_session
+            )
+            assert provider is not None
+            update_default_provider(provider.id, "gpt-4o", db_session)
+
+            # First sync to stabilize state
+            db_session.expire_all()
+            provider = fetch_existing_llm_provider(
+                name=provider_name, db_session=db_session
+            )
+            assert provider is not None
+            sync_auto_mode_models(
+                db_session=db_session,
+                provider=provider,
+                llm_recommendations=config,
+            )
+
+            # Second sync — default already matches, should be a no-op
+            db_session.expire_all()
+            provider = fetch_existing_llm_provider(
+                name=provider_name, db_session=db_session
+            )
+            assert provider is not None
+            changes = sync_auto_mode_models(
+                db_session=db_session,
+                provider=provider,
+                llm_recommendations=config,
+            )
+            assert changes == 0, (
+                f"Expected 0 changes when default already matches recommended, "
+                f"got {changes}"
+            )
+
+            # Default should still be gpt-4o
+            default_model = fetch_default_llm_model(db_session)
+            assert default_model is not None
+            assert default_model.name == "gpt-4o"
+
+        finally:
+            db_session.rollback()
+            _cleanup_provider(db_session, provider_name)
