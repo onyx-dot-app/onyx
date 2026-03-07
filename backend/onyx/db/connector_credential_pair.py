@@ -2,7 +2,6 @@ from datetime import datetime
 from enum import Enum
 from typing import TypeVarTuple
 
-from fastapi import HTTPException
 from sqlalchemy import delete
 from sqlalchemy import desc
 from sqlalchemy import exists
@@ -32,6 +31,8 @@ from onyx.db.models import User
 from onyx.db.models import User__UserGroup
 from onyx.db.models import UserGroup__ConnectorCredentialPair
 from onyx.db.models import UserRole
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.models import StatusResponse
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
@@ -539,7 +540,7 @@ def add_credential_to_connector(
         )
 
     if connector is None:
-        raise HTTPException(status_code=404, detail="Connector does not exist")
+        raise OnyxError(OnyxErrorCode.CONNECTOR_NOT_FOUND, "Connector does not exist")
 
     if access_type == AccessType.SYNC:
         if not fetch_ee_implementation_or_noop(
@@ -547,9 +548,9 @@ def add_credential_to_connector(
             "check_if_valid_sync_source",
             noop_return_value=True,
         )(connector.source):
-            raise HTTPException(
-                status_code=400,
-                detail=f"Connector of type {connector.source} does not support SYNC access type",
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR,
+                f"Connector of type {connector.source} does not support SYNC access type",
             )
 
     if credential is None:
@@ -557,9 +558,9 @@ def add_credential_to_connector(
             f"Credential {credential_id} does not exist or does not belong to user"
         )
         logger.error(error_msg)
-        raise HTTPException(
-            status_code=401,
-            detail=error_msg,
+        raise OnyxError(
+            OnyxErrorCode.CREDENTIAL_NOT_FOUND,
+            error_msg,
         )
 
     existing_association = (
@@ -622,12 +623,12 @@ def remove_credential_from_connector(
     )
 
     if connector is None:
-        raise HTTPException(status_code=404, detail="Connector does not exist")
+        raise OnyxError(OnyxErrorCode.CONNECTOR_NOT_FOUND, "Connector does not exist")
 
     if credential is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Credential does not exist or does not belong to user",
+        raise OnyxError(
+            OnyxErrorCode.CREDENTIAL_NOT_FOUND,
+            "Credential does not exist or does not belong to user",
         )
 
     association = get_connector_credential_pair_for_user(
