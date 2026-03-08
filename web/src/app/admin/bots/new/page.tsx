@@ -1,12 +1,7 @@
-import BackButton from "@/refresh-components/buttons/BackButton";
+"use client";
+
 import { NewSlackBotForm } from "../SlackBotCreationForm";
 
-export default async function NewSlackBotPage() {
-  return (
-    <>
-      <BackButton routerOverride="/admin/bots" />
-
-      <NewSlackBotForm />
-    </>
-  );
+export default function Page() {
+  return <NewSlackBotForm />;
 }
