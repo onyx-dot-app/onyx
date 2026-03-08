@@ -122,6 +122,8 @@ const collections = (
             name: "User Management",
             items: [
               sidebarItem(ADMIN_PATHS.USERS),
+              // TODO: Uncomment once Users v2 page is complete
+              sidebarItem(ADMIN_PATHS.USERS_V2),
               ...(enableEnterprise ? [sidebarItem(ADMIN_PATHS.GROUPS)] : []),
               sidebarItem(ADMIN_PATHS.API_KEYS),
               sidebarItem(ADMIN_PATHS.TOKEN_RATE_LIMITS),
@@ -131,11 +133,7 @@ const collections = (
             ? [
                 {
                   name: "Permissions",
-                  items: [
-                    // TODO: Uncomment once Users v2 page is complete
-                    // sidebarItem(ADMIN_PATHS.USERS_V2),
-                    sidebarItem(ADMIN_PATHS.SCIM),
-                  ],
+                  items: [sidebarItem(ADMIN_PATHS.SCIM)],
                 },
               ]
             : []),

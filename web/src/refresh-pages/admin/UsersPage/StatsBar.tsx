@@ -3,13 +3,12 @@ import { ContentAction } from "@opal/layouts";
 import { Button } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import Card from "@/refresh-components/cards/Card";
-import Separator from "@/refresh-components/Separator";
 import Text from "@/refresh-components/texts/Text";
 import Link from "next/link";
 import { ADMIN_PATHS } from "@/lib/admin-routes";
 
 // ---------------------------------------------------------------------------
-// Stats cell
+// Stats cell — number + label, no truncation on label
 // ---------------------------------------------------------------------------
 
 interface StatCellProps {
@@ -21,11 +20,11 @@ function StatCell({ value, label }: StatCellProps) {
   const display = value === null ? "—" : value.toLocaleString();
 
   return (
-    <Section alignItems="start" gap={0.25} width="fit" padding={0.5}>
-      <Text as="p" headingH3 text05>
+    <Section alignItems="start" gap={0.25} width="full" padding={0.5}>
+      <Text as="span" mainUiAction text04>
         {display}
       </Text>
-      <Text as="p" mainUiMuted text03>
+      <Text as="span" secondaryBody text03>
         {label}
       </Text>
     </Section>
@@ -76,7 +75,7 @@ export default function StatsBar({
   showScim,
 }: StatsBarProps) {
   if (showScim) {
-    // With SCIM: one card containing all 3 stats (dividers) + separate SCIM card
+    // With SCIM: one card containing stats + separate SCIM card
     return (
       <Section
         flexDirection="row"
@@ -84,22 +83,12 @@ export default function StatsBar({
         alignItems="stretch"
         gap={0.5}
       >
-        <Card padding={0}>
-          <Section
-            flexDirection="row"
-            alignItems="stretch"
-            gap={0}
-            width="fit"
-            height="auto"
-          >
+        <Card padding={0.5}>
+          <Section flexDirection="row" gap={0}>
             <StatCell value={activeUsers} label="active users" />
-            <Separator orientation="vertical" noPadding />
             <StatCell value={pendingInvites} label="pending invites" />
             {requests !== null && (
-              <>
-                <Separator orientation="vertical" noPadding />
-                <StatCell value={requests} label="requests to join" />
-              </>
+              <StatCell value={requests} label="requests to join" />
             )}
           </Section>
         </Card>
@@ -109,7 +98,7 @@ export default function StatsBar({
     );
   }
 
-  // Without SCIM: 3 separate cards
+  // Without SCIM: separate cards
   return (
     <Section
       flexDirection="row"
