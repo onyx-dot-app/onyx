@@ -126,7 +126,7 @@ class _EncryptedBase(TypeDecorator):
     cache_ok = True
     _is_json: bool = False
 
-    def wrap_raw(self, value: Any) -> SensitiveValue:  # type: ignore[type-arg]
+    def wrap_raw(self, value: Any) -> SensitiveValue:
         """Encrypt a raw value and wrap it in SensitiveValue.
 
         Called by the attribute set event so the Python-side type is always
@@ -205,7 +205,7 @@ class EncryptedJson(_EncryptedBase):
 
 @event.listens_for(Mapper, "mapper_configured")
 def _register_sensitive_value_set_events(
-    mapper: Mapper,  # type: ignore[type-arg]
+    mapper: Mapper,
     class_: type,
 ) -> None:
     """Auto-wrap raw values in SensitiveValue when assigned to encrypted columns."""
