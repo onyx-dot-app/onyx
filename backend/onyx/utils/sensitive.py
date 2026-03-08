@@ -174,18 +174,17 @@ class SensitiveValue(Generic[T]):
         )
 
     def __eq__(self, other: Any) -> bool:
-        """Prevent direct comparison which might expose value."""
-        if isinstance(other, SensitiveValue):
-            # Compare encrypted bytes for equality check
-            return self._encrypted_bytes == other._encrypted_bytes
-        raise SensitiveAccessError(
-            "Cannot compare SensitiveValue with non-SensitiveValue. "
-            "Use .get_value(apply_mask=True/False) to access the value for comparison."
-        )
+        """Compare SensitiveValues by their decrypted content."""
+        if not isinstance(other, SensitiveValue):
+            return NotImplemented
+        return self._decrypt() == other._decrypt()
 
     def __hash__(self) -> int:
-        """Allow hashing based on encrypted bytes."""
-        return hash(self._encrypted_bytes)
+        """Hash based on decrypted content."""
+        value = self._decrypt()
+        if isinstance(value, dict):
+            return hash(tuple(sorted(value.items())))
+        return hash(value)
 
     # Prevent JSON serialization
     def __json__(self) -> Any:
