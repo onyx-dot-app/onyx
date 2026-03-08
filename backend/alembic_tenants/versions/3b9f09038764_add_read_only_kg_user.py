@@ -24,8 +24,7 @@ def upgrade() -> None:
     # Enable pg_trgm extension if not already enabled
     op.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
 
-    # Create read-only db user here only in multi-tenant mode. For single-tenant mode,
-    # the user is created in the standard migration.
+    # Create the read-only db user if it does not already exist.
     if not (DB_READONLY_USER and DB_READONLY_PASSWORD):
         raise Exception("DB_READONLY_USER or DB_READONLY_PASSWORD is not set")
 
