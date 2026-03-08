@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import DataTable from "@/refresh-components/table/DataTable";
 import { createTableColumns } from "@/refresh-components/table/columns";
 import { Content } from "@opal/layouts";
@@ -9,10 +9,11 @@ import { timeAgo } from "@/lib/time";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import useAdminUsers from "@/hooks/useAdminUsers";
-import { ThreeDotsLoader } from "@/components/Loading";
+import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { SvgUser, SvgUsers, SvgSlack } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
-import type { UserRow, UserGroupInfo } from "./interfaces";
+import UserFilters from "./UserFilters";
+import type { UserRow, UserGroupInfo, StatusFilter } from "./interfaces";
 import { getInitials } from "./utils";
 
 // ---------------------------------------------------------------------------
@@ -163,10 +164,33 @@ const columns = [
 
 export default function UsersTable() {
   const [searchTerm, setSearchTerm] = useState("");
+  const [selectedRoles, setSelectedRoles] = useState<UserRole[]>([]);
+  const [selectedStatus, setSelectedStatus] = useState<StatusFilter>("all");
+
   const { users, isLoading, error } = useAdminUsers();
 
+  const filteredUsers = useMemo(() => {
+    let result = users;
+
+    if (selectedRoles.length > 0) {
+      result = result.filter((u) => selectedRoles.includes(u.role));
+    }
+
+    if (selectedStatus === "active") {
+      result = result.filter((u) => u.is_active);
+    } else if (selectedStatus === "inactive") {
+      result = result.filter((u) => !u.is_active);
+    }
+
+    return result;
+  }, [users, selectedRoles, selectedStatus]);
+
   if (isLoading) {
-    return <ThreeDotsLoader />;
+    return (
+      <div className="flex justify-center py-12">
+        <SimpleLoader className="h-6 w-6" />
+      </div>
+    );
   }
 
   if (error) {
@@ -185,8 +209,14 @@ export default function UsersTable() {
         placeholder="Search users..."
         leftSearchIcon
       />
+      <UserFilters
+        selectedRoles={selectedRoles}
+        onRolesChange={setSelectedRoles}
+        selectedStatus={selectedStatus}
+        onStatusChange={setSelectedStatus}
+      />
       <DataTable
-        data={users}
+        data={filteredUsers}
         columns={columns}
         getRowId={(row) => row.id}
         pageSize={PAGE_SIZE}
