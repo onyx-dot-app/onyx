@@ -20,18 +20,26 @@ def _unique(prefix: str) -> str:
 
 
 def test_insert_slack_bot_returns_sensitive_values(db_session: Session) -> None:
+    bot_token = _unique("xoxb-insert")
+    app_token = _unique("xapp-insert")
+    user_token = _unique("xoxp-insert")
+
     slack_bot = insert_slack_bot(
         db_session=db_session,
         name=_unique("test-bot-insert"),
         enabled=True,
-        bot_token=_unique("xoxb-insert"),
-        app_token=_unique("xapp-insert"),
-        user_token=_unique("xoxp-insert"),
+        bot_token=bot_token,
+        app_token=app_token,
+        user_token=user_token,
     )
 
     assert isinstance(slack_bot.bot_token, SensitiveValue)
     assert isinstance(slack_bot.app_token, SensitiveValue)
     assert isinstance(slack_bot.user_token, SensitiveValue)
+
+    assert slack_bot.bot_token.get_value(apply_mask=False) == bot_token
+    assert slack_bot.app_token.get_value(apply_mask=False) == app_token
+    assert slack_bot.user_token.get_value(apply_mask=False) == user_token
 
     # Verify from_model works without error
     pydantic_bot = SlackBot.from_model(slack_bot)
@@ -48,19 +56,27 @@ def test_update_slack_bot_returns_sensitive_values(db_session: Session) -> None:
         app_token=_unique("xapp-update"),
     )
 
+    new_bot_token = _unique("xoxb-update-new")
+    new_app_token = _unique("xapp-update-new")
+    new_user_token = _unique("xoxp-update-new")
+
     updated = update_slack_bot(
         db_session=db_session,
         slack_bot_id=slack_bot.id,
         name=_unique("test-bot-updated"),
         enabled=False,
-        bot_token=_unique("xoxb-update-new"),
-        app_token=_unique("xapp-update-new"),
-        user_token=_unique("xoxp-update-new"),
+        bot_token=new_bot_token,
+        app_token=new_app_token,
+        user_token=new_user_token,
     )
 
     assert isinstance(updated.bot_token, SensitiveValue)
     assert isinstance(updated.app_token, SensitiveValue)
     assert isinstance(updated.user_token, SensitiveValue)
+
+    assert updated.bot_token.get_value(apply_mask=False) == new_bot_token
+    assert updated.app_token.get_value(apply_mask=False) == new_app_token
+    assert updated.user_token.get_value(apply_mask=False) == new_user_token
 
     # Verify from_model works without error
     pydantic_bot = SlackBot.from_model(updated)
