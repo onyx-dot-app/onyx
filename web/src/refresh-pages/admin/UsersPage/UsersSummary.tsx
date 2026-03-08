@@ -61,19 +61,19 @@ function ScimCard() {
 // Stats bar — layout varies by SCIM status
 // ---------------------------------------------------------------------------
 
-interface StatsBarProps {
+interface UsersSummaryProps {
   activeUsers: number | null;
   pendingInvites: number | null;
   requests: number | null;
   showScim: boolean;
 }
 
-export default function StatsBar({
+export default function UsersSummary({
   activeUsers,
   pendingInvites,
   requests,
   showScim,
-}: StatsBarProps) {
+}: UsersSummaryProps) {
   if (showScim) {
     // With SCIM: one card containing stats + separate SCIM card
     return (
