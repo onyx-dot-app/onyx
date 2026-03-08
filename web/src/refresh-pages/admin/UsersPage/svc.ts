@@ -42,3 +42,15 @@ export async function deleteUser(email: string): Promise<void> {
     throw new Error(await parseErrorDetail(res, "Failed to delete user"));
   }
 }
+
+export async function inviteUsers(emails: string[]): Promise<void> {
+  const res = await fetch("/api/manage/admin/users", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ emails }),
+  });
+  if (!res.ok) {
+    const detail = (await res.json()).detail;
+    throw new Error(detail ?? "Failed to invite users");
+  }
+}
