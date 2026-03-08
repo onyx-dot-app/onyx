@@ -2,9 +2,12 @@
 
 import {
   buildChatUrl,
+  getAvailableContextTokens,
   nameChatSession,
   updateLlmOverrideForChatSession,
 } from "@/app/app/services/lib";
+import { getMaxSelectedDocumentTokens } from "@/app/app/projects/projectsService";
+import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
 import { StreamStopInfo } from "@/lib/search/interfaces";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Route } from "next";
@@ -193,9 +196,6 @@ export default function useChatController({
   const currentChatState = useCurrentChatState();
 
   const navigatingAway = useRef(false);
-
-  // Local state that doesn't need to be in the store
-  const [_maxTokens, setMaxTokens] = useState<number>(4096);
 
   // Sync store state changes
   useEffect(() => {
@@ -1067,21 +1067,48 @@ export default function useChatController({
     handleSlackChatRedirect();
   }, [searchParams, router]);
 
-  // fetch # of allowed document tokens for the selected Persona
-  useEffect(() => {
-    if (!liveAgent?.id) return; // avoid calling with undefined persona id
+  // Available context tokens: if a chat session exists, fetch from the session
+  // API (dynamic per session/model). Otherwise derive from the persona's max
+  // document tokens. The backend already accounts for system prompt, tools,
+  // and user-message reservations.
+  const [availableContextTokens, setAvailableContextTokens] = useState<number>(
+    DEFAULT_CONTEXT_TOKENS
+  );
 
-    async function fetchMaxTokens() {
-      const response = await fetch(
-        `/api/chat/max-selected-document-tokens?persona_id=${liveAgent?.id}`
-      );
-      if (response.ok) {
-        const maxTokens = (await response.json()).max_tokens as number;
-        setMaxTokens(maxTokens);
+  useEffect(() => {
+    if (!llmManager.hasAnyProvider) return;
+
+    let cancelled = false;
+
+    const setIfActive = (tokens: number) => {
+      if (!cancelled) setAvailableContextTokens(tokens);
+    };
+
+    (async () => {
+      try {
+        if (currentSessionId) {
+          const available = await getAvailableContextTokens(currentSessionId);
+          setIfActive(available ?? DEFAULT_CONTEXT_TOKENS);
+          return;
+        }
+
+        const personaId = liveAgent?.id;
+        if (personaId == null) {
+          setIfActive(DEFAULT_CONTEXT_TOKENS);
+          return;
+        }
+
+        const maxTokens = await getMaxSelectedDocumentTokens(personaId);
+        setIfActive(maxTokens ?? DEFAULT_CONTEXT_TOKENS);
+      } catch {
+        setIfActive(DEFAULT_CONTEXT_TOKENS);
       }
-    }
-    fetchMaxTokens();
-  }, [liveAgent]);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentSessionId, liveAgent?.id, llmManager.hasAnyProvider]);
 
   // check if there's an image file in the message history so that we know
   // which LLMs are available to use
@@ -1110,5 +1137,7 @@ export default function useChatController({
     onSubmit,
     stopGenerating,
     handleMessageSpecificFileUpload,
+    // data
+    availableContextTokens,
   };
 }
