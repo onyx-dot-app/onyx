@@ -8,6 +8,7 @@ import { OpenRouterModal } from "./OpenRouterModal";
 import { AvianModal } from "./AvianModal";
 import { CustomModal } from "./CustomModal";
 import { BedrockModal } from "./BedrockModal";
+import { LMStudioForm } from "./LMStudioForm";
 
 export function detectIfRealOpenAIProvider(provider: LLMProviderView) {
   return (
@@ -47,6 +48,8 @@ export function getModalForExistingProvider(
       return <OpenRouterModal {...props} />;
     case LLMProviderName.AVIAN:
       return <AvianModal {...props} />;
+    case LLMProviderName.LM_STUDIO:
+      return <LMStudioForm {...props} />;
     default:
       return <CustomModal {...props} />;
   }

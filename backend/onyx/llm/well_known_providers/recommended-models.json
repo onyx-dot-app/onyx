@@ -1,12 +1,12 @@
 {
   "version": "1.1",
-  "updated_at": "2026-02-05T00:00:00Z",
+  "updated_at": "2026-03-05T00:00:00Z",
   "providers": {
     "openai": {
-      "default_model": { "name": "gpt-5.2" },
+      "default_model": { "name": "gpt-5.4" },
       "additional_visible_models": [
-        { "name": "gpt-5-mini" },
-        { "name": "gpt-4.1" }
+        { "name": "gpt-5.4" },
+        { "name": "gpt-5.2" }
       ]
     },
     "anthropic": {
@@ -15,6 +15,10 @@
         {
           "name": "claude-opus-4-6",
           "display_name": "Claude Opus 4.6"
+        },
+        {
+          "name": "claude-sonnet-4-6",
+          "display_name": "Claude Sonnet 4.6"
         },
         {
           "name": "claude-opus-4-5",

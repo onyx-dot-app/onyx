@@ -18,7 +18,6 @@ from ee.onyx.server.enterprise_settings.store import (
     store_settings as store_ee_settings,
 )
 from ee.onyx.server.enterprise_settings.store import upload_logo
-from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.llm import fetch_existing_llm_provider
 from onyx.db.llm import update_default_provider
@@ -161,12 +160,6 @@ def _seed_personas(db_session: Session, personas: list[PersonaUpsertRequest]) ->
                     user=None,  # Seeding is done as admin
                     name=persona.name,
                     description=persona.description,
-                    num_chunks=(
-                        persona.num_chunks if persona.num_chunks is not None else 0.0
-                    ),
-                    llm_relevance_filter=persona.llm_relevance_filter,
-                    llm_filter_extraction=persona.llm_filter_extraction,
-                    recency_bias=RecencyBiasSetting.AUTO,
                     document_set_ids=persona.document_set_ids,
                     llm_model_provider_override=persona.llm_model_provider_override,
                     llm_model_version_override=persona.llm_model_version_override,
@@ -178,6 +171,7 @@ def _seed_personas(db_session: Session, personas: list[PersonaUpsertRequest]) ->
                     system_prompt=persona.system_prompt,
                     task_prompt=persona.task_prompt,
                     datetime_aware=persona.datetime_aware,
+                    featured=persona.featured,
                     commit=False,
                 )
             db_session.commit()

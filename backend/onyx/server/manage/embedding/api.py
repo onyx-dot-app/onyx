@@ -1,6 +1,5 @@
 from fastapi import APIRouter
 from fastapi import Depends
-from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_admin_user
@@ -11,6 +10,8 @@ from onyx.db.llm import upsert_cloud_embedding_provider
 from onyx.db.models import User
 from onyx.db.search_settings import get_all_search_settings
 from onyx.db.search_settings import get_current_db_embedding_provider
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.indexing.models import EmbeddingModelDetail
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.server.manage.embedding.models import CloudEmbeddingProvider
@@ -59,7 +60,7 @@ def test_embedding_configuration(
     except Exception as e:
         error_msg = "An error occurred while testing your embedding model. Please check your configuration."
         logger.error(f"{error_msg} Error message: {e}", exc_info=True)
-        raise HTTPException(status_code=400, detail=error_msg)
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, error_msg)
 
 
 @admin_router.get("", response_model=list[EmbeddingModelDetail])
@@ -93,8 +94,9 @@ def delete_embedding_provider(
         embedding_provider is not None
         and provider_type == embedding_provider.provider_type
     ):
-        raise HTTPException(
-            status_code=400, detail="You can't delete a currently active model"
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "You can't delete a currently active model",
         )
 
     remove_embedding_provider(db_session, provider_type=provider_type)

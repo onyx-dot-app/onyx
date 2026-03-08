@@ -57,6 +57,12 @@ export interface LineItemProps
     WithoutStyles<React.HTMLAttributes<HTMLDivElement>>,
     "children"
   > {
+  /**
+   * Whether the row should behave like a standalone interactive button.
+   * Set to false when nested inside another interactive primitive
+   * (e.g. Radix Select.Item) to avoid nested focus targets.
+   */
+  interactive?: boolean;
   // line-item variants
   strikethrough?: boolean;
   danger?: boolean;
@@ -72,6 +78,8 @@ export interface LineItemProps
   description?: string;
   rightChildren?: React.ReactNode;
   href?: string;
+  rel?: string;
+  target?: string;
   ref?: React.Ref<HTMLDivElement>;
   children?: React.ReactNode;
 }
@@ -129,6 +137,7 @@ export interface LineItemProps
  * - The component automatically adds a `data-selected="true"` attribute for custom styling
  */
 export default function LineItem({
+  interactive = true,
   selected,
   strikethrough,
   danger,
@@ -141,6 +150,8 @@ export default function LineItem({
   children,
   rightChildren,
   href,
+  rel,
+  target,
   ref,
   ...props
 }: LineItemProps) {
@@ -160,6 +171,11 @@ export default function LineItem({
   const emphasisKey = emphasized ? "emphasized" : "normal";
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!interactive) {
+      props.onKeyDown?.(e);
+      return;
+    }
+
     if (e.key === "Enter") {
       e.preventDefault();
       (e.currentTarget as HTMLDivElement).click();
@@ -170,6 +186,11 @@ export default function LineItem({
   };
 
   const handleKeyUp = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!interactive) {
+      props.onKeyUp?.(e);
+      return;
+    }
+
     if (e.key === " ") {
       e.preventDefault();
       (e.currentTarget as HTMLDivElement).click();
@@ -180,8 +201,8 @@ export default function LineItem({
   const content = (
     <div
       ref={ref}
-      role="button"
-      tabIndex={0}
+      role={interactive ? "button" : undefined}
+      tabIndex={interactive ? 0 : undefined}
       className={cn(
         "flex flex-row w-full items-start p-2 rounded-08 group/LineItem gap-2",
         !!(children && description) ? "items-start" : "items-center",
@@ -241,5 +262,9 @@ export default function LineItem({
   );
 
   if (!href) return content;
-  return <Link href={href as Route}>{content}</Link>;
+  return (
+    <Link href={href as Route} rel={rel} target={target}>
+      {content}
+    </Link>
+  );
 }

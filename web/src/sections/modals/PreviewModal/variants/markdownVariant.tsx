@@ -30,7 +30,7 @@ export const markdownVariant: PreviewVariant = {
     <ScrollIndicatorDiv className="flex-1 min-h-0 p-4" variant="shadow">
       <MinimalMarkdown
         content={ctx.fileContent}
-        className="w-full pb-4 h-full text-lg break-words"
+        className="w-full pb-4 text-lg break-words"
       />
     </ScrollIndicatorDiv>
   ),

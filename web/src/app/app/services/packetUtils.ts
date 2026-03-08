@@ -16,6 +16,7 @@ export function isToolPacket(
     PacketType.SEARCH_TOOL_DOCUMENTS_DELTA,
     PacketType.PYTHON_TOOL_START,
     PacketType.PYTHON_TOOL_DELTA,
+    PacketType.TOOL_CALL_ARGUMENT_DELTA,
     PacketType.CUSTOM_TOOL_START,
     PacketType.CUSTOM_TOOL_DELTA,
     PacketType.FILE_READER_START,

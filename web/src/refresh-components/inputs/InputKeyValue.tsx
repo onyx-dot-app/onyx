@@ -78,8 +78,8 @@ import React, {
 } from "react";
 import { cn } from "@/lib/utils";
 import InputTypeIn from "./InputTypeIn";
-import { Button as OpalButton } from "@opal/components";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import Text from "@/refresh-components/texts/Text";
 import { FieldContext } from "../form/FieldContext";
 import { FieldMessage } from "../messages/FieldMessage";
@@ -178,16 +178,17 @@ const KeyValueInputItem = ({
         </div>
       </div>
       <div className="flex items-start pt-[2px]">
-        <OpalButton
-          prominence="tertiary"
-          size="sm"
-          icon={SvgMinusCircle}
-          onClick={onRemove}
-          disabled={disabled || !canRemove}
-          aria-label={`Remove ${keyPlaceholder || "key-value"} pair ${
-            index + 1
-          }`}
-        />
+        <Disabled disabled={disabled || !canRemove}>
+          <Button
+            prominence="tertiary"
+            size="sm"
+            icon={SvgMinusCircle}
+            onClick={onRemove}
+            aria-label={`Remove ${keyPlaceholder || "key-value"} pair ${
+              index + 1
+            }`}
+          />
+        </Disabled>
       </div>
     </div>
   );
@@ -488,16 +489,17 @@ const KeyValueInput = ({
       )}
 
       <div>
-        <Button
-          onClick={handleAdd}
-          secondary
-          disabled={disabled}
-          leftIcon={SvgPlusCircle}
-          aria-label={`Add ${keyTitle} and ${valueTitle} pair`}
-          type="button"
-        >
-          {addButtonLabel}
-        </Button>
+        <Disabled disabled={disabled}>
+          <Button
+            prominence="secondary"
+            onClick={handleAdd}
+            icon={SvgPlusCircle}
+            aria-label={`Add ${keyTitle} and ${valueTitle} pair`}
+            type="button"
+          >
+            {addButtonLabel}
+          </Button>
+        </Disabled>
       </div>
     </div>
   );

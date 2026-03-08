@@ -4,11 +4,10 @@ import CardSection from "@/components/admin/CardSection";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { SlackTokensForm } from "./SlackTokensForm";
-import { SourceIcon } from "@/components/SourceIcon";
-import { AdminPageTitle } from "@/components/admin/Title";
-import { ValidSources } from "@/lib/types";
+import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SvgSlack } from "@opal/icons";
 
-export const NewSlackBotForm = () => {
+export function NewSlackBotForm() {
   const [formValues] = useState({
     name: "",
     enabled: true,
@@ -19,20 +18,24 @@ export const NewSlackBotForm = () => {
   const router = useRouter();
 
   return (
-    <div>
-      <AdminPageTitle
-        icon={<SourceIcon iconSize={36} sourceType={ValidSources.Slack} />}
+    <SettingsLayouts.Root>
+      <SettingsLayouts.Header
+        icon={SvgSlack}
         title="New Slack Bot"
+        separator
+        backButton
       />
-      <CardSection>
-        <div className="p-4">
-          <SlackTokensForm
-            isUpdate={false}
-            initialValues={formValues}
-            router={router}
-          />
-        </div>
-      </CardSection>
-    </div>
+      <SettingsLayouts.Body>
+        <CardSection>
+          <div className="p-4">
+            <SlackTokensForm
+              isUpdate={false}
+              initialValues={formValues}
+              router={router}
+            />
+          </div>
+        </CardSection>
+      </SettingsLayouts.Body>
+    </SettingsLayouts.Root>
   );
-};
+}

@@ -165,7 +165,7 @@ function ConnectorRow({
       onClick={handleRowClick}
     >
       <TableCell className="">
-        <p className="lg:w-[200px] xl:w-[400px] inline-block ellipsis truncate">
+        <p className="max-w-[200px] xl:max-w-[400px] inline-block ellipsis truncate">
           {ccPairsIndexingStatus.name}
         </p>
       </TableCell>
@@ -246,7 +246,7 @@ function FederatedConnectorRow({
       onClick={handleRowClick}
     >
       <TableCell className="">
-        <p className="lg:w-[200px] xl:w-[400px] inline-block ellipsis truncate">
+        <p className="max-w-[200px] xl:max-w-[400px] inline-block ellipsis truncate">
           {federatedConnector.name}
         </p>
       </TableCell>
@@ -293,7 +293,7 @@ export function CCPairIndexingStatusTable({
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
 
   return (
-    <Table className="-mt-8">
+    <Table className="-mt-8 table-fixed">
       <TableHeader>
         <ConnectorRow
           invisible

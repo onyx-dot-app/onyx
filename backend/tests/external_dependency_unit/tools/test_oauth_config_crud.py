@@ -21,6 +21,8 @@ from onyx.db.oauth_config import get_tools_by_oauth_config
 from onyx.db.oauth_config import get_user_oauth_token
 from onyx.db.oauth_config import update_oauth_config
 from onyx.db.oauth_config import upsert_user_oauth_token
+from onyx.db.tools import delete_tool__no_commit
+from onyx.db.tools import update_tool
 from tests.external_dependency_unit.conftest import create_test_user
 
 
@@ -311,6 +313,85 @@ class TestOAuthConfigCRUD:
 
         # Tool should still exist but oauth_config_id should be NULL
         assert tool.oauth_config_id is None
+
+    def test_update_tool_cleans_up_orphaned_oauth_config(
+        self, db_session: Session
+    ) -> None:
+        """Test that changing a tool's oauth_config_id deletes the old config if no other tool uses it."""
+        old_config = _create_test_oauth_config(db_session)
+        new_config = _create_test_oauth_config(db_session)
+        tool = _create_test_tool_with_oauth(db_session, old_config)
+        old_config_id = old_config.id
+
+        update_tool(
+            tool_id=tool.id,
+            name=None,
+            description=None,
+            openapi_schema=None,
+            custom_headers=None,
+            user_id=None,
+            db_session=db_session,
+            passthrough_auth=None,
+            oauth_config_id=new_config.id,
+        )
+
+        assert tool.oauth_config_id == new_config.id
+        assert get_oauth_config(old_config_id, db_session) is None
+
+    def test_delete_tool_cleans_up_orphaned_oauth_config(
+        self, db_session: Session
+    ) -> None:
+        """Test that deleting the last tool referencing an OAuthConfig also deletes the config."""
+        config = _create_test_oauth_config(db_session)
+        tool = _create_test_tool_with_oauth(db_session, config)
+        config_id = config.id
+
+        delete_tool__no_commit(tool.id, db_session)
+        db_session.commit()
+
+        assert get_oauth_config(config_id, db_session) is None
+
+    def test_update_tool_preserves_shared_oauth_config(
+        self, db_session: Session
+    ) -> None:
+        """Test that updating one tool's oauth_config_id preserves the config when another tool still uses it."""
+        shared_config = _create_test_oauth_config(db_session)
+        new_config = _create_test_oauth_config(db_session)
+        tool_a = _create_test_tool_with_oauth(db_session, shared_config)
+        tool_b = _create_test_tool_with_oauth(db_session, shared_config)
+        shared_config_id = shared_config.id
+
+        # Move tool_a to a new config; tool_b still references shared_config
+        update_tool(
+            tool_id=tool_a.id,
+            name=None,
+            description=None,
+            openapi_schema=None,
+            custom_headers=None,
+            user_id=None,
+            db_session=db_session,
+            passthrough_auth=None,
+            oauth_config_id=new_config.id,
+        )
+
+        assert tool_a.oauth_config_id == new_config.id
+        assert tool_b.oauth_config_id == shared_config_id
+        assert get_oauth_config(shared_config_id, db_session) is not None
+
+    def test_delete_tool_preserves_shared_oauth_config(
+        self, db_session: Session
+    ) -> None:
+        """Test that deleting one tool preserves the config when another tool still uses it."""
+        shared_config = _create_test_oauth_config(db_session)
+        tool_a = _create_test_tool_with_oauth(db_session, shared_config)
+        tool_b = _create_test_tool_with_oauth(db_session, shared_config)
+        shared_config_id = shared_config.id
+
+        delete_tool__no_commit(tool_a.id, db_session)
+        db_session.commit()
+
+        assert tool_b.oauth_config_id == shared_config_id
+        assert get_oauth_config(shared_config_id, db_session) is not None
 
 
 class TestOAuthUserTokenCRUD:

@@ -1,5 +1,6 @@
 from typing import Any
 
+import pytest
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -14,12 +15,13 @@ from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
 from onyx.db.utils import DocumentRow
 from onyx.db.utils import SortOrder
-from onyx.utils.variable_functionality import global_version
 
 
 # In order to get these tests to run, use the credentials from Bitwarden.
 # Search up "ENV vars for local and Github tests", and find the Jira relevant key-value pairs.
 # Required env vars: JIRA_USER_EMAIL, JIRA_API_TOKEN
+
+pytestmark = pytest.mark.usefixtures("enable_ee")
 
 
 class DocExternalAccessSet(BaseModel):
@@ -52,9 +54,6 @@ def test_jira_doc_sync(
     This test uses the AS project which has applicationRole permission,
     meaning all documents should be marked as public.
     """
-    # NOTE: must set EE on or else the connector will skip the perm syncing
-    global_version.set_ee()
-
     try:
         # Use AS project specifically for this test
         connector_config = {
@@ -150,9 +149,6 @@ def test_jira_doc_sync_with_specific_permissions(
     This test uses a project that has specific user permissions to verify
     that specific users are correctly extracted.
     """
-    # NOTE: must set EE on or else the connector will skip the perm syncing
-    global_version.set_ee()
-
     try:
         # Use SUP project which has specific user permissions
         connector_config = {

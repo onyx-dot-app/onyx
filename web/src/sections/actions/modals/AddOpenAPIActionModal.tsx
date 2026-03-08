@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import Modal from "@/refresh-components/Modal";
-import Button from "@/refresh-components/buttons/Button";
 import Text from "@/refresh-components/texts/Text";
 import * as InputLayouts from "@/layouts/input-layouts";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
@@ -10,7 +9,8 @@ import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import Separator from "@/refresh-components/Separator";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
-import { Button as OpalButton } from "@opal/components";
+import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import { MethodSpec, ToolSnapshot } from "@/lib/tools/interfaces";
 import {
   validateToolDefinition,
@@ -270,7 +270,7 @@ function FormContent({
                   getCopyText={() => values.definition}
                   tooltip="Copy definition"
                 />
-                <OpalButton
+                <Button
                   prominence="tertiary"
                   size="sm"
                   icon={SvgBracketCurly}
@@ -363,7 +363,7 @@ function FormContent({
               alignItems="center"
               width="fit"
             >
-              <OpalButton
+              <Button
                 icon={SvgUnplug}
                 prominence="tertiary"
                 type="button"
@@ -375,32 +375,29 @@ function FormContent({
                   onDisconnectTool(existingTool);
                 }}
               />
-              <Button
-                secondary
-                type="button"
-                onClick={handleEditAuthenticationClick}
-                disabled={!onEditAuthentication}
-              >
-                Edit Configs
-              </Button>
+              <Disabled disabled={!onEditAuthentication}>
+                <Button
+                  prominence="secondary"
+                  type="button"
+                  onClick={handleEditAuthenticationClick}
+                >
+                  Edit Configs
+                </Button>
+              </Disabled>
             </Section>
           </Section>
         )}
       </Modal.Body>
 
       <Modal.Footer>
-        <Button
-          main
-          secondary
-          type="button"
-          onClick={handleClose}
-          disabled={isSubmitting}
-        >
-          Cancel
-        </Button>
-        <Button main primary type="submit" disabled={isSubmitting || !dirty}>
-          {primaryButtonLabel}
-        </Button>
+        <Disabled disabled={isSubmitting}>
+          <Button prominence="secondary" type="button" onClick={handleClose}>
+            Cancel
+          </Button>
+        </Disabled>
+        <Disabled disabled={isSubmitting || !dirty}>
+          <Button type="submit">{primaryButtonLabel}</Button>
+        </Disabled>
       </Modal.Footer>
     </Form>
   );
@@ -459,8 +456,14 @@ export default function AddOpenAPIActionModal({
           name?: string;
           description?: string;
           definition: Record<string, any>;
+          custom_headers?: { key: string; value: string }[];
+          passthrough_auth?: boolean;
+          oauth_config_id?: number | null;
         } = {
           definition: parsedDefinition,
+          custom_headers: existingTool.custom_headers,
+          passthrough_auth: existingTool.passthrough_auth,
+          oauth_config_id: existingTool.oauth_config_id,
         };
 
         if (derivedName) {

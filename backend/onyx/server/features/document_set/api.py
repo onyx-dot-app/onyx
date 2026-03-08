@@ -11,6 +11,7 @@ from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.db.document_set import check_document_sets_are_public
+from onyx.db.document_set import delete_document_set as db_delete_document_set
 from onyx.db.document_set import fetch_all_document_sets_for_user
 from onyx.db.document_set import get_document_set_by_id
 from onyx.db.document_set import insert_document_set
@@ -142,7 +143,10 @@ def delete_document_set(
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    if not DISABLE_VECTOR_DB:
+    if DISABLE_VECTOR_DB:
+        db_session.refresh(document_set)
+        db_delete_document_set(document_set, db_session)
+    else:
         client_app.send_task(
             OnyxCeleryTask.CHECK_FOR_VESPA_SYNC_TASK,
             kwargs={"tenant_id": tenant_id},

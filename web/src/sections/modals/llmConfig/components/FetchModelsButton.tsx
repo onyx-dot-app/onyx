@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import Text from "@/refresh-components/texts/Text";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import { ModelConfiguration } from "@/interfaces/llm";
@@ -59,13 +60,11 @@ export function FetchModelsButton({
     <div className="flex flex-col gap-y-1">
       <SimpleTooltip tooltip={isDisabled ? disabledHint : undefined} side="top">
         <div className="w-fit">
-          <Button
-            type="button"
-            onClick={handleFetchModels}
-            disabled={isFetchingModels || isDisabled}
-          >
-            Fetch Available Models
-          </Button>
+          <Disabled disabled={isFetchingModels || isDisabled}>
+            <Button type="button" onClick={handleFetchModels}>
+              Fetch Available Models
+            </Button>
+          </Disabled>
         </div>
       </SimpleTooltip>
       {fetchModelsError && (

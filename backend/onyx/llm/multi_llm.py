@@ -42,6 +42,7 @@ from onyx.llm.well_known_providers.constants import AWS_SECRET_ACCESS_KEY_KWARG
 from onyx.llm.well_known_providers.constants import (
     AWS_SECRET_ACCESS_KEY_KWARG_ENV_VAR_FORMAT,
 )
+from onyx.llm.well_known_providers.constants import LM_STUDIO_API_KEY_CONFIG_KEY
 from onyx.llm.well_known_providers.constants import OLLAMA_API_KEY_CONFIG_KEY
 from onyx.llm.well_known_providers.constants import VERTEX_CREDENTIALS_FILE_KWARG
 from onyx.llm.well_known_providers.constants import (
@@ -90,6 +91,98 @@ def _prompt_to_dicts(prompt: LanguageModelInput) -> list[dict[str, Any]]:
     if isinstance(prompt, list):
         return [msg.model_dump(exclude_none=True) for msg in prompt]
     return [prompt.model_dump(exclude_none=True)]
+
+
+def _normalize_content(raw: Any) -> str:
+    """Normalize a message content field to a plain string.
+
+    Content can be a string, None, or a list of content-block dicts
+    (e.g. [{"type": "text", "text": "..."}]).
+    """
+    if raw is None:
+        return ""
+    if isinstance(raw, str):
+        return raw
+    if isinstance(raw, list):
+        return "\n".join(
+            block.get("text", "") if isinstance(block, dict) else str(block)
+            for block in raw
+        )
+    return str(raw)
+
+
+def _strip_tool_content_from_messages(
+    messages: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Convert tool-related messages to plain text.
+
+    Bedrock's Converse API requires toolConfig when messages contain
+    toolUse/toolResult content blocks. When no tools are provided for the
+    current request, we must convert any tool-related history into plain text
+    to avoid the "toolConfig field must be defined" error.
+
+    This is the same approach used by _OllamaHistoryMessageFormatter.
+    """
+    result: list[dict[str, Any]] = []
+    for msg in messages:
+        role = msg.get("role")
+        tool_calls = msg.get("tool_calls")
+
+        if role == "assistant" and tool_calls:
+            # Convert structured tool calls to text representation
+            tool_call_lines = []
+            for tc in tool_calls:
+                func = tc.get("function", {})
+                name = func.get("name", "unknown")
+                args = func.get("arguments", "{}")
+                tc_id = tc.get("id", "")
+                tool_call_lines.append(
+                    f"[Tool Call] name={name} id={tc_id} args={args}"
+                )
+
+            existing_content = _normalize_content(msg.get("content"))
+            parts = (
+                [existing_content] + tool_call_lines
+                if existing_content
+                else tool_call_lines
+            )
+            new_msg = {
+                "role": "assistant",
+                "content": "\n".join(parts),
+            }
+            result.append(new_msg)
+
+        elif role == "tool":
+            # Convert tool response to user message with text content
+            tool_call_id = msg.get("tool_call_id", "")
+            content = _normalize_content(msg.get("content"))
+            tool_result_text = f"[Tool Result] id={tool_call_id}\n{content}"
+            # Merge into previous user message if it is also a converted
+            # tool result to avoid consecutive user messages (Bedrock requires
+            # strict user/assistant alternation).
+            if (
+                result
+                and result[-1]["role"] == "user"
+                and "[Tool Result]" in result[-1].get("content", "")
+            ):
+                result[-1]["content"] += "\n\n" + tool_result_text
+            else:
+                result.append({"role": "user", "content": tool_result_text})
+
+        else:
+            result.append(msg)
+
+    return result
+
+
+def _messages_contain_tool_content(messages: list[dict[str, Any]]) -> bool:
+    """Check if any messages contain tool-related content blocks."""
+    for msg in messages:
+        if msg.get("role") == "tool":
+            return True
+        if msg.get("role") == "assistant" and msg.get("tool_calls"):
+            return True
+    return False
 
 
 def _is_vertex_model_rejecting_output_config(model_name: str) -> bool:
@@ -157,6 +250,9 @@ class LitellmLLM(LLM):
                 elif model_provider == LlmProviderNames.OLLAMA_CHAT:
                     if k == OLLAMA_API_KEY_CONFIG_KEY:
                         model_kwargs["api_key"] = v
+                elif model_provider == LlmProviderNames.LM_STUDIO:
+                    if k == LM_STUDIO_API_KEY_CONFIG_KEY:
+                        model_kwargs["api_key"] = v
                 elif model_provider == LlmProviderNames.BEDROCK:
                     if k == AWS_REGION_NAME_KWARG:
                         model_kwargs[k] = v
@@ -172,6 +268,19 @@ class LitellmLLM(LLM):
                         model_kwargs[k] = v
                     elif k == AWS_SECRET_ACCESS_KEY_KWARG_ENV_VAR_FORMAT:
                         model_kwargs[AWS_SECRET_ACCESS_KEY_KWARG] = v
+
+        # LM Studio: LiteLLM defaults to "fake-api-key" when no key is provided,
+        # which LM Studio rejects. Ensure we always pass an explicit key (or empty
+        # string) to prevent LiteLLM from injecting its fake default.
+        if model_provider == LlmProviderNames.LM_STUDIO:
+            model_kwargs.setdefault("api_key", "")
+
+            # Users provide the server root (e.g. http://localhost:1234) but LiteLLM
+            # needs /v1 for OpenAI-compatible calls.
+            if self._api_base is not None:
+                base = self._api_base.rstrip("/")
+                self._api_base = base if base.endswith("/v1") else f"{base}/v1"
+                model_kwargs["api_base"] = self._api_base
 
         # Default vertex_location to "global" if not provided for Vertex AI
         # Latest gemini models are only available through the global region
@@ -407,13 +516,30 @@ class LitellmLLM(LLM):
                 else nullcontext()
             )
             with env_ctx:
+                messages = _prompt_to_dicts(prompt)
+
+                # Bedrock's Converse API requires toolConfig when messages
+                # contain toolUse/toolResult content blocks. When no tools are
+                # provided for this request but the history contains tool
+                # content from previous turns, strip it to plain text.
+                is_bedrock = self._model_provider in {
+                    LlmProviderNames.BEDROCK,
+                    LlmProviderNames.BEDROCK_CONVERSE,
+                }
+                if (
+                    is_bedrock
+                    and not tools
+                    and _messages_contain_tool_content(messages)
+                ):
+                    messages = _strip_tool_content_from_messages(messages)
+
                 response = litellm.completion(
                     mock_response=get_llm_mock_response() or MOCK_LLM_RESPONSE,
                     model=model,
                     base_url=self._api_base or None,
                     api_version=self._api_version or None,
                     custom_llm_provider=self._custom_llm_provider or None,
-                    messages=_prompt_to_dicts(prompt),
+                    messages=messages,
                     tools=tools,
                     tool_choice=tool_choice,
                     stream=stream,

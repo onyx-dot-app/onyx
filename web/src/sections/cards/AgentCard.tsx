@@ -1,9 +1,9 @@
 "use client";
 
 import { useMemo, useCallback } from "react";
-import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
+import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { useAppRouter } from "@/hooks/appNavigation";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { usePinnedAgents, useAgent } from "@/hooks/useAgents";
@@ -12,7 +12,7 @@ import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import {
-  checkUserOwnsAssistant,
+  checkUserOwnsAgent,
   updateAgentSharedStatus,
   updateAgentFeaturedStatus,
 } from "@/lib/agents";
@@ -51,7 +51,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
   const { user, isAdmin, isCurator } = useUser();
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
   const canUpdateFeaturedStatus = isAdmin || isCurator;
-  const isOwnedByUser = checkUserOwnsAssistant(user, agent);
+  const isOwnedByUser = checkUserOwnsAgent(user, agent);
   const shareAgentModal = useCreateModal();
   const agentViewerModal = useCreateModal();
   const { agent: fullAgent, refresh: refreshAgent } = useAgent(agent.id);
@@ -117,7 +117,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
           userIds={fullAgent?.users?.map((u) => u.id) ?? []}
           groupIds={fullAgent?.groups ?? []}
           isPublic={fullAgent?.is_public ?? false}
-          isFeatured={fullAgent?.is_default_persona ?? false}
+          isFeatured={fullAgent?.featured ?? false}
           labelIds={fullAgent?.labels?.map((l) => l.id) ?? []}
           onShare={handleShare}
         />
@@ -127,7 +127,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
         {fullAgent && <AgentViewerModal agent={fullAgent} />}
       </agentViewerModal.Provider>
 
-      <Interactive.Base
+      <Interactive.Stateless
         onClick={() => agentViewerModal.toggle(true)}
         group="group/AgentCard"
         variant="none"
@@ -146,17 +146,19 @@ export default function AgentCard({ agent }: AgentCardProps) {
               rightChildren={
                 <>
                   {isOwnedByUser && isPaidEnterpriseFeaturesEnabled && (
+                    // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
                     <IconButton
                       icon={SvgBarChart}
                       tertiary
                       onClick={noProp(() =>
-                        router.push(`/ee/assistants/stats/${agent.id}` as Route)
+                        router.push(`/ee/agents/stats/${agent.id}` as Route)
                       )}
                       tooltip="View Agent Stats"
                       className="hidden group-hover/AgentCard:flex"
                     />
                   )}
                   {isOwnedByUser && (
+                    // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
                     <IconButton
                       icon={SvgEdit}
                       tertiary
@@ -168,6 +170,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
                     />
                   )}
                   {isOwnedByUser && (
+                    // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
                     <IconButton
                       icon={SvgShare}
                       tertiary
@@ -176,6 +179,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
                       className="hidden group-hover/AgentCard:flex"
                     />
                   )}
+                  {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
                   <IconButton
                     icon={pinned ? SvgPinned : SvgPin}
                     tertiary
@@ -219,7 +223,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
             {/* Right side - Start Chat button */}
             <div className="p-0.5">
               <Button
-                tertiary
+                prominence="tertiary"
                 rightIcon={SvgBubbleText}
                 onClick={noProp(handleStartChat)}
               >
@@ -228,7 +232,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
             </div>
           </div>
         </Card>
-      </Interactive.Base>
+      </Interactive.Stateless>
     </>
   );
 }

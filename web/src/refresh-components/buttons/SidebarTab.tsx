@@ -1,107 +1,116 @@
 "use client";
 
 import React from "react";
-import type { IconProps } from "@opal/types";
-import { cn } from "@/lib/utils";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
-import Link from "next/link";
+import type { IconFunctionComponent, IconProps } from "@opal/types";
 import type { Route } from "next";
-import Truncated from "@/refresh-components/texts/Truncated";
+import { Interactive } from "@opal/core";
+import { ContentAction } from "@opal/layouts";
+import Link from "next/link";
+import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 
 export interface SidebarTabProps {
   // Button states:
   folded?: boolean;
-  transient?: boolean;
-  focused?: boolean;
+  selected?: boolean;
   lowlight?: boolean;
   nested?: boolean;
 
   // Button properties:
-  onClick?: React.MouseEventHandler<HTMLDivElement>;
+  onClick?: React.MouseEventHandler<HTMLElement>;
   href?: string;
-  className?: string;
-  leftIcon?: React.FunctionComponent<IconProps>;
-  rightChildren?: React.ReactNode;
+  icon?: React.FunctionComponent<IconProps>;
   children?: React.ReactNode;
+  rightChildren?: React.ReactNode;
 }
 
 export default function SidebarTab({
   folded,
-  transient,
-  focused,
+  selected,
   lowlight,
   nested,
 
   onClick,
   href,
-  className,
-  leftIcon: LeftIcon,
+  icon,
   rightChildren,
   children,
 }: SidebarTabProps) {
-  const variant = lowlight ? "lowlight" : focused ? "focused" : "defaulted";
-  const state = transient ? "active" : "inactive";
+  const Icon =
+    icon ??
+    (nested
+      ? ((() => (
+          <div className="w-6" aria-hidden="true" />
+        )) as IconFunctionComponent)
+      : null);
+
+  // NOTE (@raunakab)
+  //
+  // The `rightChildren` node NEEDS to be absolutely positioned since it needs to live on top of the absolutely positioned `Link`.
+  // However, having the `rightChildren` be absolutely positioned means that it cannot appropriately truncate the title.
+  // Therefore, we add a dummy node solely for the truncation effects that we obtain.
+  const truncationSpacer = rightChildren && (
+    <div className="w-0 group-hover/SidebarTab:w-6" />
+  );
 
   const content = (
-    <div
-      data-state={state}
-      className={cn(
-        "relative flex flex-row justify-start items-start p-1.5 gap-1 rounded-08 cursor-pointer group/SidebarTab w-full select-none",
-        `sidebar-tab-background-${variant}`,
-        className
-      )}
-      onClick={onClick}
-    >
-      {href && (
-        <Link
-          href={href as Route}
-          scroll={false}
-          className="absolute inset-0 rounded-08"
-          tabIndex={-1}
-        />
-      )}
-      <div
-        data-state={state}
-        className={cn(
-          "relative flex-1 h-[1.5rem] flex flex-row items-center px-1 py-0.5 gap-2 justify-start",
-          !focused && "pointer-events-none"
-        )}
+    <div className="relative">
+      <Interactive.Stateful
+        variant="sidebar"
+        state={selected ? "selected" : "empty"}
+        onClick={onClick}
+        group="group/SidebarTab"
       >
-        {nested && !LeftIcon && (
-          <div className="w-4 shrink-0" aria-hidden="true" />
-        )}
-        {LeftIcon && (
-          <div
-            className={cn(
-              "w-[1rem] flex items-center justify-center",
-              !folded && "pointer-events-auto"
-            )}
-          >
-            <LeftIcon
-              data-state={state}
-              className={`h-[1rem] w-[1rem] sidebar-tab-icon-${variant}`}
+        <Interactive.Container
+          roundingVariant="compact"
+          heightVariant="lg"
+          widthVariant="full"
+        >
+          {href && (
+            <Link
+              href={href as Route}
+              scroll={false}
+              className="absolute z-[99] inset-0 rounded-08"
+              tabIndex={-1}
             />
-          </div>
-        )}
-        {!folded &&
-          (typeof children === "string" ? (
-            <Truncated
-              data-state={state}
-              className={`sidebar-tab-text-${variant}`}
-              side="right"
-              sideOffset={40}
-            >
-              {children}
-            </Truncated>
+          )}
+
+          {!folded && rightChildren && (
+            <div className="absolute z-[100] right-1.5 top-0 bottom-0 flex flex-col justify-center items-center pointer-events-auto">
+              {rightChildren}
+            </div>
+          )}
+
+          {typeof children === "string" ? (
+            <ContentAction
+              icon={Icon ?? undefined}
+              title={folded ? "" : children}
+              sizePreset="main-ui"
+              variant="body"
+              prominence={
+                lowlight ? "muted-2x" : selected ? "default" : "muted"
+              }
+              widthVariant="full"
+              paddingVariant="fit"
+              rightChildren={truncationSpacer}
+            />
           ) : (
-            children
-          ))}
-      </div>
-      {!folded && (
-        <div className="relative h-[1.5rem] flex items-center">
-          {rightChildren}
-        </div>
-      )}
+            <div className="flex flex-row items-center gap-2 flex-1">
+              {Icon && (
+                <div className="flex items-center justify-center p-0.5">
+                  <Icon className="h-[1rem] w-[1rem] text-text-03" />
+                </div>
+              )}
+              {children}
+              {
+                // NOTE (@raunakab)
+                //
+                // Adding the `truncationSpacer` here for the same reason as above.
+                truncationSpacer
+              }
+            </div>
+          )}
+        </Interactive.Container>
+      </Interactive.Stateful>
     </div>
   );
 

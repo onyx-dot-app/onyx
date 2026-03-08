@@ -22,7 +22,6 @@ from sqlalchemy.orm import Session
 from slack_sdk.errors import SlackApiError
 
 from onyx.configs.constants import FederatedConnectorSource
-from onyx.context.search.enums import RecencyBiasSetting
 from onyx.context.search.federated.slack_search import fetch_and_cache_channel_metadata
 from onyx.db.models import DocumentSet
 from onyx.db.models import FederatedConnector
@@ -55,11 +54,6 @@ def _create_test_persona_with_slack_config(db_session: Session) -> Persona | Non
     persona = Persona(
         name=f"test_slack_persona_{unique_id}",
         description="Test persona for Slack federated search",
-        chunks_above=0,
-        chunks_below=0,
-        llm_relevance_filter=True,
-        llm_filter_extraction=True,
-        recency_bias=RecencyBiasSetting.AUTO,
         system_prompt="You are a helpful assistant.",
         task_prompt="Answer the user's question based on the provided context.",
     )
@@ -818,11 +812,6 @@ def test_slack_channel_config_eager_loads_persona(db_session: Session) -> None:
     persona = Persona(
         name=f"test_eager_load_persona_{unique_id}",
         description="Test persona for eager loading test",
-        chunks_above=0,
-        chunks_below=0,
-        llm_relevance_filter=True,
-        llm_filter_extraction=True,
-        recency_bias=RecencyBiasSetting.AUTO,
         system_prompt="You are a helpful assistant.",
         task_prompt="Answer the user's question.",
     )

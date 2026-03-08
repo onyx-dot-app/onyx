@@ -6,15 +6,12 @@ import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { adminDeleteCredential } from "@/lib/credential";
 import { setupGoogleDriveOAuth } from "@/lib/googleDrive";
-import {
-  DOCS_ADMINS_PATH,
-  GOOGLE_DRIVE_AUTH_IS_ADMIN_COOKIE_NAME,
-} from "@/lib/constants";
-import Cookies from "js-cookie";
+import { DOCS_ADMINS_PATH } from "@/lib/constants";
 import { TextFormField, SectionHeader } from "@/components/Field";
 import { Form, Formik } from "formik";
 import { User } from "@/lib/types";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import {
   Credential,
   GoogleDriveCredentialJson,
@@ -318,7 +315,7 @@ export const DriveJsonUploadSection = ({
           {isAdmin && !existingAuthCredential && (
             <div className="mt-2">
               <Button
-                danger
+                variant="danger"
                 onClick={async () => {
                   const endpoint =
                     localServiceAccountData?.service_account_email
@@ -471,7 +468,7 @@ export const DriveAuthSection = ({
             </div>
           </div>
           <Button
-            danger
+            variant="danger"
             onClick={async () => {
               handleRevokeAccess(
                 connectorAssociated,
@@ -565,9 +562,11 @@ export const DriveAuthSection = ({
                   subtext="Enter the email of an admin/owner of the Google Organization that owns the Google Drive(s) you want to index."
                 />
                 <div className="flex">
-                  <Button type="submit" disabled={isSubmitting}>
-                    {isSubmitting ? "Creating..." : "Create Credential"}
-                  </Button>
+                  <Disabled disabled={isSubmitting}>
+                    <Button type="submit">
+                      {isSubmitting ? "Creating..." : "Create Credential"}
+                    </Button>
+                  </Disabled>
                 </div>
               </Form>
             )}
@@ -587,39 +586,35 @@ export const DriveAuthSection = ({
             Google Drive account.
           </p>
         </div>
-        <Button
-          disabled={isAuthenticating}
-          onClick={async () => {
-            setIsAuthenticating(true);
-            try {
-              // cookie used by callback to determine where to finally redirect to
-              Cookies.set(GOOGLE_DRIVE_AUTH_IS_ADMIN_COOKIE_NAME, "true", {
-                path: "/",
-              });
+        <Disabled disabled={isAuthenticating}>
+          <Button
+            onClick={async () => {
+              setIsAuthenticating(true);
+              try {
+                const [authUrl, errorMsg] = await setupGoogleDriveOAuth({
+                  isAdmin: true,
+                  name: "OAuth (uploaded)",
+                });
 
-              const [authUrl, errorMsg] = await setupGoogleDriveOAuth({
-                isAdmin: true,
-                name: "OAuth (uploaded)",
-              });
-
-              if (authUrl) {
-                router.push(authUrl as Route);
-              } else {
-                toast.error(errorMsg);
+                if (authUrl) {
+                  router.push(authUrl as Route);
+                } else {
+                  toast.error(errorMsg);
+                  setIsAuthenticating(false);
+                }
+              } catch (error) {
+                toast.error(
+                  `Failed to authenticate with Google Drive - ${error}`
+                );
                 setIsAuthenticating(false);
               }
-            } catch (error) {
-              toast.error(
-                `Failed to authenticate with Google Drive - ${error}`
-              );
-              setIsAuthenticating(false);
-            }
-          }}
-        >
-          {isAuthenticating
-            ? "Authenticating..."
-            : "Authenticate with Google Drive"}
-        </Button>
+            }}
+          >
+            {isAuthenticating
+              ? "Authenticating..."
+              : "Authenticate with Google Drive"}
+          </Button>
+        </Disabled>
       </div>
     );
   }

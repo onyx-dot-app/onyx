@@ -5,22 +5,22 @@ import { useSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { CombinedSettings } from "@/interfaces/settings";
 import { ChatSession } from "@/app/app/interfaces";
-import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
-import { DEFAULT_ASSISTANT_ID } from "@/lib/constants";
+import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
+import { DEFAULT_AGENT_ID } from "@/lib/constants";
 
 /**
  * Determines if the current assistant is the default agent based on:
  * 1. Whether default agent is disabled in settings
- * 2. If URL has an assistantId specified
+ * 2. If URL has an agentId specified
  * 3. Based on the current chat session
  */
 export default function useIsDefaultAgent({
-  liveAssistant,
+  liveAgent,
   existingChatSessionId,
   selectedChatSession,
   settings,
 }: {
-  liveAssistant: MinimalPersonaSnapshot | undefined;
+  liveAgent: MinimalPersonaSnapshot | undefined;
   existingChatSessionId: string | null;
   selectedChatSession: ChatSession | undefined;
   settings: CombinedSettings | null;
@@ -29,15 +29,15 @@ export default function useIsDefaultAgent({
   const urlAssistantId = searchParams?.get(SEARCH_PARAM_NAMES.PERSONA_ID);
 
   return useMemo(() => {
-    // If default assistant is disabled, it can never be the default agent
+    // If default agent is disabled, it can never be the default agent
     if (settings?.settings?.disable_default_assistant) {
       return false;
     }
 
-    // If URL has an assistantId, it's explicitly selected, not default
+    // If URL has an agentId, it's explicitly selected, not default
     if (
       urlAssistantId !== null &&
-      urlAssistantId !== DEFAULT_ASSISTANT_ID.toString()
+      urlAssistantId !== DEFAULT_AGENT_ID.toString()
     ) {
       return false;
     }
@@ -45,7 +45,7 @@ export default function useIsDefaultAgent({
     // If there's an existing chat session with a persona_id, it's not default
     if (
       existingChatSessionId &&
-      selectedChatSession?.persona_id !== DEFAULT_ASSISTANT_ID
+      selectedChatSession?.persona_id !== DEFAULT_AGENT_ID
     ) {
       return false;
     }
@@ -57,6 +57,6 @@ export default function useIsDefaultAgent({
     urlAssistantId,
     existingChatSessionId,
     selectedChatSession?.persona_id,
-    liveAssistant?.id,
+    liveAgent?.id,
   ]);
 }

@@ -5,7 +5,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   MinimalPersonaSnapshot,
   FullPersona,
-} from "@/app/admin/assistants/interfaces";
+} from "@/app/admin/agents/interfaces";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { pinAgents } from "@/lib/agents";
 import { useUser } from "@/providers/UserProvider";
@@ -109,13 +109,11 @@ export function usePinnedAgents() {
   const serverPinnedAgents = useMemo(() => {
     if (agents.length === 0) return [];
 
-    // If pinned_assistants is null/undefined (never set), show default personas
+    // If pinned_assistants is null/undefined (never set), show featured personas
     // If it's an empty array (user explicitly unpinned all), show nothing
     const pinnedIds = user?.preferences.pinned_assistants;
     if (pinnedIds === null || pinnedIds === undefined) {
-      return agents.filter(
-        (agent) => agent.is_default_persona && agent.id !== 0
-      );
+      return agents.filter((agent) => agent.featured && agent.id !== 0);
     }
 
     return pinnedIds
@@ -171,7 +169,7 @@ export function usePinnedAgents() {
 
 /**
  * Hook to determine the currently active agent based on:
- * 1. URL param `assistantId`
+ * 1. URL param `agentId`
  * 2. Chat session's `persona_id`
  * 3. Falls back to null if neither is present
  */

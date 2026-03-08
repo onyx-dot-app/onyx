@@ -92,3 +92,7 @@ class Tool(abc.ABC, Generic[TOverride]):
         **llm_kwargs: Any,
     ) -> ToolResponse:
         raise NotImplementedError
+
+    @classmethod
+    def should_emit_argument_deltas(cls) -> bool:
+        return False

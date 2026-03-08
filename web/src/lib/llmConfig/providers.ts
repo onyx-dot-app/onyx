@@ -12,6 +12,7 @@ import {
   SvgAzure,
   SvgGemini,
   SvgLitellm,
+  SvgLmStudio,
 } from "@opal/icons";
 import { LLMProviderName } from "@/interfaces/llm";
 
@@ -25,6 +26,7 @@ const PROVIDER_ICONS: Record<string, IconFunctionComponent> = {
   [LLMProviderName.OLLAMA_CHAT]: SvgOllama,
   [LLMProviderName.OPENROUTER]: SvgOpenrouter,
   [LLMProviderName.AVIAN]: SvgAvian,
+  [LLMProviderName.LM_STUDIO]: SvgLmStudio,
 
   // fallback
   [LLMProviderName.CUSTOM]: SvgServer,
@@ -40,6 +42,7 @@ const PROVIDER_PRODUCT_NAMES: Record<string, string> = {
   [LLMProviderName.OLLAMA_CHAT]: "Ollama",
   [LLMProviderName.OPENROUTER]: "OpenRouter",
   [LLMProviderName.AVIAN]: "Avian",
+  [LLMProviderName.LM_STUDIO]: "LM Studio",
 
   // fallback
   [LLMProviderName.CUSTOM]: "Custom Models",
@@ -55,6 +58,7 @@ const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
   [LLMProviderName.OLLAMA_CHAT]: "Ollama",
   [LLMProviderName.OPENROUTER]: "OpenRouter",
   [LLMProviderName.AVIAN]: "Avian",
+  [LLMProviderName.LM_STUDIO]: "LM Studio",
 
   // fallback
   [LLMProviderName.CUSTOM]: "Other providers or self-hosted",

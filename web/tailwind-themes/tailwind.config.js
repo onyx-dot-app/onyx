@@ -370,5 +370,12 @@ module.exports = {
     plugin(({ addVariant }) => {
       addVariant("focus-within-nonactive", "&:focus-within:not(:active)");
     }),
+    plugin(({ addUtilities }) => {
+      addUtilities({
+        ".break-anywhere": {
+          "overflow-wrap": "anywhere",
+        },
+      });
+    }),
   ],
 };

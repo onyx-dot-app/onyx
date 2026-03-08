@@ -54,6 +54,7 @@ runs:
       shell: bash
       env:
         RUNS_ON_ECR_CACHE: ${{ inputs.runs-on-ecr-cache }}
+        INTEGRATION_REPOSITORY: ${{ inputs.runs-on-ecr-cache }}
         TAG: nightly-llm-it-${{ inputs.run-id }}
         CACHE_SUFFIX: ${{ steps.format-branch.outputs.cache-suffix }}
         HEAD_SHA: ${{ inputs.github-sha }}

@@ -1,5 +1,6 @@
 import json
 import string
+import time
 from collections.abc import Callable
 from collections.abc import Mapping
 from datetime import datetime
@@ -18,6 +19,7 @@ from onyx.background.celery.tasks.opensearch_migration.transformer import (
 )
 from onyx.configs.app_configs import LOG_VESPA_TIMING_INFORMATION
 from onyx.configs.app_configs import VESPA_LANGUAGE_OVERRIDE
+from onyx.configs.app_configs import VESPA_MIGRATION_REQUEST_TIMEOUT_S
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunkUncleaned
 from onyx.document_index.interfaces import VespaChunkRequest
@@ -338,12 +340,18 @@ def get_all_chunks_paginated(
             params["continuation"] = continuation_token
 
         response: httpx.Response | None = None
+        start_time = time.monotonic()
         try:
-            with get_vespa_http_client() as http_client:
+            with get_vespa_http_client(
+                timeout=VESPA_MIGRATION_REQUEST_TIMEOUT_S
+            ) as http_client:
                 response = http_client.get(url, params=params)
                 response.raise_for_status()
         except httpx.HTTPError as e:
-            error_base = f"Failed to get chunks from Vespa slice {slice_id} with continuation token {continuation_token}."
+            error_base = (
+                f"Failed to get chunks from Vespa slice {slice_id} with continuation token "
+                f"{continuation_token} in {time.monotonic() - start_time:.3f} seconds."
+            )
             logger.exception(
                 f"Request URL: {e.request.url}\n"
                 f"Request Headers: {e.request.headers}\n"

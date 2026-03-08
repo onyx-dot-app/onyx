@@ -19,7 +19,6 @@ import hashlib
 import secrets
 
 from fastapi import Depends
-from fastapi import HTTPException
 from fastapi import Request
 from sqlalchemy.orm import Session
 
@@ -27,6 +26,21 @@ from ee.onyx.db.scim import ScimDAL
 from onyx.auth.utils import get_hashed_bearer_token_from_request
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import ScimToken
+
+
+class ScimAuthError(Exception):
+    """Raised when SCIM bearer token authentication fails.
+
+    Unlike HTTPException, this carries the status and detail so the SCIM
+    exception handler can wrap them in an RFC 7644 §3.12 error envelope
+    with ``schemas`` and ``status`` fields.
+    """
+
+    def __init__(self, status_code: int, detail: str) -> None:
+        self.status_code = status_code
+        self.detail = detail
+        super().__init__(detail)
+
 
 SCIM_TOKEN_PREFIX = "onyx_scim_"
 SCIM_TOKEN_LENGTH = 48
@@ -82,23 +96,14 @@ def verify_scim_token(
     """
     hashed = _get_hashed_scim_token_from_request(request)
     if not hashed:
-        raise HTTPException(
-            status_code=401,
-            detail="Missing or invalid SCIM bearer token",
-        )
+        raise ScimAuthError(401, "Missing or invalid SCIM bearer token")
 
     token = dal.get_token_by_hash(hashed)
 
     if not token:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid SCIM bearer token",
-        )
+        raise ScimAuthError(401, "Invalid SCIM bearer token")
 
     if not token.is_active:
-        raise HTTPException(
-            status_code=401,
-            detail="SCIM token has been revoked",
-        )
+        raise ScimAuthError(401, "SCIM token has been revoked")
 
     return token

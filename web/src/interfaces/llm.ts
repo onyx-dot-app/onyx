@@ -2,6 +2,7 @@ export enum LLMProviderName {
   OPENAI = "openai",
   ANTHROPIC = "anthropic",
   OLLAMA_CHAT = "ollama_chat",
+  LM_STUDIO = "lm_studio",
   AZURE = "azure",
   OPENROUTER = "openrouter",
   AVIAN = "avian",
@@ -89,6 +90,14 @@ export interface BedrockModelResponse {
   supports_image_input: boolean;
 }
 
+export interface LMStudioModelResponse {
+  name: string;
+  display_name: string;
+  max_input_tokens: number | null;
+  supports_image_input: boolean;
+  supports_reasoning: boolean;
+}
+
 export interface DefaultModel {
   provider_id: number;
   model_name: string;
@@ -119,6 +128,15 @@ export interface BedrockFetchParams {
 export interface OllamaFetchParams {
   api_base?: string;
   provider_name?: string;
+  signal?: AbortSignal;
+}
+
+export interface LMStudioFetchParams {
+  api_base?: string;
+  api_key?: string;
+  api_key_changed?: boolean;
+  provider_name?: string;
+  signal?: AbortSignal;
 }
 
 export interface OpenRouterFetchParams {
@@ -134,5 +152,6 @@ export interface VertexAIFetchParams {
 export type FetchModelsParams =
   | BedrockFetchParams
   | OllamaFetchParams
+  | LMStudioFetchParams
   | OpenRouterFetchParams
   | VertexAIFetchParams;

@@ -5,6 +5,7 @@ import InputTypeIn, {
   InputTypeInProps,
 } from "@/refresh-components/inputs/InputTypeIn";
 import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import { noProp } from "@/lib/utils";
 import { SvgEye, SvgEyeClosed } from "@opal/icons";
 
@@ -172,6 +173,7 @@ export default function PasswordInputTypeIn({
 }: PasswordInputTypeInProps) {
   const [isPasswordVisible, setIsPasswordVisible] = React.useState(false);
   const [isFocused, setIsFocused] = React.useState(false);
+  const containerRef = React.useRef<HTMLDivElement>(null);
 
   // Track selection range before changes occur
   const selectionRef = React.useRef<{ start: number; end: number }>({
@@ -192,9 +194,22 @@ export default function PasswordInputTypeIn({
     return realValue;
   };
 
+  const handleContainerFocus = React.useCallback(() => {
+    setIsFocused(true);
+  }, []);
+
+  const handleContainerBlur = React.useCallback(
+    (e: React.FocusEvent<HTMLDivElement>) => {
+      if (containerRef.current?.contains(e.relatedTarget as Node)) {
+        return;
+      }
+      setIsFocused(false);
+    },
+    []
+  );
+
   const handleFocus = React.useCallback(
     (e: React.FocusEvent<HTMLInputElement>) => {
-      setIsFocused(true);
       onFocus?.(e);
     },
     [onFocus]
@@ -202,7 +217,6 @@ export default function PasswordInputTypeIn({
 
   const handleBlur = React.useCallback(
     (e: React.FocusEvent<HTMLInputElement>) => {
-      setIsFocused(false);
       onBlur?.(e);
     },
     [onBlur]
@@ -272,35 +286,43 @@ export default function PasswordInputTypeIn({
       : "Show password";
 
   return (
-    <InputTypeIn
-      ref={ref}
-      value={getDisplayValue()}
-      onChange={handleChange}
-      onFocus={handleFocus}
-      onBlur={handleBlur}
-      onSelect={captureSelection}
-      onKeyDown={captureSelection}
-      variant={disabled ? "disabled" : error ? "error" : undefined}
-      showClearButton={showClearButton}
-      autoComplete="off"
-      data-ph-no-capture
-      rightSection={
-        showToggleButton ? (
-          <Button
-            icon={isRevealed ? SvgEye : SvgEyeClosed}
-            disabled={disabled || effectiveNonRevealable}
-            onClick={noProp(() => setIsPasswordVisible((v) => !v))}
-            type="button"
-            variant={isRevealed ? "action" : undefined}
-            prominence="tertiary"
-            size="sm"
-            tooltipSide="left"
-            tooltip={toggleLabel}
-            aria-label={toggleLabel}
-          />
-        ) : undefined
-      }
-      {...props}
-    />
+    <div
+      ref={containerRef}
+      className="contents"
+      onFocus={handleContainerFocus}
+      onBlur={handleContainerBlur}
+    >
+      <InputTypeIn
+        ref={ref}
+        value={getDisplayValue()}
+        onChange={handleChange}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
+        onSelect={captureSelection}
+        onKeyDown={captureSelection}
+        variant={disabled ? "disabled" : error ? "error" : undefined}
+        showClearButton={showClearButton}
+        autoComplete="off"
+        data-ph-no-capture
+        rightSection={
+          showToggleButton ? (
+            <Disabled disabled={disabled || effectiveNonRevealable}>
+              <Button
+                icon={isRevealed ? SvgEye : SvgEyeClosed}
+                onClick={noProp(() => setIsPasswordVisible((v) => !v))}
+                type="button"
+                variant={isRevealed ? "action" : undefined}
+                prominence="tertiary"
+                size="sm"
+                tooltipSide="left"
+                tooltip={toggleLabel}
+                aria-label={toggleLabel}
+              />
+            </Disabled>
+          ) : undefined
+        }
+        {...props}
+      />
+    </div>
   );
 }

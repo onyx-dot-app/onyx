@@ -28,7 +28,9 @@ postgresql:
 # -- Master toggle for vector database support. When false:
 #   - Sets DISABLE_VECTOR_DB=true on all backend pods
 #   - Skips the indexing model server deployment (embeddings not needed)
-#   - Skips docprocessing and docfetching celery workers
+#   - Skips ALL celery worker deployments (beat, primary, light, heavy,
+#     monitoring, user-file-processing, docprocessing, docfetching) — the
+#     API server handles background work via FastAPI BackgroundTasks
 #   - You should also set vespa.enabled=false and opensearch.enabled=false
 #     to prevent those subcharts from deploying
 vectorDB:
@@ -1259,3 +1261,5 @@ configMap:
   SKIP_USERFILE_THRESHOLD: ""
   # For multi-tenant: comma-separated list of tenant IDs to skip threshold
   SKIP_USERFILE_THRESHOLD_TENANT_IDS: ""
+  # Maximum user upload file size in MB for chat/projects uploads
+  USER_FILE_MAX_UPLOAD_SIZE_MB: ""

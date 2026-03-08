@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AdminPageTitle } from "@/components/admin/Title";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import { getSourceMetadata, isValidSource } from "@/lib/sources";
 import { ConfluenceAccessibleResource, ValidSources } from "@/lib/types";
 import CardSection from "@/components/admin/CardSection";
@@ -259,9 +260,11 @@ export default function OAuthFinalizePage() {
                 )}
                 <br />
                 {!redirectUrl && (
-                  <Button type="submit" disabled={!isValid || isSubmitting}>
-                    {isSubmitting ? "Submitting..." : "Submit"}
-                  </Button>
+                  <Disabled disabled={!isValid || isSubmitting}>
+                    <Button type="submit">
+                      {isSubmitting ? "Submitting..." : "Submit"}
+                    </Button>
+                  </Disabled>
                 )}
               </Form>
             )}

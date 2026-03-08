@@ -1,4 +1,3 @@
-import pytest
 import requests
 
 from tests.integration.common_utils.constants import API_SERVER_URL
@@ -365,7 +364,6 @@ def test_update_contextual_rag_missing_model_name(
     assert "Provider name and model name are required" in response.json()["detail"]
 
 
-@pytest.mark.skip(reason="Set new search settings is temporarily disabled.")
 def test_set_new_search_settings_with_contextual_rag(
     reset: None,  # noqa: ARG001
     admin_user: DATestUser,
@@ -394,7 +392,6 @@ def test_set_new_search_settings_with_contextual_rag(
     _cancel_new_embedding(admin_user)
 
 
-@pytest.mark.skip(reason="Set new search settings is temporarily disabled.")
 def test_set_new_search_settings_without_contextual_rag(
     reset: None,  # noqa: ARG001
     admin_user: DATestUser,
@@ -419,7 +416,6 @@ def test_set_new_search_settings_without_contextual_rag(
     _cancel_new_embedding(admin_user)
 
 
-@pytest.mark.skip(reason="Set new search settings is temporarily disabled.")
 def test_set_new_then_update_inference_settings(
     reset: None,  # noqa: ARG001
     admin_user: DATestUser,
@@ -457,7 +453,6 @@ def test_set_new_then_update_inference_settings(
     _cancel_new_embedding(admin_user)
 
 
-@pytest.mark.skip(reason="Set new search settings is temporarily disabled.")
 def test_set_new_search_settings_replaces_previous_secondary(
     reset: None,  # noqa: ARG001
     admin_user: DATestUser,

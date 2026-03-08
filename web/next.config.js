@@ -8,7 +8,8 @@ const cspHeader = `
     base-uri 'self';
     form-action 'self';
     ${
-      process.env.NEXT_PUBLIC_CLOUD_ENABLED === "true"
+      process.env.NEXT_PUBLIC_CLOUD_ENABLED === "true" &&
+      process.env.NODE_ENV !== "development"
         ? "upgrade-insecure-requests;"
         : ""
     }
@@ -79,6 +80,16 @@ const nextConfig = {
   async rewrites() {
     return [
       {
+        source: "/ph_ingest/static/:path*",
+        destination: "https://us-assets.i.posthog.com/static/:path*",
+      },
+      {
+        source: "/ph_ingest/:path*",
+        destination: `${
+          process.env.NEXT_PUBLIC_POSTHOG_HOST || "https://us.i.posthog.com"
+        }/:path*`,
+      },
+      {
         source: "/api/docs/:path*", // catch /api/docs and /api/docs/...
         destination: `${
           process.env.INTERNAL_URL || "http://localhost:8080"
@@ -120,6 +131,25 @@ const nextConfig = {
       {
         source: "/chat/:path*",
         destination: "/app/:path*",
+        permanent: true,
+      },
+      // Legacy /assistants → /agents redirects (added in PR #8869).
+      // Preserves backward compatibility for bookmarks, shared links, and
+      // hardcoded URLs that still reference the old /assistants paths.
+      // TODO: Remove these redirects in v4.0 — https://linear.app/onyx-app/issue/ENG-3771
+      {
+        source: "/admin/assistants",
+        destination: "/admin/agents",
+        permanent: true,
+      },
+      {
+        source: "/admin/assistants/:path*",
+        destination: "/admin/agents/:path*",
+        permanent: true,
+      },
+      {
+        source: "/ee/assistants/:path*",
+        destination: "/ee/agents/:path*",
         permanent: true,
       },
     ];
