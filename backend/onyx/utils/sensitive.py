@@ -183,7 +183,7 @@ class SensitiveValue(Generic[T]):
         """Hash based on decrypted content."""
         value = self._decrypt()
         if isinstance(value, dict):
-            return hash(tuple(sorted(value.items())))
+            return hash(json.dumps(value, sort_keys=True))
         return hash(value)
 
     # Prevent JSON serialization
