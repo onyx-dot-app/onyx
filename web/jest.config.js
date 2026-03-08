@@ -156,6 +156,7 @@ module.exports = {
         "**/src/app/**/*.test.tsx",
         "**/src/components/**/*.test.tsx",
         "**/src/lib/**/*.test.tsx",
+        "**/src/providers/**/*.test.tsx",
         "**/src/refresh-components/**/*.test.tsx",
         "**/src/hooks/**/*.test.tsx",
         "**/src/sections/**/*.test.tsx",
