@@ -175,6 +175,9 @@ class SensitiveValue(Generic[T]):
 
     def __eq__(self, other: Any) -> bool:
         """Compare SensitiveValues by their decrypted content."""
+        # NOTE: if you attempt to compare a string/dict to a SensitiveValue,
+        # this comparison will return NotImplemented, which then evaluates to False.
+        # This is the convention and required for SQLAlchemy's attribute tracking.
         if not isinstance(other, SensitiveValue):
             return NotImplemented
         return self._decrypt() == other._decrypt()
