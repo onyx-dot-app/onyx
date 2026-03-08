@@ -30,8 +30,36 @@ function uniqueName(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function escapeRegex(input: string): string {
-  return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+function normalizeAlphaNum(input: string): string {
+  return input.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function modelTokenVariants(modelName: string): string[][] {
+  return modelName
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((token) => token.length > 0)
+    .map((token) => {
+      // Display names may shorten long numeric segments to suffixes.
+      if (/^\d+$/.test(token) && token.length > 5) {
+        return [token, token.slice(-5)];
+      }
+      return [token];
+    });
+}
+
+function textMatchesModel(modelName: string, candidateText: string): boolean {
+  const normalizedCandidate = normalizeAlphaNum(candidateText);
+  if (!normalizedCandidate) {
+    return false;
+  }
+
+  const tokenVariants = modelTokenVariants(modelName);
+  return tokenVariants.every((variants) =>
+    variants.some((variant) =>
+      normalizedCandidate.includes(normalizeAlphaNum(variant))
+    )
+  );
 }
 
 async function getAdminLLMProviderResponse(page: Page) {
@@ -155,10 +183,14 @@ async function getModelCountInChatSelector(
   await dialog.waitFor({ state: "visible", timeout: 10000 });
 
   await dialog.getByPlaceholder("Search models...").fill(modelName);
-  const matchingModelOptions = dialog
-    .locator("[data-selected]")
-    .filter({ hasText: new RegExp(`^${escapeRegex(modelName)}$`) });
-  const count = await matchingModelOptions.count();
+  const optionButtons = dialog.getByRole("button");
+  const optionTexts = await optionButtons.allTextContents();
+  const uniqueOptionTexts = Array.from(
+    new Set(optionTexts.map((text) => text.trim()))
+  );
+  const count = uniqueOptionTexts.filter((text) =>
+    textMatchesModel(modelName, text)
+  ).length;
 
   await page.keyboard.press("Escape");
   await dialog.waitFor({ state: "hidden", timeout: 10000 });
