@@ -8,6 +8,7 @@ import { useSlackBot, useSlackChannelConfigsByBot } from "./hooks";
 import { ExistingSlackBotForm } from "../SlackBotUpdateForm";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { SvgSlack } from "@opal/icons";
+import { getErrorMsg } from "@/lib/error";
 
 function SlackBotEditContent({ botId }: { botId: string }) {
   const {
@@ -29,27 +30,23 @@ function SlackBotEditContent({ botId }: { botId: string }) {
   }
 
   if (slackBotError || !slackBot) {
-    const errorMsg =
-      slackBotError?.info?.message ||
-      slackBotError?.info?.detail ||
-      "An unknown error occurred";
     return (
       <ErrorCallout
         errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch Slack Bot ${botId}: ${errorMsg}`}
+        errorMsg={`Failed to fetch Slack Bot ${botId}: ${getErrorMsg(
+          slackBotError
+        )}`}
       />
     );
   }
 
   if (slackChannelConfigsError || !slackChannelConfigs) {
-    const errorMsg =
-      slackChannelConfigsError?.info?.message ||
-      slackChannelConfigsError?.info?.detail ||
-      "An unknown error occurred";
     return (
       <ErrorCallout
         errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch Slack Bot ${botId}: ${errorMsg}`}
+        errorMsg={`Failed to fetch Slack Bot ${botId}: ${getErrorMsg(
+          slackChannelConfigsError
+        )}`}
       />
     );
   }
