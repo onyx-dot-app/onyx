@@ -12,7 +12,7 @@ class _Tokenizer:
         return [1] * len(text)
 
 
-class _NonSeekableFile:
+class _NonSeekableFile(BytesIO):
     def tell(self) -> int:
         raise OSError("tell not supported")
 
