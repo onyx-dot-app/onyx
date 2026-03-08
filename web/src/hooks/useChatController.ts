@@ -1084,10 +1084,15 @@ export default function useChatController({
       if (!cancelled) setAvailableContextTokens(tokens);
     };
 
+    // Prefer the Zustand session ID, but fall back to the URL-derived prop
+    // so we don't incorrectly take the persona path while the store is
+    // still initialising on navigation to an existing chat.
+    const sessionId = currentSessionId || existingChatSessionId;
+
     (async () => {
       try {
-        if (currentSessionId) {
-          const available = await getAvailableContextTokens(currentSessionId);
+        if (sessionId) {
+          const available = await getAvailableContextTokens(sessionId);
           setIfActive(available ?? DEFAULT_CONTEXT_TOKENS);
           return;
         }
@@ -1100,7 +1105,8 @@ export default function useChatController({
 
         const maxTokens = await getMaxSelectedDocumentTokens(personaId);
         setIfActive(maxTokens ?? DEFAULT_CONTEXT_TOKENS);
-      } catch {
+      } catch (e) {
+        console.error("Failed to fetch available context tokens:", e);
         setIfActive(DEFAULT_CONTEXT_TOKENS);
       }
     })();
@@ -1108,7 +1114,12 @@ export default function useChatController({
     return () => {
       cancelled = true;
     };
-  }, [currentSessionId, liveAgent?.id, llmManager.hasAnyProvider]);
+  }, [
+    currentSessionId,
+    existingChatSessionId,
+    liveAgent?.id,
+    llmManager.hasAnyProvider,
+  ]);
 
   // check if there's an image file in the message history so that we know
   // which LLMs are available to use
