@@ -59,8 +59,8 @@ const columns = [
   }),
   tc.column("email", {
     header: "Name",
-    weight: 25,
-    minWidth: 180,
+    weight: 22,
+    minWidth: 160,
     cell: (value, row) => (
       <Content
         sizePreset="main-ui"
@@ -107,8 +107,8 @@ const columns = [
   }),
   tc.column("role", {
     header: "Account Type",
-    weight: 18,
-    minWidth: 120,
+    weight: 16,
+    minWidth: 100,
     cell: (value) => {
       const Icon = ROLE_ICONS[value];
       return (
@@ -155,7 +155,7 @@ const columns = [
 // Component
 // ---------------------------------------------------------------------------
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 8;
 
 export default function UsersTable() {
   const [searchTerm, setSearchTerm] = useState("");
