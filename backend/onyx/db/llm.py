@@ -276,13 +276,18 @@ def upsert_llm_provider(
         for mc in llm_provider_upsert_request.model_configurations
     }
 
+    # Delete removed models
+    removed_ids = [
+        mc.id for name, mc in existing_by_name.items() if name not in models_to_exist
+    ]
+
     default_model = fetch_default_llm_model(db_session)
 
     # Prevent removing and hiding the default model
     if default_model:
         for name, mc in existing_by_name.items():
             if mc.id == default_model.id:
-                if name not in models_to_exist:
+                if default_model.id in removed_ids:
                     raise ValueError(
                         f"Cannot remove the default model '{name}'. "
                         "Please change the default model before removing."
@@ -293,11 +298,6 @@ def upsert_llm_provider(
                         "Please change the default model before hiding."
                     )
                 break
-
-    # Delete removed models
-    removed_ids = [
-        mc.id for name, mc in existing_by_name.items() if name not in models_to_exist
-    ]
 
     if removed_ids:
         db_session.query(ModelConfiguration).filter(
