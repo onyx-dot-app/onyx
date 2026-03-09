@@ -280,6 +280,16 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         TIMESTAMPAware(timezone=True), nullable=True
     )
 
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
     default_model: Mapped[str] = mapped_column(Text, nullable=True)
     # organized in typical structured fashion
     # formatted as `displayName__provider__modelName`
