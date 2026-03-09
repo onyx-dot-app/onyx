@@ -182,7 +182,7 @@ export default function ActionsPopover({
   const { llmProviders, isLoading: isLLMLoading } = useLLMProviders(
     selectedAgent.id
   );
-  const hasAnyProvider = isLLMLoading || (llmProviders?.length ?? 0) > 0;
+  const hasAnyProvider = !isLLMLoading && (llmProviders?.length ?? 0) > 0;
 
   // Use the OAuth hook
   const { getToolAuthStatus, authenticateTool } = useToolOAuthStatus(
