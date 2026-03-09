@@ -2,7 +2,6 @@ import contextvars
 import threading
 import uuid
 from enum import Enum
-from typing import cast
 
 import requests
 
@@ -15,8 +14,8 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import User
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
+from onyx.key_value_store.interface import unwrap_str
 from onyx.utils.logger import setup_logger
-from onyx.utils.special_types import JSON_ro
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation_with_fallback,
 )
@@ -25,14 +24,6 @@ from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
-
-
-def _unwrap_str(val: JSON_ro) -> str:
-    """Unwrap a string stored as {"value": str} in the KV store.
-    Also handles legacy plain-string values cached in Redis."""
-    if isinstance(val, dict):
-        return cast(str, val["value"])
-    return cast(str, val)
 
 
 _DANSWER_TELEMETRY_ENDPOINT = "https://telemetry.onyx.app/anonymous_telemetry"
@@ -72,7 +63,7 @@ def get_or_generate_uuid() -> str:
     kv_store = get_kv_store()
 
     try:
-        _CACHED_UUID = _unwrap_str(kv_store.load(KV_CUSTOMER_UUID_KEY))
+        _CACHED_UUID = unwrap_str(kv_store.load(KV_CUSTOMER_UUID_KEY))
     except KvKeyNotFoundError:
         _CACHED_UUID = str(uuid.uuid4())
         kv_store.store(KV_CUSTOMER_UUID_KEY, {"value": _CACHED_UUID}, encrypt=True)
@@ -89,7 +80,7 @@ def _get_or_generate_instance_domain() -> str | None:  #
     kv_store = get_kv_store()
 
     try:
-        _CACHED_INSTANCE_DOMAIN = _unwrap_str(kv_store.load(KV_INSTANCE_DOMAIN_KEY))
+        _CACHED_INSTANCE_DOMAIN = unwrap_str(kv_store.load(KV_INSTANCE_DOMAIN_KEY))
     except KvKeyNotFoundError:
         with get_session_with_current_tenant() as db_session:
             first_user = db_session.query(User).first()

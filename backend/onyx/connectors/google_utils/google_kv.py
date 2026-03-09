@@ -44,6 +44,7 @@ from onyx.connectors.google_utils.shared_constants import (
 from onyx.db.credentials import update_credential_json
 from onyx.db.models import User
 from onyx.key_value_store.factory import get_kv_store
+from onyx.key_value_store.interface import unwrap_str
 from onyx.server.documents.models import CredentialBase
 from onyx.server.documents.models import GoogleAppCredentials
 from onyx.server.documents.models import GoogleServiceAccountKey
@@ -89,8 +90,7 @@ def _get_current_oauth_user(creds: OAuthCredentials, source: DocumentSource) -> 
 
 
 def verify_csrf(credential_id: int, state: str) -> None:
-    loaded = get_kv_store().load(KV_CRED_KEY.format(str(credential_id)))
-    csrf = loaded["value"] if isinstance(loaded, dict) else loaded
+    csrf = unwrap_str(get_kv_store().load(KV_CRED_KEY.format(str(credential_id))))
     if csrf != state:
         raise PermissionError(
             "State from Google Drive Connector callback does not match expected"
