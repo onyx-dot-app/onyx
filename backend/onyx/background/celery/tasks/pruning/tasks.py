@@ -693,19 +693,27 @@ def connector_pruning_generator_task(
                 source=source,
                 commit=True,
             )
-            reparented = reparent_orphaned_hierarchy_nodes(
+            reparented_nodes = reparent_orphaned_hierarchy_nodes(
                 db_session=db_session,
                 source=source,
                 commit=True,
             )
             if deleted_raw_ids:
                 evict_hierarchy_nodes_from_cache(redis_client, source, deleted_raw_ids)
-            if stale_removed or deleted_raw_ids or reparented:
+            if reparented_nodes:
+                reparented_cache_entries = [
+                    HierarchyNodeCacheEntry.from_db_model(node)
+                    for node in reparented_nodes
+                ]
+                cache_hierarchy_nodes_batch(
+                    redis_client, source, reparented_cache_entries
+                )
+            if stale_removed or deleted_raw_ids or reparented_nodes:
                 task_logger.info(
                     f"Hierarchy node pruning: cc_pair={cc_pair_id} "
                     f"stale_entries_removed={stale_removed} "
                     f"nodes_deleted={len(deleted_raw_ids)} "
-                    f"nodes_reparented={reparented}"
+                    f"nodes_reparented={len(reparented_nodes)}"
                 )
     except Exception as e:
         task_logger.exception(

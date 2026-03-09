@@ -4,7 +4,6 @@ from collections import defaultdict
 
 from sqlalchemy import delete
 from sqlalchemy import select
-from sqlalchemy import update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -14,7 +13,6 @@ from onyx.db.enums import HierarchyNodeType
 from onyx.db.models import Document
 from onyx.db.models import HierarchyNode
 from onyx.db.models import HierarchyNodeByConnectorCredentialPair
-from onyx.db.utils import model_to_dict
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 
@@ -642,17 +640,17 @@ def upsert_hierarchy_node_cc_pair_entries(
     if not hierarchy_node_ids:
         return
 
-    values = [
-        model_to_dict(
-            HierarchyNodeByConnectorCredentialPair(
-                hierarchy_node_id=node_id,
-                connector_id=connector_id,
-                credential_id=credential_id,
-            )
-        )
-        for node_id in hierarchy_node_ids
-    ]
-    stmt = pg_insert(HierarchyNodeByConnectorCredentialPair).values(values)
+    _M = HierarchyNodeByConnectorCredentialPair
+    stmt = pg_insert(_M).values(
+        [
+            {
+                _M.hierarchy_node_id: node_id,
+                _M.connector_id: connector_id,
+                _M.credential_id: credential_id,
+            }
+            for node_id in hierarchy_node_ids
+        ]
+    )
     stmt = stmt.on_conflict_do_nothing()
     db_session.execute(stmt)
 
@@ -670,6 +668,10 @@ def remove_stale_hierarchy_node_cc_pair_entries(
     commit: bool = True,
 ) -> int:
     """Delete join-table rows for this cc_pair that are NOT in the live set.
+
+    If ``live_hierarchy_node_ids`` is empty ALL rows for the cc_pair are deleted
+    (i.e. the connector no longer has any hierarchy nodes). Callers that want a
+    no-op when there are no live nodes must guard before calling.
 
     Returns the number of deleted rows.
     """
@@ -741,33 +743,34 @@ def reparent_orphaned_hierarchy_nodes(
     db_session: Session,
     source: DocumentSource,
     commit: bool = True,
-) -> int:
+) -> list[HierarchyNode]:
     """Re-parent hierarchy nodes whose parent_id is NULL to the SOURCE node.
 
     After pruning deletes stale nodes, their former children get parent_id=NULL
     via the SET NULL cascade. This function points them back to the SOURCE root.
 
-    Returns the number of re-parented nodes.
+    Returns the reparented HierarchyNode objects (with updated parent_id)
+    so callers can refresh downstream caches.
     """
     source_node = get_source_hierarchy_node(db_session, source)
     if not source_node:
-        return 0
+        return []
 
-    stmt = (
-        update(HierarchyNode)
-        .where(
-            HierarchyNode.source == source,
-            HierarchyNode.parent_id.is_(None),
-            HierarchyNode.node_type != HierarchyNodeType.SOURCE,
-        )
-        .values(parent_id=source_node.id)
+    stmt = select(HierarchyNode).where(
+        HierarchyNode.source == source,
+        HierarchyNode.parent_id.is_(None),
+        HierarchyNode.node_type != HierarchyNodeType.SOURCE,
     )
-    result = db_session.execute(stmt)
-    updated = result.rowcount  # type: ignore[assignment]
+    orphans = list(db_session.execute(stmt).scalars().all())
+    if not orphans:
+        return []
+
+    for node in orphans:
+        node.parent_id = source_node.id
 
     if commit:
         db_session.commit()
-    elif updated:
+    else:
         db_session.flush()
 
-    return updated
+    return orphans

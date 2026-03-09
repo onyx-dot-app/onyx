@@ -800,7 +800,7 @@ def test_reparent_orphaned_children(db_session: Session) -> None:
         source=TEST_SOURCE,
         commit=True,
     )
-    assert reparented == 1
+    assert len(reparented) == 1
 
     db_session.expire_all()
     child_db = get_hierarchy_node_by_raw_id(db_session, "CHILD", TEST_SOURCE)

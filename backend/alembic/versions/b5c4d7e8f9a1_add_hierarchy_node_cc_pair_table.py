@@ -27,13 +27,11 @@ def upgrade() -> None:
             ondelete="CASCADE",
         ),
         sa.ForeignKeyConstraint(
-            ["connector_id"],
-            ["connector.id"],
-            ondelete="CASCADE",
-        ),
-        sa.ForeignKeyConstraint(
-            ["credential_id"],
-            ["credential.id"],
+            ["connector_id", "credential_id"],
+            [
+                "connector_credential_pair.connector_id",
+                "connector_credential_pair.credential_id",
+            ],
             ondelete="CASCADE",
         ),
         sa.PrimaryKeyConstraint("hierarchy_node_id", "connector_id", "credential_id"),

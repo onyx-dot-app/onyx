@@ -221,9 +221,7 @@ def evict_hierarchy_nodes_from_cache(
 
     # Look up node_ids so we can remove them from the parent-chain hash
     node_id_strs = [
-        v
-        for rid in raw_node_ids
-        if (v := redis_client.hget(raw_id_key, rid)) is not None
+        v for v in redis_client.hmget(raw_id_key, raw_node_ids) if v is not None
     ]
 
     if node_id_strs:

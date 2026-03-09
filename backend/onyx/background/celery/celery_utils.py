@@ -123,8 +123,7 @@ def _extract_from_batch(
                 f"Failed to retrieve document {failed_id}: " f"{item.failure_message}"
             )
         else:
-            parent_raw = getattr(item, "parent_hierarchy_raw_node_id", None)
-            ids[item.id] = parent_raw
+            ids[item.id] = item.parent_hierarchy_raw_node_id
     return BatchResult(raw_id_to_parent=ids, hierarchy_nodes=hierarchy_nodes)
 
 

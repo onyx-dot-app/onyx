@@ -25,6 +25,7 @@ from sqlalchemy import desc
 from sqlalchemy import Enum
 from sqlalchemy import Float
 from sqlalchemy import ForeignKey
+from sqlalchemy import ForeignKeyConstraint
 from sqlalchemy import func
 from sqlalchemy import Index
 from sqlalchemy import Integer
@@ -2437,14 +2438,18 @@ class HierarchyNodeByConnectorCredentialPair(Base):
     hierarchy_node_id: Mapped[int] = mapped_column(
         ForeignKey("hierarchy_node.id", ondelete="CASCADE"), primary_key=True
     )
-    connector_id: Mapped[int] = mapped_column(
-        ForeignKey("connector.id", ondelete="CASCADE"), primary_key=True
-    )
-    credential_id: Mapped[int] = mapped_column(
-        ForeignKey("credential.id", ondelete="CASCADE"), primary_key=True
-    )
+    connector_id: Mapped[int] = mapped_column(primary_key=True)
+    credential_id: Mapped[int] = mapped_column(primary_key=True)
 
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["connector_id", "credential_id"],
+            [
+                "connector_credential_pair.connector_id",
+                "connector_credential_pair.credential_id",
+            ],
+            ondelete="CASCADE",
+        ),
         Index(
             "ix_hierarchy_node_cc_pair_connector_credential",
             "connector_id",
