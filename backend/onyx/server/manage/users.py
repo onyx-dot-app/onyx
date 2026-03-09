@@ -5,6 +5,7 @@ from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
 from typing import cast
+from uuid import UUID
 
 import jwt
 from email_validator import EmailNotValidError
@@ -18,6 +19,7 @@ from fastapi import Query
 from fastapi import Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.auth.anonymous_user import fetch_anonymous_user_info
@@ -209,6 +211,18 @@ def list_accepted_users(
     user_ids = [user.id for user in filtered_accepted_users]
     groups_by_user = batch_get_user_groups(db_session, user_ids)
 
+    # Batch-fetch SCIM mappings to mark synced users
+    scim_synced_ids: set[UUID] = set()
+    try:
+        from onyx.db.models import ScimUserMapping
+
+        scim_mappings = db_session.scalars(
+            select(ScimUserMapping.user_id).where(ScimUserMapping.user_id.in_(user_ids))
+        ).all()
+        scim_synced_ids = set(scim_mappings)
+    except Exception:
+        pass
+
     return PaginatedReturn(
         items=[
             FullUserSnapshot.from_user_model(
@@ -217,6 +231,7 @@ def list_accepted_users(
                     UserGroupInfo(id=gid, name=gname)
                     for gid, gname in groups_by_user.get(user.id, [])
                 ],
+                is_scim_synced=user.id in scim_synced_ids,
             )
             for user in filtered_accepted_users
         ],

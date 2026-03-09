@@ -10,6 +10,7 @@ export interface UserRow {
   email: string;
   role: UserRole;
   is_active: boolean;
+  is_scim_synced: boolean;
   personal_name: string | null;
   created_at: string;
   updated_at: string;

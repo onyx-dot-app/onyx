@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql import expression
 from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.sql.elements import KeyedColumnElement
+from sqlalchemy.sql.expression import or_
 
 from onyx.auth.invited_users import remove_user_from_invited_users
 from onyx.auth.schemas import UserRole
@@ -163,7 +164,13 @@ def _get_accepted_user_where_clause(
         where_clause.append(User.role != UserRole.EXT_PERM_USER)
 
     if email_filter_string is not None:
-        where_clause.append(email_col.ilike(f"%{email_filter_string}%"))
+        personal_name_col: KeyedColumnElement[Any] = User.__table__.c.personal_name
+        where_clause.append(
+            or_(
+                email_col.ilike(f"%{email_filter_string}%"),
+                personal_name_col.ilike(f"%{email_filter_string}%"),
+            )
+        )
 
     if roles_filter:
         where_clause.append(User.role.in_(roles_filter))

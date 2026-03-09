@@ -5,12 +5,13 @@ import type { SortingState } from "@tanstack/react-table";
 import DataTable from "@/refresh-components/table/DataTable";
 import { createTableColumns } from "@/refresh-components/table/columns";
 import { Content } from "@opal/layouts";
-import { Tag } from "@opal/components";
-import { USER_ROLE_LABELS } from "@/lib/types";
+import { USER_ROLE_LABELS, UserRole } from "@/lib/types";
 import { timeAgo } from "@/lib/time";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import useAdminUsers from "@/hooks/useAdminUsers";
+import { SvgUser, SvgUsers, SvgSlack } from "@opal/icons";
+import type { IconFunctionComponent } from "@opal/types";
 import type { UserRow } from "./interfaces";
 
 // ---------------------------------------------------------------------------
@@ -34,13 +35,15 @@ function getInitials(name: string | null, email: string): string {
   return local.slice(0, 2).toUpperCase();
 }
 
-function statusLabel(isActive: boolean): string {
-  return isActive ? "Active" : "Inactive";
-}
-
-function statusColor(isActive: boolean): "green" | "gray" {
-  return isActive ? "green" : "gray";
-}
+const ROLE_ICONS: Record<UserRole, IconFunctionComponent> = {
+  [UserRole.BASIC]: SvgUser,
+  [UserRole.ADMIN]: SvgUser,
+  [UserRole.GLOBAL_CURATOR]: SvgUsers,
+  [UserRole.CURATOR]: SvgUsers,
+  [UserRole.LIMITED]: SvgUser,
+  [UserRole.EXT_PERM_USER]: SvgUser,
+  [UserRole.SLACK_USER]: SvgSlack,
+};
 
 // ---------------------------------------------------------------------------
 // Columns (stable reference — defined at module scope)
@@ -55,7 +58,7 @@ const columns = [
     selectable: false,
   }),
   tc.column("email", {
-    header: "User",
+    header: "Name",
     weight: 25,
     minWidth: 180,
     cell: (value, row) => (
@@ -84,7 +87,14 @@ const columns = [
       return (
         <div className="flex items-center gap-1 flex-wrap">
           {visible.map((g) => (
-            <Tag key={g.id} title={g.name} />
+            <span
+              key={g.id}
+              className="inline-flex items-center rounded-md bg-background-tint-02 px-2 py-0.5"
+            >
+              <Text as="span" secondaryBody text03>
+                {g.name}
+              </Text>
+            </span>
           ))}
           {overflow > 0 && (
             <Text as="span" secondaryBody text03>
@@ -99,21 +109,33 @@ const columns = [
     header: "Account Type",
     weight: 18,
     minWidth: 120,
-    cell: (value) => (
-      <Content
-        sizePreset="main-ui"
-        variant="body"
-        title={USER_ROLE_LABELS[value] ?? value}
-        prominence="muted"
-      />
-    ),
+    cell: (value) => {
+      const Icon = ROLE_ICONS[value];
+      return (
+        <div className="flex items-center gap-1.5">
+          {Icon && <Icon size={14} className="text-text-03 shrink-0" />}
+          <Text as="span" mainUiBody text03>
+            {USER_ROLE_LABELS[value] ?? value}
+          </Text>
+        </div>
+      );
+    },
   }),
   tc.column("is_active", {
     header: "Status",
     weight: 15,
     minWidth: 100,
-    cell: (value) => (
-      <Tag title={statusLabel(value)} color={statusColor(value)} />
+    cell: (value, row) => (
+      <div className="flex flex-col">
+        <Text as="span" mainUiBody text03>
+          {value ? "Active" : "Inactive"}
+        </Text>
+        {row.is_scim_synced && (
+          <Text as="span" secondaryBody text03>
+            SCIM synced
+          </Text>
+        )}
+      </div>
     ),
   }),
   tc.column("updated_at", {
@@ -154,7 +176,7 @@ export default function UsersTable() {
           setSearchTerm(e.target.value);
           setPageIndex(0);
         }}
-        placeholder="Search users by email..."
+        placeholder="Search users..."
         leftSearchIcon
       />
       <DataTable
