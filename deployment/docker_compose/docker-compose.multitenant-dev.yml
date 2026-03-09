@@ -558,3 +558,5 @@ volumes:
   model_cache_huggingface:
   indexing_huggingface_model_cache:
   # mcp_server_logs:
+  # Persistent data for OpenSearch.
+  opensearch-data:

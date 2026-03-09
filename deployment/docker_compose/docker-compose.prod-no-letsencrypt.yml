@@ -393,3 +393,5 @@ volumes:
   # mcp_server_logs:
   # Shared volume for persistent document storage (Craft file-system mode)
   file-system:
+  # Persistent data for OpenSearch.
+  opensearch-data:
