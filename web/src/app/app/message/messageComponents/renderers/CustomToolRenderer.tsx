@@ -22,16 +22,29 @@ import hljs from "highlight.js/lib/core";
 import json from "highlight.js/lib/languages/json";
 import FadingEdgeContainer from "@/refresh-components/FadingEdgeContainer";
 
-// Register JSON language for highlighting
-hljs.registerLanguage("json", json);
+// Lazy registration guard for hljs JSON language
+let hljsRegistered = false;
+function ensureHljsRegistered() {
+  if (!hljsRegistered) {
+    hljs.registerLanguage("json", json);
+    hljsRegistered = true;
+  }
+}
 
 // Component to render syntax-highlighted JSON
-function HighlightedJsonCode({ code }: { code: string }) {
+interface HighlightedJsonCodeProps {
+  code: string;
+}
+function HighlightedJsonCode({ code }: HighlightedJsonCodeProps) {
   const highlightedHtml = useMemo(() => {
+    ensureHljsRegistered();
     try {
       return hljs.highlight(code, { language: "json" }).value;
     } catch {
-      return code;
+      return code
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
     }
   }, [code]);
 
@@ -121,116 +134,135 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
 
   const icon = SvgActions;
 
-  const content = (
-    <div className="flex flex-col gap-3">
-      {/* Loading indicator */}
-      {isRunning &&
-        !error &&
-        !fileIds &&
-        (data === undefined || data === null) && (
-          <div className="flex items-center gap-2 text-sm text-text-03">
-            <div className="flex gap-0.5">
-              <div className="w-1 h-1 bg-current rounded-full animate-pulse"></div>
-              <div
-                className="w-1 h-1 bg-current rounded-full animate-pulse"
-                style={{ animationDelay: "0.1s" }}
-              ></div>
-              <div
-                className="w-1 h-1 bg-current rounded-full animate-pulse"
-                style={{ animationDelay: "0.2s" }}
-              ></div>
+  const toolArgsJson = useMemo(
+    () => (toolArgs ? JSON.stringify(toolArgs, null, 2) : null),
+    [toolArgs]
+  );
+  const dataJson = useMemo(
+    () =>
+      data !== undefined && data !== null && typeof data === "object"
+        ? JSON.stringify(data, null, 2)
+        : null,
+    [data]
+  );
+
+  const content = useMemo(
+    () => (
+      <div className="flex flex-col gap-3">
+        {/* Loading indicator */}
+        {isRunning &&
+          !error &&
+          !fileIds &&
+          (data === undefined || data === null) && (
+            <div className="flex items-center gap-2 text-sm text-text-03">
+              <div className="flex gap-0.5">
+                <div className="w-1 h-1 bg-current rounded-full animate-pulse"></div>
+                <div
+                  className="w-1 h-1 bg-current rounded-full animate-pulse"
+                  style={{ animationDelay: "0.1s" }}
+                ></div>
+                <div
+                  className="w-1 h-1 bg-current rounded-full animate-pulse"
+                  style={{ animationDelay: "0.2s" }}
+                ></div>
+              </div>
+              <Text text03 secondaryBody>
+                Waiting for response...
+              </Text>
             </div>
-            <span>Waiting for response...</span>
+          )}
+
+        {/* Tool arguments */}
+        {toolArgsJson && (
+          <div>
+            <div className="flex items-center gap-1">
+              <SvgArrowExchange className="w-3 h-3 text-text-02" />
+              <Text text04 secondaryBody>
+                Request
+              </Text>
+            </div>
+            <div className="prose max-w-full">
+              <CodeBlock
+                className="font-secondary-mono"
+                codeText={toolArgsJson}
+                noPadding
+              >
+                <HighlightedJsonCode code={toolArgsJson} />
+              </CodeBlock>
+            </div>
           </div>
         )}
 
-      {/* Tool arguments */}
-      {toolArgs && Object.keys(toolArgs).length > 0 && (
-        <div>
-          <div className="flex items-center gap-1">
-            <SvgArrowExchange className="w-3 h-3 text-text-02" />
-            <Text text04 secondaryBody>
-              Request
+        {/* Error display */}
+        {error && (
+          <div className="pl-[var(--timeline-common-text-padding)]">
+            <Text text03 mainUiMuted>
+              {error.message}
             </Text>
           </div>
-          <div className="prose max-w-full">
-            <CodeBlock
-              className="font-secondary-mono"
-              codeText={JSON.stringify(toolArgs, null, 2)}
-              noPadding
-            >
-              <HighlightedJsonCode code={JSON.stringify(toolArgs, null, 2)} />
-            </CodeBlock>
+        )}
+
+        {/* File responses */}
+        {!error && fileIds && fileIds.length > 0 && (
+          <div className="text-sm text-text-03 flex flex-col gap-2">
+            {fileIds.map((fid, idx) => (
+              <div key={fid} className="flex items-center gap-2 flex-wrap">
+                <Text text03 secondaryBody className="whitespace-nowrap">
+                  File {idx + 1}
+                </Text>
+                <a
+                  href={buildImgUrl(fid)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-xs text-action-link-01 hover:underline whitespace-nowrap"
+                >
+                  <SvgExternalLink className="w-3 h-3" /> Open
+                </a>
+                <a
+                  href={buildImgUrl(fid)}
+                  download
+                  className="inline-flex items-center gap-1 text-xs text-action-link-01 hover:underline whitespace-nowrap"
+                >
+                  <SvgDownload className="w-3 h-3" /> Download
+                </a>
+              </div>
+            ))}
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Error display */}
-      {error && (
-        <div className="pl-[var(--timeline-common-text-padding)]">
-          <Text text03 mainUiMuted>
-            {error.message}
-          </Text>
-        </div>
-      )}
-
-      {/* File responses */}
-      {!error && fileIds && fileIds.length > 0 && (
-        <div className="text-sm text-text-03 flex flex-col gap-2">
-          {fileIds.map((fid, idx) => (
-            <div key={fid} className="flex items-center gap-2 flex-wrap">
-              <span className="whitespace-nowrap">File {idx + 1}</span>
-              <a
-                href={buildImgUrl(fid)}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1 text-xs text-action-link-01 hover:underline whitespace-nowrap"
-              >
-                <SvgExternalLink className="w-3 h-3" /> Open
-              </a>
-              <a
-                href={buildImgUrl(fid)}
-                download
-                className="inline-flex items-center gap-1 text-xs text-action-link-01 hover:underline whitespace-nowrap"
-              >
-                <SvgDownload className="w-3 h-3" /> Download
-              </a>
+        {/* JSON/Text responses */}
+        {!error && data !== undefined && data !== null && (
+          <div>
+            <div className="flex items-center gap-1">
+              <SvgArrowExchange className="w-3 h-3 text-text-02" />
+              <Text text04 secondaryBody>
+                Response
+              </Text>
             </div>
-          ))}
-        </div>
-      )}
-
-      {/* JSON/Text responses */}
-      {!error && data !== undefined && data !== null && (
-        <div>
-          <div className="flex items-center gap-1">
-            <SvgArrowExchange className="w-3 h-3 text-text-02" />
-            <Text text04 secondaryBody>
-              Response
-            </Text>
+            <div className="prose max-w-full">
+              {dataJson ? (
+                <CodeBlock
+                  className="font-secondary-mono"
+                  codeText={dataJson}
+                  noPadding
+                >
+                  <HighlightedJsonCode code={dataJson} />
+                </CodeBlock>
+              ) : (
+                <CodeBlock
+                  className="font-secondary-mono"
+                  codeText={String(data)}
+                  noPadding
+                >
+                  {String(data)}
+                </CodeBlock>
+              )}
+            </div>
           </div>
-          <div className="prose max-w-full">
-            {typeof data === "object" ? (
-              <CodeBlock
-                className="font-secondary-mono"
-                codeText={JSON.stringify(data, null, 2)}
-                noPadding
-              >
-                <HighlightedJsonCode code={JSON.stringify(data, null, 2)} />
-              </CodeBlock>
-            ) : (
-              <CodeBlock
-                className="font-secondary-mono"
-                codeText={String(data)}
-                noPadding
-              >
-                {String(data)}
-              </CodeBlock>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+    ),
+    [toolArgsJson, dataJson, data, fileIds, error, isRunning]
   );
 
   // Auth error: always render FULL with error surface

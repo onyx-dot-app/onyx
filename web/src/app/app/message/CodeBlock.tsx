@@ -93,7 +93,7 @@ export const CodeBlock = memo(function CodeBlock({
             noPadding ? "!py-2 !pr-2" : "!p-2"
           )}
         >
-          <code className={`text-sm hljs ${className}`}>
+          <code className={cn("text-sm hljs", className)}>
             {Array.isArray(children)
               ? children.map((child, index) => (
                   <MemoizedCodeLine key={index} content={child} />
