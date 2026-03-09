@@ -1,13 +1,12 @@
 import json
 from collections import defaultdict
 from typing import Any
+from urllib.parse import urlparse
+from urllib.parse import urlunparse
 
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing_extensions import override
-
-from urllib.parse import urlparse
-from urllib.parse import urlunparse
 
 from onyx.chat.emitter import Emitter
 from onyx.context.search.models import IndexFilters
