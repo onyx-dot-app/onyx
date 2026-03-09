@@ -25,8 +25,8 @@ export const textVariant: PreviewVariant = {
     const lowerName = (name || "").toLowerCase();
     return TEXT_EXTENSIONS.some((extension) => lowerName.endsWith(extension));
   },
-  width: "lg",
-  height: "full",
+  width: "md",
+  height: "lg",
   needsTextContent: true,
   headerDescription: (ctx) =>
     ctx.fileContent
@@ -35,7 +35,9 @@ export const textVariant: PreviewVariant = {
         }`
       : "",
 
-  renderContent: (ctx) => <CodePreview content={ctx.fileContent} />,
+  renderContent: (ctx) => (
+    <CodePreview content={ctx.fileContent} language={ctx.language} />
+  ),
 
   renderFooterLeft: (ctx) => (
     <Text text03 mainUiBody className="select-none">

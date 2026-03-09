@@ -1,6 +1,7 @@
 "use client";
 
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
+import "@/app/app/message/custom-code-styles.css";
 
 interface CodePreviewProps {
   content: string;
