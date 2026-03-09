@@ -26,6 +26,10 @@ async def search_indexed_documents(
     Use this tool for information that is not public knowledge and specific to the user,
     their team, their work, or their organization/company.
 
+    Note: This tool uses the chat endpoint internally which invokes an LLM on every
+    call, consuming tokens and adding latency. To be replaced when a CE-compatible
+    pure-search endpoint is available.
+
     To find a list of available sources, use the `indexed_sources` resource.
     Returns chunks of text as search results with snippets, scores, and metadata.
 
