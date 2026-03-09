@@ -149,8 +149,10 @@ async def search_indexed_documents(
             }
             for doc in result.get("top_documents", [])
         ]
-               
-        # Limit results to requested amount
+
+        # NOTE: search depth is controlled by the backend persona defaults, not `limit`.
+        # `limit` only caps the returned list; fewer results may be returned if the
+        # backend retrieves fewer documents than requested.
         documents = documents[:limit]
 
         logger.info(
