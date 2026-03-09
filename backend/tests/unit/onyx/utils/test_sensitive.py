@@ -147,15 +147,18 @@ class TestSensitiveValueString:
         )
         assert sensitive1 != sensitive2
 
-    def test_equality_with_non_sensitive_raises(self) -> None:
-        """Test that comparing with non-SensitiveValue raises error."""
+    def test_equality_with_non_sensitive_returns_not_equal(self) -> None:
+        """Test that comparing with non-SensitiveValue is always not-equal.
+
+        Returns NotImplemented so Python falls back to identity comparison.
+        This is required for compatibility with SQLAlchemy's attribute tracking.
+        """
         sensitive = SensitiveValue(
             encrypted_bytes=_encrypt_string("secret"),
             decrypt_fn=_decrypt_string,
             is_json=False,
         )
-        with pytest.raises(SensitiveAccessError):
-            _ = sensitive == "secret"
+        assert not (sensitive == "secret")
 
 
 class TestSensitiveValueJson:
