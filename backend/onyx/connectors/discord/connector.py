@@ -1,4 +1,5 @@
 import asyncio
+from collections.abc import AsyncGenerator
 from collections.abc import AsyncIterable
 from collections.abc import Iterable
 from datetime import datetime
@@ -204,7 +205,7 @@ def _manage_async_retrieval(
 
     end_time: datetime | None = end
 
-    async def _async_fetch() -> AsyncIterable[Document]:
+    async def _async_fetch() -> AsyncGenerator[Document, None]:
         intents = Intents.default()
         intents.message_content = True
         async with Client(intents=intents) as discord_client:
@@ -229,10 +230,9 @@ def _manage_async_retrieval(
         loop = asyncio.new_event_loop()
         async_gen = _async_fetch()
         try:
-            async_iter = async_gen.__aiter__()
             while True:
                 try:
-                    doc = loop.run_until_complete(anext(async_iter))
+                    doc = loop.run_until_complete(anext(async_gen))
                     yield doc
                 except StopAsyncIteration:
                     break
