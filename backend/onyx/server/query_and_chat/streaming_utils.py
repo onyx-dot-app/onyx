@@ -9,6 +9,7 @@ from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.query_and_chat.streaming_models import CustomToolDelta
+from onyx.server.query_and_chat.streaming_models import CustomToolErrorInfo
 from onyx.server.query_and_chat.streaming_models import CustomToolStart
 from onyx.server.query_and_chat.streaming_models import GeneratedImage
 from onyx.server.query_and_chat.streaming_models import ImageGenerationFinal
@@ -171,6 +172,7 @@ def create_custom_tool_packets(
     turn_index: int,
     data: dict | list | str | int | float | bool | None = None,
     file_ids: list[str] | None = None,
+    error: CustomToolErrorInfo | None = None,
 ) -> list[Packet]:
     packets: list[Packet] = []
 
@@ -189,6 +191,7 @@ def create_custom_tool_packets(
                 response_type=response_type,
                 data=data,
                 file_ids=file_ids,
+                error=error,
             ),
         ),
     )

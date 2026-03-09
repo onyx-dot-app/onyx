@@ -16,6 +16,7 @@ from onyx.configs.constants import FileOrigin
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import CustomToolDelta
+from onyx.server.query_and_chat.streaming_models import CustomToolErrorInfo
 from onyx.server.query_and_chat.streaming_models import CustomToolStart
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.tools.interface import Tool
@@ -180,6 +181,18 @@ class CustomTool(Tool[None]):
         )
         content_type = response.headers.get("Content-Type", "")
 
+        # Detect HTTP errors — only 401/403 are flagged as auth errors
+        error_info: CustomToolErrorInfo | None = None
+        if response.status_code in (401, 403):
+            error_info = CustomToolErrorInfo(
+                is_auth_error=True,
+                status_code=response.status_code,
+                message=f"Authentication error: received HTTP {response.status_code} from {self._name}",
+            )
+            logger.warning(
+                f"Auth error from custom tool '{self._name}': HTTP {response.status_code}"
+            )
+
         tool_result: Any
         response_type: str
         file_ids: List[str] | None = None
@@ -225,6 +238,7 @@ class CustomTool(Tool[None]):
                     response_type=response_type,
                     data=data,
                     file_ids=file_ids,
+                    error=error_info,
                 ),
             )
         )
@@ -236,6 +250,7 @@ class CustomTool(Tool[None]):
                 tool_name=self._name,
                 response_type=response_type,
                 tool_result=tool_result,
+                error=error_info,
             ),
             llm_facing_response=llm_facing_response,
         )

@@ -248,6 +248,12 @@ class CustomToolStart(BaseObj):
     tool_name: str
 
 
+class CustomToolErrorInfo(BaseModel):
+    is_auth_error: bool = False
+    status_code: int
+    message: str
+
+
 # The allowed streamed packets for a custom tool
 class CustomToolDelta(BaseObj):
     type: Literal["custom_tool_delta"] = StreamingType.CUSTOM_TOOL_DELTA.value
@@ -258,6 +264,7 @@ class CustomToolDelta(BaseObj):
     data: dict | list | str | int | float | bool | None = None
     # For file-based responses like image/csv
     file_ids: list[str] | None = None
+    error: CustomToolErrorInfo | None = None
 
 
 class ToolCallArgumentDelta(BaseObj):
