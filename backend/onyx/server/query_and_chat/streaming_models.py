@@ -247,6 +247,7 @@ class CustomToolStart(BaseObj):
     type: Literal["custom_tool_start"] = StreamingType.CUSTOM_TOOL_START.value
 
     tool_name: str
+    tool_id: int | None = None
 
 
 class CustomToolArgs(BaseObj):
@@ -267,6 +268,7 @@ class CustomToolDelta(BaseObj):
     type: Literal["custom_tool_delta"] = StreamingType.CUSTOM_TOOL_DELTA.value
 
     tool_name: str
+    tool_id: int | None = None
     response_type: str
     # For non-file responses
     data: dict | list | str | int | float | bool | None = None

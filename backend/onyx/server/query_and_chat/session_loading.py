@@ -184,13 +184,14 @@ def create_custom_tool_packets(
     file_ids: list[str] | None = None,
     error: CustomToolErrorInfo | None = None,
     tool_args: dict[str, object] | None = None,
+    tool_id: int | None = None,
 ) -> list[Packet]:
     packets: list[Packet] = []
 
     packets.append(
         Packet(
             placement=Placement(turn_index=turn_index, tab_index=tab_index),
-            obj=CustomToolStart(tool_name=tool_name),
+            obj=CustomToolStart(tool_name=tool_name, tool_id=tool_id),
         )
     )
 
@@ -207,6 +208,7 @@ def create_custom_tool_packets(
             placement=Placement(turn_index=turn_index, tab_index=tab_index),
             obj=CustomToolDelta(
                 tool_name=tool_name,
+                tool_id=tool_id,
                 response_type=response_type,
                 data=data,
                 file_ids=file_ids,
@@ -705,6 +707,7 @@ def translate_assistant_message_to_packets(
                                 data=custom_data,
                                 error=custom_error,
                                 tool_args=custom_args if custom_args else None,
+                                tool_id=tool_call.tool_id,
                             )
                         )
 
