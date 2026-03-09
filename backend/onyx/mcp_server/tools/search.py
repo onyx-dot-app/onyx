@@ -28,9 +28,12 @@ async def search_indexed_documents(
     their team, their work, or their organization/company.
 
     Note: In CE mode, this tool uses the chat endpoint internally which invokes an LLM
-    on every call, consuming tokens and adding latency. In EE mode, a dedicated search
-    endpoint is used instead. CE mode functionality should be swapped when
-    new CE search endpoint is implemented.
+    on every call, consuming tokens and adding latency.
+    Additionally, CE callers receive a truncated snippet (blurb) instead of a full document chunk,
+    but this should still be sufficient for most use cases. CE mode functionality should be swapped
+    when a dedicated CE search endpoint is implemented.
+
+    In EE mode, the dedicated search endpoint is used instead.
 
     To find a list of available sources, use the `indexed_sources` resource.
     Returns chunks of text as search results with snippets, scores, and metadata.
@@ -137,7 +140,7 @@ async def search_indexed_documents(
         content_field = "content"
     else:
         # CE: fall back to the chat endpoint (invokes LLM, consumes tokens)
-        search_request = {
+        search_request: dict[str, Any] = {
             "message": query,
             "stream": False,
             "chat_session_info": {},
