@@ -21,6 +21,7 @@ from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.query_and_chat.streaming_models import CustomToolDelta
+from onyx.server.query_and_chat.streaming_models import CustomToolErrorInfo
 from onyx.server.query_and_chat.streaming_models import CustomToolStart
 from onyx.server.query_and_chat.streaming_models import FileReaderResult
 from onyx.server.query_and_chat.streaming_models import FileReaderStart
@@ -180,6 +181,7 @@ def create_custom_tool_packets(
     tab_index: int = 0,
     data: dict | list | str | int | float | bool | None = None,
     file_ids: list[str] | None = None,
+    error: CustomToolErrorInfo | None = None,
 ) -> list[Packet]:
     packets: list[Packet] = []
 
@@ -198,6 +200,7 @@ def create_custom_tool_packets(
                 response_type=response_type,
                 data=data,
                 file_ids=file_ids,
+                error=error,
             ),
         ),
     )
@@ -657,13 +660,35 @@ def translate_assistant_message_to_packets(
 
                     else:
                         # Custom tool or unknown tool
+                        # Try to parse as structured CustomToolCallSummary JSON
+                        custom_data: dict | list | str | int | float | bool | None = (
+                            tool_call.tool_call_response
+                        )
+                        custom_error: CustomToolErrorInfo | None = None
+                        custom_response_type = "text"
+
+                        try:
+                            parsed = json.loads(tool_call.tool_call_response)
+                            if isinstance(parsed, dict) and "tool_name" in parsed:
+                                custom_data = parsed.get("tool_result")
+                                custom_response_type = parsed.get(
+                                    "response_type", "text"
+                                )
+                                if parsed.get("error"):
+                                    custom_error = CustomToolErrorInfo(
+                                        **parsed["error"]
+                                    )
+                        except (json.JSONDecodeError, KeyError, TypeError):
+                            pass
+
                         turn_tool_packets.extend(
                             create_custom_tool_packets(
                                 tool_name=tool.display_name or tool.name,
-                                response_type="text",
+                                response_type=custom_response_type,
                                 turn_index=turn_num,
                                 tab_index=tool_call.tab_index,
-                                data=tool_call.tool_call_response,
+                                data=custom_data,
+                                error=custom_error,
                             )
                         )
 

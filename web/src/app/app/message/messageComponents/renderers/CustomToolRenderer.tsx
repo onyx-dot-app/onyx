@@ -5,6 +5,7 @@ import {
   CustomToolPacket,
   CustomToolStart,
   CustomToolDelta,
+  CustomToolErrorInfo,
   SectionEnd,
 } from "../../../services/streamingModels";
 import { MessageRenderer, RenderType } from "../interfaces";
@@ -27,6 +28,7 @@ function constructCustomToolState(packets: CustomToolPacket[]) {
   const responseType = latestDelta?.response_type || null;
   const data = latestDelta?.data;
   const fileIds = latestDelta?.file_ids || null;
+  const error = latestDelta?.error || null;
 
   const isRunning = Boolean(toolStart && !toolEnd);
   const isComplete = Boolean(toolStart && toolEnd);
@@ -36,6 +38,7 @@ function constructCustomToolState(packets: CustomToolPacket[]) {
     responseType,
     data,
     fileIds,
+    error,
     isRunning,
     isComplete,
   };
@@ -47,8 +50,15 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
   renderType,
   children,
 }) => {
-  const { toolName, responseType, data, fileIds, isRunning, isComplete } =
-    constructCustomToolState(packets);
+  const {
+    toolName,
+    responseType,
+    data,
+    fileIds,
+    error,
+    isRunning,
+    isComplete,
+  } = constructCustomToolState(packets);
 
   useEffect(() => {
     if (isComplete) {
@@ -58,13 +68,18 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
 
   const status = useMemo(() => {
     if (isComplete) {
+      if (error) {
+        return error.is_auth_error
+          ? `${toolName} authentication failed (HTTP ${error.status_code})`
+          : `${toolName} completed`;
+      }
       if (responseType === "image") return `${toolName} returned images`;
       if (responseType === "csv") return `${toolName} returned a file`;
       return `${toolName} completed`;
     }
     if (isRunning) return `${toolName} running...`;
     return null;
-  }, [toolName, responseType, isComplete, isRunning]);
+  }, [toolName, responseType, error, isComplete, isRunning]);
 
   const icon = FiTool;
 
@@ -88,6 +103,15 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
       supportsCollapsible: true,
       content: (
         <div className="flex flex-col gap-3">
+          {/* Error display */}
+          {error && (
+            <div className="text-xs p-3 rounded border border-status-error-02 bg-status-error-01 text-status-error-03">
+              {error.is_auth_error
+                ? `Authentication error: ${toolName} returned HTTP ${error.status_code}. Please check the tool's credentials or API key configuration.`
+                : error.message}
+            </div>
+          )}
+
           {/* File responses */}
           {fileIds && fileIds.length > 0 && (
             <div className="text-sm text-muted-foreground flex flex-col gap-2">
@@ -98,14 +122,14 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
                     href={buildImgUrl(fid)}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline whitespace-nowrap"
+                    className="inline-flex items-center gap-1 text-xs text-action-link-01 hover:underline whitespace-nowrap"
                   >
                     <FiExternalLink className="w-3 h-3" /> Open
                   </a>
                   <a
                     href={buildImgUrl(fid)}
                     download
-                    className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline whitespace-nowrap"
+                    className="inline-flex items-center gap-1 text-xs text-action-link-01 hover:underline whitespace-nowrap"
                   >
                     <FiDownload className="w-3 h-3" /> Download
                   </a>
@@ -116,14 +140,14 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
 
           {/* JSON/Text responses */}
           {data !== undefined && data !== null && (
-            <div className="text-xs bg-gray-50 dark:bg-gray-800 p-3 rounded border max-h-96 overflow-y-auto font-mono whitespace-pre-wrap break-all">
+            <div className="text-xs bg-background-neutral-02 p-3 rounded border border-border-01 max-h-96 overflow-y-auto font-mono whitespace-pre-wrap break-all">
               {typeof data === "string" ? data : JSON.stringify(data, null, 2)}
             </div>
           )}
 
           {/* Show placeholder if no response data yet */}
           {!fileIds && (data === undefined || data === null) && isRunning && (
-            <div className="text-xs text-gray-500 italic">
+            <div className="text-xs text-text-03 italic">
               Waiting for response...
             </div>
           )}

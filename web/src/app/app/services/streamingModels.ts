@@ -178,6 +178,12 @@ export interface FetchToolDocuments extends BaseObj {
 }
 
 // Custom Tool Packets
+export interface CustomToolErrorInfo {
+  is_auth_error: boolean;
+  status_code: number;
+  message: string;
+}
+
 export interface CustomToolStart extends BaseObj {
   type: "custom_tool_start";
   tool_name: string;
@@ -189,6 +195,7 @@ export interface CustomToolDelta extends BaseObj {
   response_type: string;
   data?: any;
   file_ids?: string[] | null;
+  error?: CustomToolErrorInfo | null;
 }
 
 // File Reader Packets

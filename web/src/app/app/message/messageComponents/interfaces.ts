@@ -51,6 +51,8 @@ export interface RendererResult {
   alwaysCollapsible?: boolean;
   /** Whether the result should be wrapped by timeline UI or rendered as-is */
   timelineLayout?: TimelineLayout;
+  /** Remove right padding for long-form content (reasoning, deep research, memory). */
+  noPaddingRight?: boolean;
 }
 
 // All renderers return an array of results (even single-step renderers return a 1-element array)
