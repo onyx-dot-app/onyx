@@ -842,22 +842,12 @@ def sync_auto_mode_models(
     # Update the default if this provider currently holds the global CHAT default
     recommended_default = llm_recommendations.get_default_model(provider.provider)
     if recommended_default:
-        current_default_name = db_session.scalar(
-            select(ModelConfiguration.name)
-            .join(
-                LLMModelFlow,
-                LLMModelFlow.model_configuration_id == ModelConfiguration.id,
-            )
-            .where(
-                ModelConfiguration.llm_provider_id == provider.id,
-                LLMModelFlow.llm_model_flow_type == LLMModelFlowType.CHAT,
-                LLMModelFlow.is_default == True,  # noqa: E712
-            )
-        )
+        current_default = fetch_default_llm_model(db_session)
 
         if (
-            current_default_name is not None
-            and current_default_name != recommended_default.name
+            current_default
+            and current_default.llm_provider_id == provider.id
+            and current_default.name != recommended_default.name
         ):
             try:
                 _update_default_model(
