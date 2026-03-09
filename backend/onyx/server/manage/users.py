@@ -23,9 +23,11 @@ from sqlalchemy.orm import Session
 from onyx.auth.anonymous_user import fetch_anonymous_user_info
 from onyx.auth.email_utils import send_user_email_invite
 from onyx.auth.invited_users import get_invited_users
+from onyx.auth.invited_users import get_pending_users
 from onyx.auth.invited_users import remove_user_from_invited_users
 from onyx.auth.invited_users import write_invited_users
 from onyx.auth.schemas import UserRole
+from onyx.auth.schemas import UserStatus
 from onyx.auth.users import anonymous_user_enabled
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_curator_or_admin_user
@@ -99,6 +101,7 @@ from onyx.server.manage.models import UserSpecificAssistantPreferences
 from onyx.server.models import FullUserSnapshot
 from onyx.server.models import InvitedUserSnapshot
 from onyx.server.models import MinimalUserSnapshot
+from onyx.server.models import UnifiedUserSnapshot
 from onyx.server.models import UserGroupInfo
 from onyx.server.usage_limits import is_tenant_on_trial_fn
 from onyx.server.utils import BasicAuthenticationError
@@ -237,6 +240,131 @@ def list_invited_users(
     ]
 
     return [InvitedUserSnapshot(email=email) for email in filtered_invited_emails]
+
+
+@router.get("/manage/users/all", tags=PUBLIC_API_TAGS)
+def list_all_users_unified(
+    q: str | None = Query(default=None),
+    page_num: int = Query(0, ge=0),
+    page_size: int = Query(10, ge=1, le=1000),
+    roles: list[UserRole] = Query(default=[]),
+    statuses: list[UserStatus] = Query(default=[]),
+    _: User = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
+) -> PaginatedReturn[UnifiedUserSnapshot]:
+    """Unified user listing that includes accepted, invited, and pending users.
+
+    When ``statuses`` is empty, all statuses are included.  The accepted users
+    (active / inactive) are always server-paginated.  Invited and pending users
+    are small KV-store lists appended to the result set.
+
+    Pagination strategy:
+    - When filtering to *only* DB-backed statuses (active/inactive): standard
+      server-side pagination via ``get_page_of_filtered_users``.
+    - When filtering to *only* KV-backed statuses (invited/requested): the full
+      list is returned (these lists are always small) with client-side paging.
+    - When showing all / mixed: DB users are paginated first. Once all DB pages
+      are exhausted, invited and pending users are appended on the last page.
+    """
+
+    include_all = len(statuses) == 0
+    include_active = include_all or UserStatus.ACTIVE in statuses
+    include_inactive = include_all or UserStatus.INACTIVE in statuses
+    include_invited = include_all or UserStatus.INVITED in statuses
+    include_requested = include_all or UserStatus.REQUESTED in statuses
+    include_db_users = include_active or include_inactive
+
+    items: list[UnifiedUserSnapshot] = []
+    total_db_count = 0
+
+    # ── DB users (active / inactive) ──────────────────────────────────────
+    if include_db_users:
+        is_active_filter: bool | None = None
+        if include_active and not include_inactive:
+            is_active_filter = True
+        elif include_inactive and not include_active:
+            is_active_filter = False
+
+        db_users = get_page_of_filtered_users(
+            db_session=db_session,
+            page_size=page_size,
+            page_num=page_num,
+            email_filter_string=q,
+            is_active_filter=is_active_filter,
+            roles_filter=roles,
+        )
+        total_db_count = get_total_filtered_users_count(
+            db_session=db_session,
+            email_filter_string=q,
+            is_active_filter=is_active_filter,
+            roles_filter=roles,
+        )
+
+        if db_users:
+            user_ids = [user.id for user in db_users]
+            groups_by_user = batch_get_user_groups(db_session, user_ids)
+
+            items.extend(
+                UnifiedUserSnapshot.from_user_model(
+                    user,
+                    groups=[
+                        UserGroupInfo(id=gid, name=gname)
+                        for gid, gname in groups_by_user.get(user.id, [])
+                    ],
+                )
+                for user in db_users
+            )
+
+    # ── KV-store users (invited / pending) ────────────────────────────────
+    # These are always small lists, so we collect them all and apply search
+    # filtering client-side.  They are appended after all DB pages exhaust.
+
+    kv_items: list[UnifiedUserSnapshot] = []
+
+    if include_invited:
+        invited_emails = get_invited_users()
+        # Exclude emails that already have a DB account
+        active_emails = {user.email for user in get_all_users(db_session)}
+        invited_emails = [e for e in invited_emails if e not in active_emails]
+        if q:
+            q_lower = q.lower()
+            invited_emails = [e for e in invited_emails if q_lower in e.lower()]
+        kv_items.extend(
+            UnifiedUserSnapshot.from_invited_email(email) for email in invited_emails
+        )
+
+    if include_requested:
+        pending_emails = get_pending_users()
+        if q:
+            q_lower = q.lower()
+            pending_emails = [e for e in pending_emails if q_lower in e.lower()]
+        kv_items.extend(
+            UnifiedUserSnapshot.from_pending_email(email) for email in pending_emails
+        )
+
+    total_kv_count = len(kv_items)
+    total_items = total_db_count + total_kv_count
+
+    # If we're only showing KV users (no DB statuses selected), paginate
+    # the KV list directly.
+    if not include_db_users:
+        start = page_num * page_size
+        end = start + page_size
+        return PaginatedReturn(
+            items=kv_items[start:end],
+            total_items=total_items,
+        )
+
+    # For mixed mode: append KV users on the last page of DB results
+    # (i.e. when the current page is past or at the end of DB results).
+    db_pages_exhausted = (page_num + 1) * page_size >= total_db_count
+    if db_pages_exhausted and kv_items:
+        items.extend(kv_items)
+
+    return PaginatedReturn(
+        items=items,
+        total_items=total_items,
+    )
 
 
 @router.get("/manage/users", tags=PUBLIC_API_TAGS)

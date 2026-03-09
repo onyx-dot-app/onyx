@@ -7,6 +7,7 @@ from uuid import UUID
 from pydantic import BaseModel
 
 from onyx.auth.schemas import UserRole
+from onyx.auth.schemas import UserStatus
 from onyx.db.models import User
 
 
@@ -69,6 +70,71 @@ class FullUserSnapshot(BaseModel):
 
 class DisplayPriorityRequest(BaseModel):
     display_priority_map: dict[int, int]
+
+
+class UnifiedUserSnapshot(BaseModel):
+    """A user row that can represent accepted, invited, or pending users."""
+
+    id: UUID | None
+    email: str
+    role: UserRole | None
+    status: UserStatus
+    is_active: bool
+    password_configured: bool
+    personal_name: str | None
+    created_at: datetime.datetime | None
+    updated_at: datetime.datetime | None
+    groups: list[UserGroupInfo]
+
+    @classmethod
+    def from_user_model(
+        cls,
+        user: User,
+        groups: list[UserGroupInfo] | None = None,
+    ) -> "UnifiedUserSnapshot":
+        status = UserStatus.ACTIVE if user.is_active else UserStatus.INACTIVE
+        return cls(
+            id=user.id,
+            email=user.email,
+            role=user.role,
+            status=status,
+            is_active=user.is_active,
+            password_configured=user.password_configured,
+            personal_name=user.personal_name,
+            created_at=user.created_at,
+            updated_at=user.updated_at,
+            groups=groups or [],
+        )
+
+    @classmethod
+    def from_invited_email(cls, email: str) -> "UnifiedUserSnapshot":
+        return cls(
+            id=None,
+            email=email,
+            role=None,
+            status=UserStatus.INVITED,
+            is_active=False,
+            password_configured=False,
+            personal_name=None,
+            created_at=None,
+            updated_at=None,
+            groups=[],
+        )
+
+    @classmethod
+    def from_pending_email(cls, email: str) -> "UnifiedUserSnapshot":
+        return cls(
+            id=None,
+            email=email,
+            role=None,
+            status=UserStatus.REQUESTED,
+            is_active=False,
+            password_configured=False,
+            personal_name=None,
+            created_at=None,
+            updated_at=None,
+            groups=[],
+        )
 
 
 class InvitedUserSnapshot(BaseModel):

@@ -35,6 +35,15 @@ class UserRole(str, Enum):
         ]
 
 
+class UserStatus(str, Enum):
+    """Status of a user across all data sources (DB + KV store)."""
+
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+    INVITED = "invited"
+    REQUESTED = "requested"
+
+
 class UserRead(schemas.BaseUser[uuid.UUID]):
     role: UserRole
 
