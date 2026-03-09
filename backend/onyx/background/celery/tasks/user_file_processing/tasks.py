@@ -15,6 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
+from onyx.access.access import get_access_for_user_files
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.celery_redis import celery_get_queue_length
 from onyx.background.celery.celery_utils import httpx_init_vespa_pool
@@ -821,8 +822,6 @@ def project_sync_user_file_impl(
                     RetryDocumentIndex(document_index)
                     for document_index in document_indices
                 ]
-
-                from onyx.access.access import get_access_for_user_files
 
                 project_ids = [project.id for project in user_file.projects]
                 persona_ids = [p.id for p in user_file.assistants if not p.deleted]

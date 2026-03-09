@@ -1,8 +1,8 @@
-from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.external_perm import fetch_external_groups_for_user
 from ee.onyx.db.external_perm import fetch_public_external_group_ids
+from ee.onyx.db.user_group import fetch_user_group_names_for_user_files
 from ee.onyx.db.user_group import fetch_user_groups_for_documents
 from ee.onyx.db.user_group import fetch_user_groups_for_user
 from ee.onyx.external_permissions.sync_params import get_source_perm_sync_config
@@ -18,9 +18,7 @@ from onyx.access.utils import prefix_external_group
 from onyx.access.utils import prefix_user_group
 from onyx.db.document import get_document_sources
 from onyx.db.document import get_documents_by_ids
-from onyx.db.models import Persona
 from onyx.db.models import User
-from onyx.db.models import UserFile
 from onyx.utils.logger import setup_logger
 
 
@@ -132,24 +130,7 @@ def get_access_for_user_files_impl(
     NOTE: is imported in onyx.access.access by `fetch_versioned_implementation`
     DO NOT REMOVE."""
     mit_access = get_access_for_user_files_without_groups(user_file_ids, db_session)
-
-    user_files = (
-        db_session.query(UserFile)
-        .options(
-            joinedload(UserFile.assistants).joinedload(Persona.groups),
-        )
-        .filter(UserFile.id.in_(user_file_ids))
-        .all()
-    )
-    file_to_groups: dict[str, set[str]] = {}
-    for user_file in user_files:
-        groups: set[str] = set()
-        for persona in user_file.assistants:
-            if persona.deleted:
-                continue
-            for group in persona.groups:
-                groups.add(group.name)
-        file_to_groups[str(user_file.id)] = groups
+    file_to_groups = fetch_user_group_names_for_user_files(user_file_ids, db_session)
 
     result: dict[str, DocumentAccess] = {}
     for file_id, access in mit_access.items():

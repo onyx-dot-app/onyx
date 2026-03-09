@@ -2,6 +2,7 @@ from collections.abc import Callable
 from typing import cast
 
 from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
 from onyx.access.models import DocumentAccess
@@ -147,7 +148,10 @@ def get_access_for_user_files_impl(
         db_session.query(UserFile)
         .options(
             joinedload(UserFile.user),
-            joinedload(UserFile.assistants).joinedload(Persona.users),
+            joinedload(UserFile.assistants).options(
+                selectinload(Persona.users),
+                selectinload(Persona.user),
+            ),
         )
         .filter(UserFile.id.in_(user_file_ids))
         .all()

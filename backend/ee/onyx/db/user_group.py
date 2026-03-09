@@ -9,6 +9,7 @@ from sqlalchemy import Select
 from sqlalchemy import select
 from sqlalchemy import update
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
@@ -882,3 +883,34 @@ def delete_user_group_cc_pair_relationship__no_commit(
         UserGroup__ConnectorCredentialPair.cc_pair_id == cc_pair_id,
     )
     db_session.execute(delete_stmt)
+
+
+def fetch_user_group_names_for_user_files(
+    user_file_ids: list[str],
+    db_session: Session,
+) -> dict[str, set[str]]:
+    """Return {user_file_id: {group_name, ...}} for the given user files.
+
+    Group names are derived from non-deleted personas that are shared with
+    user groups via the persona ↔ user-group association."""
+    from onyx.db.models import UserFile
+
+    user_files = (
+        db_session.query(UserFile)
+        .options(
+            joinedload(UserFile.assistants).joinedload(Persona.groups),
+        )
+        .filter(UserFile.id.in_(user_file_ids))
+        .all()
+    )
+
+    file_to_groups: dict[str, set[str]] = {}
+    for user_file in user_files:
+        groups: set[str] = set()
+        for persona in user_file.assistants:
+            if persona.deleted:
+                continue
+            for group in persona.groups:
+                groups.add(group.name)
+        file_to_groups[str(user_file.id)] = groups
+    return file_to_groups
