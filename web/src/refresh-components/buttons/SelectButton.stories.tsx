@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import SelectButton from "./SelectButton";
-import { SvgFilter, SvgSettings, SvgChevronDownSmall } from "@opal/icons";
+import { SvgFilter, SvgSettings } from "@opal/icons";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 
 const meta: Meta<typeof SelectButton> = {
