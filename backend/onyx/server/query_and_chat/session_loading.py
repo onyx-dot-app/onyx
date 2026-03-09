@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 from typing import cast
 from typing import Literal
 
@@ -183,7 +184,7 @@ def create_custom_tool_packets(
     data: dict | list | str | int | float | bool | None = None,
     file_ids: list[str] | None = None,
     error: CustomToolErrorInfo | None = None,
-    tool_args: dict[str, object] | None = None,
+    tool_args: dict[str, Any] | None = None,
     tool_id: int | None = None,
 ) -> list[Packet]:
     packets: list[Packet] = []
