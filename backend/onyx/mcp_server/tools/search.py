@@ -111,20 +111,19 @@ async def search_indexed_documents(
         if time_cutoff_dt:
             filters["time_cutoff"] = time_cutoff_dt.isoformat()
 
-    # Build the search request using the new SendSearchQueryRequest format
-    search_request = {
-        "search_query": query,
-        "filters": filters,
-        "num_docs_fed_to_llm_selection": limit,
-        "run_query_expansion": False,
-        "include_content": True,
+    # Build the search request using SendMessageRequest format (CE-compatible)
+    # /search/send-search-message is EE-only; /chat/send-chat-message works in all editions
+    search_request: dict = {
+        "message": query,
         "stream": False,
+        "chat_session_info": {},
     }
+    if filters:
+        search_request["internal_search_filters"] = filters
 
-    # Call the API server using the new send-search-message route
     try:
         response = await get_http_client().post(
-            f"{build_api_server_url_for_http_requests(respect_env_override_if_set=True)}/search/send-search-message",
+            f"{build_api_server_url_for_http_requests(respect_env_override_if_set=True)}/chat/send-chat-message",
             json=search_request,
             headers={"Authorization": f"Bearer {access_token.token}"},
         )
@@ -140,7 +139,7 @@ async def search_indexed_documents(
                 "error": result.get("error"),
             }
 
-        # Return simplified format for MCP clients
+        # Extract search docs from chat response
         fields_to_return = [
             "semantic_identifier",
             "content",
@@ -150,8 +149,10 @@ async def search_indexed_documents(
         ]
         documents = [
             {key: doc.get(key) for key in fields_to_return}
-            for doc in result.get("search_docs", [])
+            for doc in result.get("top_documents", [])
         ]
+        # Limit results to requested amount
+        documents = documents[:limit]
 
         logger.info(
             f"Onyx MCP Server: Internal search returned {len(documents)} results"
@@ -169,7 +170,6 @@ async def search_indexed_documents(
             "documents": [],
             "query": query,
         }
-
 
 @mcp_server.tool()
 async def search_web(
