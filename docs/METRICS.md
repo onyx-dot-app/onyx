@@ -182,15 +182,22 @@ Always-on, sub-microsecond overhead per request (single `psutil` syscall).
 
 | Metric | Type | Labels | Description |
 |--------|------|--------|-------------|
-| `onyx_api_request_rss_delta_bytes` | Histogram | `handler` | RSS change in bytes during a request |
+| `onyx_api_request_rss_delta_bytes` | Histogram | `handler` | Absolute RSS change in bytes during a request |
+| `onyx_api_request_rss_shrink_total` | Counter | `handler` | Requests where RSS decreased (pages freed) |
 | `onyx_api_process_rss_bytes` | Gauge | — | Current process RSS |
 
+The histogram tracks `abs(delta)` so `histogram_quantile()` works correctly.
+Use the shrink counter to distinguish growth from reclamation.
+
 ```promql
-# Top 5 endpoints by average memory delta per request
+# Top 5 endpoints by average memory impact per request
 topk(5, avg by (handler)(
   rate(onyx_api_request_rss_delta_bytes_sum[5m])
   / rate(onyx_api_request_rss_delta_bytes_count[5m])
 ))
+
+# Endpoints with frequent RSS shrinkage (GC/mmap release)
+topk(5, rate(onyx_api_request_rss_shrink_total[5m]))
 ```
 
 ## Example PromQL Queries

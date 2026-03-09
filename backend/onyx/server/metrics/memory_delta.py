@@ -10,7 +10,8 @@ This is inherent to the approach — the metric is most useful for
 identifying endpoints that *consistently* cause large deltas.
 
 Metrics:
-- onyx_api_request_rss_delta_bytes: Histogram of RSS change per request
+- onyx_api_request_rss_delta_bytes: Histogram of abs(RSS change) per request
+- onyx_api_request_rss_shrink_total: Counter of requests where RSS decreased
 - onyx_api_process_rss_bytes: Gauge of current process RSS
 """
 
@@ -22,19 +23,16 @@ import psutil
 from fastapi import FastAPI
 from fastapi import Request
 from fastapi.routing import APIRoute
+from prometheus_client import Counter
 from prometheus_client import Gauge
 from prometheus_client import Histogram
 from starlette.responses import Response
 
 _RSS_DELTA: Histogram = Histogram(
     "onyx_api_request_rss_delta_bytes",
-    "RSS change in bytes during a single request",
+    "Absolute RSS change in bytes during a single request",
     ["handler"],
     buckets=(
-        -16777216,
-        -1048576,
-        -65536,
-        0,
         1024,
         4096,
         16384,
@@ -44,6 +42,12 @@ _RSS_DELTA: Histogram = Histogram(
         4194304,
         16777216,
     ),
+)
+
+_RSS_SHRINK: Counter = Counter(
+    "onyx_api_request_rss_shrink_total",
+    "Requests where RSS decreased (pages freed)",
+    ["handler"],
 )
 
 _PROCESS_RSS: Gauge = Gauge(
@@ -98,7 +102,9 @@ def add_memory_delta_middleware(app: FastAPI) -> None:
         try:
             rss_after = _process.memory_info().rss
             delta = rss_after - rss_before
-            _RSS_DELTA.labels(handler=handler).observe(delta)
+            _RSS_DELTA.labels(handler=handler).observe(abs(delta))
+            if delta < 0:
+                _RSS_SHRINK.labels(handler=handler).inc()
             _PROCESS_RSS.set(rss_after)
         except (psutil.Error, OSError):
             pass

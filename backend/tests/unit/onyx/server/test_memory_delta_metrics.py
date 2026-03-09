@@ -42,14 +42,16 @@ def test_match_route_returns_template() -> None:
 
 
 @patch("onyx.server.metrics.memory_delta._process")
+@patch("onyx.server.metrics.memory_delta._RSS_SHRINK")
 @patch("onyx.server.metrics.memory_delta._RSS_DELTA")
 @patch("onyx.server.metrics.memory_delta._PROCESS_RSS")
 def test_middleware_observes_rss_delta(
     mock_rss_gauge: MagicMock,
     mock_histogram: MagicMock,
+    mock_shrink: MagicMock,
     mock_process: MagicMock,
 ) -> None:
-    """Verify the middleware measures RSS before/after and records the delta."""
+    """Verify the middleware measures RSS before/after and records abs(delta)."""
     mem_before = MagicMock()
     mem_before.rss = 100_000_000
     mem_after = MagicMock()
@@ -66,7 +68,37 @@ def test_middleware_observes_rss_delta(
     assert response.status_code == 200
     mock_histogram.labels.assert_called_with(handler="/api/health")
     mock_histogram.labels().observe.assert_called_once_with(65_536)
+    mock_shrink.labels().inc.assert_not_called()
     mock_rss_gauge.set.assert_called_once_with(100_065_536)
+
+
+@patch("onyx.server.metrics.memory_delta._process")
+@patch("onyx.server.metrics.memory_delta._RSS_SHRINK")
+@patch("onyx.server.metrics.memory_delta._RSS_DELTA")
+@patch("onyx.server.metrics.memory_delta._PROCESS_RSS")
+def test_middleware_tracks_rss_shrink(
+    mock_rss_gauge: MagicMock,  # noqa: ARG001
+    mock_histogram: MagicMock,
+    mock_shrink: MagicMock,
+    mock_process: MagicMock,
+) -> None:
+    """When RSS decreases, observe abs(delta) and increment shrink counter."""
+    mem_before = MagicMock()
+    mem_before.rss = 100_065_536
+    mem_after = MagicMock()
+    mem_after.rss = 100_000_000
+
+    mock_process.memory_info.side_effect = [mem_before, mem_after]
+
+    app = _make_app()
+    add_memory_delta_middleware(app)
+
+    client = TestClient(app)
+    client.get("/api/health")
+
+    mock_histogram.labels().observe.assert_called_once_with(65_536)
+    mock_shrink.labels.assert_called_with(handler="/api/health")
+    mock_shrink.labels().inc.assert_called_once()
 
 
 @patch("onyx.server.metrics.memory_delta._process")
