@@ -419,6 +419,7 @@ jobs:
               -e POSTGRES_POOL_PRE_PING=true \
               -e POSTGRES_USE_NULL_POOL=true \
               -e VESPA_HOST=index \
+              -e ENABLE_OPENSEARCH_INDEXING_FOR_ONYX=false \
               -e REDIS_HOST=cache \
               -e API_SERVER_HOST=api_server \
               -e OPENAI_API_KEY=${OPENAI_API_KEY} \
