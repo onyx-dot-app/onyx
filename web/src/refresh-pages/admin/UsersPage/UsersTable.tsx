@@ -9,17 +9,28 @@ import { Content } from "@opal/layouts";
 import { Tag } from "@opal/components";
 import { UserRole, USER_ROLE_LABELS } from "@/lib/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
+import { timeAgo } from "@/lib/time";
+import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
+interface UserGroupInfo {
+  id: number;
+  name: string;
+}
+
 interface UserRow {
   id: string;
   email: string;
   role: UserRole;
   is_active: boolean;
+  personal_name: string | null;
+  created_at: string;
+  updated_at: string;
+  groups: UserGroupInfo[];
 }
 
 interface PaginatedResponse {
@@ -31,10 +42,16 @@ interface PaginatedResponse {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function getInitials(email: string): string {
+function getInitials(name: string | null, email: string): string {
+  if (name) {
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase();
+    }
+    return name.slice(0, 2).toUpperCase();
+  }
   const local = email.split("@")[0];
   if (!local) return "?";
-  // Try splitting on dots/underscores for multi-part names
   const parts = local.split(/[._-]/);
   if (parts.length >= 2) {
     return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase();
@@ -59,25 +76,63 @@ const tc = createTableColumns<UserRow>();
 const columns = [
   tc.qualifier({
     content: "avatar-user",
-    getInitials: (row) => getInitials(row.email),
+    getInitials: (row) => getInitials(row.personal_name, row.email),
     selectable: false,
   }),
   tc.column("email", {
     header: "User",
-    weight: 35,
+    weight: 25,
     minWidth: 180,
-    cell: (value) => (
-      <Content
-        sizePreset="main-ui"
-        variant="body"
-        title={value}
-        prominence="default"
-      />
-    ),
+    cell: (value, row) =>
+      row.personal_name ? (
+        <div className="flex flex-col">
+          <Text as="span" mainUiAction text04>
+            {row.personal_name}
+          </Text>
+          <Text as="span" secondaryBody text03>
+            {value}
+          </Text>
+        </div>
+      ) : (
+        <Content
+          sizePreset="main-ui"
+          variant="body"
+          title={value}
+          prominence="default"
+        />
+      ),
+  }),
+  tc.column("groups", {
+    header: "Groups",
+    weight: 20,
+    minWidth: 120,
+    cell: (value: UserGroupInfo[]) => {
+      if (!value.length) {
+        return (
+          <Text as="span" secondaryBody text03>
+            —
+          </Text>
+        );
+      }
+      const visible = value.slice(0, 2);
+      const overflow = value.length - visible.length;
+      return (
+        <div className="flex items-center gap-1 flex-wrap">
+          {visible.map((g) => (
+            <Tag key={g.id} title={g.name} />
+          ))}
+          {overflow > 0 && (
+            <Text as="span" secondaryBody text03>
+              +{overflow}
+            </Text>
+          )}
+        </div>
+      );
+    },
   }),
   tc.column("role", {
     header: "Account Type",
-    weight: 25,
+    weight: 18,
     minWidth: 120,
     cell: (value) => (
       <Content
@@ -90,10 +145,20 @@ const columns = [
   }),
   tc.column("is_active", {
     header: "Status",
-    weight: 20,
+    weight: 15,
     minWidth: 100,
     cell: (value) => (
       <Tag title={statusLabel(value)} color={statusColor(value)} />
+    ),
+  }),
+  tc.column("updated_at", {
+    header: "Last Updated",
+    weight: 14,
+    minWidth: 100,
+    cell: (value) => (
+      <Text as="span" secondaryBody text03>
+        {timeAgo(value) ?? "—"}
+      </Text>
     ),
   }),
   tc.actions(),
