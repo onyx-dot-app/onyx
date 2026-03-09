@@ -81,6 +81,9 @@ class RedisPoolCollector(Collector):
         return [in_use, available, max_conns, created]
 
     def describe(self) -> list[GaugeMetricFamily]:
+        # Return empty to mark this as an "unchecked" collector.
+        # Prometheus checks describe() vs collect() for consistency;
+        # returning empty opts out since our metrics are dynamic.
         return []
 
 
@@ -91,6 +94,10 @@ def setup_redis_connection_pool_metrics() -> None:
     """Register Redis pool metrics using the RedisPool singleton.
 
     Idempotent — safe to call multiple times (e.g. Uvicorn hot-reload).
+    On hot-reload, the module re-imports and ``_redis_collector`` resets
+    to ``None``, but the REGISTRY still holds the old collector.
+    We catch the ``ValueError`` from duplicate registration and update
+    the module-level reference to the existing collector.
     """
     global _redis_collector
     if _redis_collector is not None:
@@ -106,6 +113,11 @@ def setup_redis_connection_pool_metrics() -> None:
     # since it maintains an independent connection pool.
     collector.add_pool("replica", pool_instance._replica_pool)
 
-    REGISTRY.register(collector)
+    try:
+        REGISTRY.register(collector)
+    except ValueError:
+        # Already registered from a previous module load (Uvicorn reload).
+        # The old collector still works — just update our reference.
+        logger.debug("Redis pool collector already registered, skipping")
     _redis_collector = collector
     logger.info("Registered Redis connection pool metrics")
