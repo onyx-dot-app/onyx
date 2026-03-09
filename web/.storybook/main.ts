@@ -3,6 +3,7 @@ import path from "path";
 
 const config: StorybookConfig = {
   stories: [
+    "./*.mdx",
     "../lib/opal/src/**/*.stories.@(ts|tsx)",
     "../src/refresh-components/**/*.stories.@(ts|tsx)",
   ],

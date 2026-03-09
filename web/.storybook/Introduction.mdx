@@ -1,0 +1,116 @@
+import { Meta } from "@storybook/blocks";
+
+<Meta title="Getting Started" />
+
+# Onyx Storybook
+
+A living catalog for browsing, testing, and documenting Onyx UI components in isolation.
+
+---
+
+## What is this?
+
+This Storybook contains interactive examples of every reusable UI component in the Onyx frontend. Each component has a dedicated page with:
+
+- **Live demos** you can interact with directly
+- **Controls** to tweak props and see how the component responds
+- **Auto-generated docs** showing the full props API
+- **Dark mode toggle** in the toolbar to preview both themes
+
+---
+
+## Navigating Storybook
+
+### Sidebar
+
+The left sidebar organizes components by layer:
+
+- **opal/core** — Low-level primitives (`Interactive`, `Hoverable`)
+- **opal/components** — Design system atoms (`Button`, `OpenButton`, `Tag`)
+- **Layouts** — Structural layouts (`Content`, `ContentAction`, `IllustrationContent`)
+- **refresh-components** — App-level components (inputs, modals, tables, text, etc.)
+
+Click any component to see its stories. Click **Docs** to see the auto-generated props table.
+
+### Controls panel
+
+At the bottom of each story, the **Controls** panel lets you change props in real time. Toggle booleans, pick from enums, type in strings — the preview updates instantly.
+
+### Theme toggle
+
+Use the paint roller icon in the top toolbar to switch between **light** and **dark** mode. All components use CSS variables that automatically adapt.
+
+---
+
+## Running locally
+
+```bash
+cd web
+npm run storybook        # dev server on :6006
+npm run storybook:build  # static build to storybook-static/
+```
+
+---
+
+## Adding a new story
+
+Stories are **co-located** next to their component:
+
+```
+lib/opal/src/components/buttons/Button/
+├── components.tsx       ← the component
+├── Button.stories.tsx   ← the story
+├── styles.css
+└── README.md
+```
+
+### Minimal template
+
+```tsx
+import type { Meta, StoryObj } from "@storybook/react";
+import { MyComponent } from "./MyComponent";
+
+const meta: Meta<typeof MyComponent> = {
+  title: "opal/components/MyComponent",  // sidebar path
+  component: MyComponent,
+  tags: ["autodocs"],                     // auto-generate docs page
+};
+
+export default meta;
+type Story = StoryObj<typeof MyComponent>;
+
+export const Default: Story = {
+  args: {
+    title: "Hello",
+  },
+};
+
+// For complex rendering:
+export const WithCustomLayout: Story = {
+  render: () => (
+    <div style={{ display: "flex", gap: 8 }}>
+      <MyComponent title="One" />
+      <MyComponent title="Two" />
+    </div>
+  ),
+};
+```
+
+### Conventions
+
+- **Title format:** `opal/core/Name`, `opal/components/Name`, `Layouts/Name`, or `refresh-components/Name`
+- **Tags:** Add `tags: ["autodocs"]` to auto-generate a docs page from props
+- **Decorators:** If your component needs `TooltipPrimitive.Provider` (anything with tooltips), add it as a decorator
+- **Layout:** Use `parameters: { layout: "fullscreen" }` for modals/popovers that use portals
+
+---
+
+## Deployment
+
+Production builds deploy to [onyx-storybook.vercel.app](https://onyx-storybook.vercel.app) automatically when PRs touching component files merge to `main`.
+
+Monitored paths:
+
+- `web/lib/opal/**`
+- `web/src/refresh-components/**`
+- `web/.storybook/**`
