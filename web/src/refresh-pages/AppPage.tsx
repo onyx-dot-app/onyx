@@ -3,7 +3,7 @@
 import { redirect, useRouter, useSearchParams } from "next/navigation";
 import { personaIncludesRetrieval } from "@/app/app/services/lib";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { toast } from "@/hooks/useToast";
+import { toast, useToastFromQuery } from "@/hooks/useToast";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { useFederatedConnectors, useFilters, useLlmManager } from "@/lib/hooks";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
@@ -122,6 +122,13 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const router = useRouter();
   const appFocus = useAppFocus();
+
+  useToastFromQuery({
+    oauth_connected: {
+      message: "Authentication successful",
+      type: "success",
+    },
+  });
   const { setAppMode } = useAppMode();
   const searchParams = useSearchParams();
 

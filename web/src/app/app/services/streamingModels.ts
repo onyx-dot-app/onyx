@@ -188,6 +188,7 @@ export interface CustomToolErrorInfo {
 export interface CustomToolStart extends BaseObj {
   type: "custom_tool_start";
   tool_name: string;
+  tool_id?: number | null;
 }
 
 export interface CustomToolArgs extends BaseObj {
@@ -199,6 +200,7 @@ export interface CustomToolArgs extends BaseObj {
 export interface CustomToolDelta extends BaseObj {
   type: "custom_tool_delta";
   tool_name: string;
+  tool_id?: number | null;
   response_type: string;
   data?: any;
   file_ids?: string[] | null;

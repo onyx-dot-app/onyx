@@ -141,7 +141,7 @@ class CustomTool(Tool[None]):
         self.emitter.emit(
             Packet(
                 placement=placement,
-                obj=CustomToolStart(tool_name=self._name),
+                obj=CustomToolStart(tool_name=self._name, tool_id=self._id),
             )
         )
 
@@ -249,6 +249,7 @@ class CustomTool(Tool[None]):
                 placement=placement,
                 obj=CustomToolDelta(
                     tool_name=self._name,
+                    tool_id=self._id,
                     response_type=response_type,
                     data=data,
                     file_ids=file_ids,

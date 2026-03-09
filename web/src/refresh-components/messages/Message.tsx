@@ -224,6 +224,10 @@ export interface MessageProps extends React.HTMLAttributes<HTMLDivElement> {
   actions?: boolean | string;
   close?: boolean;
 
+  // Action button customization:
+  actionIcon?: IconFunctionComponent;
+  actionPrimary?: boolean;
+
   // Callbacks:
   onClose?: () => void;
   onAction?: () => void;
@@ -250,6 +254,9 @@ function MessageInner(
     iconComponent,
     actions,
     close = true,
+
+    actionIcon,
+    actionPrimary,
 
     onClose,
     onAction,
@@ -339,7 +346,8 @@ function MessageInner(
         <div className="flex items-center justify-end shrink-0 self-center pr-2">
           {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
           <Button
-            secondary
+            secondary={!actionPrimary}
+            leftIcon={actionIcon}
             onClick={onAction}
             className={size === "large" ? "p-2" : "p-1"}
           >

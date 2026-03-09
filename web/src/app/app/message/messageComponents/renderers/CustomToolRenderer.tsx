@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo } from "react";
-import { FiExternalLink, FiDownload, FiTool } from "react-icons/fi";
+import { FiExternalLink } from "react-icons/fi";
 import {
   PacketType,
   CustomToolPacket,
@@ -12,6 +12,7 @@ import {
 import { MessageRenderer, RenderType } from "../interfaces";
 import { buildImgUrl } from "../../../components/files/images/utils";
 import Text from "@/refresh-components/texts/Text";
+import { SvgActions, SvgDownload } from "@opal/icons";
 
 function constructCustomToolState(packets: CustomToolPacket[]) {
   const toolStart = packets.find(
@@ -89,7 +90,7 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
     return null;
   }, [toolName, responseType, error, isComplete, isRunning]);
 
-  const icon = FiTool;
+  const icon = SvgActions;
 
   if (renderType === RenderType.COMPACT && !error?.is_auth_error) {
     return children([
@@ -154,7 +155,7 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
                     download
                     className="inline-flex items-center gap-1 text-xs text-action-link-01 hover:underline whitespace-nowrap"
                   >
-                    <FiDownload className="w-3 h-3" /> Download
+                    <SvgDownload className="w-3 h-3" /> Download
                   </a>
                 </div>
               ))}
