@@ -354,7 +354,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
         </div>
 
         {!showEmpty && (
-          <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-4 px-1 py-3">
+          <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-4 px-1">
             <Section gap={0.25} height="fit">
               {sourcesWithMeta.map(({ source, meta, count }) => (
                 <LineItem
