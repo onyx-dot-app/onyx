@@ -407,8 +407,10 @@ services:
     # opensearch-enabled to COMPOSE_PROFILES in the environment for this
     # docker-compose.
     # NOTE: Now enabled on by default. To explicitly disable this service,
-    # uncomment this profile, or when running docker compose, include all
-    # desired service names but this one.
+    # uncomment this profile and ensure COMPOSE_PROFILES in your env does not
+    # list the profile, or when running docker compose, include all desired
+    # service names but this one. Additionally set
+    # OPENSEARCH_FOR_ONYX_ENABLED=false in your env.
     # profiles: ["opensearch-enabled"]
     environment:
       # We need discovery.type=single-node so that OpenSearch doesn't try
