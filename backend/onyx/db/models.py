@@ -133,7 +133,18 @@ class _EncryptedBase(TypeDecorator):
         SensitiveValue, regardless of whether the value was loaded from the DB
         or assigned in application code.
         """
-        raw_str = json.dumps(value) if self._is_json else value
+        if self._is_json:
+            if not isinstance(value, dict):
+                raise TypeError(
+                    f"EncryptedJson column expected dict, got {type(value).__name__}"
+                )
+            raw_str = json.dumps(value)
+        else:
+            if not isinstance(value, str):
+                raise TypeError(
+                    f"EncryptedString column expected str, got {type(value).__name__}"
+                )
+            raw_str = value
         return SensitiveValue(
             encrypted_bytes=encrypt_string_to_bytes(raw_str),
             decrypt_fn=decrypt_bytes_to_string,
@@ -151,7 +162,7 @@ class _EncryptedBase(TypeDecorator):
 
 
 class EncryptedString(_EncryptedBase):
-    _is_json = False
+    _is_json: bool = False
 
     def process_bind_param(
         self, value: str | SensitiveValue[str] | None, dialect: Dialect  # noqa: ARG002
@@ -177,7 +188,7 @@ class EncryptedString(_EncryptedBase):
 
 
 class EncryptedJson(_EncryptedBase):
-    _is_json = True
+    _is_json: bool = True
 
     def process_bind_param(
         self,
@@ -203,6 +214,9 @@ class EncryptedJson(_EncryptedBase):
         return None
 
 
+_REGISTERED_ATTRS: set[str] = set()
+
+
 @event.listens_for(Mapper, "mapper_configured")
 def _register_sensitive_value_set_events(
     mapper: Mapper,
@@ -214,6 +228,13 @@ def _register_sensitive_value_set_events(
             if isinstance(col.type, _EncryptedBase):
                 col_type = col.type
                 attr = getattr(class_, prop.key)
+
+                # Guard against double-registration (e.g. if mapper is
+                # re-configured in test setups)
+                attr_key = f"{class_.__qualname__}.{prop.key}"
+                if attr_key in _REGISTERED_ATTRS:
+                    continue
+                _REGISTERED_ATTRS.add(attr_key)
 
                 @event.listens_for(attr, "set", retval=True)
                 def _wrap_value(

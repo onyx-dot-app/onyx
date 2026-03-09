@@ -128,6 +128,8 @@ class SensitiveValue(Generic[T]):
         value = self._decrypt()
 
         if not apply_mask:
+            # Callers must not mutate the returned dict — doing so would
+            # desync the cache from the encrypted bytes and the DB.
             return value
 
         # Apply masking
