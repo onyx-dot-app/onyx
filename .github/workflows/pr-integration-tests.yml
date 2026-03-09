@@ -316,6 +316,7 @@ jobs:
           # Base config shared by both editions
           cat <<EOF > deployment/docker_compose/.env
           COMPOSE_PROFILES=s3-filestore
+          OPENSEARCH_FOR_ONYX_ENABLED=false
           AUTH_TYPE=basic
           POSTGRES_POOL_PRE_PING=true
           POSTGRES_USE_NULL_POOL=true
