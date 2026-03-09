@@ -6,6 +6,9 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing_extensions import override
 
+from urllib.parse import urlparse
+from urllib.parse import urlunparse
+
 from onyx.chat.emitter import Emitter
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceSection
@@ -115,7 +118,6 @@ def _url_lookup_variants(url: str) -> set[str]:
     variants handle web/linear URLs where query parameters are part of the
     document identity (e.g. https://news.ycombinator.com/item?id=46821482).
     """
-    from urllib.parse import urlparse, urlunparse
 
     variants: set[str] = set()
 
@@ -135,10 +137,6 @@ def _url_lookup_variants(url: str) -> set[str]:
         url_no_fragment = urlunparse(parsed._replace(fragment=""))
         if url_no_fragment:
             variants.add(url_no_fragment)
-            if url_no_fragment.endswith("/"):
-                variants.add(url_no_fragment.rstrip("/"))
-            else:
-                variants.add(f"{url_no_fragment}/")
 
     return {v for v in variants if v}
 

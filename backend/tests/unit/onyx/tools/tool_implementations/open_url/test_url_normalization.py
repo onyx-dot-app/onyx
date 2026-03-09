@@ -282,7 +282,6 @@ def test_url_lookup_variants_strips_query_and_fragment() -> None:
     assert "https://example.com/path/" in variants
     # Query-preserved, fragment-stripped variants (for web URLs)
     assert "https://example.com/path?a=1" in variants
-    assert "https://example.com/path?a=1/" in variants
     # Fragment should never appear in any variant
     assert not any("#" in v for v in variants)
 
