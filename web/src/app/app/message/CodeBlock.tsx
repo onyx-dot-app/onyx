@@ -7,6 +7,7 @@ interface CodeBlockProps {
   className?: string;
   children?: ReactNode;
   codeText: string;
+  noPadding?: boolean;
 }
 
 const MemoizedCodeLine = memo(({ content }: { content: ReactNode }) => (
@@ -17,6 +18,7 @@ export const CodeBlock = memo(function CodeBlock({
   className = "",
   children,
   codeText,
+  noPadding = false,
 }: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
 
@@ -85,7 +87,12 @@ export const CodeBlock = memo(function CodeBlock({
   const CodeContent = () => {
     if (!language) {
       return (
-        <pre className="!p-2 m-0 overflow-x-auto w-0 min-w-full hljs">
+        <pre
+          className={cn(
+            "m-0 overflow-x-auto w-0 min-w-full hljs",
+            noPadding ? "!py-2 !pr-2" : "!p-2"
+          )}
+        >
           <code className={`text-sm hljs ${className}`}>
             {Array.isArray(children)
               ? children.map((child, index) => (
@@ -98,7 +105,12 @@ export const CodeBlock = memo(function CodeBlock({
     }
 
     return (
-      <pre className="!p-2 m-0 overflow-x-auto w-0 min-w-full hljs">
+      <pre
+        className={cn(
+          "m-0 overflow-x-auto w-0 min-w-full hljs",
+          noPadding ? "!py-2 !pr-2" : "!p-2"
+        )}
+      >
         <code className="text-xs">
           {Array.isArray(children)
             ? children.map((child, index) => (
@@ -111,7 +123,12 @@ export const CodeBlock = memo(function CodeBlock({
   };
 
   return (
-    <div className="bg-background-tint-00 px-1 pb-1 rounded-12 max-w-full min-w-0">
+    <div
+      className={cn(
+        "bg-background-tint-00 max-w-full min-w-0",
+        !noPadding && "px-1 pb-1 rounded-12"
+      )}
+    >
       {language && (
         <div className="flex items-center px-2 py-1 text-sm text-text-04 gap-x-2">
           <SvgCode
