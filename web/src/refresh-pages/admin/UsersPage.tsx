@@ -41,7 +41,7 @@ function UsersContent() {
 
 export default function UsersPage() {
   return (
-    <SettingsLayouts.Root width="lg">
+    <SettingsLayouts.Root width="full">
       <SettingsLayouts.Header
         title="Users & Requests"
         icon={SvgUser}
