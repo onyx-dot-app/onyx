@@ -10,6 +10,7 @@ from onyx.mcp_server.utils import get_indexed_sources
 from onyx.mcp_server.utils import require_access_token
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import build_api_server_url_for_http_requests
+from onyx.utils.variable_functionality import global_version
 
 logger = setup_logger()
 
@@ -25,6 +26,14 @@ async def search_indexed_documents(
     Search the user's knowledge base indexed in Onyx.
     Use this tool for information that is not public knowledge and specific to the user,
     their team, their work, or their organization/company.
+
+    Note: In CE mode, this tool uses the chat endpoint internally which invokes an LLM
+    on every call, consuming tokens and adding latency.
+    Additionally, CE callers receive a truncated snippet (blurb) instead of a full document chunk,
+    but this should still be sufficient for most use cases. CE mode functionality should be swapped
+    when a dedicated CE search endpoint is implemented.
+
+    In EE mode, the dedicated search endpoint is used instead.
 
     To find a list of available sources, use the `indexed_sources` resource.
     Returns chunks of text as search results with snippets, scores, and metadata.
@@ -111,47 +120,72 @@ async def search_indexed_documents(
         if time_cutoff_dt:
             filters["time_cutoff"] = time_cutoff_dt.isoformat()
 
-    # Build the search request using the new SendSearchQueryRequest format
-    search_request = {
-        "search_query": query,
-        "filters": filters,
-        "num_docs_fed_to_llm_selection": limit,
-        "run_query_expansion": False,
-        "include_content": True,
-        "stream": False,
-    }
+    is_ee = global_version.is_ee_version()
+    base_url = build_api_server_url_for_http_requests(respect_env_override_if_set=True)
+    auth_headers = {"Authorization": f"Bearer {access_token.token}"}
 
-    # Call the API server using the new send-search-message route
+    search_request: dict[str, Any]
+    if is_ee:
+        # EE: use the dedicated search endpoint (no LLM invocation)
+        search_request = {
+            "search_query": query,
+            "filters": filters,
+            "num_docs_fed_to_llm_selection": limit,
+            "run_query_expansion": False,
+            "include_content": True,
+            "stream": False,
+        }
+        endpoint = f"{base_url}/search/send-search-message"
+        error_key = "error"
+        docs_key = "search_docs"
+        content_field = "content"
+    else:
+        # CE: fall back to the chat endpoint (invokes LLM, consumes tokens)
+        search_request = {
+            "message": query,
+            "stream": False,
+            "chat_session_info": {},
+        }
+        if filters:
+            search_request["internal_search_filters"] = filters
+        endpoint = f"{base_url}/chat/send-chat-message"
+        error_key = "error_msg"
+        docs_key = "top_documents"
+        content_field = "blurb"
+
     try:
         response = await get_http_client().post(
-            f"{build_api_server_url_for_http_requests(respect_env_override_if_set=True)}/search/send-search-message",
+            endpoint,
             json=search_request,
-            headers={"Authorization": f"Bearer {access_token.token}"},
+            headers=auth_headers,
         )
         response.raise_for_status()
         result = response.json()
 
         # Check for error in response
-        if result.get("error"):
+        if result.get(error_key):
             return {
                 "documents": [],
                 "total_results": 0,
                 "query": query,
-                "error": result.get("error"),
+                "error": result.get(error_key),
             }
 
-        # Return simplified format for MCP clients
-        fields_to_return = [
-            "semantic_identifier",
-            "content",
-            "source_type",
-            "link",
-            "score",
-        ]
         documents = [
-            {key: doc.get(key) for key in fields_to_return}
-            for doc in result.get("search_docs", [])
+            {
+                "semantic_identifier": doc.get("semantic_identifier"),
+                "content": doc.get(content_field),
+                "source_type": doc.get("source_type"),
+                "link": doc.get("link"),
+                "score": doc.get("score"),
+            }
+            for doc in result.get(docs_key, [])
         ]
+
+        # NOTE: search depth is controlled by the backend persona defaults, not `limit`.
+        # `limit` only caps the returned list; fewer results may be returned if the
+        # backend retrieves fewer documents than requested.
+        documents = documents[:limit]
 
         logger.info(
             f"Onyx MCP Server: Internal search returned {len(documents)} results"
@@ -160,7 +194,6 @@ async def search_indexed_documents(
             "documents": documents,
             "total_results": len(documents),
             "query": query,
-            "executed_queries": result.get("all_executed_queries", [query]),
         }
     except Exception as e:
         logger.error(f"Onyx MCP Server: Document search error: {e}", exc_info=True)
