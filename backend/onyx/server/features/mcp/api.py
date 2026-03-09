@@ -1233,7 +1233,7 @@ def _list_mcp_tools_by_id(
         MCPAuthenticationType.PT_OAUTH,
     ):
         raise OnyxError(
-            OnyxErrorCode.UNAUTHENTICATED,
+            OnyxErrorCode.VALIDATION_ERROR,
             "This MCP server is not configured yet",
         )
 
