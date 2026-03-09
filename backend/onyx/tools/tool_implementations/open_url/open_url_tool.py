@@ -134,7 +134,9 @@ def _url_lookup_variants(url: str) -> set[str]:
     parsed = urlparse(url)
     if parsed.query:
         # Strip only fragment, preserve query string
-        url_no_fragment = urlunparse(parsed._replace(fragment=""))
+        url_no_fragment = urlunparse(
+            (parsed.scheme, parsed.netloc, parsed.path, parsed.params, parsed.query, "")
+        )
         if url_no_fragment:
             variants.add(url_no_fragment)
 

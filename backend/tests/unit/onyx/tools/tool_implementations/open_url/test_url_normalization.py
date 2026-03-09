@@ -311,4 +311,4 @@ def test_url_lookup_variants_no_query_unchanged() -> None:
     variants = _url_lookup_variants("https://example.com/path")
     assert "https://example.com/path" in variants
     assert "https://example.com/path/" in variants
-    assert len(variants) == 2    
+    assert len(variants) == 2
