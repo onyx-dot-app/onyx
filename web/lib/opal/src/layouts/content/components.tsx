@@ -127,13 +127,11 @@ function Content(props: ContentProps) {
   const {
     sizePreset = "headline",
     variant = "heading",
-    widthVariant = "fit",
+    widthVariant = "auto",
     withInteractive,
     ref,
     ...rest
   } = props;
-
-  const widthClass = widthVariants[widthVariant];
 
   let layout: React.ReactNode = null;
 
@@ -194,11 +192,7 @@ function Content(props: ContentProps) {
       `Content: no layout matched for sizePreset="${sizePreset}" variant="${variant}"`
     );
 
-  // "fit" → return layout directly (no wrapper needed; the layout
-  // element itself shrink-wraps to its content).
-  if (widthVariant === "fit") return layout;
-
-  return <div className={widthClass}>{layout}</div>;
+  return <div className={widthVariants[widthVariant]}>{layout}</div>;
 }
 
 // ---------------------------------------------------------------------------
