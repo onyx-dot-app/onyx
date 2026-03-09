@@ -3,6 +3,7 @@ import time
 from collections.abc import Iterator
 from datetime import datetime
 from datetime import timezone
+from email.utils import parsedate_to_datetime
 from typing import List
 
 import requests
@@ -12,6 +13,7 @@ from onyx.configs.app_configs import FRESHDESK_PER_PAGE
 from onyx.configs.app_configs import FRESHDESK_RATE_LIMIT_CAP_SECONDS
 from onyx.configs.app_configs import FRESHDESK_RETRY_INTERVAL
 from onyx.configs.app_configs import FRESHDESK_SERVER_ERROR_RETRY_DELAY
+from onyx.configs.app_configs import FRESHDESK_TICKET_DELAY_SECONDS
 from onyx.configs.app_configs import FRESHDESK_TICKETS_MAX_PAGE
 from onyx.configs.app_configs import FRESHDESK_TICKETS_PAGE_DELAY_SECONDS
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
@@ -78,6 +80,23 @@ _STATUS_NUMBER_TYPE_MAP: dict[int, str] = {
 }
 
 
+def _parse_retry_after_seconds(value: str | None, default: int) -> int:
+    """Parse Retry-After header (delay-seconds or HTTP-date per RFC 7231)."""
+    if not value or not value.strip():
+        return default
+    value = value.strip()
+    try:
+        return int(value)
+    except ValueError:
+        pass
+    try:
+        retry_at = parsedate_to_datetime(value)
+        delta = retry_at - datetime.now(timezone.utc)
+        return max(0, int(delta.total_seconds()))
+    except (TypeError, ValueError):
+        return default
+
+
 def _request_with_retries(
     url: str,
     *,
@@ -105,7 +124,9 @@ def _request_with_retries(
 
         if response.status_code == 429:
             retry_after = min(
-                int(response.headers.get("Retry-After", FRESHDESK_RETRY_INTERVAL)),
+                _parse_retry_after_seconds(
+                    response.headers.get("Retry-After"), FRESHDESK_RETRY_INTERVAL
+                ),
                 FRESHDESK_RATE_LIMIT_CAP_SECONDS,
             )
             logger.warning(
@@ -258,23 +279,16 @@ def _create_metadata_from_ticket(
 def _create_doc_from_ticket(
     ticket: dict, domain: str, api_key: str, password: str, name: str
 ) -> list[Document]:
-    base_url = f"https://{domain}.freshdesk.com/api/v2/tickets/{ticket['id']}?include=conversations"
+    base_url = f"https://{domain}.freshdesk.com/api/v2/tickets/{ticket['id']}"
     logger.info(f"Indexing ticket {ticket['id']}")
 
-    try:
-        response = _request_with_retries(
-            base_url,
-            auth=(api_key, password),
-            timeout=30,
-            max_retries=FRESHDESK_MAX_RETRIES,
-            error_context=f"ticket {ticket['id']}",
-        )
-    except Exception as e:
-        logger.error(
-            f"Failed to fetch ticket {ticket['id']}: {e}. Skipping this ticket."
-        )
-        return []
-
+    response = _request_with_retries(
+        base_url,
+        auth=(api_key, password),
+        timeout=30,
+        max_retries=FRESHDESK_MAX_RETRIES,
+        error_context=f"ticket {ticket['id']}",
+    )
     indv_ticket = response.json()
 
     priority = ""
@@ -292,21 +306,18 @@ def _create_doc_from_ticket(
     custom_field = indv_ticket.get("custom_fields") or {}
     if custom_field:
         component = custom_field.get("cf_components", "")
-        kb_articles_referred = custom_field.get("cf_kb_articles_referred", "")
         kb_category = custom_field.get("cf_kb_category", "")
         product_category = custom_field.get("cf_product_category", "")
         resolution_type = custom_field.get("cf_resolution_type", "")
         region = custom_field.get("cf_region", "")
         customer = custom_field.get("cf_sd_customer", "")
         severity = custom_field.get("severity", "")
-        solution_provided = custom_field.get("solution_provided", "")
         ticket_summary = custom_field.get("ticket_summary", "")
 
         text += (
-            f"Component: {component}, KB Articles Referred: {kb_articles_referred}, KB Category: {kb_category}, "
+            f"Component: {component}, KB Category: {kb_category}, "
             f"Product Category: {product_category}, Resolution Type: {resolution_type}, Region: {region}, "
-            f"Customer: {customer}, Severity: {severity}, Solution Provided: {solution_provided}, "
-            f"Ticket Summary: {ticket_summary}"
+            f"Customer: {customer}, Severity: {severity}, Ticket Summary: {ticket_summary}"
         )
 
     description_text = indv_ticket.get("description_text", "")
@@ -417,6 +428,7 @@ class FreshdeskConnector(PollConnector, LoadConnector):
         if start:
             params["updated_since"] = start.isoformat()
 
+        updated_since_anchor: str | None = params.get("updated_since")
         last_updated_at_from_max_page: str | None = None
 
         while True:
@@ -454,22 +466,27 @@ class FreshdeskConnector(PollConnector, LoadConnector):
             params["page"] = int(params["page"]) + 1
 
             if params["page"] == FRESHDESK_TICKETS_MAX_PAGE + 1:
-                if last_updated_at_from_max_page:
-                    logger.warning(
-                        f"Reached page limit ({FRESHDESK_TICKETS_MAX_PAGE}) for Freshdesk API. "
-                        "Resetting to page 1 with new updated_since"
-                    )
-                    params["page"] = 1
-                    params["updated_since"] = last_updated_at_from_max_page
-                    logger.info(
-                        f"Continuing with updated_since: {last_updated_at_from_max_page}"
-                    )
-                else:
+                if not last_updated_at_from_max_page:
                     logger.error(
                         f"No last_updated_at available from page {FRESHDESK_TICKETS_MAX_PAGE}, "
                         "stopping pagination"
                     )
                     break
+                if last_updated_at_from_max_page == updated_since_anchor:
+                    logger.warning(
+                        "updated_since anchor unchanged after page limit — "
+                        "possible infinite loop (e.g. many tickets with same updated_at), stopping"
+                    )
+                    break
+                logger.warning(
+                    f"Reached page limit ({FRESHDESK_TICKETS_MAX_PAGE}) for Freshdesk API. "
+                    "Resetting to page 1 with new updated_since"
+                )
+                updated_since_anchor = last_updated_at_from_max_page
+                params["page"] = 1
+                params["updated_since"] = last_updated_at_from_max_page
+                last_updated_at_from_max_page = None
+                logger.info(f"Continuing with updated_since: {updated_since_anchor}")
 
     def _process_tickets(
         self, start: datetime | None = None, end: datetime | None = None
@@ -502,7 +519,7 @@ class FreshdeskConnector(PollConnector, LoadConnector):
                         continue
 
                     # Small delay between tickets to reduce rate-limit pressure
-                    time.sleep(1)
+                    time.sleep(FRESHDESK_TICKET_DELAY_SECONDS)
 
                     if len(doc_batch) >= self.batch_size:
                         yield doc_batch
@@ -522,6 +539,6 @@ class FreshdeskConnector(PollConnector, LoadConnector):
     ) -> GenerateDocumentsOutput:
         start_datetime = datetime.fromtimestamp(start, tz=timezone.utc)
         end_datetime = datetime.fromtimestamp(end, tz=timezone.utc)
-        logger.info(f"start time: {start_datetime} and end_datetime: {end_datetime}")
+        logger.debug(f"start time: {start_datetime} and end_datetime: {end_datetime}")
 
         yield from self._process_tickets(start_datetime, end_datetime)

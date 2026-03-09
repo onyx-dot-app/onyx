@@ -577,6 +577,10 @@ FRESHDESK_TICKETS_PAGE_DELAY_SECONDS = float(
     os.environ.get("FRESHDESK_TICKETS_PAGE_DELAY_SECONDS", 0.5)
 )
 
+FRESHDESK_TICKET_DELAY_SECONDS = float(
+    os.environ.get("FRESHDESK_TICKET_DELAY_SECONDS", 1)
+)
+
 
 #####
 # Confluence Connector Configs
