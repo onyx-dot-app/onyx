@@ -46,7 +46,8 @@ RUN apt-get update && \
         pkg-config \
         gcc \
         nano \
-        vim && \
+        vim \
+        libjemalloc2 && \
     rm -rf /var/lib/apt/lists/* && \
     apt-get clean
 

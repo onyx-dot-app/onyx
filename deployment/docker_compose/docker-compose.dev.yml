@@ -12,6 +12,8 @@ services:
   api_server:
     ports:
       - "8080:8080"
+    environment:
+      - LD_PRELOAD=/usr/lib/aarch64-linux-gnu/libjemalloc.so.2
 
   # Uncomment the block below to enable the MCP server for Onyx.
   # mcp_server:
