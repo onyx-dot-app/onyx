@@ -20,6 +20,7 @@ from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
 from onyx.server.query_and_chat.streaming_models import CitationInfo
+from onyx.server.query_and_chat.streaming_models import CustomToolArgs
 from onyx.server.query_and_chat.streaming_models import CustomToolDelta
 from onyx.server.query_and_chat.streaming_models import CustomToolErrorInfo
 from onyx.server.query_and_chat.streaming_models import CustomToolStart
@@ -182,6 +183,7 @@ def create_custom_tool_packets(
     data: dict | list | str | int | float | bool | None = None,
     file_ids: list[str] | None = None,
     error: CustomToolErrorInfo | None = None,
+    tool_args: dict[str, object] | None = None,
 ) -> list[Packet]:
     packets: list[Packet] = []
 
@@ -191,6 +193,14 @@ def create_custom_tool_packets(
             obj=CustomToolStart(tool_name=tool_name),
         )
     )
+
+    if tool_args:
+        packets.append(
+            Packet(
+                placement=Placement(turn_index=turn_index, tab_index=tab_index),
+                obj=CustomToolArgs(tool_name=tool_name, tool_args=tool_args),
+            )
+        )
 
     packets.append(
         Packet(
@@ -681,6 +691,11 @@ def translate_assistant_message_to_packets(
                         except (json.JSONDecodeError, KeyError, TypeError):
                             pass
 
+                        custom_args = {
+                            k: v
+                            for k, v in tool_call.tool_call_arguments.items()
+                            if k != "requestBody"
+                        }
                         turn_tool_packets.extend(
                             create_custom_tool_packets(
                                 tool_name=tool.display_name or tool.name,
@@ -689,6 +704,7 @@ def translate_assistant_message_to_packets(
                                 tab_index=tool_call.tab_index,
                                 data=custom_data,
                                 error=custom_error,
+                                tool_args=custom_args if custom_args else None,
                             )
                         )
 
