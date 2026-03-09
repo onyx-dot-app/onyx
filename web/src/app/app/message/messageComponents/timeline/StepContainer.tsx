@@ -88,6 +88,7 @@ export function StepContainer({
         hideHeader={hideHeader}
         collapsedIcon={CollapsedIconComponent}
         noPaddingRight={noPaddingRight}
+        surfaceBackground={surfaceBackground}
       >
         {children}
       </TimelineStepContent>
