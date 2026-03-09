@@ -1261,3 +1261,5 @@ configMap:
   SKIP_USERFILE_THRESHOLD: ""
   # For multi-tenant: comma-separated list of tenant IDs to skip threshold
   SKIP_USERFILE_THRESHOLD_TENANT_IDS: ""
+  # Maximum user upload file size in MB for chat/projects uploads
+  USER_FILE_MAX_UPLOAD_SIZE_MB: ""

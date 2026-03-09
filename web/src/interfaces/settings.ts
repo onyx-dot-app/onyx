@@ -36,6 +36,7 @@ export interface Settings {
 
   // User Knowledge settings
   user_knowledge_enabled?: boolean;
+  user_file_max_upload_size_mb?: number | null;
 
   // Connector settings
   show_extra_connectors?: boolean;

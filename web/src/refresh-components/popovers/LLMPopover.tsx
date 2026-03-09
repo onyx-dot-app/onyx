@@ -29,6 +29,7 @@ import {
 } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import { OpenButton } from "@opal/components";
+import { Disabled } from "@opal/core";
 import { LLMOption, LLMOptionGroup } from "./interfaces";
 
 export interface LLMPopoverProps {
@@ -355,20 +356,20 @@ export default function LLMPopover({
     <Popover open={open} onOpenChange={setOpen}>
       <div data-testid="llm-popover-trigger">
         <Popover.Trigger asChild disabled={disabled}>
-          <OpenButton
-            icon={
-              folded
-                ? SvgRefreshCw
-                : getProviderIcon(
-                    llmManager.currentLlm.provider,
-                    llmManager.currentLlm.modelName
-                  )
-            }
-            foldable={folded}
-            disabled={disabled}
-          >
-            {currentLlmDisplayName}
-          </OpenButton>
+          <Disabled disabled={disabled}>
+            <OpenButton
+              icon={
+                folded
+                  ? SvgRefreshCw
+                  : getProviderIcon(
+                      llmManager.currentLlm.provider,
+                      llmManager.currentLlm.modelName
+                    )
+              }
+            >
+              {currentLlmDisplayName}
+            </OpenButton>
+          </Disabled>
         </Popover.Trigger>
       </div>
 

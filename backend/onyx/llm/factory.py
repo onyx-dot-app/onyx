@@ -20,7 +20,9 @@ from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.utils import get_max_input_tokens_from_llm_provider
 from onyx.llm.utils import model_supports_image_input
-from onyx.llm.well_known_providers.constants import OLLAMA_API_KEY_CONFIG_KEY
+from onyx.llm.well_known_providers.constants import (
+    PROVIDERS_WITH_SPECIAL_API_KEY_HANDLING,
+)
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.utils.headers import build_llm_extra_headers
@@ -32,14 +34,18 @@ logger = setup_logger()
 def _build_provider_extra_headers(
     provider: str, custom_config: dict[str, str] | None
 ) -> dict[str, str]:
-    if provider == LlmProviderNames.OLLAMA_CHAT and custom_config:
-        raw_api_key = custom_config.get(OLLAMA_API_KEY_CONFIG_KEY)
-        api_key = raw_api_key.strip() if raw_api_key else None
+    if provider in PROVIDERS_WITH_SPECIAL_API_KEY_HANDLING and custom_config:
+        raw = custom_config.get(PROVIDERS_WITH_SPECIAL_API_KEY_HANDLING[provider])
+        api_key = raw.strip() if raw else None
         if not api_key:
             return {}
-        if not api_key.lower().startswith("bearer "):
-            api_key = f"Bearer {api_key}"
-        return {"Authorization": api_key}
+        return {
+            "Authorization": (
+                api_key
+                if api_key.lower().startswith("bearer ")
+                else f"Bearer {api_key}"
+            )
+        }
 
     # Passing these will put Onyx on the OpenRouter leaderboard
     elif provider == LlmProviderNames.OPENROUTER:

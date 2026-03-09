@@ -27,6 +27,9 @@ export enum PacketType {
   FETCH_TOOL_URLS = "open_url_urls",
   FETCH_TOOL_DOCUMENTS = "open_url_documents",
 
+  // Tool call argument delta (streams tool args before tool executes)
+  TOOL_CALL_ARGUMENT_DELTA = "tool_call_argument_delta",
+
   // Custom tool packets
   CUSTOM_TOOL_START = "custom_tool_start",
   CUSTOM_TOOL_DELTA = "custom_tool_delta",
@@ -58,6 +61,10 @@ export enum PacketType {
   INTERMEDIATE_REPORT_DELTA = "intermediate_report_delta",
   INTERMEDIATE_REPORT_CITED_DOCS = "intermediate_report_cited_docs",
 }
+
+export const CODE_INTERPRETER_TOOL_TYPES = {
+  PYTHON: "python",
+} as const;
 
 // Basic Message Packets
 export interface MessageStart extends BaseObj {
@@ -147,6 +154,13 @@ export interface PythonToolDelta extends BaseObj {
   stdout: string;
   stderr: string;
   file_ids: string[];
+}
+
+export interface ToolCallArgumentDelta extends BaseObj {
+  type: "tool_call_argument_delta";
+  tool_type: string;
+  tool_id: string;
+  argument_deltas: Record<string, unknown>;
 }
 
 export interface FetchToolStart extends BaseObj {
@@ -294,6 +308,7 @@ export type ImageGenerationToolObj =
 export type PythonToolObj =
   | PythonToolStart
   | PythonToolDelta
+  | ToolCallArgumentDelta
   | SectionEnd
   | PacketError;
 export type FetchToolObj =

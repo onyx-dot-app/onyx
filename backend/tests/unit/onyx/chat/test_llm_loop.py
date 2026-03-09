@@ -2,7 +2,6 @@
 
 import pytest
 
-from onyx.chat.llm_loop import _should_keep_bedrock_tool_definitions
 from onyx.chat.llm_loop import _try_fallback_tool_extraction
 from onyx.chat.llm_loop import construct_message_history
 from onyx.chat.models import ChatLoadedFile
@@ -14,20 +13,9 @@ from onyx.chat.models import LlmStepResult
 from onyx.chat.models import ToolCallSimple
 from onyx.configs.constants import MessageType
 from onyx.file_store.models import ChatFileType
-from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import ToolChoiceOptions
 from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.models import ToolCallKickoff
-
-
-class _StubConfig:
-    def __init__(self, model_provider: str) -> None:
-        self.model_provider = model_provider
-
-
-class _StubLLM:
-    def __init__(self, model_provider: str) -> None:
-        self.config = _StubConfig(model_provider=model_provider)
 
 
 def create_message(
@@ -944,37 +932,6 @@ class TestForgottenFileMetadata:
                 forgotten is not None
             ), f"Turn {turn}: forgotten-files message must persist every turn"
             assert "moby_dick.txt" in forgotten.message
-
-
-class TestBedrockToolConfigGuard:
-    def test_bedrock_with_tool_history_keeps_tool_definitions(self) -> None:
-        llm = _StubLLM(LlmProviderNames.BEDROCK)
-        history = [
-            create_message("Question", MessageType.USER, 5),
-            create_assistant_with_tool_call("tc_1", "search", 5),
-            create_tool_response("tc_1", "Tool output", 5),
-        ]
-
-        assert _should_keep_bedrock_tool_definitions(llm, history) is True
-
-    def test_bedrock_without_tool_history_does_not_keep_tool_definitions(self) -> None:
-        llm = _StubLLM(LlmProviderNames.BEDROCK)
-        history = [
-            create_message("Question", MessageType.USER, 5),
-            create_message("Answer", MessageType.ASSISTANT, 5),
-        ]
-
-        assert _should_keep_bedrock_tool_definitions(llm, history) is False
-
-    def test_non_bedrock_with_tool_history_does_not_keep_tool_definitions(self) -> None:
-        llm = _StubLLM(LlmProviderNames.OPENAI)
-        history = [
-            create_message("Question", MessageType.USER, 5),
-            create_assistant_with_tool_call("tc_1", "search", 5),
-            create_tool_response("tc_1", "Tool output", 5),
-        ]
-
-        assert _should_keep_bedrock_tool_definitions(llm, history) is False
 
 
 class TestFallbackToolExtraction:

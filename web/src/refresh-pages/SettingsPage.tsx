@@ -57,7 +57,7 @@ import {
 } from "@/lib/constants/chatBackgrounds";
 import { SvgCheck } from "@opal/icons";
 import { cn } from "@/lib/utils";
-import { Interactive } from "@opal/core";
+import { Disabled, Interactive } from "@opal/core";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
@@ -109,12 +109,11 @@ function PATModal({
         !!createdToken?.token ? (
           <Button onClick={onClose}>Done</Button>
         ) : (
-          <Button
-            onClick={onCreate}
-            disabled={isCreating || !newTokenName.trim()}
-          >
-            {isCreating ? "Creating Token..." : "Create Token"}
-          </Button>
+          <Disabled disabled={isCreating || !newTokenName.trim()}>
+            <Button onClick={onCreate}>
+              {isCreating ? "Creating Token..." : "Create Token"}
+            </Button>
+          </Disabled>
         )
       }
       hideCancel={!!createdToken}
@@ -236,15 +235,16 @@ function GeneralSettings() {
           title="Delete All Chats"
           onClose={() => setShowDeleteConfirmation(false)}
           submit={
-            <Button
-              variant="danger"
-              onClick={() => {
-                void handleDeleteAllChats();
-              }}
-              disabled={isDeleting}
-            >
-              {isDeleting ? "Deleting..." : "Delete"}
-            </Button>
+            <Disabled disabled={isDeleting}>
+              <Button
+                variant="danger"
+                onClick={() => {
+                  void handleDeleteAllChats();
+                }}
+              >
+                {isDeleting ? "Deleting..." : "Delete"}
+              </Button>
+            </Disabled>
           }
         >
           <Section gap={0.5} alignItems="start">
@@ -447,7 +447,7 @@ function GeneralSettings() {
                 prominence="secondary"
                 onClick={() => setShowDeleteConfirmation(true)}
                 icon={SvgTrash}
-                transient={showDeleteConfirmation}
+                interaction={showDeleteConfirmation ? "hover" : "rest"}
               >
                 Delete All Chats
               </Button>
@@ -697,18 +697,21 @@ function PromptShortcuts() {
                   }
                 />
                 <Section>
-                  <Button
-                    icon={SvgMinusCircle}
-                    onClick={() => void handleRemoveShortcut(index)}
-                    prominence="tertiary"
+                  <Disabled
                     disabled={(shortcut.isNew && isEmpty) || shortcut.is_public}
-                    aria-label="Remove shortcut"
-                    tooltip={
-                      shortcut.is_public
-                        ? "Cannot delete public prompt-shortcuts."
-                        : undefined
-                    }
-                  />
+                  >
+                    <Button
+                      icon={SvgMinusCircle}
+                      onClick={() => void handleRemoveShortcut(index)}
+                      prominence="tertiary"
+                      aria-label="Remove shortcut"
+                      tooltip={
+                        shortcut.is_public
+                          ? "Cannot delete public prompt-shortcuts."
+                          : undefined
+                      }
+                    />
+                  </Disabled>
                 </Section>
                 <InputTextArea
                   placeholder="Provide a concise 1–2 sentence summary of the following:"
@@ -1271,19 +1274,20 @@ function AccountsAccessSettings() {
                 icon={SvgLock}
                 title="Change Password"
                 submit={
-                  <Button
-                    disabled={isSubmitting || !dirty || !isValid}
-                    onClick={async () => {
-                      setSubmitting(true);
-                      try {
-                        await handleChangePassword(values);
-                      } finally {
-                        setSubmitting(false);
-                      }
-                    }}
-                  >
-                    {isSubmitting ? "Updating..." : "Update"}
-                  </Button>
+                  <Disabled disabled={isSubmitting || !dirty || !isValid}>
+                    <Button
+                      onClick={async () => {
+                        setSubmitting(true);
+                        try {
+                          await handleChangePassword(values);
+                        } finally {
+                          setSubmitting(false);
+                        }
+                      }}
+                    >
+                      {isSubmitting ? "Updating..." : "Update"}
+                    </Button>
+                  </Disabled>
                 }
                 onClose={() => {
                   setShowPasswordModal(false);
@@ -1371,7 +1375,7 @@ function AccountsAccessSettings() {
                   prominence="secondary"
                   icon={SvgLock}
                   onClick={() => setShowPasswordModal(true)}
-                  transient={showPasswordModal}
+                  interaction={showPasswordModal ? "hover" : "rest"}
                 >
                   Change Password
                 </Button>
@@ -1558,13 +1562,11 @@ function FederatedConnectorCard({
           title={`Disconnect ${sourceMetadata.displayName}`}
           onClose={() => setShowDisconnectConfirmation(false)}
           submit={
-            <Button
-              variant="danger"
-              onClick={() => void handleDisconnect()}
-              disabled={isDisconnecting}
-            >
-              {isDisconnecting ? "Disconnecting..." : "Disconnect"}
-            </Button>
+            <Disabled disabled={isDisconnecting}>
+              <Button variant="danger" onClick={() => void handleDisconnect()}>
+                {isDisconnecting ? "Disconnecting..." : "Disconnect"}
+              </Button>
+            </Disabled>
           }
         >
           <Section gap={0.5} alignItems="start">
@@ -1593,13 +1595,14 @@ function FederatedConnectorCard({
           paddingVariant="sm"
           rightChildren={
             connector.has_oauth_token ? (
-              <Button
-                icon={SvgUnplug}
-                prominence="tertiary"
-                size="sm"
-                onClick={() => setShowDisconnectConfirmation(true)}
-                disabled={isDisconnecting}
-              />
+              <Disabled disabled={isDisconnecting}>
+                <Button
+                  icon={SvgUnplug}
+                  prominence="tertiary"
+                  size="sm"
+                  onClick={() => setShowDisconnectConfirmation(true)}
+                />
+              </Disabled>
             ) : connector.authorize_url ? (
               <Button
                 prominence="internal"

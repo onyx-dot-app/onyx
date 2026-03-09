@@ -19,6 +19,7 @@ import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import PendingUsersTable from "@/components/admin/users/PendingUsersTable";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { Spinner } from "@/components/Spinner";
 import { SvgDownloadCloud, SvgUserPlus } from "@opal/icons";
@@ -149,13 +150,14 @@ function UsersTables({
           <CardHeader>
             <div className="flex justify-between items-center gap-1">
               <CardTitle>Current Users</CardTitle>
-              <Button
-                icon={SvgDownloadCloud}
-                disabled={isDownloadingUsers}
-                onClick={() => downloadAllUsers()}
-              >
-                {isDownloadingUsers ? "Downloading..." : "Download CSV"}
-              </Button>
+              <Disabled disabled={isDownloadingUsers}>
+                <Button
+                  icon={SvgDownloadCloud}
+                  onClick={() => downloadAllUsers()}
+                >
+                  {isDownloadingUsers ? "Downloading..." : "Download CSV"}
+                </Button>
+              </Disabled>
             </div>
           </CardHeader>
           <CardContent>

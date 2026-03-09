@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import Label from "@/refresh-components/form/Label";
 import Text from "@/refresh-components/texts/Text";
 import { SvgAlertCircle, SvgEye, SvgEyeClosed, SvgKey } from "@opal/icons";
+import { Disabled } from "@opal/core";
 interface MCPAuthTemplate {
   headers: Array<{ name: string; value: string }>;
   request_body_params: Array<{ path: string; value: string }>;
@@ -250,15 +251,12 @@ export default function MCPApiKeyModal({
             )}
 
             <div className="flex justify-end space-x-2 pt-4">
-              <Button
-                prominence="secondary"
-                onClick={handleClose}
-                disabled={isSubmitting}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
+              <Disabled disabled={isSubmitting}>
+                <Button prominence="secondary" onClick={handleClose}>
+                  Cancel
+                </Button>
+              </Disabled>
+              <Disabled
                 disabled={
                   isSubmitting ||
                   (isTemplateMode
@@ -268,12 +266,14 @@ export default function MCPApiKeyModal({
                     : !apiKey.trim())
                 }
               >
-                {isSubmitting
-                  ? "Saving..."
-                  : isAuthenticated
-                    ? `Update ${credsType}`
-                    : `Save ${credsType}`}
-              </Button>
+                <Button type="submit">
+                  {isSubmitting
+                    ? "Saving..."
+                    : isAuthenticated
+                      ? `Update ${credsType}`
+                      : `Save ${credsType}`}
+                </Button>
+              </Disabled>
             </div>
           </form>
         </Modal.Body>

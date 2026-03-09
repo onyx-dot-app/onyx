@@ -2,6 +2,7 @@ import { SvgDownload, SvgKey, SvgRefreshCw } from "@opal/icons";
 import { Interactive } from "@opal/core";
 import { Section } from "@/layouts/general-layouts";
 import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import Text from "@/refresh-components/texts/Text";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
@@ -54,13 +55,11 @@ export default function ScimModal({
           title="Regenerate SCIM Token"
           onClose={onClose}
           submit={
-            <Button
-              variant="danger"
-              onClick={onRegenerate}
-              disabled={isSubmitting}
-            >
-              Regenerate Token
-            </Button>
+            <Disabled disabled={isSubmitting}>
+              <Button variant="danger" onClick={onRegenerate}>
+                Regenerate Token
+              </Button>
+            </Disabled>
           }
         >
           <Section alignItems="start" gap={0.5}>
@@ -84,7 +83,7 @@ export default function ScimModal({
               onClose={onClose}
             />
             <Modal.Body>
-              <Interactive.Base
+              <Interactive.Stateless
                 group="group/token"
                 onClick={() => copyToClipboard(view.rawToken)}
               >
@@ -104,7 +103,7 @@ export default function ScimModal({
                     </div>
                   }
                 />
-              </Interactive.Base>
+              </Interactive.Stateless>
             </Modal.Body>
             <Modal.Footer>
               <BasicModalFooter

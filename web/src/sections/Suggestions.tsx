@@ -30,7 +30,7 @@ export default function Suggestions({ onSubmit }: SuggestionsProps) {
   return (
     <div className="max-w-[var(--app-page-main-content-width)] flex flex-col w-full p-1">
       {currentAgent.starter_messages.map(({ message }, index) => (
-        <Interactive.Base
+        <Interactive.Stateless
           key={index}
           variant="default"
           prominence="tertiary"
@@ -49,7 +49,7 @@ export default function Suggestions({ onSubmit }: SuggestionsProps) {
               prominence="muted"
             />
           </Interactive.Container>
-        </Interactive.Base>
+        </Interactive.Stateless>
       ))}
     </div>
   );

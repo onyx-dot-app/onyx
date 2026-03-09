@@ -6,6 +6,7 @@ import * as SettingsLayouts from "@/layouts/settings-layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import Button from "@/refresh-components/buttons/Button";
 import { Button as OpalButton } from "@opal/components";
+import { Disabled } from "@opal/core";
 import { FullPersona } from "@/app/admin/agents/interfaces";
 import { buildImgUrl } from "@/app/app/components/files/images/utils";
 import { Formik, Form, FieldArray } from "formik";
@@ -1200,8 +1201,7 @@ export default function AgentEditorPage({
                           >
                             Cancel
                           </OpalButton>
-                          <OpalButton
-                            type="submit"
+                          <Disabled
                             disabled={
                               isSubmitting ||
                               !isValid ||
@@ -1209,8 +1209,10 @@ export default function AgentEditorPage({
                               hasUploadingFiles
                             }
                           >
-                            {existingAgent ? "Save" : "Create"}
-                          </OpalButton>
+                            <OpalButton type="submit">
+                              {existingAgent ? "Save" : "Create"}
+                            </OpalButton>
+                          </Disabled>
                         </div>
                       }
                       backButton

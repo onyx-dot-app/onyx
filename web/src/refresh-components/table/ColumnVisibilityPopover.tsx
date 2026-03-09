@@ -38,7 +38,7 @@ function ColumnVisibilityPopover<TData extends RowData>({
       <Popover.Trigger asChild>
         <Button
           icon={SvgColumn}
-          transient={open}
+          interaction={open ? "hover" : "rest"}
           size={size === "small" ? "sm" : "md"}
           prominence="internal"
           tooltip="Columns"

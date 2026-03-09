@@ -22,7 +22,7 @@ import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import { useAppMode } from "@/providers/AppModeProvider";
 import useAppFocus from "@/hooks/useAppFocus";
 import { cn, isImageFile } from "@/lib/utils";
-import { Disabled } from "@/refresh-components/Disabled";
+import { Disabled } from "@opal/core";
 import { useUser } from "@/providers/UserProvider";
 import {
   SettingsContext,
@@ -50,7 +50,7 @@ import {
   SvgStop,
   SvgX,
 } from "@opal/icons";
-import { Button } from "@opal/components";
+import { Button, SelectButton } from "@opal/components";
 import Popover from "@/refresh-components/Popover";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { useQueryController } from "@/providers/QueryControllerProvider";
@@ -194,7 +194,7 @@ const AppInputBar = React.memo(
       (isNewSession || recordingCycleCount === 1);
 
     const { forcedToolIds, setForcedToolIds } = useForcedTools();
-    const { currentMessageFiles, setCurrentMessageFiles } =
+    const { currentMessageFiles, setCurrentMessageFiles, currentProjectId } =
       useProjectsContext();
 
     const currentIndexingFiles = useMemo(() => {
@@ -246,9 +246,17 @@ const AppInputBar = React.memo(
       const textarea = textAreaRef.current;
       if (!wrapper || !textarea) return;
 
+      // Reset so scrollHeight reflects actual content size
       wrapper.style.height = `${MIN_INPUT_HEIGHT}px`;
+
+      // scrollHeight doesn't include the wrapper's padding, so add it back
+      const wrapperStyle = getComputedStyle(wrapper);
+      const paddingTop = parseFloat(wrapperStyle.paddingTop);
+      const paddingBottom = parseFloat(wrapperStyle.paddingBottom);
+      const contentHeight = textarea.scrollHeight + paddingTop + paddingBottom;
+
       wrapper.style.height = `${Math.min(
-        Math.max(textarea.scrollHeight, MIN_INPUT_HEIGHT),
+        Math.max(contentHeight, MIN_INPUT_HEIGHT),
         MAX_INPUT_HEIGHT
       )}px`;
     }, [message, isSearchMode]);
@@ -404,13 +412,19 @@ const AppInputBar = React.memo(
     const showDeepResearch = useMemo(() => {
       const deepResearchGloballyEnabled =
         combinedSettings?.settings?.deep_research_enabled ?? true;
+      const isProjectWorkflow = currentProjectId !== null;
+
+      // TODO(@yuhong): Re-enable Deep Research in Projects workflow once it is fully supported.
+      // https://linear.app/onyx-app/issue/ENG-3818/re-enable-deep-research-in-projects
       return (
+        !isProjectWorkflow &&
         deepResearchGloballyEnabled &&
         hasSearchToolsAvailable(selectedAgent?.tools || [])
       );
     }, [
       selectedAgent?.tools,
       combinedSettings?.settings?.deep_research_enabled,
+      currentProjectId,
     ]);
 
     function handleKeyDownForPromptShortcuts(
@@ -485,13 +499,14 @@ const AppInputBar = React.memo(
             }}
             handleUploadChange={handleUploadChange}
             trigger={(open) => (
-              <Button
-                icon={SvgPlusCircle}
-                tooltip="Attach Files"
-                transient={open}
-                disabled={disabled}
-                prominence="tertiary"
-              />
+              <Disabled disabled={disabled}>
+                <Button
+                  icon={SvgPlusCircle}
+                  tooltip="Attach Files"
+                  interaction={open ? "hover" : "rest"}
+                  prominence="tertiary"
+                />
+              </Disabled>
             )}
             selectedFileIds={currentMessageFiles.map((f) => f.id)}
           />
@@ -513,38 +528,38 @@ const AppInputBar = React.memo(
               />
             )}
             {onToggleTabReading ? (
-              <Button
-                icon={SvgGlobe}
-                onClick={onToggleTabReading}
-                variant="select"
-                selected={tabReadingEnabled}
-                foldable={!tabReadingEnabled}
-                disabled={disabled}
-              >
-                {tabReadingEnabled
-                  ? currentTabUrl
-                    ? (() => {
-                        try {
-                          return new URL(currentTabUrl).hostname;
-                        } catch {
-                          return currentTabUrl;
-                        }
-                      })()
-                    : "Reading tab..."
-                  : "Read this tab"}
-              </Button>
+              <Disabled disabled={disabled}>
+                <SelectButton
+                  icon={SvgGlobe}
+                  onClick={onToggleTabReading}
+                  state={tabReadingEnabled ? "selected" : "empty"}
+                >
+                  {tabReadingEnabled
+                    ? currentTabUrl
+                      ? (() => {
+                          try {
+                            return new URL(currentTabUrl).hostname;
+                          } catch {
+                            return currentTabUrl;
+                          }
+                        })()
+                      : "Reading tab..."
+                    : "Read this tab"}
+                </SelectButton>
+              </Disabled>
             ) : (
               showDeepResearch && (
-                <Button
-                  icon={SvgHourglass}
-                  onClick={toggleDeepResearch}
-                  variant="select"
-                  selected={deepResearchEnabled}
-                  foldable={!deepResearchEnabled}
-                  disabled={disabled}
-                >
-                  Deep Research
-                </Button>
+                <Disabled disabled={disabled}>
+                  <SelectButton
+                    variant="select-light"
+                    icon={SvgHourglass}
+                    onClick={toggleDeepResearch}
+                    state={deepResearchEnabled ? "selected" : "empty"}
+                    foldable={!deepResearchEnabled}
+                  >
+                    Deep Research
+                  </SelectButton>
+                </Disabled>
               )
             )}
 
@@ -558,20 +573,20 @@ const AppInputBar = React.memo(
                   return null;
                 }
                 return (
-                  <Button
-                    key={toolId}
-                    icon={getIconForAction(tool)}
-                    onClick={() => {
-                      setForcedToolIds(
-                        forcedToolIds.filter((id) => id !== toolId)
-                      );
-                    }}
-                    variant="select"
-                    selected
-                    disabled={disabled}
-                  >
-                    {tool.display_name}
-                  </Button>
+                  <Disabled disabled={disabled} key={toolId}>
+                    <SelectButton
+                      variant="select-light"
+                      icon={getIconForAction(tool)}
+                      onClick={() => {
+                        setForcedToolIds(
+                          forcedToolIds.filter((id) => id !== toolId)
+                        );
+                      }}
+                      state="selected"
+                    >
+                      {tool.display_name}
+                    </SelectButton>
+                  </Disabled>
                 );
               })}
           </div>
@@ -608,15 +623,8 @@ const AppInputBar = React.memo(
             onMuteChange={setIsMuted}
             setMutedRef={setMutedRef}
           />
-          <Button
-            id="onyx-chat-input-send-button"
-            icon={
-              isClassifying
-                ? SimpleLoader
-                : chatState === "streaming" || isVoicePlaybackControllable
-                  ? SvgStop
-                  : SvgArrowUp
-            }
+      
+          <Disabled
             disabled={
               (chatState === "input" &&
                 !isVoicePlaybackControllable &&
@@ -624,6 +632,16 @@ const AppInputBar = React.memo(
               hasUploadingFiles ||
               isClassifying
             }
+           >
+            <Button
+              id="onyx-chat-input-send-button"
+              icon={
+                isClassifying
+                  ? SimpleLoader
+                  : chatState === "streaming" || isVoicePlaybackControllable
+                    ? SvgStop
+                    : SvgArrowUp
+              }
             onClick={() => {
               if (chatState == "streaming") {
                 stopTTS({ manual: true });
@@ -633,8 +651,15 @@ const AppInputBar = React.memo(
               } else if (message) {
                 onSubmit(message);
               }
-            }}
-          />
+              onClick={() => {
+                if (chatState == "streaming") {
+                  stopGenerating();
+                } else if (message) {
+                  onSubmit(message);
+                }
+              }}
+            />
+          </Disabled>
         </div>
       </div>
     );
@@ -782,25 +807,29 @@ const AppInputBar = React.memo(
 
             {isSearchMode && (
               <Section flexDirection="row" width="fit" gap={0}>
-                <Button
-                  icon={SvgX}
-                  disabled={!message || isClassifying}
-                  onClick={() => setMessage("")}
-                  prominence="tertiary"
-                />
-                <Button
-                  id="onyx-chat-input-send-button"
-                  icon={isClassifying ? SimpleLoader : SvgSearch}
+                <Disabled disabled={!message || isClassifying}>
+                  <Button
+                    icon={SvgX}
+                    onClick={() => setMessage("")}
+                    prominence="tertiary"
+                  />
+                </Disabled>
+                <Disabled
                   disabled={!message || isClassifying || hasUploadingFiles}
-                  onClick={() => {
-                    if (chatState == "streaming") {
-                      stopGenerating();
-                    } else if (message) {
-                      handleSubmit(message);
-                    }
-                  }}
-                  prominence="tertiary"
-                />
+                >
+                  <Button
+                    id="onyx-chat-input-send-button"
+                    icon={isClassifying ? SimpleLoader : SvgSearch}
+                    onClick={() => {
+                      if (chatState == "streaming") {
+                        stopGenerating();
+                      } else if (message) {
+                        handleSubmit(message);
+                      }
+                    }}
+                    prominence="tertiary"
+                  />
+                </Disabled>
                 <Spacer horizontal rem={0.25} />
               </Section>
             )}

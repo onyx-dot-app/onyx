@@ -15,7 +15,8 @@ permissions:
 jobs:
   provider-chat-test:
     uses: ./.github/workflows/reusable-nightly-llm-provider-chat.yml
-    secrets: inherit
+    secrets:
+      AWS_OIDC_ROLE_ARN: ${{ secrets.AWS_OIDC_ROLE_ARN }}
     permissions:
       contents: read
       id-token: write

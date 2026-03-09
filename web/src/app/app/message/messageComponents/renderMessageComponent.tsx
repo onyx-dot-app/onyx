@@ -1,11 +1,14 @@
 import React, { JSX, memo } from "react";
 import {
   ChatPacket,
+  CODE_INTERPRETER_TOOL_TYPES,
   ImageGenerationToolPacket,
   Packet,
   PacketType,
   ReasoningPacket,
+  SearchToolStart,
   StopReason,
+  ToolCallArgumentDelta,
 } from "../../services/streamingModels";
 import {
   FullChatState,
@@ -26,7 +29,6 @@ import { DeepResearchPlanRenderer } from "./timeline/renderers/deepresearch/Deep
 import { ResearchAgentRenderer } from "./timeline/renderers/deepresearch/ResearchAgentRenderer";
 import { WebSearchToolRenderer } from "./timeline/renderers/search/WebSearchToolRenderer";
 import { InternalSearchToolRenderer } from "./timeline/renderers/search/InternalSearchToolRenderer";
-import { SearchToolStart } from "../../services/streamingModels";
 
 // Different types of chat packets using discriminated unions
 interface GroupedPackets {
@@ -56,7 +58,12 @@ function isImageToolPacket(packet: Packet) {
 }
 
 function isPythonToolPacket(packet: Packet) {
-  return packet.obj.type === PacketType.PYTHON_TOOL_START;
+  return (
+    packet.obj.type === PacketType.PYTHON_TOOL_START ||
+    (packet.obj.type === PacketType.TOOL_CALL_ARGUMENT_DELTA &&
+      (packet.obj as ToolCallArgumentDelta).tool_type ===
+        CODE_INTERPRETER_TOOL_TYPES.PYTHON)
+  );
 }
 
 function isCustomToolPacket(packet: Packet) {

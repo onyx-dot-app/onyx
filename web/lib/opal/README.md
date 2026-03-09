@@ -33,9 +33,17 @@ Those dependencies will then install inside of `/web/node_modules` and be availa
 ```
 /web/lib/opal/
 ├── src/
-│   ├── components/    # React components
-│   └── index.ts       # Main export file
+│   ├── core/           # Low-level primitives (Interactive, Hoverable)
+│   ├── components/     # High-level React components (Button, SelectButton, OpenButton, Tag)
+│   ├── layouts/        # Layout primitives (Content, ContentAction, IllustrationContent)
+│   └── index.ts        # Main export file
 ├── package.json
 ├── tsconfig.json
 └── README.md
 ```
+
+## Conventions
+
+- **Directory names** are kebab-case (e.g. `select-button/`, `open-button/`, `content-action/`)
+- **Each component directory** contains `components.tsx`, `styles.css` (if needed), and `README.md`
+- **Imports** use `@opal/` path aliases (e.g. `@opal/components`, `@opal/core`)

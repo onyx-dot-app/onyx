@@ -15,6 +15,7 @@ from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.emitter import Emitter
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import LlmStepResult
+from onyx.chat.tool_call_args_streaming import maybe_emit_argument_delta
 from onyx.configs.app_configs import LOG_ONYX_MODEL_INTERACTIONS
 from onyx.configs.app_configs import PROMPT_CACHE_CHAT_HISTORY
 from onyx.configs.constants import MessageType
@@ -54,7 +55,9 @@ from onyx.server.query_and_chat.streaming_models import ReasoningStart
 from onyx.tools.models import ToolCallKickoff
 from onyx.tracing.framework.create import generation_span
 from onyx.utils.b64 import get_image_type_from_bytes
+from onyx.utils.jsonriver import Parser
 from onyx.utils.logger import setup_logger
+from onyx.utils.postgres_sanitization import sanitize_string
 from onyx.utils.text_processing import find_all_json_objects
 
 logger = setup_logger()
@@ -166,15 +169,6 @@ def _find_function_calls_open_marker(text_lower: str) -> int:
         search_from = idx + 1
 
 
-def _sanitize_llm_output(value: str) -> str:
-    """Remove characters that PostgreSQL's text/JSONB types cannot store.
-
-    - NULL bytes (\x00): Not allowed in PostgreSQL text types
-    - UTF-16 surrogates (\ud800-\udfff): Invalid in UTF-8 encoding
-    """
-    return "".join(c for c in value if c != "\x00" and not ("\ud800" <= c <= "\udfff"))
-
-
 def _try_parse_json_string(value: Any) -> Any:
     """Attempt to parse a JSON string value into its Python equivalent.
 
@@ -222,9 +216,7 @@ def _parse_tool_args_to_dict(raw_args: Any) -> dict[str, Any]:
     if isinstance(raw_args, dict):
         # Parse any string values that look like JSON arrays/objects
         return {
-            k: _try_parse_json_string(
-                _sanitize_llm_output(v) if isinstance(v, str) else v
-            )
+            k: _try_parse_json_string(sanitize_string(v) if isinstance(v, str) else v)
             for k, v in raw_args.items()
         }
 
@@ -232,7 +224,7 @@ def _parse_tool_args_to_dict(raw_args: Any) -> dict[str, Any]:
         return {}
 
     # Sanitize before parsing to remove NULL bytes and surrogates
-    raw_args = _sanitize_llm_output(raw_args)
+    raw_args = sanitize_string(raw_args)
 
     try:
         parsed1: Any = json.loads(raw_args)
@@ -545,12 +537,12 @@ def _extract_xml_attribute(attrs: str, attr_name: str) -> str | None:
     )
     if not attr_match:
         return None
-    return _sanitize_llm_output(unescape(attr_match.group(2).strip()))
+    return sanitize_string(unescape(attr_match.group(2).strip()))
 
 
 def _parse_xml_parameter_value(raw_value: str, string_attr: str | None) -> Any:
     """Parse a parameter value from XML-style tool call payloads."""
-    value = _sanitize_llm_output(unescape(raw_value).strip())
+    value = sanitize_string(unescape(raw_value).strip())
 
     if string_attr and string_attr.lower() == "true":
         return value
@@ -569,6 +561,7 @@ def _resolve_tool_arguments(obj: dict[str, Any]) -> dict[str, Any] | None:
     """
     arguments = obj.get("arguments", obj.get("parameters", {}))
     if isinstance(arguments, str):
+        arguments = sanitize_string(arguments)
         try:
             arguments = json.loads(arguments)
         except json.JSONDecodeError:
@@ -1018,6 +1011,7 @@ def run_llm_step_pkt_generator(
         )
 
     id_to_tool_call_map: dict[int, dict[str, Any]] = {}
+    arg_parsers: dict[int, Parser] = {}
     reasoning_start = False
     answer_start = False
     accumulated_reasoning = ""
@@ -1224,7 +1218,14 @@ def run_llm_step_pkt_generator(
                 yield from _close_reasoning_if_active()
 
                 for tool_call_delta in delta.tool_calls:
+                    # maybe_emit depends and update being called first and attaching the delta
                     _update_tool_call_with_delta(id_to_tool_call_map, tool_call_delta)
+                    yield from maybe_emit_argument_delta(
+                        tool_calls_in_progress=id_to_tool_call_map,
+                        tool_call_delta=tool_call_delta,
+                        placement=_current_placement(),
+                        parsers=arg_parsers,
+                    )
 
         # Flush any tail text buffered while checking for split "<function_calls" markers.
         filtered_content_tail = xml_tool_call_content_filter.flush()

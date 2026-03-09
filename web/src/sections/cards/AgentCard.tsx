@@ -127,7 +127,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
         {fullAgent && <AgentViewerModal agent={fullAgent} />}
       </agentViewerModal.Provider>
 
-      <Interactive.Base
+      <Interactive.Stateless
         onClick={() => agentViewerModal.toggle(true)}
         group="group/AgentCard"
         variant="none"
@@ -232,7 +232,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
             </div>
           </div>
         </Card>
-      </Interactive.Base>
+      </Interactive.Stateless>
     </>
   );
 }

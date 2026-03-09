@@ -35,7 +35,7 @@ export const widthClassmap: Record<Length, string> = {
 export const heightClassmap: Record<Length, string> = {
   auto: "h-auto",
   fit: "h-fit",
-  full: "h-full",
+  full: "h-full min-h-0",
 };
 
 /**
@@ -112,20 +112,8 @@ export interface SectionProps
 }
 
 /**
- * WARNING: Do NOT wrap Section with the `<Disabled>` component.
- *
- * The `<Disabled>` component uses Radix Slot which injects a `className` prop.
- * Since `Section` spreads `...rest` after setting its own `className`, the injected
- * className will overwrite all layout classes (flex, flex-col, etc.), breaking the layout.
- *
- * To disable content within a Section, wrap the individual children instead:
- * ```tsx
- * <Section>
- *   <Disabled disabled={!isEnabled}>
- *     <Button>...</Button>
- *   </Disabled>
- * </Section>
- * ```
+ * `<Disabled>` from `@opal/core` uses `display: contents` — it can safely
+ * wrap a `Section` without affecting layout.
  */
 function Section({
   flexDirection = "column",

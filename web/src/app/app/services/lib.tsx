@@ -288,15 +288,15 @@ export async function deleteAllChatSessions() {
 
 export async function getAvailableContextTokens(
   chatSessionId: string
-): Promise<number> {
+): Promise<number | null> {
   const response = await fetch(
     `/api/chat/available-context-tokens/${chatSessionId}`
   );
   if (!response.ok) {
-    return 0;
+    return null;
   }
   const data = (await response.json()) as { available_tokens: number };
-  return data?.available_tokens ?? 0;
+  return data?.available_tokens ?? null;
 }
 
 export function processRawChatHistory(

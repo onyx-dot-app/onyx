@@ -78,6 +78,7 @@ class Settings(BaseModel):
 
     # User Knowledge settings
     user_knowledge_enabled: bool | None = True
+    user_file_max_upload_size_mb: int | None = None
 
     # Connector settings
     show_extra_connectors: bool | None = True

@@ -104,6 +104,10 @@ Onyx uses Celery for asynchronous task processing with multiple specialized work
 
 - Always use `@shared_task` rather than `@celery_app`
 - Put tasks under `background/celery/tasks/` or `ee/background/celery/tasks`
+- Never enqueue a task without an expiration. Always supply `expires=` when
+  sending tasks, either from the beat schedule or directly from another task. It
+  should never be acceptable to submit code which enqueues tasks without an
+  expiration, as doing so can lead to unbounded task queue growth.
 
 **Defining APIs**:
 When creating new FastAPI APIs, do NOT use the `response_model` field. Instead, just type the
@@ -539,6 +543,8 @@ To run them:
 ```bash
 npx playwright test <TEST_NAME>
 ```
+
+For shared fixtures, best practices, and detailed guidance, see `backend/tests/README.md`.
 
 ## Logs
 

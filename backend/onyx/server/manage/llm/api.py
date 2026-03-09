@@ -48,6 +48,7 @@ from onyx.llm.utils import test_llm
 from onyx.llm.well_known_providers.auto_update_service import (
     fetch_llm_recommendations_from_github,
 )
+from onyx.llm.well_known_providers.constants import LM_STUDIO_API_KEY_CONFIG_KEY
 from onyx.llm.well_known_providers.llm_provider_options import (
     fetch_available_well_known_llms,
 )
@@ -62,6 +63,8 @@ from onyx.server.manage.llm.models import LLMProviderDescriptor
 from onyx.server.manage.llm.models import LLMProviderResponse
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import LLMProviderView
+from onyx.server.manage.llm.models import LMStudioFinalModelResponse
+from onyx.server.manage.llm.models import LMStudioModelsRequest
 from onyx.server.manage.llm.models import OllamaFinalModelResponse
 from onyx.server.manage.llm.models import OllamaModelDetails
 from onyx.server.manage.llm.models import OllamaModelsRequest
@@ -73,6 +76,7 @@ from onyx.server.manage.llm.models import VisionProviderResponse
 from onyx.server.manage.llm.utils import generate_bedrock_display_name
 from onyx.server.manage.llm.utils import generate_ollama_display_name
 from onyx.server.manage.llm.utils import infer_vision_support
+from onyx.server.manage.llm.utils import is_reasoning_model
 from onyx.server.manage.llm.utils import is_valid_bedrock_model
 from onyx.server.manage.llm.utils import ModelMetadata
 from onyx.server.manage.llm.utils import strip_openrouter_vendor_prefix
@@ -441,6 +445,17 @@ def put_llm_provider(
         not existing_provider or not existing_provider.is_auto_mode
     )
 
+    # Before the upsert, check if this provider currently owns the global
+    # CHAT default. The upsert may cascade-delete model_configurations
+    # (and their flow mappings), so we need to remember this beforehand.
+    was_default_provider = False
+    if existing_provider and transitioning_to_auto_mode:
+        current_default = fetch_default_llm_model(db_session)
+        was_default_provider = (
+            current_default is not None
+            and current_default.llm_provider_id == existing_provider.id
+        )
+
     try:
         result = upsert_llm_provider(
             llm_provider_upsert_request=llm_provider_upsert_request,
@@ -463,6 +478,20 @@ def put_llm_provider(
                         updated_provider,
                         config,
                     )
+
+                    # If this provider was the default before the transition,
+                    # restore the default using the recommended model.
+                    if was_default_provider:
+                        recommended = config.get_default_model(
+                            llm_provider_upsert_request.provider
+                        )
+                        if recommended:
+                            update_default_provider(
+                                provider_id=updated_provider.id,
+                                model_name=recommended.name,
+                                db_session=db_session,
+                            )
+
                     # Refresh result with synced models
                     result = LLMProviderView.from_model(updated_provider)
 
@@ -1215,5 +1244,119 @@ def get_openrouter_available_models(
                 )
         except ValueError as e:
             logger.warning(f"Failed to sync OpenRouter models to DB: {e}")
+
+    return sorted_results
+
+
+@admin_router.post("/lm-studio/available-models")
+def get_lm_studio_available_models(
+    request: LMStudioModelsRequest,
+    _: User = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
+) -> list[LMStudioFinalModelResponse]:
+    """Fetch available models from an LM Studio server.
+
+    Uses the LM Studio-native /api/v1/models endpoint which exposes
+    rich metadata including capabilities (vision, reasoning),
+    display names, and context lengths.
+    """
+    cleaned_api_base = request.api_base.strip().rstrip("/")
+    # Strip /v1 suffix that users may copy from OpenAI-compatible tool configs;
+    # the native metadata endpoint lives at /api/v1/models, not /v1/api/v1/models.
+    cleaned_api_base = cleaned_api_base.removesuffix("/v1")
+    if not cleaned_api_base:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "API base URL is required to fetch LM Studio models.",
+        )
+
+    # If provider_name is given and the api_key hasn't been changed by the user,
+    # fall back to the stored API key from the database (the form value is masked).
+    api_key = request.api_key
+    if request.provider_name and not request.api_key_changed:
+        existing_provider = fetch_existing_llm_provider(
+            name=request.provider_name, db_session=db_session
+        )
+        if existing_provider and existing_provider.custom_config:
+            api_key = existing_provider.custom_config.get(LM_STUDIO_API_KEY_CONFIG_KEY)
+
+    url = f"{cleaned_api_base}/api/v1/models"
+    headers: dict[str, str] = {}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    try:
+        response = httpx.get(url, headers=headers, timeout=10.0)
+        response.raise_for_status()
+        response_json = response.json()
+    except Exception as e:
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY,
+            f"Failed to fetch LM Studio models: {e}",
+        )
+
+    models = response_json.get("models", [])
+    if not isinstance(models, list) or len(models) == 0:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "No models found from your LM Studio server.",
+        )
+
+    results: list[LMStudioFinalModelResponse] = []
+    for item in models:
+        # Filter to LLM-type models only (skip embeddings, etc.)
+        if item.get("type") != "llm":
+            continue
+
+        model_key = item.get("key")
+        if not model_key:
+            continue
+
+        display_name = item.get("display_name") or model_key
+        max_context_length = item.get("max_context_length")
+        capabilities = item.get("capabilities") or {}
+
+        results.append(
+            LMStudioFinalModelResponse(
+                name=model_key,
+                display_name=display_name,
+                max_input_tokens=max_context_length,
+                supports_image_input=capabilities.get("vision", False),
+                supports_reasoning=capabilities.get("reasoning", False)
+                or is_reasoning_model(model_key, display_name),
+            )
+        )
+
+    if not results:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "No compatible models found from LM Studio server.",
+        )
+
+    sorted_results = sorted(results, key=lambda m: m.name.lower())
+
+    # Sync new models to DB if provider_name is specified
+    if request.provider_name:
+        try:
+            models_to_sync = [
+                {
+                    "name": r.name,
+                    "display_name": r.display_name,
+                    "max_input_tokens": r.max_input_tokens,
+                    "supports_image_input": r.supports_image_input,
+                }
+                for r in sorted_results
+            ]
+            new_count = sync_model_configurations(
+                db_session=db_session,
+                provider_name=request.provider_name,
+                models=models_to_sync,
+            )
+            if new_count > 0:
+                logger.info(
+                    f"Added {new_count} new LM Studio models to provider '{request.provider_name}'"
+                )
+        except ValueError as e:
+            logger.warning(f"Failed to sync LM Studio models to DB: {e}")
 
     return sorted_results

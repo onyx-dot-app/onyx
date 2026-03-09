@@ -461,14 +461,14 @@ jobs:
       # --- Visual Regression Diff ---
       - name: Configure AWS credentials
         if: always()
-        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
 
       - name: Install the latest version of uv
         if: always()
-        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b # ratchet:astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@5a095e7a2014a4212f075830d4f7277575a9d098 # ratchet:astral-sh/setup-uv@v7
         with:
           enable-cache: false
           version: "0.9.9"
@@ -707,7 +707,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Download visual diff summaries
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
         with:
           pattern: screenshot-diff-summary-*
           path: summaries/

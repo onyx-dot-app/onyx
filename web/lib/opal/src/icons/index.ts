@@ -100,6 +100,7 @@ export { default as SvgLineChartUp } from "@opal/icons/line-chart-up";
 export { default as SvgLink } from "@opal/icons/link";
 export { default as SvgLinkedDots } from "@opal/icons/linked-dots";
 export { default as SvgLitellm } from "@opal/icons/litellm";
+export { default as SvgLmStudio } from "@opal/icons/lm-studio";
 export { default as SvgLoader } from "@opal/icons/loader";
 export { default as SvgLock } from "@opal/icons/lock";
 export { default as SvgLogOut } from "@opal/icons/log-out";

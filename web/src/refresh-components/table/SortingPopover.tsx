@@ -47,7 +47,7 @@ function SortingPopover<TData extends RowData>({
       <Popover.Trigger asChild>
         <Button
           icon={currentSort === null ? SvgArrowUpDown : SvgSortOrder}
-          transient={open}
+          interaction={open ? "hover" : "rest"}
           size={size === "small" ? "sm" : "md"}
           prominence="internal"
           tooltip="Sort"
