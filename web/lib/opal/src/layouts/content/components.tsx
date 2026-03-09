@@ -53,6 +53,7 @@ interface ContentBaseProps {
    * Width preset controlling the component's horizontal size.
    * Uses the shared `WidthVariant` scale from `@opal/shared`.
    *
+   * - `"auto"` — Shrink-wraps to content width
    * - `"fit"` — Shrink-wraps to content width
    * - `"full"` — Stretches to fill the parent's width
    *
