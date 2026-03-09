@@ -52,6 +52,12 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/* && \
     apt-get clean
 
+# Use jemalloc instead of glibc malloc to reduce memory fragmentation
+# in long-running Python processes (API server, Celery workers).
+# The soname is architecture-independent; the dynamic linker resolves
+# the correct path from standard library directories.
+ENV LD_PRELOAD=libjemalloc.so.2
+
 # Conditionally install Node.js 20 for Craft (required for Next.js)
 # Only installed when ENABLE_CRAFT=true
 RUN if [ "$ENABLE_CRAFT" = "true" ]; then \
