@@ -21,7 +21,7 @@ import { DisplayModels } from "./components/DisplayModels";
 export const AVIAN_PROVIDER_NAME = "avian";
 const AVIAN_DISPLAY_NAME = "Avian";
 const DEFAULT_API_BASE = "https://api.avian.io/v1";
-const DEFAULT_DEFAULT_MODEL_NAME = "deepseek/deepseek-v3.2";
+const DEFAULT_MODEL_NAME = "deepseek/deepseek-v3.2";
 
 export function AvianModal({
   existingLlmProvider,
@@ -60,7 +60,7 @@ export function AvianModal({
           default_model_name:
             existingLlmProvider?.default_model_name ??
             wellKnownLLMProvider?.recommended_default_model?.name ??
-            DEFAULT_DEFAULT_MODEL_NAME,
+            DEFAULT_MODEL_NAME,
         };
 
         const validationSchema = buildDefaultValidationSchema().shape({
