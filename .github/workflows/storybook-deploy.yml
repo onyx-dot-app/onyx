@@ -1,0 +1,41 @@
+name: Storybook Deploy
+env:
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: prj_sG49mVsA25UsxIPhN2pmBJlikJZM
+  VERCEL_CLI: vercel@50.14.1
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "web/lib/opal/**"
+      - "web/src/refresh-components/**"
+      - "web/.storybook/**"
+      - "web/package.json"
+      - "web/package-lock.json"
+permissions:
+  contents: read
+jobs:
+  Deploy-Storybook:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup node
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # ratchet:actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "npm"
+          cache-dependency-path: ./web/package-lock.json
+
+      - name: Pull Vercel Environment Information
+        run: npx --yes ${{ env.VERCEL_CLI }} pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build Project Artifacts
+        run: npx --yes ${{ env.VERCEL_CLI }} build --prod --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy to Vercel (Production)
+        run: npx --yes ${{ env.VERCEL_CLI }} deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
