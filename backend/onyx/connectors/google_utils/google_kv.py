@@ -89,7 +89,8 @@ def _get_current_oauth_user(creds: OAuthCredentials, source: DocumentSource) -> 
 
 
 def verify_csrf(credential_id: int, state: str) -> None:
-    csrf = get_kv_store().load(KV_CRED_KEY.format(str(credential_id)))
+    loaded = get_kv_store().load(KV_CRED_KEY.format(str(credential_id)))
+    csrf = loaded["value"] if isinstance(loaded, dict) else loaded
     if csrf != state:
         raise PermissionError(
             "State from Google Drive Connector callback does not match expected"
@@ -178,7 +179,9 @@ def get_auth_url(credential_id: int, source: DocumentSource) -> str:
     params = parse_qs(parsed_url.query)
 
     get_kv_store().store(
-        KV_CRED_KEY.format(credential_id), params.get("state", [None])[0], encrypt=True
+        KV_CRED_KEY.format(credential_id),
+        {"value": params.get("state", [None])[0]},
+        encrypt=True,
     )
     return str(auth_url)
 
