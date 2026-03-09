@@ -1,7 +1,7 @@
 import React from "react";
 import { cn } from "@/lib/utils";
 
-export type TimelineSurfaceBackground = "tint" | "transparent";
+export type TimelineSurfaceBackground = "tint" | "transparent" | "error";
 
 export interface TimelineSurfaceProps {
   children: React.ReactNode;
@@ -28,9 +28,16 @@ export function TimelineSurface({
     return null;
   }
 
-  const baseBackground = background === "tint" ? "bg-background-tint-00" : "";
+  const baseBackground =
+    background === "tint"
+      ? "bg-background-tint-00"
+      : background === "error"
+        ? "bg-status-error-00"
+        : "";
   const hoverBackground =
-    background === "tint" && isHover ? "bg-background-tint-02" : "";
+    (background === "tint" || background === "error") && isHover
+      ? "bg-background-tint-02"
+      : "";
 
   return (
     <div

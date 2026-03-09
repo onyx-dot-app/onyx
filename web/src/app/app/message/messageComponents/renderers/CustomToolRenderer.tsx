@@ -10,6 +10,7 @@ import {
 } from "../../../services/streamingModels";
 import { MessageRenderer, RenderType } from "../interfaces";
 import { buildImgUrl } from "../../../components/files/images/utils";
+import Text from "@/refresh-components/texts/Text";
 
 function constructCustomToolState(packets: CustomToolPacket[]) {
   const toolStart = packets.find(
@@ -83,7 +84,7 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
 
   const icon = FiTool;
 
-  if (renderType === RenderType.COMPACT) {
+  if (renderType === RenderType.COMPACT && !error?.is_auth_error) {
     return children([
       {
         icon,
@@ -100,20 +101,23 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
     {
       icon,
       status,
-      supportsCollapsible: true,
+
+      supportsCollapsible: error?.is_auth_error ? false : true,
+      noPaddingRight: true,
+      surfaceBackground: error?.is_auth_error ? "error" : undefined,
       content: (
         <div className="flex flex-col gap-3">
           {/* Error display */}
           {error && (
-            <div className="text-xs p-3 rounded border border-status-error-02 bg-status-error-01 text-status-error-03">
-              {error.is_auth_error
-                ? `Authentication error: ${toolName} returned HTTP ${error.status_code}. Please check the tool's credentials or API key configuration.`
-                : error.message}
+            <div className="pl-[var(--timeline-common-text-padding)]">
+              <Text text03 mainUiMuted>
+                {error.message}
+              </Text>
             </div>
           )}
 
           {/* File responses */}
-          {fileIds && fileIds.length > 0 && (
+          {!error && fileIds && fileIds.length > 0 && (
             <div className="text-sm text-muted-foreground flex flex-col gap-2">
               {fileIds.map((fid, idx) => (
                 <div key={fid} className="flex items-center gap-2 flex-wrap">
@@ -139,18 +143,21 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
           )}
 
           {/* JSON/Text responses */}
-          {data !== undefined && data !== null && (
+          {!error && data !== undefined && data !== null && (
             <div className="text-xs bg-background-neutral-02 p-3 rounded border border-border-01 max-h-96 overflow-y-auto font-mono whitespace-pre-wrap break-all">
               {typeof data === "string" ? data : JSON.stringify(data, null, 2)}
             </div>
           )}
 
           {/* Show placeholder if no response data yet */}
-          {!fileIds && (data === undefined || data === null) && isRunning && (
-            <div className="text-xs text-text-03 italic">
-              Waiting for response...
-            </div>
-          )}
+          {!error &&
+            !fileIds &&
+            (data === undefined || data === null) &&
+            isRunning && (
+              <div className="text-xs text-text-03 italic">
+                Waiting for response...
+              </div>
+            )}
         </div>
       ),
     },
