@@ -54,9 +54,10 @@ interface ContentBaseProps {
    * Uses the shared `WidthVariant` scale from `@opal/shared`.
    *
    * - `"auto"` — Shrink-wraps to content width
+   * - `"fit"` — Shrink-wraps to content width
    * - `"full"` — Stretches to fill the parent's width
    *
-   * @default "auto"
+   * @default "fit"
    */
   widthVariant?: WidthVariant;
 
@@ -133,8 +134,6 @@ function Content(props: ContentProps) {
     ...rest
   } = props;
 
-  const widthClass = widthVariants[widthVariant];
-
   let layout: React.ReactNode = null;
 
   // ContentXl / ContentLg: headline/section presets
@@ -194,11 +193,7 @@ function Content(props: ContentProps) {
       `Content: no layout matched for sizePreset="${sizePreset}" variant="${variant}"`
     );
 
-  // "auto" → return layout directly (a block div with w-auto still
-  // stretches to its parent, defeating shrink-to-content).
-  if (widthVariant === "auto") return layout;
-
-  return <div className={widthClass}>{layout}</div>;
+  return <div className={widthVariants[widthVariant]}>{layout}</div>;
 }
 
 // ---------------------------------------------------------------------------

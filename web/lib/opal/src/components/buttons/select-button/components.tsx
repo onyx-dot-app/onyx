@@ -56,7 +56,7 @@ type SelectButtonProps = InteractiveStatefulProps &
     /** Tooltip text shown on hover. */
     tooltip?: string;
 
-    /** Width preset. `"auto"` shrink-wraps, `"full"` stretches to parent width. */
+    /** Width preset. `"fit"` shrink-wraps, `"full"` stretches to parent width. */
     width?: WidthVariant;
 
     /** Which side the tooltip appears on. */
