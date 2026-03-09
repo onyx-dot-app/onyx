@@ -26,7 +26,7 @@ This Storybook contains interactive examples of every reusable UI component in t
 The left sidebar organizes components by layer:
 
 - **opal/core** — Low-level primitives (`Interactive`, `Hoverable`)
-- **opal/components** — Design system atoms (`Button`, `OpenButton`)
+- **opal/components** — Design system atoms (`Button`, `OpenButton`, `Tag`)
 - **Layouts** — Structural layouts (`Content`, `ContentAction`, `IllustrationContent`)
 - **refresh-components** — App-level components (inputs, modals, tables, text, etc.)
 
@@ -85,7 +85,6 @@ export const Default: Story = {
   },
 };
 
-// For complex rendering:
 export const WithCustomLayout: Story = {
   render: () => (
     <div className="flex gap-2">
