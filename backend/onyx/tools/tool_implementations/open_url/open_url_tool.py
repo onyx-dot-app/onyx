@@ -107,21 +107,40 @@ def _normalize_string_list(value: str | list[str] | None) -> list[str]:
 
 
 def _url_lookup_variants(url: str) -> set[str]:
-    """Generate URL variants (with/without trailing slash) for database lookup.
+    """Generate URL variants for database lookup.
 
-    This is used after normalize_url() to create variants for fuzzy matching
-    in the database, since URLs may be stored with or without trailing slashes.
+    Creates variants with/without trailing slash, both with and without query
+    parameters. Query-stripped variants handle connectors (e.g. Google Drive,
+    Notion) that store canonical URLs without query strings. Query-preserved
+    variants handle web/linear URLs where query parameters are part of the
+    document identity (e.g. https://news.ycombinator.com/item?id=46821482).
     """
-    # Use default normalizer to strip query/fragment, then create variants
+    from urllib.parse import urlparse, urlunparse
+
+    variants: set[str] = set()
+
+    # --- Query-stripped variants (for indexed connectors) ---
     normalized = _default_url_normalizer(url)
-    if not normalized:
-        return set()
-    variants = {normalized}
-    if normalized.endswith("/"):
-        variants.add(normalized.rstrip("/"))
-    else:
-        variants.add(f"{normalized}/")
-    return {variant for variant in variants if variant}
+    if normalized:
+        variants.add(normalized)
+        if normalized.endswith("/"):
+            variants.add(normalized.rstrip("/"))
+        else:
+            variants.add(f"{normalized}/")
+
+    # --- Query-preserved variants (for web URLs where query = identity) ---
+    parsed = urlparse(url)
+    if parsed.query:
+        # Strip only fragment, preserve query string
+        url_no_fragment = urlunparse(parsed._replace(fragment=""))
+        if url_no_fragment:
+            variants.add(url_no_fragment)
+            if url_no_fragment.endswith("/"):
+                variants.add(url_no_fragment.rstrip("/"))
+            else:
+                variants.add(f"{url_no_fragment}/")
+
+    return {v for v in variants if v}
 
 
 def _lookup_document_ids_by_link(
@@ -804,7 +823,7 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
             indexed_section = indexed_by_doc_id.get(doc_id) if doc_id else None
             # WebContent.link is normalized (query/fragment stripped). Match on the
             # same normalized form to avoid dropping successful crawl results.
-            crawled_section = crawled_by_url.get(normalize_web_content_url(url))
+            crawled_section = crawled_by_url.get(normalize_web_content_url(url)) or crawled_by_url.get(url)
 
             if indexed_section and indexed_section.combined_content:
                 # Prefer indexed
