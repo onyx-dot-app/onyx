@@ -43,6 +43,21 @@ export async function deleteUser(email: string): Promise<void> {
   }
 }
 
+export async function setUserRole(
+  email: string,
+  newRole: string
+): Promise<void> {
+  const res = await fetch("/api/manage/set-user-role", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ user_email: email, new_role: newRole }),
+  });
+  if (!res.ok) {
+    const detail = (await res.json()).detail;
+    throw new Error(detail ?? "Failed to update user role");
+  }
+}
+
 export async function inviteUsers(emails: string[]): Promise<void> {
   const res = await fetch("/api/manage/admin/users", {
     method: "PUT",
