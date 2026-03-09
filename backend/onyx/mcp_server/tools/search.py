@@ -171,6 +171,7 @@ async def search_indexed_documents(
             "query": query,
         }
 
+
 @mcp_server.tool()
 async def search_web(
     query: str,
