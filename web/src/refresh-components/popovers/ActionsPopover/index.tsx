@@ -179,8 +179,10 @@ export default function ActionsPopover({
   // const [showTopShadow, setShowTopShadow] = useState(false);
   const { selectedSources, setSelectedSources } = filterManager;
   const [mcpServers, setMcpServers] = useState<MCPServer[]>([]);
-  const { llmProviders } = useLLMProviders();
-  const hasAnyProvider = (llmProviders?.length ?? 0) > 0;
+  const { llmProviders, isLoading: isLLMLoading } = useLLMProviders(
+    selectedAgent.id
+  );
+  const hasAnyProvider = isLLMLoading || (llmProviders?.length ?? 0) > 0;
 
   // Use the OAuth hook
   const { getToolAuthStatus, authenticateTool } = useToolOAuthStatus(
