@@ -1,0 +1,24 @@
+import type { UserRole } from "@/lib/types";
+
+export interface UserGroupInfo {
+  id: number;
+  name: string;
+}
+
+export interface UserRow {
+  id: string;
+  email: string;
+  role: UserRole;
+  is_active: boolean;
+  personal_name: string | null;
+  created_at: string;
+  updated_at: string;
+  groups: UserGroupInfo[];
+}
+
+export interface PaginatedUsersResponse {
+  items: UserRow[];
+  total_items: number;
+}
+
+export type StatusFilter = "all" | "active" | "inactive";
