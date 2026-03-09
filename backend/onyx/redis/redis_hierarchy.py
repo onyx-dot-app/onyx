@@ -16,6 +16,7 @@ Cache Strategy:
   using only the SOURCE-type node as the ancestor
 """
 
+from typing import cast
 from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
@@ -220,9 +221,8 @@ def evict_hierarchy_nodes_from_cache(
     raw_id_key = _raw_id_cache_key(source)
 
     # Look up node_ids so we can remove them from the parent-chain hash
-    node_id_strs = [
-        v for v in redis_client.hmget(raw_id_key, raw_node_ids) if v is not None
-    ]
+    raw_values = cast(list[str | None], redis_client.hmget(raw_id_key, raw_node_ids))
+    node_id_strs = [v for v in raw_values if v is not None]
 
     if node_id_strs:
         redis_client.hdel(cache_key, *node_id_strs)

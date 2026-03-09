@@ -5,6 +5,7 @@ from collections import defaultdict
 from sqlalchemy import delete
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
@@ -686,8 +687,8 @@ def remove_stale_hierarchy_node_cc_pair_entries(
             )
         )
 
-    result = db_session.execute(stmt)
-    deleted = result.rowcount  # type: ignore[assignment]
+    result: CursorResult = db_session.execute(stmt)  # type: ignore[assignment]
+    deleted = result.rowcount
 
     if commit:
         db_session.commit()
