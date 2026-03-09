@@ -78,7 +78,7 @@ services:
       - VESPA_HOST=${VESPA_HOST:-index}
       - OPENSEARCH_HOST=${OPENSEARCH_HOST:-opensearch}
       - OPENSEARCH_ADMIN_PASSWORD=${OPENSEARCH_ADMIN_PASSWORD:-StrongPassword123!}
-      - ENABLE_OPENSEARCH_INDEXING_FOR_ONYX=${OPENSEARCH_FOR_ONYX_ENABLED:-false}
+      - ENABLE_OPENSEARCH_INDEXING_FOR_ONYX=${OPENSEARCH_FOR_ONYX_ENABLED:-true}
       - REDIS_HOST=${REDIS_HOST:-cache}
       - MODEL_SERVER_HOST=${MODEL_SERVER_HOST:-inference_model_server}
       - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-http://minio:9000}
@@ -151,7 +151,7 @@ services:
       - VESPA_HOST=${VESPA_HOST:-index}
       - OPENSEARCH_HOST=${OPENSEARCH_HOST:-opensearch}
       - OPENSEARCH_ADMIN_PASSWORD=${OPENSEARCH_ADMIN_PASSWORD:-StrongPassword123!}
-      - ENABLE_OPENSEARCH_INDEXING_FOR_ONYX=${OPENSEARCH_FOR_ONYX_ENABLED:-false}
+      - ENABLE_OPENSEARCH_INDEXING_FOR_ONYX=${OPENSEARCH_FOR_ONYX_ENABLED:-true}
       - REDIS_HOST=${REDIS_HOST:-cache}
       - MODEL_SERVER_HOST=${MODEL_SERVER_HOST:-inference_model_server}
       - INDEXING_MODEL_SERVER_HOST=${INDEXING_MODEL_SERVER_HOST:-indexing_model_server}
@@ -406,7 +406,10 @@ services:
     # Controls whether this service runs. In order to enable it, add
     # opensearch-enabled to COMPOSE_PROFILES in the environment for this
     # docker-compose.
-    profiles: ["opensearch-enabled"]
+    # NOTE: Now enabled on by default. To explicitly disable this service,
+    # uncomment this profile, or when running docker compose, include all
+    # desired service names but this one.
+    # profiles: ["opensearch-enabled"]
     environment:
       # We need discovery.type=single-node so that OpenSearch doesn't try
       # forming a cluster and waiting for other nodes to become live.
