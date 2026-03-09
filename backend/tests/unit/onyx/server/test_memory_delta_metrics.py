@@ -3,6 +3,7 @@
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
+import psutil
 from fastapi import FastAPI
 from starlette.testclient import TestClient
 
@@ -41,7 +42,7 @@ def test_match_route_returns_template() -> None:
     assert _match_route(route_map, "/nonexistent") is None
 
 
-@patch("onyx.server.metrics.memory_delta._process")
+@patch("onyx.server.metrics.memory_delta._get_process")
 @patch("onyx.server.metrics.memory_delta._RSS_SHRINK")
 @patch("onyx.server.metrics.memory_delta._RSS_DELTA")
 @patch("onyx.server.metrics.memory_delta._PROCESS_RSS")
@@ -49,7 +50,7 @@ def test_middleware_observes_rss_delta(
     mock_rss_gauge: MagicMock,
     mock_histogram: MagicMock,
     mock_shrink: MagicMock,
-    mock_process: MagicMock,
+    mock_get_process: MagicMock,
 ) -> None:
     """Verify the middleware measures RSS before/after and records abs(delta)."""
     mem_before = MagicMock()
@@ -57,7 +58,9 @@ def test_middleware_observes_rss_delta(
     mem_after = MagicMock()
     mem_after.rss = 100_065_536
 
-    mock_process.memory_info.side_effect = [mem_before, mem_after]
+    mock_proc = MagicMock()
+    mock_proc.memory_info.side_effect = [mem_before, mem_after]
+    mock_get_process.return_value = mock_proc
 
     app = _make_app()
     add_memory_delta_middleware(app)
@@ -72,7 +75,7 @@ def test_middleware_observes_rss_delta(
     mock_rss_gauge.set.assert_called_once_with(100_065_536)
 
 
-@patch("onyx.server.metrics.memory_delta._process")
+@patch("onyx.server.metrics.memory_delta._get_process")
 @patch("onyx.server.metrics.memory_delta._RSS_SHRINK")
 @patch("onyx.server.metrics.memory_delta._RSS_DELTA")
 @patch("onyx.server.metrics.memory_delta._PROCESS_RSS")
@@ -80,7 +83,7 @@ def test_middleware_tracks_rss_shrink(
     mock_rss_gauge: MagicMock,  # noqa: ARG001
     mock_histogram: MagicMock,
     mock_shrink: MagicMock,
-    mock_process: MagicMock,
+    mock_get_process: MagicMock,
 ) -> None:
     """When RSS decreases, observe abs(delta) and increment shrink counter."""
     mem_before = MagicMock()
@@ -88,7 +91,9 @@ def test_middleware_tracks_rss_shrink(
     mem_after = MagicMock()
     mem_after.rss = 100_000_000
 
-    mock_process.memory_info.side_effect = [mem_before, mem_after]
+    mock_proc = MagicMock()
+    mock_proc.memory_info.side_effect = [mem_before, mem_after]
+    mock_get_process.return_value = mock_proc
 
     app = _make_app()
     add_memory_delta_middleware(app)
@@ -101,17 +106,19 @@ def test_middleware_tracks_rss_shrink(
     mock_shrink.labels().inc.assert_called_once()
 
 
-@patch("onyx.server.metrics.memory_delta._process")
+@patch("onyx.server.metrics.memory_delta._get_process")
 @patch("onyx.server.metrics.memory_delta._RSS_DELTA")
 @patch("onyx.server.metrics.memory_delta._PROCESS_RSS")
 def test_middleware_uses_unmatched_for_unknown_paths(
     mock_rss_gauge: MagicMock,  # noqa: ARG001
     mock_histogram: MagicMock,
-    mock_process: MagicMock,
+    mock_get_process: MagicMock,
 ) -> None:
     mem_info = MagicMock()
     mem_info.rss = 50_000_000
-    mock_process.memory_info.return_value = mem_info
+    mock_proc = MagicMock()
+    mock_proc.memory_info.return_value = mem_info
+    mock_get_process.return_value = mock_proc
 
     app = _make_app()
     add_memory_delta_middleware(app)
@@ -120,3 +127,26 @@ def test_middleware_uses_unmatched_for_unknown_paths(
     client.get("/totally-unknown")
 
     mock_histogram.labels.assert_called_with(handler="unmatched")
+
+
+@patch("onyx.server.metrics.memory_delta._get_process")
+@patch("onyx.server.metrics.memory_delta._RSS_DELTA")
+@patch("onyx.server.metrics.memory_delta._PROCESS_RSS")
+def test_middleware_skips_metrics_on_psutil_error(
+    mock_rss_gauge: MagicMock,  # noqa: ARG001
+    mock_histogram: MagicMock,
+    mock_get_process: MagicMock,
+) -> None:
+    """When psutil raises on the initial memory_info call, middleware skips metrics."""
+    mock_proc = MagicMock()
+    mock_proc.memory_info.side_effect = psutil.Error("no such process")
+    mock_get_process.return_value = mock_proc
+
+    app = _make_app()
+    add_memory_delta_middleware(app)
+
+    client = TestClient(app)
+    response = client.get("/api/health")
+
+    assert response.status_code == 200
+    mock_histogram.labels.assert_not_called()

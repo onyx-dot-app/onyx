@@ -7,14 +7,10 @@ Functions:
   Called from ``get_application()``.
 - ``setup_app_observability(app)`` — app-scoped observability (middleware that
   must be registered after all routers). Called from ``get_application()``.
-- ``start_observability()`` — lifespan-scoped observability (collectors and
-  probes). Called from ``lifespan()``.
-- ``stop_observability()`` — async shutdown for lifespan-scoped probes.
-  Called from ``lifespan()`` after yield.
 
 SQLAlchemy connection pool metrics are registered separately via
 ``setup_postgres_connection_pool_metrics`` during application lifespan
-(after engines are created, before ``start_observability``).
+(after engines are created).
 """
 
 from fastapi import FastAPI

@@ -15,6 +15,7 @@ Metrics:
 - onyx_api_process_rss_bytes: Gauge of current process RSS
 """
 
+import os
 import re
 from collections.abc import Awaitable
 from collections.abc import Callable
@@ -55,7 +56,25 @@ _PROCESS_RSS: Gauge = Gauge(
     "Current process RSS in bytes",
 )
 
-_process: psutil.Process = psutil.Process()
+
+def _get_process() -> psutil.Process:
+    """Return a psutil.Process for the *current* PID.
+
+    We lazily create the Process object and cache it, but invalidate the
+    cache when the PID changes (e.g. after Uvicorn forks workers).
+    Module-level ``psutil.Process()`` would capture the *parent's* PID
+    and report that child's RSS from the wrong process.
+    """
+    global _process, _process_pid
+    pid = os.getpid()
+    if _process is None or _process_pid != pid:
+        _process = psutil.Process(pid)
+        _process_pid = pid
+    return _process
+
+
+_process: psutil.Process | None = None
+_process_pid: int | None = None
 
 
 def _build_route_map(app: FastAPI) -> list[tuple[re.Pattern[str], str]]:
@@ -93,14 +112,14 @@ def add_memory_delta_middleware(app: FastAPI) -> None:
     ) -> Response:
         handler = _match_route(route_map, request.url.path) or "unmatched"
         try:
-            rss_before = _process.memory_info().rss
+            rss_before = _get_process().memory_info().rss
         except (psutil.Error, OSError):
             return await call_next(request)
 
         response = await call_next(request)
 
         try:
-            rss_after = _process.memory_info().rss
+            rss_after = _get_process().memory_info().rss
             delta = rss_after - rss_before
             _RSS_DELTA.labels(handler=handler).observe(abs(delta))
             if delta < 0:
