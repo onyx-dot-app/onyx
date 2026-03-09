@@ -59,7 +59,7 @@ class AzureStreamingTranscriber(StreamingTranscriberProtocol):
     async def connect(self) -> None:
         """Initialize Azure Speech recognizer with push stream."""
         try:
-            import azure.cognitiveservices.speech as speechsdk  # type: ignore[import-not-found]
+            import azure.cognitiveservices.speech as speechsdk  # type: ignore
         except ImportError as e:
             raise RuntimeError(
                 "Azure Speech SDK is required for streaming STT. "
