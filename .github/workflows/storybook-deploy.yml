@@ -38,10 +38,10 @@ jobs:
           cache-dependency-path: ./web/package-lock.json
 
       - name: Pull Vercel Environment Information
-        run: npx --yes ${{ env.VERCEL_CLI }} pull --yes --environment=production --token=${{ env.VERCEL_TOKEN }}
+        run: npx --yes ${{ env.VERCEL_CLI }} pull --yes --environment=production
 
       - name: Build Project Artifacts
-        run: npx --yes ${{ env.VERCEL_CLI }} build --prod --token=${{ env.VERCEL_TOKEN }}
+        run: npx --yes ${{ env.VERCEL_CLI }} build --prod
 
       - name: Deploy to Vercel (Production)
-        run: npx --yes ${{ env.VERCEL_CLI }} deploy --prebuilt --prod --token=${{ env.VERCEL_TOKEN }}
+        run: npx --yes ${{ env.VERCEL_CLI }} deploy --prebuilt --prod
