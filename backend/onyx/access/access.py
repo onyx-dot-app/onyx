@@ -1,8 +1,6 @@
 from collections.abc import Callable
 from typing import cast
 
-from sqlalchemy.orm import joinedload
-from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
 from onyx.access.models import DocumentAccess
@@ -11,9 +9,9 @@ from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import PUBLIC_DOC_PAT
 from onyx.db.document import get_access_info_for_document
 from onyx.db.document import get_access_info_for_documents
-from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.db.models import UserFile
+from onyx.db.user_file import fetch_user_files_with_access_relationships
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 
@@ -144,18 +142,7 @@ def get_access_for_user_files_impl(
     user_file_ids: list[str],
     db_session: Session,
 ) -> dict[str, DocumentAccess]:
-    user_files = (
-        db_session.query(UserFile)
-        .options(
-            joinedload(UserFile.user),
-            joinedload(UserFile.assistants).options(
-                selectinload(Persona.users),
-                selectinload(Persona.user),
-            ),
-        )
-        .filter(UserFile.id.in_(user_file_ids))
-        .all()
-    )
+    user_files = fetch_user_files_with_access_relationships(user_file_ids, db_session)
 
     result: dict[str, DocumentAccess] = {}
     for user_file in user_files:
