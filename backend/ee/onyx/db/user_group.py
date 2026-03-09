@@ -898,7 +898,7 @@ def fetch_user_group_names_for_user_files(
     user_files = (
         db_session.query(UserFile)
         .options(
-            joinedload(UserFile.assistants).joinedload(Persona.groups),
+            joinedload(UserFile.assistants).options(selectinload(Persona.groups)),
         )
         .filter(UserFile.id.in_(user_file_ids))
         .all()

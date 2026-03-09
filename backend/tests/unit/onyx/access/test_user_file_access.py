@@ -1,7 +1,6 @@
 """Tests for user file ACL computation, including shared persona access."""
 
 from unittest.mock import MagicMock
-from unittest.mock import patch
 from uuid import uuid4
 
 from onyx.access.access import _collect_user_file_access
@@ -125,11 +124,8 @@ class TestCollectUserFileAccess:
 
 
 class TestGetAccessForUserFiles:
-    @patch("onyx.access.access.fetch_versioned_implementation")
-    def test_ownerless_file_is_public(self, mock_fetch: MagicMock) -> None:
+    def test_ownerless_file_is_public(self) -> None:
         """Files with no owner should be public."""
-        mock_fetch.return_value = get_access_for_user_files_impl
-
         uf = _make_user_file(owner=None)
         uf.user = None
 
@@ -144,11 +140,8 @@ class TestGetAccessForUserFiles:
         assert access.is_public is True
         assert len(access.user_emails) == 0
 
-    @patch("onyx.access.access.fetch_versioned_implementation")
-    def test_shared_user_in_acl(self, mock_fetch: MagicMock) -> None:
+    def test_shared_user_in_acl(self) -> None:
         """Shared persona users should appear in the ACL."""
-        mock_fetch.return_value = get_access_for_user_files_impl
-
         owner = _make_user("owner@test.com")
         shared = _make_user("shared@test.com")
         persona = _make_persona(owner=owner, shared_users=[shared])
@@ -167,10 +160,7 @@ class TestGetAccessForUserFiles:
         assert prefix_user_email("shared@test.com") in acl
         assert access.is_public is False
 
-    @patch("onyx.access.access.fetch_versioned_implementation")
-    def test_public_persona_sets_public_acl(self, mock_fetch: MagicMock) -> None:
-        mock_fetch.return_value = get_access_for_user_files_impl
-
+    def test_public_persona_sets_public_acl(self) -> None:
         owner = _make_user("owner@test.com")
         persona = _make_persona(owner=owner, is_public=True)
         uf = _make_user_file(owner=owner, assistants=[persona])
