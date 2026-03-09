@@ -124,9 +124,10 @@ async def search_indexed_documents(
     base_url = build_api_server_url_for_http_requests(respect_env_override_if_set=True)
     auth_headers = {"Authorization": f"Bearer {access_token.token}"}
 
+    search_request: dict[str, Any]
     if is_ee:
         # EE: use the dedicated search endpoint (no LLM invocation)
-        search_request: dict[str, Any] = {
+        search_request = {
             "search_query": query,
             "filters": filters,
             "num_docs_fed_to_llm_selection": limit,
@@ -140,7 +141,7 @@ async def search_indexed_documents(
         content_field = "content"
     else:
         # CE: fall back to the chat endpoint (invokes LLM, consumes tokens)
-        search_request: dict[str, Any] = {
+        search_request = {
             "message": query,
             "stream": False,
             "chat_session_info": {},
