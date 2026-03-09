@@ -139,18 +139,17 @@ async def search_indexed_documents(
                 "error": result.get("error_msg"),
             }
 
-        # Extract search docs from chat response
-        fields_to_return = [
-            "semantic_identifier",
-            "content",
-            "source_type",
-            "link",
-            "score",
-        ]
         documents = [
-            {key: doc.get(key) for key in fields_to_return}
+            {
+                "semantic_identifier": doc.get("semantic_identifier"),
+                "content": doc.get("blurb"),  # SearchDoc uses blurb for text snippet
+                "source_type": doc.get("source_type"),
+                "link": doc.get("link"),
+                "score": doc.get("score"),
+            }
             for doc in result.get("top_documents", [])
         ]
+               
         # Limit results to requested amount
         documents = documents[:limit]
 
