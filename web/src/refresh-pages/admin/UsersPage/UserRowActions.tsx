@@ -2,7 +2,13 @@
 
 import { useState } from "react";
 import { Button } from "@opal/components";
-import { SvgMoreHorizontal, SvgXCircle, SvgTrash, SvgCheck } from "@opal/icons";
+import {
+  SvgMoreHorizontal,
+  SvgUsers,
+  SvgXCircle,
+  SvgTrash,
+  SvgCheck,
+} from "@opal/icons";
 import { Disabled } from "@opal/core";
 import Popover from "@/refresh-components/Popover";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
@@ -10,13 +16,14 @@ import Text from "@/refresh-components/texts/Text";
 import { UserStatus } from "@/lib/types";
 import { toast } from "@/hooks/useToast";
 import { deactivateUser, activateUser, deleteUser } from "./svc";
+import EditGroupsModal from "./EditGroupsModal";
 import type { UserRow } from "./interfaces";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-type ModalType = "deactivate" | "activate" | "delete" | null;
+type ModalType = "deactivate" | "activate" | "delete" | "editGroups" | null;
 
 interface UserRowActionsProps {
   user: UserRow;
@@ -75,6 +82,16 @@ export default function UserRowActions({
         </Popover.Trigger>
         <Popover.Content align="end">
           <div className="flex flex-col gap-0.5 p-1">
+            <Button
+              prominence="tertiary"
+              icon={SvgUsers}
+              onClick={() => {
+                setPopoverOpen(false);
+                setModal("editGroups");
+              }}
+            >
+              Groups
+            </Button>
             {user.status === UserStatus.ACTIVE ? (
               <Button
                 prominence="tertiary"
@@ -114,6 +131,14 @@ export default function UserRowActions({
           </div>
         </Popover.Content>
       </Popover>
+
+      {modal === "editGroups" && user.id && (
+        <EditGroupsModal
+          user={user as UserRow & { id: string }}
+          onClose={() => setModal(null)}
+          onMutate={onMutate}
+        />
+      )}
 
       {modal === "deactivate" && (
         <ConfirmationModalLayout
