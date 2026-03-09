@@ -59,6 +59,64 @@ export async function setUserRole(
   }
 }
 
+export async function addUserToGroup(
+  groupId: number,
+  userId: string
+): Promise<void> {
+  const res = await fetch(`/api/manage/admin/user-group/${groupId}/add-users`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ user_ids: [userId] }),
+  });
+  if (!res.ok) {
+    const detail = (await res.json()).detail;
+    throw new Error(detail ?? "Failed to add user to group");
+  }
+}
+
+export async function removeUserFromGroup(
+  groupId: number,
+  currentUserIds: string[],
+  userIdToRemove: string
+): Promise<void> {
+  const res = await fetch(`/api/manage/admin/user-group/${groupId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      user_ids: currentUserIds.filter((id) => id !== userIdToRemove),
+      cc_pair_ids: [],
+    }),
+  });
+  if (!res.ok) {
+    const detail = (await res.json()).detail;
+    throw new Error(detail ?? "Failed to remove user from group");
+  }
+}
+
+export async function cancelInvite(email: string): Promise<void> {
+  const res = await fetch("/api/manage/admin/remove-invited-user", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ user_email: email }),
+  });
+  if (!res.ok) {
+    const detail = (await res.json()).detail;
+    throw new Error(detail ?? "Failed to cancel invite");
+  }
+}
+
+export async function approveRequest(email: string): Promise<void> {
+  const res = await fetch("/api/tenants/users/invite/approve", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+  if (!res.ok) {
+    const detail = (await res.json()).detail;
+    throw new Error(detail ?? "Failed to approve request");
+  }
+}
+
 export async function inviteUsers(emails: string[]): Promise<void> {
   const res = await fetch("/api/manage/admin/users", {
     method: "PUT",
