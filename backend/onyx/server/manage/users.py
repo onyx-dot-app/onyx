@@ -67,6 +67,7 @@ from onyx.db.user_preferences import update_user_role
 from onyx.db.user_preferences import update_user_shortcut_enabled
 from onyx.db.user_preferences import update_user_temperature_override_enabled
 from onyx.db.user_preferences import update_user_theme_preference
+from onyx.db.users import batch_get_user_groups
 from onyx.db.users import delete_user_from_db
 from onyx.db.users import get_all_users
 from onyx.db.users import get_page_of_filtered_users
@@ -98,6 +99,7 @@ from onyx.server.manage.models import UserSpecificAssistantPreferences
 from onyx.server.models import FullUserSnapshot
 from onyx.server.models import InvitedUserSnapshot
 from onyx.server.models import MinimalUserSnapshot
+from onyx.server.models import UserGroupInfo
 from onyx.server.usage_limits import is_tenant_on_trial_fn
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
@@ -203,9 +205,19 @@ def list_accepted_users(
             total_items=0,
         )
 
+    user_ids = [user.id for user in filtered_accepted_users]
+    groups_by_user = batch_get_user_groups(db_session, user_ids)
+
     return PaginatedReturn(
         items=[
-            FullUserSnapshot.from_user_model(user) for user in filtered_accepted_users
+            FullUserSnapshot.from_user_model(
+                user,
+                groups=[
+                    UserGroupInfo(id=gid, name=gname)
+                    for gid, gname in groups_by_user.get(user.id, [])
+                ],
+            )
+            for user in filtered_accepted_users
         ],
         total_items=total_accepted_users_count,
     )
@@ -269,24 +281,10 @@ def list_all_users(
     if accepted_page is None or invited_page is None or slack_users_page is None:
         return AllUsersResponse(
             accepted=[
-                FullUserSnapshot(
-                    id=user.id,
-                    email=user.email,
-                    role=user.role,
-                    is_active=user.is_active,
-                    password_configured=user.password_configured,
-                )
-                for user in accepted_users
+                FullUserSnapshot.from_user_model(user) for user in accepted_users
             ],
             slack_users=[
-                FullUserSnapshot(
-                    id=user.id,
-                    email=user.email,
-                    role=user.role,
-                    is_active=user.is_active,
-                    password_configured=user.password_configured,
-                )
-                for user in slack_users
+                FullUserSnapshot.from_user_model(user) for user in slack_users
             ],
             invited=[InvitedUserSnapshot(email=email) for email in invited_emails],
             accepted_pages=1,
@@ -296,26 +294,10 @@ def list_all_users(
 
     # Otherwise, return paginated results
     return AllUsersResponse(
-        accepted=[
-            FullUserSnapshot(
-                id=user.id,
-                email=user.email,
-                role=user.role,
-                is_active=user.is_active,
-                password_configured=user.password_configured,
-            )
-            for user in accepted_users
-        ][accepted_page * USERS_PAGE_SIZE : (accepted_page + 1) * USERS_PAGE_SIZE],
-        slack_users=[
-            FullUserSnapshot(
-                id=user.id,
-                email=user.email,
-                role=user.role,
-                is_active=user.is_active,
-                password_configured=user.password_configured,
-            )
-            for user in slack_users
-        ][
+        accepted=[FullUserSnapshot.from_user_model(user) for user in accepted_users][
+            accepted_page * USERS_PAGE_SIZE : (accepted_page + 1) * USERS_PAGE_SIZE
+        ],
+        slack_users=[FullUserSnapshot.from_user_model(user) for user in slack_users][
             slack_users_page
             * USERS_PAGE_SIZE : (slack_users_page + 1)
             * USERS_PAGE_SIZE
