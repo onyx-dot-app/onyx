@@ -227,22 +227,24 @@ def _manage_async_retrieval(
 
     def run_and_yield() -> Iterable[Document]:
         loop = asyncio.new_event_loop()
+        async_gen = _async_fetch()
         try:
-            # Get the async generator
-            async_gen = _async_fetch()
-            # Convert to AsyncIterator
             async_iter = async_gen.__aiter__()
             while True:
                 try:
-                    # Create a coroutine by calling anext with the async iterator
-                    next_coro = anext(async_iter)
-                    # Run the coroutine to get the next document
-                    doc = loop.run_until_complete(next_coro)
+                    doc = loop.run_until_complete(anext(async_iter))
                     yield doc
                 except StopAsyncIteration:
                     break
         finally:
-            loop.close()
+            # Must close the async generator before the loop so the Discord
+            # client's `async with` block can await its shutdown coroutine.
+            # The nested try/finally ensures the loop always closes even if
+            # aclose() raises (same pattern as cursor.close() before conn.close()).
+            try:
+                loop.run_until_complete(async_gen.aclose())
+            finally:
+                loop.close()
 
     return run_and_yield()
 
