@@ -32,7 +32,6 @@ from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import File
 from fastapi import Form
-from fastapi import HTTPException
 from fastapi import Query
 from fastapi import UploadFile
 from pydantic import BaseModel
@@ -50,6 +49,8 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.models import User
 from onyx.document_index.interfaces import DocumentMetadata
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.configs import USER_LIBRARY_MAX_FILE_SIZE_BYTES
 from onyx.server.features.build.configs import USER_LIBRARY_MAX_FILES_PER_UPLOAD
 from onyx.server.features.build.configs import USER_LIBRARY_MAX_TOTAL_SIZE_BYTES
@@ -184,12 +185,12 @@ def _validate_zip_contents(
     """Validate zip file contents before extraction.
 
     Checks file count limit and total decompressed size against storage quota.
-    Raises HTTPException on validation failure.
+    Raises OnyxError on validation failure.
     """
     if len(zip_file.namelist()) > USER_LIBRARY_MAX_FILES_PER_UPLOAD:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Zip contains too many files. Maximum is {USER_LIBRARY_MAX_FILES_PER_UPLOAD}.",
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            f"Zip contains too many files. Maximum is {USER_LIBRARY_MAX_FILES_PER_UPLOAD}.",
         )
 
     # Zip bomb protection: check total decompressed size before extracting
@@ -197,9 +198,9 @@ def _validate_zip_contents(
         info.file_size for info in zip_file.infolist() if not info.is_dir()
     )
     if existing_usage + declared_total > USER_LIBRARY_MAX_TOTAL_SIZE_BYTES:
-        raise HTTPException(
-            status_code=400,
-            detail=(
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            (
                 f"Zip decompressed size ({declared_total // (1024*1024)}MB) "
                 f"would exceed storage limit."
             ),
@@ -213,19 +214,19 @@ def _verify_ownership_and_get_document(
 ) -> Any:
     """Verify the user owns the document and return it.
 
-    Raises HTTPException on authorization failure or if document not found.
+    Raises OnyxError on authorization failure or if document not found.
     """
     from onyx.db.document import get_document
 
     user_prefix = f"CRAFT_FILE__{user.id}__"
     if not document_id.startswith(user_prefix):
-        raise HTTPException(
-            status_code=403, detail="Not authorized to modify this file"
+        raise OnyxError(
+            OnyxErrorCode.UNAUTHORIZED, "Not authorized to modify this file"
         )
 
     doc = get_document(document_id, db_session)
     if doc is None:
-        raise HTTPException(status_code=404, detail="File not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "File not found")
 
     return doc
 
@@ -333,13 +334,13 @@ async def upload_files(
     """
     tenant_id = get_current_tenant_id()
     if tenant_id is None:
-        raise HTTPException(status_code=500, detail="Tenant ID not found")
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, "Tenant ID not found")
 
     # Validate file count
     if len(files) > USER_LIBRARY_MAX_FILES_PER_UPLOAD:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Too many files. Maximum is {USER_LIBRARY_MAX_FILES_PER_UPLOAD} per upload.",
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            f"Too many files. Maximum is {USER_LIBRARY_MAX_FILES_PER_UPLOAD} per upload.",
         )
 
     # Check cumulative storage usage
@@ -370,17 +371,17 @@ async def upload_files(
 
         # Validate individual file size
         if file_size > USER_LIBRARY_MAX_FILE_SIZE_BYTES:
-            raise HTTPException(
-                status_code=400,
-                detail=f"File '{file.filename}' exceeds maximum size of {USER_LIBRARY_MAX_FILE_SIZE_BYTES // (1024*1024)}MB",
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR,
+                f"File '{file.filename}' exceeds maximum size of {USER_LIBRARY_MAX_FILE_SIZE_BYTES // (1024*1024)}MB",
             )
 
         # Validate cumulative storage (existing + this upload batch)
         total_size += file_size
         if existing_usage + total_size > USER_LIBRARY_MAX_TOTAL_SIZE_BYTES:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Total storage would exceed maximum of {USER_LIBRARY_MAX_TOTAL_SIZE_BYTES // (1024*1024*1024)}GB",
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR,
+                f"Total storage would exceed maximum of {USER_LIBRARY_MAX_TOTAL_SIZE_BYTES // (1024*1024*1024)}GB",
             )
 
         # Sanitize filename
@@ -449,14 +450,14 @@ async def upload_zip(
     """
     tenant_id = get_current_tenant_id()
     if tenant_id is None:
-        raise HTTPException(status_code=500, detail="Tenant ID not found")
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, "Tenant ID not found")
 
     # Read zip content
     content = await file.read()
     if len(content) > USER_LIBRARY_MAX_TOTAL_SIZE_BYTES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Zip file exceeds maximum size of {USER_LIBRARY_MAX_TOTAL_SIZE_BYTES // (1024*1024*1024)}GB",
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            f"Zip file exceeds maximum size of {USER_LIBRARY_MAX_TOTAL_SIZE_BYTES // (1024*1024*1024)}GB",
         )
 
     # Check cumulative storage usage
@@ -515,9 +516,9 @@ async def upload_zip(
 
                 # Validate cumulative storage
                 if existing_usage + total_size > USER_LIBRARY_MAX_TOTAL_SIZE_BYTES:
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"Total storage would exceed maximum of {USER_LIBRARY_MAX_TOTAL_SIZE_BYTES // (1024*1024*1024)}GB",
+                    raise OnyxError(
+                        OnyxErrorCode.VALIDATION_ERROR,
+                        f"Total storage would exceed maximum of {USER_LIBRARY_MAX_TOTAL_SIZE_BYTES // (1024*1024*1024)}GB",
                     )
 
                 # Build path preserving zip structure
@@ -560,7 +561,7 @@ async def upload_zip(
                 )
 
     except zipfile.BadZipFile:
-        raise HTTPException(status_code=400, detail="Invalid zip file")
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, "Invalid zip file")
 
     # Create directory document records so they appear in the tree view
     if directory_paths:
@@ -674,7 +675,7 @@ def toggle_file_sync(
 
     tenant_id = get_current_tenant_id()
     if tenant_id is None:
-        raise HTTPException(status_code=500, detail="Tenant ID not found")
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, "Tenant ID not found")
 
     doc = _verify_ownership_and_get_document(document_id, user, db_session)
 
@@ -719,7 +720,7 @@ def delete_file(
 
     tenant_id = get_current_tenant_id()
     if tenant_id is None:
-        raise HTTPException(status_code=500, detail="Tenant ID not found")
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, "Tenant ID not found")
 
     doc = _verify_ownership_and_get_document(document_id, user, db_session)
 
