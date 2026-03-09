@@ -6,7 +6,18 @@ interface LinkProps {
   [key: string]: unknown;
 }
 
-function Link({ href, children, ...props }: LinkProps) {
+function Link({
+  href,
+  children,
+  prefetch: _prefetch,
+  scroll: _scroll,
+  shallow: _shallow,
+  replace: _replace,
+  passHref: _passHref,
+  locale: _locale,
+  legacyBehavior: _legacyBehavior,
+  ...props
+}: LinkProps) {
   return (
     <a href={href} {...props}>
       {children}

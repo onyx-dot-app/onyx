@@ -15,12 +15,12 @@ function Image({ src, alt, width, height, fill, ...props }: ImageProps) {
     : {};
   return (
     <img
+      {...(props as React.ImgHTMLAttributes<HTMLImageElement>)}
       src={src}
       alt={alt}
       width={fill ? undefined : width}
       height={fill ? undefined : height}
-      style={fillStyle}
-      {...(props as React.ImgHTMLAttributes<HTMLImageElement>)}
+      style={{ ...(props.style as React.CSSProperties), ...fillStyle }}
     />
   );
 }
