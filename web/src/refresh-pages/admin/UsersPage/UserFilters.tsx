@@ -19,22 +19,6 @@ import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import type { GroupOption, StatusFilter, StatusCountMap } from "./interfaces";
 
 // ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-interface UserFiltersProps {
-  selectedRoles: UserRole[];
-  onRolesChange: (roles: UserRole[]) => void;
-  selectedGroups: number[];
-  onGroupsChange: (groupIds: number[]) => void;
-  groups: GroupOption[];
-  selectedStatuses: StatusFilter;
-  onStatusesChange: (statuses: StatusFilter) => void;
-  roleCounts: Record<string, number>;
-  statusCounts: StatusCountMap;
-}
-
-// ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
@@ -76,6 +60,18 @@ function CountBadge({ count }: { count: number | undefined }) {
 // Component
 // ---------------------------------------------------------------------------
 
+interface UserFiltersProps {
+  selectedRoles: UserRole[];
+  onRolesChange: (roles: UserRole[]) => void;
+  selectedGroups: number[];
+  onGroupsChange: (groupIds: number[]) => void;
+  groups: GroupOption[];
+  selectedStatuses: StatusFilter;
+  onStatusesChange: (statuses: StatusFilter) => void;
+  roleCounts: Record<string, number>;
+  statusCounts: StatusCountMap;
+}
+
 export default function UserFilters({
   selectedRoles,
   onRolesChange,
@@ -101,14 +97,6 @@ export default function UserFilters({
     }
   };
 
-  const roleLabel = hasRoleFilter
-    ? FILTERABLE_ROLES.filter(([role]) => selectedRoles.includes(role))
-        .map(([, label]) => label)
-        .slice(0, 2)
-        .join(", ") +
-      (selectedRoles.length > 2 ? `, +${selectedRoles.length - 2}` : "")
-    : "All Account Types";
-
   const toggleGroup = (groupId: number) => {
     if (selectedGroups.includes(groupId)) {
       onGroupsChange(selectedGroups.filter((id) => id !== groupId));
@@ -116,6 +104,22 @@ export default function UserFilters({
       onGroupsChange([...selectedGroups, groupId]);
     }
   };
+
+  const toggleStatus = (status: UserStatus) => {
+    if (selectedStatuses.includes(status)) {
+      onStatusesChange(selectedStatuses.filter((s) => s !== status));
+    } else {
+      onStatusesChange([...selectedStatuses, status]);
+    }
+  };
+
+  const roleLabel = hasRoleFilter
+    ? FILTERABLE_ROLES.filter(([role]) => selectedRoles.includes(role))
+        .map(([, label]) => label)
+        .slice(0, 2)
+        .join(", ") +
+      (selectedRoles.length > 2 ? `, +${selectedRoles.length - 2}` : "")
+    : "All Account Types";
 
   const groupLabel = hasGroupFilter
     ? groups
@@ -125,14 +129,6 @@ export default function UserFilters({
         .join(", ") +
       (selectedGroups.length > 2 ? `, +${selectedGroups.length - 2}` : "")
     : "All Groups";
-
-  const toggleStatus = (status: UserStatus) => {
-    if (selectedStatuses.includes(status)) {
-      onStatusesChange(selectedStatuses.filter((s) => s !== status));
-    } else {
-      onStatusesChange([...selectedStatuses, status]);
-    }
-  };
 
   const statusLabel = hasStatusFilter
     ? FILTERABLE_STATUSES.filter(([status]) =>

@@ -273,6 +273,7 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
         currentPage={currentPage}
         totalPages={totalPages}
         onPageChange={setPage}
+        leftExtra={footerConfig.leftExtra}
       />
     );
   }
@@ -301,7 +302,25 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
               : undefined),
           }}
         >
-          <Table>
+          <Table
+            width={
+              Object.keys(columnWidths).length > 0
+                ? Object.values(columnWidths).reduce((sum, w) => sum + w, 0)
+                : undefined
+            }
+          >
+            <colgroup>
+              {table.getAllLeafColumns().map((col) => (
+                <col
+                  key={col.id}
+                  style={
+                    columnWidths[col.id] != null
+                      ? { width: columnWidths[col.id] }
+                      : undefined
+                  }
+                />
+              ))}
+            </colgroup>
             <TableHeader>
               {table.getHeaderGroups().map((headerGroup) => (
                 <TableRow key={headerGroup.id}>

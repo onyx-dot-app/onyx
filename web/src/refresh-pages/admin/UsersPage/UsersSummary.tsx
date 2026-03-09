@@ -8,7 +8,7 @@ import Link from "next/link";
 import { ADMIN_PATHS } from "@/lib/admin-routes";
 
 // ---------------------------------------------------------------------------
-// Stats cell — number + label
+// Stats cell — number + label + hover filter icon
 // ---------------------------------------------------------------------------
 
 type StatCellProps = {

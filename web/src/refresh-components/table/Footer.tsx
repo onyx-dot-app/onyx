@@ -61,6 +61,8 @@ interface FooterSummaryModeProps {
   totalPages: number;
   /** Called when the user navigates to a different page. */
   onPageChange: (page: number) => void;
+  /** Optional extra element rendered after the summary text (e.g. a download icon). */
+  leftExtra?: React.ReactNode;
   /** Controls overall footer sizing. `"regular"` (default) or `"small"`. */
   size?: TableSize;
   className?: string;
@@ -115,12 +117,15 @@ export default function Footer(props: FooterProps) {
             isSmall={isSmall}
           />
         ) : (
-          <SummaryLeft
-            rangeStart={props.rangeStart}
-            rangeEnd={props.rangeEnd}
-            totalItems={props.totalItems}
-            isSmall={isSmall}
-          />
+          <>
+            <SummaryLeft
+              rangeStart={props.rangeStart}
+              rangeEnd={props.rangeEnd}
+              totalItems={props.totalItems}
+              isSmall={isSmall}
+            />
+            {props.leftExtra}
+          </>
         )}
       </div>
 
