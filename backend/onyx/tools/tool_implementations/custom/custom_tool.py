@@ -15,6 +15,7 @@ from onyx.chat.emitter import get_default_emitter
 from onyx.configs.constants import FileOrigin
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.query_and_chat.placement import Placement
+from onyx.server.query_and_chat.streaming_models import CustomToolArgs
 from onyx.server.query_and_chat.streaming_models import CustomToolDelta
 from onyx.server.query_and_chat.streaming_models import CustomToolErrorInfo
 from onyx.server.query_and_chat.streaming_models import CustomToolStart
@@ -150,10 +151,8 @@ class CustomTool(Tool[None]):
         override_kwargs: None = None,  # noqa: ARG002
         **llm_kwargs: Any,
     ) -> ToolResponse:
-        request_body = llm_kwargs.get(REQUEST_BODY)
-
+        # Build path params
         path_params = {}
-
         for path_param_schema in self._method_spec.get_path_param_schemas():
             param_name = path_param_schema["name"]
             if param_name not in llm_kwargs:
@@ -166,6 +165,7 @@ class CustomTool(Tool[None]):
                 )
             path_params[param_name] = llm_kwargs[param_name]
 
+        # Build query params
         query_params = {}
         for query_param_schema in self._method_spec.get_query_param_schemas():
             if query_param_schema["name"] in llm_kwargs:
@@ -173,6 +173,20 @@ class CustomTool(Tool[None]):
                     query_param_schema["name"]
                 ]
 
+        # Emit args packet (path + query params only, no request body)
+        tool_args = {**path_params, **query_params}
+        if tool_args:
+            self.emitter.emit(
+                Packet(
+                    placement=placement,
+                    obj=CustomToolArgs(
+                        tool_name=self._name,
+                        tool_args=tool_args,
+                    ),
+                )
+            )
+
+        request_body = llm_kwargs.get(REQUEST_BODY)
         url = self._method_spec.build_url(self._base_url, path_params, query_params)
         method = self._method_spec.method
 

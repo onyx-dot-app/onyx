@@ -4,6 +4,7 @@ import {
   PacketType,
   CustomToolPacket,
   CustomToolStart,
+  CustomToolArgs,
   CustomToolDelta,
   CustomToolErrorInfo,
   SectionEnd,
@@ -25,6 +26,10 @@ function constructCustomToolState(packets: CustomToolPacket[]) {
   )?.obj as SectionEnd | null;
 
   const toolName = toolStart?.tool_name || toolDeltas[0]?.tool_name || "Tool";
+  const toolArgsPacket = packets.find(
+    (p) => p.obj.type === PacketType.CUSTOM_TOOL_ARGS
+  )?.obj as CustomToolArgs | null;
+  const toolArgs = toolArgsPacket?.tool_args ?? null;
   const latestDelta = toolDeltas[toolDeltas.length - 1] || null;
   const responseType = latestDelta?.response_type || null;
   const data = latestDelta?.data;
@@ -36,6 +41,7 @@ function constructCustomToolState(packets: CustomToolPacket[]) {
 
   return {
     toolName,
+    toolArgs,
     responseType,
     data,
     fileIds,
@@ -53,6 +59,7 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
 }) => {
   const {
     toolName,
+    toolArgs,
     responseType,
     data,
     fileIds,
@@ -107,6 +114,18 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
       surfaceBackground: error?.is_auth_error ? "error" : undefined,
       content: (
         <div className="flex flex-col gap-3">
+          {/* Tool arguments */}
+          {toolArgs && Object.keys(toolArgs).length > 0 && (
+            <div className="pl-[var(--timeline-common-text-padding)]">
+              <Text text03 mainUiMuted>
+                Request
+              </Text>
+              <div className="text-xs bg-background-neutral-02 p-3 rounded border border-border-01 max-h-48 overflow-y-auto font-mono whitespace-pre-wrap break-all">
+                {JSON.stringify(toolArgs, null, 2)}
+              </div>
+            </div>
+          )}
+
           {/* Error display */}
           {error && (
             <div className="pl-[var(--timeline-common-text-padding)]">
