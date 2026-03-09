@@ -1,11 +1,9 @@
 import secrets
 from collections.abc import AsyncIterator
-from typing import Any
 
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import File
-from fastapi import HTTPException
 from fastapi import Query
 from fastapi import UploadFile
 from fastapi.responses import StreamingResponse
@@ -14,12 +12,15 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_user
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.engine.sql_engine import get_sqlalchemy_engine
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import User
 from onyx.db.voice import fetch_default_stt_provider
 from onyx.db.voice import fetch_default_tts_provider
 from onyx.db.voice import update_user_voice_settings
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import store_ws_token
+from onyx.redis.redis_pool import WsTokenRateLimitExceeded
 from onyx.server.manage.models import VoiceSettingsUpdateRequest
 from onyx.utils.logger import setup_logger
 from onyx.voice.factory import get_voice_provider
@@ -30,6 +31,8 @@ router = APIRouter(prefix="/voice")
 
 # Max audio file size: 25MB (Whisper limit)
 MAX_AUDIO_SIZE = 25 * 1024 * 1024
+# Chunk size for streaming uploads (8KB)
+UPLOAD_READ_CHUNK_SIZE = 8192
 
 
 @router.post("/transcribe")
@@ -41,23 +44,29 @@ async def transcribe_audio(
     """Transcribe audio to text using the default STT provider."""
     provider_db = fetch_default_stt_provider(db_session)
     if provider_db is None:
-        raise HTTPException(
-            status_code=400,
-            detail="No speech-to-text provider configured. Please contact your administrator.",
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "No speech-to-text provider configured. Please contact your administrator.",
         )
 
     if not provider_db.api_key:
-        raise HTTPException(
-            status_code=400,
-            detail="Voice provider API key not configured.",
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Voice provider API key not configured.",
         )
 
-    audio_data = await audio.read()
-    if len(audio_data) > MAX_AUDIO_SIZE:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Audio file too large. Maximum size is {MAX_AUDIO_SIZE // (1024 * 1024)}MB.",
-        )
+    # Read in chunks to enforce size limit during streaming (prevents OOM attacks)
+    chunks: list[bytes] = []
+    total = 0
+    while chunk := await audio.read(UPLOAD_READ_CHUNK_SIZE):
+        total += len(chunk)
+        if total > MAX_AUDIO_SIZE:
+            raise OnyxError(
+                OnyxErrorCode.PAYLOAD_TOO_LARGE,
+                f"Audio file too large. Maximum size is {MAX_AUDIO_SIZE // (1024 * 1024)}MB.",
+            )
+        chunks.append(chunk)
+    audio_data = b"".join(chunks)
 
     # Extract format from filename
     filename = audio.filename or "audio.webm"
@@ -66,21 +75,21 @@ async def transcribe_audio(
     try:
         provider = get_voice_provider(provider_db)
     except ValueError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, str(exc)) from exc
 
     try:
         text = await provider.transcribe(audio_data, audio_format)
         return {"text": text}
     except NotImplementedError as exc:
-        raise HTTPException(
-            status_code=501,
-            detail=f"Speech-to-text not implemented for {provider_db.provider_type}.",
+        raise OnyxError(
+            OnyxErrorCode.NOT_IMPLEMENTED,
+            f"Speech-to-text not implemented for {provider_db.provider_type}.",
         ) from exc
     except Exception as exc:
         logger.error(f"Transcription failed: {exc}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Transcription failed: {str(exc)}",
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR,
+            "Transcription failed. Please try again.",
         ) from exc
 
 
@@ -105,29 +114,28 @@ async def synthesize_speech(
     )
 
     if not text:
-        raise HTTPException(status_code=400, detail="Text is required")
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, "Text is required")
 
     # Use short-lived session to fetch provider config, then release connection
     # before starting the long-running streaming response
-    engine = get_sqlalchemy_engine()
-    with Session(engine) as db_session:
+    with get_session_with_current_tenant() as db_session:
         provider_db = fetch_default_tts_provider(db_session)
         if provider_db is None:
             logger.error("No TTS provider configured")
-            raise HTTPException(
-                status_code=400,
-                detail="No text-to-speech provider configured. Please contact your administrator.",
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR,
+                "No text-to-speech provider configured. Please contact your administrator.",
             )
 
         if not provider_db.api_key:
             logger.error("TTS provider has no API key")
-            raise HTTPException(
-                status_code=400,
-                detail="Voice provider API key not configured.",
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR,
+                "Voice provider API key not configured.",
             )
 
-        # Use request voice, or user's preferred voice, or provider default
-        final_voice = voice or user.preferred_voice or provider_db.default_voice
+        # Use request voice or provider default
+        final_voice = voice or provider_db.default_voice
         # Use explicit None checks to avoid falsy float issues (0.0 would be skipped with `or`)
         final_speed = (
             speed
@@ -147,7 +155,7 @@ async def synthesize_speech(
             provider = get_voice_provider(provider_db)
         except ValueError as exc:
             logger.error(f"Failed to get voice provider: {exc}")
-            raise HTTPException(status_code=500, detail=str(exc)) from exc
+            raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, str(exc)) from exc
 
     # Session is now closed - streaming response won't hold DB connection
     async def audio_stream() -> AsyncIterator[bytes]:
@@ -184,24 +192,14 @@ def update_voice_settings(
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> dict[str, str]:
-    """Update user's voice settings.
-
-    To clear preferred_voice back to default, explicitly send {"preferred_voice": null}.
-    Omitting the field leaves it unchanged.
-    """
-    # Build kwargs, only including preferred_voice if explicitly provided
-    # This allows distinguishing between "not provided" and "set to null"
-    kwargs: dict[str, Any] = {
-        "db_session": db_session,
-        "user_id": user.id,
-        "auto_send": request.auto_send,
-        "auto_playback": request.auto_playback,
-        "playback_speed": request.playback_speed,
-    }
-    if "preferred_voice" in request.model_fields_set:
-        kwargs["preferred_voice"] = request.preferred_voice
-
-    update_user_voice_settings(**kwargs)
+    """Update user's voice settings."""
+    update_user_voice_settings(
+        db_session=db_session,
+        user_id=user.id,
+        auto_send=request.auto_send,
+        auto_playback=request.auto_playback,
+        playback_speed=request.playback_speed,
+    )
     return {"status": "ok"}
 
 
@@ -220,7 +218,14 @@ async def get_ws_token(
     to voice WebSocket endpoints (e.g., /voice/transcribe/stream?token=xxx).
 
     The token expires after 60 seconds and is single-use.
+    Rate limited to 10 tokens per minute per user.
     """
     token = secrets.token_urlsafe(32)
-    await store_ws_token(token, str(user.id))
+    try:
+        await store_ws_token(token, str(user.id))
+    except WsTokenRateLimitExceeded:
+        raise OnyxError(
+            OnyxErrorCode.RATE_LIMITED,
+            "Too many token requests. Please wait before requesting another.",
+        )
     return WSTokenResponse(token=token)

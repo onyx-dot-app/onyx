@@ -39,6 +39,8 @@ import document360Icon from "@public/Document360.png";
 import dropboxIcon from "@public/Dropbox.png";
 import drupalwikiIcon from "@public/DrupalWiki.png";
 import egnyteIcon from "@public/Egnyte.png";
+import elevenLabsDarkSVG from "@public/ElevenLabsDark.svg";
+import elevenLabsSVG from "@public/ElevenLabs.svg";
 import firefliesIcon from "@public/Fireflies.png";
 import freshdeskIcon from "@public/Freshdesk.png";
 import geminiSVG from "@public/Gemini.svg";
@@ -842,6 +844,9 @@ export const Document360Icon = createLogoIcon(document360Icon);
 export const DropboxIcon = createLogoIcon(dropboxIcon);
 export const DrupalWikiIcon = createLogoIcon(drupalwikiIcon);
 export const EgnyteIcon = createLogoIcon(egnyteIcon);
+export const ElevenLabsIcon = createLogoIcon(elevenLabsSVG, {
+  darkSrc: elevenLabsDarkSVG,
+});
 export const FirefliesIcon = createLogoIcon(firefliesIcon);
 export const FreshdeskIcon = createLogoIcon(freshdeskIcon);
 export const GeminiIcon = createLogoIcon(geminiSVG);

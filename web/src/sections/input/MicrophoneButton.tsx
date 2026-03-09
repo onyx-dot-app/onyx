@@ -62,7 +62,8 @@ function MicrophoneButton({
   } = useVoiceMode();
 
   // Refs for tracking state across renders
-  const wasTTSPlayingRef = useRef(false);
+  // Track whether TTS was actually playing audio (not just loading)
+  const wasTTSActuallyPlayingRef = useRef(false);
   const manualStopRequestedRef = useRef(false);
   const lastHandledManualStopCountRef = useRef(manualStopCount);
   const autoListenCooldownTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -167,6 +168,8 @@ function MicrophoneButton({
 
   // Auto-start listening shortly after TTS finishes (only if autoListen is enabled).
   // Small cooldown reduces playback bleed being re-captured by the microphone.
+  // IMPORTANT: Only trigger auto-listen if TTS was actually playing audio,
+  // not just loading. This prevents auto-listen from triggering when TTS fails.
   useEffect(() => {
     if (autoListenCooldownTimerRef.current) {
       clearTimeout(autoListenCooldownTimerRef.current);
@@ -176,8 +179,9 @@ function MicrophoneButton({
     const stoppedManually =
       manualStopCount !== lastHandledManualStopCountRef.current;
 
+    // Only trigger auto-listen if TTS was actually playing (not just loading)
     if (
-      wasTTSPlayingRef.current &&
+      wasTTSActuallyPlayingRef.current &&
       !isTTSPlaying &&
       !isTTSLoading &&
       !isAwaitingAutoPlaybackStart &&
@@ -209,8 +213,14 @@ function MicrophoneButton({
       lastHandledManualStopCountRef.current = manualStopCount;
     }
 
-    wasTTSPlayingRef.current =
-      isTTSPlaying || isTTSLoading || isAwaitingAutoPlaybackStart;
+    // Only track actual playback - not loading states
+    // This ensures auto-listen only triggers after audio actually played
+    if (isTTSPlaying) {
+      wasTTSActuallyPlayingRef.current = true;
+    } else if (!isTTSPlaying && !isTTSLoading && !isAwaitingAutoPlaybackStart) {
+      // Reset when TTS is completely done
+      wasTTSActuallyPlayingRef.current = false;
+    }
   }, [
     isTTSPlaying,
     isTTSLoading,

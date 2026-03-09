@@ -5,11 +5,13 @@ import struct
 import wave
 from collections.abc import AsyncIterator
 from typing import Any
+from urllib.parse import urlparse
 from xml.sax.saxutils import escape
 from xml.sax.saxutils import quoteattr
 
 import aiohttp
 
+from onyx.utils.logger import setup_logger
 from onyx.voice.interface import StreamingSynthesizerProtocol
 from onyx.voice.interface import StreamingTranscriberProtocol
 from onyx.voice.interface import TranscriptResult
@@ -37,12 +39,14 @@ class AzureStreamingTranscriber(StreamingTranscriberProtocol):
     def __init__(
         self,
         api_key: str,
-        region: str,
+        region: str | None = None,
+        endpoint: str | None = None,
         input_sample_rate: int = 24000,
         target_sample_rate: int = 16000,
     ):
         self.api_key = api_key
         self.region = region
+        self.endpoint = endpoint
         self.input_sample_rate = input_sample_rate
         self.target_sample_rate = target_sample_rate
         self._transcript_queue: asyncio.Queue[TranscriptResult | None] = asyncio.Queue()
@@ -64,10 +68,17 @@ class AzureStreamingTranscriber(StreamingTranscriberProtocol):
 
         self._loop = asyncio.get_running_loop()
 
-        speech_config = speechsdk.SpeechConfig(
-            subscription=self.api_key,
-            region=self.region,
-        )
+        # Use endpoint for self-hosted containers, region for Azure cloud
+        if self.endpoint:
+            speech_config = speechsdk.SpeechConfig(
+                subscription=self.api_key,
+                endpoint=self.endpoint,
+            )
+        else:
+            speech_config = speechsdk.SpeechConfig(
+                subscription=self.api_key,
+                region=self.region,
+            )
 
         audio_format = speechsdk.audio.AudioStreamFormat(
             samples_per_second=16000,
@@ -171,15 +182,15 @@ class AzureStreamingSynthesizer(StreamingSynthesizerProtocol):
     def __init__(
         self,
         api_key: str,
-        region: str,
+        region: str | None = None,
+        endpoint: str | None = None,
         voice: str = "en-US-JennyNeural",
         speed: float = 1.0,
     ):
-        from onyx.utils.logger import setup_logger
-
         self._logger = setup_logger()
         self.api_key = api_key
         self.region = region
+        self.endpoint = endpoint
         self.voice = voice
         self.speed = max(0.5, min(2.0, speed))
         self._audio_queue: asyncio.Queue[bytes | None] = asyncio.Queue()
@@ -202,10 +213,17 @@ class AzureStreamingSynthesizer(StreamingSynthesizerProtocol):
         # Store the event loop for thread-safe queue operations
         self._loop = asyncio.get_running_loop()
 
-        speech_config = speechsdk.SpeechConfig(
-            subscription=self.api_key,
-            region=self.region,
-        )
+        # Use endpoint for self-hosted containers, region for Azure cloud
+        if self.endpoint:
+            speech_config = speechsdk.SpeechConfig(
+                subscription=self.api_key,
+                endpoint=self.endpoint,
+            )
+        else:
+            speech_config = speechsdk.SpeechConfig(
+                subscription=self.api_key,
+                region=self.region,
+            )
         speech_config.speech_synthesis_voice_name = self.voice
         # Use MP3 format for streaming - compatible with MediaSource Extensions
         speech_config.set_speech_synthesis_output_format(
@@ -286,14 +304,32 @@ class AzureVoiceProvider(VoiceProviderInterface):
         self.api_key = api_key
         self.api_base = api_base
         self.custom_config = custom_config
-        self.speech_region = (
+        raw_speech_region = (
             custom_config.get("speech_region")
             or self._extract_speech_region_from_uri(api_base)
             or ""
         )
+        self.speech_region = self._validate_speech_region(raw_speech_region)
         self.stt_model = stt_model
         self.tts_model = tts_model
         self.default_voice = default_voice or "en-US-JennyNeural"
+
+    @staticmethod
+    def _is_azure_cloud_url(uri: str | None) -> bool:
+        """Check if URI is an Azure cloud endpoint (vs custom/self-hosted)."""
+        if not uri:
+            return False
+        try:
+            hostname = (urlparse(uri).hostname or "").lower()
+        except ValueError:
+            return False
+        return hostname.endswith(
+            (
+                ".speech.microsoft.com",
+                ".api.cognitive.microsoft.com",
+                ".cognitiveservices.azure.com",
+            )
+        )
 
     @staticmethod
     def _extract_speech_region_from_uri(uri: str | None) -> str | None:
@@ -312,15 +348,58 @@ class AzureVoiceProvider(VoiceProviderInterface):
         #
         # NOT supported (requires explicit speech_region config):
         # - https://<resource>.cognitiveservices.azure.com/ (resource name != region)
-        patterns = [
-            r"https?://([^.]+)\.(?:tts|stt)\.speech\.microsoft\.com",
-            r"https?://([^.]+)\.api\.cognitive\.microsoft\.com",
-        ]
-        for pattern in patterns:
-            match = re.search(pattern, uri)
-            if match:
-                return match.group(1)
+        try:
+            hostname = (urlparse(uri).hostname or "").lower()
+        except ValueError:
+            return None
+
+        stt_tts_match = re.match(
+            r"^([a-z0-9-]+)\.(?:tts|stt)\.speech\.microsoft\.com$", hostname
+        )
+        if stt_tts_match:
+            return stt_tts_match.group(1)
+
+        api_match = re.match(
+            r"^([a-z0-9-]+)\.api\.cognitive\.microsoft\.com$", hostname
+        )
+        if api_match:
+            return api_match.group(1)
+
         return None
+
+    @staticmethod
+    def _validate_speech_region(speech_region: str) -> str:
+        normalized_region = speech_region.strip().lower()
+        if not normalized_region:
+            return ""
+        if not re.fullmatch(r"[a-z0-9-]+", normalized_region):
+            raise ValueError(
+                "Invalid Azure speech_region. Use lowercase letters, digits, and hyphens only."
+            )
+        return normalized_region
+
+    def _get_stt_url(self) -> str:
+        """Get the STT endpoint URL (auto-detects cloud vs self-hosted)."""
+        if self.api_base and not self._is_azure_cloud_url(self.api_base):
+            # Self-hosted container endpoint
+            return f"{self.api_base.rstrip('/')}/speech/recognition/conversation/cognitiveservices/v1"
+        # Azure cloud endpoint
+        return (
+            f"https://{self.speech_region}.stt.speech.microsoft.com/"
+            "speech/recognition/conversation/cognitiveservices/v1"
+        )
+
+    def _get_tts_url(self) -> str:
+        """Get the TTS endpoint URL (auto-detects cloud vs self-hosted)."""
+        if self.api_base and not self._is_azure_cloud_url(self.api_base):
+            # Self-hosted container endpoint
+            return f"{self.api_base.rstrip('/')}/cognitiveservices/v1"
+        # Azure cloud endpoint
+        return f"https://{self.speech_region}.tts.speech.microsoft.com/cognitiveservices/v1"
+
+    def _is_self_hosted(self) -> bool:
+        """Check if using self-hosted container vs Azure cloud."""
+        return bool(self.api_base and not self._is_azure_cloud_url(self.api_base))
 
     @staticmethod
     def _pcm16_to_wav(pcm_data: bytes, sample_rate: int = 24000) -> bytes:
@@ -336,8 +415,8 @@ class AzureVoiceProvider(VoiceProviderInterface):
     async def transcribe(self, audio_data: bytes, audio_format: str) -> str:
         if not self.api_key:
             raise ValueError("Azure API key required for STT")
-        if not self.speech_region:
-            raise ValueError("Azure speech region required for STT")
+        if not self._is_self_hosted() and not self.speech_region:
+            raise ValueError("Azure speech region required for STT (cloud mode)")
 
         normalized_format = audio_format.lower()
         payload = audio_data
@@ -352,10 +431,7 @@ class AzureVoiceProvider(VoiceProviderInterface):
         elif normalized_format == "webm":
             content_type = "audio/webm; codecs=opus"
 
-        url = (
-            f"https://{self.speech_region}.stt.speech.microsoft.com/"
-            "speech/recognition/conversation/cognitiveservices/v1"
-        )
+        url = self._get_stt_url()
         params = {"language": "en-US", "format": "detailed"}
         headers = {
             "Ocp-Apim-Subscription-Key": self.api_key,
@@ -399,8 +475,8 @@ class AzureVoiceProvider(VoiceProviderInterface):
         if not self.api_key:
             raise ValueError("Azure API key required for TTS")
 
-        if not self.speech_region:
-            raise ValueError("Azure speech region required for TTS")
+        if not self._is_self_hosted() and not self.speech_region:
+            raise ValueError("Azure speech region required for TTS (cloud mode)")
 
         voice_name = voice or self.default_voice
 
@@ -416,7 +492,7 @@ class AzureVoiceProvider(VoiceProviderInterface):
             </voice>
         </speak>"""
 
-        url = f"https://{self.speech_region}.tts.speech.microsoft.com/cognitiveservices/v1"
+        url = self._get_tts_url()
 
         headers = {
             "Ocp-Apim-Subscription-Key": self.api_key,
@@ -464,11 +540,16 @@ class AzureVoiceProvider(VoiceProviderInterface):
         """Create a streaming transcription session."""
         if not self.api_key:
             raise ValueError("API key required for streaming transcription")
-        if not self.speech_region:
-            raise ValueError("Speech region required for Azure streaming transcription")
+        if not self._is_self_hosted() and not self.speech_region:
+            raise ValueError(
+                "Speech region required for Azure streaming transcription (cloud mode)"
+            )
+
+        # Use endpoint for self-hosted, region for cloud
         transcriber = AzureStreamingTranscriber(
             api_key=self.api_key,
-            region=self.speech_region,
+            region=self.speech_region if not self._is_self_hosted() else None,
+            endpoint=self.api_base if self._is_self_hosted() else None,
             input_sample_rate=24000,
             target_sample_rate=16000,
         )
@@ -481,11 +562,16 @@ class AzureVoiceProvider(VoiceProviderInterface):
         """Create a streaming TTS session."""
         if not self.api_key:
             raise ValueError("API key required for streaming TTS")
-        if not self.speech_region:
-            raise ValueError("Speech region required for Azure streaming TTS")
+        if not self._is_self_hosted() and not self.speech_region:
+            raise ValueError(
+                "Speech region required for Azure streaming TTS (cloud mode)"
+            )
+
+        # Use endpoint for self-hosted, region for cloud
         synthesizer = AzureStreamingSynthesizer(
             api_key=self.api_key,
-            region=self.speech_region,
+            region=self.speech_region if not self._is_self_hosted() else None,
+            endpoint=self.api_base if self._is_self_hosted() else None,
             voice=voice or self.default_voice or "en-US-JennyNeural",
             speed=speed,
         )

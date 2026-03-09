@@ -13,6 +13,8 @@ import { useUser } from "@/providers/UserProvider";
 interface VoiceModeContextType {
   /** Whether TTS audio is currently playing */
   isTTSPlaying: boolean;
+  /** Whether manual read-aloud playback is currently speaking */
+  isManualTTSPlaying: boolean;
   /** Whether TTS is loading/generating audio */
   isTTSLoading: boolean;
   /** Text that has been spoken so far (for synced display) */
@@ -45,6 +47,12 @@ interface VoiceModeContextType {
   isTTSMuted: boolean;
   /** Toggle TTS mute state */
   toggleTTSMute: () => void;
+  /** Set manual read-aloud speaking state for shared UI (e.g., waveform) */
+  setManualTTSPlaying: (playing: boolean) => void;
+  /** Register manual read-aloud mute handler so shared mute controls affect it */
+  registerManualTTSMuteHandler: (
+    handler: ((muted: boolean) => void) | null
+  ) => void;
 }
 
 const VoiceModeContext = createContext<VoiceModeContextType | null>(null);
@@ -106,9 +114,9 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
   const { user } = useUser();
   const autoPlayback = user?.preferences?.voice_auto_playback ?? false;
   const playbackSpeed = user?.preferences?.voice_playback_speed ?? 1.0;
-  const preferredVoice = user?.preferences?.preferred_voice;
 
   const [isTTSPlaying, setIsTTSPlaying] = useState(false);
+  const [isManualTTSPlaying, setIsManualTTSPlaying] = useState(false);
   const [isTTSLoading, setIsTTSLoading] = useState(false);
   const [spokenText, setSpokenText] = useState("");
   const [activeMessageNodeId, setActiveMessageNodeId] = useState<number | null>(
@@ -118,6 +126,9 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
     useState(false);
   const [manualStopCount, setManualStopCount] = useState(0);
   const [isTTSMuted, setIsTTSMuted] = useState(false);
+  const manualTTSMuteHandlerRef = useRef<((muted: boolean) => void) | null>(
+    null
+  );
 
   // Audio progress tracking for progressive text reveal
   const [audioProgress, setAudioProgress] = useState(0);
@@ -191,6 +202,11 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
 
     streamEndedRef.current = true;
 
+    // Don't call endOfStream if no audio was received - it causes errors
+    if (totalBytesReceivedRef.current === 0) {
+      return;
+    }
+
     if (
       mediaSourceRef.current &&
       mediaSourceRef.current.readyState === "open" &&
@@ -200,7 +216,7 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
       try {
         mediaSourceRef.current.endOfStream();
       } catch {
-        // Ignore errors when ending stream
+        // Ignore endOfStream errors
       }
     }
 
@@ -252,6 +268,32 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
       return false;
     }
 
+    // Clean up any existing MediaSource before creating a new one
+    if (audioUrlRef.current) {
+      URL.revokeObjectURL(audioUrlRef.current);
+      audioUrlRef.current = null;
+    }
+    if (audioElementRef.current) {
+      audioElementRef.current.pause();
+      audioElementRef.current.src = "";
+      audioElementRef.current = null;
+    }
+    if (
+      mediaSourceRef.current &&
+      mediaSourceRef.current.readyState === "open"
+    ) {
+      try {
+        if (sourceBufferRef.current) {
+          mediaSourceRef.current.removeSourceBuffer(sourceBufferRef.current);
+        }
+        mediaSourceRef.current.endOfStream();
+      } catch {
+        // Ignore cleanup errors
+      }
+    }
+    mediaSourceRef.current = null;
+    sourceBufferRef.current = null;
+
     // Create MediaSource and audio element
     mediaSourceRef.current = new MediaSource();
     audioElementRef.current = new Audio();
@@ -274,6 +316,14 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
     };
 
     audioElementRef.current.onerror = () => {
+      const audioEl = audioElementRef.current;
+      const mediaError = audioEl?.error;
+
+      // Ignore spurious errors with no actual error code (happens during cleanup)
+      if (!mediaError || mediaError.code === undefined) {
+        return;
+      }
+
       isPlayingRef.current = false;
       setIsTTSPlaying(false);
       setActiveMessageNodeId(null);
@@ -404,7 +454,6 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
         ws.send(
           JSON.stringify({
             type: "config",
-            voice: preferredVoice,
             speed: playbackSpeed,
           })
         );
@@ -456,7 +505,6 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
       isConnectingRef.current = false;
     }
   }, [
-    preferredVoice,
     playbackSpeed,
     handleAudioData,
     getWebSocketUrl,
@@ -747,6 +795,7 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
     setActiveMessageNodeId(null);
     setIsAwaitingAutoPlaybackStart(false);
     setIsTTSMuted(false);
+    setIsManualTTSPlaying(false);
 
     // Reset audio progress tracking
     totalBytesReceivedRef.current = 0;
@@ -769,9 +818,20 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
       if (audioElementRef.current) {
         audioElementRef.current.muted = newMuted;
       }
+      manualTTSMuteHandlerRef.current?.(newMuted);
       return newMuted;
     });
   }, []);
+
+  const registerManualTTSMuteHandler = useCallback(
+    (handler: ((muted: boolean) => void) | null) => {
+      manualTTSMuteHandlerRef.current = handler;
+      if (handler) {
+        handler(isTTSMuted);
+      }
+    },
+    [isTTSMuted]
+  );
 
   // Animation loop to track audio playback progress for progressive text reveal
   useEffect(() => {
@@ -896,6 +956,7 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
     <VoiceModeContext.Provider
       value={{
         isTTSPlaying,
+        isManualTTSPlaying,
         isTTSLoading,
         spokenText,
         activeMessageNodeId,
@@ -910,6 +971,8 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
         isAwaitingAutoPlaybackStart,
         isTTSMuted,
         toggleTTSMute,
+        setManualTTSPlaying: setIsManualTTSPlaying,
+        registerManualTTSMuteHandler,
       }}
     >
       {children}

@@ -20,6 +20,7 @@ export class HTTPStreamingTTSPlayer {
   private onPlayingChange?: (playing: boolean) => void;
   private onError?: (error: string) => void;
   private abortController: AbortController | null = null;
+  private isMuted: boolean = false;
 
   constructor(options?: {
     onPlayingChange?: (playing: boolean) => void;
@@ -69,6 +70,7 @@ export class HTTPStreamingTTSPlayer {
     this.audioElement = new Audio();
     this.mediaSourceUrl = URL.createObjectURL(this.mediaSource);
     this.audioElement.src = this.mediaSourceUrl;
+    this.audioElement.muted = this.isMuted;
 
     // Set up audio element event handlers
     this.audioElement.onplay = () => {
@@ -256,6 +258,7 @@ export class HTTPStreamingTTSPlayer {
     const audioUrl = URL.createObjectURL(blob);
 
     this.audioElement = new Audio(audioUrl);
+    this.audioElement.muted = this.isMuted;
 
     this.audioElement.onplay = () => {
       this.isPlaying = true;
@@ -286,6 +289,13 @@ export class HTTPStreamingTTSPlayer {
     }
 
     this.cleanup();
+  }
+
+  setMuted(muted: boolean): void {
+    this.isMuted = muted;
+    if (this.audioElement) {
+      this.audioElement.muted = muted;
+    }
   }
 
   /**

@@ -121,6 +121,7 @@ from onyx.db.models import User
 from onyx.db.pat import fetch_user_for_pat
 from onyx.db.users import get_user_by_email
 from onyx.redis.redis_pool import get_async_redis_connection
+from onyx.redis.redis_pool import retrieve_ws_token_data
 from onyx.server.settings.store import load_settings
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
@@ -1626,7 +1627,7 @@ async def _get_user_from_token_data(token_data: dict) -> User | None:
 
 
 async def current_user_from_websocket(
-    _websocket: WebSocket,
+    websocket: WebSocket,
     token: str = Query(..., description="WebSocket authentication token"),
 ) -> User:
     """
@@ -1644,7 +1645,20 @@ async def current_user_from_websocket(
 
     This applies the same auth checks as current_user() for HTTP endpoints.
     """
-    from onyx.redis.redis_pool import retrieve_ws_token_data
+    # Check Origin header to prevent Cross-Site WebSocket Hijacking (CSWSH)
+    # Browsers always send Origin on WebSocket connections
+    origin = websocket.headers.get("origin")
+    expected_origin = WEB_DOMAIN.rstrip("/")
+    if not origin:
+        logger.warning("WS auth: missing Origin header")
+        raise BasicAuthenticationError(detail="Access denied. Missing origin.")
+
+    actual_origin = origin.rstrip("/")
+    if actual_origin != expected_origin:
+        logger.warning(
+            f"WS auth: origin mismatch. Expected {expected_origin}, got {actual_origin}"
+        )
+        raise BasicAuthenticationError(detail="Access denied. Invalid origin.")
 
     # Validate WS token in Redis (single-use, deleted after retrieval)
     try:
@@ -1658,7 +1672,7 @@ async def current_user_from_websocket(
     except Exception as e:
         logger.error(f"WS auth: error during token validation: {e}")
         raise BasicAuthenticationError(
-            detail=f"Authentication verification failed: {str(e)}"
+            detail="Authentication verification failed."
         ) from e
 
     # Get user from token data
@@ -1668,11 +1682,9 @@ async def current_user_from_websocket(
         raise BasicAuthenticationError(
             detail="Access denied. User not found or inactive."
         )
-    logger.info(f"WS auth: user found: {user.email}")
 
     # Apply same checks as HTTP auth (verification, OIDC expiry, role)
     user = await double_check_user(user)
-    logger.info(f"WS auth: user verified: {user.email}, role={user.role}")
 
     # Block LIMITED users (same as current_user)
     if user.role == UserRole.LIMITED:
@@ -1681,7 +1693,7 @@ async def current_user_from_websocket(
             detail="Access denied. User role is LIMITED. BASIC or higher permissions are required.",
         )
 
-    logger.info(f"WS auth: authentication successful for {user.email}")
+    logger.debug(f"WS auth: authenticated {user.email}")
     return user
 
 

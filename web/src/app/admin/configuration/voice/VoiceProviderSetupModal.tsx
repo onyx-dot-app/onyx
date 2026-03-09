@@ -2,6 +2,11 @@
 
 import Image from "next/image";
 import { FunctionComponent, useState, useEffect } from "react";
+import {
+  AzureIcon,
+  ElevenLabsIcon,
+  OpenAIIcon,
+} from "@/components/icons/icons";
 import Modal from "@/refresh-components/Modal";
 import Button from "@/refresh-components/buttons/Button";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
@@ -16,6 +21,7 @@ import type { IconProps } from "@opal/types";
 interface VoiceOption {
   value: string;
   label: string;
+  description?: string;
 }
 
 interface LLMProviderView {
@@ -76,6 +82,22 @@ const PROVIDER_DOCS_URLS: Record<string, string> = {
   azure: "https://learn.microsoft.com/en-us/azure/ai-services/speech-service/",
   elevenlabs: "https://elevenlabs.io/docs",
 };
+
+const PROVIDER_VOICE_DOCS_URLS: Record<string, { url: string; label: string }> =
+  {
+    openai: {
+      url: "https://platform.openai.com/docs/guides/text-to-speech#voice-options",
+      label: "OpenAI",
+    },
+    azure: {
+      url: "https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support?tabs=tts",
+      label: "Azure",
+    },
+    elevenlabs: {
+      url: "https://elevenlabs.io/docs/voices/premade-voices",
+      label: "ElevenLabs",
+    },
+  };
 
 const OPENAI_STT_MODELS = [{ id: "whisper-1", name: "Whisper v1" }];
 
@@ -171,13 +193,19 @@ export default function VoiceProviderSetupModal({
     fetch(`/api/admin/voice/voices?provider_type=${providerType}`)
       .then((res) => res.json())
       .then((data: Array<{ id: string; name: string }>) => {
-        const options = data.map((v) => ({ value: v.id, label: v.name }));
+        const options = data.map((v) => ({
+          value: v.id,
+          label: v.name,
+          description: v.id,
+        }));
         setVoiceOptions(options);
-        // Set default voice to first option if not already set
-        const firstOption = options[0];
-        if (firstOption) {
-          setDefaultVoice((prev) => prev || firstOption.value);
-        }
+        // Set default voice to first option if not already set,
+        // or if current value doesn't exist in the new options
+        setDefaultVoice((prev) => {
+          if (!prev) return options[0]?.value ?? "";
+          const existsInOptions = options.some((opt) => opt.value === prev);
+          return existsInOptions ? prev : options[0]?.value ?? "";
+        });
       })
       .catch(() => {
         setVoiceOptions([]);
@@ -193,16 +221,25 @@ export default function VoiceProviderSetupModal({
   // Logo arrangement component for the modal header
   // No useMemo needed - providerType and label are stable props
   const LogoArrangement: FunctionComponent<IconProps> = () => (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-2">
       <div className="flex items-center justify-center size-7 shrink-0 overflow-clip">
-        <Image
-          src={PROVIDER_LOGO_URLS[providerType] ?? "/Openai.svg"}
-          alt={`${label} logo`}
-          width={24}
-          height={24}
-        />
+        {providerType === "openai" ? (
+          <OpenAIIcon size={24} />
+        ) : providerType === "azure" ? (
+          <AzureIcon size={24} />
+        ) : providerType === "elevenlabs" ? (
+          <ElevenLabsIcon size={24} />
+        ) : (
+          <Image
+            src={PROVIDER_LOGO_URLS[providerType] ?? "/Openai.svg"}
+            alt={`${label} logo`}
+            width={24}
+            height={24}
+            className="object-contain"
+          />
+        )}
       </div>
-      <div className="flex items-center justify-center size-4 p-0.5 shrink-0">
+      <div className="flex items-center justify-center size-4 shrink-0">
         <SvgArrowExchange className="size-3 text-text-04" />
       </div>
       <div className="flex items-center justify-center size-7 p-0.5 shrink-0 overflow-clip">
@@ -434,27 +471,38 @@ export default function VoiceProviderSetupModal({
             {mode === "tts" && (
               <Vertical
                 title="Voice"
-                subDescription="This voice will be used for spoken responses."
+                subDescription={
+                  <>
+                    This voice will be used for spoken responses. See full list
+                    of supported languages and voices at{" "}
+                    <a
+                      href={
+                        PROVIDER_VOICE_DOCS_URLS[providerType]?.url ??
+                        PROVIDER_DOCS_URLS[providerType]
+                      }
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline"
+                    >
+                      {PROVIDER_VOICE_DOCS_URLS[providerType]?.label ?? label}
+                    </a>
+                    .
+                  </>
+                }
                 nonInteractive
               >
-                <InputSelect
+                <InputComboBox
                   value={defaultVoice}
                   onValueChange={setDefaultVoice}
+                  options={voiceOptions}
+                  placeholder={
+                    isLoadingVoices
+                      ? "Loading voices..."
+                      : "Select a voice or enter voice ID"
+                  }
                   disabled={isLoadingVoices}
-                >
-                  <InputSelect.Trigger
-                    placeholder={
-                      isLoadingVoices ? "Loading voices..." : "Select voice"
-                    }
-                  />
-                  <InputSelect.Content>
-                    {voiceOptions.map((voice) => (
-                      <InputSelect.Item key={voice.value} value={voice.value}>
-                        {voice.label}
-                      </InputSelect.Item>
-                    ))}
-                  </InputSelect.Content>
-                </InputSelect>
+                  strict={false}
+                />
               </Vertical>
             )}
           </Section>

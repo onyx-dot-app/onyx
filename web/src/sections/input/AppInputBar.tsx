@@ -135,6 +135,7 @@ const AppInputBar = React.memo(
     const {
       stopTTS,
       isTTSPlaying,
+      isManualTTSPlaying,
       isTTSLoading,
       isAwaitingAutoPlaybackStart,
       isTTSMuted,
@@ -143,7 +144,7 @@ const AppInputBar = React.memo(
     const isVoicePlaybackActive =
       isTTSPlaying || isTTSLoading || isAwaitingAutoPlaybackStart;
     const isVoicePlaybackControllable = isVoicePlaybackActive && !isRecording;
-    const isTTSActuallySpeaking = isTTSPlaying;
+    const isTTSActuallySpeaking = isTTSPlaying || isManualTTSPlaying;
 
     const handleRecordingChange = useCallback((nextIsRecording: boolean) => {
       setIsRecording((prevIsRecording) => {

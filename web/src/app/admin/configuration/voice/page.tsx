@@ -3,7 +3,12 @@
 import Image from "next/image";
 import { useMemo, useState } from "react";
 import { AdminPageTitle } from "@/components/admin/Title";
-import { InfoIcon } from "@/components/icons/icons";
+import {
+  AzureIcon,
+  ElevenLabsIcon,
+  InfoIcon,
+  OpenAIIcon,
+} from "@/components/icons/icons";
 import Text from "@/refresh-components/texts/Text";
 import Separator from "@/refresh-components/Separator";
 import useSWR from "swr";
@@ -291,10 +296,12 @@ export default function VoiceConfigurationPage() {
 
   const renderLogo = ({
     logoSrc,
+    providerType,
     alt,
     size = 16,
   }: {
     logoSrc?: string;
+    providerType: string;
     alt: string;
     size?: number;
   }) => {
@@ -307,8 +314,20 @@ export default function VoiceConfigurationPage() {
           containerSizeClass
         )}
       >
-        {logoSrc ? (
-          <Image src={logoSrc} alt={alt} width={size} height={size} />
+        {providerType === "openai" ? (
+          <OpenAIIcon size={size} />
+        ) : providerType === "azure" ? (
+          <AzureIcon size={size} />
+        ) : providerType === "elevenlabs" ? (
+          <ElevenLabsIcon size={size} />
+        ) : logoSrc ? (
+          <Image
+            src={logoSrc}
+            alt={alt}
+            width={size}
+            height={size}
+            className="object-contain"
+          />
         ) : (
           <SvgMicrophone size={size} className="text-text-02" />
         )}
@@ -382,19 +401,20 @@ export default function VoiceConfigurationPage() {
         key={`${mode}-${model.id}`}
         onClick={isCardClickable ? handleCardClick : undefined}
         className={cn(
-          "flex items-start justify-between gap-3 rounded-16 border p-2 bg-background-neutral-01",
+          "flex items-start justify-between gap-4 rounded-16 border p-2 bg-background-neutral-01",
           isHighlighted ? "border-action-link-05" : "border-border-01",
           isCardClickable &&
             "cursor-pointer hover:bg-background-tint-01 transition-colors"
         )}
       >
-        <div className="flex flex-1 items-start gap-1 p-2">
+        <div className="flex flex-1 items-start gap-2.5 p-2">
           {renderLogo({
             logoSrc: model.logoSrc,
+            providerType: model.providerType,
             alt: `${model.label} logo`,
             size: 16,
           })}
-          <div className="flex flex-col">
+          <div className="flex flex-col gap-0.5">
             <Text as="p" mainUiAction text04>
               {model.label}
             </Text>
@@ -403,7 +423,7 @@ export default function VoiceConfigurationPage() {
             </Text>
           </div>
         </div>
-        <div className="flex items-center justify-end gap-2">
+        <div className="flex items-center justify-end gap-1.5 self-center">
           {isConfigured && (
             <OpalButton
               icon={SvgEdit}

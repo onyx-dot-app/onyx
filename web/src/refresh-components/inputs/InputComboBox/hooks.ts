@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, RefObject } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { ComboBoxOption } from "./types";
 
 // =============================================================================
@@ -19,22 +19,32 @@ export function useComboBoxState({ value, options }: UseComboBoxStateProps) {
   const [inputValue, setInputValue] = useState(value);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const [isKeyboardNav, setIsKeyboardNav] = useState(false);
+  const prevIsOpenRef = useRef(false);
 
   // State synchronization logic
-  // Only sync when the dropdown is closed or when value changes significantly
   useEffect(() => {
-    // If dropdown is closed, always sync with prop value
-    if (!isOpen) {
+    const justOpened = isOpen && !prevIsOpenRef.current;
+    const justClosed = !isOpen && prevIsOpenRef.current;
+    prevIsOpenRef.current = isOpen;
+
+    if (justClosed) {
+      // When closing, sync back to the prop value
       setInputValue(value);
-    } else {
-      // If dropdown is open, only sync if the new value is an exact match with an option
-      // This prevents interference when user is typing
-      const isExactOptionMatch = options.some((opt) => opt.value === value);
-      if (isExactOptionMatch && inputValue !== value) {
+    } else if (justOpened) {
+      // When first opening, show the label of the matched option (for better UX)
+      // This prevents showing raw IDs when the user clicks to open the dropdown
+      const matchedOption = options.find((opt) => opt.value === value);
+      if (matchedOption) {
+        setInputValue(matchedOption.label);
+      } else {
         setInputValue(value);
       }
+    } else if (!isOpen) {
+      // While closed, keep in sync with prop value
+      setInputValue(value);
     }
-  }, [value, isOpen, options, inputValue]);
+    // Note: While open, we don't sync - let the user type freely
+  }, [value, isOpen, options]);
 
   // Reset highlight and keyboard nav when closing dropdown
   useEffect(() => {

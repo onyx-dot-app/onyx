@@ -1,6 +1,5 @@
 from fastapi import APIRouter
 from fastapi import Depends
-from fastapi import HTTPException
 from fastapi import Response
 from sqlalchemy.orm import Session
 
@@ -18,15 +17,38 @@ from onyx.db.voice import fetch_voice_providers
 from onyx.db.voice import set_default_stt_provider
 from onyx.db.voice import set_default_tts_provider
 from onyx.db.voice import upsert_voice_provider
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from onyx.server.manage.voice.models import VoiceOption
 from onyx.server.manage.voice.models import VoiceProviderTestRequest
+from onyx.server.manage.voice.models import VoiceProviderUpdateSuccess
 from onyx.server.manage.voice.models import VoiceProviderUpsertRequest
 from onyx.server.manage.voice.models import VoiceProviderView
 from onyx.utils.logger import setup_logger
+from onyx.utils.url import SSRFException
+from onyx.utils.url import validate_outbound_http_url
 from onyx.voice.factory import get_voice_provider
 
 logger = setup_logger()
 
 admin_router = APIRouter(prefix="/admin/voice")
+
+
+def _validate_voice_api_base(provider_type: str, api_base: str | None) -> str | None:
+    """Validate and normalize provider api_base / target URI."""
+    if api_base is None:
+        return None
+
+    allow_private_network = provider_type.lower() == "azure"
+    try:
+        return validate_outbound_http_url(
+            api_base, allow_private_network=allow_private_network
+        )
+    except (ValueError, SSRFException) as e:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            f"Invalid target URI: {str(e)}",
+        ) from e
 
 
 def _provider_to_view(provider: VoiceProvider) -> VoiceProviderView:
@@ -69,20 +91,22 @@ def upsert_voice_provider_endpoint(
     if request.llm_provider_id is not None:
         llm_provider = db_session.get(LLMProviderModel, request.llm_provider_id)
         if llm_provider is None:
-            raise HTTPException(
-                status_code=404,
-                detail=f"LLM provider with id {request.llm_provider_id} not found.",
+            raise OnyxError(
+                OnyxErrorCode.NOT_FOUND,
+                f"LLM provider with id {request.llm_provider_id} not found.",
             )
         if llm_provider.api_key is None:
-            raise HTTPException(
-                status_code=400,
-                detail="Selected LLM provider has no API key configured.",
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR,
+                "Selected LLM provider has no API key configured.",
             )
         api_key = llm_provider.api_key.get_value(apply_mask=False)
         api_key_changed = True
 
     # Use target_uri if provided, otherwise fall back to api_base
-    api_base = request.target_uri or request.api_base
+    api_base = _validate_voice_api_base(
+        request.provider_type, request.target_uri or request.api_base
+    )
 
     provider = upsert_voice_provider(
         db_session=db_session,
@@ -136,11 +160,11 @@ def deactivate_stt_provider_endpoint(
     provider_id: int,
     _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
-) -> dict[str, str]:
+) -> VoiceProviderUpdateSuccess:
     """Remove the default STT status from a voice provider."""
     deactivate_stt_provider(db_session=db_session, provider_id=provider_id)
     db_session.commit()
-    return {"status": "ok"}
+    return VoiceProviderUpdateSuccess()
 
 
 @admin_router.post("/providers/{provider_id}/activate-tts")
@@ -163,11 +187,11 @@ def deactivate_tts_provider_endpoint(
     provider_id: int,
     _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
-) -> dict[str, str]:
+) -> VoiceProviderUpdateSuccess:
     """Remove the default TTS status from a voice provider."""
     deactivate_tts_provider(db_session=db_session, provider_id=provider_id)
     db_session.commit()
-    return {"status": "ok"}
+    return VoiceProviderUpdateSuccess()
 
 
 @admin_router.post("/providers/test")
@@ -175,7 +199,7 @@ def test_voice_provider(
     request: VoiceProviderTestRequest,
     _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
-) -> dict[str, str]:
+) -> VoiceProviderUpdateSuccess:
     """Test a voice provider connection."""
     api_key = request.api_key
 
@@ -184,20 +208,22 @@ def test_voice_provider(
             db_session, request.provider_type
         )
         if existing_provider is None or not existing_provider.api_key:
-            raise HTTPException(
-                status_code=400,
-                detail="No stored API key found for this provider type.",
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR,
+                "No stored API key found for this provider type.",
             )
         api_key = existing_provider.api_key.get_value(apply_mask=False)
 
     if not api_key:
-        raise HTTPException(
-            status_code=400,
-            detail="API key is required. Either provide api_key or set use_stored_key to true.",
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "API key is required. Either provide api_key or set use_stored_key to true.",
         )
 
     # Use target_uri if provided, otherwise fall back to api_base
-    api_base = request.target_uri or request.api_base
+    api_base = _validate_voice_api_base(
+        request.provider_type, request.target_uri or request.api_base
+    )
 
     # Create a temporary VoiceProvider for testing (not saved to DB)
     temp_provider = VoiceProvider(
@@ -211,27 +237,27 @@ def test_voice_provider(
     try:
         provider = get_voice_provider(temp_provider)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(exc)) from exc
 
     # Test the provider by getting available voices (lightweight check)
     try:
         voices = provider.get_available_voices()
         if not voices:
-            raise HTTPException(
-                status_code=400,
-                detail="Provider returned no available voices.",
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR,
+                "Provider returned no available voices.",
             )
-    except NotImplementedError:
-        # Provider not fully implemented yet (Azure, ElevenLabs placeholders)
-        pass
+    except OnyxError:
+        raise
     except Exception as e:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Connection test failed: {str(e)}",
+        logger.error(f"Voice provider connection test failed: {e}")
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Connection test failed. Please verify your API key and settings.",
         ) from e
 
     logger.info(f"Voice provider test succeeded for {request.provider_type}.")
-    return {"status": "ok"}
+    return VoiceProviderUpdateSuccess()
 
 
 @admin_router.get("/providers/{provider_id}/voices")
@@ -239,30 +265,30 @@ def get_provider_voices(
     provider_id: int,
     _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
-) -> list[dict[str, str]]:
+) -> list[VoiceOption]:
     """Get available voices for a provider."""
     provider_db = fetch_voice_provider_by_id(db_session, provider_id)
     if provider_db is None:
-        raise HTTPException(status_code=404, detail="Voice provider not found.")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Voice provider not found.")
 
     if not provider_db.api_key:
-        raise HTTPException(
-            status_code=400, detail="Provider has no API key configured."
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR, "Provider has no API key configured."
         )
 
     try:
         provider = get_voice_provider(provider_db)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(exc)) from exc
 
-    return provider.get_available_voices()
+    return [VoiceOption(**voice) for voice in provider.get_available_voices()]
 
 
 @admin_router.get("/voices")
 def get_voices_by_type(
     provider_type: str,
     _: User = Depends(current_admin_user),
-) -> list[dict[str, str]]:
+) -> list[VoiceOption]:
     """Get available voices for a provider type.
 
     For providers like ElevenLabs and OpenAI, this fetches voices
@@ -277,6 +303,6 @@ def get_voices_by_type(
     try:
         provider = get_voice_provider(temp_provider)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(exc)) from exc
 
-    return provider.get_available_voices()
+    return [VoiceOption(**voice) for voice in provider.get_available_voices()]

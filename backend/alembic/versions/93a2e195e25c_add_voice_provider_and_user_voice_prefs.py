@@ -8,6 +8,8 @@ Create Date: 2026-02-23 15:16:39.507304
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy import column
+from sqlalchemy import true
 from sqlalchemy.dialects import postgresql
 
 
@@ -53,19 +55,19 @@ def upgrade() -> None:
     )
 
     # Add partial unique indexes to enforce only one default STT/TTS provider
-    op.execute(
-        """
-        CREATE UNIQUE INDEX ix_voice_provider_one_default_stt
-        ON voice_provider (is_default_stt)
-        WHERE is_default_stt = true
-        """
+    op.create_index(
+        "ix_voice_provider_one_default_stt",
+        "voice_provider",
+        ["is_default_stt"],
+        unique=True,
+        postgresql_where=column("is_default_stt") == true(),
     )
-    op.execute(
-        """
-        CREATE UNIQUE INDEX ix_voice_provider_one_default_tts
-        ON voice_provider (is_default_tts)
-        WHERE is_default_tts = true
-        """
+    op.create_index(
+        "ix_voice_provider_one_default_tts",
+        "voice_provider",
+        ["is_default_tts"],
+        unique=True,
+        postgresql_where=column("is_default_tts") == true(),
     )
 
     # Add voice preference columns to user table
@@ -99,21 +101,16 @@ def upgrade() -> None:
             server_default="1.0",
         ),
     )
-    op.add_column(
-        "user",
-        sa.Column("preferred_voice", sa.String(), nullable=True),
-    )
 
 
 def downgrade() -> None:
     # Remove user voice preference columns
-    op.drop_column("user", "preferred_voice")
     op.drop_column("user", "voice_playback_speed")
     op.drop_column("user", "voice_auto_playback")
     op.drop_column("user", "voice_auto_send")
 
-    op.execute("DROP INDEX IF EXISTS ix_voice_provider_one_default_tts")
-    op.execute("DROP INDEX IF EXISTS ix_voice_provider_one_default_stt")
+    op.drop_index("ix_voice_provider_one_default_tts", table_name="voice_provider")
+    op.drop_index("ix_voice_provider_one_default_stt", table_name="voice_provider")
 
     # Drop voice_provider table
     op.drop_table("voice_provider")

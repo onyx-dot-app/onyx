@@ -36,7 +36,6 @@ interface UserPreferences {
   voice_auto_send?: boolean;
   voice_auto_playback?: boolean;
   voice_playback_speed?: number;
-  preferred_voice?: string;
 }
 
 export interface MemoryItem {

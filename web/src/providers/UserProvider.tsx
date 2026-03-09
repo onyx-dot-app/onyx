@@ -50,7 +50,6 @@ interface UserContextType {
     auto_send?: boolean;
     auto_playback?: boolean;
     playback_speed?: number;
-    preferred_voice?: string;
   }) => Promise<void>;
 }
 
@@ -470,7 +469,6 @@ export function UserProvider({
     auto_send?: boolean;
     auto_playback?: boolean;
     playback_speed?: number;
-    preferred_voice?: string;
   }) => {
     try {
       setUpToDateUser((prevUser) => {
@@ -487,9 +485,6 @@ export function UserProvider({
               voice_playback_speed:
                 settings.playback_speed ??
                 prevUser.preferences.voice_playback_speed,
-              preferred_voice:
-                settings.preferred_voice ??
-                prevUser.preferences.preferred_voice,
             },
           };
         }

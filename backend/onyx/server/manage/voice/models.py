@@ -25,6 +25,19 @@ class VoiceProviderView(BaseModel):
     )
 
 
+class VoiceProviderUpdateSuccess(BaseModel):
+    """Simple status response for voice provider actions."""
+
+    status: str = "ok"
+
+
+class VoiceOption(BaseModel):
+    """Voice option returned by voice providers."""
+
+    id: str
+    name: str
+
+
 class VoiceProviderUpsertRequest(BaseModel):
     """Request model for creating or updating a voice provider."""
 
@@ -80,11 +93,3 @@ class VoiceProviderTestRequest(BaseModel):
         description="Target URI for Azure Speech Services (maps to api_base).",
     )
     custom_config: dict[str, Any] | None = None
-
-
-class SynthesizeRequest(BaseModel):
-    """Request model for text-to-speech synthesis."""
-
-    text: str = Field(..., min_length=1, max_length=4096)
-    voice: str | None = None
-    speed: float = Field(default=1.0, ge=0.5, le=2.0)

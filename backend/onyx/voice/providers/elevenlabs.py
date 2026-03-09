@@ -11,6 +11,19 @@ from onyx.voice.interface import StreamingTranscriberProtocol
 from onyx.voice.interface import TranscriptResult
 from onyx.voice.interface import VoiceProviderInterface
 
+# Default ElevenLabs API base URL
+DEFAULT_ELEVENLABS_API_BASE = "https://api.elevenlabs.io"
+
+
+def _http_to_ws_url(http_url: str) -> str:
+    """Convert http(s) URL to ws(s) URL for WebSocket connections."""
+    if http_url.startswith("https://"):
+        return "wss://" + http_url[8:]
+    elif http_url.startswith("http://"):
+        return "ws://" + http_url[7:]
+    return http_url
+
+
 # Common ElevenLabs voices
 ELEVENLABS_VOICES = [
     {"id": "21m00Tcm4TlvDq8ikWAM", "name": "Rachel"},
@@ -35,6 +48,7 @@ class ElevenLabsStreamingTranscriber(StreamingTranscriberProtocol):
         input_sample_rate: int = 24000,  # What frontend sends
         target_sample_rate: int = 16000,  # What ElevenLabs expects
         language_code: str = "en",
+        api_base: str | None = None,
     ):
         # Import logger first
         from onyx.utils.logger import setup_logger
@@ -49,6 +63,7 @@ class ElevenLabsStreamingTranscriber(StreamingTranscriberProtocol):
         self.input_sample_rate = input_sample_rate
         self.target_sample_rate = target_sample_rate
         self.language_code = language_code
+        self.api_base = api_base or DEFAULT_ELEVENLABS_API_BASE
         self._ws: aiohttp.ClientWebSocketResponse | None = None
         self._session: aiohttp.ClientSession | None = None
         self._transcript_queue: asyncio.Queue[TranscriptResult | None] = asyncio.Queue()
@@ -65,8 +80,9 @@ class ElevenLabsStreamingTranscriber(StreamingTranscriberProtocol):
 
         # VAD is configured via query parameters
         # commit_strategy=vad enables automatic transcript commit on silence detection
+        ws_base = _http_to_ws_url(self.api_base.rstrip("/"))
         url = (
-            f"wss://api.elevenlabs.io/v1/speech-to-text/realtime"
+            f"{ws_base}/v1/speech-to-text/realtime"
             f"?model_id={self.model}"
             f"&sample_rate={self.target_sample_rate}"
             f"&language_code={self.language_code}"
@@ -345,6 +361,8 @@ class ElevenLabsStreamingSynthesizer(StreamingSynthesizerProtocol):
         voice_id: str,
         model_id: str = "eleven_multilingual_v2",
         output_format: str = "mp3_44100_64",
+        api_base: str | None = None,
+        speed: float = 1.0,
     ):
         from onyx.utils.logger import setup_logger
 
@@ -353,6 +371,8 @@ class ElevenLabsStreamingSynthesizer(StreamingSynthesizerProtocol):
         self.voice_id = voice_id
         self.model_id = model_id
         self.output_format = output_format
+        self.api_base = api_base or DEFAULT_ELEVENLABS_API_BASE
+        self.speed = speed
         self._ws: aiohttp.ClientWebSocketResponse | None = None
         self._session: aiohttp.ClientSession | None = None
         self._audio_queue: asyncio.Queue[bytes | None] = asyncio.Queue()
@@ -366,8 +386,9 @@ class ElevenLabsStreamingSynthesizer(StreamingSynthesizerProtocol):
 
         # WebSocket URL for streaming input TTS with output format for streaming compatibility
         # Using mp3_44100_64 for good quality with smaller chunks for real-time playback
+        ws_base = _http_to_ws_url(self.api_base.rstrip("/"))
         url = (
-            f"wss://api.elevenlabs.io/v1/text-to-speech/{self.voice_id}/stream-input"
+            f"{ws_base}/v1/text-to-speech/{self.voice_id}/stream-input"
             f"?model_id={self.model_id}&output_format={self.output_format}"
         )
 
@@ -377,6 +398,7 @@ class ElevenLabsStreamingSynthesizer(StreamingSynthesizerProtocol):
         )
 
         # Send initial configuration with generation settings optimized for streaming
+        # Note: API key is sent via header only (not in body to avoid log exposure)
         await self._ws.send_str(
             json.dumps(
                 {
@@ -384,6 +406,7 @@ class ElevenLabsStreamingSynthesizer(StreamingSynthesizerProtocol):
                     "voice_settings": {
                         "stability": 0.5,
                         "similarity_boost": 0.75,
+                        "speed": self.speed,
                     },
                     "generation_config": {
                         "chunk_length_schedule": [
@@ -393,7 +416,6 @@ class ElevenLabsStreamingSynthesizer(StreamingSynthesizerProtocol):
                             290,
                         ],  # Optimized chunk sizes for streaming
                     },
-                    "xi_api_key": self.api_key,
                 }
             )
         )
@@ -636,7 +658,7 @@ class ElevenLabsVoiceProvider(VoiceProviderInterface):
                 return text
 
     async def synthesize_stream(
-        self, text: str, voice: str | None = None, _speed: float = 1.0
+        self, text: str, voice: str | None = None, speed: float = 1.0
     ) -> AsyncIterator[bytes]:
         """
         Convert text to audio using ElevenLabs TTS with streaming.
@@ -644,7 +666,7 @@ class ElevenLabsVoiceProvider(VoiceProviderInterface):
         Args:
             text: Text to convert to speech
             voice: Voice ID (defaults to provider's default voice or Rachel)
-            speed: Playback speed multiplier (not directly supported, ignored)
+            speed: Playback speed multiplier
 
         Yields:
             Audio data chunks (mp3 format)
@@ -662,7 +684,7 @@ class ElevenLabsVoiceProvider(VoiceProviderInterface):
 
         logger.info(
             f"ElevenLabs TTS: starting synthesis, text='{text[:50]}...', "
-            f"voice={voice_id}, model={self.tts_model}"
+            f"voice={voice_id}, model={self.tts_model}, speed={speed}"
         )
 
         headers = {
@@ -677,6 +699,7 @@ class ElevenLabsVoiceProvider(VoiceProviderInterface):
             "voice_settings": {
                 "stability": 0.5,
                 "similarity_boost": 0.75,
+                "speed": speed,
             },
         }
 
@@ -744,12 +767,13 @@ class ElevenLabsVoiceProvider(VoiceProviderInterface):
             input_sample_rate=24000,  # What frontend sends
             target_sample_rate=16000,  # What ElevenLabs expects
             language_code="en",
+            api_base=self.api_base,
         )
         await transcriber.connect()
         return transcriber
 
     async def create_streaming_synthesizer(
-        self, voice: str | None = None, _speed: float = 1.0
+        self, voice: str | None = None, speed: float = 1.0
     ) -> ElevenLabsStreamingSynthesizer:
         """Create a streaming TTS session."""
         if not self.api_key:
@@ -761,6 +785,8 @@ class ElevenLabsVoiceProvider(VoiceProviderInterface):
             model_id=self.tts_model,
             # Use mp3_44100_64 for streaming - good balance of quality and chunk size
             output_format="mp3_44100_64",
+            api_base=self.api_base,
+            speed=speed,
         )
         await synthesizer.connect()
         return synthesizer

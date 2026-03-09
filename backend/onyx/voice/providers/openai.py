@@ -15,11 +15,28 @@ from onyx.voice.interface import VoiceProviderInterface
 if TYPE_CHECKING:
     from openai import AsyncOpenAI
 
+# Default OpenAI API base URL
+DEFAULT_OPENAI_API_BASE = "https://api.openai.com"
+
+
+def _http_to_ws_url(http_url: str) -> str:
+    """Convert http(s) URL to ws(s) URL for WebSocket connections."""
+    if http_url.startswith("https://"):
+        return "wss://" + http_url[8:]
+    elif http_url.startswith("http://"):
+        return "ws://" + http_url[7:]
+    return http_url
+
 
 class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
     """Streaming transcription using OpenAI Realtime API."""
 
-    def __init__(self, api_key: str, model: str = "whisper-1"):
+    def __init__(
+        self,
+        api_key: str,
+        model: str = "whisper-1",
+        api_base: str | None = None,
+    ):
         # Import logger first
         from onyx.utils.logger import setup_logger
 
@@ -30,6 +47,7 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
         )
         self.api_key = api_key
         self.model = model
+        self.api_base = api_base or DEFAULT_OPENAI_API_BASE
         self._ws: aiohttp.ClientWebSocketResponse | None = None
         self._session: aiohttp.ClientSession | None = None
         self._transcript_queue: asyncio.Queue[TranscriptResult | None] = asyncio.Queue()
@@ -43,7 +61,8 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
         self._session = aiohttp.ClientSession()
 
         # OpenAI Realtime transcription endpoint
-        url = "wss://api.openai.com/v1/realtime?intent=transcription"
+        ws_base = _http_to_ws_url(self.api_base.rstrip("/"))
+        url = f"{ws_base}/v1/realtime?intent=transcription"
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "OpenAI-Beta": "realtime=v1",
@@ -302,6 +321,7 @@ class OpenAIStreamingSynthesizer(StreamingSynthesizerProtocol):
         voice: str = "alloy",
         model: str = "tts-1",
         speed: float = 1.0,
+        api_base: str | None = None,
     ):
         from onyx.utils.logger import setup_logger
 
@@ -310,6 +330,7 @@ class OpenAIStreamingSynthesizer(StreamingSynthesizerProtocol):
         self.voice = voice
         self.model = model
         self.speed = max(0.25, min(4.0, speed))
+        self.api_base = api_base or DEFAULT_OPENAI_API_BASE
         self._session: aiohttp.ClientSession | None = None
         self._audio_queue: asyncio.Queue[bytes | None] = asyncio.Queue()
         self._text_queue: asyncio.Queue[str | None] = asyncio.Queue()
@@ -345,7 +366,7 @@ class OpenAIStreamingSynthesizer(StreamingSynthesizerProtocol):
         if not self._session or self._closed:
             return
 
-        url = "https://api.openai.com/v1/audio/speech"
+        url = f"{self.api_base.rstrip('/')}/v1/audio/speech"
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
@@ -547,6 +568,7 @@ class OpenAIVoiceProvider(VoiceProviderInterface):
         transcriber = OpenAIStreamingTranscriber(
             api_key=self.api_key,
             model=self.stt_model,
+            api_base=self.api_base,
         )
         await transcriber.connect()
         return transcriber
@@ -562,6 +584,7 @@ class OpenAIVoiceProvider(VoiceProviderInterface):
             voice=voice or self.default_voice or "alloy",
             model=self.tts_model or "tts-1",
             speed=speed,
+            api_base=self.api_base,
         )
         await synthesizer.connect()
         return synthesizer

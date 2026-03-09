@@ -140,6 +140,44 @@ def _validate_and_resolve_url(url: str) -> tuple[str, str, int]:
     return validated_ip, hostname, port
 
 
+def validate_outbound_http_url(url: str, *, allow_private_network: bool = False) -> str:
+    """
+    Validate a URL that will be used by backend outbound HTTP calls.
+
+    Returns:
+        A normalized URL string with surrounding whitespace removed.
+
+    Raises:
+        ValueError: If URL is malformed.
+        SSRFException: If URL fails SSRF checks.
+    """
+    normalized_url = url.strip()
+    if not normalized_url:
+        raise ValueError("URL cannot be empty")
+
+    parsed = urlparse(normalized_url)
+
+    if parsed.scheme not in ("http", "https"):
+        raise SSRFException(
+            f"Invalid URL scheme '{parsed.scheme}'. Only http and https are allowed."
+        )
+
+    if not parsed.hostname:
+        raise ValueError("URL must contain a hostname")
+
+    if parsed.username or parsed.password:
+        raise SSRFException("URLs with embedded credentials are not allowed.")
+
+    hostname = parsed.hostname.lower()
+    if hostname in BLOCKED_HOSTNAMES:
+        raise SSRFException(f"Access to hostname '{parsed.hostname}' is not allowed.")
+
+    if not allow_private_network:
+        _validate_and_resolve_url(normalized_url)
+
+    return normalized_url
+
+
 MAX_REDIRECTS = 10
 
 

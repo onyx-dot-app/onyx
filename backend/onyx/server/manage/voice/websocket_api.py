@@ -35,6 +35,12 @@ VOICE_DISABLE_STREAMING_FALLBACK = (
     os.environ.get("VOICE_DISABLE_STREAMING_FALLBACK", "").lower() == "true"
 )
 
+# WebSocket size limits to prevent memory exhaustion attacks
+WS_MAX_MESSAGE_SIZE = 64 * 1024  # 64KB per message (OWASP recommendation)
+WS_MAX_TOTAL_BYTES = 25 * 1024 * 1024  # 25MB total per connection (matches REST API)
+WS_MAX_TEXT_MESSAGE_SIZE = 16 * 1024  # 16KB for text/JSON messages
+WS_MAX_TTS_TEXT_LENGTH = 4096  # Max text length per synthesize call (matches REST API)
+
 
 class ChunkedTranscriber:
     """Fallback transcriber for providers without streaming support."""
@@ -143,6 +149,27 @@ async def handle_streaming_transcription(
 
             if "bytes" in message:
                 chunk_size = len(message["bytes"])
+
+                # Enforce per-message size limit
+                if chunk_size > WS_MAX_MESSAGE_SIZE:
+                    logger.warning(
+                        f"Streaming transcription: message too large ({chunk_size} bytes)"
+                    )
+                    await websocket.send_json(
+                        {"type": "error", "message": "Message too large"}
+                    )
+                    break
+
+                # Enforce total connection size limit
+                if total_bytes + chunk_size > WS_MAX_TOTAL_BYTES:
+                    logger.warning(
+                        f"Streaming transcription: total size limit exceeded ({total_bytes + chunk_size} bytes)"
+                    )
+                    await websocket.send_json(
+                        {"type": "error", "message": "Total size limit exceeded"}
+                    )
+                    break
+
                 chunk_count += 1
                 total_bytes += chunk_size
                 logger.debug(
@@ -219,6 +246,27 @@ async def handle_chunked_transcription(
 
         if "bytes" in message:
             chunk_size = len(message["bytes"])
+
+            # Enforce per-message size limit
+            if chunk_size > WS_MAX_MESSAGE_SIZE:
+                logger.warning(
+                    f"Chunked transcription: message too large ({chunk_size} bytes)"
+                )
+                await websocket.send_json(
+                    {"type": "error", "message": "Message too large"}
+                )
+                break
+
+            # Enforce total connection size limit
+            if total_bytes + chunk_size > WS_MAX_TOTAL_BYTES:
+                logger.warning(
+                    f"Chunked transcription: total size limit exceeded ({total_bytes + chunk_size} bytes)"
+                )
+                await websocket.send_json(
+                    {"type": "error", "message": "Total size limit exceeded"}
+                )
+                break
+
             chunk_count += 1
             total_bytes += chunk_size
             logger.debug(
@@ -463,16 +511,31 @@ async def handle_streaming_synthesis(
                 break
 
             if "text" in message:
+                # Enforce text message size limit
+                msg_size = len(message["text"])
+                if msg_size > WS_MAX_TEXT_MESSAGE_SIZE:
+                    logger.warning(
+                        f"Streaming synthesis: text message too large ({msg_size} bytes)"
+                    )
+                    await websocket.send_json(
+                        {"type": "error", "message": "Message too large"}
+                    )
+                    break
+
                 try:
                     data = json.loads(message["text"])
 
                     if data.get("type") == "synthesize":
                         text = data.get("text", "")
-                        if not text:
-                            for key, value in data.items():
-                                if key != "type" and isinstance(value, str) and value:
-                                    text = value
-                                    break
+                        # Enforce per-text size limit
+                        if len(text) > WS_MAX_TTS_TEXT_LENGTH:
+                            logger.warning(
+                                f"Streaming synthesis: text too long ({len(text)} chars)"
+                            )
+                            await websocket.send_json(
+                                {"type": "error", "message": "Text too long"}
+                            )
+                            continue
                         if text:
                             # Start audio receiver on first text chunk so playback
                             # can begin before the full assistant response completes.
@@ -569,6 +632,17 @@ async def handle_chunked_synthesis(
             if "text" not in message:
                 continue
 
+            # Enforce text message size limit
+            msg_size = len(message["text"])
+            if msg_size > WS_MAX_TEXT_MESSAGE_SIZE:
+                logger.warning(
+                    f"Chunked synthesis: text message too large ({msg_size} bytes)"
+                )
+                await websocket.send_json(
+                    {"type": "error", "message": "Message too large"}
+                )
+                break
+
             try:
                 data = json.loads(message["text"])
             except json.JSONDecodeError:
@@ -581,11 +655,15 @@ async def handle_chunked_synthesis(
             msg_data_type = data.get("type")  # type: ignore[possibly-undefined]
             if msg_data_type == "synthesize":
                 text = data.get("text", "")
-                if not text:
-                    for key, value in data.items():
-                        if key != "type" and isinstance(value, str) and value:
-                            text = value
-                            break
+                # Enforce per-text size limit
+                if len(text) > WS_MAX_TTS_TEXT_LENGTH:
+                    logger.warning(
+                        f"Chunked synthesis: text too long ({len(text)} chars)"
+                    )
+                    await websocket.send_json(
+                        {"type": "error", "message": "Text too long"}
+                    )
+                    continue
                 if text:
                     text_buffer.append(text)
                     logger.debug(

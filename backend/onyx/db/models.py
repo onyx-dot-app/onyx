@@ -288,7 +288,6 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     voice_auto_send: Mapped[bool] = mapped_column(Boolean, default=False)
     voice_auto_playback: Mapped[bool] = mapped_column(Boolean, default=False)
     voice_playback_speed: Mapped[float] = mapped_column(Float, default=1.0)
-    preferred_voice: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # relationships
     credentials: Mapped[list["Credential"]] = relationship(

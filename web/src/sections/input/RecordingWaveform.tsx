@@ -41,13 +41,13 @@ function RecordingWaveform({
       .padStart(2, "0")}`;
   }, [elapsedSeconds]);
 
-  // Generate random bar heights for waveform animation
+  // Generate bar heights for waveform animation
   const bars = useMemo(() => {
-    return Array.from({ length: 50 }, (_, i) => ({
+    return Array.from({ length: 120 }, (_, i) => ({
       id: i,
       // Create a wave pattern with some randomness
-      baseHeight: Math.sin(i * 0.3) * 6 + 8,
-      delay: i * 0.02,
+      baseHeight: Math.sin(i * 0.15) * 6 + 8,
+      delay: i * 0.008,
     }));
   }, []);
 
@@ -58,12 +58,12 @@ function RecordingWaveform({
   return (
     <div className="flex items-center gap-3 px-3 py-2 bg-background-tint-00 rounded-12 min-h-[32px]">
       {/* Waveform visualization */}
-      <div className="flex-1 flex items-center justify-center gap-[2px] h-4 overflow-hidden">
+      <div className="flex-1 flex items-center justify-between h-4 overflow-hidden">
         {bars.map((bar) => (
           <div
             key={bar.id}
             className={cn(
-              "w-[2px] bg-text-03 rounded-full",
+              "w-[1.5px] bg-text-03 rounded-full shrink-0",
               !isMuted && "animate-waveform"
             )}
             style={{
