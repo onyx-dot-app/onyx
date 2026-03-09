@@ -1722,6 +1722,7 @@ class GoogleDriveConnector(
                         primary_admin_email=self.primary_admin_email,
                         google_domain=self.google_domain,
                     ),
+                    retriever_email=file.user_email,
                 ):
                     slim_batch.append(doc)
 
