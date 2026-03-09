@@ -623,7 +623,7 @@ const AppInputBar = React.memo(
             onMuteChange={setIsMuted}
             setMutedRef={setMutedRef}
           />
-      
+
           <Disabled
             disabled={
               (chatState === "input" &&
@@ -632,7 +632,7 @@ const AppInputBar = React.memo(
               hasUploadingFiles ||
               isClassifying
             }
-           >
+          >
             <Button
               id="onyx-chat-input-send-button"
               icon={
@@ -642,18 +642,12 @@ const AppInputBar = React.memo(
                     ? SvgStop
                     : SvgArrowUp
               }
-            onClick={() => {
-              if (chatState == "streaming") {
-                stopTTS({ manual: true });
-                stopGenerating();
-              } else if (isVoicePlaybackControllable) {
-                stopTTS({ manual: true });
-              } else if (message) {
-                onSubmit(message);
-              }
               onClick={() => {
                 if (chatState == "streaming") {
+                  stopTTS({ manual: true });
                   stopGenerating();
+                } else if (isVoicePlaybackControllable) {
+                  stopTTS({ manual: true });
                 } else if (message) {
                   onSubmit(message);
                 }

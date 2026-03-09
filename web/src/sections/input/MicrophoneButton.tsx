@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef } from "react";
 import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import { SvgMicrophone } from "@opal/icons";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import { useVoiceMode } from "@/providers/VoiceModeProvider";
@@ -269,13 +270,14 @@ function MicrophoneButton({
   const prominence = isRecording ? "primary" : "tertiary";
 
   return (
-    <Button
-      icon={icon}
-      disabled={isDisabled}
-      onClick={handleClick}
-      aria-label={isRecording ? "Stop recording" : "Start recording"}
-      prominence={prominence}
-    />
+    <Disabled disabled={isDisabled}>
+      <Button
+        icon={icon}
+        onClick={handleClick}
+        aria-label={isRecording ? "Stop recording" : "Start recording"}
+        prominence={prominence}
+      />
+    </Disabled>
   );
 }
 
