@@ -59,6 +59,12 @@ interface ContentBaseProps {
    * @default "auto"
    */
   widthVariant?: WidthVariant;
+
+  /** When `true`, the title color hooks into `Interactive.Stateful`/`Interactive.Stateless`'s `--interactive-foreground` variable. */
+  withInteractive?: boolean;
+
+  /** Ref forwarded to the root `<div>` of the resolved layout. */
+  ref?: React.Ref<HTMLDivElement>;
 }
 
 // ---------------------------------------------------------------------------
@@ -122,6 +128,8 @@ function Content(props: ContentProps) {
     sizePreset = "headline",
     variant = "heading",
     widthVariant = "auto",
+    withInteractive,
+    ref,
     ...rest
   } = props;
 
@@ -135,6 +143,8 @@ function Content(props: ContentProps) {
       layout = (
         <ContentXl
           sizePreset={sizePreset}
+          withInteractive={withInteractive}
+          ref={ref}
           {...(rest as Omit<ContentXlProps, "sizePreset">)}
         />
       );
@@ -142,6 +152,8 @@ function Content(props: ContentProps) {
       layout = (
         <ContentLg
           sizePreset={sizePreset}
+          withInteractive={withInteractive}
+          ref={ref}
           {...(rest as Omit<ContentLgProps, "sizePreset">)}
         />
       );
@@ -154,6 +166,8 @@ function Content(props: ContentProps) {
     layout = (
       <ContentMd
         sizePreset={sizePreset}
+        withInteractive={withInteractive}
+        ref={ref}
         {...(rest as Omit<ContentMdProps, "sizePreset">)}
       />
     );
@@ -164,6 +178,8 @@ function Content(props: ContentProps) {
     layout = (
       <ContentSm
         sizePreset={sizePreset}
+        withInteractive={withInteractive}
+        ref={ref}
         {...(rest as Omit<
           React.ComponentProps<typeof ContentSm>,
           "sizePreset"

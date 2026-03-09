@@ -22,6 +22,7 @@
 
 .opal-content-xl-icon-row {
   @apply flex flex-row items-center;
+  gap: 0.25rem;
 }
 
 /* ---------------------------------------------------------------------------
@@ -63,7 +64,7 @@
 }
 
 .opal-content-xl-title {
-  @apply text-left overflow-hidden;
+  @apply text-left overflow-hidden text-text-04;
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 1;
@@ -162,7 +163,7 @@
 }
 
 .opal-content-lg-title {
-  @apply text-left overflow-hidden;
+  @apply text-left overflow-hidden text-text-04;
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 1;
@@ -255,7 +256,7 @@
 }
 
 .opal-content-md-title {
-  @apply text-left overflow-hidden;
+  @apply text-left overflow-hidden text-text-04;
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 1;
@@ -361,8 +362,12 @@
   @apply text-text-03;
 }
 
+.opal-content-sm[data-prominence="muted"] .opal-content-sm-icon {
+  @apply text-text-02;
+}
+
 .opal-content-sm[data-prominence="muted-2x"] .opal-content-sm-icon {
-  @apply text-text-02 stroke-text-02;
+  @apply text-text-02;
 }
 
 /* ---------------------------------------------------------------------------
@@ -384,4 +389,45 @@
 
 .opal-content-sm[data-prominence="muted-2x"] .opal-content-sm-title {
   @apply text-text-02;
+}
+
+/* ===========================================================================
+   Interactive-foreground opt-in
+
+   When a Content variant is nested inside an Interactive and
+   `withInteractive` is set, the title and icon delegate their color to the
+   `--interactive-foreground` / `--interactive-foreground-icon` CSS variables
+   controlled by the ancestor Interactive variant.
+   =========================================================================== */
+
+.opal-content-xl[data-interactive] .opal-content-xl-title {
+  color: var(--interactive-foreground);
+}
+
+.opal-content-xl[data-interactive] .opal-content-xl-icon {
+  color: var(--interactive-foreground-icon);
+}
+
+.opal-content-lg[data-interactive] .opal-content-lg-title {
+  color: var(--interactive-foreground);
+}
+
+.opal-content-lg[data-interactive] .opal-content-lg-icon {
+  color: var(--interactive-foreground-icon);
+}
+
+.opal-content-md[data-interactive] .opal-content-md-title {
+  color: var(--interactive-foreground);
+}
+
+.opal-content-md[data-interactive] .opal-content-md-icon {
+  color: var(--interactive-foreground-icon);
+}
+
+.opal-content-sm[data-interactive] .opal-content-sm-title {
+  color: var(--interactive-foreground);
+}
+
+.opal-content-sm[data-interactive] .opal-content-sm-icon {
+  color: var(--interactive-foreground-icon);
 }
