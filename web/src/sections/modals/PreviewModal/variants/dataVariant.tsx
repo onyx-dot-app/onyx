@@ -1,10 +1,8 @@
-import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import Text from "@/refresh-components/texts/Text";
 import { Section } from "@/layouts/general-layouts";
 import { getDataLanguage } from "@/lib/languages";
-import { CodeBlock } from "@/app/app/message/CodeBlock";
-import { extractCodeText } from "@/app/app/message/codeUtils";
 import { PreviewVariant } from "@/sections/modals/PreviewModal/interfaces";
+import { CodePreview } from "@/sections/modals/PreviewModal/variants/CodePreview";
 import {
   CopyButton,
   DownloadButton,
@@ -22,7 +20,15 @@ function formatContent(language: string, content: string): string {
 }
 
 export const dataVariant: PreviewVariant = {
-  matches: (name) => !!getDataLanguage(name || ""),
+  matches: (name, mime) =>
+    !!getDataLanguage(name || "") ||
+    mime.startsWith("application/json") ||
+    mime.startsWith("application/xml") ||
+    mime.startsWith("text/xml") ||
+    mime.startsWith("application/x-yaml") ||
+    mime.startsWith("application/yaml") ||
+    mime.startsWith("text/yaml") ||
+    mime.startsWith("text/x-yaml"),
   width: "md",
   height: "lg",
   needsTextContent: true,
@@ -36,22 +42,7 @@ export const dataVariant: PreviewVariant = {
 
   renderContent: (ctx) => {
     const formatted = formatContent(ctx.language, ctx.fileContent);
-    return (
-      <MinimalMarkdown
-        content={`\`\`\`${ctx.language}\n${formatted}\n\n\`\`\``}
-        className="w-full break-words h-full"
-        components={{
-          code: ({ node, children }: any) => {
-            const codeText = extractCodeText(node, formatted, children);
-            return (
-              <CodeBlock className="" codeText={codeText}>
-                {children}
-              </CodeBlock>
-            );
-          },
-        }}
-      />
-    );
+    return <CodePreview content={formatted} language={ctx.language} />;
   },
 
   renderFooterLeft: (ctx) => (

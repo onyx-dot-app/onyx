@@ -11,7 +11,6 @@ import {
 const MARKDOWN_MIMES = [
   "text/markdown",
   "text/x-markdown",
-  "text/plain",
   "text/x-rst",
   "text/x-org",
 ];
