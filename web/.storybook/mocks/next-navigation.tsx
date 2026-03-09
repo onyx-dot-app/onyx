@@ -21,6 +21,10 @@ export function useParams() {
   return {};
 }
 
-export function redirect(_url: string) {}
+export function redirect(_url: string): never {
+  throw new Error("redirect() called in Storybook");
+}
 
-export function notFound() {}
+export function notFound(): never {
+  throw new Error("notFound() called in Storybook");
+}

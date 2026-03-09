@@ -21,7 +21,7 @@ export const Default: Story = {
 
 export const AllColors: Story = {
   render: () => (
-    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+    <div className="flex items-center gap-2">
       {TAG_COLORS.map((color) => (
         <Tag key={color} title={color} color={color} />
       ))}
@@ -38,7 +38,7 @@ export const WithIcon: Story = {
 
 export const AllColorsWithIcon: Story = {
   render: () => (
-    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+    <div className="flex items-center gap-2">
       {TAG_COLORS.map((color) => (
         <Tag key={color} title={color} color={color} icon={SvgAlertCircle} />
       ))}
