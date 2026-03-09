@@ -63,6 +63,7 @@ export function TimelineStepComposer({
             }
             noPaddingRight={result.noPaddingRight ?? false}
             isHover={result.isHover}
+            surfaceBackground={result.surfaceBackground}
           >
             {result.content}
           </StepContainer>

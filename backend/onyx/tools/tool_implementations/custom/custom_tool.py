@@ -187,7 +187,7 @@ class CustomTool(Tool[None]):
             error_info = CustomToolErrorInfo(
                 is_auth_error=True,
                 status_code=response.status_code,
-                message=f"Authentication error: received HTTP {response.status_code} from {self._name}",
+                message=f"{self._name} action failed because of authentication error",
             )
             logger.warning(
                 f"Auth error from custom tool '{self._name}': HTTP {response.status_code}"

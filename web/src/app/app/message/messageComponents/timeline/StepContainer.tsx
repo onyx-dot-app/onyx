@@ -2,7 +2,10 @@ import React, { FunctionComponent } from "react";
 import { cn } from "@/lib/utils";
 import { IconProps } from "@opal/types";
 import { TimelineRow } from "@/app/app/message/messageComponents/timeline/primitives/TimelineRow";
-import { TimelineSurface } from "@/app/app/message/messageComponents/timeline/primitives/TimelineSurface";
+import {
+  TimelineSurface,
+  TimelineSurfaceBackground,
+} from "@/app/app/message/messageComponents/timeline/primitives/TimelineSurface";
 import { TimelineStepContent } from "@/app/app/message/messageComponents/timeline/primitives/TimelineStepContent";
 
 export interface StepContainerProps {
@@ -36,6 +39,8 @@ export interface StepContainerProps {
   noPaddingRight?: boolean;
   /** Render without rail (for nested/parallel content) */
   withRail?: boolean;
+  /** Override the surface background variant */
+  surfaceBackground?: TimelineSurfaceBackground;
 }
 
 /** Visual wrapper for timeline steps - icon, connector line, header, and content */
@@ -55,6 +60,7 @@ export function StepContainer({
   collapsedIcon: CollapsedIconComponent,
   noPaddingRight = false,
   withRail = true,
+  surfaceBackground,
 }: StepContainerProps) {
   const iconNode = StepIconComponent ? (
     <StepIconComponent
@@ -70,6 +76,7 @@ export function StepContainer({
       className="flex-1 flex flex-col"
       isHover={isHover}
       roundedBottom={isLastStep}
+      background={surfaceBackground}
     >
       <TimelineStepContent
         header={header}
