@@ -61,6 +61,16 @@ export default function TextViewModal({
       "text/x-markdown",
       "text/plain",
       "text/csv",
+      "text/x-log",
+      "text/x-config",
+      "text/tab-separated-values",
+      "application/json",
+      "application/xml",
+      "text/xml",
+      "application/x-yaml",
+      "application/yaml",
+      "text/yaml",
+      "text/x-yaml",
       "text/x-rst",
       "text/x-org",
       "txt",
@@ -134,10 +144,26 @@ export default function TextViewModal({
           const lowerName = originalFileName.toLowerCase();
           if (lowerName.endsWith(".md") || lowerName.endsWith(".markdown")) {
             contentType = "text/markdown";
-          } else if (lowerName.endsWith(".txt")) {
+          } else if (
+            lowerName.endsWith(".txt") ||
+            lowerName.endsWith(".log") ||
+            lowerName.endsWith(".conf") ||
+            lowerName.endsWith(".sql")
+          ) {
             contentType = "text/plain";
           } else if (lowerName.endsWith(".csv")) {
             contentType = "text/csv";
+          } else if (lowerName.endsWith(".tsv")) {
+            contentType = "text/tab-separated-values";
+          } else if (lowerName.endsWith(".json")) {
+            contentType = "application/json";
+          } else if (lowerName.endsWith(".xml")) {
+            contentType = "application/xml";
+          } else if (
+            lowerName.endsWith(".yml") ||
+            lowerName.endsWith(".yaml")
+          ) {
+            contentType = "application/x-yaml";
           }
         }
         setFileType(contentType);
