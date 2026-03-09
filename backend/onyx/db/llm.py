@@ -853,21 +853,13 @@ def sync_auto_mode_models(
             and current_default.llm_provider_id == provider.id
             and current_default.name != recommended_default.name
         ):
-            try:
-                _update_default_model__no_commit(
-                    db_session=db_session,
-                    provider_id=provider.id,
-                    model=recommended_default.name,
-                    flow_type=LLMModelFlowType.CHAT,
-                )
-                changes += 1
-            except ValueError:
-                logger.warning(
-                    "Recommended default model '%s' not found "
-                    "for provider_id=%s; skipping default update.",
-                    recommended_default.name,
-                    provider.id,
-                )
+            _update_default_model__no_commit(
+                db_session=db_session,
+                provider_id=provider.id,
+                model=recommended_default.name,
+                flow_type=LLMModelFlowType.CHAT,
+            )
+            changes += 1
 
     db_session.commit()
     return changes
