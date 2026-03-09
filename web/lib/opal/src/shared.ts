@@ -66,6 +66,7 @@ type SizeVariant = keyof typeof sizeVariants;
  *
  * | Key    | Tailwind class |
  * |--------|----------------|
+ * | `auto` | `w-auto`       |
  * | `fit`  | `w-fit`        |
  * | `full` | `w-full`       |
  */
