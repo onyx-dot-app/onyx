@@ -113,7 +113,7 @@ async def search_indexed_documents(
 
     # Build the search request using SendMessageRequest format (CE-compatible)
     # /search/send-search-message is EE-only; /chat/send-chat-message works in all editions
-    search_request: dict = {
+    search_request: dict[str, Any] = {
         "message": query,
         "stream": False,
         "chat_session_info": {},
@@ -131,12 +131,12 @@ async def search_indexed_documents(
         result = response.json()
 
         # Check for error in response
-        if result.get("error"):
+        if result.get("error_msg"):
             return {
                 "documents": [],
                 "total_results": 0,
                 "query": query,
-                "error": result.get("error"),
+                "error": result.get("error_msg"),
             }
 
         # Extract search docs from chat response
@@ -161,7 +161,6 @@ async def search_indexed_documents(
             "documents": documents,
             "total_results": len(documents),
             "query": query,
-            "executed_queries": result.get("all_executed_queries", [query]),
         }
     except Exception as e:
         logger.error(f"Onyx MCP Server: Document search error: {e}", exc_info=True)
