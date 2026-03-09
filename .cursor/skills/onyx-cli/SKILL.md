@@ -106,13 +106,34 @@ onyx-cli ask --json "What authentication methods do we support?"
 
 Outputs JSON-encoded parsed stream events (one object per line). Key event objects include message deltas, stop, errors, search-start, and citation payloads.
 
+Each line is a JSON object with this envelope:
+
+```json
+{"type": "<event_type>", "event": { ... }}
+```
+
 | Event Type | Description |
 |------------|-------------|
 | `message_delta` | Content token — concatenate all `content` fields for the full answer |
 | `stop` | Stream complete |
 | `error` | Error with `error` message field |
 | `search_tool_start` | Onyx started searching documents |
-| `citation_info` | Source citation with `citation_number` and `document_id` |
+| `citation_info` | Source citation — see shape below |
+
+`citation_info` event shape:
+
+```json
+{
+  "type": "citation_info",
+  "event": {
+    "citation_number": 1,
+    "document_id": "abc123def456",
+    "placement": {"turn_index": 0, "tab_index": 0, "sub_turn_index": null}
+  }
+}
+```
+
+`placement` is metadata about where in the conversation the citation appeared and can be ignored for most use cases.
 
 ### Specify an agent
 
@@ -128,6 +149,10 @@ Uses a specific Onyx agent/persona instead of the default.
 |------|------|-------------|
 | `--agent-id` | int | Agent ID to use (overrides default) |
 | `--json` | bool | Output raw NDJSON events instead of plain text |
+
+## Statelessness
+
+Each `onyx-cli ask` call creates an independent chat session. There is no built-in way to chain context across multiple `ask` invocations — every call starts fresh. If you need multi-turn conversation with memory, use the interactive TUI (`onyx-cli` or `onyx-cli chat`) instead.
 
 ## When to Use
 

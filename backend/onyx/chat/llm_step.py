@@ -15,6 +15,7 @@ from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.emitter import Emitter
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import LlmStepResult
+from onyx.chat.tool_call_args_streaming import maybe_emit_argument_delta
 from onyx.configs.app_configs import LOG_ONYX_MODEL_INTERACTIONS
 from onyx.configs.app_configs import PROMPT_CACHE_CHAT_HISTORY
 from onyx.configs.constants import MessageType
@@ -54,6 +55,7 @@ from onyx.server.query_and_chat.streaming_models import ReasoningStart
 from onyx.tools.models import ToolCallKickoff
 from onyx.tracing.framework.create import generation_span
 from onyx.utils.b64 import get_image_type_from_bytes
+from onyx.utils.jsonriver import Parser
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_string
 from onyx.utils.text_processing import find_all_json_objects
@@ -1009,6 +1011,7 @@ def run_llm_step_pkt_generator(
         )
 
     id_to_tool_call_map: dict[int, dict[str, Any]] = {}
+    arg_parsers: dict[int, Parser] = {}
     reasoning_start = False
     answer_start = False
     accumulated_reasoning = ""
@@ -1215,7 +1218,14 @@ def run_llm_step_pkt_generator(
                 yield from _close_reasoning_if_active()
 
                 for tool_call_delta in delta.tool_calls:
+                    # maybe_emit depends and update being called first and attaching the delta
                     _update_tool_call_with_delta(id_to_tool_call_map, tool_call_delta)
+                    yield from maybe_emit_argument_delta(
+                        tool_calls_in_progress=id_to_tool_call_map,
+                        tool_call_delta=tool_call_delta,
+                        placement=_current_placement(),
+                        parsers=arg_parsers,
+                    )
 
         # Flush any tail text buffered while checking for split "<function_calls" markers.
         filtered_content_tail = xml_tool_call_content_filter.flush()

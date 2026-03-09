@@ -68,6 +68,7 @@ def get_external_access_for_raw_gdrive_file(
     company_domain: str,
     retriever_drive_service: GoogleDriveService | None,
     admin_drive_service: GoogleDriveService,
+    fallback_user_email: str,
     add_prefix: bool = False,
 ) -> ExternalAccess:
     """
@@ -79,6 +80,11 @@ def get_external_access_for_raw_gdrive_file(
                 set add_prefix to True so group IDs are prefixed with the source type.
                 When invoked from doc_sync (permission sync), use the default (False)
                 since upsert_document_external_perms handles prefixing.
+    fallback_user_email: When we cannot retrieve any permission info for a file
+                (e.g. externally-owned files where the API returns no permissions
+                and permissions.list returns 403), fall back to granting access
+                to this user. This is typically the impersonated org user whose
+                drive contained the file.
     """
     doc_id = file.get("id")
     if not doc_id:
@@ -116,6 +122,26 @@ def get_external_access_for_raw_gdrive_file(
             permissions_list = _merge_permissions_lists(
                 [permissions_list, backup_permissions_list]
             )
+
+    # For externally-owned files, the Drive API may return no permissions
+    # and permissions.list may return 403. In this case, fall back to
+    # granting access to the user who found the file in their drive.
+    # Note, even if other users also have access to this file,
+    # they will not be granted access in Onyx.
+    # We check permissions_list (the final result after all fetch attempts)
+    # rather than the raw fields, because permission_ids may be present
+    # but the actual fetch can still return empty due to a 403.
+    if not permissions_list:
+        logger.info(
+            f"No permission info available for file {doc_id} "
+            f"(likely owned by a user outside of your organization). "
+            f"Falling back to granting access to retriever user: {fallback_user_email}"
+        )
+        return ExternalAccess(
+            external_user_emails={fallback_user_email},
+            external_user_group_ids=set(),
+            is_public=False,
+        )
 
     folder_ids_to_inherit_permissions_from: set[str] = set()
     user_emails: set[str] = set()

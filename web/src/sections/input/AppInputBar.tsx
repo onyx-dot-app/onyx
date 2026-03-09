@@ -148,7 +148,7 @@ const AppInputBar = React.memo(
       classification === "search";
 
     const { forcedToolIds, setForcedToolIds } = useForcedTools();
-    const { currentMessageFiles, setCurrentMessageFiles } =
+    const { currentMessageFiles, setCurrentMessageFiles, currentProjectId } =
       useProjectsContext();
 
     const currentIndexingFiles = useMemo(() => {
@@ -200,9 +200,17 @@ const AppInputBar = React.memo(
       const textarea = textAreaRef.current;
       if (!wrapper || !textarea) return;
 
+      // Reset so scrollHeight reflects actual content size
       wrapper.style.height = `${MIN_INPUT_HEIGHT}px`;
+
+      // scrollHeight doesn't include the wrapper's padding, so add it back
+      const wrapperStyle = getComputedStyle(wrapper);
+      const paddingTop = parseFloat(wrapperStyle.paddingTop);
+      const paddingBottom = parseFloat(wrapperStyle.paddingBottom);
+      const contentHeight = textarea.scrollHeight + paddingTop + paddingBottom;
+
       wrapper.style.height = `${Math.min(
-        Math.max(textarea.scrollHeight, MIN_INPUT_HEIGHT),
+        Math.max(contentHeight, MIN_INPUT_HEIGHT),
         MAX_INPUT_HEIGHT
       )}px`;
     }, [message, isSearchMode]);
@@ -358,13 +366,19 @@ const AppInputBar = React.memo(
     const showDeepResearch = useMemo(() => {
       const deepResearchGloballyEnabled =
         combinedSettings?.settings?.deep_research_enabled ?? true;
+      const isProjectWorkflow = currentProjectId !== null;
+
+      // TODO(@yuhong): Re-enable Deep Research in Projects workflow once it is fully supported.
+      // https://linear.app/onyx-app/issue/ENG-3818/re-enable-deep-research-in-projects
       return (
+        !isProjectWorkflow &&
         deepResearchGloballyEnabled &&
         hasSearchToolsAvailable(selectedAgent?.tools || [])
       );
     }, [
       selectedAgent?.tools,
       combinedSettings?.settings?.deep_research_enabled,
+      currentProjectId,
     ]);
 
     function handleKeyDownForPromptShortcuts(
