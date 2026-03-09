@@ -26,7 +26,10 @@ from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnectorWithPermSync
 from onyx.connectors.models import HierarchyNode as PydanticHierarchyNode
+from onyx.connectors.models import InputType
 from onyx.connectors.models import SlimDocument
+from onyx.db.enums import AccessType
+from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import HierarchyNodeType
 from onyx.db.hierarchy import delete_orphaned_hierarchy_nodes
 from onyx.db.hierarchy import ensure_source_node_exists
@@ -38,6 +41,9 @@ from onyx.db.hierarchy import reparent_orphaned_hierarchy_nodes
 from onyx.db.hierarchy import update_document_parent_hierarchy_nodes
 from onyx.db.hierarchy import upsert_hierarchy_node_cc_pair_entries
 from onyx.db.hierarchy import upsert_hierarchy_nodes_batch
+from onyx.db.models import Connector
+from onyx.db.models import ConnectorCredentialPair
+from onyx.db.models import Credential
 from onyx.db.models import Document as DbDocument
 from onyx.db.models import HierarchyNode as DBHierarchyNode
 from onyx.db.models import HierarchyNodeByConnectorCredentialPair
@@ -58,10 +64,6 @@ CHANNEL_C_ID = "C_ENGINEERING"
 CHANNEL_C_NAME = "#engineering"
 
 SLIM_DOC_IDS = ["msg-001", "msg-002", "msg-003"]
-
-FAKE_CONNECTOR_ID = 999
-FAKE_CREDENTIAL_ID = 888
-FAKE_CONNECTOR_ID_2 = 998
 
 
 # ---------------------------------------------------------------------------
@@ -153,18 +155,71 @@ class MockSlimConnectorWithPermSync(SlimConnectorWithPermSync):
 # ---------------------------------------------------------------------------
 
 
+def _create_cc_pair(
+    db_session: Session,
+    source: DocumentSource = TEST_SOURCE,
+) -> ConnectorCredentialPair:
+    """Create a real Connector + Credential + ConnectorCredentialPair for testing."""
+    connector = Connector(
+        name=f"Test {source.value} Connector",
+        source=source,
+        input_type=InputType.LOAD_STATE,
+        connector_specific_config={},
+    )
+    db_session.add(connector)
+    db_session.flush()
+
+    credential = Credential(
+        source=source,
+        credential_json={},
+        admin_public=True,
+    )
+    db_session.add(credential)
+    db_session.flush()
+    db_session.expire(credential)
+
+    cc_pair = ConnectorCredentialPair(
+        connector_id=connector.id,
+        credential_id=credential.id,
+        name=f"Test {source.value} CC Pair",
+        status=ConnectorCredentialPairStatus.ACTIVE,
+        access_type=AccessType.PUBLIC,
+    )
+    db_session.add(cc_pair)
+    db_session.commit()
+    db_session.refresh(cc_pair)
+    return cc_pair
+
+
 def _cleanup_test_data(db_session: Session) -> None:
     """Remove all test hierarchy nodes and documents to isolate tests."""
     for doc_id in SLIM_DOC_IDS:
         db_session.query(DbDocument).filter(DbDocument.id == doc_id).delete()
     db_session.query(HierarchyNodeByConnectorCredentialPair).filter(
         HierarchyNodeByConnectorCredentialPair.connector_id.in_(
-            [FAKE_CONNECTOR_ID, FAKE_CONNECTOR_ID_2]
+            db_session.query(Connector.id).filter(
+                Connector.source == TEST_SOURCE,
+                Connector.name.like("Test %"),
+            )
         )
-    ).delete()
+    ).delete(synchronize_session="fetch")
     db_session.query(DBHierarchyNode).filter(
         DBHierarchyNode.source == TEST_SOURCE
     ).delete()
+    db_session.flush()
+    # Clean up test connectors/credentials/cc_pairs
+    db_session.query(ConnectorCredentialPair).filter(
+        ConnectorCredentialPair.connector_id.in_(
+            db_session.query(Connector.id).filter(
+                Connector.source == TEST_SOURCE,
+                Connector.name.like("Test %"),
+            )
+        )
+    ).delete(synchronize_session="fetch")
+    db_session.query(Connector).filter(
+        Connector.source == TEST_SOURCE,
+        Connector.name.like("Test %"),
+    ).delete(synchronize_session="fetch")
     db_session.commit()
 
 
@@ -585,6 +640,7 @@ def test_upsert_hierarchy_node_cc_pair_entries(db_session: Session) -> None:
     """upsert_hierarchy_node_cc_pair_entries should insert rows and be idempotent."""
     _cleanup_test_data(db_session)
     ensure_source_node_exists(db_session, TEST_SOURCE, commit=True)
+    cc_pair = _create_cc_pair(db_session)
 
     upserted = upsert_hierarchy_nodes_batch(
         db_session=db_session,
@@ -599,16 +655,17 @@ def test_upsert_hierarchy_node_cc_pair_entries(db_session: Session) -> None:
     upsert_hierarchy_node_cc_pair_entries(
         db_session=db_session,
         hierarchy_node_ids=node_ids,
-        connector_id=FAKE_CONNECTOR_ID,
-        credential_id=FAKE_CREDENTIAL_ID,
+        connector_id=cc_pair.connector_id,
+        credential_id=cc_pair.credential_id,
         commit=True,
     )
 
     rows = (
         db_session.query(HierarchyNodeByConnectorCredentialPair)
         .filter(
-            HierarchyNodeByConnectorCredentialPair.connector_id == FAKE_CONNECTOR_ID,
-            HierarchyNodeByConnectorCredentialPair.credential_id == FAKE_CREDENTIAL_ID,
+            HierarchyNodeByConnectorCredentialPair.connector_id == cc_pair.connector_id,
+            HierarchyNodeByConnectorCredentialPair.credential_id
+            == cc_pair.credential_id,
         )
         .all()
     )
@@ -618,15 +675,16 @@ def test_upsert_hierarchy_node_cc_pair_entries(db_session: Session) -> None:
     upsert_hierarchy_node_cc_pair_entries(
         db_session=db_session,
         hierarchy_node_ids=node_ids,
-        connector_id=FAKE_CONNECTOR_ID,
-        credential_id=FAKE_CREDENTIAL_ID,
+        connector_id=cc_pair.connector_id,
+        credential_id=cc_pair.credential_id,
         commit=True,
     )
     rows_after = (
         db_session.query(HierarchyNodeByConnectorCredentialPair)
         .filter(
-            HierarchyNodeByConnectorCredentialPair.connector_id == FAKE_CONNECTOR_ID,
-            HierarchyNodeByConnectorCredentialPair.credential_id == FAKE_CREDENTIAL_ID,
+            HierarchyNodeByConnectorCredentialPair.connector_id == cc_pair.connector_id,
+            HierarchyNodeByConnectorCredentialPair.credential_id
+            == cc_pair.credential_id,
         )
         .all()
     )
@@ -638,6 +696,7 @@ def test_remove_stale_entries_and_delete_orphans(db_session: Session) -> None:
     be deleted and the SOURCE node should survive."""
     _cleanup_test_data(db_session)
     source_node = ensure_source_node_exists(db_session, TEST_SOURCE, commit=True)
+    cc_pair = _create_cc_pair(db_session)
 
     upserted = upsert_hierarchy_nodes_batch(
         db_session=db_session,
@@ -647,12 +706,11 @@ def test_remove_stale_entries_and_delete_orphans(db_session: Session) -> None:
         is_connector_public=False,
     )
     all_ids = [n.id for n in upserted]
-    # Associate all 3 nodes with our fake cc_pair
     upsert_hierarchy_node_cc_pair_entries(
         db_session=db_session,
         hierarchy_node_ids=all_ids,
-        connector_id=FAKE_CONNECTOR_ID,
-        credential_id=FAKE_CREDENTIAL_ID,
+        connector_id=cc_pair.connector_id,
+        credential_id=cc_pair.credential_id,
         commit=True,
     )
 
@@ -663,8 +721,8 @@ def test_remove_stale_entries_and_delete_orphans(db_session: Session) -> None:
 
     stale_removed = remove_stale_hierarchy_node_cc_pair_entries(
         db_session=db_session,
-        connector_id=FAKE_CONNECTOR_ID,
-        credential_id=FAKE_CREDENTIAL_ID,
+        connector_id=cc_pair.connector_id,
+        credential_id=cc_pair.credential_id,
         live_hierarchy_node_ids=live_ids,
         commit=True,
     )
@@ -689,6 +747,8 @@ def test_multi_cc_pair_prevents_premature_deletion(db_session: Session) -> None:
     one cc_pair removes its association."""
     _cleanup_test_data(db_session)
     ensure_source_node_exists(db_session, TEST_SOURCE, commit=True)
+    cc_pair_1 = _create_cc_pair(db_session)
+    cc_pair_2 = _create_cc_pair(db_session)
 
     upserted = upsert_hierarchy_nodes_batch(
         db_session=db_session,
@@ -703,24 +763,24 @@ def test_multi_cc_pair_prevents_premature_deletion(db_session: Session) -> None:
     upsert_hierarchy_node_cc_pair_entries(
         db_session=db_session,
         hierarchy_node_ids=all_ids,
-        connector_id=FAKE_CONNECTOR_ID,
-        credential_id=FAKE_CREDENTIAL_ID,
+        connector_id=cc_pair_1.connector_id,
+        credential_id=cc_pair_1.credential_id,
         commit=True,
     )
     # cc_pair 2 also owns all 3
     upsert_hierarchy_node_cc_pair_entries(
         db_session=db_session,
         hierarchy_node_ids=all_ids,
-        connector_id=FAKE_CONNECTOR_ID_2,
-        credential_id=FAKE_CREDENTIAL_ID,
+        connector_id=cc_pair_2.connector_id,
+        credential_id=cc_pair_2.credential_id,
         commit=True,
     )
 
     # cc_pair 1 prunes — keeps none
     remove_stale_hierarchy_node_cc_pair_entries(
         db_session=db_session,
-        connector_id=FAKE_CONNECTOR_ID,
-        credential_id=FAKE_CREDENTIAL_ID,
+        connector_id=cc_pair_1.connector_id,
+        credential_id=cc_pair_1.credential_id,
         live_hierarchy_node_ids=set(),
         commit=True,
     )
@@ -743,6 +803,7 @@ def test_reparent_orphaned_children(db_session: Session) -> None:
     re-parented to the SOURCE node."""
     _cleanup_test_data(db_session)
     source_node = ensure_source_node_exists(db_session, TEST_SOURCE, commit=True)
+    cc_pair = _create_cc_pair(db_session)
 
     # Create a parent node and a child node
     parent_node = PydanticHierarchyNode(
@@ -775,8 +836,8 @@ def test_reparent_orphaned_children(db_session: Session) -> None:
     upsert_hierarchy_node_cc_pair_entries(
         db_session=db_session,
         hierarchy_node_ids=[child_db.id],
-        connector_id=FAKE_CONNECTOR_ID,
-        credential_id=FAKE_CREDENTIAL_ID,
+        connector_id=cc_pair.connector_id,
+        credential_id=cc_pair.credential_id,
         commit=True,
     )
 
