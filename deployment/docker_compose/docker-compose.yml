@@ -59,6 +59,7 @@ services:
         condition: service_started
       opensearch:
         condition: service_started
+        required: false
       cache:
         condition: service_started
       inference_model_server:
@@ -141,12 +142,19 @@ services:
       - path: .env
         required: false
     depends_on:
-      - relational_db
-      - index
-      - opensearch
-      - cache
-      - inference_model_server
-      - indexing_model_server
+      relational_db:
+        condition: service_started
+      index:
+        condition: service_started
+      opensearch:
+        condition: service_started
+        required: false
+      cache:
+        condition: service_started
+      inference_model_server:
+        condition: service_started
+      indexing_model_server:
+        condition: service_started
     restart: unless-stopped
     environment:
       - FILE_STORE_BACKEND=${FILE_STORE_BACKEND:-s3}
