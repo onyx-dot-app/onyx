@@ -838,9 +838,12 @@ def sync_auto_mode_models(
             )
             changes += 1
 
-    db_session.commit()
+    # Update the default if this provider currently holds the global CHAT default.
+    # We flush (but don't commit) so that _update_default_model can see the new
+    # model rows, then commit everything atomically to avoid a window where the
+    # old default is invisible but still pointed-to.
+    db_session.flush()
 
-    # Update the default if this provider currently holds the global CHAT default
     recommended_default = llm_recommendations.get_default_model(provider.provider)
     if recommended_default:
         current_default = fetch_default_llm_model(db_session)
@@ -851,7 +854,7 @@ def sync_auto_mode_models(
             and current_default.name != recommended_default.name
         ):
             try:
-                _update_default_model(
+                _update_default_model__no_commit(
                     db_session=db_session,
                     provider_id=provider.id,
                     model=recommended_default.name,
@@ -866,6 +869,7 @@ def sync_auto_mode_models(
                     provider.id,
                 )
 
+    db_session.commit()
     return changes
 
 
@@ -996,7 +1000,7 @@ def update_model_configuration__no_commit(
     db_session.flush()
 
 
-def _update_default_model(
+def _update_default_model__no_commit(
     db_session: Session,
     provider_id: int,
     model: str,
@@ -1034,6 +1038,14 @@ def _update_default_model(
     new_default.is_default = True
     model_config.is_visible = True
 
+
+def _update_default_model(
+    db_session: Session,
+    provider_id: int,
+    model: str,
+    flow_type: LLMModelFlowType,
+) -> None:
+    _update_default_model__no_commit(db_session, provider_id, model, flow_type)
     db_session.commit()
 
 
