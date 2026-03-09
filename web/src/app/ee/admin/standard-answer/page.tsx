@@ -368,8 +368,8 @@ function Main() {
       <ErrorCallout
         errorTitle="Error loading standard answers"
         errorMsg={
-          standardAnswersError.info?.message ||
-          standardAnswersError.message.info?.detail
+          standardAnswersError.info?.detail ||
+          standardAnswersError.info?.message
         }
       />
     );
@@ -380,8 +380,8 @@ function Main() {
       <ErrorCallout
         errorTitle="Error loading standard answer categories"
         errorMsg={
-          standardAnswerCategoriesError.info?.message ||
-          standardAnswerCategoriesError.message.info?.detail
+          standardAnswerCategoriesError.info?.detail ||
+          standardAnswerCategoriesError.info?.message
         }
       />
     );

@@ -240,7 +240,7 @@ export default function AddConnector({
       toast.success("Credential deleted successfully!");
     } else {
       const errorData = await response.json();
-      toast.error(errorData.message);
+      toast.error(errorData.detail || errorData.message);
     }
   };
 

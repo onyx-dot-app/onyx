@@ -3,5 +3,5 @@ export const getErrorMsg = async (response: Response) => {
     return null;
   }
   const responseJson = await response.json();
-  return responseJson.detail || responseJson.message || "Unknown error";
+  return responseJson.message || responseJson.detail || "Unknown error";
 };
