@@ -48,7 +48,7 @@ jobs:
 
       - name: Deploy to Vercel (Production)
         working-directory: web
-        run: npx --yes "$VERCEL_CLI" deploy storybook-static/ --prod --yes
+        run: npx --yes "$VERCEL_CLI" deploy storybook-static/ --prod --yes --token="$VERCEL_TOKEN"
 
   notify-slack-on-failure:
     needs: Deploy-Storybook
