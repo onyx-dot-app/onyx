@@ -189,6 +189,7 @@ class EncryptedString(_EncryptedBase):
 
 
 class EncryptedJson(_EncryptedBase):
+    cache_ok = True  # have to re-declare because we set is_json (different than parent)
     _is_json: bool = True
 
     def process_bind_param(
