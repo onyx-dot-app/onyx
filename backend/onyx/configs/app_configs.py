@@ -288,8 +288,9 @@ OPENSEARCH_TEXT_ANALYZER = os.environ.get("OPENSEARCH_TEXT_ANALYZER") or "englis
 # environments we always want to be dual indexing into both OpenSearch and Vespa
 # to stress test the new codepaths. Only enable this if there is some instance
 # of OpenSearch running for the relevant Onyx instance.
+# NOTE: Now enabled on by default, unless the env indicates otherwise.
 ENABLE_OPENSEARCH_INDEXING_FOR_ONYX = (
-    os.environ.get("ENABLE_OPENSEARCH_INDEXING_FOR_ONYX", "").lower() == "true"
+    os.environ.get("ENABLE_OPENSEARCH_INDEXING_FOR_ONYX", "true").lower() == "true"
 )
 # NOTE: This effectively does nothing anymore, admins can now toggle whether
 # retrieval is through OpenSearch. This value is only used as a final fallback
