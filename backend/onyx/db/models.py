@@ -163,6 +163,8 @@ class _EncryptedBase(TypeDecorator):
 
 
 class EncryptedString(_EncryptedBase):
+    # Must redeclare cache_ok in this child class since we explicitly redeclare _is_json
+    cache_ok = True
     _is_json: bool = False
 
     def process_bind_param(
@@ -189,9 +191,7 @@ class EncryptedString(_EncryptedBase):
 
 
 class EncryptedJson(_EncryptedBase):
-    cache_ok = (
-        True  # have to re-declare because _is_json value is different from parent
-    )
+    cache_ok = True
     _is_json: bool = True
 
     def process_bind_param(
