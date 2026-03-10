@@ -2,6 +2,7 @@ import Text from "@/refresh-components/texts/Text";
 import { Section } from "@/layouts/general-layouts";
 import { getDataLanguage } from "@/lib/languages";
 import { PreviewVariant } from "@/sections/modals/PreviewModal/interfaces";
+import { getMimeLanguage } from "@/sections/modals/PreviewModal/mimeUtils";
 import { CodePreview } from "@/sections/modals/PreviewModal/variants/CodePreview";
 import {
   CopyButton,
@@ -21,14 +22,7 @@ function formatContent(language: string, content: string): string {
 
 export const dataVariant: PreviewVariant = {
   matches: (name, mime) =>
-    !!getDataLanguage(name || "") ||
-    mime.startsWith("application/json") ||
-    mime.startsWith("application/xml") ||
-    mime.startsWith("text/xml") ||
-    mime.startsWith("application/x-yaml") ||
-    mime.startsWith("application/yaml") ||
-    mime.startsWith("text/yaml") ||
-    mime.startsWith("text/x-yaml"),
+    !!getDataLanguage(name || "") || !!getMimeLanguage(mime),
   width: "md",
   height: "lg",
   needsTextContent: true,

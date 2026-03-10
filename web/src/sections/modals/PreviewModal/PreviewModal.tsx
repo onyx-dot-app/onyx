@@ -10,6 +10,7 @@ import { Section } from "@/layouts/general-layouts";
 import { getCodeLanguage, getDataLanguage } from "@/lib/languages";
 import { fetchChatFile } from "@/lib/chat/svc";
 import { PreviewContext } from "@/sections/modals/PreviewModal/interfaces";
+import { getMimeLanguage } from "@/sections/modals/PreviewModal/mimeUtils";
 import { resolveVariant } from "@/sections/modals/PreviewModal/variants";
 
 const OCTET_STREAM_EXTENSION_TO_MIME: Record<string, string> = {
@@ -68,17 +69,7 @@ export default function PreviewModal({
   const language = useMemo(
     () =>
       getCodeLanguage(presentingDocument.semantic_identifier || "") ||
-      (mimeType.startsWith("application/json")
-        ? "json"
-        : mimeType.startsWith("application/xml") ||
-            mimeType.startsWith("text/xml")
-          ? "xml"
-          : mimeType.startsWith("application/x-yaml") ||
-              mimeType.startsWith("application/yaml") ||
-              mimeType.startsWith("text/yaml") ||
-              mimeType.startsWith("text/x-yaml")
-            ? "yaml"
-            : null) ||
+      getMimeLanguage(mimeType) ||
       getDataLanguage(presentingDocument.semantic_identifier || "") ||
       "plaintext",
     [mimeType, presentingDocument.semantic_identifier]
