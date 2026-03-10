@@ -61,6 +61,9 @@ services:
       - POSTGRES_HOST=relational_db
       - POSTGRES_DEFAULT_SCHEMA=${POSTGRES_DEFAULT_SCHEMA:-}
       - VESPA_HOST=index
+      - OPENSEARCH_HOST=${OPENSEARCH_HOST:-opensearch}
+      - OPENSEARCH_ADMIN_PASSWORD=${OPENSEARCH_ADMIN_PASSWORD:-StrongPassword123!}
+      - ENABLE_OPENSEARCH_INDEXING_FOR_ONYX=${OPENSEARCH_FOR_ONYX_ENABLED:-true}
       - REDIS_HOST=cache
       - WEB_DOMAIN=${WEB_DOMAIN:-}
       # MinIO configuration
@@ -168,6 +171,9 @@ services:
       - POSTGRES_DB=${POSTGRES_DB:-}
       - POSTGRES_DEFAULT_SCHEMA=${POSTGRES_DEFAULT_SCHEMA:-}
       - VESPA_HOST=index
+      - OPENSEARCH_HOST=${OPENSEARCH_HOST:-opensearch}
+      - OPENSEARCH_ADMIN_PASSWORD=${OPENSEARCH_ADMIN_PASSWORD:-StrongPassword123!}
+      - ENABLE_OPENSEARCH_INDEXING_FOR_ONYX=${OPENSEARCH_FOR_ONYX_ENABLED:-true}
       - REDIS_HOST=cache
       - WEB_DOMAIN=${WEB_DOMAIN:-}
       # MinIO configuration
@@ -424,6 +430,50 @@ services:
         max-size: "50m"
         max-file: "6"
 
+  opensearch:
+    image: opensearchproject/opensearch:3.4.0
+    restart: unless-stopped
+    # Controls whether this service runs. In order to enable it, add
+    # opensearch-enabled to COMPOSE_PROFILES in the environment for this
+    # docker-compose.
+    # NOTE: Now enabled on by default. To explicitly disable this service,
+    # uncomment this profile and ensure COMPOSE_PROFILES in your env does not
+    # list the profile, or when running docker compose, include all desired
+    # service names but this one. Additionally set
+    # OPENSEARCH_FOR_ONYX_ENABLED=false in your env.
+    # profiles: ["opensearch-enabled"]
+    environment:
+      # We need discovery.type=single-node so that OpenSearch doesn't try
+      # forming a cluster and waiting for other nodes to become live.
+      - discovery.type=single-node
+      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=${OPENSEARCH_ADMIN_PASSWORD:-StrongPassword123!}
+      # This and the JVM config below come from the example in https://docs.opensearch.org/latest/install-and-configure/install-opensearch/docker/
+      # We do this to avoid unstable performance from page swaps.
+      - bootstrap.memory_lock=true # Disable JVM heap memory swapping.
+      # Java heap should be ~50% of memory limit. For now we assume a limit of
+      # 4g although in practice the container can request more than this.
+      # See https://opster.com/guides/opensearch/opensearch-basics/opensearch-heap-size-usage-and-jvm-garbage-collection/
+      # Xms is the starting size, Xmx is the maximum size. These should be the
+      # same.
+      - "OPENSEARCH_JAVA_OPTS=-Xms2g -Xmx2g"
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+    # These come from the example in https://docs.opensearch.org/latest/install-and-configure/install-opensearch/docker/
+    ulimits:
+      # Similarly to bootstrap.memory_lock, we don't want to impose limits on
+      # how much memory a process can lock from being swapped.
+      memlock:
+        soft: -1 # Set memlock to unlimited (no soft or hard limit).
+        hard: -1
+      nofile:
+        soft: 65536 # Maximum number of open files for the opensearch user - set to at least 65536.
+        hard: 65536
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "6"
+
   nginx:
     image: nginx:1.25.5-alpine
     restart: unless-stopped
@@ -508,3 +558,5 @@ volumes:
   model_cache_huggingface:
   indexing_huggingface_model_cache:
   # mcp_server_logs:
+  # Persistent data for OpenSearch.
+  opensearch-data:
