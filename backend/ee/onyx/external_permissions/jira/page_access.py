@@ -255,12 +255,15 @@ def get_project_permissions(
     jira_client: JIRA,
     jira_project: str,
     add_prefix: bool = False,
+    source: DocumentSource = DocumentSource.JIRA,
 ) -> ExternalAccess | None:
     """
     Get project permissions from Jira.
 
     add_prefix: When True, prefix group IDs with source type (for indexing path).
                When False (default), leave unprefixed (for permission sync path).
+    source: The DocumentSource to use when prefixing group IDs.
+            Defaults to JIRA; JSM connector passes JIRA_SERVICE_MANAGEMENT.
     """
     project_permissions: PermissionScheme = jira_client.project_permissionscheme(
         project=jira_project
@@ -283,7 +286,7 @@ def get_project_permissions(
     # Prefix group IDs with source type if requested (for indexing path)
     if add_prefix and external_access and external_access.external_user_group_ids:
         prefixed_groups = {
-            build_ext_group_name_for_onyx(g, DocumentSource.JIRA)
+            build_ext_group_name_for_onyx(g, source)
             for g in external_access.external_user_group_ids
         }
         return ExternalAccess(
