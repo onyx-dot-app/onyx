@@ -255,8 +255,12 @@ class DocumentQuery:
                 f"result window ({DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW})."
             )
 
+        # TODO(andrei, yuhong): We can tune this more dynamically based on
+        # num_hits.
+        max_results_per_subquery = DEFAULT_NUM_HYBRID_SEARCH_CANDIDATES
+
         hybrid_search_subqueries = DocumentQuery._get_hybrid_search_subqueries(
-            query_text, query_vector
+            query_text, query_vector, vector_candidates=max_results_per_subquery
         )
         hybrid_search_filters = DocumentQuery._get_search_filters(
             tenant_state=tenant_state,
@@ -291,7 +295,7 @@ class DocumentQuery:
                 # Sources:
                 # https://docs.opensearch.org/latest/vector-search/ai-search/hybrid-search/pagination/
                 # https://opensearch.org/blog/navigating-pagination-in-hybrid-queries-with-the-pagination_depth-parameter/
-                "pagination_depth": DEFAULT_NUM_HYBRID_SEARCH_CANDIDATES,
+                "pagination_depth": max_results_per_subquery,
                 # Applied to all the sub-queries independently (this avoids
                 # subqueries having a lot of results thrown out during
                 # aggregation).
