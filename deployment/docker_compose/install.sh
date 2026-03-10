@@ -165,6 +165,9 @@ prompt_yn_or_default() {
     if is_interactive; then
         read -p "$prompt_text" -n 1 -r
         echo ""
+        if [[ -z "$REPLY" ]]; then
+            REPLY="$default_value"
+        fi
     else
         REPLY="$default_value"
     fi
@@ -719,6 +722,13 @@ if [ -f "$ENV_FILE" ]; then
             print_info "Selected: Latest version"
         else
             print_info "Selected: $VERSION"
+        fi
+
+        # Reject craft image tags when running in lite mode
+        if [[ "$LITE_MODE" = true ]] && [[ "${VERSION:-}" == craft-* ]]; then
+            print_error "Cannot use a craft image tag (${VERSION}) with --lite."
+            print_info "Craft requires services (Vespa, Redis, background workers) that lite mode disables."
+            exit 1
         fi
 
         # Update .env file with new version
