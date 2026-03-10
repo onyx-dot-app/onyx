@@ -10,8 +10,7 @@ import { Section } from "@/layouts/general-layouts";
 import { getCodeLanguage, getDataLanguage } from "@/lib/languages";
 import { fetchChatFile } from "@/lib/chat/svc";
 import { PreviewContext } from "@/sections/modals/PreviewModal/interfaces";
-import { getMimeLanguage } from "@/sections/modals/PreviewModal/mimeUtils";
-import { resolveMimeType } from "@/sections/modals/PreviewModal/mimeUtils";
+import { getMimeLanguage, resolveMimeType } from "@/sections/modals/PreviewModal/mimeUtils";
 import { resolveVariant } from "@/sections/modals/PreviewModal/variants";
 
 interface PreviewModalProps {
