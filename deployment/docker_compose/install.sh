@@ -173,14 +173,6 @@ prompt_yn_or_default() {
     fi
 }
 
-prompt_enter_or_skip() {
-    local prompt_text="$1"
-    if is_interactive; then
-        echo -e "$prompt_text"
-        read -r
-    fi
-}
-
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -516,7 +508,7 @@ if [ "$RESOURCE_WARNING" = true ]; then
     echo ""
     print_warning "Onyx recommends at least ${EXPECTED_DOCKER_RAM_GB}GB RAM and ${EXPECTED_DISK_GB}GB disk space for optimal performance."
     echo ""
-    prompt_yn_or_default "Do you want to continue anyway? (y/N): " "y"
+    prompt_yn_or_default "Do you want to continue anyway? (Y/n): " "y"
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
         print_info "Installation cancelled. Please allocate more resources and try again."
         exit 1
@@ -578,7 +570,7 @@ if download_file "${GITHUB_RAW_URL}/docker-compose.yml" "$COMPOSE_FILE" 2>/dev/n
         echo ""
         print_warning "The installation will continue, but may fail if Docker Compose cannot parse the file."
         echo ""
-        prompt_yn_or_default "Do you want to continue anyway? (y/N): " "y"
+        prompt_yn_or_default "Do you want to continue anyway? (Y/n): " "y"
         if [[ ! $REPLY =~ ^[Yy]$ ]]; then
             print_info "Installation cancelled. Please upgrade Docker Compose or manually edit the docker-compose.yml file."
             exit 1
@@ -605,8 +597,20 @@ if [[ "$LITE_MODE" = true ]]; then
         exit 1
     fi
 elif [[ -f "${INSTALL_ROOT}/deployment/${LITE_COMPOSE_FILE}" ]]; then
-    rm -f "${INSTALL_ROOT}/deployment/${LITE_COMPOSE_FILE}"
-    print_info "Removed previous lite overlay (switching to standard mode)"
+    if [[ -f "${INSTALL_ROOT}/deployment/.env" ]]; then
+        print_warning "Existing lite overlay found but --lite was not passed."
+        prompt_yn_or_default "Remove lite overlay and switch to standard mode? (y/N): " "n"
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            print_info "Keeping existing lite overlay. Pass --lite to keep using lite mode."
+            LITE_MODE=true
+        else
+            rm -f "${INSTALL_ROOT}/deployment/${LITE_COMPOSE_FILE}"
+            print_info "Removed lite overlay (switching to standard mode)"
+        fi
+    else
+        rm -f "${INSTALL_ROOT}/deployment/${LITE_COMPOSE_FILE}"
+        print_info "Removed previous lite overlay (switching to standard mode)"
+    fi
 fi
 
 # Download env.template file
@@ -749,6 +753,14 @@ if [ -f "$ENV_FILE" ]; then
         fi
         print_success "Configuration updated for upgrade"
     else
+        # Reject restarting a craft deployment in lite mode
+        EXISTING_TAG=$(grep "^IMAGE_TAG=" "$ENV_FILE" | head -1 | cut -d'=' -f2 | tr -d ' "'"'"'')
+        if [[ "$LITE_MODE" = true ]] && [[ "${EXISTING_TAG:-}" == craft-* ]]; then
+            print_error "Cannot restart a craft deployment (${EXISTING_TAG}) with --lite."
+            print_info "Craft requires services (Vespa, Redis, background workers) that lite mode disables."
+            exit 1
+        fi
+
         print_info "Keeping existing configuration..."
         print_success "Will restart with current settings"
     fi
