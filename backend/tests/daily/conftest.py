@@ -19,7 +19,7 @@ from fastapi.testclient import TestClient
 from onyx.auth.users import current_admin_user
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import UserRole
-from onyx.main import fetch_versioned_implementation
+from onyx.main import get_application
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -51,11 +51,8 @@ def client() -> Generator[TestClient, None, None]:
     # Patch out prometheus metrics setup to avoid "Duplicated timeseries in
     # CollectorRegistry" errors when multiple tests each create a new app
     # (prometheus registers metrics globally and rejects duplicate names).
-    get_app = fetch_versioned_implementation(
-        module="onyx.main", attribute="get_application"
-    )
     with patch("onyx.main.setup_prometheus_metrics"):
-        app: FastAPI = get_app(lifespan_override=test_lifespan)
+        app: FastAPI = get_application(lifespan_override=test_lifespan)
 
     # Override the database session dependency with a mock
     # (these tests don't actually need DB access)

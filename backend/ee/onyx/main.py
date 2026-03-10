@@ -3,7 +3,6 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from httpx_oauth.clients.google import GoogleOAuth2
-from starlette.types import Lifespan
 
 from ee.onyx.server.analytics.api import router as analytics_router
 from ee.onyx.server.auth_check import check_ee_router_auth
@@ -78,14 +77,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         yield
 
 
-def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
+def get_application() -> FastAPI:
     # Anything that happens at import time is not guaranteed to be running ee-version
     # Anything after the server startup will be running ee version
     global_version.set_ee()
 
     test_encryption()
 
-    application = get_application_base(lifespan_override=lifespan_override or lifespan)
+    application = get_application_base(lifespan_override=lifespan)
 
     if MULTI_TENANT:
         add_api_server_tenant_id_middleware(application, logger)
