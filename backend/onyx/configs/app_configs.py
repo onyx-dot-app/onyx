@@ -61,17 +61,6 @@ CACHE_BACKEND = CacheBackendType(
     os.environ.get("CACHE_BACKEND", CacheBackendType.REDIS)
 )
 
-# Maximum token count for a single uploaded file. Files exceeding this are rejected.
-# Defaults to 100k tokens (or 10M when vector DB is disabled).
-_DEFAULT_FILE_TOKEN_LIMIT = 10_000_000 if DISABLE_VECTOR_DB else 100_000
-FILE_TOKEN_COUNT_THRESHOLD = int(
-    os.environ.get("FILE_TOKEN_COUNT_THRESHOLD", str(_DEFAULT_FILE_TOKEN_LIMIT))
-)
-
-# Maximum upload size for a single user file (chat/projects) in MB.
-USER_FILE_MAX_UPLOAD_SIZE_MB = int(os.environ.get("USER_FILE_MAX_UPLOAD_SIZE_MB") or 50)
-USER_FILE_MAX_UPLOAD_SIZE_BYTES = USER_FILE_MAX_UPLOAD_SIZE_MB * 1024 * 1024
-
 # If set to true, will show extra/uncommon connectors in the "Other" category
 SHOW_EXTRA_CONNECTORS = os.environ.get("SHOW_EXTRA_CONNECTORS", "").lower() == "true"
 

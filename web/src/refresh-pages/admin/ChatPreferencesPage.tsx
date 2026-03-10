@@ -80,6 +80,10 @@ interface ChatPreferencesFormValues {
   maximum_chat_retention_days: string;
   anonymous_user_enabled: boolean;
   disable_default_assistant: boolean;
+
+  // File limits
+  user_file_max_upload_size_mb: string;
+  file_token_count_threshold_k: string;
 }
 
 interface MCPServerCardTool {
@@ -186,6 +190,8 @@ function ChatPreferencesForm() {
   // Track initial text values to avoid unnecessary saves on blur
   const initialCompanyName = useRef(values.company_name);
   const initialCompanyDescription = useRef(values.company_description);
+  const initialUploadSizeMb = useRef(values.user_file_max_upload_size_mb);
+  const initialTokenThresholdK = useRef(values.file_token_count_threshold_k);
 
   // Tools availability
   const { tools: availableTools } = useAvailableTools();
@@ -747,6 +753,72 @@ function ChatPreferencesForm() {
                     />
                   </InputLayouts.Horizontal>
                 </Card>
+
+                <Card>
+                  <InputLayouts.Vertical
+                    title="File Attachment Size Limit"
+                    subDescription="Files attached in chats and projects must fit within both limits to be accepted. Larger files increase latency, memory usage, and token costs."
+                  >
+                    <div className="flex gap-4">
+                      <div className="flex-1">
+                        <InputTypeInField
+                          name="user_file_max_upload_size_mb"
+                          type="number"
+                          placeholder="No limit"
+                          onBlur={() => {
+                            if (
+                              values.user_file_max_upload_size_mb !==
+                              initialUploadSizeMb.current
+                            ) {
+                              const parsed = parseInt(
+                                values.user_file_max_upload_size_mb,
+                                10
+                              );
+                              void saveSettings({
+                                user_file_max_upload_size_mb:
+                                  values.user_file_max_upload_size_mb === ""
+                                    ? 0
+                                    : isNaN(parsed)
+                                      ? 0
+                                      : parsed,
+                              });
+                              initialUploadSizeMb.current =
+                                values.user_file_max_upload_size_mb;
+                            }
+                          }}
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <InputTypeInField
+                          name="file_token_count_threshold_k"
+                          type="number"
+                          placeholder="No limit"
+                          onBlur={() => {
+                            if (
+                              values.file_token_count_threshold_k !==
+                              initialTokenThresholdK.current
+                            ) {
+                              const parsed = parseInt(
+                                values.file_token_count_threshold_k,
+                                10
+                              );
+                              void saveSettings({
+                                file_token_count_threshold_k:
+                                  values.file_token_count_threshold_k === ""
+                                    ? 0
+                                    : isNaN(parsed)
+                                      ? 0
+                                      : parsed,
+                              });
+                              initialTokenThresholdK.current =
+                                values.file_token_count_threshold_k;
+                            }
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </InputLayouts.Vertical>
+                </Card>
               </Section>
             </SimpleCollapsible.Content>
           </SimpleCollapsible>
@@ -832,6 +904,18 @@ export default function ChatPreferencesPage() {
     anonymous_user_enabled: settings.settings.anonymous_user_enabled ?? false,
     disable_default_assistant:
       settings.settings.disable_default_assistant ?? false,
+
+    // File limits — 0 means "no limit", show as empty string
+    user_file_max_upload_size_mb:
+      settings.settings.user_file_max_upload_size_mb === 0 ||
+      settings.settings.user_file_max_upload_size_mb == null
+        ? ""
+        : settings.settings.user_file_max_upload_size_mb.toString(),
+    file_token_count_threshold_k:
+      settings.settings.file_token_count_threshold_k === 0 ||
+      settings.settings.file_token_count_threshold_k == null
+        ? ""
+        : settings.settings.file_token_count_threshold_k.toString(),
   };
 
   return (
