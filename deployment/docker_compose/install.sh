@@ -658,11 +658,13 @@ else
     sed -i.bak 's/^AUTH_TYPE=.*/AUTH_TYPE=basic/' "$ENV_FILE" 2>/dev/null || true
     print_success "Basic authentication enabled in configuration"
 
-    # Generate a secure USER_AUTH_SECRET
+    # Check if openssl is available
     if ! command -v openssl &> /dev/null; then
         print_error "openssl is required to generate secure secrets but was not found."
         exit 1
     fi
+
+    # Generate a secure USER_AUTH_SECRET
     USER_AUTH_SECRET=$(openssl rand -hex 32)
     sed -i.bak "s/^USER_AUTH_SECRET=.*/USER_AUTH_SECRET=\"$USER_AUTH_SECRET\"/" "$ENV_FILE" 2>/dev/null || true
 
