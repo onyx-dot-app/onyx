@@ -19,6 +19,11 @@ from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import MilestoneRecordType
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.input_prompt import fetch_input_prompts_by_persona
+from onyx.db.input_prompt import insert_input_prompt_for_persona
+from onyx.db.input_prompt import remove_input_prompt_for_persona
+from onyx.db.input_prompt import sync_input_prompts_for_persona
+from onyx.db.input_prompt import update_input_prompt_for_persona
 from onyx.db.models import User
 from onyx.db.persona import create_assistant_label
 from onyx.db.persona import create_update_persona
@@ -41,6 +46,10 @@ from onyx.db.persona import update_personas_display_priority
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import ChatFileType
 from onyx.server.documents.models import PaginatedReturn
+from onyx.server.features.input_prompt.models import CreatePersonaInputPromptRequest
+from onyx.server.features.input_prompt.models import InputPromptSnapshot
+from onyx.server.features.input_prompt.models import SyncPersonaInputPromptsRequest
+from onyx.server.features.input_prompt.models import UpdatePersonaInputPromptRequest
 from onyx.server.features.persona.constants import ADMIN_AGENTS_RESOURCE
 from onyx.server.features.persona.constants import AGENTS_RESOURCE
 from onyx.server.features.persona.models import FullPersonaSnapshot
@@ -540,3 +549,95 @@ def get_persona(
             db_session.commit()
 
     return FullPersonaSnapshot.from_model(persona)
+
+
+@basic_router.get("/{persona_id}/input_prompt")
+def list_persona_input_prompts(
+    persona_id: int,
+    user: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> list[InputPromptSnapshot]:
+    # Access check: users who can use the assistant can view/use its shortcuts
+    try:
+        get_persona_by_id(
+            persona_id=persona_id,
+            user=user,
+            db_session=db_session,
+            is_for_edit=False,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    input_prompts = fetch_input_prompts_by_persona(
+        db_session=db_session,
+        persona_id=persona_id,
+    )
+    return [InputPromptSnapshot.from_model(prompt) for prompt in input_prompts]
+
+
+@basic_router.post("/{persona_id}/input_prompt")
+def create_persona_input_prompt(
+    persona_id: int,
+    request: CreatePersonaInputPromptRequest,
+    user: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> InputPromptSnapshot:
+    input_prompt = insert_input_prompt_for_persona(
+        prompt=request.prompt,
+        content=request.content,
+        active=request.active,
+        persona_id=persona_id,
+        user=user,
+        db_session=db_session,
+    )
+    return InputPromptSnapshot.from_model(input_prompt)
+
+
+@basic_router.patch("/{persona_id}/input_prompt/{input_prompt_id}")
+def patch_persona_input_prompt(
+    persona_id: int,
+    input_prompt_id: int,
+    request: UpdatePersonaInputPromptRequest,
+    user: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> InputPromptSnapshot:
+    updated_prompt = update_input_prompt_for_persona(
+        user=user,
+        persona_id=persona_id,
+        input_prompt_id=input_prompt_id,
+        prompt=request.prompt,
+        content=request.content,
+        active=request.active,
+        db_session=db_session,
+    )
+    return InputPromptSnapshot.from_model(updated_prompt)
+
+
+@basic_router.delete("/{persona_id}/input_prompt/{input_prompt_id}")
+def delete_persona_input_prompt(
+    persona_id: int,
+    input_prompt_id: int,
+    user: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> None:
+    remove_input_prompt_for_persona(
+        user=user,
+        persona_id=persona_id,
+        input_prompt_id=input_prompt_id,
+        db_session=db_session,
+    )
+
+
+@basic_router.put("/{persona_id}/input_prompt")
+def sync_persona_input_prompts(
+    persona_id: int,
+    request: SyncPersonaInputPromptsRequest,
+    user: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> list[InputPromptSnapshot]:
+    synced_prompts = sync_input_prompts_for_persona(
+        user=user,
+        persona_id=persona_id,
+        prompts=request.prompts,
+        db_session=db_session,
+    )
+    return [InputPromptSnapshot.from_model(prompt) for prompt in synced_prompts]

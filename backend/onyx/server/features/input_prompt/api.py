@@ -15,6 +15,7 @@ from onyx.db.input_prompt import remove_public_input_prompt
 from onyx.db.input_prompt import update_input_prompt
 from onyx.db.models import InputPrompt__User
 from onyx.db.models import User
+from onyx.db.persona import get_persona_by_id
 from onyx.server.features.input_prompt.models import CreateInputPromptRequest
 from onyx.server.features.input_prompt.models import InputPromptSnapshot
 from onyx.server.features.input_prompt.models import UpdateInputPromptRequest
@@ -30,12 +31,25 @@ admin_router = APIRouter(prefix="/admin/input_prompt")
 def list_input_prompts(
     user: User = Depends(current_user),
     include_public: bool = True,
+    persona_id: int | None = None,
     db_session: Session = Depends(get_session),
 ) -> list[InputPromptSnapshot]:
+    if persona_id is not None:
+        try:
+            get_persona_by_id(
+                persona_id=persona_id,
+                user=user,
+                db_session=db_session,
+                is_for_edit=False,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=403, detail=str(e))
+
     user_prompts = fetch_input_prompts_by_user(
         user_id=user.id,
         db_session=db_session,
         include_public=include_public,
+        persona_id=persona_id,
     )
     return [InputPromptSnapshot.from_model(prompt) for prompt in user_prompts]
 
@@ -66,6 +80,7 @@ def create_input_prompt(
         content=create_input_prompt_request.content,
         is_public=False,
         user=user,
+        persona_id=None,
         db_session=db_session,
     )
 

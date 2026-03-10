@@ -267,6 +267,7 @@ export interface InputPrompt {
   content: string;
   active: boolean;
   is_public: boolean;
+  persona_id?: number | null;
 }
 
 export interface EditPromptModalProps {
