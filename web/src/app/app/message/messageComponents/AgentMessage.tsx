@@ -2,9 +2,11 @@
 
 import React, { useRef, RefObject, useMemo } from "react";
 import { Packet, StopReason } from "@/app/app/services/streamingModels";
+import CustomToolAuthCard from "@/app/app/message/messageComponents/CustomToolAuthCard";
 import { FullChatState } from "@/app/app/message/messageComponents/interfaces";
 import { FeedbackType } from "@/app/app/interfaces";
 import { handleCopy } from "@/app/app/message/copyingUtils";
+import { useAuthErrors } from "@/app/app/message/messageComponents/hooks/useAuthErrors";
 import { useMessageSwitching } from "@/app/app/message/messageComponents/hooks/useMessageSwitching";
 import { RendererComponent } from "@/app/app/message/messageComponents/renderMessageComponent";
 import { usePacketProcessor } from "@/app/app/message/messageComponents/timeline/hooks/usePacketProcessor";
@@ -146,6 +148,8 @@ const AgentMessage = React.memo(function AgentMessage({
     ]
   );
 
+  const authErrors = useAuthErrors(rawPackets);
+
   // Message switching logic
   const {
     currentMessageInd,
@@ -189,7 +193,16 @@ const AgentMessage = React.memo(function AgentMessage({
         }}
       >
         {pacedDisplayGroups.length > 0 && (
-          <div ref={finalAnswerRef}>
+          <div ref={finalAnswerRef} className="flex flex-col gap-3">
+            {authErrors.map((authError, i) => (
+              <CustomToolAuthCard
+                key={`auth-error-${i}`}
+                toolName={authError.toolName}
+                toolId={authError.toolId}
+                tools={effectiveChatState.agent.tools}
+                agentId={effectiveChatState.agent.id}
+              />
+            ))}
             {pacedDisplayGroups.map((displayGroup, index) => (
               <RendererComponent
                 key={`${displayGroup.turn_index}-${displayGroup.tab_index}`}

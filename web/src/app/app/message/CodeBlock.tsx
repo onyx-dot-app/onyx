@@ -8,6 +8,7 @@ interface CodeBlockProps {
   children?: ReactNode;
   codeText: string;
   showHeader?: boolean;
+  noPadding?: boolean;
 }
 
 const MemoizedCodeLine = memo(({ content }: { content: ReactNode }) => (
@@ -19,6 +20,7 @@ export const CodeBlock = memo(function CodeBlock({
   children,
   codeText,
   showHeader = true,
+  noPadding = false,
 }: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
 
@@ -115,7 +117,12 @@ export const CodeBlock = memo(function CodeBlock({
   return (
     <>
       {showHeader ? (
-        <div className="bg-background-tint-00 px-1 pb-1 rounded-12 max-w-full min-w-0">
+        <div
+          className={cn(
+            "bg-background-tint-00 rounded-12 max-w-full min-w-0",
+            !noPadding && "px-1 pb-1"
+          )}
+        >
           {language && (
             <div className="flex items-center px-2 py-1 text-sm text-text-04 gap-x-2">
               <SvgCode

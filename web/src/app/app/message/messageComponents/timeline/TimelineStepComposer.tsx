@@ -17,8 +17,6 @@ export interface TimelineStepComposerProps {
   isSingleStep?: boolean;
   /** Whether StepContainer should show collapse controls. */
   collapsible?: boolean;
-  /** Remove right padding for long-form content (reasoning, deep research). */
-  noPaddingRight?: boolean;
   /** Optional resolver for custom collapsed icon per result. */
   getCollapsedIcon?: (
     result: TimelineRendererResult
@@ -35,7 +33,6 @@ export function TimelineStepComposer({
   isFirstStep,
   isSingleStep = false,
   collapsible = true,
-  noPaddingRight = false,
   getCollapsedIcon,
 }: TimelineStepComposerProps) {
   return (
@@ -64,8 +61,9 @@ export function TimelineStepComposer({
             collapsedIcon={
               getCollapsedIcon ? getCollapsedIcon(result) : undefined
             }
-            noPaddingRight={noPaddingRight}
+            noPaddingRight={result.noPaddingRight ?? false}
             isHover={result.isHover}
+            surfaceBackground={result.surfaceBackground}
           >
             {result.content}
           </StepContainer>
