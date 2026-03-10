@@ -379,12 +379,13 @@ class TestProjectSyncImplNoVectorDb:
     ) -> None:
         uf = _make_user_file(status=UserFileStatus.COMPLETED)
         session = MagicMock()
-        session.query.return_value.options.return_value.filter.return_value.all.return_value = [
-            uf
-        ]
         mock_get_session.return_value.__enter__.return_value = session
 
         with (
+            patch(
+                f"{TASKS_MODULE}.fetch_user_files_with_access_relationships",
+                return_value=[uf],
+            ),
             patch(f"{TASKS_MODULE}.get_all_document_indices") as mock_get_indices,
             patch(f"{TASKS_MODULE}.get_active_search_settings") as mock_get_ss,
             patch(f"{TASKS_MODULE}.httpx_init_vespa_pool") as mock_vespa_pool,
@@ -407,16 +408,17 @@ class TestProjectSyncImplNoVectorDb:
     ) -> None:
         uf = _make_user_file(status=UserFileStatus.COMPLETED)
         session = MagicMock()
-        session.query.return_value.options.return_value.filter.return_value.all.return_value = [
-            uf
-        ]
         mock_get_session.return_value.__enter__.return_value = session
 
-        project_sync_user_file_impl(
-            user_file_id=str(uf.id),
-            tenant_id="test-tenant",
-            redis_locking=False,
-        )
+        with patch(
+            f"{TASKS_MODULE}.fetch_user_files_with_access_relationships",
+            return_value=[uf],
+        ):
+            project_sync_user_file_impl(
+                user_file_id=str(uf.id),
+                tenant_id="test-tenant",
+                redis_locking=False,
+            )
 
         assert uf.needs_project_sync is False
         assert uf.needs_persona_sync is False
