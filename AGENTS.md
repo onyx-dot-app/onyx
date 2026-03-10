@@ -598,7 +598,7 @@ Before writing your plan, make sure to do research. Explore the relevant section
 Never hardcode status codes or use `starlette.status` / `fastapi.status` constants directly.**
 
 A global FastAPI exception handler converts `OnyxError` into a JSON response with the standard
-`{"error_code": "...", "message": "..."}` shape. This eliminates boilerplate and keeps error
+`{"error_code": "...", "detail": "..."}` shape. This eliminates boilerplate and keeps error
 handling consistent across the entire backend.
 
 ```python

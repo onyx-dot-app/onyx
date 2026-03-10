@@ -96,7 +96,9 @@ export default function NewTeamModal() {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || "Failed to request invite");
+        throw new Error(
+          errorData.detail || errorData.message || "Failed to request invite"
+        );
       }
 
       setHasRequestedInvite(true);

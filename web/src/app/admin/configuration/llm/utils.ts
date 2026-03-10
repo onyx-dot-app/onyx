@@ -145,7 +145,7 @@ export const fetchBedrockModels = async (
       let errorMessage = "Failed to fetch models";
       try {
         const errorData = await response.json();
-        errorMessage = errorData.message || errorMessage;
+        errorMessage = errorData.detail || errorData.message || errorMessage;
       } catch {
         // ignore JSON parsing errors
       }
@@ -199,7 +199,7 @@ export const fetchOllamaModels = async (
       let errorMessage = "Failed to fetch models";
       try {
         const errorData = await response.json();
-        errorMessage = errorData.message || errorMessage;
+        errorMessage = errorData.detail || errorData.message || errorMessage;
       } catch {
         // ignore JSON parsing errors
       }
@@ -257,7 +257,7 @@ export const fetchOpenRouterModels = async (
       let errorMessage = "Failed to fetch models";
       try {
         const errorData = await response.json();
-        errorMessage = errorData.message || errorMessage;
+        errorMessage = errorData.detail || errorData.message || errorMessage;
       } catch {
         // ignore JSON parsing errors
       }
@@ -313,7 +313,7 @@ export const fetchLMStudioModels = async (
       let errorMessage = "Failed to fetch models";
       try {
         const errorData = await response.json();
-        errorMessage = errorData.message || errorMessage;
+        errorMessage = errorData.detail || errorData.message || errorMessage;
       } catch {
         // ignore JSON parsing errors
       }

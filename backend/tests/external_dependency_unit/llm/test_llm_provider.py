@@ -158,7 +158,7 @@ class TestLLMConfigurationEndpoint:
                     )
 
                 assert exc_info.value.error_code == OnyxErrorCode.VALIDATION_ERROR
-                assert exc_info.value.message == error_message
+                assert exc_info.value.detail == error_message
 
         finally:
             db_session.rollback()
@@ -540,7 +540,7 @@ class TestDefaultProviderEndpoint:
                 run_test_default_provider(_=_create_mock_admin())
 
             assert exc_info.value.error_code == OnyxErrorCode.VALIDATION_ERROR
-            assert "No LLM Provider setup" in exc_info.value.message
+            assert "No LLM Provider setup" in exc_info.value.detail
 
         finally:
             db_session.rollback()
@@ -585,7 +585,7 @@ class TestDefaultProviderEndpoint:
                     run_test_default_provider(_=_create_mock_admin())
 
                 assert exc_info.value.error_code == OnyxErrorCode.VALIDATION_ERROR
-                assert exc_info.value.message == error_message
+                assert exc_info.value.detail == error_message
 
         finally:
             db_session.rollback()
