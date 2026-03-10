@@ -18,13 +18,13 @@ import { getTimeFilterDate, TimeFilter } from "@/lib/time";
 import useTags from "@/hooks/useTags";
 import { SourceIcon } from "@/components/SourceIcon";
 import Text from "@/refresh-components/texts/Text";
-import LineItem from "@/refresh-components/buttons/LineItem";
 import { Section } from "@/layouts/general-layouts";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import { SvgCheck, SvgClock, SvgTag } from "@opal/icons";
 import FilterButton from "@/refresh-components/buttons/FilterButton";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import useFilter from "@/hooks/useFilter";
+import { LineItemButton } from "@opal/components";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/useToast";
@@ -284,18 +284,19 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
               <Popover.Content align="start" width="md">
                 <PopoverMenu>
                   {TIME_FILTER_OPTIONS.map((opt) => (
-                    <LineItem
+                    <LineItemButton
                       key={opt.value}
                       onClick={() => {
                         setTimeFilter(opt.value);
                         setTimeFilterOpen(false);
                         onRefineSearch(buildFilters({ time: opt.value }));
                       }}
-                      selected={timeFilter === opt.value}
+                      state={timeFilter === opt.value ? "selected" : "empty"}
                       icon={timeFilter === opt.value ? SvgCheck : SvgClock}
-                    >
-                      {opt.label}
-                    </LineItem>
+                      title={opt.label}
+                      sizePreset="main-ui"
+                      variant="section"
+                    />
                   ))}
                 </PopoverMenu>
               </Popover.Content>
@@ -336,7 +337,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
                         t.tag_value === tag.tag_value
                     );
                     return (
-                      <LineItem
+                      <LineItemButton
                         key={`${tag.tag_key}=${tag.tag_value}`}
                         onClick={() => {
                           const next = isSelected
@@ -349,11 +350,12 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
                           setSelectedTags(next);
                           onRefineSearch(buildFilters({ tags: next }));
                         }}
-                        selected={isSelected}
+                        state={isSelected ? "selected" : "empty"}
                         icon={isSelected ? SvgCheck : SvgTag}
-                      >
-                        {tag.tag_value}
-                      </LineItem>
+                        title={tag.tag_value}
+                        sizePreset="main-ui"
+                        variant="section"
+                      />
                     );
                   })}
                 </PopoverMenu>
@@ -415,7 +417,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
           <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-4 px-1">
             <Section gap={0.25} height="fit">
               {sourcesWithMeta.map(({ source, meta, count }) => (
-                <LineItem
+                <LineItemButton
                   key={source}
                   icon={(props) => (
                     <SourceIcon
@@ -425,12 +427,14 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
                     />
                   )}
                   onClick={() => handleSourceToggle(source)}
-                  selected={selectedSources.includes(source)}
-                  emphasized
+                  state={
+                    selectedSources.includes(source) ? "selected" : "empty"
+                  }
+                  title={meta.displayName}
+                  sizePreset="main-ui"
+                  variant="section"
                   rightChildren={<Text text03>{count}</Text>}
-                >
-                  {meta.displayName}
-                </LineItem>
+                />
               ))}
             </Section>
           </div>
