@@ -7,6 +7,7 @@ import { LlmDescriptor } from "@/lib/hooks";
 import { IconType } from "react-icons";
 import { OnyxIconType } from "@/components/icons/icons";
 import { CitationMap } from "../../interfaces";
+import { TimelineSurfaceBackground } from "@/app/app/message/messageComponents/timeline/primitives/TimelineSurface";
 
 export enum RenderType {
   HIGHLIGHT = "highlight",
@@ -51,6 +52,10 @@ export interface RendererResult {
   alwaysCollapsible?: boolean;
   /** Whether the result should be wrapped by timeline UI or rendered as-is */
   timelineLayout?: TimelineLayout;
+  /** Remove right padding for long-form content (reasoning, deep research, memory). */
+  noPaddingRight?: boolean;
+  /** Override the surface background (e.g. "error" for auth failures). */
+  surfaceBackground?: TimelineSurfaceBackground;
 }
 
 // All renderers return an array of results (even single-step renderers return a 1-element array)

@@ -15,7 +15,9 @@ from onyx.chat.emitter import get_default_emitter
 from onyx.configs.constants import FileOrigin
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.query_and_chat.placement import Placement
+from onyx.server.query_and_chat.streaming_models import CustomToolArgs
 from onyx.server.query_and_chat.streaming_models import CustomToolDelta
+from onyx.server.query_and_chat.streaming_models import CustomToolErrorInfo
 from onyx.server.query_and_chat.streaming_models import CustomToolStart
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.tools.interface import Tool
@@ -139,7 +141,7 @@ class CustomTool(Tool[None]):
         self.emitter.emit(
             Packet(
                 placement=placement,
-                obj=CustomToolStart(tool_name=self._name),
+                obj=CustomToolStart(tool_name=self._name, tool_id=self._id),
             )
         )
 
@@ -149,10 +151,8 @@ class CustomTool(Tool[None]):
         override_kwargs: None = None,  # noqa: ARG002
         **llm_kwargs: Any,
     ) -> ToolResponse:
-        request_body = llm_kwargs.get(REQUEST_BODY)
-
+        # Build path params
         path_params = {}
-
         for path_param_schema in self._method_spec.get_path_param_schemas():
             param_name = path_param_schema["name"]
             if param_name not in llm_kwargs:
@@ -165,6 +165,7 @@ class CustomTool(Tool[None]):
                 )
             path_params[param_name] = llm_kwargs[param_name]
 
+        # Build query params
         query_params = {}
         for query_param_schema in self._method_spec.get_query_param_schemas():
             if query_param_schema["name"] in llm_kwargs:
@@ -172,6 +173,20 @@ class CustomTool(Tool[None]):
                     query_param_schema["name"]
                 ]
 
+        # Emit args packet (path + query params only, no request body)
+        tool_args = {**path_params, **query_params}
+        if tool_args:
+            self.emitter.emit(
+                Packet(
+                    placement=placement,
+                    obj=CustomToolArgs(
+                        tool_name=self._name,
+                        tool_args=tool_args,
+                    ),
+                )
+            )
+
+        request_body = llm_kwargs.get(REQUEST_BODY)
         url = self._method_spec.build_url(self._base_url, path_params, query_params)
         method = self._method_spec.method
 
@@ -179,6 +194,18 @@ class CustomTool(Tool[None]):
             method, url, json=request_body, headers=self.headers
         )
         content_type = response.headers.get("Content-Type", "")
+
+        # Detect HTTP errors — only 401/403 are flagged as auth errors
+        error_info: CustomToolErrorInfo | None = None
+        if response.status_code in (401, 403):
+            error_info = CustomToolErrorInfo(
+                is_auth_error=True,
+                status_code=response.status_code,
+                message=f"{self._name} action failed because of authentication error",
+            )
+            logger.warning(
+                f"Auth error from custom tool '{self._name}': HTTP {response.status_code}"
+            )
 
         tool_result: Any
         response_type: str
@@ -222,9 +249,11 @@ class CustomTool(Tool[None]):
                 placement=placement,
                 obj=CustomToolDelta(
                     tool_name=self._name,
+                    tool_id=self._id,
                     response_type=response_type,
                     data=data,
                     file_ids=file_ids,
+                    error=error_info,
                 ),
             )
         )
@@ -236,6 +265,7 @@ class CustomTool(Tool[None]):
                 tool_name=self._name,
                 response_type=response_type,
                 tool_result=tool_result,
+                error=error_info,
             ),
             llm_facing_response=llm_facing_response,
         )
