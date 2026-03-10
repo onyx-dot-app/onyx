@@ -11,38 +11,8 @@ import { getCodeLanguage, getDataLanguage } from "@/lib/languages";
 import { fetchChatFile } from "@/lib/chat/svc";
 import { PreviewContext } from "@/sections/modals/PreviewModal/interfaces";
 import { getMimeLanguage } from "@/sections/modals/PreviewModal/mimeUtils";
+import { resolveMimeType } from "@/sections/modals/PreviewModal/mimeUtils";
 import { resolveVariant } from "@/sections/modals/PreviewModal/variants";
-
-const OCTET_STREAM_EXTENSION_TO_MIME: Record<string, string> = {
-  ".md": "text/markdown",
-  ".markdown": "text/markdown",
-  ".txt": "text/plain",
-  ".log": "text/plain",
-  ".conf": "text/plain",
-  ".sql": "text/plain",
-  ".csv": "text/csv",
-  ".tsv": "text/tab-separated-values",
-  ".json": "application/json",
-  ".xml": "application/xml",
-  ".yml": "application/x-yaml",
-  ".yaml": "application/x-yaml",
-};
-
-function resolveMimeType(mimeType: string, fileName: string): string {
-  if (mimeType !== "application/octet-stream") return mimeType;
-
-  const lower = fileName.toLowerCase();
-
-  for (const [extension, resolvedMime] of Object.entries(
-    OCTET_STREAM_EXTENSION_TO_MIME
-  )) {
-    if (lower.endsWith(extension)) {
-      return resolvedMime;
-    }
-  }
-
-  return mimeType;
-}
 
 interface PreviewModalProps {
   presentingDocument: MinimalOnyxDocument;
@@ -215,29 +185,27 @@ export default function PreviewModal({
 
         {/* Floating footer */}
         {!isLoading && !loadError && (
-          <>
-            <div
-              className={cn(
-                "absolute bottom-0 left-0 right-0",
-                "flex items-center justify-between",
-                "p-4 pointer-events-none w-full"
-              )}
-              style={{
-                background:
-                  "linear-gradient(to top, var(--background-tint-01) 40%, transparent)",
-              }}
-            >
-              {/* Left slot */}
-              <div className="pointer-events-auto">
-                {variant.renderFooterLeft(ctx)}
-              </div>
-
-              {/* Right slot */}
-              <div className="pointer-events-auto rounded-12 bg-background-tint-00 p-1 shadow-lg">
-                {variant.renderFooterRight(ctx)}
-              </div>
+          <div
+            className={cn(
+              "absolute bottom-0 left-0 right-0",
+              "flex items-center justify-between",
+              "p-4 pointer-events-none w-full"
+            )}
+            style={{
+              background:
+                "linear-gradient(to top, var(--background-tint-01) 40%, transparent)",
+            }}
+          >
+            {/* Left slot */}
+            <div className="pointer-events-auto">
+              {variant.renderFooterLeft(ctx)}
             </div>
-          </>
+
+            {/* Right slot */}
+            <div className="pointer-events-auto rounded-12 bg-background-tint-00 p-1 shadow-lg">
+              {variant.renderFooterRight(ctx)}
+            </div>
+          </div>
         )}
       </Modal.Content>
     </Modal>
