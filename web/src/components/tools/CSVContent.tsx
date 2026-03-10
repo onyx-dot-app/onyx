@@ -62,7 +62,7 @@ const CsvContent: React.FC<ContentComponentProps> = ({
       const csvData = await response.text();
       const rows = parseCSV(csvData.trim());
       const firstRow = rows[0];
-      if (!firstRow || firstRow.length === 0) {
+      if (!firstRow) {
         throw new Error("CSV file is empty");
       }
       const parsedHeaders = firstRow;
@@ -211,6 +211,10 @@ export function parseCSV(text: string): string[][] {
     } else {
       field += char;
     }
+  }
+
+  if (inQuotes) {
+    throw new Error("Malformed CSV: unterminated quoted field");
   }
 
   if (field.length > 0 || fields.length > 0) {

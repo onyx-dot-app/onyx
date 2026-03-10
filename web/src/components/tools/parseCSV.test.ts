@@ -44,6 +44,10 @@ describe("parseCSV", () => {
     ]);
   });
 
+  it("handles a single element", () => {
+    expect(parseCSV("a")).toEqual([["a"]]);
+  });
+
   it("handles a single row with no newline", () => {
     expect(parseCSV("a,b,c")).toEqual([["a", "b", "c"]]);
   });
@@ -60,5 +64,21 @@ describe("parseCSV", () => {
       ["foo, bar", "baz, qux"],
       ["1, 2", "3, 4"],
     ]);
+  });
+
+  it("throws on unterminated quoted field", () => {
+    expect(() => parseCSV('a,b\n"foo,bar')).toThrow(
+      "Malformed CSV: unterminated quoted field"
+    );
+  });
+
+  it("throws on unterminated quote at end of input", () => {
+    expect(() => parseCSV('"unterminated')).toThrow(
+      "Malformed CSV: unterminated quoted field"
+    );
+  });
+
+  it("returns empty array for empty input", () => {
+    expect(parseCSV("")).toEqual([]);
   });
 });
