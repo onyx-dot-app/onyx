@@ -72,7 +72,6 @@ import { eeGated } from "@/ce";
 import EESearchUI from "@/ee/sections/SearchUI";
 const SearchUI = eeGated(EESearchUI);
 import { motion, AnimatePresence } from "motion/react";
-import { useAppMode } from "@/providers/AppModeProvider";
 
 interface FadeProps {
   show: boolean;
@@ -129,7 +128,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       type: "success",
     },
   });
-  const { setAppMode } = useAppMode();
   const searchParams = useSearchParams();
 
   // Use SWR hooks for data fetching
@@ -485,7 +483,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       finishOnboarding,
     ]
   );
-  const { submit: submitQuery, phase } = useQueryController();
+  const { submit: submitQuery, phase, setAppMode } = useQueryController();
 
   const defaultAppMode =
     (user?.preferences?.default_app_mode?.toLowerCase() as "chat" | "search") ??

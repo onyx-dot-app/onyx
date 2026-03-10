@@ -11,7 +11,7 @@ import { Button } from "@opal/components";
 import { SvgBubbleText, SvgSearchMenu, SvgSidebar } from "@opal/icons";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import { useSettingsContext } from "@/providers/SettingsProvider";
-import { AppMode, useAppMode } from "@/providers/AppModeProvider";
+import type { AppMode } from "@/providers/QueryControllerProvider";
 import useAppFocus from "@/hooks/useAppFocus";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
@@ -58,12 +58,11 @@ const footerMarkdownComponents = {
  */
 export default function NRFChrome() {
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
-  const { appMode, setAppMode } = useAppMode();
+  const { appMode, setAppMode, phase } = useQueryController();
   const settings = useSettingsContext();
   const { isMobile } = useScreenSize();
   const { setFolded } = useAppSidebarContext();
   const appFocus = useAppFocus();
-  const { phase } = useQueryController();
   const [modePopoverOpen, setModePopoverOpen] = useState(false);
 
   const effectiveMode: AppMode = appFocus.isNewSession() ? appMode : "chat";

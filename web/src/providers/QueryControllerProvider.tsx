@@ -5,6 +5,8 @@ import { eeGated } from "@/ce";
 import { QueryControllerProvider as EEQueryControllerProvider } from "@/ee/providers/QueryControllerProvider";
 import { SearchDocWithContent, BaseFilters } from "@/lib/search/interfaces";
 
+export type AppMode = "auto" | "search" | "chat";
+
 export type QueryPhase =
   | "idle" // no query submitted; WelcomeMessage visible, mode toggle visible
   | "classifying" // auto mode: LLM deciding search vs chat
@@ -13,6 +15,10 @@ export type QueryPhase =
   | "chat"; // routed to chat; QueryController is done
 
 export interface QueryControllerValue {
+  /** User-selected app mode (search / chat / auto). Controls how the next query is routed. */
+  appMode: AppMode;
+  /** Update the app mode. No-op in CE or when search is unavailable. */
+  setAppMode: (mode: AppMode) => void;
   /** Current phase of the query lifecycle */
   phase: QueryPhase;
   /** Search results (empty if chat or not yet searched) */
@@ -34,6 +40,8 @@ export interface QueryControllerValue {
 }
 
 export const QueryControllerContext = createContext<QueryControllerValue>({
+  appMode: "chat",
+  setAppMode: () => undefined,
   phase: "idle",
   searchResults: [],
   llmSelectedDocIds: null,

@@ -8,14 +8,15 @@ import {
   SearchFullResponse,
 } from "@/lib/search/interfaces";
 import { classifyQuery, searchDocuments } from "@/ee/lib/search/svc";
-import { useAppMode } from "@/providers/AppModeProvider";
 import useAppFocus from "@/hooks/useAppFocus";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useUser } from "@/providers/UserProvider";
 import {
   QueryControllerContext,
   QueryControllerValue,
   QueryPhase,
+  AppMode,
 } from "@/providers/QueryControllerProvider";
 
 interface QueryControllerProviderProps {
@@ -25,13 +26,36 @@ interface QueryControllerProviderProps {
 export function QueryControllerProvider({
   children,
 }: QueryControllerProviderProps) {
-  const { appMode, setAppMode } = useAppMode();
   const appFocus = useAppFocus();
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
   const settings = useSettingsContext();
   const { isSearchModeAvailable: searchUiEnabled } = settings;
+  const { user } = useUser();
 
-  // Query state
+  // ── App mode (absorbed from AppModeProvider) ──────────────────────────
+  const persistedMode = user?.preferences?.default_app_mode;
+  const [appModeState, setAppModeState] = useState<AppMode>("chat");
+
+  useEffect(() => {
+    if (!isPaidEnterpriseFeaturesEnabled || !searchUiEnabled) {
+      setAppModeState("chat");
+      return;
+    }
+
+    if (persistedMode) {
+      setAppModeState(persistedMode.toLowerCase() as AppMode);
+    }
+  }, [isPaidEnterpriseFeaturesEnabled, searchUiEnabled, persistedMode]);
+
+  const setAppMode = useCallback(
+    (mode: AppMode) => {
+      if (!isPaidEnterpriseFeaturesEnabled || !searchUiEnabled) return;
+      setAppModeState(mode);
+    },
+    [isPaidEnterpriseFeaturesEnabled, searchUiEnabled]
+  );
+
+  // ── Query state ───────────────────────────────────────────────────────
   const [query, setQuery] = useState<string | null>(null);
   const [phase, setPhase] = useState<QueryPhase>("idle");
 
@@ -147,7 +171,7 @@ export function QueryControllerProvider({
         !isPaidEnterpriseFeaturesEnabled ||
         !searchUiEnabled ||
         !appFocus.isNewSession() ||
-        appMode === "chat"
+        appModeState === "chat"
       ) {
         setPhase("chat");
         setSearchResults([]);
@@ -157,11 +181,11 @@ export function QueryControllerProvider({
       }
 
       // Search mode: immediately show SearchUI with loading state
-      if (appMode === "search") {
+      if (appModeState === "search") {
         setPhase("searching");
         await performSearch(submitQuery, filters);
         setPhase("search-results");
-        setAppMode("search");
+        setAppModeState("search");
         return;
       }
 
@@ -174,7 +198,7 @@ export function QueryControllerProvider({
           setPhase("searching");
           await performSearch(submitQuery, filters);
           setPhase("search-results");
-          setAppMode("search");
+          setAppModeState("search");
         } else {
           setPhase("chat");
           setSearchResults([]);
@@ -193,13 +217,12 @@ export function QueryControllerProvider({
       }
     },
     [
-      appMode,
+      appModeState,
       appFocus,
       performClassification,
       performSearch,
       isPaidEnterpriseFeaturesEnabled,
       searchUiEnabled,
-      setAppMode,
     ]
   );
 
@@ -238,6 +261,8 @@ export function QueryControllerProvider({
 
   const value: QueryControllerValue = useMemo(
     () => ({
+      appMode: appModeState,
+      setAppMode,
       phase,
       searchResults,
       llmSelectedDocIds,
@@ -247,6 +272,8 @@ export function QueryControllerProvider({
       reset,
     }),
     [
+      appModeState,
+      setAppMode,
       phase,
       searchResults,
       llmSelectedDocIds,

@@ -19,7 +19,6 @@ import useCCPairs from "@/hooks/useCCPairs";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { ChatState } from "@/app/app/interfaces";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
-import { useAppMode } from "@/providers/AppModeProvider";
 import useAppFocus from "@/hooks/useAppFocus";
 import { cn, isImageFile } from "@/lib/utils";
 import { Disabled } from "@opal/core";
@@ -120,7 +119,7 @@ const AppInputBar = React.memo(
     const filesContentRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const { user } = useUser();
-    const { phase } = useQueryController();
+    const { phase, appMode } = useQueryController();
     const isClassifying = phase === "classifying";
     const isSearchActive = phase === "searching" || phase === "search-results";
 
@@ -142,8 +141,6 @@ const AppInputBar = React.memo(
         setMessage(initialMessage);
       }
     }, [initialMessage]);
-
-    const { appMode } = useAppMode();
     const appFocus = useAppFocus();
     const isSearchMode =
       (appFocus.isNewSession() && appMode === "search") || isSearchActive;
