@@ -107,7 +107,7 @@ class TestCreateCheckoutSession:
 
         assert exc_info.value.status_code == 502
         assert exc_info.value.error_code is OnyxErrorCode.BAD_GATEWAY
-        assert exc_info.value.message == "Stripe error"
+        assert exc_info.value.detail == "Stripe error"
 
 
 class TestCreateCustomerPortalSession:
@@ -137,7 +137,7 @@ class TestCreateCustomerPortalSession:
 
         assert exc_info.value.status_code == 400
         assert exc_info.value.error_code is OnyxErrorCode.VALIDATION_ERROR
-        assert exc_info.value.message == "No license found"
+        assert exc_info.value.detail == "No license found"
 
     @pytest.mark.asyncio
     @patch("ee.onyx.server.billing.api.create_portal_service")
@@ -243,7 +243,7 @@ class TestUpdateSeats:
 
         assert exc_info.value.status_code == 400
         assert exc_info.value.error_code is OnyxErrorCode.VALIDATION_ERROR
-        assert exc_info.value.message == "No license found"
+        assert exc_info.value.detail == "No license found"
 
     @pytest.mark.asyncio
     @patch("ee.onyx.server.billing.api.get_used_seats")
@@ -317,7 +317,7 @@ class TestUpdateSeats:
 
         assert exc_info.value.status_code == 400
         assert exc_info.value.error_code is OnyxErrorCode.BAD_GATEWAY
-        assert exc_info.value.message == "Cannot reduce below 10 seats"
+        assert exc_info.value.detail == "Cannot reduce below 10 seats"
 
 
 class TestCircuitBreaker:
@@ -346,7 +346,7 @@ class TestCircuitBreaker:
 
         assert exc_info.value.status_code == 503
         assert exc_info.value.error_code is OnyxErrorCode.SERVICE_UNAVAILABLE
-        assert "Connect to Stripe" in exc_info.value.message
+        assert "Connect to Stripe" in exc_info.value.detail
 
     @pytest.mark.asyncio
     @patch("ee.onyx.server.billing.api.MULTI_TENANT", False)

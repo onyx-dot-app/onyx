@@ -444,7 +444,7 @@ export default function AddConnector({
 
                 if (!timeoutErrorHappenedRef.current) {
                   // Only show error if timeout didn't happen
-                  toast.error(errorData.message || errorData.detail);
+                  toast.error(errorData.detail || errorData.message);
                 }
               }
             } else if (isSuccess) {
