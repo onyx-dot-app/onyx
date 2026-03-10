@@ -58,7 +58,6 @@ export const ADMIN_PATHS = {
   DOCUMENT_PROCESSING: "/admin/configuration/document-processing",
   KNOWLEDGE_GRAPH: "/admin/kg",
   USERS: "/admin/users",
-  USERS_V2: "/admin/users2",
   API_KEYS: "/admin/api-key",
   TOKEN_RATE_LIMITS: "/admin/token-rate-limits",
   USAGE: "/admin/performance/usage",
@@ -188,13 +187,8 @@ export const ADMIN_ROUTE_CONFIG: Record<string, AdminRouteConfig> = {
   },
   [ADMIN_PATHS.USERS]: {
     icon: SvgUser,
-    title: "Manage Users",
-    sidebarLabel: "Users",
-  },
-  [ADMIN_PATHS.USERS_V2]: {
-    icon: SvgUser,
     title: "Users & Requests",
-    sidebarLabel: "Users v2",
+    sidebarLabel: "Users",
   },
   [ADMIN_PATHS.API_KEYS]: {
     icon: SvgKey,
