@@ -122,7 +122,7 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
       if (error) {
         return error.is_auth_error
           ? `${toolName} authentication failed (HTTP ${error.status_code})`
-          : `${toolName} completed`;
+          : `${toolName} failed (HTTP ${error.status_code})`;
       }
       if (responseType === "image") return `${toolName} returned images`;
       if (responseType === "csv") return `${toolName} returned a file`;

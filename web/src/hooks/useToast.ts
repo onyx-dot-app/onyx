@@ -177,7 +177,15 @@ export function useToastFromQuery(messages: ToastFromQueryMessages) {
     const messageValue = searchParams?.get("message");
 
     if (messageValue && messageValue in messages) {
-      window.history.replaceState(null, "", window.location.pathname);
+      searchParams.delete("message");
+      const newSearch = searchParams.toString()
+        ? "?" + searchParams.toString()
+        : "";
+      window.history.replaceState(
+        null,
+        "",
+        window.location.pathname + newSearch
+      );
       const spec = messages[messageValue];
       if (spec !== undefined) {
         toast({

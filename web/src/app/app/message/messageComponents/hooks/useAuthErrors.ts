@@ -29,10 +29,17 @@ export function useAuthErrors(rawPackets: Packet[]): AuthError[] {
       if (packet.obj.type === PacketType.CUSTOM_TOOL_DELTA) {
         const delta = packet.obj as CustomToolDelta;
         if (delta.error?.is_auth_error) {
-          newErrors = [
-            ...newErrors,
-            { toolName: delta.tool_name, toolId: delta.tool_id ?? null },
-          ];
+          const alreadyPresent = newErrors.some(
+            (e) =>
+              (delta.tool_id != null && e.toolId === delta.tool_id) ||
+              (delta.tool_id == null && e.toolName === delta.tool_name)
+          );
+          if (!alreadyPresent) {
+            newErrors = [
+              ...newErrors,
+              { toolName: delta.tool_name, toolId: delta.tool_id ?? null },
+            ];
+          }
         }
       }
     }

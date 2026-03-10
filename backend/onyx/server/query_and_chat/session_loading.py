@@ -5,6 +5,7 @@ from typing import Any
 from typing import cast
 from typing import Literal
 
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.chat.citation_utils import extract_citation_order_from_text
@@ -691,8 +692,20 @@ def translate_assistant_message_to_packets(
                                     custom_error = CustomToolErrorInfo(
                                         **parsed["error"]
                                     )
-                        except (json.JSONDecodeError, KeyError, TypeError):
+                        except (
+                            json.JSONDecodeError,
+                            KeyError,
+                            TypeError,
+                            ValidationError,
+                        ):
                             pass
+
+                        custom_file_ids: list[str] | None = None
+                        if custom_response_type in ("image", "csv") and isinstance(
+                            custom_data, dict
+                        ):
+                            custom_file_ids = custom_data.get("file_ids")
+                            custom_data = None
 
                         custom_args = {
                             k: v
@@ -706,6 +719,7 @@ def translate_assistant_message_to_packets(
                                 turn_index=turn_num,
                                 tab_index=tool_call.tab_index,
                                 data=custom_data,
+                                file_ids=custom_file_ids,
                                 error=custom_error,
                                 tool_args=custom_args if custom_args else None,
                                 tool_id=tool_call.tool_id,

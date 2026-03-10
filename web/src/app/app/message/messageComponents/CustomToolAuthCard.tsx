@@ -50,7 +50,7 @@ function CustomToolAuthCard({
       icon
       close={false}
       text={`${toolName} not connected`}
-      description={`Connect to ${toolName} to enable search`}
+      description={`Connect to ${toolName} to enable this tool`}
       actions={oauthConfigId != null ? "Connect" : undefined}
       actionPrimary
       actionIcon={SvgArrowExchange}
