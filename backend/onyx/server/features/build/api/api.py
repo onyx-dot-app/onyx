@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import Iterator
 from pathlib import Path
 from uuid import UUID
@@ -8,6 +9,8 @@ from fastapi import Depends
 from fastapi import HTTPException
 from fastapi import Request
 from fastapi import Response
+from fastapi import WebSocket
+from fastapi import WebSocketDisconnect
 from fastapi.responses import RedirectResponse
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -466,6 +469,54 @@ def get_webapp(
             )
             return _offline_html_response(auto_refresh=sandbox_is_asleep)
         raise
+
+
+async def _hmr_websocket_sink(
+    websocket: WebSocket,
+    session_id: UUID,
+    user: User | None,
+    db_session: Session,
+) -> None:
+    """Accept the Next.js HMR WebSocket but act as a silent sink.
+
+    The sandbox webapp runs next dev with HMR enabled. Without a handler the
+    HMR client retries its WebSocket with exponential backoff (~63 s total)
+    then calls location.reload(), causing periodic iframe refreshes. Accepting
+    and keeping the connection alive prevents that retry cycle. The Craft UI
+    handles preview refreshes explicitly via its own mechanism.
+    """
+    try:
+        _check_webapp_access(session_id, user, db_session)
+    except Exception:
+        await websocket.close(code=4003)
+        return
+
+    await websocket.accept()
+    try:
+        while True:
+            await asyncio.sleep(30)
+    except WebSocketDisconnect:
+        pass
+
+
+@public_build_router.websocket("/sessions/{session_id}/webapp/_next/webpack-hmr")
+async def webapp_hmr_sink_webpack(
+    websocket: WebSocket,
+    session_id: UUID,
+    user: User | None = Depends(optional_user),
+    db_session: Session = Depends(get_session),
+) -> None:
+    await _hmr_websocket_sink(websocket, session_id, user, db_session)
+
+
+@public_build_router.websocket("/sessions/{session_id}/webapp/_next/hmr")
+async def webapp_hmr_sink_turbopack(
+    websocket: WebSocket,
+    session_id: UUID,
+    user: User | None = Depends(optional_user),
+    db_session: Session = Depends(get_session),
+) -> None:
+    await _hmr_websocket_sink(websocket, session_id, user, db_session)
 
 
 # =============================================================================
