@@ -20,6 +20,7 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import IndexingStatus
 from onyx.db.enums import ProcessingMode
+from onyx.db.enums import SandboxStatus
 from onyx.db.enums import SharingScope
 from onyx.db.index_attempt import get_latest_index_attempt_for_cc_pair_id
 from onyx.db.models import BuildSession
@@ -247,8 +248,11 @@ def _rewrite_asset_paths(content: bytes, session_id: str) -> bytes:
     webapp_base_path = f"/api/build/sessions/{session_id}/webapp"
 
     text = content.decode("utf-8")
-    # Rewrite /_next/ paths to go through our proxy
-    text = text.replace("/_next/", f"{webapp_base_path}/_next/")
+    # Rewrite /_next/ only when it starts a URL (after a quote or paren delimiter).
+    # With assetPrefix set, Next.js already emits the full proxy-prefixed URL in the
+    # HTML, so a bare text.replace would double-prefix those.
+    for delim in ('"', "'", "("):
+        text = text.replace(f"{delim}/_next/", f"{delim}{webapp_base_path}/_next/")
     # Rewrite JSON data file fetch paths (e.g., /data.json, /data/tickets.json)
     # Matches paths like "/filename.json" or "/path/to/file.json"
     text = re.sub(
@@ -455,7 +459,11 @@ def get_webapp(
                 if session and session.user_id
                 else None
             )
-            sandbox_is_asleep = sandbox is None or not sandbox.status.is_active()
+            sandbox_is_asleep = sandbox is None or sandbox.status in (
+                SandboxStatus.SLEEPING,
+                SandboxStatus.TERMINATED,
+                SandboxStatus.PROVISIONING,
+            )
             return _offline_html_response(auto_refresh=sandbox_is_asleep)
         raise
 
