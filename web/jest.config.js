@@ -144,6 +144,7 @@ module.exports = {
         "**/src/app/**/hooks/*.test.ts", // Pure packet processor tests
         "**/src/refresh-components/**/*.test.ts",
         "**/src/sections/**/*.test.ts",
+        "**/src/components/**/*.test.ts",
         // Add more patterns here as you add more unit tests
       ],
     },
