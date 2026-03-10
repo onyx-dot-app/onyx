@@ -25,6 +25,7 @@ import {
   SvgFold,
   SvgExternalLink,
   SvgAlertCircle,
+  SvgRefreshCw,
 } from "@opal/icons";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { Content } from "@opal/layouts";
@@ -54,6 +55,7 @@ import * as ExpandableCard from "@/layouts/expandable-card-layouts";
 import * as ActionsLayouts from "@/layouts/actions-layouts";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 import { Disabled } from "@opal/core";
+import IconButton from "@/refresh-components/buttons/IconButton";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import useFilter from "@/hooks/useFilter";
 import { MCPServer } from "@/lib/tools/interfaces";
@@ -189,6 +191,99 @@ function MCPServerCard({
   );
 }
 
+type FileLimitFieldName =
+  | "user_file_max_upload_size_mb"
+  | "file_token_count_threshold_k";
+
+interface NumericLimitFieldProps {
+  name: FileLimitFieldName;
+  defaultValue: string;
+  saveSettings: (updates: Partial<Settings>) => Promise<void>;
+}
+
+function NumericLimitField({
+  name,
+  defaultValue,
+  saveSettings,
+}: NumericLimitFieldProps) {
+  const { values, setFieldValue } =
+    useFormikContext<ChatPreferencesFormValues>();
+  const initialValue = useRef(values[name]);
+  const value = values[name];
+
+  const handleRestore = () => {
+    void setFieldValue(name, defaultValue);
+    void saveSettings({ [name]: parseInt(defaultValue, 10) });
+    initialValue.current = defaultValue;
+  };
+
+  const handleBlur = () => {
+    const parsed = parseInt(value, 10);
+    if (isNaN(parsed) || parsed === 0) {
+      void setFieldValue(name, "");
+    }
+    if (value !== initialValue.current) {
+      void saveSettings({
+        [name]: value === "" || isNaN(parsed) || parsed === 0 ? 0 : parsed,
+      });
+      initialValue.current = isNaN(parsed) || parsed === 0 ? "" : value;
+    }
+  };
+
+  return (
+    <InputTypeInField
+      name={name}
+      inputMode="numeric"
+      pattern="[0-9]*"
+      placeholder="No limit"
+      rightSection={
+        value !== "" && value !== defaultValue ? (
+          <IconButton
+            icon={SvgRefreshCw}
+            tooltip="Restore default"
+            internal
+            type="button"
+            onClick={handleRestore}
+          />
+        ) : undefined
+      }
+      onBlur={handleBlur}
+    />
+  );
+}
+
+interface FileSizeLimitFieldsProps {
+  saveSettings: (updates: Partial<Settings>) => Promise<void>;
+  vectorDbEnabled: boolean;
+}
+
+function FileSizeLimitFields({
+  saveSettings,
+  vectorDbEnabled,
+}: FileSizeLimitFieldsProps) {
+  const DEFAULT_UPLOAD_SIZE_MB = "100";
+  const DEFAULT_TOKEN_THRESHOLD_K = vectorDbEnabled ? "200" : "10000";
+
+  return (
+    <div className="flex gap-4">
+      <div className="flex-1">
+        <NumericLimitField
+          name="user_file_max_upload_size_mb"
+          defaultValue={DEFAULT_UPLOAD_SIZE_MB}
+          saveSettings={saveSettings}
+        />
+      </div>
+      <div className="flex-1">
+        <NumericLimitField
+          name="file_token_count_threshold_k"
+          defaultValue={DEFAULT_TOKEN_THRESHOLD_K}
+          saveSettings={saveSettings}
+        />
+      </div>
+    </div>
+  );
+}
+
 /**
  * Inner form component that uses useFormikContext to access values
  * and create save handlers for settings fields.
@@ -196,17 +291,17 @@ function MCPServerCard({
 function ChatPreferencesForm() {
   const router = useRouter();
   const settings = useSettingsContext();
-  const { values } = useFormikContext<ChatPreferencesFormValues>();
+  const { values, setFieldValue } =
+    useFormikContext<ChatPreferencesFormValues>();
 
   // Track initial text values to avoid unnecessary saves on blur
   const initialCompanyName = useRef(values.company_name);
   const initialCompanyDescription = useRef(values.company_description);
-  const initialUploadSizeMb = useRef(values.user_file_max_upload_size_mb);
-  const initialTokenThresholdK = useRef(values.file_token_count_threshold_k);
 
   // Tools availability
   const { tools: availableTools } = useAvailableTools();
   const vectorDbEnabled = useVectorDbEnabled();
+
   const searchTool = availableTools.find(
     (t) => t.in_code_tool_id === SEARCH_TOOL_ID
   );
@@ -762,64 +857,10 @@ function ChatPreferencesForm() {
                     title="File Attachment Size Limit"
                     subDescription="Files attached in chats and projects must fit within both limits to be accepted. Larger files increase latency, memory usage, and token costs."
                   >
-                    <div className="flex gap-4">
-                      <div className="flex-1">
-                        <InputTypeInField
-                          name="user_file_max_upload_size_mb"
-                          type="number"
-                          placeholder="No limit"
-                          onBlur={() => {
-                            if (
-                              values.user_file_max_upload_size_mb !==
-                              initialUploadSizeMb.current
-                            ) {
-                              const parsed = parseInt(
-                                values.user_file_max_upload_size_mb,
-                                10
-                              );
-                              void saveSettings({
-                                user_file_max_upload_size_mb:
-                                  values.user_file_max_upload_size_mb === ""
-                                    ? 0
-                                    : isNaN(parsed)
-                                      ? 0
-                                      : parsed,
-                              });
-                              initialUploadSizeMb.current =
-                                values.user_file_max_upload_size_mb;
-                            }
-                          }}
-                        />
-                      </div>
-                      <div className="flex-1">
-                        <InputTypeInField
-                          name="file_token_count_threshold_k"
-                          type="number"
-                          placeholder="No limit"
-                          onBlur={() => {
-                            if (
-                              values.file_token_count_threshold_k !==
-                              initialTokenThresholdK.current
-                            ) {
-                              const parsed = parseInt(
-                                values.file_token_count_threshold_k,
-                                10
-                              );
-                              void saveSettings({
-                                file_token_count_threshold_k:
-                                  values.file_token_count_threshold_k === ""
-                                    ? 0
-                                    : isNaN(parsed)
-                                      ? 0
-                                      : parsed,
-                              });
-                              initialTokenThresholdK.current =
-                                values.file_token_count_threshold_k;
-                            }
-                          }}
-                        />
-                      </div>
-                    </div>
+                    <FileSizeLimitFields
+                      saveSettings={saveSettings}
+                      vectorDbEnabled={vectorDbEnabled}
+                    />
                   </InputLayouts.Vertical>
                 </Card>
               </Section>
