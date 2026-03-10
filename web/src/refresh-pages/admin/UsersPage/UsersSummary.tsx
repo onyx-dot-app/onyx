@@ -1,4 +1,4 @@
-import { SvgArrowUpRight, SvgFilter, SvgUserSync } from "@opal/icons";
+import { SvgArrowUpRight, SvgUserSync } from "@opal/icons";
 import { ContentAction } from "@opal/layouts";
 import { Button } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
@@ -8,37 +8,26 @@ import Link from "next/link";
 import { ADMIN_PATHS } from "@/lib/admin-routes";
 
 // ---------------------------------------------------------------------------
-// Stats cell — number + label, filter icon on hover
+// Stats cell — number + label
 // ---------------------------------------------------------------------------
 
-interface StatCellProps {
+type StatCellProps = {
   value: number | null;
   label: string;
-  onClick?: () => void;
-}
+};
 
-function StatCell({ value, label, onClick }: StatCellProps) {
-  const display = value === null ? "—" : value.toLocaleString();
+function StatCell({ value, label }: StatCellProps) {
+  const display = value === null ? "\u2014" : value.toLocaleString();
 
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="group relative flex flex-col items-start gap-0.5 w-full p-2 text-left rounded-md hover:bg-background-neutral-02 transition-colors cursor-pointer"
-    >
+    <div className="flex flex-col items-start gap-0.5 w-full p-2">
       <Text as="span" mainUiAction text04>
         {display}
       </Text>
       <Text as="span" secondaryBody text03>
         {label}
       </Text>
-      <div className="absolute right-2 top-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-        <Text as="span" secondaryBody text03>
-          Filter
-        </Text>
-        <SvgFilter size={16} className="text-text-03" />
-      </div>
-    </button>
+    </div>
   );
 }
 
@@ -72,48 +61,20 @@ function ScimCard() {
 // Stats bar — layout varies by SCIM status
 // ---------------------------------------------------------------------------
 
-export type StatFilter = "active" | "invited" | "requests";
-
-interface UsersSummaryProps {
+type UsersSummaryProps = {
   activeUsers: number | null;
   pendingInvites: number | null;
   requests: number | null;
   showScim: boolean;
-  onStatClick?: (filter: StatFilter) => void;
-}
+};
 
 export default function UsersSummary({
   activeUsers,
   pendingInvites,
   requests,
   showScim,
-  onStatClick,
 }: UsersSummaryProps) {
   const showRequests = requests !== null && requests > 0;
-
-  const statsCard = (
-    <Card padding={0.5}>
-      <Section flexDirection="row" gap={0}>
-        <StatCell
-          value={activeUsers}
-          label="active users"
-          onClick={() => onStatClick?.("active")}
-        />
-        <StatCell
-          value={pendingInvites}
-          label="pending invites"
-          onClick={() => onStatClick?.("invited")}
-        />
-        {showRequests && (
-          <StatCell
-            value={requests}
-            label="requests to join"
-            onClick={() => onStatClick?.("requests")}
-          />
-        )}
-      </Section>
-    </Card>
-  );
 
   if (showScim) {
     return (
@@ -123,11 +84,34 @@ export default function UsersSummary({
         alignItems="stretch"
         gap={0.5}
       >
-        {statsCard}
+        <Card padding={0.5}>
+          <Section flexDirection="row" gap={0}>
+            <StatCell value={activeUsers} label="active users" />
+            <StatCell value={pendingInvites} label="pending invites" />
+            {showRequests && (
+              <StatCell value={requests} label="requests to join" />
+            )}
+          </Section>
+        </Card>
         <ScimCard />
       </Section>
     );
   }
 
-  return statsCard;
+  // No SCIM — each stat gets its own card
+  return (
+    <Section flexDirection="row" gap={0.5}>
+      <Card padding={0.5}>
+        <StatCell value={activeUsers} label="active users" />
+      </Card>
+      <Card padding={0.5}>
+        <StatCell value={pendingInvites} label="pending invites" />
+      </Card>
+      {showRequests && (
+        <Card padding={0.5}>
+          <StatCell value={requests} label="requests to join" />
+        </Card>
+      )}
+    </Section>
+  );
 }

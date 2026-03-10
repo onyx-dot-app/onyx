@@ -130,7 +130,8 @@ const collections = (
           {
             name: "Permissions",
             items: [
-              sidebarItem(ADMIN_PATHS.USERS_V2),
+              // TODO (nikolas): Uncommented in switchover PR once Users v2 is ready
+              // sidebarItem(ADMIN_PATHS.USERS_V2),
               ...(enableEnterprise ? [sidebarItem(ADMIN_PATHS.SCIM)] : []),
             ],
           },
