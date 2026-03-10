@@ -41,7 +41,7 @@ export function FormActionButtons({
   return (
     <>
       {testError && (
-        <Text as="p" className="text-error mt-2">
+        <Text as="p" className="text-status-text-error-05 mt-2">
           {testError}
         </Text>
       )}
