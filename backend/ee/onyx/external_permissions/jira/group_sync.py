@@ -40,7 +40,7 @@ def _fetch_group_member_page(
             "group/member",
             params={
                 "groupname": group_name,
-                "includeInactiveUsers": False,
+                "includeInactiveUsers": "false",
                 "startAt": start_at,
                 "maxResults": _GROUP_MEMBER_PAGE_SIZE,
             },
@@ -76,7 +76,7 @@ def _get_group_member_emails(
             logger.error(f"Error fetching members for group {group_name}: {e}")
             raise
 
-        members = page.get("values", [])
+        members: list[dict[str, Any]] = page.get("values", [])
         for member in members:
             if member.get("accountType") != _ATLASSIAN_ACCOUNT_TYPE:
                 continue
