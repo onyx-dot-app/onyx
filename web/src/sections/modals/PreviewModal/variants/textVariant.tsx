@@ -1,6 +1,5 @@
 import Text from "@/refresh-components/texts/Text";
 import { Section } from "@/layouts/general-layouts";
-import { getCodeLanguage } from "@/lib/languages";
 import { PreviewVariant } from "@/sections/modals/PreviewModal/interfaces";
 import { CodePreview } from "@/sections/modals/PreviewModal/variants/CodePreview";
 import {
@@ -8,17 +7,32 @@ import {
   DownloadButton,
 } from "@/sections/modals/PreviewModal/variants/shared";
 
-export const codeVariant: PreviewVariant = {
-  matches: (name) => !!getCodeLanguage(name || ""),
+const TEXT_MIMES = [
+  "text/plain",
+  "text/x-log",
+  "text/x-config",
+  "text/tab-separated-values",
+];
+
+const TEXT_EXTENSIONS = [".txt", ".log", ".conf", ".tsv"];
+
+export const textVariant: PreviewVariant = {
+  matches: (name, mime) => {
+    if (TEXT_MIMES.some((supportedMime) => mime.startsWith(supportedMime))) {
+      return true;
+    }
+
+    const lowerName = (name || "").toLowerCase();
+    return TEXT_EXTENSIONS.some((extension) => lowerName.endsWith(extension));
+  },
   width: "md",
   height: "lg",
   needsTextContent: true,
-
   headerDescription: (ctx) =>
     ctx.fileContent
-      ? `${ctx.language} - ${ctx.lineCount} ${
-          ctx.lineCount === 1 ? "line" : "lines"
-        } · ${ctx.fileSize}`
+      ? `${ctx.lineCount} ${ctx.lineCount === 1 ? "line" : "lines"} · ${
+          ctx.fileSize
+        }`
       : "",
 
   renderContent: (ctx) => (
