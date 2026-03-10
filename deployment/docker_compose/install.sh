@@ -87,7 +87,10 @@ if [[ "$LITE_MODE" = true ]] && [[ "$INCLUDE_CRAFT" = true ]]; then
     exit 1
 fi
 
-# Lite mode needs far fewer resources (no Vespa, Redis, or model servers)
+# When --lite is passed as a flag, lower resource thresholds early (before the
+# resource check). When lite is chosen interactively, the thresholds are adjusted
+# inside the new-deployment flow, after the resource check has already passed
+# with the standard thresholds — which is the safer direction.
 if [[ "$LITE_MODE" = true ]]; then
     EXPECTED_DOCKER_RAM_GB=4
     EXPECTED_DISK_GB=16
@@ -97,11 +100,16 @@ INSTALL_ROOT="${INSTALL_PREFIX:-onyx_data}"
 
 LITE_COMPOSE_FILE="docker-compose.onyx-lite.yml"
 
-# Build the -f flags for docker compose. For shutdown/delete-data we auto-detect
-# whether the lite overlay was previously downloaded; for install we use --lite.
+# Build the -f flags for docker compose.
+# Pass "true" as $1 to auto-detect a previously-downloaded lite overlay
+# (used by shutdown/delete-data so users don't need to remember --lite).
+# Without the argument, the lite overlay is only included when --lite was
+# explicitly passed — preventing install/start from silently staying in
+# lite mode just because the file exists on disk from a prior run.
 compose_file_args() {
+    local auto_detect="${1:-false}"
     local args="-f docker-compose.yml"
-    if [[ "$LITE_MODE" = true ]] || [[ -f "${INSTALL_ROOT}/deployment/${LITE_COMPOSE_FILE}" ]]; then
+    if [[ "$LITE_MODE" = true ]] || { [[ "$auto_detect" = true ]] && [[ -f "${INSTALL_ROOT}/deployment/${LITE_COMPOSE_FILE}" ]]; }; then
         args="$args -f ${LITE_COMPOSE_FILE}"
     fi
     echo "$args"
@@ -245,7 +253,7 @@ if [ "$SHUTDOWN_MODE" = true ]; then
             fi
 
             # Stop containers (without removing them)
-            (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args) stop)
+            (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args true) stop)
             if [ $? -eq 0 ]; then
                 print_success "Onyx containers stopped (paused)"
             else
@@ -303,7 +311,7 @@ if [ "$DELETE_DATA_MODE" = true ]; then
             fi
 
             # Stop and remove containers with volumes
-            (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args) down -v)
+            (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args true) down -v)
             if [ $? -eq 0 ]; then
                 print_success "Onyx containers and volumes removed"
             else
@@ -337,13 +345,8 @@ echo " \____/|_| |_|\__, /_/\_\ "
 echo "               __/ |      "
 echo "              |___/       "
 echo -e "${NC}"
-if [[ "$LITE_MODE" = true ]]; then
-    echo "Welcome to Onyx Lite Installation Script"
-    echo "========================================="
-else
-    echo "Welcome to Onyx Installation Script"
-    echo "===================================="
-fi
+echo "Welcome to Onyx Installation Script"
+echo "===================================="
 echo ""
 
 # User acknowledgment section
@@ -351,11 +354,6 @@ echo -e "${YELLOW}${BOLD}This script will:${NC}"
 echo "1. Download deployment files for Onyx into a new '${INSTALL_ROOT}' directory"
 echo "2. Check your system resources (Docker, memory, disk space)"
 echo "3. Guide you through deployment options (version, authentication)"
-if [[ "$LITE_MODE" = true ]]; then
-    echo ""
-    echo -e "${YELLOW}${BOLD}Lite mode:${NC} Vespa, Redis, and model servers will NOT be started."
-    echo "This gives you the core chat experience with lower resource requirements."
-fi
 echo ""
 
 if is_interactive; then
@@ -381,7 +379,6 @@ if [[ "$DRY_RUN" = true ]]; then
     echo "  • Include Craft: ${INCLUDE_CRAFT}"
     echo "  • OS type: ${OSTYPE:-unknown} (WSL: ${IS_WSL})"
     echo "  • Downloader: ${DOWNLOADER}"
-    echo "  • Min RAM: ${EXPECTED_DOCKER_RAM_GB}GB, Min disk: ${EXPECTED_DISK_GB}GB"
     echo ""
     print_success "Dry run complete (no changes made)"
     exit 0
@@ -608,7 +605,9 @@ else
     exit 1
 fi
 
-# Download lite overlay if --lite was requested
+# Download lite overlay if --lite was requested, otherwise remove any stale
+# overlay from a previous lite install so shutdown/delete-data auto-detection
+# doesn't mistakenly include it later.
 if [[ "$LITE_MODE" = true ]]; then
     LITE_FILE="${INSTALL_ROOT}/deployment/${LITE_COMPOSE_FILE}"
     print_info "Downloading ${LITE_COMPOSE_FILE} (lite overlay)..."
@@ -619,6 +618,9 @@ if [[ "$LITE_MODE" = true ]]; then
         print_info "Please ensure you have internet connection and try again"
         exit 1
     fi
+elif [[ -f "${INSTALL_ROOT}/deployment/${LITE_COMPOSE_FILE}" ]]; then
+    rm -f "${INSTALL_ROOT}/deployment/${LITE_COMPOSE_FILE}"
+    print_info "Removed previous lite overlay (switching to standard mode)"
 fi
 
 # Download env.template file
@@ -689,7 +691,7 @@ if [ -d "${INSTALL_ROOT}/deployment" ] && [ -f "${INSTALL_ROOT}/deployment/docke
 
     if [ -n "$COMPOSE_CMD" ]; then
         # Check if any containers are running
-        RUNNING_CONTAINERS=$(cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args) ps -q 2>/dev/null | wc -l)
+        RUNNING_CONTAINERS=$(cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args true) ps -q 2>/dev/null | wc -l)
         if [ "$RUNNING_CONTAINERS" -gt 0 ]; then
             print_error "Onyx services are currently running!"
             echo ""
@@ -760,6 +762,43 @@ if [ -f "$ENV_FILE" ]; then
 else
     print_info "No existing .env file found. Setting up new deployment..."
     echo ""
+
+    # Ask for deployment mode (standard vs lite) unless already set via --lite flag
+    if [[ "$LITE_MODE" = false ]]; then
+        print_info "Which deployment mode would you like?"
+        echo ""
+        echo "  1) Standard  - Full deployment with search, connectors, and RAG"
+        echo "  2) Lite      - Minimal deployment (no Vespa, Redis, or model servers)"
+        echo "                  LLM chat, tools, file uploads, and Projects still work"
+        echo ""
+        prompt_or_default "Choose a mode (1 or 2) [default: 1]: " "1"
+        echo ""
+
+        case "$REPLY" in
+            2)
+                LITE_MODE=true
+                print_info "Selected: Lite mode"
+                ;;
+            *)
+                print_info "Selected: Standard mode"
+                ;;
+        esac
+    else
+        print_info "Deployment mode: Lite (set via --lite flag)"
+    fi
+
+    # Validate lite + craft combination (could now be set interactively)
+    if [[ "$LITE_MODE" = true ]] && [[ "$INCLUDE_CRAFT" = true ]]; then
+        print_error "--include-craft cannot be used with Lite mode."
+        print_info "Craft requires services (Vespa, Redis, background workers) that lite mode disables."
+        exit 1
+    fi
+
+    # Adjust resource expectations for lite mode
+    if [[ "$LITE_MODE" = true ]]; then
+        EXPECTED_DOCKER_RAM_GB=4
+        EXPECTED_DISK_GB=16
+    fi
 
     # Ask for version
     print_info "Which tag would you like to deploy?"
