@@ -483,7 +483,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       finishOnboarding,
     ]
   );
-  const { submit: submitQuery, phase, setAppMode } = useQueryController();
+  const { submit: submitQuery, state, setAppMode } = useQueryController();
 
   const defaultAppMode =
     (user?.preferences?.default_app_mode?.toLowerCase() as "chat" | "search") ??
@@ -491,7 +491,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const isNewSession = appFocus.isNewSession();
 
-  const isSearch = phase === "searching" || phase === "search-results";
+  const isSearch =
+    state.phase === "searching" || state.phase === "search-results";
 
   // 1. Reset the app-mode back to the user's default when navigating back to the "New Sessions" tab.
   // 2. If we're navigating away from the "New Session" tab after performing a search, we reset the app-input-bar.
@@ -734,7 +735,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                   <Fade
                     show={
                       (appFocus.isNewSession() || appFocus.isAgent()) &&
-                      phase === "idle"
+                      state.phase === "idle"
                     }
                     className="w-full flex-1 flex flex-col items-center justify-end"
                   >
@@ -763,7 +764,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
                     {/* OnboardingUI */}
                     {(appFocus.isNewSession() || appFocus.isAgent()) &&
-                      phase === "idle" &&
+                      state.phase === "idle" &&
                       (showOnboarding || !user?.personalization?.name) &&
                       !onboardingDismissed && (
                         <OnboardingFlow

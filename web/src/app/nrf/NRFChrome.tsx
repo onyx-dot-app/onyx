@@ -58,14 +58,15 @@ const footerMarkdownComponents = {
  */
 export default function NRFChrome() {
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
-  const { appMode, setAppMode, phase } = useQueryController();
+  const { state, setAppMode } = useQueryController();
   const settings = useSettingsContext();
   const { isMobile } = useScreenSize();
   const { setFolded } = useAppSidebarContext();
   const appFocus = useAppFocus();
   const [modePopoverOpen, setModePopoverOpen] = useState(false);
 
-  const effectiveMode: AppMode = appFocus.isNewSession() ? appMode : "chat";
+  const effectiveMode: AppMode =
+    appFocus.isNewSession() && state.phase === "idle" ? state.appMode : "chat";
 
   const customFooterContent =
     settings?.enterpriseSettings?.custom_lower_disclaimer_content ||
@@ -77,7 +78,7 @@ export default function NRFChrome() {
     isPaidEnterpriseFeaturesEnabled &&
     settings.isSearchModeAvailable &&
     appFocus.isNewSession() &&
-    phase === "idle";
+    state.phase === "idle";
 
   const showHeader = isMobile || showModeToggle;
 

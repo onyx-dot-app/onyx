@@ -82,7 +82,7 @@ import useBrowserInfo from "@/hooks/useBrowserInfo";
  */
 function Header() {
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
-  const { appMode, setAppMode, phase } = useQueryController();
+  const { state, setAppMode } = useQueryController();
   const settings = useSettingsContext();
   const { isMobile } = useScreenSize();
   const { setFolded } = useAppSidebarContext();
@@ -116,7 +116,8 @@ function Header() {
   // without this content still use.
   const pageWithHeaderContent = appFocus.isChat() || appFocus.isNewSession();
 
-  const effectiveMode: AppMode = appFocus.isNewSession() ? appMode : "chat";
+  const effectiveMode: AppMode =
+    appFocus.isNewSession() && state.phase === "idle" ? state.appMode : "chat";
 
   const availableProjects = useMemo(() => {
     if (!projects) return [];
@@ -322,7 +323,7 @@ function Header() {
           {isPaidEnterpriseFeaturesEnabled &&
             settings.isSearchModeAvailable &&
             appFocus.isNewSession() &&
-            phase === "idle" && (
+            state.phase === "idle" && (
               <Popover open={modePopoverOpen} onOpenChange={setModePopoverOpen}>
                 <Popover.Trigger asChild>
                   <OpenButton

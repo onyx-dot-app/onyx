@@ -56,7 +56,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
   // Available tags from backend
   const { tags: availableTags } = useTags();
   const {
-    phase,
+    state,
     searchResults: results,
     llmSelectedDocIds,
     error,
@@ -194,7 +194,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
   const showEmpty = !error && results.length === 0;
 
   // Show loading skeleton while search is in-flight (after all hooks)
-  if (phase === "searching") {
+  if (state.phase === "searching") {
     return <SearchSkeleton />;
   }
 

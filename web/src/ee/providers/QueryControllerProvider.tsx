@@ -15,7 +15,7 @@ import { useUser } from "@/providers/UserProvider";
 import {
   QueryControllerContext,
   QueryControllerValue,
-  QueryPhase,
+  QueryState,
   AppMode,
 } from "@/providers/QueryControllerProvider";
 
@@ -32,34 +32,41 @@ export function QueryControllerProvider({
   const { isSearchModeAvailable: searchUiEnabled } = settings;
   const { user } = useUser();
 
-  // ── App mode (absorbed from AppModeProvider) ──────────────────────────
+  // ── Merged query state (discriminated union) ──────────────────────────
+  const [state, setState] = useState<QueryState>({
+    phase: "idle",
+    appMode: "chat",
+  });
+
+  // Persistent app-mode preference — survives phase transitions and is
+  // used to restore the correct mode when resetting back to idle.
+  const appModeRef = useRef<AppMode>("chat");
+
+  // ── App mode sync from user preferences ───────────────────────────────
   const persistedMode = user?.preferences?.default_app_mode;
-  const [appModeState, setAppModeState] = useState<AppMode>("chat");
 
   useEffect(() => {
-    if (!isPaidEnterpriseFeaturesEnabled || !searchUiEnabled) {
-      setAppModeState("chat");
-      return;
+    let mode: AppMode = "chat";
+    if (isPaidEnterpriseFeaturesEnabled && searchUiEnabled && persistedMode) {
+      mode = persistedMode.toLowerCase() as AppMode;
     }
-
-    if (persistedMode) {
-      setAppModeState(persistedMode.toLowerCase() as AppMode);
-    }
+    appModeRef.current = mode;
+    setState({ phase: "idle", appMode: mode });
   }, [isPaidEnterpriseFeaturesEnabled, searchUiEnabled, persistedMode]);
 
   const setAppMode = useCallback(
     (mode: AppMode) => {
       if (!isPaidEnterpriseFeaturesEnabled || !searchUiEnabled) return;
-      setAppModeState(mode);
+      appModeRef.current = mode;
+      setState((prev) =>
+        prev.phase === "idle" ? { phase: "idle", appMode: mode } : prev
+      );
     },
     [isPaidEnterpriseFeaturesEnabled, searchUiEnabled]
   );
 
-  // ── Query state ───────────────────────────────────────────────────────
+  // ── Ancillary state ───────────────────────────────────────────────────
   const [query, setQuery] = useState<string | null>(null);
-  const [phase, setPhase] = useState<QueryPhase>("idle");
-
-  // Search state
   const [searchResults, setSearchResults] = useState<SearchDocWithContent[]>(
     []
   );
@@ -73,7 +80,7 @@ export function QueryControllerProvider({
   const searchAbortRef = useRef<AbortController | null>(null);
 
   /**
-   * Perform document search (pure data-fetching, no phase/appMode side effects)
+   * Perform document search (pure data-fetching, no phase side effects)
    */
   const performSearch = useCallback(
     async (searchQuery: string, filters?: BaseFilters): Promise<void> => {
@@ -162,6 +169,8 @@ export function QueryControllerProvider({
       setQuery(submitQuery);
       setError(null);
 
+      const currentAppMode = appModeRef.current;
+
       // Always route through chat if:
       // 1. Not Enterprise Enabled
       // 2. Admin has disabled the Search UI
@@ -171,9 +180,9 @@ export function QueryControllerProvider({
         !isPaidEnterpriseFeaturesEnabled ||
         !searchUiEnabled ||
         !appFocus.isNewSession() ||
-        appModeState === "chat"
+        currentAppMode === "chat"
       ) {
-        setPhase("chat");
+        setState({ phase: "chat" });
         setSearchResults([]);
         setLlmSelectedDocIds(null);
         onChat(submitQuery);
@@ -181,31 +190,31 @@ export function QueryControllerProvider({
       }
 
       // Search mode: immediately show SearchUI with loading state
-      if (appModeState === "search") {
-        setPhase("searching");
+      if (currentAppMode === "search") {
+        setState({ phase: "searching" });
         try {
           await performSearch(submitQuery, filters);
         } catch (err) {
           if (err instanceof Error && err.name === "AbortError") return;
           throw err;
         }
-        setPhase("search-results");
-        setAppModeState("search");
+        setState({ phase: "search-results" });
+        appModeRef.current = "search";
         return;
       }
 
       // Auto mode: classify first, then route
-      setPhase("classifying");
+      setState({ phase: "classifying" });
       try {
         const result = await performClassification(submitQuery);
 
         if (result === "search") {
-          setPhase("searching");
+          setState({ phase: "searching" });
           await performSearch(submitQuery, filters);
-          setPhase("search-results");
-          setAppModeState("search");
+          setState({ phase: "search-results" });
+          appModeRef.current = "search";
         } else {
-          setPhase("chat");
+          setState({ phase: "chat" });
           setSearchResults([]);
           setLlmSelectedDocIds(null);
           onChat(submitQuery);
@@ -215,14 +224,13 @@ export function QueryControllerProvider({
           return;
         }
 
-        setPhase("chat");
+        setState({ phase: "chat" });
         setSearchResults([]);
         setLlmSelectedDocIds(null);
         onChat(submitQuery);
       }
     },
     [
-      appModeState,
       appFocus,
       performClassification,
       performSearch,
@@ -237,14 +245,14 @@ export function QueryControllerProvider({
   const refineSearch = useCallback(
     async (filters: BaseFilters): Promise<void> => {
       if (!query) return;
-      setPhase("searching");
+      setState({ phase: "searching" });
       try {
         await performSearch(query, filters);
       } catch (err) {
         if (err instanceof Error && err.name === "AbortError") return;
         throw err;
       }
-      setPhase("search-results");
+      setState({ phase: "search-results" });
     },
     [query, performSearch]
   );
@@ -263,7 +271,7 @@ export function QueryControllerProvider({
     }
 
     setQuery(null);
-    setPhase("idle");
+    setState({ phase: "idle", appMode: appModeRef.current });
     setSearchResults([]);
     setLlmSelectedDocIds(null);
     setError(null);
@@ -271,9 +279,8 @@ export function QueryControllerProvider({
 
   const value: QueryControllerValue = useMemo(
     () => ({
-      appMode: appModeState,
+      state,
       setAppMode,
-      phase,
       searchResults,
       llmSelectedDocIds,
       error,
@@ -282,9 +289,8 @@ export function QueryControllerProvider({
       reset,
     }),
     [
-      appModeState,
+      state,
       setAppMode,
-      phase,
       searchResults,
       llmSelectedDocIds,
       error,

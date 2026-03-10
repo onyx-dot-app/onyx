@@ -175,7 +175,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   const isStreaming = currentChatState === "streaming";
 
   // Query controller for search/chat classification (EE feature)
-  const { submit: submitQuery, phase } = useQueryController();
+  const { submit: submitQuery, state } = useQueryController();
 
   // Determine if retrieval (search) is enabled based on the agent
   const retrievalEnabled = useMemo(() => {
@@ -186,7 +186,8 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   }, [liveAgent]);
 
   // Check if we're in search mode
-  const isSearch = phase === "searching" || phase === "search-results";
+  const isSearch =
+    state.phase === "searching" || state.phase === "search-results";
 
   // Anchor for scroll positioning (matches ChatPage pattern)
   const anchorMessage = messageHistory.at(-2) ?? messageHistory[0];
