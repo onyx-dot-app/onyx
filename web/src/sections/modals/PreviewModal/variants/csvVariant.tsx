@@ -34,6 +34,7 @@ export const csvVariant: PreviewVariant = {
   width: "lg",
   height: "full",
   needsTextContent: true,
+  codeBackground: false,
   headerDescription: (ctx) => {
     if (!ctx.fileContent) return "";
     const { rows } = parseCsv(ctx.fileContent);
