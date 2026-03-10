@@ -12,6 +12,9 @@ on:
   push:
     tags:
       - "v*.*.*"
+    # TODO: Remove this if we enable merge-queues for release branches.
+    branches:
+      - "release/**"
 
 permissions:
   contents: read
