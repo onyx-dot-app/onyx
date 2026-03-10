@@ -285,13 +285,16 @@ class DocumentQuery:
         hybrid_search_query: dict[str, Any] = {
             "hybrid": {
                 "queries": hybrid_search_subqueries,
-                # Max results per subquery per shard before aggregation. Ensures keyword and vector
-                # subqueries contribute equally to the candidate pool for hybrid fusion.
+                # Max results per subquery per shard before aggregation. Ensures
+                # keyword and vector subqueries contribute equally to the
+                # candidate pool for hybrid fusion.
                 # Sources:
                 # https://docs.opensearch.org/latest/vector-search/ai-search/hybrid-search/pagination/
                 # https://opensearch.org/blog/navigating-pagination-in-hybrid-queries-with-the-pagination_depth-parameter/
                 "pagination_depth": DEFAULT_NUM_HYBRID_SEARCH_CANDIDATES,
-                # Applied to all the sub-queries independently (this avoids having subqueries having a lot of results thrown out).
+                # Applied to all the sub-queries independently (this avoids
+                # subqueries having a lot of results thrown out during
+                # aggregation).
                 # Sources:
                 # https://docs.opensearch.org/latest/query-dsl/compound/hybrid/
                 # https://opensearch.org/blog/introducing-common-filter-support-for-hybrid-search-queries
@@ -374,9 +377,10 @@ class DocumentQuery:
     def _get_hybrid_search_subqueries(
         query_text: str,
         query_vector: list[float],
-        # The default number of neighbors to consider for knn vector similarity search.
-        # This is higher than the number of results because the scoring is hybrid.
-        # for a detailed breakdown, see where the default value is set.
+        # The default number of neighbors to consider for knn vector similarity
+        # search. This is higher than the number of results because the scoring
+        # is hybrid. For a detailed breakdown, see where the default value is
+        # set.
         vector_candidates: int = DEFAULT_NUM_HYBRID_SEARCH_CANDIDATES,
     ) -> list[dict[str, Any]]:
         """Returns subqueries for hybrid search.
@@ -400,20 +404,27 @@ class DocumentQuery:
         in a single hybrid query. Source:
         https://docs.opensearch.org/latest/query-dsl/compound/hybrid/
 
-        NOTE: Each query is independent during the search phase, there is no backfilling of scores for missing query components.
-        What this means is that if a document was a good vector match but did not show up for keyword, it gets a score of 0 for
-        the keyword component of the hybrid scoring. This is not as bad as just disregarding a score though as there is
-        normalization applied after. So really it is "increasing" the missing score compared to if it was included and the range
-        was renormalized. This does however mean that between docs that have high scores for say the vector field, the keyword
-        scores between them are completely ignored unless they also showed up in the keyword query as a reasonably high match.
-        TLDR, this is a bit of unique funky behavior but it seems ok.
+        NOTE: Each query is independent during the search phase, there is no
+        backfilling of scores for missing query components. What this means is
+        that if a document was a good vector match but did not show up for
+        keyword, it gets a score of 0 for the keyword component of the hybrid
+        scoring. This is not as bad as just disregarding a score though as there
+        is normalization applied after. So really it is "increasing" the missing
+        score compared to if it was included and the range was renormalized.
+        This does however mean that between docs that have high scores for say
+        the vector field, the keyword scores between them are completely ignored
+        unless they also showed up in the keyword query as a reasonably high
+        match. TLDR, this is a bit of unique funky behavior but it seems ok.
 
         NOTE: Options considered and rejected:
-        - minimum_should_match: Since it's hybrid search and users often provide semantic queries, there is often a lot of terms,
-          and very low number of meaningful keywords (and a low ratio of keywords).
-        - fuzziness AUTO: typo tolerance (0/1/2 edit distance by term length). It's mostly for typos as the analyzer ("english by
-          default") already does some stemming and tokenization. In testing datasets, this makes recall slightly worse. It also is
-          less performant so not really any reason to do it.
+        - minimum_should_match: Since it's hybrid search and users often provide
+          semantic queries, there is often a lot of terms, and very low number
+          of meaningful keywords (and a low ratio of keywords).
+        - fuzziness AUTO: Typo tolerance (0/1/2 edit distance by term length).
+          It's mostly for typos as the analyzer ("english" by default) already
+          does some stemming and tokenization. In testing datasets, this makes
+          recall slightly worse. It also is less performant so not really any
+          reason to do it.
 
         Args:
             query_text: The text of the query to search for.
