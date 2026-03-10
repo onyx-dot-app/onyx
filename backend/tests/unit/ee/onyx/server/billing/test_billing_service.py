@@ -101,7 +101,7 @@ class TestMakeBillingRequest:
 
         assert exc_info.value.status_code == 400
         assert exc_info.value.error_code is OnyxErrorCode.BAD_GATEWAY
-        assert "Bad request" in exc_info.value.message
+        assert "Bad request" in exc_info.value.detail
 
     @pytest.mark.asyncio
     @patch("ee.onyx.server.billing.service._get_headers")
@@ -152,7 +152,7 @@ class TestMakeBillingRequest:
 
         assert exc_info.value.status_code == 502
         assert exc_info.value.error_code is OnyxErrorCode.BAD_GATEWAY
-        assert "Failed to connect" in exc_info.value.message
+        assert "Failed to connect" in exc_info.value.detail
 
 
 class TestCreateCheckoutSession:
