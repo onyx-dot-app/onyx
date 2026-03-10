@@ -231,24 +231,29 @@ function NumericLimitField({
   };
 
   return (
-    <InputTypeInField
-      name={name}
-      inputMode="numeric"
-      pattern="[0-9]*"
-      placeholder="No limit"
-      rightSection={
-        value !== "" && value !== defaultValue ? (
-          <IconButton
-            icon={SvgRefreshCw}
-            tooltip="Restore default"
-            internal
-            type="button"
-            onClick={handleRestore}
-          />
-        ) : undefined
-      }
-      onBlur={handleBlur}
-    />
+    <div className="group w-full">
+      <InputTypeInField
+        name={name}
+        inputMode="numeric"
+        showClearButton={false}
+        pattern="[0-9]*"
+        placeholder="No limit"
+        rightSection={
+          value !== "" && value !== defaultValue ? (
+            <div className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+              <IconButton
+                icon={SvgRefreshCw}
+                tooltip="Restore default"
+                internal
+                type="button"
+                onClick={handleRestore}
+              />
+            </div>
+          ) : undefined
+        }
+        onBlur={handleBlur}
+      />
+    </div>
   );
 }
 
@@ -265,20 +270,27 @@ function FileSizeLimitFields({
   const DEFAULT_TOKEN_THRESHOLD_K = vectorDbEnabled ? "200" : "10000";
 
   return (
-    <div className="flex gap-4">
+    <div className="flex gap-4 w-full">
       <div className="flex-1">
-        <NumericLimitField
-          name="user_file_max_upload_size_mb"
-          defaultValue={DEFAULT_UPLOAD_SIZE_MB}
-          saveSettings={saveSettings}
-        />
+        <InputLayouts.Vertical title="File Size Limit (MB)" nonInteractive>
+          <NumericLimitField
+            name="user_file_max_upload_size_mb"
+            defaultValue={DEFAULT_UPLOAD_SIZE_MB}
+            saveSettings={saveSettings}
+          />
+        </InputLayouts.Vertical>
       </div>
       <div className="flex-1">
-        <NumericLimitField
-          name="file_token_count_threshold_k"
-          defaultValue={DEFAULT_TOKEN_THRESHOLD_K}
-          saveSettings={saveSettings}
-        />
+        <InputLayouts.Vertical
+          title="File Token Limit (thousand tokens)"
+          nonInteractive
+        >
+          <NumericLimitField
+            name="file_token_count_threshold_k"
+            defaultValue={DEFAULT_TOKEN_THRESHOLD_K}
+            saveSettings={saveSettings}
+          />
+        </InputLayouts.Vertical>
       </div>
     </div>
   );
@@ -855,7 +867,7 @@ function ChatPreferencesForm() {
                 <Card>
                   <InputLayouts.Vertical
                     title="File Attachment Size Limit"
-                    subDescription="Files attached in chats and projects must fit within both limits to be accepted. Larger files increase latency, memory usage, and token costs."
+                    description="Files attached in chats and projects must fit within both limits to be accepted. Larger files increase latency, memory usage, and token costs."
                   >
                     <FileSizeLimitFields
                       saveSettings={saveSettings}
