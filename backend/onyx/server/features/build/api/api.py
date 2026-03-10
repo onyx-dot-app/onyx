@@ -394,13 +394,22 @@ def _check_webapp_access(
 _OFFLINE_HTML_PATH = Path(__file__).parent / "templates" / "webapp_offline.html"
 
 
-def _offline_html_response() -> Response:
+def _offline_html_response(auto_refresh: bool) -> Response:
     """Return a branded Craft HTML page when the sandbox is not reachable.
 
     Design mirrors the default Craft web template (outputs/web/app/page.tsx):
     terminal window aesthetic with Minecraft-themed typing animation.
+
+    Args:
+        auto_refresh: When True, inject a meta refresh tag so the page polls
+            for the sandbox to wake up. Should only be True when the sandbox is
+            genuinely asleep (SLEEPING/TERMINATED), not when it is RUNNING but
+            Next.js is momentarily restarting — that case causes jarring
+            periodic iframe reloads and the frontend's own polling handles it.
     """
     html = _OFFLINE_HTML_PATH.read_text()
+    meta_tag = '<meta http-equiv="refresh" content="15" />' if auto_refresh else ""
+    html = html.replace("{auto_refresh_meta}", meta_tag)
     return Response(content=html, status_code=503, media_type="text/html")
 
 
@@ -435,7 +444,19 @@ def get_webapp(
         return _proxy_request(path, request, session_id, db_session)
     except HTTPException as e:
         if e.status_code in (502, 503, 504):
-            return _offline_html_response()
+            # Only auto-refresh when the sandbox is genuinely asleep.
+            # If the sandbox is RUNNING, the Next.js dev server may be
+            # momentarily restarting (e.g. after a hot-reload file change).
+            # Embedding a meta-refresh in that case causes jarring periodic
+            # iframe reloads; the frontend's SWR polling handles reconnection.
+            session = db_session.get(BuildSession, session_id)
+            sandbox = (
+                get_sandbox_by_user_id(db_session, session.user_id)
+                if session and session.user_id
+                else None
+            )
+            sandbox_is_asleep = sandbox is None or not sandbox.status.is_active()
+            return _offline_html_response(auto_refresh=sandbox_is_asleep)
         raise
 
 
