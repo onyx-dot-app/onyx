@@ -42,7 +42,9 @@ RUN apt-get update && \
         pkg-config \
         gcc \
         nano \
-        vim && \
+        vim \
+        libjemalloc2 \
+        && \
     rm -rf /var/lib/apt/lists/* && \
     apt-get clean
 
@@ -123,6 +125,13 @@ ENV PYTHONPATH=/app
 # Default ONYX_VERSION, typically overriden during builds by GitHub Actions.
 ARG ONYX_VERSION=0.0.0-dev
 ENV ONYX_VERSION=${ONYX_VERSION}
+
+# Use jemalloc instead of glibc malloc to reduce memory fragmentation
+# in long-running Python processes (API server, Celery workers).
+# The soname is architecture-independent; the dynamic linker resolves
+# the correct path from standard library directories.
+# Placed after all RUN steps so build-time processes are unaffected.
+ENV LD_PRELOAD=libjemalloc.so.2
 
 # Default command which does nothing
 # This container is used by api server and background which specify their own CMD
