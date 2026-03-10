@@ -6,6 +6,7 @@ Validates that:
 - Crash + resume skips already-processed pages
 - BFS (folder-scoped) drives process all items in one call
 - 410 Gone triggers a full-resync URL in the checkpoint
+- Duplicate document IDs across delta pages are deduplicated
 """
 
 from __future__ import annotations
@@ -457,3 +458,228 @@ class TestDeltaPageFetchFailure:
         assert final_cp.current_drive_name is None
         assert final_cp.current_drive_id is None
         assert final_cp.current_drive_delta_next_link is None
+
+
+class TestDeltaDuplicateDocumentDedup:
+    """The Microsoft Graph delta API can return the same item on multiple
+    pages.  Documents already yielded should be skipped via
+    checkpoint.seen_document_ids."""
+
+    def test_duplicate_across_pages_is_skipped(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Item 'dup' appears on both page 1 and page 2.  It should only be
+        yielded once."""
+        connector = _setup_connector(monkeypatch)
+        _mock_convert(monkeypatch)
+
+        call_count = 0
+
+        def fake_fetch_page(
+            self: SharepointConnector,  # noqa: ARG001
+            page_url: str,  # noqa: ARG001
+            drive_id: str,  # noqa: ARG001
+            start: datetime | None = None,  # noqa: ARG001
+            end: datetime | None = None,  # noqa: ARG001
+            page_size: int = 200,  # noqa: ARG001
+        ) -> tuple[list[DriveItemData], str | None]:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return [_make_item("a"), _make_item("dup")], "https://next2"
+            return [_make_item("dup"), _make_item("b")], None
+
+        monkeypatch.setattr(
+            SharepointConnector, "_fetch_one_delta_page", fake_fetch_page
+        )
+
+        checkpoint = _build_ready_checkpoint()
+
+        # Page 1: yields a, dup
+        gen = connector._load_from_checkpoint(
+            _START_TS, _END_TS, checkpoint, include_permissions=False
+        )
+        yielded, checkpoint = _consume_generator(gen)
+        docs = _docs_from(yielded)
+        assert [d.id for d in docs] == ["a", "dup"]
+        assert "dup" in checkpoint.seen_document_ids
+
+        # Page 2: dup should be skipped, only b yielded
+        gen = connector._load_from_checkpoint(
+            _START_TS, _END_TS, checkpoint, include_permissions=False
+        )
+        yielded, checkpoint = _consume_generator(gen)
+        docs = _docs_from(yielded)
+        assert [d.id for d in docs] == ["b"]
+
+    def test_duplicate_within_same_page_is_skipped(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """If the same item appears twice on a single delta page, only the
+        first occurrence should be yielded."""
+        connector = _setup_connector(monkeypatch)
+        _mock_convert(monkeypatch)
+
+        def fake_fetch_page(
+            self: SharepointConnector,  # noqa: ARG001
+            page_url: str,  # noqa: ARG001
+            drive_id: str,  # noqa: ARG001
+            start: datetime | None = None,  # noqa: ARG001
+            end: datetime | None = None,  # noqa: ARG001
+            page_size: int = 200,  # noqa: ARG001
+        ) -> tuple[list[DriveItemData], str | None]:
+            return [_make_item("x"), _make_item("x"), _make_item("y")], None
+
+        monkeypatch.setattr(
+            SharepointConnector, "_fetch_one_delta_page", fake_fetch_page
+        )
+
+        checkpoint = _build_ready_checkpoint()
+        gen = connector._load_from_checkpoint(
+            _START_TS, _END_TS, checkpoint, include_permissions=False
+        )
+        yielded, checkpoint = _consume_generator(gen)
+        docs = _docs_from(yielded)
+        assert [d.id for d in docs] == ["x", "y"]
+
+    def test_seen_ids_survive_checkpoint_serialization(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """seen_document_ids must survive JSON serialization so that
+        dedup works across crash + resume."""
+        connector = _setup_connector(monkeypatch)
+        _mock_convert(monkeypatch)
+
+        call_count = 0
+
+        def fake_fetch_page(
+            self: SharepointConnector,  # noqa: ARG001
+            page_url: str,  # noqa: ARG001
+            drive_id: str,  # noqa: ARG001
+            start: datetime | None = None,  # noqa: ARG001
+            end: datetime | None = None,  # noqa: ARG001
+            page_size: int = 200,  # noqa: ARG001
+        ) -> tuple[list[DriveItemData], str | None]:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return [_make_item("a")], "https://next2"
+            return [_make_item("a"), _make_item("b")], None
+
+        monkeypatch.setattr(
+            SharepointConnector, "_fetch_one_delta_page", fake_fetch_page
+        )
+
+        checkpoint = _build_ready_checkpoint()
+
+        # Page 1
+        gen = connector._load_from_checkpoint(
+            _START_TS, _END_TS, checkpoint, include_permissions=False
+        )
+        _, checkpoint = _consume_generator(gen)
+        assert "a" in checkpoint.seen_document_ids
+
+        # Simulate crash: round-trip through JSON
+        restored = SharepointConnectorCheckpoint.model_validate_json(
+            checkpoint.model_dump_json()
+        )
+        assert "a" in restored.seen_document_ids
+
+        # Page 2 with restored checkpoint: 'a' should be skipped
+        connector2 = _setup_connector(monkeypatch)
+        _mock_convert(monkeypatch)
+        monkeypatch.setattr(
+            SharepointConnector, "_fetch_one_delta_page", fake_fetch_page
+        )
+
+        gen = connector2._load_from_checkpoint(
+            _START_TS, _END_TS, restored, include_permissions=False
+        )
+        yielded, final_cp = _consume_generator(gen)
+        docs = _docs_from(yielded)
+        assert [d.id for d in docs] == ["b"]
+
+    def test_no_dedup_across_separate_indexing_runs(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A fresh checkpoint (new indexing run) should have an empty
+        seen_document_ids, so previously-indexed docs are re-processed."""
+        connector = _setup_connector(monkeypatch)
+        _mock_convert(monkeypatch)
+
+        def fake_fetch_page(
+            self: SharepointConnector,  # noqa: ARG001
+            page_url: str,  # noqa: ARG001
+            drive_id: str,  # noqa: ARG001
+            start: datetime | None = None,  # noqa: ARG001
+            end: datetime | None = None,  # noqa: ARG001
+            page_size: int = 200,  # noqa: ARG001
+        ) -> tuple[list[DriveItemData], str | None]:
+            return [_make_item("a")], None
+
+        monkeypatch.setattr(
+            SharepointConnector, "_fetch_one_delta_page", fake_fetch_page
+        )
+
+        # First run
+        cp1 = _build_ready_checkpoint()
+        gen = connector._load_from_checkpoint(
+            _START_TS, _END_TS, cp1, include_permissions=False
+        )
+        yielded, _ = _consume_generator(gen)
+        assert len(_docs_from(yielded)) == 1
+
+        # Second run with a fresh checkpoint — same doc should appear again
+        cp2 = _build_ready_checkpoint()
+        assert len(cp2.seen_document_ids) == 0
+        gen = connector._load_from_checkpoint(
+            _START_TS, _END_TS, cp2, include_permissions=False
+        )
+        yielded, _ = _consume_generator(gen)
+        assert len(_docs_from(yielded)) == 1
+
+    def test_same_id_across_drives_not_skipped(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Graph item IDs are only unique within a drive.  An item in drive B
+        that happens to share an ID with an item already seen in drive A must
+        NOT be skipped."""
+        connector = _setup_connector(monkeypatch)
+        _mock_convert(monkeypatch)
+
+        def fake_fetch_page(
+            self: SharepointConnector,  # noqa: ARG001
+            page_url: str,  # noqa: ARG001
+            drive_id: str,  # noqa: ARG001
+            start: datetime | None = None,  # noqa: ARG001
+            end: datetime | None = None,  # noqa: ARG001
+            page_size: int = 200,  # noqa: ARG001
+        ) -> tuple[list[DriveItemData], str | None]:
+            return [_make_item("shared-id")], None
+
+        monkeypatch.setattr(
+            SharepointConnector, "_fetch_one_delta_page", fake_fetch_page
+        )
+
+        checkpoint = _build_ready_checkpoint(drive_names=["DriveA", "DriveB"])
+
+        # Drive A: yields the item
+        gen = connector._load_from_checkpoint(
+            _START_TS, _END_TS, checkpoint, include_permissions=False
+        )
+        yielded, checkpoint = _consume_generator(gen)
+        docs = _docs_from(yielded)
+        assert len(docs) == 1
+        assert docs[0].id == "shared-id"
+
+        # seen_document_ids should have been cleared when drive A finished
+        assert len(checkpoint.seen_document_ids) == 0
+
+        # Drive B: same ID must be yielded again (different drive)
+        gen = connector._load_from_checkpoint(
+            _START_TS, _END_TS, checkpoint, include_permissions=False
+        )
+        yielded, checkpoint = _consume_generator(gen)
+        docs = _docs_from(yielded)
+        assert len(docs) == 1
+        assert docs[0].id == "shared-id"
