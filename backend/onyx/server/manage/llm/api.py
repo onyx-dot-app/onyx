@@ -1351,13 +1351,14 @@ def get_lm_studio_available_models(
 
     return sorted_results
 
+
 @admin_router.post("/litellm/available-models")
 def get_litellm_available_models(
     request: LitellmModelsRequest,
     _: User = Depends(current_admin_user),
     _db_session: Session = Depends(get_session),
 ) -> list[LitellmFinalModelResponse]:
-    """Fetch available models from Litellm proxy /api/v1/models endpoint."""
+    """Fetch available models from Litellm proxy /v1/models endpoint."""
     response_json = _get_litellm_models_response(
         api_key=request.api_key, api_base=request.api_base
     )
