@@ -458,7 +458,7 @@ def get_all_hierarchy_nodes_for_source(
 def _get_accessible_hierarchy_nodes_for_source(
     db_session: Session,
     source: DocumentSource,
-    user_email: str | None,  # noqa: ARG001
+    user_email: str,  # noqa: ARG001
     external_group_ids: list[str],  # noqa: ARG001
 ) -> list[HierarchyNode]:
     """
@@ -485,7 +485,7 @@ def _get_accessible_hierarchy_nodes_for_source(
 def get_accessible_hierarchy_nodes_for_source(
     db_session: Session,
     source: DocumentSource,
-    user_email: str | None,
+    user_email: str,
     external_group_ids: list[str],
 ) -> list[HierarchyNode]:
     """
