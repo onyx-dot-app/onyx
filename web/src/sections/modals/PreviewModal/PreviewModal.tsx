@@ -224,27 +224,29 @@ export default function PreviewModal({
 
         {/* Floating footer */}
         {!isLoading && !loadError && (
-          <div
-            className={cn(
-              "absolute bottom-0 left-0 right-0",
-              "flex items-center justify-between",
-              "p-4 pointer-events-none w-full"
-            )}
-            style={{
-              background:
-                "linear-gradient(to top, var(--background-tint-01) 40%, transparent)",
-            }}
-          >
-            {/* Left slot */}
-            <div className="pointer-events-auto">
-              {variant.renderFooterLeft(ctx)}
-            </div>
+          <>
+            <div
+              className={cn(
+                "absolute bottom-0 left-0 right-0",
+                "flex items-center justify-between",
+                "p-4 pointer-events-none w-full"
+              )}
+              style={{
+                background:
+                  "linear-gradient(to top, var(--background-tint-01) 40%, transparent)",
+              }}
+            >
+              {/* Left slot */}
+              <div className="pointer-events-auto">
+                {variant.renderFooterLeft(ctx)}
+              </div>
 
-            {/* Right slot */}
-            <div className="pointer-events-auto rounded-12 bg-background-tint-00 p-1 shadow-lg">
-              {variant.renderFooterRight(ctx)}
+              {/* Right slot */}
+              <div className="pointer-events-auto rounded-12 bg-background-tint-00 p-1 shadow-lg">
+                {variant.renderFooterRight(ctx)}
+              </div>
             </div>
-          </div>
+          </>
         )}
       </Modal.Content>
     </Modal>
