@@ -193,7 +193,7 @@ const AgentMessage = React.memo(function AgentMessage({
         }}
       >
         {pacedDisplayGroups.length > 0 && (
-          <div ref={finalAnswerRef}>
+          <div ref={finalAnswerRef} className="flex flex-col gap-3">
             {authErrors.map((authError, i) => (
               <CustomToolAuthCard
                 key={`auth-error-${i}`}
