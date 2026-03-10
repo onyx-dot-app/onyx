@@ -709,7 +709,7 @@ def translate_assistant_message_to_packets(
 
                         custom_args = {
                             k: v
-                            for k, v in tool_call.tool_call_arguments.items()
+                            for k, v in (tool_call.tool_call_arguments or {}).items()
                             if k != "requestBody"
                         }
                         turn_tool_packets.extend(

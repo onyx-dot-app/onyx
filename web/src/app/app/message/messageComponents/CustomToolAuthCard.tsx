@@ -34,13 +34,16 @@ function CustomToolAuthCard({
 
   const oauthConfigId = matchedTool?.oauth_config_id ?? null;
 
+  // No OAuth config — nothing actionable to show
+  if (!oauthConfigId) {
+    return null;
+  }
+
   const handleAuthenticate = () => {
-    if (oauthConfigId != null) {
-      initiateOAuthFlow(
-        oauthConfigId,
-        window.location.pathname + window.location.search
-      );
-    }
+    initiateOAuthFlow(
+      oauthConfigId,
+      window.location.pathname + window.location.search
+    );
   };
 
   return (
@@ -51,7 +54,7 @@ function CustomToolAuthCard({
       close={false}
       text={`${toolName} not connected`}
       description={`Connect to ${toolName} to enable this tool`}
-      actions={oauthConfigId != null ? "Connect" : undefined}
+      actions="Connect"
       actionPrimary
       actionIcon={SvgArrowExchange}
       onAction={handleAuthenticate}
