@@ -258,6 +258,10 @@ class SharepointConnectorCheckpoint(ConnectorCheckpoint):
     # Track yielded hierarchy nodes by their raw_node_id (URLs) to avoid duplicates
     seen_hierarchy_node_raw_ids: set[str] = Field(default_factory=set)
 
+    # Track yielded document IDs to avoid processing the same document twice.
+    # The Microsoft Graph delta API can return the same item on multiple pages.
+    seen_document_ids: set[str] = Field(default_factory=set)
+
 
 class SharepointAuthMethod(Enum):
     CLIENT_SECRET = "client_secret"
@@ -2137,6 +2141,14 @@ class SharepointConnector(
             item_count = 0
             for driveitem in driveitems:
                 item_count += 1
+
+                if driveitem.id and driveitem.id in checkpoint.seen_document_ids:
+                    logger.debug(
+                        f"Skipping duplicate document {driveitem.id} "
+                        f"({driveitem.name})"
+                    )
+                    continue
+
                 driveitem_extension = get_file_ext(driveitem.name)
                 if driveitem_extension not in OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS:
                     logger.warning(
@@ -2189,11 +2201,13 @@ class SharepointConnector(
 
                     if isinstance(doc_or_failure, Document):
                         if doc_or_failure.sections:
+                            checkpoint.seen_document_ids.add(doc_or_failure.id)
                             yield doc_or_failure
                         elif should_yield_if_empty:
                             doc_or_failure.sections = [
                                 TextSection(link=driveitem.web_url, text="")
                             ]
+                            checkpoint.seen_document_ids.add(doc_or_failure.id)
                             yield doc_or_failure
                         else:
                             logger.warning(
