@@ -125,17 +125,25 @@ def get_file_ids_by_user_file_ids(
 def fetch_user_files_with_access_relationships(
     user_file_ids: list[str],
     db_session: Session,
+    eager_load_groups: bool = False,
 ) -> list[UserFile]:
     """Fetch user files with the owner and assistant relationships
-    eagerly loaded (needed for computing access control)."""
+    eagerly loaded (needed for computing access control).
+
+    When eager_load_groups is True, Persona.groups is also loaded so that
+    callers can extract user-group names without a second DB round-trip."""
+    persona_sub_options = [
+        selectinload(Persona.users),
+        selectinload(Persona.user),
+    ]
+    if eager_load_groups:
+        persona_sub_options.append(selectinload(Persona.groups))
+
     return (
         db_session.query(UserFile)
         .options(
             joinedload(UserFile.user),
-            joinedload(UserFile.assistants).options(
-                selectinload(Persona.users),
-                selectinload(Persona.user),
-            ),
+            joinedload(UserFile.assistants).options(*persona_sub_options),
         )
         .filter(UserFile.id.in_(user_file_ids))
         .all()

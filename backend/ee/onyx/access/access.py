@@ -2,23 +2,22 @@ from sqlalchemy.orm import Session
 
 from ee.onyx.db.external_perm import fetch_external_groups_for_user
 from ee.onyx.db.external_perm import fetch_public_external_group_ids
-from ee.onyx.db.user_group import fetch_user_group_names_for_user_files
 from ee.onyx.db.user_group import fetch_user_groups_for_documents
 from ee.onyx.db.user_group import fetch_user_groups_for_user
 from ee.onyx.external_permissions.sync_params import get_source_perm_sync_config
+from onyx.access.access import _collect_user_file_access
 from onyx.access.access import (
     _get_access_for_documents as get_access_for_documents_without_groups,
 )
 from onyx.access.access import _get_acl_for_user as get_acl_for_user_without_groups
-from onyx.access.access import (
-    get_access_for_user_files_impl as get_access_for_user_files_without_groups,
-)
 from onyx.access.models import DocumentAccess
 from onyx.access.utils import prefix_external_group
 from onyx.access.utils import prefix_user_group
 from onyx.db.document import get_document_sources
 from onyx.db.document import get_documents_by_ids
 from onyx.db.models import User
+from onyx.db.models import UserFile
+from onyx.db.user_file import fetch_user_files_with_access_relationships
 from onyx.utils.logger import setup_logger
 
 
@@ -120,6 +119,18 @@ def _get_access_for_documents(
     return access_map
 
 
+def _collect_user_file_group_names(user_file: UserFile) -> set[str]:
+    """Extract user-group names from the already-loaded Persona.groups
+    relationships on a UserFile (skipping deleted personas)."""
+    groups: set[str] = set()
+    for persona in user_file.assistants:
+        if persona.deleted:
+            continue
+        for group in persona.groups:
+            groups.add(group.name)
+    return groups
+
+
 def get_access_for_user_files_impl(
     user_file_ids: list[str],
     db_session: Session,
@@ -127,23 +138,45 @@ def get_access_for_user_files_impl(
     """EE version: extends the MIT user file ACL with user group names
     from personas shared via user groups.
 
+    Uses a single DB query (via fetch_user_files_with_access_relationships)
+    that eagerly loads both the MIT-needed and EE-needed relationships.
+
     NOTE: is imported in onyx.access.access by `fetch_versioned_implementation`
     DO NOT REMOVE."""
-    mit_access = get_access_for_user_files_without_groups(user_file_ids, db_session)
-    file_to_groups = fetch_user_group_names_for_user_files(user_file_ids, db_session)
+    user_files = fetch_user_files_with_access_relationships(
+        user_file_ids, db_session, eager_load_groups=True
+    )
+    return build_access_for_user_files_impl(user_files)
 
+
+def build_access_for_user_files_impl(
+    user_files: list[UserFile],
+) -> dict[str, DocumentAccess]:
+    """EE version: works on pre-loaded UserFile objects.
+    Expects Persona.groups to be eagerly loaded.
+
+    NOTE: is imported in onyx.access.access by `fetch_versioned_implementation`
+    DO NOT REMOVE."""
     result: dict[str, DocumentAccess] = {}
-    for file_id, access in mit_access.items():
-        group_names = file_to_groups.get(file_id, set())
-        if not group_names:
-            result[file_id] = access
+    for user_file in user_files:
+        if user_file.user is None:
+            result[str(user_file.id)] = DocumentAccess.build(
+                user_emails=[],
+                user_groups=[],
+                is_public=True,
+                external_user_emails=[],
+                external_user_group_ids=[],
+            )
             continue
-        result[file_id] = DocumentAccess.build(
-            user_emails=list(access.user_emails),
+
+        emails, is_public = _collect_user_file_access(user_file)
+        group_names = _collect_user_file_group_names(user_file)
+        result[str(user_file.id)] = DocumentAccess.build(
+            user_emails=list(emails),
             user_groups=list(group_names),
-            is_public=access.is_public,
-            external_user_emails=list(access.external_user_emails),
-            external_user_group_ids=list(access.external_user_group_ids),
+            is_public=is_public,
+            external_user_emails=[],
+            external_user_group_ids=[],
         )
     return result
 

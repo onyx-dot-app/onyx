@@ -12,10 +12,11 @@ from redis import Redis
 from redis.lock import Lock as RedisLock
 from retry import retry
 from sqlalchemy import select
+from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
-from onyx.access.access import get_access_for_user_files
+from onyx.access.access import build_access_for_user_files
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.celery_redis import celery_get_queue_length
 from onyx.background.celery.celery_utils import httpx_init_vespa_pool
@@ -41,6 +42,7 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import HierarchyNode
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import UserFileStatus
+from onyx.db.models import Persona
 from onyx.db.models import UserFile
 from onyx.db.search_settings import get_active_search_settings
 from onyx.db.search_settings import get_active_search_settings_list
@@ -796,7 +798,13 @@ def project_sync_user_file_impl(
             user_file = db_session.execute(
                 select(UserFile)
                 .where(UserFile.id == _as_uuid(user_file_id))
-                .options(selectinload(UserFile.assistants))
+                .options(
+                    joinedload(UserFile.user),
+                    joinedload(UserFile.assistants).options(
+                        selectinload(Persona.users),
+                        selectinload(Persona.user),
+                    ),
+                )
             ).scalar_one_or_none()
             if not user_file:
                 task_logger.info(
@@ -826,9 +834,8 @@ def project_sync_user_file_impl(
                 project_ids = [project.id for project in user_file.projects]
                 persona_ids = [p.id for p in user_file.assistants if not p.deleted]
 
-                # update to current file access
                 file_id_str = str(user_file.id)
-                access_map = get_access_for_user_files([file_id_str], db_session)
+                access_map = build_access_for_user_files([user_file])
                 access = access_map.get(file_id_str)
 
                 for retry_document_index in retry_document_indices:

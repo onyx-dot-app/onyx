@@ -205,7 +205,9 @@ def update_persona_access(
 
     NOTE: Callers are responsible for committing."""
 
+    needs_sync = False
     if is_public is not None:
+        needs_sync = True
         persona = db_session.query(Persona).filter(Persona.id == persona_id).first()
         if persona:
             persona.is_public = is_public
@@ -213,6 +215,7 @@ def update_persona_access(
     # NOTE: For user-ids and group-ids, `None` means "leave unchanged", `[]` means "clear all shares",
     # and a non-empty list means "replace with these shares".
     if user_ids is not None:
+        needs_sync = True
         db_session.query(Persona__User).filter(
             Persona__User.persona_id == persona_id
         ).delete(synchronize_session="fetch")
@@ -233,6 +236,7 @@ def update_persona_access(
     # MIT doesn't support group-based sharing, so we allow clearing (no-op since
     # there shouldn't be any) but raise an error if trying to add actual groups.
     if group_ids is not None:
+        needs_sync = True
         db_session.query(Persona__UserGroup).filter(
             Persona__UserGroup.persona_id == persona_id
         ).delete(synchronize_session="fetch")
@@ -241,7 +245,7 @@ def update_persona_access(
             raise NotImplementedError("Onyx MIT does not support group-based sharing")
 
     # When sharing changes, user file ACLs need to be updated in the vector DB
-    if is_public is not None or user_ids is not None or group_ids is not None:
+    if needs_sync:
         _mark_persona_user_files_for_sync(persona_id, db_session)
 
 

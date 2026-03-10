@@ -143,19 +143,26 @@ def get_access_for_user_files_impl(
     db_session: Session,
 ) -> dict[str, DocumentAccess]:
     user_files = fetch_user_files_with_access_relationships(user_file_ids, db_session)
+    return build_access_for_user_files_impl(user_files)
 
+
+def build_access_for_user_files(
+    user_files: list[UserFile],
+) -> dict[str, DocumentAccess]:
+    """Compute access from pre-loaded UserFile objects (with relationships).
+    Callers must ensure UserFile.user, Persona.users, and Persona.user are
+    eagerly loaded (and Persona.groups for the EE path)."""
+    versioned_fn = fetch_versioned_implementation(
+        "onyx.access.access", "build_access_for_user_files_impl"
+    )
+    return versioned_fn(user_files)
+
+
+def build_access_for_user_files_impl(
+    user_files: list[UserFile],
+) -> dict[str, DocumentAccess]:
     result: dict[str, DocumentAccess] = {}
     for user_file in user_files:
-        if user_file.user is None:
-            result[str(user_file.id)] = DocumentAccess.build(
-                user_emails=[],
-                user_groups=[],
-                is_public=True,
-                external_user_emails=[],
-                external_user_group_ids=[],
-            )
-            continue
-
         emails, is_public = _collect_user_file_access(user_file)
         result[str(user_file.id)] = DocumentAccess.build(
             user_emails=list(emails),
