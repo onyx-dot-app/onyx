@@ -260,12 +260,6 @@ else
     exit 1
 fi
 
-# Check openssl (needed for generating secure secrets)
-if ! command -v openssl &> /dev/null; then
-    print_error "openssl is required to generate secure secrets but was not found."
-    exit 1
-fi
-
 # Function to compare version numbers
 version_compare() {
     # Returns 0 if $1 <= $2, 1 if $1 > $2
@@ -665,6 +659,10 @@ else
     print_success "Basic authentication enabled in configuration"
 
     # Generate a secure USER_AUTH_SECRET
+    if ! command -v openssl &> /dev/null; then
+        print_error "openssl is required to generate secure secrets but was not found."
+        exit 1
+    fi
     USER_AUTH_SECRET=$(openssl rand -hex 32)
     sed -i.bak "s/^USER_AUTH_SECRET=.*/USER_AUTH_SECRET=\"$USER_AUTH_SECRET\"/" "$ENV_FILE" 2>/dev/null || true
 
