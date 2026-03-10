@@ -113,22 +113,25 @@ export const CodeBlock = memo(function CodeBlock({
   };
 
   return (
-    <div className="bg-background-tint-00 px-1 pb-1 rounded-12 max-w-full min-w-0">
-      {showHeader && language && (
-        <div className="flex items-center px-2 py-1 text-sm text-text-04 gap-x-2">
-          <SvgCode
-            height={12}
-            width={12}
-            stroke="currentColor"
-            className="my-auto"
-          />
-          <Text secondaryMono>{language}</Text>
-          {codeText && <CopyButton />}
+    <>
+      {showHeader && language ? (
+        <div className="bg-background-tint-00 px-1 pb-1 rounded-12 max-w-full min-w-0">
+          <div className="flex items-center px-2 py-1 text-sm text-text-04 gap-x-2">
+            <SvgCode
+              height={12}
+              width={12}
+              stroke="currentColor"
+              className="my-auto"
+            />
+            <Text secondaryMono>{language}</Text>
+            {codeText && <CopyButton />}
+          </div>
+          <CodeContent />
         </div>
+      ) : (
+        <CodeContent />
       )}
-
-      <CodeContent />
-    </div>
+    </>
   );
 });
 

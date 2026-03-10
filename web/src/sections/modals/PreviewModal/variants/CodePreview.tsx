@@ -15,7 +15,7 @@ export function CodePreview({ content, language }: CodePreviewProps) {
   return (
     <MinimalMarkdown
       content={`${fenceHeader}\n${normalizedContent}\n~~~`}
-      className="w-full h-full break-words"
+      className="w-full h-full"
       showHeader={false}
     />
   );
