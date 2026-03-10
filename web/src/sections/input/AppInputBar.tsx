@@ -21,7 +21,7 @@ import { ChatState } from "@/app/app/interfaces";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import { useAppMode } from "@/providers/AppModeProvider";
 import useAppFocus from "@/hooks/useAppFocus";
-import { cn, isImageFile } from "@/lib/utils";
+import { cn, isImageFile, isValidMessage } from "@/lib/utils";
 import { Disabled } from "@opal/core";
 import { useUser } from "@/providers/UserProvider";
 import {
@@ -361,6 +361,12 @@ const AppInputBar = React.memo(
       [currentMessageFiles]
     );
 
+    // Memoize validation result since it's used multiple times per render
+    const isMessageValid = useMemo(
+      () => isValidMessage(message),
+      [message]
+    );
+
     // Check if the agent has search tools available (internal search or web search)
     // AND if deep research is globally enabled in admin settings
     const showDeepResearch = useMemo(() => {
@@ -560,7 +566,7 @@ const AppInputBar = React.memo(
           </div>
           <Disabled
             disabled={
-              (chatState === "input" && !message) ||
+              (chatState === "input" && !isMessageValid) ||
               hasUploadingFiles ||
               isClassifying
             }
@@ -577,7 +583,7 @@ const AppInputBar = React.memo(
               onClick={() => {
                 if (chatState == "streaming") {
                   stopGenerating();
-                } else if (message) {
+                } else if (isMessageValid) {
                   onSubmit(message);
                 }
               }}
@@ -671,7 +677,7 @@ const AppInputBar = React.memo(
                       ) {
                         event.preventDefault();
                         if (
-                          message &&
+                          isMessageValid &&
                           !disabled &&
                           !isClassifying &&
                           !hasUploadingFiles
@@ -726,7 +732,7 @@ const AppInputBar = React.memo(
 
             {isSearchMode && (
               <Section flexDirection="row" width="fit" gap={0}>
-                <Disabled disabled={!message || isClassifying}>
+                <Disabled disabled={!isMessageValid || isClassifying}>
                   <Button
                     icon={SvgX}
                     onClick={() => setMessage("")}
@@ -734,7 +740,7 @@ const AppInputBar = React.memo(
                   />
                 </Disabled>
                 <Disabled
-                  disabled={!message || isClassifying || hasUploadingFiles}
+                  disabled={!isMessageValid || isClassifying || hasUploadingFiles}
                 >
                   <Button
                     id="onyx-chat-input-send-button"
@@ -742,7 +748,7 @@ const AppInputBar = React.memo(
                     onClick={() => {
                       if (chatState == "streaming") {
                         stopGenerating();
-                      } else if (message) {
+                      } else if (isMessageValid) {
                         onSubmit(message);
                       }
                     }}
