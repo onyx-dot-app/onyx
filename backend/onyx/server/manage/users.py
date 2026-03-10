@@ -69,6 +69,7 @@ from onyx.db.user_preferences import update_user_temperature_override_enabled
 from onyx.db.user_preferences import update_user_theme_preference
 from onyx.db.users import batch_get_user_groups
 from onyx.db.users import delete_user_from_db
+from onyx.db.users import get_all_accepted_users
 from onyx.db.users import get_all_users
 from onyx.db.users import get_page_of_filtered_users
 from onyx.db.users import get_total_filtered_users_count
@@ -221,6 +222,33 @@ def list_accepted_users(
         ],
         total_items=total_accepted_users_count,
     )
+
+
+@router.get("/manage/users/accepted/all", tags=PUBLIC_API_TAGS)
+def list_all_accepted_users(
+    _: User = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
+) -> list[FullUserSnapshot]:
+    """Returns all accepted users without pagination.
+    Used by the admin Users page for client-side filtering/sorting."""
+    users = get_all_accepted_users(db_session=db_session)
+
+    if not users:
+        return []
+
+    user_ids = [user.id for user in users]
+    groups_by_user = batch_get_user_groups(db_session, user_ids)
+
+    return [
+        FullUserSnapshot.from_user_model(
+            user,
+            groups=[
+                UserGroupInfo(id=gid, name=gname)
+                for gid, gname in groups_by_user.get(user.id, [])
+            ],
+        )
+        for user in users
+    ]
 
 
 @router.get("/manage/users/invited", tags=PUBLIC_API_TAGS)

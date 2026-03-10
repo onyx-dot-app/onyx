@@ -174,6 +174,21 @@ def _get_accepted_user_where_clause(
     return where_clause
 
 
+def get_all_accepted_users(
+    db_session: Session,
+    include_external: bool = False,
+) -> Sequence[User]:
+    """Returns all accepted users without pagination.
+    Uses the same filtering as the paginated endpoint but without
+    search, role, or active filters."""
+    stmt = select(User)
+    where_clause = _get_accepted_user_where_clause(
+        include_external=include_external,
+    )
+    stmt = stmt.where(*where_clause)
+    return db_session.scalars(stmt).unique().all()
+
+
 def get_page_of_filtered_users(
     db_session: Session,
     page_size: int,
