@@ -735,7 +735,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                   <Fade
                     show={
                       (appFocus.isNewSession() || appFocus.isAgent()) &&
-                      state.phase === "idle"
+                      (state.phase === "idle" || state.phase === "classifying")
                     }
                     className="w-full flex-1 flex flex-col items-center justify-end"
                   >
@@ -764,7 +764,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
                     {/* OnboardingUI */}
                     {(appFocus.isNewSession() || appFocus.isAgent()) &&
-                      state.phase === "idle" &&
+                      (state.phase === "idle" ||
+                        state.phase === "classifying") &&
                       (showOnboarding || !user?.personalization?.name) &&
                       !onboardingDismissed && (
                         <OnboardingFlow

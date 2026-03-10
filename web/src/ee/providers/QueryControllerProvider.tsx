@@ -48,10 +48,15 @@ export function QueryControllerProvider({
   useEffect(() => {
     let mode: AppMode = "chat";
     if (isPaidEnterpriseFeaturesEnabled && searchUiEnabled && persistedMode) {
-      mode = persistedMode.toLowerCase() as AppMode;
+      const lower = persistedMode.toLowerCase();
+      mode = (["auto", "search", "chat"] as const).includes(lower as AppMode)
+        ? (lower as AppMode)
+        : "chat";
     }
     appModeRef.current = mode;
-    setState({ phase: "idle", appMode: mode });
+    setState((prev) =>
+      prev.phase === "idle" ? { phase: "idle", appMode: mode } : prev
+    );
   }, [isPaidEnterpriseFeaturesEnabled, searchUiEnabled, persistedMode]);
 
   const setAppMode = useCallback(
@@ -199,7 +204,6 @@ export function QueryControllerProvider({
           throw err;
         }
         setState({ phase: "search-results" });
-        appModeRef.current = "search";
         return;
       }
 
