@@ -107,7 +107,7 @@ export function QueryControllerProvider({
         setLlmSelectedDocIds(response.llm_selected_doc_ids ?? null);
       } catch (err) {
         if (err instanceof Error && err.name === "AbortError") {
-          return;
+          throw err;
         }
 
         setError("Document search failed. Please try again.");
@@ -183,7 +183,12 @@ export function QueryControllerProvider({
       // Search mode: immediately show SearchUI with loading state
       if (appModeState === "search") {
         setPhase("searching");
-        await performSearch(submitQuery, filters);
+        try {
+          await performSearch(submitQuery, filters);
+        } catch (err) {
+          if (err instanceof Error && err.name === "AbortError") return;
+          throw err;
+        }
         setPhase("search-results");
         setAppModeState("search");
         return;
@@ -233,7 +238,12 @@ export function QueryControllerProvider({
     async (filters: BaseFilters): Promise<void> => {
       if (!query) return;
       setPhase("searching");
-      await performSearch(query, filters);
+      try {
+        await performSearch(query, filters);
+      } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") return;
+        throw err;
+      }
       setPhase("search-results");
     },
     [query, performSearch]
