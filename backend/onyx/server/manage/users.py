@@ -221,7 +221,10 @@ def list_accepted_users(
         ).all()
         scim_synced_ids = set(scim_mappings)
     except Exception:
-        pass
+        logger.warning(
+            "Failed to fetch SCIM mappings; marking all users as non-synced",
+            exc_info=True,
+        )
 
     return PaginatedReturn(
         items=[

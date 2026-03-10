@@ -1,7 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import type { SortingState } from "@tanstack/react-table";
+import { useEffect, useState } from "react";
 import DataTable from "@/refresh-components/table/DataTable";
 import { createTableColumns } from "@/refresh-components/table/columns";
 import { Content } from "@opal/layouts";
@@ -12,28 +11,15 @@ import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import useAdminUsers from "@/hooks/useAdminUsers";
 import { SvgUser, SvgUsers, SvgSlack } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
-import type { UserRow } from "./interfaces";
+import type { UserRow, UserGroupInfo } from "./interfaces";
+import { getInitials } from "./utils";
 
 // ---------------------------------------------------------------------------
-// Helpers
+// Constants
 // ---------------------------------------------------------------------------
 
-function getInitials(name: string | null, email: string): string {
-  if (name) {
-    const parts = name.trim().split(/\s+/);
-    if (parts.length >= 2) {
-      return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase();
-    }
-    return name.slice(0, 2).toUpperCase();
-  }
-  const local = email.split("@")[0];
-  if (!local) return "?";
-  const parts = local.split(/[._-]/);
-  if (parts.length >= 2) {
-    return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase();
-  }
-  return local.slice(0, 2).toUpperCase();
-}
+const PAGE_SIZE = 8;
+const SEARCH_DEBOUNCE_MS = 300;
 
 const ROLE_ICONS: Record<UserRole, IconFunctionComponent> = {
   [UserRole.BASIC]: SvgUser,
@@ -44,6 +30,87 @@ const ROLE_ICONS: Record<UserRole, IconFunctionComponent> = {
   [UserRole.EXT_PERM_USER]: SvgUser,
   [UserRole.SLACK_USER]: SvgSlack,
 };
+
+// ---------------------------------------------------------------------------
+// Column renderers
+// ---------------------------------------------------------------------------
+
+function renderNameColumn(email: string, row: UserRow) {
+  return (
+    <Content
+      sizePreset="main-ui"
+      variant="section"
+      title={row.personal_name ?? email}
+      description={row.personal_name ? email : undefined}
+    />
+  );
+}
+
+function renderGroupsColumn(groups: UserGroupInfo[]) {
+  if (!groups.length) {
+    return (
+      <Text as="span" secondaryBody text03>
+        {"\u2014"}
+      </Text>
+    );
+  }
+  const visible = groups.slice(0, 2);
+  const overflow = groups.length - visible.length;
+  return (
+    <div className="flex items-center gap-1 flex-nowrap overflow-hidden min-w-0">
+      {visible.map((g) => (
+        <span
+          key={g.id}
+          className="inline-flex items-center flex-shrink-0 rounded-md bg-background-tint-02 px-2 py-0.5 whitespace-nowrap"
+        >
+          <Text as="span" secondaryBody text03>
+            {g.name}
+          </Text>
+        </span>
+      ))}
+      {overflow > 0 && (
+        <Text as="span" secondaryBody text03>
+          +{overflow}
+        </Text>
+      )}
+    </div>
+  );
+}
+
+function renderRoleColumn(role: UserRole) {
+  const Icon = ROLE_ICONS[role];
+  return (
+    <div className="flex items-center gap-1.5">
+      {Icon && <Icon size={14} className="text-text-03 shrink-0" />}
+      <Text as="span" mainUiBody text03>
+        {USER_ROLE_LABELS[role] ?? role}
+      </Text>
+    </div>
+  );
+}
+
+function renderStatusColumn(isActive: boolean, row: UserRow) {
+  return (
+    <div className="flex flex-col">
+      <Text as="span" mainUiBody text03>
+        {isActive ? "Active" : "Inactive"}
+      </Text>
+      {row.is_scim_synced && (
+        <Text as="span" secondaryBody text03>
+          SCIM synced
+        </Text>
+      )}
+    </div>
+  );
+}
+
+function renderLastUpdatedColumn(value: string) {
+  return (
+    <Text as="span" secondaryBody text03>
+      {timeAgo(value) ?? "\u2014"}
+    </Text>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Columns (stable reference — defined at module scope)
@@ -61,92 +128,31 @@ const columns = [
     header: "Name",
     weight: 22,
     minWidth: 140,
-    cell: (value, row) => (
-      <Content
-        sizePreset="main-ui"
-        variant="section"
-        title={row.personal_name ?? value}
-        description={row.personal_name ? value : undefined}
-      />
-    ),
+    cell: renderNameColumn,
   }),
   tc.column("groups", {
     header: "Groups",
     weight: 24,
     minWidth: 200,
-    cell: (value) => {
-      if (!value.length) {
-        return (
-          <Text as="span" secondaryBody text03>
-            —
-          </Text>
-        );
-      }
-      const visible = value.slice(0, 2);
-      const overflow = value.length - visible.length;
-      return (
-        <div className="flex items-center gap-1 flex-nowrap overflow-hidden min-w-0">
-          {visible.map((g) => (
-            <span
-              key={g.id}
-              className="inline-flex items-center flex-shrink-0 rounded-md bg-background-tint-02 px-2 py-0.5 whitespace-nowrap"
-            >
-              <Text as="span" secondaryBody text03>
-                {g.name}
-              </Text>
-            </span>
-          ))}
-          {overflow > 0 && (
-            <Text as="span" secondaryBody text03>
-              +{overflow}
-            </Text>
-          )}
-        </div>
-      );
-    },
+    cell: renderGroupsColumn,
   }),
   tc.column("role", {
     header: "Account Type",
     weight: 16,
     minWidth: 180,
-    cell: (value) => {
-      const Icon = ROLE_ICONS[value];
-      return (
-        <div className="flex items-center gap-1.5">
-          {Icon && <Icon size={14} className="text-text-03 shrink-0" />}
-          <Text as="span" mainUiBody text03>
-            {USER_ROLE_LABELS[value] ?? value}
-          </Text>
-        </div>
-      );
-    },
+    cell: renderRoleColumn,
   }),
   tc.column("is_active", {
     header: "Status",
     weight: 15,
     minWidth: 100,
-    cell: (value, row) => (
-      <div className="flex flex-col">
-        <Text as="span" mainUiBody text03>
-          {value ? "Active" : "Inactive"}
-        </Text>
-        {row.is_scim_synced && (
-          <Text as="span" secondaryBody text03>
-            SCIM synced
-          </Text>
-        )}
-      </div>
-    ),
+    cell: renderStatusColumn,
   }),
   tc.column("updated_at", {
     header: "Last Updated",
     weight: 14,
     minWidth: 100,
-    cell: (value) => (
-      <Text as="span" secondaryBody text03>
-        {timeAgo(value) ?? "—"}
-      </Text>
-    ),
+    cell: renderLastUpdatedColumn,
   }),
   tc.actions(),
 ];
@@ -155,17 +161,23 @@ const columns = [
 // Component
 // ---------------------------------------------------------------------------
 
-const PAGE_SIZE = 8;
-
 export default function UsersTable() {
   const [searchTerm, setSearchTerm] = useState("");
-  const [sorting, setSorting] = useState<SortingState>([]);
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [pageIndex, setPageIndex] = useState(0);
+
+  useEffect(() => {
+    const timer = setTimeout(
+      () => setDebouncedSearch(searchTerm),
+      SEARCH_DEBOUNCE_MS
+    );
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
 
   const { users, totalItems, isLoading } = useAdminUsers({
     pageIndex,
     pageSize: PAGE_SIZE,
-    searchTerm: searchTerm || undefined,
+    searchTerm: debouncedSearch || undefined,
   });
 
   return (
@@ -184,12 +196,14 @@ export default function UsersTable() {
         columns={columns}
         getRowId={(row) => row.id}
         pageSize={PAGE_SIZE}
-        searchTerm={searchTerm}
+        searchTerm={debouncedSearch}
         footer={{ mode: "summary" }}
         serverSide={{
           totalItems,
           isLoading,
-          onSortingChange: setSorting,
+          onSortingChange: () => {
+            // sorting not yet wired to backend
+          },
           onPaginationChange: (idx) => {
             setPageIndex(idx);
           },
