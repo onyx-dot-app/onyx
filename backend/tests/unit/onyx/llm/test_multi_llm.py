@@ -1431,25 +1431,28 @@ def test_strip_tool_content_merges_consecutive_tool_results() -> None:
 
 def test_no_tool_choice_sent_when_no_tools(default_multi_llm: LitellmLLM) -> None:
     """Regression test for providers (e.g. Fireworks) that reject tool_choice=null.
-    When no tools are provided, tool_choice must not be forwarded to
-    litellm.completion() at all — not even as None."""
-    messages = [UserMessage(message="Hello!")]
 
-    with patch("litellm.completion") as mock_completion:
-        mock_completion.return_value = litellm.ModelResponse(
+    When no tools are provided, tool_choice must not be forwarded to
+    litellm.completion() at all — not even as None.
+    """
+    messages: LanguageModelInput = [UserMessage(content="Hello!")]
+
+    mock_stream_chunks = [
+        litellm.ModelResponse(
             id="chatcmpl-123",
             choices=[
                 litellm.Choices(
+                    delta=_create_delta(role="assistant", content="Hello!"),
                     finish_reason="stop",
                     index=0,
-                    message=litellm.Message(role="assistant", content="Hello!"),
                 )
             ],
             model="gpt-3.5-turbo",
-            usage=litellm.Usage(
-                prompt_tokens=10, completion_tokens=5, total_tokens=15
-            ),
-        )
+        ),
+    ]
+
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = mock_stream_chunks
 
         default_multi_llm.invoke(messages, tools=None)
 
@@ -1457,4 +1460,3 @@ def test_no_tool_choice_sent_when_no_tools(default_multi_llm: LitellmLLM) -> Non
         assert "tool_choice" not in kwargs, (
             "tool_choice must not be sent to providers when no tools are provided"
         )
-        
