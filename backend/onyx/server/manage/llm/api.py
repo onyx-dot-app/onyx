@@ -1429,8 +1429,25 @@ def _get_litellm_models_response(api_key: str, api_base: str) -> dict:
         response = httpx.get(url, headers=headers, timeout=10.0)
         response.raise_for_status()
         return response.json()
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 401:
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR,
+                "Authentication failed: invalid or missing API key for LiteLLM proxy.",
+            )
+        elif e.response.status_code == 404:
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR,
+                f"LiteLLM models endpoint not found at {url}. "
+                "Please verify the API base URL.",
+            )
+        else:
+            raise OnyxError(
+                OnyxErrorCode.BAD_GATEWAY,
+                f"Failed to fetch LiteLLM models: {e}",
+            )
     except Exception as e:
         raise OnyxError(
             OnyxErrorCode.BAD_GATEWAY,
-            f"Failed to fetch Litellm models: {e}",
+            f"Failed to fetch LiteLLM models: {e}",
         )

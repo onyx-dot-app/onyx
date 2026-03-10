@@ -855,5 +855,5 @@ class TestGetLitellmAvailableModels:
                 api_base="http://localhost:4000",
                 api_key="test-key",
             )
-            with pytest.raises(OnyxError, match="Failed to fetch Litellm models"):
+            with pytest.raises(OnyxError, match="Failed to fetch LiteLLM models"):
                 get_litellm_available_models(request, MagicMock(), mock_session)
