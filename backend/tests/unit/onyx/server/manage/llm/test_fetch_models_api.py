@@ -9,12 +9,12 @@ from unittest.mock import MagicMock
 from unittest.mock import patch
 
 import pytest
-from fastapi import HTTPException
 
-from onyx.server.manage.llm.models import LMStudioFinalModelResponse
-from onyx.server.manage.llm.models import LMStudioModelsRequest
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.manage.llm.models import LitellmFinalModelResponse
 from onyx.server.manage.llm.models import LitellmModelsRequest
+from onyx.server.manage.llm.models import LMStudioFinalModelResponse
+from onyx.server.manage.llm.models import LMStudioModelsRequest
 from onyx.server.manage.llm.models import OllamaFinalModelResponse
 from onyx.server.manage.llm.models import OllamaModelsRequest
 from onyx.server.manage.llm.models import OpenRouterFinalModelResponse
@@ -618,6 +618,7 @@ class TestGetLMStudioAvailableModels:
             with pytest.raises(OnyxError):
                 get_lm_studio_available_models(request, MagicMock(), mock_session)
 
+
 class TestGetLitellmAvailableModels:
     """Tests for the Litellm proxy model fetch endpoint."""
 
@@ -729,11 +730,8 @@ class TestGetLitellmAvailableModels:
                 api_base="http://localhost:4000",
                 api_key="test-key",
             )
-            with pytest.raises(HTTPException) as exc_info:
+            with pytest.raises(OnyxError, match="No models found"):
                 get_litellm_available_models(request, MagicMock(), mock_session)
-
-            assert exc_info.value.status_code == 400
-            assert "No models found" in str(exc_info.value.detail)
 
     def test_missing_data_key_raises_http_exception(self) -> None:
         """Test that response without 'data' key raises HTTPException."""
@@ -751,10 +749,8 @@ class TestGetLitellmAvailableModels:
                 api_base="http://localhost:4000",
                 api_key="test-key",
             )
-            with pytest.raises(HTTPException) as exc_info:
+            with pytest.raises(OnyxError):
                 get_litellm_available_models(request, MagicMock(), mock_session)
-
-            assert exc_info.value.status_code == 400
 
     def test_skips_unparseable_entries(self) -> None:
         """Test that malformed model entries are skipped without failing."""
@@ -811,11 +807,8 @@ class TestGetLitellmAvailableModels:
                 api_base="http://localhost:4000",
                 api_key="test-key",
             )
-            with pytest.raises(HTTPException) as exc_info:
+            with pytest.raises(OnyxError, match="No compatible models"):
                 get_litellm_available_models(request, MagicMock(), mock_session)
-
-            assert exc_info.value.status_code == 400
-            assert "No compatible models" in str(exc_info.value.detail)
 
     def test_api_base_trailing_slash_handled(self) -> None:
         """Test that trailing slashes in api_base are handled correctly."""
@@ -862,8 +855,5 @@ class TestGetLitellmAvailableModels:
                 api_base="http://localhost:4000",
                 api_key="test-key",
             )
-            with pytest.raises(HTTPException) as exc_info:
+            with pytest.raises(OnyxError, match="Failed to fetch Litellm models"):
                 get_litellm_available_models(request, MagicMock(), mock_session)
-
-            assert exc_info.value.status_code == 400
-            assert "Failed to fetch Litellm models" in str(exc_info.value.detail)
