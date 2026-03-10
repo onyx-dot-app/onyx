@@ -78,7 +78,10 @@ def _get_group_member_emails(
 
         members: list[dict[str, Any]] = page.get("values", [])
         for member in members:
-            if member.get("accountType") != _ATLASSIAN_ACCOUNT_TYPE:
+            account_type = member.get("accountType")
+            # On Jira DC < 9.0, accountType is absent; include those users.
+            # On Cloud / DC 9.0+, filter to real user accounts only.
+            if account_type is not None and account_type != _ATLASSIAN_ACCOUNT_TYPE:
                 continue
 
             email = member.get("emailAddress")
