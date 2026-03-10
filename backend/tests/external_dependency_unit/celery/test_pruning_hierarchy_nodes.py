@@ -195,31 +195,40 @@ def _cleanup_test_data(db_session: Session) -> None:
     """Remove all test hierarchy nodes and documents to isolate tests."""
     for doc_id in SLIM_DOC_IDS:
         db_session.query(DbDocument).filter(DbDocument.id == doc_id).delete()
+
+    test_connector_ids_q = db_session.query(Connector.id).filter(
+        Connector.source == TEST_SOURCE,
+        Connector.name.like("Test %"),
+    )
+
     db_session.query(HierarchyNodeByConnectorCredentialPair).filter(
-        HierarchyNodeByConnectorCredentialPair.connector_id.in_(
-            db_session.query(Connector.id).filter(
-                Connector.source == TEST_SOURCE,
-                Connector.name.like("Test %"),
-            )
-        )
+        HierarchyNodeByConnectorCredentialPair.connector_id.in_(test_connector_ids_q)
     ).delete(synchronize_session="fetch")
     db_session.query(DBHierarchyNode).filter(
         DBHierarchyNode.source == TEST_SOURCE
     ).delete()
     db_session.flush()
-    # Clean up test connectors/credentials/cc_pairs
+
+    # Collect credential IDs before deleting cc_pairs (bulk query.delete()
+    # bypasses ORM-level cascade, so credentials won't be auto-removed).
+    credential_ids = [
+        row[0]
+        for row in db_session.query(ConnectorCredentialPair.credential_id)
+        .filter(ConnectorCredentialPair.connector_id.in_(test_connector_ids_q))
+        .all()
+    ]
+
     db_session.query(ConnectorCredentialPair).filter(
-        ConnectorCredentialPair.connector_id.in_(
-            db_session.query(Connector.id).filter(
-                Connector.source == TEST_SOURCE,
-                Connector.name.like("Test %"),
-            )
-        )
+        ConnectorCredentialPair.connector_id.in_(test_connector_ids_q)
     ).delete(synchronize_session="fetch")
     db_session.query(Connector).filter(
         Connector.source == TEST_SOURCE,
         Connector.name.like("Test %"),
     ).delete(synchronize_session="fetch")
+    if credential_ids:
+        db_session.query(Credential).filter(Credential.id.in_(credential_ids)).delete(
+            synchronize_session="fetch"
+        )
     db_session.commit()
 
 
