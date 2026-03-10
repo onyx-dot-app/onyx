@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react";
-import { Interactive } from "@opal/core";
+import { Interactive, Disabled } from "@opal/core";
 
 // ---------------------------------------------------------------------------
 // Variant / Prominence mappings for the matrix story
@@ -9,8 +9,6 @@ const VARIANT_PROMINENCE_MAP: Record<string, string[]> = {
   default: ["primary", "secondary", "tertiary", "internal"],
   action: ["primary", "secondary", "tertiary", "internal"],
   danger: ["primary", "secondary", "tertiary", "internal"],
-  select: ["light", "heavy"],
-  sidebar: ["light"],
   none: [],
 };
 
@@ -35,39 +33,39 @@ export default meta;
 // Stories
 // ---------------------------------------------------------------------------
 
-/** Basic Interactive.Base + Container with text content. */
+/** Basic Interactive.Stateless + Container with text content. */
 export const Default: StoryObj = {
   render: () => (
     <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
-      <Interactive.Base
+      <Interactive.Stateless
         variant="default"
         prominence="secondary"
         onClick={() => {}}
       >
         <Interactive.Container border>
-          <span>Secondary</span>
+          <span className="interactive-foreground">Secondary</span>
         </Interactive.Container>
-      </Interactive.Base>
+      </Interactive.Stateless>
 
-      <Interactive.Base
+      <Interactive.Stateless
         variant="default"
         prominence="primary"
         onClick={() => {}}
       >
         <Interactive.Container border>
-          <span>Primary</span>
+          <span className="interactive-foreground">Primary</span>
         </Interactive.Container>
-      </Interactive.Base>
+      </Interactive.Stateless>
 
-      <Interactive.Base
+      <Interactive.Stateless
         variant="default"
         prominence="tertiary"
         onClick={() => {}}
       >
         <Interactive.Container border>
-          <span>Tertiary</span>
+          <span className="interactive-foreground">Tertiary</span>
         </Interactive.Container>
-      </Interactive.Base>
+      </Interactive.Stateless>
     </div>
   ),
 };
@@ -91,11 +89,13 @@ export const VariantMatrix: StoryObj = {
           </div>
 
           {prominences.length === 0 ? (
-            <Interactive.Base variant="none" onClick={() => {}}>
+            <Interactive.Stateless variant="none" onClick={() => {}}>
               <Interactive.Container border>
-                <span>none (no prominence)</span>
+                <span style={{ color: "var(--text-01)" }}>
+                  none (no prominence)
+                </span>
               </Interactive.Container>
-            </Interactive.Base>
+            </Interactive.Stateless>
           ) : (
             <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
               {prominences.map((prominence) => (
@@ -108,16 +108,18 @@ export const VariantMatrix: StoryObj = {
                     gap: "0.25rem",
                   }}
                 >
-                  <Interactive.Base
+                  <Interactive.Stateless
                     // Cast required because the discriminated union can't be
                     // resolved from dynamic strings at the type level.
                     {...({ variant, prominence } as any)}
                     onClick={() => {}}
                   >
                     <Interactive.Container border>
-                      <span>{prominence}</span>
+                      <span className="interactive-foreground">
+                        {prominence}
+                      </span>
                     </Interactive.Container>
-                  </Interactive.Base>
+                  </Interactive.Stateless>
                   <span
                     style={{
                       fontSize: "0.625rem",
@@ -141,16 +143,16 @@ export const Sizes: StoryObj = {
   render: () => (
     <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
       {SIZE_VARIANTS.map((size) => (
-        <Interactive.Base
+        <Interactive.Stateless
           key={size}
           variant="default"
           prominence="secondary"
           onClick={() => {}}
         >
           <Interactive.Container border heightVariant={size}>
-            <span>{size}</span>
+            <span className="interactive-foreground">{size}</span>
           </Interactive.Container>
-        </Interactive.Base>
+        </Interactive.Stateless>
       ))}
     </div>
   ),
@@ -160,15 +162,15 @@ export const Sizes: StoryObj = {
 export const WidthFull: StoryObj = {
   render: () => (
     <div style={{ width: 400 }}>
-      <Interactive.Base
+      <Interactive.Stateless
         variant="default"
         prominence="secondary"
         onClick={() => {}}
       >
         <Interactive.Container border widthVariant="full">
-          <span>Full width container</span>
+          <span className="interactive-foreground">Full width container</span>
         </Interactive.Container>
-      </Interactive.Base>
+      </Interactive.Stateless>
     </div>
   ),
 };
@@ -178,73 +180,86 @@ export const Rounding: StoryObj = {
   render: () => (
     <div style={{ display: "flex", gap: "0.75rem" }}>
       {ROUNDING_VARIANTS.map((rounding) => (
-        <Interactive.Base
+        <Interactive.Stateless
           key={rounding}
           variant="default"
           prominence="secondary"
           onClick={() => {}}
         >
           <Interactive.Container border roundingVariant={rounding}>
-            <span>{rounding}</span>
+            <span className="interactive-foreground">{rounding}</span>
           </Interactive.Container>
-        </Interactive.Base>
+        </Interactive.Stateless>
       ))}
     </div>
   ),
 };
 
 /** Disabled state prevents clicks and shows disabled styling. */
-export const Disabled: StoryObj = {
+export const DisabledStory: StoryObj = {
+  name: "Disabled",
   render: () => (
     <div style={{ display: "flex", gap: "0.75rem" }}>
-      <Interactive.Base
-        variant="default"
-        prominence="secondary"
-        onClick={() => {}}
-        disabled
-      >
-        <Interactive.Container border>
-          <span>Disabled</span>
-        </Interactive.Container>
-      </Interactive.Base>
+      <Disabled>
+        <Interactive.Stateless
+          variant="default"
+          prominence="secondary"
+          onClick={() => {}}
+        >
+          <Interactive.Container border>
+            <span className="interactive-foreground">Disabled</span>
+          </Interactive.Container>
+        </Interactive.Stateless>
+      </Disabled>
 
-      <Interactive.Base
+      <Interactive.Stateless
         variant="default"
         prominence="secondary"
         onClick={() => {}}
       >
         <Interactive.Container border>
-          <span>Enabled</span>
+          <span className="interactive-foreground">Enabled</span>
         </Interactive.Container>
-      </Interactive.Base>
+      </Interactive.Stateless>
     </div>
   ),
 };
 
-/** Transient prop forces the hover/active visual state. */
-export const Transient: StoryObj = {
+/** Interaction override forces the hover/active visual state. */
+export const Interaction: StoryObj = {
   render: () => (
     <div style={{ display: "flex", gap: "0.75rem" }}>
-      <Interactive.Base
+      <Interactive.Stateless
         variant="default"
         prominence="secondary"
+        interaction="hover"
         onClick={() => {}}
-        transient
       >
         <Interactive.Container border>
-          <span>Forced hover</span>
+          <span className="interactive-foreground">Forced hover</span>
         </Interactive.Container>
-      </Interactive.Base>
+      </Interactive.Stateless>
 
-      <Interactive.Base
+      <Interactive.Stateless
+        variant="default"
+        prominence="secondary"
+        interaction="active"
+        onClick={() => {}}
+      >
+        <Interactive.Container border>
+          <span className="interactive-foreground">Forced active</span>
+        </Interactive.Container>
+      </Interactive.Stateless>
+
+      <Interactive.Stateless
         variant="default"
         prominence="secondary"
         onClick={() => {}}
       >
         <Interactive.Container border>
-          <span>Normal</span>
+          <span className="interactive-foreground">Normal (rest)</span>
         </Interactive.Container>
-      </Interactive.Base>
+      </Interactive.Stateless>
     </div>
   ),
 };
@@ -253,25 +268,25 @@ export const Transient: StoryObj = {
 export const WithBorder: StoryObj = {
   render: () => (
     <div style={{ display: "flex", gap: "0.75rem" }}>
-      <Interactive.Base
+      <Interactive.Stateless
         variant="default"
         prominence="secondary"
         onClick={() => {}}
       >
         <Interactive.Container border>
-          <span>With border</span>
+          <span className="interactive-foreground">With border</span>
         </Interactive.Container>
-      </Interactive.Base>
+      </Interactive.Stateless>
 
-      <Interactive.Base
+      <Interactive.Stateless
         variant="default"
         prominence="secondary"
         onClick={() => {}}
       >
         <Interactive.Container>
-          <span>Without border</span>
+          <span className="interactive-foreground">Without border</span>
         </Interactive.Container>
-      </Interactive.Base>
+      </Interactive.Stateless>
     </div>
   ),
 };
@@ -279,51 +294,57 @@ export const WithBorder: StoryObj = {
 /** Using href to render as a link. */
 export const AsLink: StoryObj = {
   render: () => (
-    <Interactive.Base variant="action" href="/settings">
+    <Interactive.Stateless variant="action" href="/settings">
       <Interactive.Container border>
-        <span>Go to Settings</span>
+        <span className="interactive-foreground">Go to Settings</span>
       </Interactive.Container>
-    </Interactive.Base>
+    </Interactive.Stateless>
   ),
 };
 
-/** Select variant with selected and unselected states. */
+/** Stateful select variant with selected and unselected states. */
 export const SelectVariant: StoryObj = {
   render: () => (
     <div style={{ display: "flex", gap: "0.75rem" }}>
-      <Interactive.Base
-        variant="select"
-        prominence="light"
-        selected
+      <Interactive.Stateful
+        variant="select-light"
+        state="selected"
         onClick={() => {}}
       >
         <Interactive.Container border>
-          <span>Selected (light)</span>
+          <span className="interactive-foreground">Selected (light)</span>
         </Interactive.Container>
-      </Interactive.Base>
+      </Interactive.Stateful>
 
-      <Interactive.Base variant="select" prominence="light" onClick={() => {}}>
-        <Interactive.Container border>
-          <span>Unselected (light)</span>
-        </Interactive.Container>
-      </Interactive.Base>
-
-      <Interactive.Base
-        variant="select"
-        prominence="heavy"
-        selected
+      <Interactive.Stateful
+        variant="select-light"
+        state="empty"
         onClick={() => {}}
       >
         <Interactive.Container border>
-          <span>Selected (heavy)</span>
+          <span className="interactive-foreground">Unselected (light)</span>
         </Interactive.Container>
-      </Interactive.Base>
+      </Interactive.Stateful>
 
-      <Interactive.Base variant="select" prominence="heavy" onClick={() => {}}>
+      <Interactive.Stateful
+        variant="select-heavy"
+        state="selected"
+        onClick={() => {}}
+      >
         <Interactive.Container border>
-          <span>Unselected (heavy)</span>
+          <span className="interactive-foreground">Selected (heavy)</span>
         </Interactive.Container>
-      </Interactive.Base>
+      </Interactive.Stateful>
+
+      <Interactive.Stateful
+        variant="select-heavy"
+        state="empty"
+        onClick={() => {}}
+      >
+        <Interactive.Container border>
+          <span className="interactive-foreground">Unselected (heavy)</span>
+        </Interactive.Container>
+      </Interactive.Stateful>
     </div>
   ),
 };
