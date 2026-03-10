@@ -298,16 +298,30 @@ class TestDocumentIndexOld:
                 chunk.personas = [2]
             document_index.index(chunks, index_batch_params)
 
-            # Ensure that we can get chunks as expected.
+            # Ensure that we can get chunks as expected with filters.
             doc_id = chunks[0].source_document.id
             chunk_count = len(chunks)
             tenant_id = get_current_tenant_id()
-            chunk_request = VespaChunkRequest(document_id=doc_id)
+            # We need to specify the chunk index range and specify
+            # batch_retrieval=True below to trigger the codepath for Vespa's
+            # search API, which uses the expected additive filtering for
+            # project_id and persona_id. Otherwise we would use the codepath for
+            # the visit API, which does not have this kind of filtering
+            # implemented.
+            chunk_request = VespaChunkRequest(
+                document_id=doc_id, min_chunk_ind=0, max_chunk_ind=chunk_count - 1
+            )
             project_persona_filters = IndexFilters(
                 access_control_list=None,
                 tenant_id=tenant_id,
                 project_id=1,
                 persona_id=2,
+                # We need this even though none of the chunks belong to a
+                # document set because project_id and persona_id are only
+                # additive filters in the event the agent has knowledge scope;
+                # if the agent does not, it is implied that it can see
+                # everything it is allowed to.
+                document_set=["1"],
             )
             # Not best practice here but the API for refreshing the index to
             # ensure that the latest data is present is not exposed in this
@@ -316,7 +330,9 @@ class TestDocumentIndexOld:
             # this suite should be small.
             time.sleep(1)
             inference_chunks = document_index.id_based_retrieval(
-                chunk_requests=[chunk_request], filters=project_persona_filters
+                chunk_requests=[chunk_request],
+                filters=project_persona_filters,
+                batch_retrieval=True,
             )
             assert len(inference_chunks) == chunk_count
             # Sort by chunk id to easily test if we have all chunks.
@@ -343,7 +359,7 @@ class TestDocumentIndexOld:
             # Again, not best practice here.
             time.sleep(1)
             inference_chunks = document_index.id_based_retrieval(
-                chunk_requests=[chunk_request], filters=filters
+                chunk_requests=[chunk_request], filters=filters, batch_retrieval=True
             )
             assert len(inference_chunks) == chunk_count
             # Sort by chunk id to easily test if we have all chunks.
@@ -355,6 +371,8 @@ class TestDocumentIndexOld:
             # Now, we should expect to not get any chunks if we specify the user
             # project and personas filters.
             inference_chunks = document_index.id_based_retrieval(
-                chunk_requests=[chunk_request], filters=project_persona_filters
+                chunk_requests=[chunk_request],
+                filters=project_persona_filters,
+                batch_retrieval=True,
             )
             assert len(inference_chunks) == 0

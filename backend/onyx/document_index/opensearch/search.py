@@ -734,14 +734,13 @@ class DocumentQuery:
             # document's metadata list.
             filter_clauses.append(_get_tag_filter(tags))
 
-        # Knowledge scope: explicit knowledge attachments restrict what
-        # an assistant can see.  When none are set the assistant
-        # searches everything.
+        # Knowledge scope: explicit knowledge attachments restrict what an
+        # assistant can see. When none are set the assistant searches
+        # everything.
         #
-        # project_id / persona_id are additive: they make overflowing
-        # user files findable but must NOT trigger the restriction on
-        # their own (an agent with no explicit knowledge should search
-        # everything).
+        # project_id / persona_id are additive: they make overflowing user files
+        # findable but must NOT trigger the restriction on their own (an agent
+        # with no explicit knowledge should search everything).
         has_knowledge_scope = (
             attached_document_ids
             or hierarchy_node_ids
@@ -769,9 +768,8 @@ class DocumentQuery:
                 knowledge_filter["bool"]["should"].append(
                     _get_document_set_filter(document_sets)
                 )
-            # Additive: widen scope to also cover overflowing user
-            # files, but only when an explicit restriction is already
-            # in effect.
+            # Additive: widen scope to also cover overflowing user files, but
+            # only when an explicit restriction is already in effect.
             if project_id is not None:
                 knowledge_filter["bool"]["should"].append(
                     _get_user_project_filter(project_id)
