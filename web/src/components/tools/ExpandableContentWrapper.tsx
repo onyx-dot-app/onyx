@@ -42,8 +42,8 @@ export default function ExpandableContentWrapper({
   const Content = (
     <div
       className={cn(
-        !expanded ? "w-message-default" : "w-full",
-        "!rounded !rounded-lg overflow-y-hidden h-full"
+        !expanded ? "w-message-default max-w-full" : "w-full",
+        "!rounded-lg overflow-y-hidden h-full"
       )}
     >
       <CardHeader className="w-full bg-background-tint-02 top-0 p-3">
