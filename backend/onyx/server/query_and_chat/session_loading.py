@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 from typing import cast
 from typing import Literal
 
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.chat.citation_utils import extract_citation_order_from_text
@@ -20,7 +22,9 @@ from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
 from onyx.server.query_and_chat.streaming_models import CitationInfo
+from onyx.server.query_and_chat.streaming_models import CustomToolArgs
 from onyx.server.query_and_chat.streaming_models import CustomToolDelta
+from onyx.server.query_and_chat.streaming_models import CustomToolErrorInfo
 from onyx.server.query_and_chat.streaming_models import CustomToolStart
 from onyx.server.query_and_chat.streaming_models import FileReaderResult
 from onyx.server.query_and_chat.streaming_models import FileReaderStart
@@ -180,24 +184,37 @@ def create_custom_tool_packets(
     tab_index: int = 0,
     data: dict | list | str | int | float | bool | None = None,
     file_ids: list[str] | None = None,
+    error: CustomToolErrorInfo | None = None,
+    tool_args: dict[str, Any] | None = None,
+    tool_id: int | None = None,
 ) -> list[Packet]:
     packets: list[Packet] = []
 
     packets.append(
         Packet(
             placement=Placement(turn_index=turn_index, tab_index=tab_index),
-            obj=CustomToolStart(tool_name=tool_name),
+            obj=CustomToolStart(tool_name=tool_name, tool_id=tool_id),
         )
     )
+
+    if tool_args:
+        packets.append(
+            Packet(
+                placement=Placement(turn_index=turn_index, tab_index=tab_index),
+                obj=CustomToolArgs(tool_name=tool_name, tool_args=tool_args),
+            )
+        )
 
     packets.append(
         Packet(
             placement=Placement(turn_index=turn_index, tab_index=tab_index),
             obj=CustomToolDelta(
                 tool_name=tool_name,
+                tool_id=tool_id,
                 response_type=response_type,
                 data=data,
                 file_ids=file_ids,
+                error=error,
             ),
         ),
     )
@@ -657,13 +674,55 @@ def translate_assistant_message_to_packets(
 
                     else:
                         # Custom tool or unknown tool
+                        # Try to parse as structured CustomToolCallSummary JSON
+                        custom_data: dict | list | str | int | float | bool | None = (
+                            tool_call.tool_call_response
+                        )
+                        custom_error: CustomToolErrorInfo | None = None
+                        custom_response_type = "text"
+
+                        try:
+                            parsed = json.loads(tool_call.tool_call_response)
+                            if isinstance(parsed, dict) and "tool_name" in parsed:
+                                custom_data = parsed.get("tool_result")
+                                custom_response_type = parsed.get(
+                                    "response_type", "text"
+                                )
+                                if parsed.get("error"):
+                                    custom_error = CustomToolErrorInfo(
+                                        **parsed["error"]
+                                    )
+                        except (
+                            json.JSONDecodeError,
+                            KeyError,
+                            TypeError,
+                            ValidationError,
+                        ):
+                            pass
+
+                        custom_file_ids: list[str] | None = None
+                        if custom_response_type in ("image", "csv") and isinstance(
+                            custom_data, dict
+                        ):
+                            custom_file_ids = custom_data.get("file_ids")
+                            custom_data = None
+
+                        custom_args = {
+                            k: v
+                            for k, v in (tool_call.tool_call_arguments or {}).items()
+                            if k != "requestBody"
+                        }
                         turn_tool_packets.extend(
                             create_custom_tool_packets(
                                 tool_name=tool.display_name or tool.name,
-                                response_type="text",
+                                response_type=custom_response_type,
                                 turn_index=turn_num,
                                 tab_index=tool_call.tab_index,
-                                data=tool_call.tool_call_response,
+                                data=custom_data,
+                                file_ids=custom_file_ids,
+                                error=custom_error,
+                                tool_args=custom_args if custom_args else None,
+                                tool_id=tool_call.tool_id,
                             )
                         )
 

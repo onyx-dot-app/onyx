@@ -18,6 +18,7 @@ from onyx.context.search.models import SearchDoc
 from onyx.context.search.models import SearchDocsResponse
 from onyx.db.memory import UserMemoryContext
 from onyx.server.query_and_chat.placement import Placement
+from onyx.server.query_and_chat.streaming_models import CustomToolErrorInfo
 from onyx.server.query_and_chat.streaming_models import GeneratedImage
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 from onyx.tools.tool_implementations.memory.models import MemoryToolResponse
@@ -61,6 +62,7 @@ class CustomToolCallSummary(BaseModel):
     tool_name: str
     response_type: str  # e.g., 'json', 'image', 'csv', 'graph'
     tool_result: Any  # The response data
+    error: CustomToolErrorInfo | None = None
 
 
 class ToolCallKickoff(BaseModel):

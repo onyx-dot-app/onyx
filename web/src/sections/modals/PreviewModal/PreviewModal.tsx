@@ -10,17 +10,11 @@ import { Section } from "@/layouts/general-layouts";
 import { getCodeLanguage, getDataLanguage } from "@/lib/languages";
 import { fetchChatFile } from "@/lib/chat/svc";
 import { PreviewContext } from "@/sections/modals/PreviewModal/interfaces";
+import {
+  getMimeLanguage,
+  resolveMimeType,
+} from "@/sections/modals/PreviewModal/mimeUtils";
 import { resolveVariant } from "@/sections/modals/PreviewModal/variants";
-
-function resolveMimeType(mimeType: string, fileName: string): string {
-  if (mimeType !== "application/octet-stream") return mimeType;
-  const lower = fileName.toLowerCase();
-  if (lower.endsWith(".md") || lower.endsWith(".markdown"))
-    return "text/markdown";
-  if (lower.endsWith(".txt")) return "text/plain";
-  if (lower.endsWith(".csv")) return "text/csv";
-  return mimeType;
-}
 
 interface PreviewModalProps {
   presentingDocument: MinimalOnyxDocument;
@@ -47,9 +41,10 @@ export default function PreviewModal({
   const language = useMemo(
     () =>
       getCodeLanguage(presentingDocument.semantic_identifier || "") ||
+      getMimeLanguage(mimeType) ||
       getDataLanguage(presentingDocument.semantic_identifier || "") ||
       "plaintext",
-    [presentingDocument.semantic_identifier]
+    [mimeType, presentingDocument.semantic_identifier]
   );
 
   const lineCount = useMemo(() => {
@@ -200,7 +195,7 @@ export default function PreviewModal({
             )}
             style={{
               background:
-                "linear-gradient(to top, var(--background-tint-01) 40%, transparent)",
+                "linear-gradient(to top, var(--background-code-01) 40%, transparent)",
             }}
           >
             {/* Left slot */}

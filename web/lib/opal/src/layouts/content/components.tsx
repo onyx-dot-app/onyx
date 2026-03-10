@@ -54,11 +54,18 @@ interface ContentBaseProps {
    * Uses the shared `WidthVariant` scale from `@opal/shared`.
    *
    * - `"auto"` — Shrink-wraps to content width
+   * - `"fit"` — Shrink-wraps to content width
    * - `"full"` — Stretches to fill the parent's width
    *
-   * @default "auto"
+   * @default "fit"
    */
   widthVariant?: WidthVariant;
+
+  /** When `true`, the title color hooks into `Interactive.Stateful`/`Interactive.Stateless`'s `--interactive-foreground` variable. */
+  withInteractive?: boolean;
+
+  /** Ref forwarded to the root `<div>` of the resolved layout. */
+  ref?: React.Ref<HTMLDivElement>;
 }
 
 // ---------------------------------------------------------------------------
@@ -122,10 +129,10 @@ function Content(props: ContentProps) {
     sizePreset = "headline",
     variant = "heading",
     widthVariant = "auto",
+    withInteractive,
+    ref,
     ...rest
   } = props;
-
-  const widthClass = widthVariants[widthVariant];
 
   let layout: React.ReactNode = null;
 
@@ -135,6 +142,8 @@ function Content(props: ContentProps) {
       layout = (
         <ContentXl
           sizePreset={sizePreset}
+          withInteractive={withInteractive}
+          ref={ref}
           {...(rest as Omit<ContentXlProps, "sizePreset">)}
         />
       );
@@ -142,6 +151,8 @@ function Content(props: ContentProps) {
       layout = (
         <ContentLg
           sizePreset={sizePreset}
+          withInteractive={withInteractive}
+          ref={ref}
           {...(rest as Omit<ContentLgProps, "sizePreset">)}
         />
       );
@@ -154,6 +165,8 @@ function Content(props: ContentProps) {
     layout = (
       <ContentMd
         sizePreset={sizePreset}
+        withInteractive={withInteractive}
+        ref={ref}
         {...(rest as Omit<ContentMdProps, "sizePreset">)}
       />
     );
@@ -164,6 +177,8 @@ function Content(props: ContentProps) {
     layout = (
       <ContentSm
         sizePreset={sizePreset}
+        withInteractive={withInteractive}
+        ref={ref}
         {...(rest as Omit<
           React.ComponentProps<typeof ContentSm>,
           "sizePreset"
@@ -178,11 +193,7 @@ function Content(props: ContentProps) {
       `Content: no layout matched for sizePreset="${sizePreset}" variant="${variant}"`
     );
 
-  // "auto" → return layout directly (a block div with w-auto still
-  // stretches to its parent, defeating shrink-to-content).
-  if (widthVariant === "auto") return layout;
-
-  return <div className={widthClass}>{layout}</div>;
+  return <div className={widthVariants[widthVariant]}>{layout}</div>;
 }
 
 // ---------------------------------------------------------------------------

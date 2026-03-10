@@ -275,9 +275,13 @@ def setup_postgres(db_session: Session) -> None:
             ],
             api_key_changed=True,
         )
-        new_llm_provider = upsert_llm_provider(
-            llm_provider_upsert_request=model_req, db_session=db_session
-        )
+        try:
+            new_llm_provider = upsert_llm_provider(
+                llm_provider_upsert_request=model_req, db_session=db_session
+            )
+        except ValueError as e:
+            logger.warning("Failed to upsert LLM provider during setup: %s", e)
+            return
         update_default_provider(
             provider_id=new_llm_provider.id, model_name=llm_model, db_session=db_session
         )

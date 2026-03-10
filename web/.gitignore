@@ -47,3 +47,6 @@ next-env.d.ts
 # generated clients ... in particular, the API to the Onyx backend itself!
 /src/lib/generated
 .jest-cache
+
+# storybook
+storybook-static

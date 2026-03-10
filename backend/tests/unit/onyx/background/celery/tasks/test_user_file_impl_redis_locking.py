@@ -27,7 +27,6 @@ def _mock_session_returning_none() -> MagicMock:
     """Return a mock session whose .get() returns None (file not found)."""
     session = MagicMock()
     session.get.return_value = None
-    session.execute.return_value.scalar_one_or_none.return_value = None
     return session
 
 
@@ -220,6 +219,10 @@ class TestDeleteUserFileImpl:
 # ------------------------------------------------------------------
 
 
+@patch(
+    f"{TASKS_MODULE}.fetch_user_files_with_access_relationships",
+    return_value=[],
+)
 class TestProjectSyncUserFileImpl:
     @patch(f"{TASKS_MODULE}.get_session_with_current_tenant")
     @patch(f"{TASKS_MODULE}.get_redis_client")
@@ -227,6 +230,7 @@ class TestProjectSyncUserFileImpl:
         self,
         mock_get_redis: MagicMock,
         mock_get_session: MagicMock,
+        _mock_fetch: MagicMock,
     ) -> None:
         redis_client = MagicMock()
         lock = MagicMock()
@@ -255,6 +259,7 @@ class TestProjectSyncUserFileImpl:
         self,
         mock_get_redis: MagicMock,
         mock_get_session: MagicMock,
+        _mock_fetch: MagicMock,
     ) -> None:
         redis_client = MagicMock()
         lock = MagicMock()
@@ -277,6 +282,7 @@ class TestProjectSyncUserFileImpl:
         self,
         mock_get_redis: MagicMock,
         mock_get_session: MagicMock,
+        _mock_fetch: MagicMock,
     ) -> None:
         session = _mock_session_returning_none()
         mock_get_session.return_value.__enter__.return_value = session

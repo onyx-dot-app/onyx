@@ -1,12 +1,9 @@
 "use client";
 
 import { redirect, useRouter, useSearchParams } from "next/navigation";
-import {
-  personaIncludesRetrieval,
-  getAvailableContextTokens,
-} from "@/app/app/services/lib";
+import { personaIncludesRetrieval } from "@/app/app/services/lib";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { toast } from "@/hooks/useToast";
+import { toast, useToastFromQuery } from "@/hooks/useToast";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { useFederatedConnectors, useFilters, useLlmManager } from "@/lib/hooks";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
@@ -56,10 +53,7 @@ import ChatScrollContainer, {
 } from "@/sections/chat/ChatScrollContainer";
 import ProjectContextPanel from "@/app/app/components/projects/ProjectContextPanel";
 import { useProjectsContext } from "@/providers/ProjectsContext";
-import {
-  getProjectTokenCount,
-  getMaxSelectedDocumentTokens,
-} from "@/app/app/projects/projectsService";
+import { getProjectTokenCount } from "@/app/app/projects/projectsService";
 import ProjectChatSessionList from "@/app/app/components/projects/ProjectChatSessionList";
 import { cn } from "@/lib/utils";
 import Suggestions from "@/sections/Suggestions";
@@ -70,7 +64,6 @@ import * as AppLayouts from "@/layouts/app-layouts";
 import { SvgChevronDown, SvgFileText } from "@opal/icons";
 import { Button } from "@opal/components";
 import Spacer from "@/refresh-components/Spacer";
-import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
 import useAppFocus from "@/hooks/useAppFocus";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import WelcomeMessage from "@/app/app/components/WelcomeMessage";
@@ -129,6 +122,13 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const router = useRouter();
   const appFocus = useAppFocus();
+
+  useToastFromQuery({
+    oauth_connected: {
+      message: "Authentication successful",
+      type: "success",
+    },
+  });
   const { setAppMode } = useAppMode();
   const searchParams = useSearchParams();
 
@@ -367,18 +367,22 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   const autoScrollEnabled = user?.preferences?.auto_scroll !== false;
   const isStreaming = currentChatState === "streaming";
 
-  const { onSubmit, stopGenerating, handleMessageSpecificFileUpload } =
-    useChatController({
-      filterManager,
-      llmManager,
-      availableAgents: agents,
-      liveAgent,
-      existingChatSessionId: currentChatSessionId,
-      selectedDocuments,
-      searchParams,
-      resetInputBar,
-      setSelectedAgentFromId,
-    });
+  const {
+    onSubmit,
+    stopGenerating,
+    handleMessageSpecificFileUpload,
+    availableContextTokens,
+  } = useChatController({
+    filterManager,
+    llmManager,
+    availableAgents: agents,
+    liveAgent,
+    existingChatSessionId: currentChatSessionId,
+    selectedDocuments,
+    searchParams,
+    resetInputBar,
+    setSelectedAgentFromId,
+  });
 
   const { onMessageSelection, currentSessionFileTokenCount } =
     useChatSessionController({
@@ -595,43 +599,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     };
   }, [currentChatSessionId, currentProjectId, currentProjectDetails?.files]);
 
-  // Available context tokens source of truth:
-  // - If a chat session exists, fetch from session API (dynamic per session/model)
-  // - If no session, derive from the default/current persona's max document tokens
-  const [availableContextTokens, setAvailableContextTokens] = useState<number>(
-    DEFAULT_CONTEXT_TOKENS * 0.5
-  );
-  useEffect(() => {
-    let cancelled = false;
-    async function run() {
-      try {
-        if (currentChatSessionId) {
-          const available =
-            await getAvailableContextTokens(currentChatSessionId);
-          const capped_context_tokens =
-            (available ?? DEFAULT_CONTEXT_TOKENS) * 0.5;
-          if (!cancelled) setAvailableContextTokens(capped_context_tokens);
-        } else {
-          const personaId = (selectedAgent || liveAgent)?.id;
-          if (personaId !== undefined && personaId !== null) {
-            const maxTokens = await getMaxSelectedDocumentTokens(personaId);
-            const capped_context_tokens =
-              (maxTokens ?? DEFAULT_CONTEXT_TOKENS) * 0.5;
-            if (!cancelled) setAvailableContextTokens(capped_context_tokens);
-          } else if (!cancelled) {
-            setAvailableContextTokens(DEFAULT_CONTEXT_TOKENS * 0.5);
-          }
-        }
-      } catch (e) {
-        if (!cancelled) setAvailableContextTokens(DEFAULT_CONTEXT_TOKENS * 0.5);
-      }
-    }
-    run();
-    return () => {
-      cancelled = true;
-    };
-  }, [currentChatSessionId, selectedAgent?.id, liveAgent?.id]);
-
   // handle error case where no assistants are available
   // Only show this after agents have loaded to prevent flash during initial load
   if (noAgents && !isLoadingAgents) {
@@ -716,7 +683,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
             >
               {/* Main content grid — 3 rows, animated */}
               <div
-                className="flex-1 w-full grid min-h-0 px-4 transition-[grid-template-rows] duration-150 ease-in-out"
+                className="flex-1 w-full grid min-h-0 transition-[grid-template-rows] duration-150 ease-in-out"
                 style={gridStyle}
               >
                 {/* ── Top row: ChatUI / WelcomeMessage / ProjectUI ── */}
@@ -781,7 +748,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                 </div>
 
                 {/* ── Middle-center: AppInputBar ── */}
-                <div className="row-start-2 flex flex-col items-center">
+                <div className="row-start-2 flex flex-col items-center px-4">
                   <div className="relative w-full max-w-[var(--app-page-main-content-width)] flex flex-col">
                     {/* Scroll to bottom button - positioned absolutely above AppInputBar */}
                     {appFocus.isChat() && showScrollButton && (
@@ -881,7 +848,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                 </div>
 
                 {/* ── Bottom: SearchResults + SourceFilter / Suggestions / ProjectChatList ── */}
-                <div className="row-start-3 min-h-0 overflow-hidden flex flex-col items-center w-full">
+                <div className="row-start-3 min-h-0 overflow-hidden flex flex-col items-center w-full px-4">
                   {/* Agent description below input */}
                   {(appFocus.isNewSession() || appFocus.isAgent()) &&
                     !isDefaultAgent && (

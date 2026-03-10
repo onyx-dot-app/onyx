@@ -6,7 +6,7 @@ import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { FileDescriptor } from "@/app/app/interfaces";
 import { cn } from "@/lib/utils";
-import TextViewModal from "@/sections/modals/TextViewModal";
+import PreviewModal from "@/sections/modals/PreviewModal";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 
 export interface ExpandableContentWrapperProps {
@@ -102,7 +102,7 @@ export default function ExpandableContentWrapper({
   return (
     <>
       {expanded && (
-        <TextViewModal
+        <PreviewModal
           presentingDocument={presentingDocument}
           onClose={() => setExpanded(false)}
         />
