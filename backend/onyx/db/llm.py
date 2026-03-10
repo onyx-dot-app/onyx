@@ -270,10 +270,35 @@ def upsert_llm_provider(
         mc.name for mc in llm_provider_upsert_request.model_configurations
     }
 
+    # Build a lookup of requested visibility by model name
+    requested_visibility = {
+        mc.name: mc.is_visible
+        for mc in llm_provider_upsert_request.model_configurations
+    }
+
     # Delete removed models
     removed_ids = [
         mc.id for name, mc in existing_by_name.items() if name not in models_to_exist
     ]
+
+    default_model = fetch_default_llm_model(db_session)
+
+    # Prevent removing and hiding the default model
+    if default_model:
+        for name, mc in existing_by_name.items():
+            if mc.id == default_model.id:
+                if default_model.id in removed_ids:
+                    raise ValueError(
+                        f"Cannot remove the default model '{name}'. "
+                        "Please change the default model before removing."
+                    )
+                if not requested_visibility.get(name, True):
+                    raise ValueError(
+                        f"Cannot hide the default model '{name}'. "
+                        "Please change the default model before hiding."
+                    )
+                break
+
     if removed_ids:
         db_session.query(ModelConfiguration).filter(
             ModelConfiguration.id.in_(removed_ids)
@@ -538,7 +563,6 @@ def fetch_default_model(
         .options(selectinload(ModelConfiguration.llm_provider))
         .join(LLMModelFlow)
         .where(
-            ModelConfiguration.is_visible == True,  # noqa: E712
             LLMModelFlow.llm_model_flow_type == flow_type,
             LLMModelFlow.is_default == True,  # noqa: E712
         )
@@ -814,44 +838,30 @@ def sync_auto_mode_models(
             )
             changes += 1
 
-    db_session.commit()
+    # Update the default if this provider currently holds the global CHAT default.
+    # We flush (but don't commit) so that _update_default_model can see the new
+    # model rows, then commit everything atomically to avoid a window where the
+    # old default is invisible but still pointed-to.
+    db_session.flush()
 
-    # Update the default if this provider currently holds the global CHAT default
     recommended_default = llm_recommendations.get_default_model(provider.provider)
     if recommended_default:
-        current_default_name = db_session.scalar(
-            select(ModelConfiguration.name)
-            .join(
-                LLMModelFlow,
-                LLMModelFlow.model_configuration_id == ModelConfiguration.id,
-            )
-            .where(
-                ModelConfiguration.llm_provider_id == provider.id,
-                LLMModelFlow.llm_model_flow_type == LLMModelFlowType.CHAT,
-                LLMModelFlow.is_default == True,  # noqa: E712
-            )
-        )
+        current_default = fetch_default_llm_model(db_session)
 
         if (
-            current_default_name is not None
-            and current_default_name != recommended_default.name
+            current_default
+            and current_default.llm_provider_id == provider.id
+            and current_default.name != recommended_default.name
         ):
-            try:
-                _update_default_model(
-                    db_session=db_session,
-                    provider_id=provider.id,
-                    model=recommended_default.name,
-                    flow_type=LLMModelFlowType.CHAT,
-                )
-                changes += 1
-            except ValueError:
-                logger.warning(
-                    "Recommended default model '%s' not found "
-                    "for provider_id=%s; skipping default update.",
-                    recommended_default.name,
-                    provider.id,
-                )
+            _update_default_model__no_commit(
+                db_session=db_session,
+                provider_id=provider.id,
+                model=recommended_default.name,
+                flow_type=LLMModelFlowType.CHAT,
+            )
+            changes += 1
 
+    db_session.commit()
     return changes
 
 
@@ -982,7 +992,7 @@ def update_model_configuration__no_commit(
     db_session.flush()
 
 
-def _update_default_model(
+def _update_default_model__no_commit(
     db_session: Session,
     provider_id: int,
     model: str,
@@ -1020,6 +1030,14 @@ def _update_default_model(
     new_default.is_default = True
     model_config.is_visible = True
 
+
+def _update_default_model(
+    db_session: Session,
+    provider_id: int,
+    model: str,
+    flow_type: LLMModelFlowType,
+) -> None:
+    _update_default_model__no_commit(db_session, provider_id, model, flow_type)
     db_session.commit()
 
 
