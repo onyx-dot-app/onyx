@@ -29,6 +29,7 @@ export enum PacketType {
 
   // Custom tool packets
   CUSTOM_TOOL_START = "custom_tool_start",
+  CUSTOM_TOOL_ARGS = "custom_tool_args",
   CUSTOM_TOOL_DELTA = "custom_tool_delta",
 
   // File reader tool packets
@@ -164,17 +165,32 @@ export interface FetchToolDocuments extends BaseObj {
 }
 
 // Custom Tool Packets
+export interface CustomToolErrorInfo {
+  is_auth_error: boolean;
+  status_code: number;
+  message: string;
+}
+
 export interface CustomToolStart extends BaseObj {
   type: "custom_tool_start";
   tool_name: string;
+  tool_id?: number | null;
+}
+
+export interface CustomToolArgs extends BaseObj {
+  type: "custom_tool_args";
+  tool_name: string;
+  tool_args: Record<string, any>;
 }
 
 export interface CustomToolDelta extends BaseObj {
   type: "custom_tool_delta";
   tool_name: string;
+  tool_id?: number | null;
   response_type: string;
   data?: any;
   file_ids?: string[] | null;
+  error?: CustomToolErrorInfo | null;
 }
 
 // File Reader Packets
@@ -304,6 +320,7 @@ export type FetchToolObj =
   | PacketError;
 export type CustomToolObj =
   | CustomToolStart
+  | CustomToolArgs
   | CustomToolDelta
   | SectionEnd
   | PacketError;
