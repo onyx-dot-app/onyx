@@ -63,7 +63,7 @@ export default function NRFChrome() {
   const { isMobile } = useScreenSize();
   const { setFolded } = useAppSidebarContext();
   const appFocus = useAppFocus();
-  const { classification } = useQueryController();
+  const { phase } = useQueryController();
   const [modePopoverOpen, setModePopoverOpen] = useState(false);
 
   const effectiveMode: AppMode = appFocus.isNewSession() ? appMode : "chat";
@@ -78,7 +78,7 @@ export default function NRFChrome() {
     isPaidEnterpriseFeaturesEnabled &&
     settings.isSearchModeAvailable &&
     appFocus.isNewSession() &&
-    !classification;
+    phase === "idle";
 
   const showHeader = isMobile || showModeToggle;
 

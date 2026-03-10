@@ -485,7 +485,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       finishOnboarding,
     ]
   );
-  const { submit: submitQuery, classification } = useQueryController();
+  const { submit: submitQuery, phase } = useQueryController();
 
   const defaultAppMode =
     (user?.preferences?.default_app_mode?.toLowerCase() as "chat" | "search") ??
@@ -493,12 +493,14 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const isNewSession = appFocus.isNewSession();
 
+  const isSearch = phase === "searching" || phase === "search-results";
+
   // 1. Reset the app-mode back to the user's default when navigating back to the "New Sessions" tab.
   // 2. If we're navigating away from the "New Session" tab after performing a search, we reset the app-input-bar.
   useEffect(() => {
     if (isNewSession) setAppMode(defaultAppMode);
-    if (!isNewSession && classification === "search") resetInputBar();
-  }, [isNewSession, defaultAppMode, classification, resetInputBar, setAppMode]);
+    if (!isNewSession && isSearch) resetInputBar();
+  }, [isNewSession, defaultAppMode, isSearch, resetInputBar, setAppMode]);
 
   const handleSearchDocumentClick = useCallback(
     (doc: MinimalOnyxDocument) => setPresentingDocument(doc),
@@ -607,7 +609,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const hasStarterMessages = (liveAgent?.starter_messages?.length ?? 0) > 0;
 
-  const isSearch = classification === "search";
   const gridStyle = {
     gridTemplateColumns: "1fr",
     gridTemplateRows: isSearch
@@ -735,7 +736,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                   <Fade
                     show={
                       (appFocus.isNewSession() || appFocus.isAgent()) &&
-                      !classification
+                      phase === "idle"
                     }
                     className="w-full flex-1 flex flex-col items-center justify-end"
                   >
@@ -764,7 +765,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
                     {/* OnboardingUI */}
                     {(appFocus.isNewSession() || appFocus.isAgent()) &&
-                      !classification &&
+                      phase === "idle" &&
                       (showOnboarding || !user?.personalization?.name) &&
                       !onboardingDismissed && (
                         <OnboardingFlow
@@ -799,7 +800,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       <div
                         className={cn(
                           "transition-all duration-150 ease-in-out overflow-hidden",
-                          classification === "search" ? "h-[14px]" : "h-0"
+                          isSearch ? "h-[14px]" : "h-0"
                         )}
                       />
                       <AppInputBar

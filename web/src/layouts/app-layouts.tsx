@@ -108,7 +108,7 @@ function Header() {
     useChatSessions();
   const router = useRouter();
   const appFocus = useAppFocus();
-  const { classification } = useQueryController();
+  const { phase } = useQueryController();
 
   const customHeaderContent =
     settings?.enterpriseSettings?.custom_header_content;
@@ -323,7 +323,7 @@ function Header() {
           {isPaidEnterpriseFeaturesEnabled &&
             settings.isSearchModeAvailable &&
             appFocus.isNewSession() &&
-            !classification && (
+            phase === "idle" && (
               <Popover open={modePopoverOpen} onOpenChange={setModePopoverOpen}>
                 <Popover.Trigger asChild>
                   <OpenButton

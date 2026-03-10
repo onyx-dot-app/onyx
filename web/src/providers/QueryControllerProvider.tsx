@@ -5,13 +5,16 @@ import { eeGated } from "@/ce";
 import { QueryControllerProvider as EEQueryControllerProvider } from "@/ee/providers/QueryControllerProvider";
 import { SearchDocWithContent, BaseFilters } from "@/lib/search/interfaces";
 
-export type QueryClassification = "search" | "chat" | null;
+export type QueryPhase =
+  | "idle" // no query submitted; WelcomeMessage visible, mode toggle visible
+  | "classifying" // auto mode: LLM deciding search vs chat
+  | "searching" // search request in-flight; SearchUI mounted with loading skeleton
+  | "search-results" // search complete; SearchUI showing results
+  | "chat"; // routed to chat; QueryController is done
 
 export interface QueryControllerValue {
-  /** Classification state: null (idle), "search", or "chat" */
-  classification: QueryClassification;
-  /** Whether or not the currently submitted query is being actively classified by the backend */
-  isClassifying: boolean;
+  /** Current phase of the query lifecycle */
+  phase: QueryPhase;
   /** Search results (empty if chat or not yet searched) */
   searchResults: SearchDocWithContent[];
   /** Document IDs selected by the LLM as most relevant */
@@ -31,8 +34,7 @@ export interface QueryControllerValue {
 }
 
 export const QueryControllerContext = createContext<QueryControllerValue>({
-  classification: null,
-  isClassifying: false,
+  phase: "idle",
   searchResults: [],
   llmSelectedDocIds: null,
   error: null,
