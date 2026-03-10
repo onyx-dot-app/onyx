@@ -837,6 +837,18 @@ function ChatPreferencesForm() {
                 </Card>
 
                 <Card>
+                  <InputLayouts.Vertical
+                    title="File Attachment Size Limit"
+                    description="Files attached in chats and projects must fit within both limits to be accepted. Larger files increase latency, memory usage, and token costs."
+                  >
+                    <FileSizeLimitFields
+                      saveSettings={saveSettings}
+                      vectorDbEnabled={vectorDbEnabled}
+                    />
+                  </InputLayouts.Vertical>
+                </Card>
+
+                <Card>
                   <InputLayouts.Horizontal
                     title="Allow Anonymous Users"
                     description="Allow anyone to start chats without logging in. They do not see any other chats and cannot create agents or update settings."
@@ -862,18 +874,6 @@ function ChatPreferencesForm() {
                       }}
                     />
                   </InputLayouts.Horizontal>
-                </Card>
-
-                <Card>
-                  <InputLayouts.Vertical
-                    title="File Attachment Size Limit"
-                    description="Files attached in chats and projects must fit within both limits to be accepted. Larger files increase latency, memory usage, and token costs."
-                  >
-                    <FileSizeLimitFields
-                      saveSettings={saveSettings}
-                      vectorDbEnabled={vectorDbEnabled}
-                    />
-                  </InputLayouts.Vertical>
                 </Card>
               </Section>
             </SimpleCollapsible.Content>
