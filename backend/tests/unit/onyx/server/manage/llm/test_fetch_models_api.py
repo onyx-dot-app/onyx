@@ -8,6 +8,7 @@ sync-to-DB behavior when provider_name is specified.
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
+import httpx
 import pytest
 
 from onyx.error_handling.exceptions import OnyxError
@@ -714,8 +715,8 @@ class TestGetLitellmAvailableModels:
             model_names = [r.model_name for r in results]
             assert model_names == sorted(model_names, key=str.lower)
 
-    def test_empty_data_raises_http_exception(self) -> None:
-        """Test that empty model list raises HTTPException."""
+    def test_empty_data_raises_onyx_error(self) -> None:
+        """Test that empty model list raises OnyxError."""
         from onyx.server.manage.llm.api import get_litellm_available_models
 
         mock_session = MagicMock()
@@ -733,8 +734,8 @@ class TestGetLitellmAvailableModels:
             with pytest.raises(OnyxError, match="No models found"):
                 get_litellm_available_models(request, MagicMock(), mock_session)
 
-    def test_missing_data_key_raises_http_exception(self) -> None:
-        """Test that response without 'data' key raises HTTPException."""
+    def test_missing_data_key_raises_onyx_error(self) -> None:
+        """Test that response without 'data' key raises OnyxError."""
         from onyx.server.manage.llm.api import get_litellm_available_models
 
         mock_session = MagicMock()
@@ -785,8 +786,8 @@ class TestGetLitellmAvailableModels:
             assert len(results) == 1
             assert results[0].model_name == "gpt-4o"
 
-    def test_all_entries_unparseable_raises_http_exception(self) -> None:
-        """Test that HTTPException is raised when all entries fail to parse."""
+    def test_all_entries_unparseable_raises_onyx_error(self) -> None:
+        """Test that OnyxError is raised when all entries fail to parse."""
         from onyx.server.manage.llm.api import get_litellm_available_models
 
         mock_session = MagicMock()
@@ -842,8 +843,8 @@ class TestGetLitellmAvailableModels:
             call_args = mock_get.call_args
             assert call_args[0][0] == "http://localhost:4000/v1/models"
 
-    def test_connection_failure_raises_http_exception(self) -> None:
-        """Test that connection failures are wrapped in HTTPException."""
+    def test_connection_failure_raises_onyx_error(self) -> None:
+        """Test that connection failures are wrapped in OnyxError."""
         from onyx.server.manage.llm.api import get_litellm_available_models
 
         mock_session = MagicMock()
@@ -856,4 +857,44 @@ class TestGetLitellmAvailableModels:
                 api_key="test-key",
             )
             with pytest.raises(OnyxError, match="Failed to fetch LiteLLM models"):
+                get_litellm_available_models(request, MagicMock(), mock_session)
+
+    def test_401_raises_authentication_error(self) -> None:
+        """Test that a 401 response raises OnyxError with authentication message."""
+        from onyx.server.manage.llm.api import get_litellm_available_models
+
+        mock_session = MagicMock()
+
+        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+            mock_response = MagicMock()
+            mock_response.status_code = 401
+            mock_get.side_effect = httpx.HTTPStatusError(
+                "Unauthorized", request=MagicMock(), response=mock_response
+            )
+
+            request = LitellmModelsRequest(
+                api_base="http://localhost:4000",
+                api_key="bad-key",
+            )
+            with pytest.raises(OnyxError, match="Authentication failed"):
+                get_litellm_available_models(request, MagicMock(), mock_session)
+
+    def test_404_raises_not_found_error(self) -> None:
+        """Test that a 404 response raises OnyxError with endpoint not found message."""
+        from onyx.server.manage.llm.api import get_litellm_available_models
+
+        mock_session = MagicMock()
+
+        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+            mock_response = MagicMock()
+            mock_response.status_code = 404
+            mock_get.side_effect = httpx.HTTPStatusError(
+                "Not Found", request=MagicMock(), response=mock_response
+            )
+
+            request = LitellmModelsRequest(
+                api_base="http://localhost:4000",
+                api_key="test-key",
+            )
+            with pytest.raises(OnyxError, match="endpoint not found"):
                 get_litellm_available_models(request, MagicMock(), mock_session)
