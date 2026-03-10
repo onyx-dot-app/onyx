@@ -28,7 +28,7 @@ import { LineItemButton } from "@opal/components";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/useToast";
-import SearchSkeleton from "@/refresh-components/skeletons/SearchSkeleton";
+import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 
 // ============================================================================
 // Types
@@ -193,9 +193,13 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
 
   const showEmpty = !error && results.length === 0;
 
-  // Show loading skeleton while search is in-flight (after all hooks)
+  // Show a centered spinner while search is in-flight (after all hooks)
   if (state.phase === "searching") {
-    return <SearchSkeleton />;
+    return (
+      <div className="flex-1 min-h-0 w-full flex items-center justify-center">
+        <SimpleLoader className="w-[7.5rem] h-[7.5rem]" />
+      </div>
+    );
   }
 
   return (
