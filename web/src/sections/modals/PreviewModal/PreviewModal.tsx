@@ -195,7 +195,7 @@ export default function PreviewModal({
             )}
             style={{
               background:
-                "linear-gradient(to top, var(--background-tint-01) 40%, transparent)",
+                "linear-gradient(to top, var(--background-code-01) 40%, transparent)",
             }}
           >
             {/* Left slot */}
