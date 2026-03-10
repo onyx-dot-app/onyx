@@ -1,6 +1,7 @@
 """Tests for user file ACL computation, including shared persona access."""
 
 from unittest.mock import MagicMock
+from unittest.mock import patch
 from uuid import uuid4
 
 from onyx.access.access import collect_user_file_access
@@ -132,11 +133,11 @@ class TestGetAccessForUserFiles:
         uf = _make_user_file(owner=owner, assistants=[persona])
 
         db_session = MagicMock()
-        db_session.query.return_value.options.return_value.filter.return_value.all.return_value = [
-            uf
-        ]
-
-        result = get_access_for_user_files_impl([str(uf.id)], db_session)
+        with patch(
+            "onyx.access.access.fetch_user_files_with_access_relationships",
+            return_value=[uf],
+        ):
+            result = get_access_for_user_files_impl([str(uf.id)], db_session)
 
         access = result[str(uf.id)]
         acl = access.to_acl()
@@ -150,11 +151,11 @@ class TestGetAccessForUserFiles:
         uf = _make_user_file(owner=owner, assistants=[persona])
 
         db_session = MagicMock()
-        db_session.query.return_value.options.return_value.filter.return_value.all.return_value = [
-            uf
-        ]
-
-        result = get_access_for_user_files_impl([str(uf.id)], db_session)
+        with patch(
+            "onyx.access.access.fetch_user_files_with_access_relationships",
+            return_value=[uf],
+        ):
+            result = get_access_for_user_files_impl([str(uf.id)], db_session)
 
         access = result[str(uf.id)]
         assert access.is_public is True
