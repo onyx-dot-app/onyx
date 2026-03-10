@@ -22,12 +22,10 @@ import hljs from "highlight.js/lib/core";
 import json from "highlight.js/lib/languages/json";
 import FadingEdgeContainer from "@/refresh-components/FadingEdgeContainer";
 
-// Lazy registration guard for hljs JSON language
-let hljsRegistered = false;
+// Lazy registration for hljs JSON language
 function ensureHljsRegistered() {
-  if (!hljsRegistered) {
+  if (!hljs.listLanguages().includes("json")) {
     hljs.registerLanguage("json", json);
-    hljsRegistered = true;
   }
 }
 

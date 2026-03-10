@@ -168,7 +168,10 @@ export default function OAuthCallbackPage({ config }: OAuthCallbackPageProps) {
           searchParams?.get("return_path") ||
           config.defaultRedirectPath ||
           "/app";
-        const sanitizedPath = "/" + rawPath.replace(/^\/+/, "");
+        const sanitizedPath =
+          rawPath.startsWith("http://") || rawPath.startsWith("https://")
+            ? "/app"
+            : "/" + rawPath.replace(/^\/+/, "");
         const redirectUrl = new URL(sanitizedPath, window.location.origin);
         redirectUrl.searchParams.set("message", "oauth_connected");
         setRedirectPath(redirectUrl.pathname + redirectUrl.search);
