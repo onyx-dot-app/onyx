@@ -1,9 +1,9 @@
 from onyx.cache.factory import get_cache_backend
 from onyx.configs.app_configs import DISABLE_USER_KNOWLEDGE
+from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.app_configs import ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
 from onyx.configs.app_configs import ONYX_QUERY_HISTORY_TYPE
 from onyx.configs.app_configs import SHOW_EXTRA_CONNECTORS
-from onyx.configs.app_configs import USER_FILE_MAX_UPLOAD_SIZE_MB
 from onyx.configs.constants import KV_SETTINGS_KEY
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.key_value_store.factory import get_kv_store
@@ -51,9 +51,16 @@ def load_settings() -> Settings:
     if DISABLE_USER_KNOWLEDGE:
         settings.user_knowledge_enabled = False
 
-    settings.user_file_max_upload_size_mb = USER_FILE_MAX_UPLOAD_SIZE_MB
     settings.show_extra_connectors = SHOW_EXTRA_CONNECTORS
     settings.opensearch_indexing_enabled = ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
+
+    # Resolve context-aware defaults for fields not yet set by admin
+    if settings.file_token_count_threshold_k is None:
+        settings.file_token_count_threshold_k = 10000 if DISABLE_VECTOR_DB else 200
+
+    if settings.user_file_max_upload_size_mb is None:
+        settings.user_file_max_upload_size_mb = 100
+
     return settings
 
 

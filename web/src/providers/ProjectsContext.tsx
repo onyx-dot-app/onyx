@@ -85,7 +85,7 @@ function buildFileKey(file: File): string {
   return `${file.size}|${namePrefix}`;
 }
 
-const DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB = 50;
+const DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB = 100;
 
 interface ProjectsContextType {
   projects: Project[];
@@ -341,21 +341,20 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
       onFailure?: (failedTempIds: string[]) => void
     ): Promise<ProjectFile[]> => {
       const rawMax = settingsContext?.settings?.user_file_max_upload_size_mb;
-      const maxUploadSizeMb =
-        rawMax && rawMax > 0 ? rawMax : DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB;
-      const maxUploadSizeBytes = maxUploadSizeMb * 1024 * 1024;
 
-      const oversizedFiles = files.filter(
-        (file) => file.size > maxUploadSizeBytes
-      );
-      const validFiles = files.filter(
-        (file) => file.size <= maxUploadSizeBytes
-      );
+      const oversizedFiles =
+        rawMax && rawMax > 0
+          ? files.filter((file) => file.size > rawMax * 1024 * 1024)
+          : [];
+      const validFiles =
+        rawMax && rawMax > 0
+          ? files.filter((file) => file.size <= rawMax * 1024 * 1024)
+          : files;
 
       if (oversizedFiles.length > 0) {
         const skippedNames = oversizedFiles.map((file) => file.name).join(", ");
         toast.warning(
-          `Skipped ${oversizedFiles.length} oversized file(s) (>${maxUploadSizeMb} MB): ${skippedNames}`
+          `Skipped ${oversizedFiles.length} oversized file(s) (>${rawMax} MB): ${skippedNames}`
         );
       }
 

@@ -9,20 +9,14 @@ from pydantic import ConfigDict
 from pydantic import Field
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import FILE_TOKEN_COUNT_THRESHOLD
-from onyx.configs.app_configs import USER_FILE_MAX_UPLOAD_SIZE_BYTES
-from onyx.configs.app_configs import USER_FILE_MAX_UPLOAD_SIZE_MB
 from onyx.db.llm import fetch_default_llm_model
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_processing.extract_file_text import get_file_ext
 from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.file_processing.password_validation import is_file_password_protected
 from onyx.natural_language_processing.utils import get_tokenizer
+from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
-from shared_configs.configs import MULTI_TENANT
-from shared_configs.configs import SKIP_USERFILE_THRESHOLD
-from shared_configs.configs import SKIP_USERFILE_THRESHOLD_TENANT_LIST
-from shared_configs.contextvars import get_current_tenant_id
 
 
 logger = setup_logger()
@@ -161,8 +155,8 @@ def categorize_uploaded_files(
       document formats (.pdf, .docx, …) and falls back to a text-detection
       heuristic for unknown extensions (.py, .js, .rs, …).
     - Uses default tokenizer to compute token length.
-    - If token length > threshold, reject file (unless threshold skip is enabled).
-    - If text cannot be extracted, reject file.
+    - If token length exceeds the admin-configured threshold, reject file.
+    - If extension unsupported or text cannot be extracted, reject file.
     - Otherwise marked as acceptable.
     """
 
@@ -173,36 +167,31 @@ def categorize_uploaded_files(
     provider_type = default_model.llm_provider.provider if default_model else None
     tokenizer = get_tokenizer(model_name=model_name, provider_type=provider_type)
 
-    # Check if threshold checks should be skipped
-    skip_threshold = False
-
-    # Check global skip flag (works for both single-tenant and multi-tenant)
-    if SKIP_USERFILE_THRESHOLD:
-        skip_threshold = True
-        logger.info("Skipping userfile threshold check (global setting)")
-    # Check tenant-specific skip list (only applicable in multi-tenant)
-    elif MULTI_TENANT and SKIP_USERFILE_THRESHOLD_TENANT_LIST:
-        try:
-            current_tenant_id = get_current_tenant_id()
-            skip_threshold = current_tenant_id in SKIP_USERFILE_THRESHOLD_TENANT_LIST
-            if skip_threshold:
-                logger.info(
-                    f"Skipping userfile threshold check for tenant: {current_tenant_id}"
-                )
-        except RuntimeError as e:
-            logger.warning(f"Failed to get current tenant ID: {str(e)}")
+    # Derive limits from admin-configurable settings.
+    # 0 = admin explicitly disabled the limit (no cap).
+    # Positive int = enforced limit.
+    settings = load_settings()
+    max_upload_size_mb = settings.user_file_max_upload_size_mb or 0
+    max_upload_size_bytes: int | None = (
+        None if max_upload_size_mb == 0 else max_upload_size_mb * 1024 * 1024
+    )
+    token_threshold_k = settings.file_token_count_threshold_k or 0
+    token_threshold: int | None = (
+        None if token_threshold_k == 0 else token_threshold_k * 1000
+    )
 
     for upload in files:
         try:
             filename = get_safe_filename(upload)
 
-            # Size limit is a hard safety cap and is enforced even when token
-            # threshold checks are skipped via SKIP_USERFILE_THRESHOLD settings.
-            if is_upload_too_large(upload, USER_FILE_MAX_UPLOAD_SIZE_BYTES):
+            # Size limit is a hard safety cap.
+            if max_upload_size_bytes is not None and is_upload_too_large(
+                upload, max_upload_size_bytes
+            ):
                 results.rejected.append(
                     RejectedFile(
                         filename=filename,
-                        reason=f"Exceeds {USER_FILE_MAX_UPLOAD_SIZE_MB} MB file size limit",
+                        reason=f"Exceeds {max_upload_size_mb} MB file size limit",
                     )
                 )
                 continue
@@ -224,11 +213,11 @@ def categorize_uploaded_files(
                     )
                     continue
 
-                if not skip_threshold and token_count > FILE_TOKEN_COUNT_THRESHOLD:
+                if token_threshold is not None and token_count > token_threshold:
                     results.rejected.append(
                         RejectedFile(
                             filename=filename,
-                            reason=f"Exceeds {FILE_TOKEN_COUNT_THRESHOLD} token limit",
+                            reason=f"Exceeds {token_threshold} token limit",
                         )
                     )
                 else:
@@ -270,11 +259,11 @@ def categorize_uploaded_files(
                     continue
 
                 token_count = len(tokenizer.encode(text_content))
-                if not skip_threshold and token_count > FILE_TOKEN_COUNT_THRESHOLD:
+                if token_threshold is not None and token_count > token_threshold:
                     results.rejected.append(
                         RejectedFile(
                             filename=filename,
-                            reason=f"Exceeds {FILE_TOKEN_COUNT_THRESHOLD} token limit",
+                            reason=f"Exceeds {token_threshold} token limit",
                         )
                     )
                 else:
