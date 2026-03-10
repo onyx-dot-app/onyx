@@ -90,7 +90,7 @@ def _get_group_member_emails(
                     f"in group {group_name} has no visible email address"
                 )
 
-        if page.get("isLast", True):
+        if page.get("isLast", True) or not members:
             break
         start_at += len(members)
 
