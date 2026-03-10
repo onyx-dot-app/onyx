@@ -795,17 +795,21 @@ def project_sync_user_file_impl(
 
     try:
         with get_session_with_current_tenant() as db_session:
-            user_file = db_session.execute(
-                select(UserFile)
-                .where(UserFile.id == _as_uuid(user_file_id))
-                .options(
-                    joinedload(UserFile.user),
-                    joinedload(UserFile.assistants).options(
-                        selectinload(Persona.users),
-                        selectinload(Persona.user),
-                    ),
+            user_file = (
+                db_session.execute(
+                    select(UserFile)
+                    .where(UserFile.id == _as_uuid(user_file_id))
+                    .options(
+                        joinedload(UserFile.user),
+                        joinedload(UserFile.assistants).options(
+                            selectinload(Persona.users),
+                            selectinload(Persona.user),
+                        ),
+                    )
                 )
-            ).scalar_one_or_none()
+                .unique()
+                .scalar_one_or_none()
+            )
             if not user_file:
                 task_logger.info(
                     f"project_sync_user_file_impl - User file not found id={user_file_id}"

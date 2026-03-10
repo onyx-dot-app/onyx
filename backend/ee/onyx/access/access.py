@@ -5,11 +5,11 @@ from ee.onyx.db.external_perm import fetch_public_external_group_ids
 from ee.onyx.db.user_group import fetch_user_groups_for_documents
 from ee.onyx.db.user_group import fetch_user_groups_for_user
 from ee.onyx.external_permissions.sync_params import get_source_perm_sync_config
-from onyx.access.access import _collect_user_file_access
 from onyx.access.access import (
     _get_access_for_documents as get_access_for_documents_without_groups,
 )
 from onyx.access.access import _get_acl_for_user as get_acl_for_user_without_groups
+from onyx.access.access import collect_user_file_access
 from onyx.access.models import DocumentAccess
 from onyx.access.utils import prefix_external_group
 from onyx.access.utils import prefix_user_group
@@ -169,7 +169,7 @@ def build_access_for_user_files_impl(
             )
             continue
 
-        emails, is_public = _collect_user_file_access(user_file)
+        emails, is_public = collect_user_file_access(user_file)
         group_names = _collect_user_file_group_names(user_file)
         result[str(user_file.id)] = DocumentAccess.build(
             user_emails=list(emails),

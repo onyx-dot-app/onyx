@@ -163,7 +163,7 @@ def build_access_for_user_files_impl(
 ) -> dict[str, DocumentAccess]:
     result: dict[str, DocumentAccess] = {}
     for user_file in user_files:
-        emails, is_public = _collect_user_file_access(user_file)
+        emails, is_public = collect_user_file_access(user_file)
         result[str(user_file.id)] = DocumentAccess.build(
             user_emails=list(emails),
             user_groups=[],
@@ -174,7 +174,7 @@ def build_access_for_user_files_impl(
     return result
 
 
-def _collect_user_file_access(user_file: UserFile) -> tuple[set[str], bool]:
+def collect_user_file_access(user_file: UserFile) -> tuple[set[str], bool]:
     """Collect all user emails that should have access to this user file.
     Includes the owner plus any users who have access via shared personas.
     Returns (emails, is_public)."""

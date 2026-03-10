@@ -246,7 +246,7 @@ def update_persona_access(
 
     # When sharing changes, user file ACLs need to be updated in the vector DB
     if needs_sync:
-        _mark_persona_user_files_for_sync(persona_id, db_session)
+        mark_persona_user_files_for_sync(persona_id, db_session)
 
 
 def create_update_persona(
@@ -859,7 +859,7 @@ def update_personas_display_priority(
         db_session.commit()
 
 
-def _mark_persona_user_files_for_sync(
+def mark_persona_user_files_for_sync(
     persona_id: int,
     db_session: Session,
 ) -> None:

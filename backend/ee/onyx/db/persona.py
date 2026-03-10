@@ -7,7 +7,7 @@ from onyx.db.models import Persona
 from onyx.db.models import Persona__User
 from onyx.db.models import Persona__UserGroup
 from onyx.db.notification import create_notification
-from onyx.db.persona import _mark_persona_user_files_for_sync
+from onyx.db.persona import mark_persona_user_files_for_sync
 from onyx.server.features.persona.models import PersonaSharedNotificationData
 
 
@@ -71,4 +71,4 @@ def update_persona_access(
 
     # When sharing changes, user file ACLs need to be updated in the vector DB
     if needs_sync:
-        _mark_persona_user_files_for_sync(persona_id, db_session)
+        mark_persona_user_files_for_sync(persona_id, db_session)

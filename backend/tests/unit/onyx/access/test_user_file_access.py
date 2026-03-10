@@ -3,7 +3,7 @@
 from unittest.mock import MagicMock
 from uuid import uuid4
 
-from onyx.access.access import _collect_user_file_access
+from onyx.access.access import collect_user_file_access
 from onyx.access.access import get_access_for_user_files_impl
 from onyx.access.utils import prefix_user_email
 from onyx.configs.constants import PUBLIC_DOC_PAT
@@ -50,7 +50,7 @@ class TestCollectUserFileAccess:
         owner = _make_user("owner@test.com")
         uf = _make_user_file(owner=owner)
 
-        emails, is_public = _collect_user_file_access(uf)
+        emails, is_public = collect_user_file_access(uf)
 
         assert emails == {"owner@test.com"}
         assert is_public is False
@@ -61,7 +61,7 @@ class TestCollectUserFileAccess:
         persona = _make_persona(owner=owner, shared_users=[shared])
         uf = _make_user_file(owner=owner, assistants=[persona])
 
-        emails, is_public = _collect_user_file_access(uf)
+        emails, is_public = collect_user_file_access(uf)
 
         assert emails == {"owner@test.com", "shared@test.com"}
         assert is_public is False
@@ -73,7 +73,7 @@ class TestCollectUserFileAccess:
         persona = _make_persona(owner=persona_owner)
         uf = _make_user_file(owner=file_owner, assistants=[persona])
 
-        emails, is_public = _collect_user_file_access(uf)
+        emails, is_public = collect_user_file_access(uf)
 
         assert "file-owner@test.com" in emails
         assert "persona-owner@test.com" in emails
@@ -83,7 +83,7 @@ class TestCollectUserFileAccess:
         persona = _make_persona(owner=owner, is_public=True)
         uf = _make_user_file(owner=owner, assistants=[persona])
 
-        emails, is_public = _collect_user_file_access(uf)
+        emails, is_public = collect_user_file_access(uf)
 
         assert is_public is True
         assert "owner@test.com" in emails
@@ -94,7 +94,7 @@ class TestCollectUserFileAccess:
         persona = _make_persona(owner=owner, shared_users=[shared], deleted=True)
         uf = _make_user_file(owner=owner, assistants=[persona])
 
-        emails, is_public = _collect_user_file_access(uf)
+        emails, is_public = collect_user_file_access(uf)
 
         assert emails == {"owner@test.com"}
         assert is_public is False
@@ -107,7 +107,7 @@ class TestCollectUserFileAccess:
         p2 = _make_persona(owner=owner, shared_users=[user_b])
         uf = _make_user_file(owner=owner, assistants=[p1, p2])
 
-        emails, is_public = _collect_user_file_access(uf)
+        emails, is_public = collect_user_file_access(uf)
 
         assert emails == {"owner@test.com", "a@test.com", "b@test.com"}
 
@@ -118,7 +118,7 @@ class TestCollectUserFileAccess:
         p2 = _make_persona(owner=owner, shared_users=[shared])
         uf = _make_user_file(owner=owner, assistants=[p1, p2])
 
-        emails, _ = _collect_user_file_access(uf)
+        emails, _ = collect_user_file_access(uf)
 
         assert emails == {"owner@test.com", "shared@test.com"}
 
