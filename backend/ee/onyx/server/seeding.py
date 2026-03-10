@@ -26,6 +26,7 @@ from onyx.db.models import Tool
 from onyx.db.persona import upsert_persona
 from onyx.server.features.persona.models import PersonaUpsertRequest
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
+from onyx.server.manage.llm.models import LLMProviderView
 from onyx.server.settings.models import Settings
 from onyx.server.settings.store import store_settings as store_base_settings
 from onyx.utils.logger import setup_logger
@@ -125,10 +126,16 @@ def _seed_llms(
         existing = fetch_existing_llm_provider(name=request.name, db_session=db_session)
         if existing:
             request.id = existing.id
-    seeded_providers = [
-        upsert_llm_provider(llm_upsert_request, db_session)
-        for llm_upsert_request in llm_upsert_requests
-    ]
+    seeded_providers: list[LLMProviderView] = []
+    for llm_upsert_request in llm_upsert_requests:
+        try:
+            seeded_providers.append(upsert_llm_provider(llm_upsert_request, db_session))
+        except ValueError as e:
+            logger.warning(
+                "Failed to upsert LLM provider '%s' during seeding: %s",
+                llm_upsert_request.name,
+                e,
+            )
 
     default_provider = next(
         (p for p in seeded_providers if p.model_configurations), None
