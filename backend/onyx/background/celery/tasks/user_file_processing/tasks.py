@@ -837,7 +837,11 @@ def project_sync_user_file_impl(
                         doc_id=file_id_str,
                         tenant_id=tenant_id,
                         chunk_count=user_file.chunk_count,
-                        fields=VespaDocumentFields(access=access) if access else None,
+                        fields=(
+                            VespaDocumentFields(access=access)
+                            if access is not None
+                            else None
+                        ),
                         user_fields=VespaDocumentUserFields(
                             user_projects=project_ids,
                             personas=persona_ids,

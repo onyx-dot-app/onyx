@@ -157,5 +157,6 @@ class TestGetAccessForUserFiles:
         result = get_access_for_user_files_impl([str(uf.id)], db_session)
 
         access = result[str(uf.id)]
+        assert access.is_public is True
         acl = access.to_acl()
         assert PUBLIC_DOC_PAT in acl

@@ -379,7 +379,9 @@ class TestProjectSyncImplNoVectorDb:
     ) -> None:
         uf = _make_user_file(status=UserFileStatus.COMPLETED)
         session = MagicMock()
-        session.execute.return_value.scalar_one_or_none.return_value = uf
+        session.query.return_value.options.return_value.filter.return_value.all.return_value = [
+            uf
+        ]
         mock_get_session.return_value.__enter__.return_value = session
 
         with (
@@ -405,7 +407,9 @@ class TestProjectSyncImplNoVectorDb:
     ) -> None:
         uf = _make_user_file(status=UserFileStatus.COMPLETED)
         session = MagicMock()
-        session.execute.return_value.scalar_one_or_none.return_value = uf
+        session.query.return_value.options.return_value.filter.return_value.all.return_value = [
+            uf
+        ]
         mock_get_session.return_value.__enter__.return_value = session
 
         project_sync_user_file_impl(
