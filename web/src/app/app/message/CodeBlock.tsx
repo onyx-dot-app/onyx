@@ -87,12 +87,7 @@ export const CodeBlock = memo(function CodeBlock({
   const CodeContent = () => {
     if (!language) {
       return (
-        <pre
-          className={cn(
-            "m-0 overflow-x-auto w-0 min-w-full hljs",
-            noPadding ? "!py-2 !pr-2" : "!p-2"
-          )}
-        >
+        <pre className="m-0 overflow-x-auto w-0 min-w-full hljs !p-2">
           <code className={cn("text-sm hljs", className)}>
             {Array.isArray(children)
               ? children.map((child, index) => (
