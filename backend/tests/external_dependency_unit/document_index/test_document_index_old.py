@@ -39,15 +39,6 @@ from tests.external_dependency_unit.constants import TEST_TENANT_ID
 
 
 @pytest.fixture(scope="module")
-def vespa_available() -> Generator[None, None, None]:
-    """Verifies Vespa is running, fails the test if not."""
-    # Try 90 seconds for testing in CI.
-    if not wait_for_vespa_with_timeout(wait_limit=90):
-        pytest.fail("Vespa is not available.")
-    yield  # Test runs here.
-
-
-@pytest.fixture(scope="module")
 def opensearch_available() -> Generator[None, None, None]:
     """Verifies OpenSearch is running, fails the test if not."""
     if not wait_for_opensearch_with_timeout():
@@ -101,12 +92,15 @@ def vespa_document_index(
             secondary_index_embedding_precision=None,
         )
     # Verify Vespa is running, fails the test if not. Try 90 seconds for testing
-    # in CI.
+    # in CI. We have to do this here because this endpoint only becomes live
+    # once we create an index.
     if not wait_for_vespa_with_timeout(wait_limit=90):
         pytest.fail("Vespa is not available.")
 
-    # Wait until the schema is actually ready for writes on content nodes.
-    # We probe by attempting a PUT; 200 means the schema is live, 400 means not yet.
+    # Wait until the schema is actually ready for writes on content nodes. We
+    # probe by attempting a PUT; 200 means the schema is live, 400 means not
+    # yet. This is so scuffed but running the test is really flakey otherwise;
+    # this is only temporary until we entirely move off of Vespa.
     probe_doc = {
         "fields": {
             "document_id": "__probe__",
@@ -171,6 +165,8 @@ def opensearch_document_index(
         embedding_dim=128,
         embedding_precision=EmbeddingPrecision.FLOAT,
         secondary_index_name=None,
+        secondary_embedding_dim=None,
+        secondary_embedding_precision=None,
         large_chunks_enabled=False,
         secondary_large_chunks_enabled=None,
         multitenant=MULTI_TENANT,
@@ -313,6 +309,11 @@ class TestDocumentIndexOld:
                 project_id=1,
                 persona_id=2,
             )
+            # Not best practice here but the API for refreshing the index to
+            # ensure that the latest data is present is not exposed in this
+            # class and is not the same for Vespa and OpenSearch, so we just
+            # tolerate a sleep for now. As a consequence the number of tests in
+            # this suite should be small.
             time.sleep(1)
             inference_chunks = document_index.id_based_retrieval(
                 chunk_requests=[chunk_request], filters=project_persona_filters
@@ -339,6 +340,7 @@ class TestDocumentIndexOld:
             # Postcondition.
             filters = IndexFilters(access_control_list=None, tenant_id=tenant_id)
             # We should expect to get back all expected chunks with no filters.
+            # Again, not best practice here.
             time.sleep(1)
             inference_chunks = document_index.id_based_retrieval(
                 chunk_requests=[chunk_request], filters=filters
