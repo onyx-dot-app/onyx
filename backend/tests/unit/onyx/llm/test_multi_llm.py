@@ -1457,6 +1457,7 @@ def test_no_tool_choice_sent_when_no_tools(default_multi_llm: LitellmLLM) -> Non
         default_multi_llm.invoke(messages, tools=None)
 
         _, kwargs = mock_completion.call_args
-        assert "tool_choice" not in kwargs, (
-            "tool_choice must not be sent to providers when no tools are provided"
-        )
+        assert (
+            "tool_choice" not in kwargs
+        ), "tool_choice must not be sent to providers when no tools are provided"
+       
