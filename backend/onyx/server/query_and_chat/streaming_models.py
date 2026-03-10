@@ -33,6 +33,7 @@ class StreamingType(Enum):
     PYTHON_TOOL_START = "python_tool_start"
     PYTHON_TOOL_DELTA = "python_tool_delta"
     CUSTOM_TOOL_START = "custom_tool_start"
+    CUSTOM_TOOL_ARGS = "custom_tool_args"
     CUSTOM_TOOL_DELTA = "custom_tool_delta"
     FILE_READER_START = "file_reader_start"
     FILE_READER_RESULT = "file_reader_result"
@@ -245,6 +246,20 @@ class CustomToolStart(BaseObj):
     type: Literal["custom_tool_start"] = StreamingType.CUSTOM_TOOL_START.value
 
     tool_name: str
+    tool_id: int | None = None
+
+
+class CustomToolArgs(BaseObj):
+    type: Literal["custom_tool_args"] = StreamingType.CUSTOM_TOOL_ARGS.value
+
+    tool_name: str
+    tool_args: dict[str, Any]
+
+
+class CustomToolErrorInfo(BaseModel):
+    is_auth_error: bool = False
+    status_code: int
+    message: str
 
 
 # The allowed streamed packets for a custom tool
@@ -252,11 +267,13 @@ class CustomToolDelta(BaseObj):
     type: Literal["custom_tool_delta"] = StreamingType.CUSTOM_TOOL_DELTA.value
 
     tool_name: str
+    tool_id: int | None = None
     response_type: str
     # For non-file responses
     data: dict | list | str | int | float | bool | None = None
     # For file-based responses like image/csv
     file_ids: list[str] | None = None
+    error: CustomToolErrorInfo | None = None
 
 
 ################################################
@@ -366,6 +383,7 @@ PacketObj = Union[
     PythonToolStart,
     PythonToolDelta,
     CustomToolStart,
+    CustomToolArgs,
     CustomToolDelta,
     FileReaderStart,
     FileReaderResult,

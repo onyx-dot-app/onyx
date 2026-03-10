@@ -50,6 +50,7 @@ from onyx.tools.built_in_tools import CITEABLE_TOOLS_NAMES
 from onyx.tools.built_in_tools import STOPPING_TOOLS_NAMES
 from onyx.tools.interface import Tool
 from onyx.tools.models import ChatFile
+from onyx.tools.models import CustomToolCallSummary
 from onyx.tools.models import MemoryToolResponseSnapshot
 from onyx.tools.models import PythonToolRichResponse
 from onyx.tools.models import ToolCallInfo
@@ -980,6 +981,10 @@ def run_llm_loop(
 
                 if memory_snapshot:
                     saved_response = json.dumps(memory_snapshot.model_dump())
+                elif isinstance(tool_response.rich_response, CustomToolCallSummary):
+                    saved_response = json.dumps(
+                        tool_response.rich_response.model_dump()
+                    )
                 elif isinstance(tool_response.rich_response, str):
                     saved_response = tool_response.rich_response
                 else:

@@ -1,14 +1,58 @@
 import React, { useEffect, useMemo } from "react";
-import { FiExternalLink, FiDownload, FiTool } from "react-icons/fi";
 import {
   PacketType,
   CustomToolPacket,
   CustomToolStart,
+  CustomToolArgs,
   CustomToolDelta,
+  CustomToolErrorInfo,
   SectionEnd,
 } from "../../../services/streamingModels";
 import { MessageRenderer, RenderType } from "../interfaces";
 import { buildImgUrl } from "../../../components/files/images/utils";
+import Text from "@/refresh-components/texts/Text";
+import {
+  SvgActions,
+  SvgArrowExchange,
+  SvgDownload,
+  SvgExternalLink,
+} from "@opal/icons";
+import { CodeBlock } from "@/app/app/message/CodeBlock";
+import hljs from "highlight.js/lib/core";
+import json from "highlight.js/lib/languages/json";
+import FadingEdgeContainer from "@/refresh-components/FadingEdgeContainer";
+
+// Lazy registration for hljs JSON language
+function ensureHljsRegistered() {
+  if (!hljs.listLanguages().includes("json")) {
+    hljs.registerLanguage("json", json);
+  }
+}
+
+// Component to render syntax-highlighted JSON
+interface HighlightedJsonCodeProps {
+  code: string;
+}
+function HighlightedJsonCode({ code }: HighlightedJsonCodeProps) {
+  const highlightedHtml = useMemo(() => {
+    ensureHljsRegistered();
+    try {
+      return hljs.highlight(code, { language: "json" }).value;
+    } catch {
+      return code
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    }
+  }, [code]);
+
+  return (
+    <span
+      dangerouslySetInnerHTML={{ __html: highlightedHtml }}
+      className="hljs"
+    />
+  );
+}
 
 function constructCustomToolState(packets: CustomToolPacket[]) {
   const toolStart = packets.find(
@@ -23,19 +67,26 @@ function constructCustomToolState(packets: CustomToolPacket[]) {
   )?.obj as SectionEnd | null;
 
   const toolName = toolStart?.tool_name || toolDeltas[0]?.tool_name || "Tool";
+  const toolArgsPacket = packets.find(
+    (p) => p.obj.type === PacketType.CUSTOM_TOOL_ARGS
+  )?.obj as CustomToolArgs | null;
+  const toolArgs = toolArgsPacket?.tool_args ?? null;
   const latestDelta = toolDeltas[toolDeltas.length - 1] || null;
   const responseType = latestDelta?.response_type || null;
   const data = latestDelta?.data;
   const fileIds = latestDelta?.file_ids || null;
+  const error = latestDelta?.error || null;
 
   const isRunning = Boolean(toolStart && !toolEnd);
   const isComplete = Boolean(toolStart && toolEnd);
 
   return {
     toolName,
+    toolArgs,
     responseType,
     data,
     fileIds,
+    error,
     isRunning,
     isComplete,
   };
@@ -47,8 +98,16 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
   renderType,
   children,
 }) => {
-  const { toolName, responseType, data, fileIds, isRunning, isComplete } =
-    constructCustomToolState(packets);
+  const {
+    toolName,
+    toolArgs,
+    responseType,
+    data,
+    fileIds,
+    error,
+    isRunning,
+    isComplete,
+  } = constructCustomToolState(packets);
 
   useEffect(() => {
     if (isComplete) {
@@ -58,76 +117,192 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
 
   const status = useMemo(() => {
     if (isComplete) {
+      if (error) {
+        return error.is_auth_error
+          ? `${toolName} authentication failed (HTTP ${error.status_code})`
+          : `${toolName} failed (HTTP ${error.status_code})`;
+      }
       if (responseType === "image") return `${toolName} returned images`;
       if (responseType === "csv") return `${toolName} returned a file`;
       return `${toolName} completed`;
     }
     if (isRunning) return `${toolName} running...`;
     return null;
-  }, [toolName, responseType, isComplete, isRunning]);
+  }, [toolName, responseType, error, isComplete, isRunning]);
 
-  const icon = FiTool;
+  const icon = SvgActions;
 
-  if (renderType === RenderType.COMPACT) {
+  const toolArgsJson = useMemo(
+    () => (toolArgs ? JSON.stringify(toolArgs, null, 2) : null),
+    [toolArgs]
+  );
+  const dataJson = useMemo(
+    () =>
+      data !== undefined && data !== null && typeof data === "object"
+        ? JSON.stringify(data, null, 2)
+        : null,
+    [data]
+  );
+
+  const content = useMemo(
+    () => (
+      <div className="flex flex-col gap-3">
+        {/* Loading indicator */}
+        {isRunning &&
+          !error &&
+          !fileIds &&
+          (data === undefined || data === null) && (
+            <div className="flex items-center gap-2 text-sm text-text-03">
+              <div className="flex gap-0.5">
+                <div className="w-1 h-1 bg-current rounded-full animate-pulse"></div>
+                <div
+                  className="w-1 h-1 bg-current rounded-full animate-pulse"
+                  style={{ animationDelay: "0.1s" }}
+                ></div>
+                <div
+                  className="w-1 h-1 bg-current rounded-full animate-pulse"
+                  style={{ animationDelay: "0.2s" }}
+                ></div>
+              </div>
+              <Text text03 secondaryBody>
+                Waiting for response...
+              </Text>
+            </div>
+          )}
+
+        {/* Tool arguments */}
+        {toolArgsJson && (
+          <div>
+            <div className="flex items-center gap-1">
+              <SvgArrowExchange className="w-3 h-3 text-text-02" />
+              <Text text04 secondaryBody>
+                Request
+              </Text>
+            </div>
+            <div className="prose max-w-full">
+              <CodeBlock
+                className="font-secondary-mono"
+                codeText={toolArgsJson}
+                noPadding
+              >
+                <HighlightedJsonCode code={toolArgsJson} />
+              </CodeBlock>
+            </div>
+          </div>
+        )}
+
+        {/* Error display */}
+        {error && (
+          <div className="pl-[var(--timeline-common-text-padding)]">
+            <Text text03 mainUiMuted>
+              {error.message}
+            </Text>
+          </div>
+        )}
+
+        {/* File responses */}
+        {!error && fileIds && fileIds.length > 0 && (
+          <div className="text-sm text-text-03 flex flex-col gap-2">
+            {fileIds.map((fid, idx) => (
+              <div key={fid} className="flex items-center gap-2 flex-wrap">
+                <Text text03 secondaryBody className="whitespace-nowrap">
+                  File {idx + 1}
+                </Text>
+                <a
+                  href={buildImgUrl(fid)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-xs text-action-link-01 hover:underline whitespace-nowrap"
+                >
+                  <SvgExternalLink className="w-3 h-3" /> Open
+                </a>
+                <a
+                  href={buildImgUrl(fid)}
+                  download
+                  className="inline-flex items-center gap-1 text-xs text-action-link-01 hover:underline whitespace-nowrap"
+                >
+                  <SvgDownload className="w-3 h-3" /> Download
+                </a>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* JSON/Text responses */}
+        {!error && data !== undefined && data !== null && (
+          <div>
+            <div className="flex items-center gap-1">
+              <SvgArrowExchange className="w-3 h-3 text-text-02" />
+              <Text text04 secondaryBody>
+                Response
+              </Text>
+            </div>
+            <div className="prose max-w-full">
+              {dataJson ? (
+                <CodeBlock
+                  className="font-secondary-mono"
+                  codeText={dataJson}
+                  noPadding
+                >
+                  <HighlightedJsonCode code={dataJson} />
+                </CodeBlock>
+              ) : (
+                <CodeBlock
+                  className="font-secondary-mono"
+                  codeText={String(data)}
+                  noPadding
+                >
+                  {String(data)}
+                </CodeBlock>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    ),
+    [toolArgsJson, dataJson, data, fileIds, error, isRunning]
+  );
+
+  // Auth error: always render FULL with error surface
+  if (error?.is_auth_error) {
     return children([
       {
         icon,
-        status: status,
-        supportsCollapsible: true,
-        // Status is already shown in the step header in compact mode.
-        // Avoid duplicating the same line in the content body.
-        content: <></>,
+        status,
+        supportsCollapsible: false,
+        noPaddingRight: true,
+        surfaceBackground: "error" as const,
+        content,
       },
     ]);
   }
 
+  // FULL mode
+  if (renderType === RenderType.FULL) {
+    return children([
+      {
+        icon,
+        status,
+        supportsCollapsible: true,
+        noPaddingRight: true,
+        content,
+      },
+    ]);
+  }
+
+  // COMPACT mode: wrap in fading container
   return children([
     {
       icon,
       status,
       supportsCollapsible: true,
       content: (
-        <div className="flex flex-col gap-3">
-          {/* File responses */}
-          {fileIds && fileIds.length > 0 && (
-            <div className="text-sm text-muted-foreground flex flex-col gap-2">
-              {fileIds.map((fid, idx) => (
-                <div key={fid} className="flex items-center gap-2 flex-wrap">
-                  <span className="whitespace-nowrap">File {idx + 1}</span>
-                  <a
-                    href={buildImgUrl(fid)}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline whitespace-nowrap"
-                  >
-                    <FiExternalLink className="w-3 h-3" /> Open
-                  </a>
-                  <a
-                    href={buildImgUrl(fid)}
-                    download
-                    className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline whitespace-nowrap"
-                  >
-                    <FiDownload className="w-3 h-3" /> Download
-                  </a>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* JSON/Text responses */}
-          {data !== undefined && data !== null && (
-            <div className="text-xs bg-gray-50 dark:bg-gray-800 p-3 rounded border max-h-96 overflow-y-auto font-mono whitespace-pre-wrap break-all">
-              {typeof data === "string" ? data : JSON.stringify(data, null, 2)}
-            </div>
-          )}
-
-          {/* Show placeholder if no response data yet */}
-          {!fileIds && (data === undefined || data === null) && isRunning && (
-            <div className="text-xs text-gray-500 italic">
-              Waiting for response...
-            </div>
-          )}
-        </div>
+        <FadingEdgeContainer
+          direction="bottom"
+          className="max-h-24 overflow-hidden"
+        >
+          {content}
+        </FadingEdgeContainer>
       ),
     },
   ]);
