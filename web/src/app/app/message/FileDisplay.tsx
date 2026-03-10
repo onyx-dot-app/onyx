@@ -78,26 +78,22 @@ export default function FileDisplay({ files }: FileDisplayProps) {
 
       {csvFiles.length > 0 && (
         <FileContainer>
-          {csvFiles.map((file) => {
-            return (
-              <>
-                {close ? (
-                  <ExpandableContentWrapper
-                    key={file.id}
-                    fileDescriptor={file}
-                    close={() => setClose(false)}
-                    ContentComponent={CsvContent}
-                  />
-                ) : (
-                  <Attachment
-                    key={file.id}
-                    open={() => setClose(true)}
-                    fileName={file.name || file.id}
-                  />
-                )}
-              </>
-            );
-          })}
+          {csvFiles.map((file) =>
+            close ? (
+              <ExpandableContentWrapper
+                key={file.id}
+                fileDescriptor={file}
+                close={() => setClose(false)}
+                ContentComponent={CsvContent}
+              />
+            ) : (
+              <Attachment
+                key={file.id}
+                open={() => setClose(true)}
+                fileName={file.name || file.id}
+              />
+            )
+          )}
         </FileContainer>
       )}
     </>
