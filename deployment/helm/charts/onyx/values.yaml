@@ -1186,13 +1186,13 @@ auth:
     # -- This defines the env var to secret map
     secretKeys:
       USER_AUTH_SECRET: user_auth_secret
-    # -- Secret value. If empty, a random 64-character secret is auto-generated.
-    # You can also set your own with: openssl rand -hex 32
+    # -- Secret value. Required - generate with: openssl rand -hex 32
+    # If not set, helm install/upgrade will fail.
     values:
       user_auth_secret: ""
 
 configMap:
-  # Change this for production uses unless Onyx is only accessible behind VPN
+  # Auth type: "basic" (default), "google", "oidc", "saml", or "disabled" (only if behind VPN)
   AUTH_TYPE: "basic"
   # 1 Day Default
   SESSION_EXPIRE_TIME_SECONDS: "86400"
