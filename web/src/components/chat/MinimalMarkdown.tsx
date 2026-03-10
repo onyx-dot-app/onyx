@@ -18,7 +18,6 @@ type MinimalMarkdownComponentOverrides = Partial<Components>;
 interface MinimalMarkdownProps {
   content: string;
   className?: string;
-  style?: CSSProperties;
   showHeader?: boolean;
   /**
    * Override specific markdown renderers.
@@ -30,7 +29,6 @@ interface MinimalMarkdownProps {
 export default function MinimalMarkdown({
   content,
   className = "",
-  style,
   showHeader = true,
   components,
 }: MinimalMarkdownProps) {
@@ -63,7 +61,7 @@ export default function MinimalMarkdown({
   }, [content, components, showHeader]);
 
   return (
-    <div style={style || {}} className={`${className}`}>
+    <div className={`${className}`}>
       <ReactMarkdown
         className="prose dark:prose-invert max-w-full text-sm break-words"
         components={markdownComponents}
