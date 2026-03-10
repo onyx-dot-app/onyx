@@ -64,7 +64,7 @@ export default function UserRowActions({
           <Button prominence="tertiary" icon={SvgMoreHorizontal} />
         </Popover.Trigger>
         <Popover.Content align="end">
-          <div className="flex flex-col gap-0.5 p-1 min-w-[180px]">
+          <div className="flex flex-col gap-0.5 p-1">
             {user.is_active ? (
               <Button
                 prominence="tertiary"
