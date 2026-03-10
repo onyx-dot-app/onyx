@@ -303,7 +303,6 @@ class TestDocumentIndexOld:
         # This test case assumes all these chunks correspond to one document.
         chunks: list[DocMetadataAwareIndexChunk],
         index_batch_params: IndexBatchParams,
-        tenant_context: None,  # noqa: ARG002
     ) -> None:
         """
         Tests that update_single can clear user_projects and personas.
