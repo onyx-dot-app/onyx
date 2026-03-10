@@ -431,6 +431,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
                     selectedSources.includes(source) ? "selected" : "empty"
                   }
                   title={meta.displayName}
+                  selectVariant="select-heavy"
                   sizePreset="main-ui"
                   variant="section"
                   rightChildren={<Text text03>{count}</Text>}
