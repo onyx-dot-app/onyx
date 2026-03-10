@@ -256,7 +256,6 @@ def test_multiple_tool_calls(default_multi_llm: LitellmLLM) -> None:
                 {"role": "user", "content": "What's the weather and time in New York?"}
             ],
             tools=tools,
-            tool_choice=None,
             stream=True,
             temperature=0.0,  # Default value from GEN_AI_TEMPERATURE
             timeout=30,
@@ -412,7 +411,6 @@ def test_multiple_tool_calls_streaming(default_multi_llm: LitellmLLM) -> None:
                 {"role": "user", "content": "What's the weather and time in New York?"}
             ],
             tools=tools,
-            tool_choice=None,
             stream=True,
             temperature=0.0,  # Default value from GEN_AI_TEMPERATURE
             timeout=30,
