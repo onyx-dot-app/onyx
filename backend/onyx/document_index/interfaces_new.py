@@ -148,6 +148,7 @@ class MetadataUpdateRequest(BaseModel):
     hidden: bool | None = None
     secondary_index_updated: bool | None = None
     project_ids: set[int] | None = None
+    persona_ids: set[int] | None = None
 
 
 class IndexRetrievalFilters(BaseModel):

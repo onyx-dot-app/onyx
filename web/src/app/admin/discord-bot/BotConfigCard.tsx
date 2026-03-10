@@ -4,7 +4,8 @@ import { useState } from "react";
 import { Section } from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
 import Card from "@/refresh-components/cards/Card";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import { Badge } from "@/components/ui/badge";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
 import { ThreeDotsLoader } from "@/components/Loading";
@@ -14,15 +15,11 @@ import {
   useDiscordGuilds,
 } from "@/app/admin/discord-bot/hooks";
 import { createBotConfig, deleteBotConfig } from "@/app/admin/discord-bot/lib";
-import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 import { getFormattedDateTime } from "@/lib/dateUtils";
 
-interface Props {
-  setPopup: (popup: PopupSpec) => void;
-}
-
-export function BotConfigCard({ setPopup }: Props) {
+export function BotConfigCard() {
   const {
     data: botConfig,
     isLoading,
@@ -63,7 +60,7 @@ export function BotConfigCard({ setPopup }: Props) {
 
   const handleSaveToken = async () => {
     if (!botToken.trim()) {
-      setPopup({ type: "error", message: "Please enter a bot token" });
+      toast.error("Please enter a bot token");
       return;
     }
 
@@ -72,13 +69,11 @@ export function BotConfigCard({ setPopup }: Props) {
       await createBotConfig(botToken.trim());
       setBotToken("");
       refreshBotConfig();
-      setPopup({ type: "success", message: "Bot token saved successfully" });
+      toast.success("Bot token saved successfully");
     } catch (err) {
-      setPopup({
-        type: "error",
-        message:
-          err instanceof Error ? err.message : "Failed to save bot token",
-      });
+      toast.error(
+        err instanceof Error ? err.message : "Failed to save bot token"
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -89,13 +84,11 @@ export function BotConfigCard({ setPopup }: Props) {
     try {
       await deleteBotConfig();
       refreshBotConfig();
-      setPopup({ type: "success", message: "Bot token deleted" });
+      toast.success("Bot token deleted");
     } catch (err) {
-      setPopup({
-        type: "error",
-        message:
-          err instanceof Error ? err.message : "Failed to delete bot token",
-      });
+      toast.error(
+        err instanceof Error ? err.message : "Failed to delete bot token"
+      );
     } finally {
       setIsSubmitting(false);
       setShowDeleteConfirm(false);
@@ -133,13 +126,14 @@ export function BotConfigCard({ setPopup }: Props) {
               }
               disabled={!hasServerConfigs}
             >
-              <Button
-                onClick={() => setShowDeleteConfirm(true)}
-                disabled={isSubmitting || hasServerConfigs}
-                danger
-              >
-                Delete Discord Token
-              </Button>
+              <Disabled disabled={isSubmitting || hasServerConfigs}>
+                <Button
+                  variant="danger"
+                  onClick={() => setShowDeleteConfirm(true)}
+                >
+                  Delete Discord Token
+                </Button>
+              </Disabled>
             </SimpleTooltip>
           )}
         </Section>
@@ -173,12 +167,11 @@ export function BotConfigCard({ setPopup }: Props) {
                 disabled={isSubmitting}
                 className="flex-1"
               />
-              <Button
-                onClick={handleSaveToken}
-                disabled={isSubmitting || !botToken.trim()}
-              >
-                {isSubmitting ? "Saving..." : "Save Token"}
-              </Button>
+              <Disabled disabled={isSubmitting || !botToken.trim()}>
+                <Button onClick={handleSaveToken}>
+                  {isSubmitting ? "Saving..." : "Save Token"}
+                </Button>
+              </Disabled>
             </Section>
           </Section>
         )}

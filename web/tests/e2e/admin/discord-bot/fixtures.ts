@@ -153,7 +153,7 @@ export const test = base.extend<{
   // API client fixture - provides access to OnyxApiClient for backend operations
   apiClient: async ({ page }, use) => {
     await authenticateAdmin(page);
-    const client = new OnyxApiClient(page);
+    const client = new OnyxApiClient(page.request);
     await use(client);
   },
 
@@ -161,7 +161,7 @@ export const test = base.extend<{
   seededGuild: async ({ page }, use) => {
     await authenticateAdmin(page);
 
-    const apiClient = new OnyxApiClient(page);
+    const apiClient = new OnyxApiClient(page.request);
     const guild = await apiClient.createDiscordGuild();
 
     await use({

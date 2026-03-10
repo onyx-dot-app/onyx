@@ -2,8 +2,8 @@
 
 import { useCallback, useState, useMemo, useEffect } from "react";
 import { useUser } from "@/providers/UserProvider";
-import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
-import { LLMProviderName } from "@/app/admin/configuration/llm/interfaces";
+import { useLLMProviders } from "@/hooks/useLLMProviders";
+import { LLMProviderName } from "@/interfaces/llm";
 import {
   OnboardingModalMode,
   OnboardingModalController,
@@ -18,9 +18,7 @@ import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
 
 // Check if all 3 build mode providers are configured (anthropic, openai, openrouter)
 function checkAllProvidersConfigured(
-  llmProviders:
-    | import("@/app/admin/configuration/llm/interfaces").LLMProviderDescriptor[]
-    | undefined
+  llmProviders: import("@/interfaces/llm").LLMProviderDescriptor[] | undefined
 ): boolean {
   if (!llmProviders || llmProviders.length === 0) {
     return false;
@@ -35,9 +33,7 @@ function checkAllProvidersConfigured(
 
 // Check if at least one provider is configured
 function checkHasAnyProvider(
-  llmProviders:
-    | import("@/app/admin/configuration/llm/interfaces").LLMProviderDescriptor[]
-    | undefined
+  llmProviders: import("@/interfaces/llm").LLMProviderDescriptor[] | undefined
 ): boolean {
   return !!(llmProviders && llmProviders.length > 0);
 }
@@ -75,11 +71,10 @@ export function useOnboardingModal(): OnboardingModalController {
     level: existingPersona?.level,
   };
 
-  // Check if user has completed initial onboarding
+  // Check if user has completed initial onboarding (only role required, not name)
   const hasUserInfo = useMemo(() => {
-    const existingPersona = getBuildUserPersona();
-    return !!(user?.personalization?.name && existingPersona?.workArea);
-  }, [user?.personalization?.name]);
+    return !!getBuildUserPersona()?.workArea;
+  }, [user]);
 
   // Check if all providers are configured (skip LLM step entirely if so)
   const allProvidersConfigured = useMemo(
@@ -94,7 +89,7 @@ export function useOnboardingModal(): OnboardingModalController {
   );
 
   // Auto-open initial onboarding modal on first load
-  // Shows if: user info is missing OR (admin AND no providers configured)
+  // Shows if: user info (role) missing OR (admin AND no providers configured)
   useEffect(() => {
     if (hasInitialized || isLoadingLlm || !user) return;
 

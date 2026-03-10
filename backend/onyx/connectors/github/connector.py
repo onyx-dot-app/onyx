@@ -523,6 +523,22 @@ class GithubConnector(CheckpointedConnectorWithPermSync[GithubConnectorCheckpoin
             sleep_after_rate_limit_exception(github_client)
             return self.get_all_repos(github_client, attempt_num + 1)
 
+    def fetch_configured_repos(self) -> list[Repository.Repository]:
+        """
+        Fetch the configured repositories based on the connector settings.
+
+        Returns:
+            list[Repository.Repository]: The configured repositories.
+        """
+        assert self.github_client is not None  # mypy
+        if self.repositories:
+            if "," in self.repositories:
+                return self.get_github_repos(self.github_client)
+            else:
+                return [self.get_github_repo(self.github_client)]
+        else:
+            return self.get_all_repos(self.github_client)
+
     def _pull_requests_func(
         self, repo: Repository.Repository
     ) -> Callable[[], PaginatedList[PullRequest]]:
@@ -551,17 +567,7 @@ class GithubConnector(CheckpointedConnectorWithPermSync[GithubConnectorCheckpoin
 
         # First run of the connector, fetch all repos and store in checkpoint
         if checkpoint.cached_repo_ids is None:
-            repos = []
-            if self.repositories:
-                if "," in self.repositories:
-                    # Multiple repositories specified
-                    repos = self.get_github_repos(self.github_client)
-                else:
-                    # Single repository (backward compatibility)
-                    repos = [self.get_github_repo(self.github_client)]
-            else:
-                # All repositories
-                repos = self.get_all_repos(self.github_client)
+            repos = self.fetch_configured_repos()
             if not repos:
                 checkpoint.has_more = False
                 return checkpoint

@@ -4,12 +4,11 @@ import { useState } from "react";
 import Card from "@/refresh-components/cards/Card";
 import Popover from "@/refresh-components/Popover";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import IconButton from "@/refresh-components/buttons/IconButton";
-import Text from "@/refresh-components/texts/Text";
-import { Section, LineItemLayout } from "@/layouts/general-layouts";
+import { ContentAction } from "@opal/layouts";
 import { ValidSources } from "@/lib/types";
 import { getSourceMetadata } from "@/lib/sources";
 import { SvgMoreHorizontal, SvgPlug, SvgSettings, SvgTrash } from "@opal/icons";
+import { Button } from "@opal/components";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 
@@ -40,15 +39,6 @@ interface ConnectorCardProps {
   onDelete: () => void;
 }
 
-const STATUS_COLORS: Record<ConnectorStatus, string> = {
-  connected: "bg-status-success-05",
-  connected_with_errors: "bg-status-warning-05",
-  indexing: "bg-status-warning-05 animate-pulse",
-  error: "bg-status-error-05",
-  deleting: "bg-status-error-05 animate-pulse",
-  not_connected: "bg-background-neutral-03",
-};
-
 function getStatusText(status: ConnectorStatus, docsIndexed: number): string {
   switch (status) {
     case "connected":
@@ -71,29 +61,6 @@ function getStatusText(status: ConnectorStatus, docsIndexed: number): string {
   }
 }
 
-function StatusDescription({
-  status,
-  docsIndexed,
-}: {
-  status: ConnectorStatus;
-  docsIndexed: number;
-}) {
-  return (
-    <Section
-      flexDirection="row"
-      alignItems="center"
-      gap={0.375}
-      width="fit"
-      height="fit"
-    >
-      <div className={cn(STATUS_COLORS[status], "w-2 h-2 rounded-full")} />
-      <Text secondaryBody text03>
-        {getStatusText(status, docsIndexed)}
-      </Text>
-    </Section>
-  );
-}
-
 export default function ConnectorCard({
   connectorType,
   config,
@@ -105,12 +72,20 @@ export default function ConnectorCard({
   const sourceMetadata = getSourceMetadata(connectorType);
   const status: ConnectorStatus = config?.status || "not_connected";
   const isConnected = status !== "not_connected" && status !== "deleting";
-
   const isDeleting = status === "deleting";
+
+  // Check if this connector type is always available (doesn't need connection setup)
+  const isAlwaysConnected = sourceMetadata.alwaysConnected ?? false;
+  const customDescription = sourceMetadata.customDescription;
 
   const handleCardClick = () => {
     if (isDeleting) {
       return; // No action while deleting
+    }
+    // Always-connected connectors always go to onConfigure
+    if (isAlwaysConnected) {
+      onConfigure();
+      return;
     }
     if (isConnected) {
       setPopoverOpen(true);
@@ -119,13 +94,16 @@ export default function ConnectorCard({
     }
   };
 
-  const rightContent = isDeleting ? null : isConnected ? (
+  // Always-connected connectors show a settings icon
+  // Regular connectors show popover menu when connected, plug icon when not
+  const rightContent = isDeleting ? null : isAlwaysConnected ? (
+    <Button prominence="internal" icon={SvgSettings} />
+  ) : isConnected ? (
     <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
       <Popover.Trigger asChild>
-        <IconButton
+        <Button
           icon={SvgMoreHorizontal}
-          tertiary
-          internal
+          prominence="tertiary"
           onClick={(e) => {
             e.stopPropagation();
             setPopoverOpen(!popoverOpen);
@@ -161,26 +139,29 @@ export default function ConnectorCard({
       </Popover.Content>
     </Popover>
   ) : (
-    <IconButton icon={SvgPlug} internal />
+    <Button icon={SvgPlug} prominence="tertiary" size="sm" />
   );
+
+  // Always-connected connectors show as "primary" variant
+  const cardVariant =
+    isAlwaysConnected || isConnected ? "primary" : "secondary";
+
+  const descriptionText =
+    customDescription ?? getStatusText(status, config?.docs_indexed || 0);
 
   return (
     <div
       className={cn(!isDeleting && "cursor-pointer")}
       onClick={handleCardClick}
     >
-      <Card variant={isConnected ? "primary" : "secondary"}>
-        <LineItemLayout
+      <Card variant={cardVariant}>
+        <ContentAction
           icon={sourceMetadata.icon}
           title={sourceMetadata.displayName}
-          description={
-            <StatusDescription
-              status={status}
-              docsIndexed={config?.docs_indexed || 0}
-            />
-          }
+          description={descriptionText}
+          sizePreset="main-content"
+          variant="section"
           rightChildren={rightContent}
-          center
         />
       </Card>
     </div>

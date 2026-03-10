@@ -153,7 +153,7 @@ function InputSelectRoot({
   );
 
   return (
-    <div className={cn("w-full relative")}>
+    <div className="w-full min-w-[var(--block-width-form-input-min)] relative">
       <InputSelectContext.Provider value={contextValue}>
         <SelectPrimitive.Root
           {...(isControlled ? { value: currentValue } : { defaultValue })}
@@ -369,7 +369,7 @@ function InputSelectItem({
     <SelectPrimitive.Item
       ref={ref}
       value={value}
-      className="outline-none focus:outline-none"
+      className="outline-none focus:outline-none rounded-08 data-[highlighted]:bg-background-tint-02"
       onSelect={onClick}
     >
       {/* Hidden ItemText for Radix to track selection */}
@@ -383,7 +383,7 @@ function InputSelectItem({
         selected={isSelected}
         emphasized
         description={description}
-        onClick={noProp((event) => event.preventDefault())}
+        interactive={false}
       >
         {children}
       </LineItem>

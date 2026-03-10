@@ -22,6 +22,8 @@ from ee.onyx.server.billing.models import SeatUpdateResponse
 from ee.onyx.server.billing.models import SubscriptionStatusResponse
 from ee.onyx.server.tenants.access import generate_data_plane_token
 from onyx.configs.app_configs import CONTROL_PLANE_API_BASE_URL
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 
@@ -29,15 +31,6 @@ logger = setup_logger()
 
 # HTTP request timeout for billing service calls
 _REQUEST_TIMEOUT = 30.0
-
-
-class BillingServiceError(Exception):
-    """Exception raised for billing service errors."""
-
-    def __init__(self, message: str, status_code: int = 500):
-        self.message = message
-        self.status_code = status_code
-        super().__init__(self.message)
 
 
 def _get_proxy_headers(license_data: str | None) -> dict[str, str]:
@@ -101,7 +94,7 @@ async def _make_billing_request(
         Response JSON as dict
 
     Raises:
-        BillingServiceError: If request fails
+        OnyxError: If request fails
     """
 
     base_url = _get_base_url()
@@ -109,7 +102,9 @@ async def _make_billing_request(
     headers = _get_headers(license_data)
 
     try:
-        async with httpx.AsyncClient(timeout=_REQUEST_TIMEOUT) as client:
+        async with httpx.AsyncClient(
+            timeout=_REQUEST_TIMEOUT, follow_redirects=True
+        ) as client:
             if method == "GET":
                 response = await client.get(url, headers=headers, params=params)
             else:
@@ -126,11 +121,17 @@ async def _make_billing_request(
         except Exception:
             pass
         logger.error(f"{error_message}: {e.response.status_code} - {detail}")
-        raise BillingServiceError(detail, e.response.status_code)
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY,
+            detail,
+            status_code_override=e.response.status_code,
+        )
 
     except httpx.RequestError:
         logger.exception("Failed to connect to billing service")
-        raise BillingServiceError("Failed to connect to billing service", 502)
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY, "Failed to connect to billing service"
+        )
 
 
 async def create_checkout_session(

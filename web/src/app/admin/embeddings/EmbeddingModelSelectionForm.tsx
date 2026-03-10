@@ -25,9 +25,9 @@ import { ModelOption } from "@/components/embedding/ModelSelector";
 import {
   EMBEDDING_MODELS_ADMIN_URL,
   EMBEDDING_PROVIDERS_ADMIN_URL,
-} from "@/app/admin/configuration/llm/constants";
+} from "@/lib/llmConfig/constants";
 import { AdvancedSearchConfiguration } from "@/app/admin/embeddings/interfaces";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 
 export interface EmbeddingDetails {
   api_key?: string;
@@ -279,7 +279,7 @@ export default function EmbeddingModelSelection({
           {currentEmbeddingModel?.provider_type && (
             <div className="mt-2">
               <Button
-                secondary
+                prominence="secondary"
                 onClick={() => {
                   const allProviders = [
                     ...AVAILABLE_CLOUD_PROVIDERS,

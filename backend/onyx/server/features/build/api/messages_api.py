@@ -57,9 +57,6 @@ def list_messages(
     db_session: Session = Depends(get_session),
 ) -> MessageListResponse:
     """Get all messages for a build session."""
-    if user is None:
-        raise HTTPException(status_code=401, detail="Authentication required")
-
     session_manager = SessionManager(db_session)
 
     messages = session_manager.list_messages(session_id, user.id)
@@ -85,7 +82,7 @@ def send_message(
     Enforces rate limiting before executing the agent (via dependency).
     Returns a Server-Sent Events (SSE) stream with the agent's response.
 
-    Follows the same pattern as /chat/send-message for consistency.
+    Follows the same pattern as /chat/send-chat-message for consistency.
     """
 
     def stream_generator() -> Generator[str, None, None]:

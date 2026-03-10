@@ -33,7 +33,8 @@ import {
   SvgCheckCircle,
 } from "@opal/icons";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import TypewriterText from "@/app/craft/components/TypewriterText";
 import {
@@ -178,6 +179,7 @@ function BuildSessionButton({
     <>
       <Popover.Trigger asChild onClick={noProp()}>
         <div>
+          {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
           <IconButton
             icon={SvgMoreHorizontal}
             className={cn(
@@ -224,9 +226,8 @@ function BuildSessionButton({
         <Popover.Anchor>
           <SidebarTab
             onClick={onLoad}
-            transient={isActive}
+            selected={isActive}
             rightChildren={rightMenu}
-            focused={renaming}
           >
             {renaming ? (
               <ButtonRenaming
@@ -263,7 +264,7 @@ function BuildSessionButton({
               ? "Deleted"
               : deleteError
                 ? "Delete Failed"
-                : "Delete Build"
+                : "Delete Craft"
           }
           icon={deleteSuccess ? SvgCheckCircle : SvgTrash}
           onClose={isDeleting || deleteSuccess ? undefined : closeModal}
@@ -271,22 +272,25 @@ function BuildSessionButton({
           twoTone={!isDeleting && !deleteSuccess && !deleteError}
           submit={
             deleteSuccess ? (
-              <Button action disabled leftIcon={SvgCheckCircle}>
-                Done
-              </Button>
+              <Disabled disabled>
+                <Button variant="action" icon={SvgCheckCircle}>
+                  Done
+                </Button>
+              </Disabled>
             ) : deleteError ? (
-              <Button danger onClick={closeModal}>
+              <Button variant="danger" onClick={closeModal}>
                 Close
               </Button>
             ) : (
-              <Button
-                danger
-                onClick={handleConfirmDelete}
-                disabled={isDeleting}
-                leftIcon={isDeleting ? SimpleLoader : undefined}
-              >
-                {isDeleting ? "Deleting..." : "Delete"}
-              </Button>
+              <Disabled disabled={isDeleting}>
+                <Button
+                  variant="danger"
+                  onClick={handleConfirmDelete}
+                  icon={isDeleting ? SimpleLoader : undefined}
+                >
+                  {isDeleting ? "Deleting..." : "Delete"}
+                </Button>
+              </Disabled>
             )
           }
         >
@@ -366,11 +370,7 @@ const MemoizedBuildSidebarInner = memo(
 
     const newBuildButton = useMemo(
       () => (
-        <SidebarTab
-          leftIcon={SvgEditBig}
-          folded={folded}
-          onClick={handleNewBuild}
-        >
+        <SidebarTab icon={SvgEditBig} folded={folded} onClick={handleNewBuild}>
           Start Crafting
         </SidebarTab>
       ),
@@ -380,10 +380,10 @@ const MemoizedBuildSidebarInner = memo(
     const buildConfigurePanel = useMemo(
       () => (
         <SidebarTab
-          leftIcon={SvgSettings}
+          icon={SvgSettings}
           folded={folded}
           href={CRAFT_CONFIGURE_PATH}
-          transient={pathname.startsWith(CRAFT_CONFIGURE_PATH)}
+          selected={pathname.startsWith(CRAFT_CONFIGURE_PATH)}
         >
           Configure
         </SidebarTab>
@@ -393,7 +393,7 @@ const MemoizedBuildSidebarInner = memo(
 
     const backToChatButton = useMemo(
       () => (
-        <SidebarTab leftIcon={SvgArrowLeft} folded={folded} href="/app">
+        <SidebarTab icon={SvgArrowLeft} folded={folded} href="/app">
           Back to Chat
         </SidebarTab>
       ),

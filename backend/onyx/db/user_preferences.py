@@ -9,6 +9,7 @@ from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from onyx.auth.schemas import UserRole
+from onyx.db.enums import DefaultAppMode
 from onyx.db.enums import ThemePreference
 from onyx.db.models import AccessToken
 from onyx.db.models import Assistant__UserSpecificConfig
@@ -154,12 +155,27 @@ def update_user_chat_background(
     db_session.commit()
 
 
+def update_user_default_app_mode(
+    user_id: UUID,
+    default_app_mode: DefaultAppMode,
+    db_session: Session,
+) -> None:
+    """Update user's default app mode setting."""
+    db_session.execute(
+        update(User)
+        .where(User.id == user_id)  # type: ignore
+        .values(default_app_mode=default_app_mode)
+    )
+    db_session.commit()
+
+
 def update_user_personalization(
     user_id: UUID,
     *,
     personal_name: str | None,
     personal_role: str | None,
     use_memories: bool,
+    enable_memory_tool: bool,
     memories: list[MemoryItem],
     user_preferences: str | None,
     db_session: Session,
@@ -171,6 +187,7 @@ def update_user_personalization(
             personal_name=personal_name,
             personal_role=personal_role,
             use_memories=use_memories,
+            enable_memory_tool=enable_memory_tool,
             user_preferences=user_preferences,
         )
     )

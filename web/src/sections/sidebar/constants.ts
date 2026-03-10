@@ -9,3 +9,7 @@ export const LOCAL_STORAGE_KEYS = {
 } as const;
 
 export const DEFAULT_PERSONA_ID = 0;
+
+export const FEATURE_FLAGS = {
+  CRAFT_ANIMATION_DISABLED: "craft-animation-disabled",
+} as const;

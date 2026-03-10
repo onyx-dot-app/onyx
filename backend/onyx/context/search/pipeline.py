@@ -18,8 +18,10 @@ from onyx.context.search.utils import inference_section_from_chunks
 from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.document_index.interfaces import DocumentIndex
+from onyx.federated_connectors.federated_retrieval import FederatedRetrievalInfo
 from onyx.llm.interfaces import LLM
 from onyx.natural_language_processing.english_stopwords import strip_stopwords
+from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.secondary_llm_flows.source_filter import extract_source_filter
 from onyx.secondary_llm_flows.time_filter import extract_time_filter
 from onyx.utils.logger import setup_logger
@@ -38,10 +40,11 @@ def _build_index_filters(
     user_provided_filters: BaseFilters | None,
     user: User,  # Used for ACLs, anonymous users only see public docs
     project_id: int | None,
+    persona_id: int | None,
     user_file_ids: list[UUID] | None,
     persona_document_sets: list[str] | None,
     persona_time_cutoff: datetime | None,
-    db_session: Session,
+    db_session: Session | None = None,
     auto_detect_filters: bool = False,
     query: str | None = None,
     llm: LLM | None = None,
@@ -49,18 +52,19 @@ def _build_index_filters(
     # Assistant knowledge filters
     attached_document_ids: list[str] | None = None,
     hierarchy_node_ids: list[int] | None = None,
+    # Pre-fetched ACL filters (skips DB query when provided)
+    acl_filters: list[str] | None = None,
 ) -> IndexFilters:
     if auto_detect_filters and (llm is None or query is None):
         raise RuntimeError("LLM and query are required for auto detect filters")
 
     base_filters = user_provided_filters or BaseFilters()
 
-    if (
-        user_provided_filters
-        and user_provided_filters.document_set is None
-        and persona_document_sets is not None
-    ):
-        base_filters.document_set = persona_document_sets
+    document_set_filter = (
+        base_filters.document_set
+        if base_filters.document_set is not None
+        else persona_document_sets
+    )
 
     time_filter = base_filters.time_cutoff or persona_time_cutoff
     source_filter = base_filters.source_type
@@ -103,15 +107,21 @@ def _build_index_filters(
             source_filter = list(source_filter) + [DocumentSource.USER_FILE]
             logger.debug("Added USER_FILE to source_filter for user knowledge search")
 
-    user_acl_filters = (
-        None if bypass_acl else build_access_filters_for_user(user, db_session)
-    )
+    if bypass_acl:
+        user_acl_filters = None
+    elif acl_filters is not None:
+        user_acl_filters = acl_filters
+    else:
+        if db_session is None:
+            raise ValueError("Either db_session or acl_filters must be provided")
+        user_acl_filters = build_access_filters_for_user(user, db_session)
 
     final_filters = IndexFilters(
         user_file_ids=user_file_ids,
         project_id=project_id,
+        persona_id=persona_id,
         source_type=source_filter,
-        document_set=persona_document_sets,
+        document_set=document_set_filter,
         time_cutoff=time_filter,
         tags=base_filters.tags,
         access_control_list=user_acl_filters,
@@ -252,11 +262,17 @@ def search_pipeline(
     user: User,
     # Used for default filters and settings
     persona: Persona | None,
-    db_session: Session,
+    db_session: Session | None = None,
     auto_detect_filters: bool = False,
     llm: LLM | None = None,
     # If a project ID is provided, it will be exclusively scoped to that project
     project_id: int | None = None,
+    # If a persona_id is provided, search scopes to files attached to this persona
+    persona_id: int | None = None,
+    # Pre-fetched data — when provided, avoids DB queries (no session needed)
+    acl_filters: list[str] | None = None,
+    embedding_model: EmbeddingModel | None = None,
+    prefetched_federated_retrieval_infos: list[FederatedRetrievalInfo] | None = None,
 ) -> list[InferenceChunk]:
     user_uploaded_persona_files: list[UUID] | None = (
         [user_file.id for user_file in persona.user_files] if persona else None
@@ -287,6 +303,7 @@ def search_pipeline(
         user_provided_filters=chunk_search_request.user_selected_filters,
         user=user,
         project_id=project_id,
+        persona_id=persona_id,
         user_file_ids=user_uploaded_persona_files,
         persona_document_sets=persona_document_sets,
         persona_time_cutoff=persona_time_cutoff,
@@ -297,6 +314,7 @@ def search_pipeline(
         bypass_acl=chunk_search_request.bypass_acl,
         attached_document_ids=attached_document_ids,
         hierarchy_node_ids=hierarchy_node_ids,
+        acl_filters=acl_filters,
     )
 
     query_keywords = strip_stopwords(chunk_search_request.query)
@@ -315,6 +333,8 @@ def search_pipeline(
         user_id=user.id if user else None,
         document_index=document_index,
         db_session=db_session,
+        embedding_model=embedding_model,
+        prefetched_federated_retrieval_infos=prefetched_federated_retrieval_infos,
     )
 
     # For some specific connectors like Salesforce, a user that has access to an object doesn't mean

@@ -19,7 +19,7 @@ import { HoverPopup } from "@/components/HoverPopup";
 import { Dispatch, SetStateAction, useEffect, useState } from "react";
 import { CustomEmbeddingModelForm } from "@/components/embedding/CustomEmbeddingModelForm";
 import { deleteSearchSettings } from "./utils";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 import { AdvancedSearchConfiguration } from "../interfaces";
 import CardSection from "@/components/admin/CardSection";
@@ -424,7 +424,6 @@ export function CloudModelCard({
     React.SetStateAction<CloudEmbeddingProvider | null>
   >;
 }) {
-  const { popup, setPopup } = usePopup();
   const [showDeleteModel, setShowDeleteModel] = useState(false);
   const modelId = typeof model.id === "number" ? model.id : null;
   const currentModelId =
@@ -445,21 +444,19 @@ export function CloudModelCard({
 
   const deleteModel = async () => {
     if (!model.id) {
-      setPopup({ message: "Model cannot be deleted", type: "error" });
+      toast.error("Model cannot be deleted");
       return;
     }
 
     const response = await deleteSearchSettings(model.id);
 
     if (response.ok) {
-      setPopup({ message: "Model deleted successfully", type: "success" });
+      toast.success("Model deleted successfully");
       setShowDeleteModel(false);
     } else {
-      setPopup({
-        message:
-          "Failed to delete model. Ensure you are not attempting to delete a curently active model.",
-        type: "error",
-      });
+      toast.error(
+        "Failed to delete model. Ensure you are not attempting to delete a curently active model."
+      );
     }
   };
 
@@ -471,7 +468,6 @@ export function CloudModelCard({
           : "border-background-300 hover:border-blue-300 hover:shadow-sm"
       } ${!provider.configured && "opacity-80 hover:opacity-100"}`}
     >
-      {popup}
       {showDeleteModel && (
         <ConfirmEntityModal
           entityName={model.model_name}

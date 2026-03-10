@@ -20,6 +20,7 @@ from onyx.connectors.exceptions import UnexpectedValidationError
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentFailure
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import SlimDocument
 from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector
 from tests.unit.onyx.connectors.utils import (
@@ -306,7 +307,7 @@ def test_retrieve_all_slim_docs_perm_sync(
     confluence_connector: ConfluenceConnector,
     create_mock_page: Callable[..., dict[str, Any]],
 ) -> None:
-    """Test retrieving all slim documents"""
+    """Test retrieving all slim documents including hierarchy nodes"""
     # Set up mocked pages
     mock_page1 = create_mock_page(id="1")
     mock_page2 = create_mock_page(id="2")
@@ -314,6 +315,11 @@ def test_retrieve_all_slim_docs_perm_sync(
     # Mock paginated_cql_retrieval to return our mock pages
     confluence_client = confluence_connector._confluence_client
     assert confluence_client is not None, "bad test setup"
+
+    # Mock space retrieval for hierarchy nodes
+    confluence_client.retrieve_confluence_spaces = MagicMock(  # type: ignore
+        return_value=iter([{"key": "TEST", "name": "Test Space"}])
+    )
 
     get_mock = MagicMock()
     confluence_client.get = get_mock  # type: ignore
@@ -325,9 +331,11 @@ def test_retrieve_all_slim_docs_perm_sync(
                 "_links": {"next": "rest/api/content/search?cql=type=page&start=2"},
             }
         ),
-        # links and attachments responses
+        # attachments for page 1
         MagicMock(json=lambda: {"results": []}),
+        # attachments for page 2
         MagicMock(json=lambda: {"results": []}),
+        # next page of CQL results (empty)
         MagicMock(json=lambda: {"results": []}),
     ]
 
@@ -335,13 +343,20 @@ def test_retrieve_all_slim_docs_perm_sync(
     batches = list(confluence_connector.retrieve_all_slim_docs_perm_sync(0, 100))
     assert get_mock.call_count == 4
 
-    # Check that a batch with 2 documents was returned
-    assert len(batches) == 1
+    # With batch size of 2, we get:
+    # Batch 1: [HierarchyNode(space), SlimDocument(page1)]
+    # Batch 2: [SlimDocument(page2)]
+    assert len(batches) == 2
+
     assert len(batches[0]) == 2
-    assert isinstance(batches[0][0], SlimDocument)
+    assert isinstance(batches[0][0], HierarchyNode)
+    assert batches[0][0].raw_node_id == "TEST"
     assert isinstance(batches[0][1], SlimDocument)
-    assert batches[0][0].id == f"{confluence_connector.wiki_base}/spaces/TEST/pages/1"
-    assert batches[0][1].id == f"{confluence_connector.wiki_base}/spaces/TEST/pages/2"
+    assert batches[0][1].id == f"{confluence_connector.wiki_base}/spaces/TEST/pages/1"
+
+    assert len(batches[1]) == 1
+    assert isinstance(batches[1][0], SlimDocument)
+    assert batches[1][0].id == f"{confluence_connector.wiki_base}/spaces/TEST/pages/2"
 
 
 @pytest.mark.parametrize(

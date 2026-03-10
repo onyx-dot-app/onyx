@@ -1,8 +1,9 @@
 "use client";
 
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import { useState } from "react";
-import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { triggerIndexing } from "@/app/admin/connector/[ccPairId]/lib";
 import Modal from "@/refresh-components/Modal";
 import Text from "@/refresh-components/texts/Text";
@@ -12,8 +13,7 @@ import { SvgRefreshCw } from "@opal/icons";
 export function useReIndexModal(
   connectorId: number | null,
   credentialId: number | null,
-  ccPairId: number | null,
-  setPopup: (popupSpec: PopupSpec | null) => void
+  ccPairId: number | null
 ) {
   const [reIndexPopupVisible, setReIndexPopupVisible] = useState(false);
 
@@ -38,30 +38,24 @@ export function useReIndexModal(
         fromBeginning,
         connectorId,
         credentialId,
-        ccPairId,
-        setPopup
+        ccPairId
       );
 
       // Show appropriate notification based on result
       if (result.success) {
-        setPopup({
-          message: `${
+        toast.success(
+          `${
             fromBeginning ? "Complete re-indexing" : "Indexing update"
-          } started successfully`,
-          type: "success",
-        });
+          } started successfully`
+        );
       } else {
-        setPopup({
-          message: result.message || "Failed to start indexing",
-          type: "error",
-        });
+        toast.error(result.message || "Failed to start indexing");
       }
     } catch (error) {
       console.error("Failed to trigger indexing:", error);
-      setPopup({
-        message: "An unexpected error occurred while trying to start indexing",
-        type: "error",
-      });
+      toast.error(
+        "An unexpected error occurred while trying to start indexing"
+      );
     }
   };
 
@@ -70,11 +64,7 @@ export function useReIndexModal(
     connectorId != null &&
     credentialId != null &&
     ccPairId != null ? (
-      <ReIndexModal
-        setPopup={setPopup}
-        hide={hideReIndexModal}
-        onRunIndex={triggerReIndex}
-      />
+      <ReIndexModal hide={hideReIndexModal} onRunIndex={triggerReIndex} />
     ) : null;
 
   return {
@@ -84,16 +74,11 @@ export function useReIndexModal(
 }
 
 export interface ReIndexModalProps {
-  setPopup: (popupSpec: PopupSpec | null) => void;
   hide: () => void;
   onRunIndex: (fromBeginning: boolean) => Promise<void>;
 }
 
-export default function ReIndexModal({
-  setPopup,
-  hide,
-  onRunIndex,
-}: ReIndexModalProps) {
+export default function ReIndexModal({ hide, onRunIndex }: ReIndexModalProps) {
   const [isProcessing, setIsProcessing] = useState(false);
 
   const handleRunIndex = async (fromBeginning: boolean) => {
@@ -101,13 +86,12 @@ export default function ReIndexModal({
 
     setIsProcessing(true);
     try {
-      // First show immediate feedback with a popup
-      setPopup({
-        message: `Starting ${
+      // First show immediate feedback with a toast
+      toast.info(
+        `Starting ${
           fromBeginning ? "complete re-indexing" : "indexing update"
-        }...`,
-        type: "info",
-      });
+        }...`
+      );
 
       // Then close the modal
       hide();
@@ -116,11 +100,8 @@ export default function ReIndexModal({
       await onRunIndex(fromBeginning);
     } catch (error) {
       console.error("Error starting indexing:", error);
-      // Show error in popup if needed
-      setPopup({
-        message: "Failed to start indexing process",
-        type: "error",
-      });
+      // Show error in toast if needed
+      toast.error("Failed to start indexing process");
     } finally {
       setIsProcessing(false);
     }
@@ -135,9 +116,9 @@ export default function ReIndexModal({
             This will pull in and index all documents that have changed and/or
             have been added since the last successful indexing run.
           </Text>
-          <Button onClick={() => handleRunIndex(false)} disabled={isProcessing}>
-            Run Update
-          </Button>
+          <Disabled disabled={isProcessing}>
+            <Button onClick={() => handleRunIndex(false)}>Run Update</Button>
+          </Disabled>
 
           <Separator />
 
@@ -150,9 +131,11 @@ export default function ReIndexModal({
             in the source, this may take a long time.
           </Text>
 
-          <Button onClick={() => handleRunIndex(true)} disabled={isProcessing}>
-            Run Complete Re-Indexing
-          </Button>
+          <Disabled disabled={isProcessing}>
+            <Button onClick={() => handleRunIndex(true)}>
+              Run Complete Re-Indexing
+            </Button>
+          </Disabled>
         </Modal.Body>
       </Modal.Content>
     </Modal>

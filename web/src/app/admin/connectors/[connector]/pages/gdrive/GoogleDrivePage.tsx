@@ -3,7 +3,6 @@
 import React from "react";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { LoadingAnimation } from "@/components/Loading";
-import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { ValidSources } from "@/lib/types";
 import { usePublicCredentials } from "@/lib/hooks";
 import Title from "@/components/ui/title";
@@ -25,11 +24,7 @@ import {
   refreshAllGoogleData,
 } from "@/lib/googleConnector";
 
-const GDriveMain = ({
-  setPopup,
-}: {
-  setPopup: (popup: PopupSpec | null) => void;
-}) => {
+const GDriveMain = () => {
   const { isAdmin, user } = useUser();
 
   // Get app credential and service account key
@@ -159,7 +154,6 @@ const GDriveMain = ({
     <>
       <Title className="mb-2 mt-6">Step 1: Provide your Credentials</Title>
       <DriveJsonUploadSection
-        setPopup={setPopup}
         appCredentialData={appCredentialData}
         serviceAccountCredentialData={serviceAccountKeyData}
         isAdmin={isAdmin}
@@ -176,7 +170,6 @@ const GDriveMain = ({
           <>
             <Title className="mb-2 mt-6">Step 2: Authenticate with Onyx</Title>
             <DriveAuthSection
-              setPopup={setPopup}
               refreshCredentials={handleRefresh}
               googleDrivePublicUploadedCredential={
                 googleDrivePublicUploadedCredential

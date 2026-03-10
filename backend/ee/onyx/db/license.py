@@ -11,11 +11,10 @@ from ee.onyx.server.license.models import LicenseMetadata
 from ee.onyx.server.license.models import LicensePayload
 from ee.onyx.server.license.models import LicenseSource
 from onyx.auth.schemas import UserRole
+from onyx.cache.factory import get_cache_backend
 from onyx.configs.constants import ANONYMOUS_USER_EMAIL
 from onyx.db.models import License
 from onyx.db.models import User
-from onyx.redis.redis_pool import get_redis_client
-from onyx.redis.redis_pool import get_redis_replica_client
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
@@ -142,7 +141,7 @@ def get_used_seats(tenant_id: str | None = None) -> int:
 
 def get_cached_license_metadata(tenant_id: str | None = None) -> LicenseMetadata | None:
     """
-    Get license metadata from Redis cache.
+    Get license metadata from cache.
 
     Args:
         tenant_id: Tenant ID (for multi-tenant deployments)
@@ -150,38 +149,34 @@ def get_cached_license_metadata(tenant_id: str | None = None) -> LicenseMetadata
     Returns:
         LicenseMetadata if cached, None otherwise
     """
-    tenant = tenant_id or get_current_tenant_id()
-    redis_client = get_redis_replica_client(tenant_id=tenant)
+    cache = get_cache_backend(tenant_id=tenant_id)
+    cached = cache.get(LICENSE_METADATA_KEY)
+    if not cached:
+        return None
 
-    cached = redis_client.get(LICENSE_METADATA_KEY)
-    if cached:
-        try:
-            cached_str: str
-            if isinstance(cached, bytes):
-                cached_str = cached.decode("utf-8")
-            else:
-                cached_str = str(cached)
-            return LicenseMetadata.model_validate_json(cached_str)
-        except Exception as e:
-            logger.warning(f"Failed to parse cached license metadata: {e}")
-            return None
-    return None
+    try:
+        cached_str = (
+            cached.decode("utf-8") if isinstance(cached, bytes) else str(cached)
+        )
+        return LicenseMetadata.model_validate_json(cached_str)
+    except Exception as e:
+        logger.warning(f"Failed to parse cached license metadata: {e}")
+        return None
 
 
 def invalidate_license_cache(tenant_id: str | None = None) -> None:
     """
     Invalidate the license metadata cache (not the license itself).
 
-    This deletes the cached LicenseMetadata from Redis. The actual license
-    in the database is not affected. Redis delete is idempotent - if the
-    key doesn't exist, this is a no-op.
+    Deletes the cached LicenseMetadata. The actual license in the database
+    is not affected. Delete is idempotent — if the key doesn't exist, this
+    is a no-op.
 
     Args:
         tenant_id: Tenant ID (for multi-tenant deployments)
     """
-    tenant = tenant_id or get_current_tenant_id()
-    redis_client = get_redis_client(tenant_id=tenant)
-    redis_client.delete(LICENSE_METADATA_KEY)
+    cache = get_cache_backend(tenant_id=tenant_id)
+    cache.delete(LICENSE_METADATA_KEY)
     logger.info("License cache invalidated")
 
 
@@ -192,7 +187,7 @@ def update_license_cache(
     tenant_id: str | None = None,
 ) -> LicenseMetadata:
     """
-    Update the Redis cache with license metadata.
+    Update the cache with license metadata.
 
     We cache all license statuses (ACTIVE, GRACE_PERIOD, GATED_ACCESS) because:
     1. Frontend needs status to show appropriate UI/banners
@@ -211,7 +206,7 @@ def update_license_cache(
     from ee.onyx.utils.license import get_license_status
 
     tenant = tenant_id or get_current_tenant_id()
-    redis_client = get_redis_client(tenant_id=tenant)
+    cache = get_cache_backend(tenant_id=tenant_id)
 
     used_seats = get_used_seats(tenant)
     status = get_license_status(payload, grace_period_end)
@@ -230,7 +225,7 @@ def update_license_cache(
         stripe_subscription_id=payload.stripe_subscription_id,
     )
 
-    redis_client.set(
+    cache.set(
         LICENSE_METADATA_KEY,
         metadata.model_dump_json(),
         ex=LICENSE_CACHE_TTL_SECONDS,
@@ -263,9 +258,15 @@ def refresh_license_cache(
 
     try:
         payload = verify_license_signature(license_record.license_data)
+        # Derive source from payload: manual licenses lack stripe_customer_id
+        source: LicenseSource = (
+            LicenseSource.AUTO_FETCH
+            if payload.stripe_customer_id
+            else LicenseSource.MANUAL_UPLOAD
+        )
         return update_license_cache(
             payload,
-            source=LicenseSource.AUTO_FETCH,
+            source=source,
             tenant_id=tenant_id,
         )
     except ValueError as e:

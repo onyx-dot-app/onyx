@@ -1,72 +1,86 @@
 "use client";
 
 import React from "react";
-import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
-import { SVGProps } from "react";
+import Text from "@/refresh-components/texts/Text";
+import { SvgX } from "@opal/icons";
+import type { IconProps } from "@opal/types";
 
-const getVariantClasses = (active?: boolean) => [
-  active ? "bg-background-tint-00" : "bg-background-tint-01",
-  "hover:bg-background-tint-02",
-];
+const variantStyles = {
+  display: {
+    container: "flex items-center p-1",
+    icon: "size-4 stroke-text-03",
+    text: { secondaryBody: true, text03: true },
+  },
+  editable: {
+    container: "flex items-center gap-1 px-2 py-1",
+    icon: "size-3 stroke-text-03",
+    text: { mainUiBody: true, text04: true },
+  },
+} as const;
 
 export interface TagProps {
-  // Tag states:
-  active?: boolean;
-
-  // Tag content:
   label: string;
+  variant?: "display" | "editable";
+  icon?: React.FunctionComponent<IconProps>;
+  onRemove?: () => void;
+  onClick?: () => void;
   className?: string;
-  children: React.FunctionComponent<SVGProps<SVGSVGElement>>[];
-  onClick?: React.MouseEventHandler;
+  ref?: React.Ref<HTMLDivElement>;
 }
 
 export default function Tag({
-  active,
-
   label,
-  className,
-  children,
+  variant = "display",
+  icon: Icon,
+  onRemove,
   onClick,
+  className,
+  ref,
 }: TagProps) {
-  // Show max 3 icons
-  const visibleIcons = children.slice(0, 3);
+  const styles = variantStyles[variant];
 
   return (
-    <button
-      type="button"
+    <div
+      ref={ref}
       className={cn(
-        "p-1.5 rounded-08 group w-fit flex items-center gap-1 transition-all duration-200 ease-in-out",
-        getVariantClasses(active),
+        styles.container,
+        "rounded-08",
+        "bg-background-tint-02 hover:bg-background-tint-03",
+        "focus-visible:shadow-[0_0_0_2px_var(--background-tint-04)]",
+        "outline-none transition-colors",
+        onClick || variant === "display" ? "cursor-pointer" : undefined,
         className
       )}
       onClick={onClick}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={
+        onClick
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onClick();
+              }
+            }
+          : undefined
+      }
     >
-      {/* Icons container */}
-      <div className="flex items-center -space-x-1">
-        {visibleIcons.map((Icon, index) => (
-          <div
-            key={index}
-            className="relative bg-background-tint-00 border border-background-tint-01 p-0.5 rounded-04"
-            style={{ zIndex: visibleIcons.length - index }}
-          >
-            <Icon className="w-[0.6rem] h-[0.6rem] stroke-text-04" />
-          </div>
-        ))}
-      </div>
-
-      {/* Count display - only shows on hover/active */}
-      <Text
-        className={cn(
-          "inline-flex transition-all duration-200 ease-in-out overflow-hidden",
-          "group-hover:max-w-8 group-hover:opacity-100",
-          active ? "max-w-[10rem] opacity-100" : "max-w-0 opacity-0"
-        )}
-      >
-        {children.length}
-      </Text>
-
-      <Text>{label}</Text>
-    </button>
+      {Icon && <Icon className={styles.icon} />}
+      <Text {...styles.text}>{label}</Text>
+      {onRemove && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
+          className="p-0.5 stroke-text-02 hover:stroke-text-03"
+          aria-label={`Remove ${label} filter`}
+        >
+          <SvgX className="size-3" />
+        </button>
+      )}
+    </div>
   );
 }

@@ -30,7 +30,7 @@ function IconWrapper({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * Row of two banners that appear above the InputBar after first assistant response.
+ * Row of two banners that appear above the InputBar after first agent response.
  * - Left: "Connect your data" - exact same look as welcome page banner, but flipped
  * - Right: "Get help setting up connectors" - links to cal.com booking
  *

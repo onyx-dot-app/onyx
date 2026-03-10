@@ -12,7 +12,7 @@ import {
   updateCredential,
   updateCredentialWithPrivateKey,
 } from "@/lib/credential";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import CreateCredential from "./actions/CreateCredential";
 import { CCPairFullInfo } from "@/app/admin/connector/[ccPairId]/types";
 import ModifyCredential from "./actions/ModifyCredential";
@@ -96,18 +96,14 @@ export default function CredentialSection({
       mutate(buildSimilarCredentialInfoURL(sourceType));
       refresh();
 
-      setPopup({
-        message: "Swapped credential successfully!",
-        type: "success",
-      });
+      toast.success("Swapped credential successfully!");
     } else {
       const errorData = await response.json();
-      setPopup({
-        message: `Issue swapping credential: ${
+      toast.error(
+        `Issue swapping credential: ${
           errorData.detail || errorData.message || "Unknown error"
-        }`,
-        type: "error",
-      });
+        }`
+      );
     }
   };
 
@@ -134,16 +130,10 @@ export default function CredentialSection({
       response = await updateCredential(selectedCredential.id, details);
     }
     if (response.ok) {
-      setPopup({
-        message: "Updated credential",
-        type: "success",
-      });
+      toast.success("Updated credential");
       onSucces();
     } else {
-      setPopup({
-        message: "Issue updating credential",
-        type: "error",
-      });
+      toast.error("Issue updating credential");
     }
   };
 
@@ -175,8 +165,6 @@ export default function CredentialSection({
     setEditingCredential(null);
     setShowModifyCredential(true);
   };
-  const { popup, setPopup } = usePopup();
-
   if (!credentials || !editableCredentials) {
     return <></>;
   }
@@ -189,8 +177,6 @@ export default function CredentialSection({
       rounded-lg
       bg-background"
     >
-      {popup}
-
       <Card className="p-6">
         <div className="flex items-center">
           <div className="flex-shrink-0 mr-3">
@@ -281,7 +267,6 @@ export default function CredentialSection({
             <Modal.Body>
               <EditCredential
                 onUpdate={onUpdateCredential}
-                setPopup={setPopup}
                 credential={editingCredential}
                 onClose={closeEditingCredential}
               />
@@ -313,7 +298,6 @@ export default function CredentialSection({
                       sourceType={sourceType}
                       accessType={ccPair.access_type}
                       swapConnector={ccPair.connector}
-                      setPopup={setPopup}
                       onSwap={onSwap}
                       onClose={closeCreateCredential}
                     />

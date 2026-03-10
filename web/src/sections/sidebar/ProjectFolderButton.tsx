@@ -6,13 +6,13 @@ import { useDroppable } from "@dnd-kit/core";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
-import Button from "@/refresh-components/buttons/Button";
 import ChatButton from "@/sections/sidebar/ChatButton";
 import { useAppRouter } from "@/hooks/appNavigation";
 import { cn, noProp } from "@/lib/utils";
 import { DRAG_TYPES } from "./constants";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button } from "@opal/components";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
 import type { IconProps } from "@opal/types";
 import useAppFocus from "@/hooks/useAppFocus";
@@ -117,7 +117,7 @@ const ProjectFolderButton = memo(({ project }: ProjectFolderButtonProps) => {
           onClose={() => setDeleteConfirmationModalOpen(false)}
           submit={
             <Button
-              danger
+              variant="danger"
               onClick={() => {
                 setDeleteConfirmationModalOpen(false);
                 deleteProject(project.id);
@@ -136,24 +136,26 @@ const ProjectFolderButton = memo(({ project }: ProjectFolderButtonProps) => {
       <Popover onOpenChange={setPopoverOpen}>
         <Popover.Anchor>
           <SidebarTab
-            leftIcon={() => (
-              <IconButton
-                onHover={handleIconHover}
+            icon={() => (
+              <Button
+                onMouseEnter={() => handleIconHover(true)}
+                onMouseLeave={() => handleIconHover(false)}
                 icon={getFolderIcon()}
-                internal
+                prominence="tertiary"
+                size="sm"
                 onClick={noProp(handleIconClick)}
               />
             )}
-            transient={
+            selected={
               activeSidebar.isProject() &&
               activeSidebar.getId() === String(project.id)
             }
             onClick={noProp(handleTextClick)}
-            focused={isEditing}
             rightChildren={
               <>
                 <Popover.Trigger asChild onClick={noProp()}>
                   <div>
+                    {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
                     <IconButton
                       icon={SvgMoreHorizontal}
                       className={cn(

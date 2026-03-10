@@ -7,23 +7,9 @@ import { LicenseStatus } from "@/lib/billing/interfaces";
 /**
  * Hook to fetch license status for self-hosted deployments.
  *
- * Returns license information including seats, expiry, and status.
- * Only fetches for self-hosted deployments (cloud uses tenant auth instead).
- *
- * @example
- * ```tsx
- * const { data, isLoading, error, refresh } = useLicense();
- *
- * if (isLoading) return <Loading />;
- * if (error) return <Error />;
- * if (!data?.has_license) return <NoLicense />;
- *
- * return <LicenseDetails license={data} />;
- * ```
+ * Skips the fetch on cloud deployments (uses tenant auth instead).
  */
 export function useLicense() {
-  // Only fetch license for self-hosted deployments
-  // Cloud deployments use tenant-based auth, not license files
   const url = NEXT_PUBLIC_CLOUD_ENABLED ? null : "/api/license";
 
   const { data, error, mutate, isLoading } = useSWR<LicenseStatus>(
@@ -38,20 +24,14 @@ export function useLicense() {
     }
   );
 
-  // Return empty state for cloud deployments
-  if (NEXT_PUBLIC_CLOUD_ENABLED) {
+  if (!url) {
     return {
-      data: null,
+      data: undefined,
       isLoading: false,
       error: undefined,
       refresh: () => Promise.resolve(undefined),
     };
   }
 
-  return {
-    data,
-    isLoading,
-    error,
-    refresh: mutate,
-  };
+  return { data, isLoading, error, refresh: mutate };
 }

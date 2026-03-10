@@ -301,8 +301,11 @@ interface UploadFilesContextValue {
   /**
    * Clear all attached files from the input bar.
    * Does NOT delete from sandbox (use for form reset).
+   * @param options.suppressRefetch - When true, skips the refetch that would
+   *   normally restore session attachments (e.g. when user hits Enter to dismiss
+   *   a file from the input bar).
    */
-  clearFiles: () => void;
+  clearFiles: (options?: { suppressRefetch?: boolean }) => void;
 
   // Check if any files are uploading
   hasUploadingFiles: boolean;
@@ -341,6 +344,8 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
   const prevSessionRef = useRef<string | null>(null);
   // Track active deletions to prevent refetch race condition
   const activeDeletionsRef = useRef<Set<string>>(new Set());
+  // When true, skip the refetch that runs after clearFiles (e.g. Enter to dismiss file)
+  const suppressRefetchRef = useRef(false);
 
   // =========================================================================
   // Derived state
@@ -593,13 +598,19 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
     // Skip refetch if there are active deletions in progress
     // This prevents the deleted file from being re-added before backend deletion completes
     const hasActiveDeletions = activeDeletionsRef.current.size > 0;
+    // Skip refetch if caller explicitly suppressed (e.g. user hit Enter to dismiss file)
+    const shouldSuppressRefetch = suppressRefetchRef.current;
+    if (shouldSuppressRefetch) {
+      suppressRefetchRef.current = false;
+    }
 
     // Refetch if on same session and files were cleared (not deleted)
     if (
       filesWereCleared &&
       activeSessionId &&
       prevSessionRef.current === activeSessionId &&
-      !hasActiveDeletions
+      !hasActiveDeletions &&
+      !shouldSuppressRefetch
     ) {
       fetchExistingAttachmentsInternal(activeSessionId, false);
     }
@@ -809,7 +820,10 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
   /**
    * Clear all files from the input bar.
    */
-  const clearFiles = useCallback(() => {
+  const clearFiles = useCallback((options?: { suppressRefetch?: boolean }) => {
+    if (options?.suppressRefetch) {
+      suppressRefetchRef.current = true;
+    }
     setCurrentMessageFiles([]);
   }, []);
 

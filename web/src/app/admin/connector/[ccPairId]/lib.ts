@@ -1,4 +1,3 @@
-import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { runConnector } from "@/lib/connector";
 import { ValidSources } from "@/lib/types";
 import { mutate } from "swr";
@@ -19,8 +18,7 @@ export async function triggerIndexing(
   fromBeginning: boolean,
   connectorId: number,
   credentialId: number,
-  ccPairId: number,
-  setPopup: (popupSpec: PopupSpec | null) => void
+  ccPairId: number
 ): Promise<{ success: boolean; message: string }> {
   const errorMsg = await runConnector(
     connectorId,

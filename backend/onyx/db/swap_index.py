@@ -15,6 +15,8 @@ from onyx.db.index_attempt import (
     count_unique_active_cc_pairs_with_successful_index_attempts,
 )
 from onyx.db.index_attempt import count_unique_cc_pairs_with_successful_index_attempts
+from onyx.db.llm import update_default_contextual_model
+from onyx.db.llm import update_no_default_contextual_rag_provider
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import SearchSettings
 from onyx.db.search_settings import get_current_search_settings
@@ -79,6 +81,24 @@ def _perform_index_swap(
         new_status=IndexModelStatus.PRESENT,
         db_session=db_session,
     )
+
+    # Update the default contextual model to match the newly promoted settings
+    try:
+        update_default_contextual_model(
+            db_session=db_session,
+            enable_contextual_rag=new_search_settings.enable_contextual_rag,
+            contextual_rag_llm_provider=new_search_settings.contextual_rag_llm_provider,
+            contextual_rag_llm_name=new_search_settings.contextual_rag_llm_name,
+        )
+    except ValueError as e:
+        logger.error(f"Model not found, defaulting to no contextual model: {e}")
+        update_no_default_contextual_rag_provider(
+            db_session=db_session,
+        )
+        new_search_settings.enable_contextual_rag = False
+        new_search_settings.contextual_rag_llm_provider = None
+        new_search_settings.contextual_rag_llm_name = None
+        db_session.commit()
 
     # This flow is for checking and possibly creating an index so we get all
     # indices.

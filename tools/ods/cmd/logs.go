@@ -5,7 +5,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// LogsOptions holds options for the logs command
+// LogsOptions holds options for the logs command.
 type LogsOptions struct {
 	Follow bool
 	Tail   string

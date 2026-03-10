@@ -1,5 +1,8 @@
+import json
 import time
 from collections.abc import Callable
+from typing import Any
+from typing import Literal
 
 from sqlalchemy.orm import Session
 
@@ -13,9 +16,10 @@ from onyx.chat.emitter import Emitter
 from onyx.chat.llm_step import extract_tool_calls_from_response_text
 from onyx.chat.llm_step import run_llm_step
 from onyx.chat.models import ChatMessageSimple
-from onyx.chat.models import ExtractedProjectFiles
+from onyx.chat.models import ContextFileMetadata
+from onyx.chat.models import ExtractedContextFiles
+from onyx.chat.models import FileToolMetadata
 from onyx.chat.models import LlmStepResult
-from onyx.chat.models import ProjectFileMetadata
 from onyx.chat.models import ToolCallSimple
 from onyx.chat.prompt_utils import build_reminder_message
 from onyx.chat.prompt_utils import build_system_prompt
@@ -27,12 +31,14 @@ from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.context.search.models import SearchDocsResponse
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.memory import add_memory
+from onyx.db.memory import update_memory_at_index
 from onyx.db.memory import UserMemoryContext
 from onyx.db.models import Persona
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.interfaces import ToolChoiceOptions
-from onyx.llm.utils import model_needs_formatting_reenabled
 from onyx.prompts.chat_prompts import IMAGE_GEN_REMINDER
 from onyx.prompts.chat_prompts import OPEN_URL_REMINDER
 from onyx.server.query_and_chat.placement import Placement
@@ -43,12 +49,17 @@ from onyx.server.query_and_chat.streaming_models import TopLevelBranching
 from onyx.tools.built_in_tools import CITEABLE_TOOLS_NAMES
 from onyx.tools.built_in_tools import STOPPING_TOOLS_NAMES
 from onyx.tools.interface import Tool
+from onyx.tools.models import ChatFile
+from onyx.tools.models import MemoryToolResponseSnapshot
+from onyx.tools.models import PythonToolRichResponse
 from onyx.tools.models import ToolCallInfo
 from onyx.tools.models import ToolCallKickoff
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool_implementations.images.models import (
     FinalImageGenerationResponse,
 )
+from onyx.tools.tool_implementations.memory.models import MemoryToolResponse
+from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.utils import extract_url_snippet_map
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
@@ -58,6 +69,18 @@ from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+
+
+def _looks_like_xml_tool_call_payload(text: str | None) -> bool:
+    """Detect XML-style marshaled tool calls emitted as plain text."""
+    if not text:
+        return False
+    lowered = text.lower()
+    return (
+        "<function_calls" in lowered
+        and "<invoke" in lowered
+        and "<parameter" in lowered
+    )
 
 
 def _try_fallback_tool_extraction(
@@ -92,18 +115,36 @@ def _try_fallback_tool_extraction(
     reasoning_but_no_answer_or_tools = (
         llm_step_result.reasoning and not llm_step_result.answer and no_tool_calls
     )
+    xml_tool_call_text_detected = no_tool_calls and (
+        _looks_like_xml_tool_call_payload(llm_step_result.answer)
+        or _looks_like_xml_tool_call_payload(llm_step_result.raw_answer)
+        or _looks_like_xml_tool_call_payload(llm_step_result.reasoning)
+    )
     should_try_fallback = (
-        tool_choice == ToolChoiceOptions.REQUIRED and no_tool_calls
-    ) or reasoning_but_no_answer_or_tools
+        (tool_choice == ToolChoiceOptions.REQUIRED and no_tool_calls)
+        or reasoning_but_no_answer_or_tools
+        or xml_tool_call_text_detected
+    )
 
     if not should_try_fallback:
         return llm_step_result, False
 
     # Try to extract from answer first, then fall back to reasoning
     extracted_tool_calls: list[ToolCallKickoff] = []
+
     if llm_step_result.answer:
         extracted_tool_calls = extract_tool_calls_from_response_text(
             response_text=llm_step_result.answer,
+            tool_definitions=tool_defs,
+            placement=Placement(turn_index=turn_index),
+        )
+    if (
+        not extracted_tool_calls
+        and llm_step_result.raw_answer
+        and llm_step_result.raw_answer != llm_step_result.answer
+    ):
+        extracted_tool_calls = extract_tool_calls_from_response_text(
+            response_text=llm_step_result.raw_answer,
             tool_definitions=tool_defs,
             placement=Placement(turn_index=turn_index),
         )
@@ -113,17 +154,17 @@ def _try_fallback_tool_extraction(
             tool_definitions=tool_defs,
             placement=Placement(turn_index=turn_index),
         )
-
     if extracted_tool_calls:
         logger.info(
             f"Extracted {len(extracted_tool_calls)} tool call(s) from response text "
-            f"as fallback (tool_choice was REQUIRED but no tool calls returned)"
+            "as fallback"
         )
         return (
             LlmStepResult(
                 reasoning=llm_step_result.reasoning,
                 answer=llm_step_result.answer,
                 tool_calls=extracted_tool_calls,
+                raw_answer=llm_step_result.raw_answer,
             ),
             True,
         )
@@ -141,17 +182,17 @@ def _try_fallback_tool_extraction(
 MAX_LLM_CYCLES = 6
 
 
-def _build_project_file_citation_mapping(
-    project_file_metadata: list[ProjectFileMetadata],
+def _build_context_file_citation_mapping(
+    file_metadata: list[ContextFileMetadata],
     starting_citation_num: int = 1,
 ) -> CitationMapping:
-    """Build citation mapping for project files.
+    """Build citation mapping for context files.
 
-    Converts project file metadata into SearchDoc objects that can be cited.
+    Converts context file metadata into SearchDoc objects that can be cited.
     Citation numbers start from the provided starting number.
 
     Args:
-        project_file_metadata: List of project file metadata
+        file_metadata: List of context file metadata
         starting_citation_num: Starting citation number (default: 1)
 
     Returns:
@@ -159,8 +200,7 @@ def _build_project_file_citation_mapping(
     """
     citation_mapping: CitationMapping = {}
 
-    for idx, file_meta in enumerate(project_file_metadata, start=starting_citation_num):
-        # Create a SearchDoc for each project file
+    for idx, file_meta in enumerate(file_metadata, start=starting_citation_num):
         search_doc = SearchDoc(
             document_id=file_meta.file_id,
             chunk_ind=0,
@@ -179,14 +219,44 @@ def _build_project_file_citation_mapping(
     return citation_mapping
 
 
+def _build_project_message(
+    context_files: ExtractedContextFiles | None,
+    token_counter: Callable[[str], int] | None,
+) -> list[ChatMessageSimple]:
+    """Build messages for context-injected / tool-backed files.
+
+    Returns up to two messages:
+    1. The full-text files message (if file_texts is populated).
+    2. A lightweight metadata message for files the LLM should access via the
+       FileReaderTool (e.g. oversized files that don't fit in context).
+    """
+    if not context_files:
+        return []
+
+    messages: list[ChatMessageSimple] = []
+    if context_files.file_texts:
+        messages.append(
+            _create_context_files_message(context_files, token_counter=None)
+        )
+    if context_files.file_metadata_for_tool and token_counter:
+        messages.append(
+            _create_file_tool_metadata_message(
+                context_files.file_metadata_for_tool, token_counter
+            )
+        )
+    return messages
+
+
 def construct_message_history(
     system_prompt: ChatMessageSimple | None,
     custom_agent_prompt: ChatMessageSimple | None,
     simple_chat_history: list[ChatMessageSimple],
     reminder_message: ChatMessageSimple | None,
-    project_files: ExtractedProjectFiles | None,
+    context_files: ExtractedContextFiles | None,
     available_tokens: int,
     last_n_user_messages: int | None = None,
+    token_counter: Callable[[str], int] | None = None,
+    all_injected_file_metadata: dict[str, FileToolMetadata] | None = None,
 ) -> list[ChatMessageSimple]:
     if last_n_user_messages is not None:
         if last_n_user_messages <= 0:
@@ -194,13 +264,17 @@ def construct_message_history(
                 "filtering chat history by last N user messages must be a value greater than 0"
             )
 
+    # Build the project / file-metadata messages up front so we can use their
+    # actual token counts for the budget.
+    project_messages = _build_project_message(context_files, token_counter)
+    project_messages_tokens = sum(m.token_count for m in project_messages)
+
     history_token_budget = available_tokens
     history_token_budget -= system_prompt.token_count if system_prompt else 0
     history_token_budget -= (
         custom_agent_prompt.token_count if custom_agent_prompt else 0
     )
-    if project_files:
-        history_token_budget -= project_files.total_token_count
+    history_token_budget -= project_messages_tokens
     history_token_budget -= reminder_message.token_count if reminder_message else 0
 
     if history_token_budget < 0:
@@ -214,11 +288,7 @@ def construct_message_history(
         result = [system_prompt] if system_prompt else []
         if custom_agent_prompt:
             result.append(custom_agent_prompt)
-        if project_files and project_files.project_file_texts:
-            project_message = _create_project_files_message(
-                project_files, token_counter=None
-            )
-            result.append(project_message)
+        result.extend(project_messages)
         if reminder_message:
             result.append(reminder_message)
         return result
@@ -277,8 +347,11 @@ def construct_message_history(
     # Calculate remaining budget for history before the last user message
     remaining_budget = history_token_budget - required_tokens
 
-    # Truncate history_before_last_user from the top to fit in remaining budget
+    # Truncate history_before_last_user from the top to fit in remaining budget.
+    # Track dropped file messages so we can provide their metadata to the
+    # FileReaderTool instead.
     truncated_history_before: list[ChatMessageSimple] = []
+    dropped_file_ids: list[str] = []
     current_token_count = 0
 
     for msg in reversed(history_before_last_user):
@@ -287,22 +360,80 @@ def construct_message_history(
             truncated_history_before.insert(0, msg)
             current_token_count += msg.token_count
         else:
-            # Can't fit this message, stop truncating
+            # Can't fit this message, stop truncating.
+            # This message and everything older is dropped.
             break
 
+    # Collect file_ids from ALL dropped messages (those not in
+    # truncated_history_before). The truncation loop above keeps the most
+    # recent messages, so the dropped ones are at the start of the original
+    # list up to (len(history) - len(kept)).
+    num_kept = len(truncated_history_before)
+    for msg in history_before_last_user[: len(history_before_last_user) - num_kept]:
+        if msg.file_id is not None:
+            dropped_file_ids.append(msg.file_id)
+
+    # Also treat "orphaned" metadata entries as dropped -- these are files
+    # from messages removed by summary truncation (before convert_chat_history
+    # ran), so no ChatMessageSimple was ever tagged with their file_id.
+    if all_injected_file_metadata:
+        surviving_file_ids = {
+            msg.file_id for msg in simple_chat_history if msg.file_id is not None
+        }
+        for fid in all_injected_file_metadata:
+            if fid not in surviving_file_ids and fid not in dropped_file_ids:
+                dropped_file_ids.append(fid)
+
+    # Build a forgotten-files metadata message if any file messages were
+    # dropped AND we have metadata for them (meaning the FileReaderTool is
+    # available). Reserve tokens for this message in the budget.
+    forgotten_files_message: ChatMessageSimple | None = None
+    if dropped_file_ids and all_injected_file_metadata and token_counter:
+        forgotten_meta = [
+            all_injected_file_metadata[fid]
+            for fid in dropped_file_ids
+            if fid in all_injected_file_metadata
+        ]
+        if forgotten_meta:
+            logger.debug(
+                f"FileReader: building forgotten-files message for "
+                f"{[(m.file_id, m.filename) for m in forgotten_meta]}"
+            )
+            forgotten_files_message = _create_file_tool_metadata_message(
+                forgotten_meta, token_counter
+            )
+            # Shrink the remaining budget. If the metadata message doesn't
+            # fit we may need to drop more history messages.
+            remaining_budget -= forgotten_files_message.token_count
+            while truncated_history_before and current_token_count > remaining_budget:
+                evicted = truncated_history_before.pop(0)
+                current_token_count -= evicted.token_count
+                # If the evicted message is itself a file, add it to the
+                # forgotten metadata (it's now dropped too).
+                if (
+                    evicted.file_id is not None
+                    and evicted.file_id in all_injected_file_metadata
+                    and evicted.file_id not in {m.file_id for m in forgotten_meta}
+                ):
+                    forgotten_meta.append(all_injected_file_metadata[evicted.file_id])
+                    # Rebuild the message with the new entry
+                    forgotten_files_message = _create_file_tool_metadata_message(
+                        forgotten_meta, token_counter
+                    )
+
     # Attach project images to the last user message
-    if project_files and project_files.project_image_files:
+    if context_files and context_files.image_files:
         existing_images = last_user_message.image_files or []
         last_user_message = ChatMessageSimple(
             message=last_user_message.message,
             token_count=last_user_message.token_count,
             message_type=last_user_message.message_type,
-            image_files=existing_images + project_files.project_image_files,
+            image_files=existing_images + context_files.image_files,
         )
 
     # Build the final message list according to README ordering:
-    # [system], [history_before_last_user], [custom_agent], [project_files],
-    # [last_user_message], [messages_after_last_user], [reminder]
+    # [system], [history_before_last_user], [custom_agent], [context_files],
+    # [forgotten_files], [last_user_message], [messages_after_last_user], [reminder]
     result = [system_prompt] if system_prompt else []
 
     # 1. Add truncated history before last user message
@@ -312,31 +443,94 @@ def construct_message_history(
     if custom_agent_prompt:
         result.append(custom_agent_prompt)
 
-    # 3. Add project files message (inserted before last user message)
-    if project_files and project_files.project_file_texts:
-        project_message = _create_project_files_message(
-            project_files, token_counter=None
-        )
-        result.append(project_message)
+    # 3. Add context files / file-metadata messages (inserted before last user message)
+    result.extend(project_messages)
 
-    # 4. Add last user message (with project images attached)
+    # 4. Add forgotten-files metadata (right before the user's question)
+    if forgotten_files_message:
+        result.append(forgotten_files_message)
+
+    # 5. Add last user message (with context images attached)
     result.append(last_user_message)
 
-    # 5. Add messages after last user message (tool calls, responses, etc.)
+    # 6. Add messages after last user message (tool calls, responses, etc.)
     result.extend(messages_after_last_user)
 
-    # 6. Add reminder message at the very end
+    # 7. Add reminder message at the very end
     if reminder_message:
         result.append(reminder_message)
 
-    return result
+    return _drop_orphaned_tool_call_responses(result)
 
 
-def _create_project_files_message(
-    project_files: ExtractedProjectFiles,
+def _drop_orphaned_tool_call_responses(
+    messages: list[ChatMessageSimple],
+) -> list[ChatMessageSimple]:
+    """Drop tool response messages whose tool_call_id is not in prior assistant tool calls.
+
+    This can happen when history truncation drops an ASSISTANT tool-call message but
+    leaves a later TOOL_CALL_RESPONSE message in context. Some providers (e.g. Ollama)
+    reject such history with an "unexpected tool call id" error.
+    """
+    known_tool_call_ids: set[str] = set()
+    sanitized: list[ChatMessageSimple] = []
+
+    for msg in messages:
+        if msg.message_type == MessageType.ASSISTANT and msg.tool_calls:
+            for tool_call in msg.tool_calls:
+                known_tool_call_ids.add(tool_call.tool_call_id)
+            sanitized.append(msg)
+            continue
+
+        if msg.message_type == MessageType.TOOL_CALL_RESPONSE:
+            if msg.tool_call_id and msg.tool_call_id in known_tool_call_ids:
+                sanitized.append(msg)
+            else:
+                logger.debug(
+                    "Dropping orphaned tool response with tool_call_id=%s while "
+                    "constructing message history",
+                    msg.tool_call_id,
+                )
+            continue
+
+        sanitized.append(msg)
+
+    return sanitized
+
+
+def _create_file_tool_metadata_message(
+    file_metadata: list[FileToolMetadata],
+    token_counter: Callable[[str], int],
+) -> ChatMessageSimple:
+    """Build a lightweight metadata-only message listing files available via FileReaderTool.
+
+    Used when files are too large to fit in context and the vector DB is
+    disabled, so the LLM must use ``read_file`` to inspect them.
+    """
+    lines = [
+        "You have access to the following files. Use the read_file tool to "
+        "read sections of any file. You MUST pass the file_id UUID (not the "
+        "filename) to read_file:"
+    ]
+    for meta in file_metadata:
+        lines.append(
+            f'- file_id="{meta.file_id}" filename="{meta.filename}" '
+            f"(~{meta.approx_char_count:,} chars)"
+        )
+
+    message_content = "\n".join(lines)
+    return ChatMessageSimple(
+        message=message_content,
+        token_count=token_counter(message_content),
+        message_type=MessageType.USER,
+    )
+
+
+def _create_context_files_message(
+    context_files: ExtractedContextFiles,
     token_counter: Callable[[str], int] | None,  # noqa: ARG001
 ) -> ChatMessageSimple:
-    """Convert project files to a ChatMessageSimple message.
+    """Convert context files to a ChatMessageSimple message.
 
     Format follows the README specification for document representation.
     """
@@ -344,21 +538,25 @@ def _create_project_files_message(
 
     # Format as documents JSON as described in README
     documents_list = []
-    for idx, file_text in enumerate(project_files.project_file_texts, start=1):
-        documents_list.append(
-            {
-                "document": idx,
-                "contents": file_text,
-            }
+    for idx, file_text in enumerate(context_files.file_texts, start=1):
+        title = (
+            context_files.file_metadata[idx - 1].filename
+            if idx - 1 < len(context_files.file_metadata)
+            else None
         )
+        entry: dict[str, Any] = {"document": idx}
+        if title:
+            entry["title"] = title
+        entry["contents"] = file_text
+        documents_list.append(entry)
 
     documents_json = json.dumps({"documents": documents_list}, indent=2)
     message_content = f"Here are some documents provided for context, they may not all be relevant:\n{documents_json}"
 
-    # Use pre-calculated token count from project_files
+    # Use pre-calculated token count from context_files
     return ChatMessageSimple(
         message=message_content,
-        token_count=project_files.total_token_count,
+        token_count=context_files.total_token_count,
         message_type=MessageType.USER,
     )
 
@@ -369,7 +567,7 @@ def run_llm_loop(
     simple_chat_history: list[ChatMessageSimple],
     tools: list[Tool],
     custom_agent_prompt: str | None,
-    project_files: ExtractedProjectFiles,
+    context_files: ExtractedContextFiles,
     persona: Persona | None,
     user_memory_context: UserMemoryContext | None,
     llm: LLM,
@@ -378,7 +576,10 @@ def run_llm_loop(
     forced_tool_id: int | None = None,
     user_identity: LLMUserIdentity | None = None,
     chat_session_id: str | None = None,
+    chat_files: list[ChatFile] | None = None,
     include_citations: bool = True,
+    all_injected_file_metadata: dict[str, FileToolMetadata] | None = None,
+    inject_memories_in_prompt: bool = True,
 ) -> None:
     with trace(
         "run_llm_loop",
@@ -409,9 +610,9 @@ def run_llm_loop(
 
         # Add project file citation mappings if project files are present
         project_citation_mapping: CitationMapping = {}
-        if project_files.project_file_metadata:
-            project_citation_mapping = _build_project_file_citation_mapping(
-                project_files.project_file_metadata
+        if context_files.file_metadata:
+            project_citation_mapping = _build_context_file_citation_mapping(
+                context_files.file_metadata
             )
             citation_processor.update_citation_mapping(project_citation_mapping)
 
@@ -429,21 +630,28 @@ def run_llm_loop(
         # TODO allow citing of images in Projects. Since attached to the last user message, it has no text associated with it.
         # One future workaround is to include the images as separate user messages with citation information and process those.
         always_cite_documents: bool = bool(
-            project_files.project_as_filter or project_files.project_file_texts
+            context_files.use_as_search_filter or context_files.file_texts
         )
         should_cite_documents: bool = False
         ran_image_gen: bool = False
         just_ran_web_search: bool = False
         has_called_search_tool: bool = False
+        code_interpreter_file_generated: bool = False
         fallback_extraction_attempted: bool = False
         citation_mapping: dict[int, str] = {}  # Maps citation_num -> document_id/URL
 
-        default_base_system_prompt: str = get_default_base_system_prompt(db_session)
+        # Fetch this in a short-lived session so the long-running stream loop does
+        # not pin a connection just to keep read state alive.
+        with get_session_with_current_tenant() as prompt_db_session:
+            default_base_system_prompt: str = get_default_base_system_prompt(
+                prompt_db_session
+            )
         system_prompt = None
         custom_agent_prompt_msg = None
 
         reasoning_cycles = 0
         for llm_cycle_count in range(MAX_LLM_CYCLES):
+            # Handling tool calls based on cycle count and past cycle conditions
             out_of_cycles = llm_cycle_count == MAX_LLM_CYCLES - 1
             if forced_tool_id:
                 # Needs to be just the single one because the "required" currently doesn't have a specified tool, just a binary
@@ -460,6 +668,7 @@ def run_llm_loop(
                 tool_choice = ToolChoiceOptions.AUTO
                 final_tools = tools
 
+            # Handling the system prompt and custom agent prompt
             # The section below calculates the available tokens for history a bit more accurately
             # now that project files are loaded in.
             if persona and persona.replace_base_system_prompt:
@@ -477,18 +686,22 @@ def run_llm_loop(
             else:
                 # If it's an empty string, we assume the user does not want to include it as an empty System message
                 if default_base_system_prompt:
-                    open_ai_formatting_enabled = model_needs_formatting_reenabled(
-                        llm.config.model_name
+                    prompt_memory_context = (
+                        user_memory_context
+                        if inject_memories_in_prompt
+                        else (
+                            user_memory_context.without_memories()
+                            if user_memory_context
+                            else None
+                        )
                     )
-
                     system_prompt_str = build_system_prompt(
                         base_system_prompt=default_base_system_prompt,
                         datetime_aware=persona.datetime_aware if persona else True,
-                        user_memory_context=user_memory_context,
+                        user_memory_context=prompt_memory_context,
                         tools=tools,
                         should_cite_documents=should_cite_documents
                         or always_cite_documents,
-                        open_ai_formatting_enabled=open_ai_formatting_enabled,
                     )
                     system_prompt = ChatMessageSimple(
                         message=system_prompt_str,
@@ -534,6 +747,7 @@ def run_llm_loop(
                     ),
                     include_citation_reminder=should_cite_documents
                     or always_cite_documents,
+                    include_file_reminder=code_interpreter_file_generated,
                     is_last_cycle=out_of_cycles,
                 )
 
@@ -541,7 +755,7 @@ def run_llm_loop(
                 ChatMessageSimple(
                     message=reminder_message_text,
                     token_count=token_counter(reminder_message_text),
-                    message_type=MessageType.USER,
+                    message_type=MessageType.USER_REMINDER,
                 )
                 if reminder_message_text
                 else None
@@ -552,8 +766,10 @@ def run_llm_loop(
                 custom_agent_prompt=custom_agent_prompt_msg,
                 simple_chat_history=simple_chat_history,
                 reminder_message=reminder_msg,
-                project_files=project_files,
+                context_files=context_files,
                 available_tokens=available_tokens,
+                token_counter=token_counter,
+                all_injected_file_metadata=all_injected_file_metadata,
             )
 
             # This calls the LLM, yields packets (reasoning, answers, etc.) and returns the result
@@ -644,7 +860,9 @@ def run_llm_loop(
                 next_citation_num=citation_processor.get_next_citation_number(),
                 max_concurrent_tools=None,
                 skip_search_query_expansion=has_called_search_tool,
+                chat_files=chat_files,
                 url_snippet_map=extract_url_snippet_map(gathered_documents or []),
+                inject_memories_in_prompt=inject_memories_in_prompt,
             )
             tool_responses = parallel_tool_call_results.tool_responses
             citation_mapping = parallel_tool_call_results.updated_citation_mapping
@@ -668,6 +886,18 @@ def run_llm_loop(
                 # Track if search tool was called (for skipping query expansion on subsequent calls)
                 if tool_call.tool_name == SearchTool.NAME:
                     has_called_search_tool = True
+
+                # Track if code interpreter generated files with download links
+                if (
+                    tool_call.tool_name == PythonTool.NAME
+                    and not code_interpreter_file_generated
+                ):
+                    try:
+                        parsed = json.loads(tool_response.llm_facing_response)
+                        if parsed.get("generated_files"):
+                            code_interpreter_file_generated = True
+                    except (json.JSONDecodeError, AttributeError):
+                        pass
 
                 # Build a mapping of tool names to tool objects for getting tool_id
                 tools_by_name = {tool.name: tool for tool in final_tools}
@@ -709,11 +939,51 @@ def run_llm_loop(
                 ):
                     generated_images = tool_response.rich_response.generated_images
 
-                saved_response = (
-                    tool_response.rich_response
-                    if isinstance(tool_response.rich_response, str)
-                    else tool_response.llm_facing_response
-                )
+                # Extract generated_files if this is a code interpreter response
+                generated_files = None
+                if isinstance(tool_response.rich_response, PythonToolRichResponse):
+                    generated_files = (
+                        tool_response.rich_response.generated_files or None
+                    )
+
+                # Persist memory if this is a memory tool response
+                memory_snapshot: MemoryToolResponseSnapshot | None = None
+                if isinstance(tool_response.rich_response, MemoryToolResponse):
+                    persisted_memory_id: int | None = None
+                    if user_memory_context and user_memory_context.user_id:
+                        if tool_response.rich_response.index_to_replace is not None:
+                            memory = update_memory_at_index(
+                                user_id=user_memory_context.user_id,
+                                index=tool_response.rich_response.index_to_replace,
+                                new_text=tool_response.rich_response.memory_text,
+                                db_session=db_session,
+                            )
+                            persisted_memory_id = memory.id if memory else None
+                        else:
+                            memory = add_memory(
+                                user_id=user_memory_context.user_id,
+                                memory_text=tool_response.rich_response.memory_text,
+                                db_session=db_session,
+                            )
+                            persisted_memory_id = memory.id
+                    operation: Literal["add", "update"] = (
+                        "update"
+                        if tool_response.rich_response.index_to_replace is not None
+                        else "add"
+                    )
+                    memory_snapshot = MemoryToolResponseSnapshot(
+                        memory_text=tool_response.rich_response.memory_text,
+                        operation=operation,
+                        memory_id=persisted_memory_id,
+                        index=tool_response.rich_response.index_to_replace,
+                    )
+
+                if memory_snapshot:
+                    saved_response = json.dumps(memory_snapshot.model_dump())
+                elif isinstance(tool_response.rich_response, str):
+                    saved_response = tool_response.rich_response
+                else:
+                    saved_response = tool_response.llm_facing_response
 
                 tool_call_info = ToolCallInfo(
                     parent_tool_call_id=None,  # Top-level tool calls are attached to the chat message
@@ -727,6 +997,7 @@ def run_llm_loop(
                     tool_call_response=saved_response,
                     search_docs=displayed_docs or search_docs,
                     generated_images=generated_images,
+                    generated_files=generated_files,
                 )
                 # Add to state container for partial save support
                 state_container.add_tool_call(tool_call_info)

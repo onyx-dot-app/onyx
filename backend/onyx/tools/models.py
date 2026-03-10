@@ -20,6 +20,7 @@ from onyx.db.memory import UserMemoryContext
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import GeneratedImage
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
+from onyx.tools.tool_implementations.memory.models import MemoryToolResponse
 
 
 TOOL_CALL_MSG_FUNC_NAME = "function_name"
@@ -86,10 +87,14 @@ class ToolResponse(BaseModel):
         FinalImageGenerationResponse
         # This comes from internal search / web search, search docs need to be saved, already emitted by the tool
         | SearchDocsResponse
+        # This comes from the memory tool, memory needs to be persisted to the database
+        | MemoryToolResponse
         # This comes from open url, web content needs to be saved, maybe this can be consolidated too
         # | WebContentResponse
         # This comes from custom tools, tool result needs to be saved
         | CustomToolCallSummary
+        # This comes from code interpreter, carries generated files
+        | PythonToolRichResponse
         # If the rich response is a string, this is what's saved to the tool call in the DB
         | str
         | None  # If nothing needs to be persisted outside of the string value passed to the LLM
@@ -190,10 +195,22 @@ class ChatFile(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
+class PythonToolRichResponse(BaseModel):
+    """Rich response from the Python tool carrying generated files."""
+
+    generated_files: list[PythonExecutionFile] = []
+
+
 class PythonToolOverrideKwargs(BaseModel):
     """Override kwargs for the Python/Code Interpreter tool."""
 
     chat_files: list[ChatFile] = []
+
+
+class ImageGenerationToolOverrideKwargs(BaseModel):
+    """Override kwargs for image generation tool calls."""
+
+    recent_generated_image_file_ids: list[str] = []
 
 
 class SearchToolRunContext(BaseModel):
@@ -214,6 +231,13 @@ class CustomToolRunContext(BaseModel):
     model_config = {"arbitrary_types_allowed": True}
 
 
+class MemoryToolResponseSnapshot(BaseModel):
+    memory_text: str
+    operation: Literal["add", "update"]
+    memory_id: int | None = None
+    index: int | None = None
+
+
 class ToolCallInfo(BaseModel):
     # The parent_tool_call_id is the actual generated tool call id
     # It is NOT the DB ID which often does not exist yet when the ToolCallInfo is created
@@ -229,6 +253,7 @@ class ToolCallInfo(BaseModel):
     tool_call_response: str
     search_docs: list[SearchDoc] | None = None
     generated_images: list[GeneratedImage] | None = None
+    generated_files: list[PythonExecutionFile] | None = None
 
 
 CHAT_SESSION_ID_PLACEHOLDER = "CHAT_SESSION_ID"

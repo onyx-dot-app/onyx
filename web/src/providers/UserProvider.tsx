@@ -15,7 +15,7 @@ import {
 } from "@/lib/types";
 import { getCurrentUser } from "@/lib/user";
 import { usePostHog } from "posthog-js/react";
-import { CombinedSettings } from "@/app/admin/settings/interfaces";
+import { CombinedSettings } from "@/interfaces/settings";
 import { SettingsContext } from "@/providers/SettingsProvider";
 import { useTokenRefresh } from "@/hooks/useTokenRefresh";
 import { AuthTypeMetadata } from "@/lib/userSS";
@@ -31,9 +31,9 @@ interface UserContextType {
   authTypeMetadata: AuthTypeMetadata;
   updateUserAutoScroll: (autoScroll: boolean) => Promise<void>;
   updateUserShortcuts: (enabled: boolean) => Promise<void>;
-  toggleAssistantPinnedStatus: (
-    currentPinnedAssistantIDs: number[],
-    assistantId: number,
+  toggleAgentPinnedStatus: (
+    currentPinnedAgentIDs: number[],
+    agentId: number,
     isPinned: boolean
   ) => Promise<boolean>;
   updateUserTemperatureOverrideEnabled: (enabled: boolean) => Promise<void>;
@@ -45,6 +45,7 @@ interface UserContextType {
   ) => Promise<void>;
   updateUserChatBackground: (chatBackground: string | null) => Promise<void>;
   updateUserDefaultModel: (defaultModel: string | null) => Promise<void>;
+  updateUserDefaultAppMode: (mode: "CHAT" | "SEARCH") => Promise<void>;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -281,9 +282,9 @@ export function UserProvider({
     }
   };
 
-  const toggleAssistantPinnedStatus = async (
-    currentPinnedAssistantIDs: number[],
-    assistantId: number,
+  const toggleAgentPinnedStatus = async (
+    currentPinnedAgentIDs: number[],
+    agentId: number,
     isPinned: boolean
   ) => {
     setUpToDateUser((prevUser) => {
@@ -293,21 +294,15 @@ export function UserProvider({
         preferences: {
           ...prevUser.preferences,
           pinned_assistants: isPinned
-            ? [...currentPinnedAssistantIDs, assistantId]
-            : currentPinnedAssistantIDs.filter((id) => id !== assistantId),
+            ? [...currentPinnedAgentIDs, agentId]
+            : currentPinnedAgentIDs.filter((id) => id !== agentId),
         },
       };
     });
 
-    let updatedPinnedAssistantsIds = currentPinnedAssistantIDs;
-
-    if (isPinned) {
-      updatedPinnedAssistantsIds.push(assistantId);
-    } else {
-      updatedPinnedAssistantsIds = updatedPinnedAssistantsIds.filter(
-        (id) => id !== assistantId
-      );
-    }
+    let updatedPinnedAgentsIds = isPinned
+      ? [...currentPinnedAgentIDs, agentId]
+      : currentPinnedAgentIDs.filter((id) => id !== agentId);
     try {
       const response = await fetch(`/api/user/pinned-assistants`, {
         method: "PATCH",
@@ -315,7 +310,7 @@ export function UserProvider({
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          ordered_assistant_ids: updatedPinnedAssistantsIds,
+          ordered_assistant_ids: updatedPinnedAgentsIds,
         }),
       });
 
@@ -432,6 +427,39 @@ export function UserProvider({
     }
   };
 
+  const updateUserDefaultAppMode = async (mode: "CHAT" | "SEARCH") => {
+    try {
+      setUpToDateUser((prevUser) => {
+        if (prevUser) {
+          return {
+            ...prevUser,
+            preferences: {
+              ...prevUser.preferences,
+              default_app_mode: mode,
+            },
+          };
+        }
+        return prevUser;
+      });
+
+      const response = await fetch("/api/user/default-app-mode", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ default_app_mode: mode }),
+      });
+
+      if (!response.ok) {
+        await refreshUser();
+        throw new Error("Failed to update default app mode");
+      }
+    } catch (error) {
+      console.error("Error updating default app mode:", error);
+      throw error;
+    }
+  };
+
   const refreshUser = async () => {
     await fetchUser();
   };
@@ -449,7 +477,8 @@ export function UserProvider({
         updateUserThemePreference,
         updateUserChatBackground,
         updateUserDefaultModel,
-        toggleAssistantPinnedStatus,
+        updateUserDefaultAppMode,
+        toggleAgentPinnedStatus,
         isAdmin: upToDateUser?.role === UserRole.ADMIN,
         // Curator status applies for either global or basic curator
         isCurator:

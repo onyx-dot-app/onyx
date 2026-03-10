@@ -5,7 +5,7 @@ from onyx.llm.models import UserMessage
 from onyx.prompts.basic_memory import FULL_MEMORY_UPDATE_PROMPT
 from onyx.tools.models import ChatMinimalTextMessage
 from onyx.tracing.llm_utils import llm_generation_span
-from onyx.tracing.llm_utils import record_llm_span_output
+from onyx.tracing.llm_utils import record_llm_response
 from onyx.utils.logger import setup_logger
 from onyx.utils.text_processing import parse_llm_json_response
 
@@ -123,8 +123,8 @@ def process_memory_update(
             response = llm.invoke(
                 prompt=prompt_msg, reasoning_effort=ReasoningEffort.OFF
             )
+            record_llm_response(span_generation, response)
             content = response.choice.message.content
-            record_llm_span_output(span_generation, content, response.usage)
     except Exception as e:
         logger.warning(f"LLM invocation failed for memory update: {e}")
         return (new_memory, None)

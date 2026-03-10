@@ -565,6 +565,7 @@ def _get_all_doc_ids(
                             channel_id=channel_id, thread_ts=message["ts"]
                         ),
                         external_access=external_access,
+                        parent_hierarchy_raw_node_id=channel_id,
                     )
                 )
 

@@ -1,6 +1,9 @@
-import { test, expect } from "@chromatic-com/playwright";
-import { loginAsRandomUser, loginAs } from "../utils/auth";
-import { TEST_ADMIN2_CREDENTIALS, TEST_ADMIN_CREDENTIALS } from "../constants";
+import { test, expect } from "@playwright/test";
+import { loginAsRandomUser, loginAs } from "@tests/e2e/utils/auth";
+import {
+  TEST_ADMIN2_CREDENTIALS,
+  TEST_ADMIN_CREDENTIALS,
+} from "@tests/e2e/constants";
 
 // test("User changes password and logs in with new password", async ({
 
@@ -43,7 +46,7 @@ test.skip("User changes password and logs in with new password", async ({
 
   // Verify successful login
   await expect(page).toHaveURL("http://localhost:3000/app");
-  await expect(page.getByText("Explore Assistants")).toBeVisible();
+  await expect(page.getByText("Explore Agents")).toBeVisible();
 });
 
 test.use({ storageState: "admin2_auth.json" });
@@ -112,5 +115,5 @@ test.skip("Admin resets own password and logs in with new password", async ({
 
   // Verify successful login
   await expect(page).toHaveURL("http://localhost:3000/app");
-  await expect(page.getByText("Explore Assistants")).toBeVisible();
+  await expect(page.getByText("Explore Agents")).toBeVisible();
 });

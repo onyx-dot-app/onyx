@@ -2,19 +2,21 @@
 
 import { UserGroupsTable } from "./UserGroupsTable";
 import UserGroupCreationForm from "./UserGroupCreationForm";
-import { usePopup } from "@/components/admin/connectors/Popup";
 import { useState } from "react";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { useConnectorStatus, useUserGroups } from "@/lib/hooks";
-import { AdminPageTitle } from "@/components/admin/Title";
 import useUsers from "@/hooks/useUsers";
-
 import { useUser } from "@/providers/UserProvider";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
-import { SvgUsers } from "@opal/icons";
-const Main = () => {
-  const { popup, setPopup } = usePopup();
+import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
+import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { useVectorDbEnabled } from "@/providers/SettingsProvider";
+
+const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.GROUPS]!;
+
+function Main() {
   const [showForm, setShowForm] = useState(false);
+  const vectorDbEnabled = useVectorDbEnabled();
 
   const { data, isLoading, error, refreshUserGroups } = useUserGroups();
 
@@ -22,7 +24,7 @@ const Main = () => {
     data: ccPairs,
     isLoading: isCCPairsLoading,
     error: ccPairsError,
-  } = useConnectorStatus();
+  } = useConnectorStatus(30000, vectorDbEnabled);
 
   const {
     data: users,
@@ -32,7 +34,7 @@ const Main = () => {
 
   const { isAdmin } = useUser();
 
-  if (isLoading || isCCPairsLoading || userIsLoading) {
+  if (isLoading || (vectorDbEnabled && isCCPairsLoading) || userIsLoading) {
     return <ThreeDotsLoader />;
   }
 
@@ -40,7 +42,7 @@ const Main = () => {
     return <div className="text-red-600">Error loading users</div>;
   }
 
-  if (ccPairsError || !ccPairs) {
+  if (vectorDbEnabled && (ccPairsError || !ccPairs)) {
     return <div className="text-red-600">Error loading connectors</div>;
   }
 
@@ -50,7 +52,6 @@ const Main = () => {
 
   return (
     <>
-      {popup}
       {isAdmin && (
         <CreateButton onClick={() => setShowForm(true)}>
           Create New User Group
@@ -58,11 +59,7 @@ const Main = () => {
       )}
       {data.length > 0 && (
         <div className="mt-2">
-          <UserGroupsTable
-            userGroups={data}
-            setPopup={setPopup}
-            refresh={refreshUserGroups}
-          />
+          <UserGroupsTable userGroups={data} refresh={refreshUserGroups} />
         </div>
       )}
       {showForm && (
@@ -71,23 +68,22 @@ const Main = () => {
             refreshUserGroups();
             setShowForm(false);
           }}
-          setPopup={setPopup}
           users={users.accepted}
-          ccPairs={ccPairs}
+          ccPairs={ccPairs ?? []}
         />
       )}
     </>
   );
-};
+}
 
-const Page = () => {
+export default function Page() {
   return (
-    <>
-      <AdminPageTitle title="Manage User Groups" icon={SvgUsers} />
+    <SettingsLayouts.Root>
+      <SettingsLayouts.Header icon={route.icon} title={route.title} separator />
 
-      <Main />
-    </>
+      <SettingsLayouts.Body>
+        <Main />
+      </SettingsLayouts.Body>
+    </SettingsLayouts.Root>
   );
-};
-
-export default Page;
+}

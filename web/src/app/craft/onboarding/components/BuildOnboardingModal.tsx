@@ -18,12 +18,12 @@ import {
   getBuildLlmSelection,
   getDefaultLlmSelection,
 } from "@/app/craft/onboarding/constants";
-import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
-import { LLM_PROVIDERS_ADMIN_URL } from "@/app/admin/configuration/llm/constants";
+import { LLMProviderDescriptor } from "@/interfaces/llm";
+import { LLM_PROVIDERS_ADMIN_URL } from "@/lib/llmConfig/constants";
 import {
   buildInitialValues,
   testApiKeyHelper,
-} from "@/refresh-components/onboarding/components/llmConnectionHelpers";
+} from "@/sections/onboarding/components/llmConnectionHelpers";
 import OnboardingInfoPages from "@/app/craft/onboarding/components/OnboardingInfoPages";
 import OnboardingUserInfo from "@/app/craft/onboarding/components/OnboardingUserInfo";
 import OnboardingLlmSetup, {

@@ -5,26 +5,28 @@ import SimpleTabs from "@/refresh-components/SimpleTabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import InvitedUserTable from "@/components/admin/users/InvitedUserTable";
 import SignedUpUserTable from "@/components/admin/users/SignedUpUserTable";
-
 import Modal from "@/refresh-components/Modal";
 import { ThreeDotsLoader } from "@/components/Loading";
-import { AdminPageTitle } from "@/components/admin/Title";
-import { usePopup, PopupSpec } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
+import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useSWR, { mutate } from "swr";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import BulkAdd from "@/components/admin/users/BulkAdd";
+import BulkAdd, { EmailInviteStatus } from "@/components/admin/users/BulkAdd";
 import Text from "@/refresh-components/texts/Text";
 import { InvitedUserSnapshot } from "@/lib/types";
-import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
-import { AuthType, NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
+import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import PendingUsersTable from "@/components/admin/users/PendingUsersTable";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { Spinner } from "@/components/Spinner";
-import { useAuthType } from "@/lib/hooks";
-import { SvgDownloadCloud, SvgUser, SvgUserPlus } from "@opal/icons";
+import { SvgDownloadCloud, SvgUserPlus } from "@opal/icons";
+import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
+
+const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.USERS]!;
+
 interface CountDisplayProps {
   label: string;
   value: number | null;
@@ -50,17 +52,15 @@ function CountDisplay({ label, value, isLoading }: CountDisplayProps) {
   );
 }
 
-const UsersTables = ({
+function UsersTables({
   q,
-  setPopup,
   isDownloadingUsers,
   setIsDownloadingUsers,
 }: {
   q: string;
-  setPopup: (spec: PopupSpec) => void;
   isDownloadingUsers: boolean;
   setIsDownloadingUsers: (loading: boolean) => void;
-}) => {
+}) {
   const [currentUsersCount, setCurrentUsersCount] = useState<number | null>(
     null
   );
@@ -86,10 +86,7 @@ const UsersTables = ({
       window.URL.revokeObjectURL(url);
       document.body.removeChild(anchor_tag);
     } catch (error) {
-      setPopup({
-        message: `Failed to download all users - ${error}`,
-        type: "error",
-      });
+      toast.error(`Failed to download all users - ${error}`);
     } finally {
       //Ensure spinner is visible for at least 1 second
       //This is to avoid the spinner disappearing too quickly
@@ -153,19 +150,19 @@ const UsersTables = ({
           <CardHeader>
             <div className="flex justify-between items-center gap-1">
               <CardTitle>Current Users</CardTitle>
-              <Button
-                leftIcon={SvgDownloadCloud}
-                disabled={isDownloadingUsers}
-                onClick={() => downloadAllUsers()}
-              >
-                {isDownloadingUsers ? "Downloading..." : "Download CSV"}
-              </Button>
+              <Disabled disabled={isDownloadingUsers}>
+                <Button
+                  icon={SvgDownloadCloud}
+                  onClick={() => downloadAllUsers()}
+                >
+                  {isDownloadingUsers ? "Downloading..." : "Download CSV"}
+                </Button>
+              </Disabled>
             </div>
           </CardHeader>
           <CardContent>
             <SignedUpUserTable
               invitedUsers={invitedUsers || []}
-              setPopup={setPopup}
               q={q}
               invitedUsersMutate={invitedUsersMutate}
               countDisplay={
@@ -204,7 +201,6 @@ const UsersTables = ({
           <CardContent>
             <InvitedUserTable
               users={invitedUsers || []}
-              setPopup={setPopup}
               mutate={invitedUsersMutate}
               error={invitedUsersError}
               isLoading={invitedUsersLoading}
@@ -232,7 +228,6 @@ const UsersTables = ({
             <CardContent>
               <PendingUsersTable
                 users={pendingUsers || []}
-                setPopup={setPopup}
                 mutate={pendingUsersMutate}
                 error={pendingUsersError}
                 isLoading={pendingUsersLoading}
@@ -246,17 +241,15 @@ const UsersTables = ({
   });
 
   return <SimpleTabs tabs={tabs} defaultValue="current" />;
-};
+}
 
-const SearchableTables = () => {
-  const { popup, setPopup } = usePopup();
+function SearchableTables() {
   const [query, setQuery] = useState("");
   const [isDownloadingUsers, setIsDownloadingUsers] = useState(false);
 
   return (
     <div>
       {isDownloadingUsers && <Spinner />}
-      {popup}
       <div className="flex flex-col gap-y-4">
         <div className="flex flex-row items-center gap-2">
           <InputTypeIn
@@ -264,71 +257,45 @@ const SearchableTables = () => {
             value={query}
             onChange={(event) => setQuery(event.target.value)}
           />
-          <AddUserButton setPopup={setPopup} />
+          <AddUserButton />
         </div>
         <UsersTables
           q={query}
-          setPopup={setPopup}
           isDownloadingUsers={isDownloadingUsers}
           setIsDownloadingUsers={setIsDownloadingUsers}
         />
       </div>
     </div>
   );
-};
+}
 
-const AddUserButton = ({
-  setPopup,
-}: {
-  setPopup: (spec: PopupSpec) => void;
-}) => {
+function AddUserButton() {
   const [bulkAddUsersModal, setBulkAddUsersModal] = useState(false);
-  const [firstUserConfirmationModal, setFirstUserConfirmationModal] =
-    useState(false);
-  const authType = useAuthType();
 
-  const { data: invitedUsers } = useSWR<InvitedUserSnapshot[]>(
-    "/api/manage/users/invited",
-    errorHandlingFetcher
-  );
-
-  const shouldShowFirstInviteWarning =
-    !NEXT_PUBLIC_CLOUD_ENABLED &&
-    authType !== null &&
-    authType !== AuthType.SAML &&
-    authType !== AuthType.OIDC &&
-    invitedUsers &&
-    invitedUsers.length === 0;
-
-  const onSuccess = () => {
+  const onSuccess = (emailInviteStatus: EmailInviteStatus) => {
     mutate(
       (key) => typeof key === "string" && key.startsWith("/api/manage/users")
     );
     setBulkAddUsersModal(false);
-    setPopup({
-      message: "Users invited!",
-      type: "success",
-    });
+    if (emailInviteStatus === "NOT_CONFIGURED") {
+      toast.warning(
+        "Users added, but no email notification was sent. There is no SMTP server set up for email sending."
+      );
+    } else if (emailInviteStatus === "SEND_FAILED") {
+      toast.warning(
+        "Users added, but email sending failed. Check your SMTP configuration and try again."
+      );
+    } else {
+      toast.success("Users invited!");
+    }
   };
 
   const onFailure = async (res: Response) => {
     const error = (await res.json()).detail;
-    setPopup({
-      message: `Failed to invite users - ${error}`,
-      type: "error",
-    });
+    toast.error(`Failed to invite users - ${error}`);
   };
 
   const handleInviteClick = () => {
-    if (shouldShowFirstInviteWarning) {
-      setFirstUserConfirmationModal(true);
-    } else {
-      setBulkAddUsersModal(true);
-    }
-  };
-
-  const handleConfirmFirstInvite = () => {
-    setFirstUserConfirmationModal(false);
     setBulkAddUsersModal(true);
   };
 
@@ -337,17 +304,6 @@ const AddUserButton = ({
       <CreateButton primary onClick={handleInviteClick}>
         Invite Users
       </CreateButton>
-
-      {firstUserConfirmationModal && (
-        <ConfirmEntityModal
-          entityType="First User Invitation"
-          entityName="your Access Logic"
-          onClose={() => setFirstUserConfirmationModal(false)}
-          onSubmit={handleConfirmFirstInvite}
-          additionalDetails="After inviting the first user, only invited users will be able to join this platform. This is a security measure to control access to your team."
-          actionButtonText="Continue"
-        />
-      )}
 
       {bulkAddUsersModal && (
         <Modal open onOpenChange={() => setBulkAddUsersModal(false)}>
@@ -372,15 +328,15 @@ const AddUserButton = ({
       )}
     </>
   );
-};
+}
 
-const Page = () => {
+export default function Page() {
   return (
-    <>
-      <AdminPageTitle title="Manage Users" icon={SvgUser} />
-      <SearchableTables />
-    </>
+    <SettingsLayouts.Root>
+      <SettingsLayouts.Header title={route.title} icon={route.icon} separator />
+      <SettingsLayouts.Body>
+        <SearchableTables />
+      </SettingsLayouts.Body>
+    </SettingsLayouts.Root>
   );
-};
-
-export default Page;
+}

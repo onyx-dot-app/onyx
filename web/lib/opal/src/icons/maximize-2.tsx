@@ -1,22 +1,20 @@
 import type { IconProps } from "@opal/types";
-
 const SvgMaximize2 = ({ size, ...props }: IconProps) => (
   <svg
     width={size}
     height={size}
-    viewBox="0 0 14 14"
+    viewBox="0 0 16 16"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
     stroke="currentColor"
-    strokeWidth={2.5}
     {...props}
   >
     <path
-      d="M9 1H13M13 1V5M13 1L8.33333 5.66667M5 13H1M1 13V9M1 13L5.66667 8.33333"
+      d="M10 2H14M14 2V6M14 2L9.33333 6.66667M6 14H2M2 14V10M2 14L6.66667 9.33333"
+      strokeWidth={1.5}
       strokeLinecap="round"
       strokeLinejoin="round"
     />
   </svg>
 );
-
 export default SvgMaximize2;

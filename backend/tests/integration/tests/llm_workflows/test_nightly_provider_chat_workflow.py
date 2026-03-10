@@ -1,0 +1,472 @@
+import json
+import os
+import time
+from uuid import uuid4
+
+import pytest
+import requests
+from pydantic import BaseModel
+from pydantic import ConfigDict
+
+from onyx.configs import app_configs
+from onyx.configs.constants import DocumentSource
+from onyx.tools.constants import SEARCH_TOOL_ID
+from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.managers.cc_pair import CCPairManager
+from tests.integration.common_utils.managers.chat import ChatSessionManager
+from tests.integration.common_utils.managers.tool import ToolManager
+from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_models import ToolName
+
+
+_ENV_PROVIDER = "NIGHTLY_LLM_PROVIDER"
+_ENV_MODELS = "NIGHTLY_LLM_MODELS"
+_ENV_API_KEY = "NIGHTLY_LLM_API_KEY"
+_ENV_API_BASE = "NIGHTLY_LLM_API_BASE"
+_ENV_API_VERSION = "NIGHTLY_LLM_API_VERSION"
+_ENV_DEPLOYMENT_NAME = "NIGHTLY_LLM_DEPLOYMENT_NAME"
+_ENV_CUSTOM_CONFIG_JSON = "NIGHTLY_LLM_CUSTOM_CONFIG_JSON"
+_ENV_STRICT = "NIGHTLY_LLM_STRICT"
+
+
+class NightlyProviderConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    provider: str
+    model_names: list[str]
+    api_key: str | None
+    api_base: str | None
+    api_version: str | None
+    deployment_name: str | None
+    custom_config: dict[str, str] | None
+    strict: bool
+
+
+def _stringify_custom_config_value(value: object) -> str:
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (dict, list)):
+        return json.dumps(value)
+    return str(value)
+
+
+def _looks_like_vertex_credentials_payload(
+    raw_custom_config: dict[object, object],
+) -> bool:
+    normalized_keys = {str(key).strip().lower() for key in raw_custom_config}
+    provider_specific_keys = {
+        "vertex_credentials",
+        "credentials_file",
+        "vertex_credentials_file",
+        "google_application_credentials",
+        "vertex_location",
+        "location",
+        "vertex_region",
+        "region",
+    }
+    if normalized_keys & provider_specific_keys:
+        return False
+
+    normalized_type = str(raw_custom_config.get("type", "")).strip().lower()
+    if normalized_type not in {"service_account", "external_account"}:
+        return False
+
+    # Service account JSON usually includes private_key/client_email, while external
+    # account JSON includes credential_source. Either shape should be accepted.
+    has_service_account_markers = any(
+        key in normalized_keys for key in {"private_key", "client_email"}
+    )
+    has_external_account_markers = "credential_source" in normalized_keys
+    return has_service_account_markers or has_external_account_markers
+
+
+def _normalize_custom_config(
+    provider: str, raw_custom_config: dict[object, object]
+) -> dict[str, str]:
+    if provider == "vertex_ai" and _looks_like_vertex_credentials_payload(
+        raw_custom_config
+    ):
+        return {"vertex_credentials": json.dumps(raw_custom_config)}
+
+    normalized: dict[str, str] = {}
+    for raw_key, raw_value in raw_custom_config.items():
+        key = str(raw_key).strip()
+        key_lower = key.lower()
+
+        if provider == "vertex_ai":
+            if key_lower in {
+                "vertex_credentials",
+                "credentials_file",
+                "vertex_credentials_file",
+                "google_application_credentials",
+            }:
+                key = "vertex_credentials"
+            elif key_lower in {
+                "vertex_location",
+                "location",
+                "vertex_region",
+                "region",
+            }:
+                key = "vertex_location"
+
+        normalized[key] = _stringify_custom_config_value(raw_value)
+
+    return normalized
+
+
+def _env_true(env_var: str, default: bool = False) -> bool:
+    value = os.environ.get(env_var)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _parse_models_env(env_var: str) -> list[str]:
+    raw_value = os.environ.get(env_var, "").strip()
+    if not raw_value:
+        return []
+
+    try:
+        parsed_json = json.loads(raw_value)
+    except json.JSONDecodeError:
+        parsed_json = None
+
+    if isinstance(parsed_json, list):
+        return [str(model).strip() for model in parsed_json if str(model).strip()]
+
+    return [part.strip() for part in raw_value.split(",") if part.strip()]
+
+
+def _load_provider_config() -> NightlyProviderConfig:
+    provider = os.environ.get(_ENV_PROVIDER, "").strip().lower()
+    model_names = _parse_models_env(_ENV_MODELS)
+    api_key = os.environ.get(_ENV_API_KEY) or None
+    api_base = os.environ.get(_ENV_API_BASE) or None
+    api_version = os.environ.get(_ENV_API_VERSION) or None
+    deployment_name = os.environ.get(_ENV_DEPLOYMENT_NAME) or None
+    strict = _env_true(_ENV_STRICT, default=False)
+
+    custom_config: dict[str, str] | None = None
+    custom_config_json = os.environ.get(_ENV_CUSTOM_CONFIG_JSON, "").strip()
+    if custom_config_json:
+        parsed = json.loads(custom_config_json)
+        if not isinstance(parsed, dict):
+            raise ValueError(f"{_ENV_CUSTOM_CONFIG_JSON} must be a JSON object")
+        custom_config = _normalize_custom_config(
+            provider=provider, raw_custom_config=parsed
+        )
+
+    if provider == "ollama_chat" and api_key and not custom_config:
+        custom_config = {"OLLAMA_API_KEY": api_key}
+
+    return NightlyProviderConfig(
+        provider=provider,
+        model_names=model_names,
+        api_key=api_key,
+        api_base=api_base,
+        api_version=api_version,
+        deployment_name=deployment_name,
+        custom_config=custom_config,
+        strict=strict,
+    )
+
+
+def _skip_or_fail(strict: bool, message: str) -> None:
+    if strict:
+        pytest.fail(message)
+    pytest.skip(message)
+
+
+def _validate_provider_config(config: NightlyProviderConfig) -> None:
+    if not config.provider:
+        _skip_or_fail(strict=config.strict, message=f"{_ENV_PROVIDER} must be set")
+
+    if not config.model_names:
+        _skip_or_fail(
+            strict=config.strict,
+            message=f"{_ENV_MODELS} must include at least one model",
+        )
+
+    if config.provider != "ollama_chat" and not (
+        config.api_key or config.custom_config
+    ):
+        _skip_or_fail(
+            strict=config.strict,
+            message=(
+                f"{_ENV_API_KEY} or {_ENV_CUSTOM_CONFIG_JSON} is required for "
+                f"provider '{config.provider}'"
+            ),
+        )
+
+    if config.provider == "ollama_chat" and not (
+        config.api_base or _default_api_base_for_provider(config.provider)
+    ):
+        _skip_or_fail(
+            strict=config.strict,
+            message=(f"{_ENV_API_BASE} is required for provider '{config.provider}'"),
+        )
+
+    if config.provider == "azure":
+        if not config.api_base:
+            _skip_or_fail(
+                strict=config.strict,
+                message=(
+                    f"{_ENV_API_BASE} is required for provider '{config.provider}'"
+                ),
+            )
+        if not config.api_version:
+            _skip_or_fail(
+                strict=config.strict,
+                message=(
+                    f"{_ENV_API_VERSION} is required for provider '{config.provider}'"
+                ),
+            )
+
+    if config.provider == "vertex_ai":
+        has_vertex_credentials = bool(
+            config.custom_config and config.custom_config.get("vertex_credentials")
+        )
+        if not has_vertex_credentials:
+            configured_keys = (
+                sorted(config.custom_config.keys()) if config.custom_config else []
+            )
+            _skip_or_fail(
+                strict=config.strict,
+                message=(
+                    f"{_ENV_CUSTOM_CONFIG_JSON} must include 'vertex_credentials' "
+                    f"for provider '{config.provider}'. "
+                    f"Found keys: {configured_keys}"
+                ),
+            )
+
+
+def _assert_integration_mode_enabled() -> None:
+    assert (
+        app_configs.INTEGRATION_TESTS_MODE is True
+    ), "Integration tests require INTEGRATION_TESTS_MODE=true."
+
+
+def _seed_connector_for_search_tool(admin_user: DATestUser) -> None:
+    # SearchTool is only exposed when at least one non-default connector exists.
+    CCPairManager.create_from_scratch(
+        source=DocumentSource.INGESTION_API,
+        user_performing_action=admin_user,
+    )
+
+
+def _get_internal_search_tool_id(admin_user: DATestUser) -> int:
+    tools = ToolManager.list_tools(user_performing_action=admin_user)
+    for tool in tools:
+        if tool.in_code_tool_id == SEARCH_TOOL_ID:
+            return tool.id
+    raise AssertionError("SearchTool must exist for this test")
+
+
+def _default_api_base_for_provider(provider: str) -> str | None:
+    if provider == "openrouter":
+        return "https://openrouter.ai/api/v1"
+    if provider == "ollama_chat":
+        # host.docker.internal works when tests are running inside the integration test container.
+        return "http://host.docker.internal:11434"
+    return None
+
+
+def _create_provider_payload(
+    provider: str,
+    provider_name: str,
+    model_name: str,
+    api_key: str | None,
+    api_base: str | None,
+    api_version: str | None,
+    deployment_name: str | None,
+    custom_config: dict[str, str] | None,
+) -> dict:
+    return {
+        "name": provider_name,
+        "provider": provider,
+        "model": model_name,
+        "api_key": api_key,
+        "api_base": api_base,
+        "api_version": api_version,
+        "deployment_name": deployment_name,
+        "custom_config": custom_config,
+        "default_model_name": model_name,
+        "is_public": True,
+        "groups": [],
+        "personas": [],
+        "model_configurations": [{"name": model_name, "is_visible": True}],
+        "api_key_changed": bool(api_key),
+        "custom_config_changed": bool(custom_config),
+    }
+
+
+def _ensure_provider_is_default(
+    provider_id: int, model_name: str, admin_user: DATestUser
+) -> None:
+    list_response = requests.get(
+        f"{API_SERVER_URL}/admin/llm/provider",
+        headers=admin_user.headers,
+    )
+    list_response.raise_for_status()
+    default_text = list_response.json().get("default_text")
+    assert default_text is not None, "Expected a default provider after setting default"
+    assert default_text.get("provider_id") == provider_id, (
+        f"Expected provider {provider_id} to be default, "
+        f"found {default_text.get('provider_id')}"
+    )
+    assert (
+        default_text.get("model_name") == model_name
+    ), f"Expected default model {model_name}, found {default_text.get('model_name')}"
+
+
+def _run_chat_assertions(
+    admin_user: DATestUser,
+    search_tool_id: int,
+    provider: str,
+    model_name: str,
+) -> None:
+    last_error: str | None = None
+    # Retry once to reduce transient nightly flakes due provider-side blips.
+    for attempt in range(1, 3):
+        chat_session = ChatSessionManager.create(user_performing_action=admin_user)
+
+        response = ChatSessionManager.send_message(
+            chat_session_id=chat_session.id,
+            message=(
+                "Use internal_search to search for 'nightly-provider-regression-sentinel', "
+                "then summarize the result in one short sentence."
+            ),
+            user_performing_action=admin_user,
+            forced_tool_ids=[search_tool_id],
+        )
+
+        if response.error is None:
+            used_internal_search = any(
+                used_tool.tool_name == ToolName.INTERNAL_SEARCH
+                for used_tool in response.used_tools
+            )
+            debug_has_internal_search = any(
+                debug_tool_call.tool_name == "internal_search"
+                for debug_tool_call in response.tool_call_debug
+            )
+            has_answer = bool(response.full_message.strip())
+
+            if used_internal_search and debug_has_internal_search and has_answer:
+                return
+
+            last_error = (
+                f"attempt={attempt} provider={provider} model={model_name} "
+                f"used_internal_search={used_internal_search} "
+                f"debug_internal_search={debug_has_internal_search} "
+                f"has_answer={has_answer} "
+                f"tool_call_debug={response.tool_call_debug}"
+            )
+        else:
+            last_error = (
+                f"attempt={attempt} provider={provider} model={model_name} "
+                f"stream_error={response.error.error}"
+            )
+
+        time.sleep(attempt)
+
+    pytest.fail(f"Chat/tool-call assertions failed: {last_error}")
+
+
+def _create_and_test_provider_for_model(
+    admin_user: DATestUser,
+    config: NightlyProviderConfig,
+    model_name: str,
+    search_tool_id: int,
+) -> None:
+    provider_name = f"nightly-{config.provider}-{uuid4().hex[:12]}"
+    resolved_api_base = config.api_base or _default_api_base_for_provider(
+        config.provider
+    )
+
+    provider_payload = _create_provider_payload(
+        provider=config.provider,
+        provider_name=provider_name,
+        model_name=model_name,
+        api_key=config.api_key,
+        api_base=resolved_api_base,
+        api_version=config.api_version,
+        deployment_name=config.deployment_name,
+        custom_config=config.custom_config,
+    )
+
+    test_response = requests.post(
+        f"{API_SERVER_URL}/admin/llm/test",
+        headers=admin_user.headers,
+        json=provider_payload,
+    )
+    assert test_response.status_code == 200, (
+        f"Provider test endpoint failed for provider={config.provider} "
+        f"model={model_name}: {test_response.status_code} {test_response.text}"
+    )
+
+    create_response = requests.put(
+        f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
+        headers=admin_user.headers,
+        json=provider_payload,
+    )
+    assert create_response.status_code == 200, (
+        f"Provider creation failed for provider={config.provider} "
+        f"model={model_name}: {create_response.status_code} {create_response.text}"
+    )
+    provider_id = create_response.json()["id"]
+
+    try:
+        set_default_response = requests.post(
+            f"{API_SERVER_URL}/admin/llm/default",
+            headers=admin_user.headers,
+            json={"provider_id": provider_id, "model_name": model_name},
+        )
+        assert set_default_response.status_code == 200, (
+            f"Setting default provider failed for provider={config.provider} "
+            f"model={model_name}: {set_default_response.status_code} "
+            f"{set_default_response.text}"
+        )
+
+        _ensure_provider_is_default(
+            provider_id=provider_id, model_name=model_name, admin_user=admin_user
+        )
+        _run_chat_assertions(
+            admin_user=admin_user,
+            search_tool_id=search_tool_id,
+            provider=config.provider,
+            model_name=model_name,
+        )
+    finally:
+        requests.delete(
+            f"{API_SERVER_URL}/admin/llm/provider/{provider_id}",
+            headers=admin_user.headers,
+        )
+
+
+def test_nightly_provider_chat_workflow(admin_user: DATestUser) -> None:
+    """Nightly regression test for provider setup + default selection + chat tool calls."""
+    _assert_integration_mode_enabled()
+    config = _load_provider_config()
+    _validate_provider_config(config)
+
+    _seed_connector_for_search_tool(admin_user)
+    search_tool_id = _get_internal_search_tool_id(admin_user)
+
+    failures: list[str] = []
+    for model_name in config.model_names:
+        try:
+            _create_and_test_provider_for_model(
+                admin_user=admin_user,
+                config=config,
+                model_name=model_name,
+                search_tool_id=search_tool_id,
+            )
+        except BaseException as exc:
+            if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+                raise
+            failures.append(
+                f"provider={config.provider} model={model_name} error={type(exc).__name__}: {exc}"
+            )
+
+    if failures:
+        pytest.fail("Nightly provider chat failures:\n" + "\n".join(failures))

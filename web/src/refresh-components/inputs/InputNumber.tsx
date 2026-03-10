@@ -2,7 +2,8 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import {
   Variants,
   wrapperClasses,
@@ -162,12 +163,13 @@ export default function InputNumber({
 
       <div className="flex flex-row items-center gap-1">
         {showReset && (
-          <IconButton
-            icon={SvgRevert}
-            onClick={handleReset}
-            disabled={!canReset || isDisabled}
-            internal
-          />
+          <Disabled disabled={!canReset || isDisabled}>
+            <Button
+              icon={SvgRevert}
+              onClick={handleReset}
+              prominence="tertiary"
+            />
+          </Disabled>
         )}
         <div className="flex flex-col">
           <button

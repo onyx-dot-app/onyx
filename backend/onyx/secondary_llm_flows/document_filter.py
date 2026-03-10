@@ -14,7 +14,7 @@ from onyx.tools.tool_implementations.search.constants import (
     MAX_CHUNKS_FOR_RELEVANCE,
 )
 from onyx.tracing.llm_utils import llm_generation_span
-from onyx.tracing.llm_utils import record_llm_span_output
+from onyx.tracing.llm_utils import record_llm_response
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -133,8 +133,8 @@ def classify_section_relevance(
                 prompt=prompt_msg,
                 reasoning_effort=ReasoningEffort.OFF,
             )
+            record_llm_response(span_generation, response)
             llm_response = response.choice.message.content
-            record_llm_span_output(span_generation, llm_response, response.usage)
 
         if not llm_response:
             logger.warning(
@@ -142,16 +142,16 @@ def classify_section_relevance(
             )
             classification = default_classification
         else:
-            # Parse the response to extract the situation number (1-4)
-            numbers = re.findall(r"\b[1-4]\b", llm_response)
+            # Parse the response to extract the situation number (0-3)
+            numbers = re.findall(r"\b[0-3]\b", llm_response)
             if numbers:
                 situation = int(numbers[-1])
                 # Map situation number to ContextExpansionType
                 situation_to_type = {
-                    1: ContextExpansionType.NOT_RELEVANT,
-                    2: ContextExpansionType.MAIN_SECTION_ONLY,
-                    3: ContextExpansionType.INCLUDE_ADJACENT_SECTIONS,
-                    4: ContextExpansionType.FULL_DOCUMENT,
+                    0: ContextExpansionType.NOT_RELEVANT,
+                    1: ContextExpansionType.MAIN_SECTION_ONLY,
+                    2: ContextExpansionType.INCLUDE_ADJACENT_SECTIONS,
+                    3: ContextExpansionType.FULL_DOCUMENT,
                 }
                 classification = situation_to_type.get(
                     situation, default_classification
@@ -281,8 +281,8 @@ def select_sections_for_expansion(
             response = llm.invoke(
                 prompt=[prompt_text], reasoning_effort=ReasoningEffort.OFF
             )
+            record_llm_response(span_generation, response)
             llm_response = response.choice.message.content
-            record_llm_span_output(span_generation, llm_response, response.usage)
 
         if not llm_response:
             logger.warning(

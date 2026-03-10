@@ -1,10 +1,20 @@
 #!/bin/bash
 set -e
 
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+COMPOSE_FILE="$SCRIPT_DIR/../../deployment/docker_compose/docker-compose.yml"
+COMPOSE_DEV_FILE="$SCRIPT_DIR/../../deployment/docker_compose/docker-compose.dev.yml"
+
+stop_and_remove_containers() {
+  docker stop onyx_postgres onyx_vespa onyx_redis onyx_minio onyx_code_interpreter 2>/dev/null || true
+  docker rm onyx_postgres onyx_vespa onyx_redis onyx_minio onyx_code_interpreter 2>/dev/null || true
+  docker compose -f "$COMPOSE_FILE" -f "$COMPOSE_DEV_FILE" --profile opensearch-enabled stop opensearch 2>/dev/null || true
+  docker compose -f "$COMPOSE_FILE" -f "$COMPOSE_DEV_FILE" --profile opensearch-enabled rm -f opensearch 2>/dev/null || true
+}
+
 cleanup() {
   echo "Error occurred. Cleaning up..."
-  docker stop onyx_postgres onyx_vespa onyx_redis onyx_minio 2>/dev/null || true
-  docker rm onyx_postgres onyx_vespa onyx_redis onyx_minio 2>/dev/null || true
+  stop_and_remove_containers
 }
 
 # Trap errors and output a message, then cleanup
@@ -12,16 +22,26 @@ trap 'echo "Error occurred on line $LINENO. Exiting script." >&2; cleanup' ERR
 
 # Usage of the script with optional volume arguments
 # ./restart_containers.sh [vespa_volume] [postgres_volume] [redis_volume]
+# [minio_volume] [--keep-opensearch-data]
 
-VESPA_VOLUME=${1:-""}  # Default is empty if not provided
-POSTGRES_VOLUME=${2:-""}  # Default is empty if not provided
-REDIS_VOLUME=${3:-""}  # Default is empty if not provided
-MINIO_VOLUME=${4:-""}  # Default is empty if not provided
+KEEP_OPENSEARCH_DATA=false
+POSITIONAL_ARGS=()
+for arg in "$@"; do
+    if [[ "$arg" == "--keep-opensearch-data" ]]; then
+        KEEP_OPENSEARCH_DATA=true
+    else
+        POSITIONAL_ARGS+=("$arg")
+    fi
+done
+
+VESPA_VOLUME=${POSITIONAL_ARGS[0]:-""}
+POSTGRES_VOLUME=${POSITIONAL_ARGS[1]:-""}
+REDIS_VOLUME=${POSITIONAL_ARGS[2]:-""}
+MINIO_VOLUME=${POSITIONAL_ARGS[3]:-""}
 
 # Stop and remove the existing containers
 echo "Stopping and removing existing containers..."
-docker stop onyx_postgres onyx_vespa onyx_redis onyx_minio 2>/dev/null || true
-docker rm onyx_postgres onyx_vespa onyx_redis onyx_minio 2>/dev/null || true
+stop_and_remove_containers
 
 # Start the PostgreSQL container with optional volume
 echo "Starting PostgreSQL container..."
@@ -39,6 +59,29 @@ else
     docker run --detach --name onyx_vespa --hostname vespa-container --publish 8081:8081 --publish 19071:19071 vespaengine/vespa:8
 fi
 
+# If OPENSEARCH_ADMIN_PASSWORD is not already set, try loading it from
+# .vscode/.env so existing dev setups that stored it there aren't silently
+# broken.
+VSCODE_ENV="$SCRIPT_DIR/../../.vscode/.env"
+if [[ -z "${OPENSEARCH_ADMIN_PASSWORD:-}" && -f "$VSCODE_ENV" ]]; then
+    set -a
+    # shellcheck source=/dev/null
+    source "$VSCODE_ENV"
+    set +a
+fi
+
+# Start the OpenSearch container using the same service from docker-compose that
+# our users use, setting OPENSEARCH_INITIAL_ADMIN_PASSWORD from the env's
+# OPENSEARCH_ADMIN_PASSWORD if it exists, else defaulting to StrongPassword123!.
+# Pass --keep-opensearch-data to preserve the opensearch-data volume across
+# restarts, else the volume is deleted so the container starts fresh.
+if [[ "$KEEP_OPENSEARCH_DATA" == "false" ]]; then
+    echo "Deleting opensearch-data volume..."
+    docker volume rm onyx_opensearch-data 2>/dev/null || true
+fi
+echo "Starting OpenSearch container..."
+docker compose -f "$COMPOSE_FILE" -f "$COMPOSE_DEV_FILE" --profile opensearch-enabled up --force-recreate -d opensearch
+
 # Start the Redis container with optional volume
 echo "Starting Redis container..."
 if [[ -n "$REDIS_VOLUME" ]]; then
@@ -55,8 +98,11 @@ else
     docker run --detach --name onyx_minio --publish 9004:9000 --publish 9005:9001 -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin minio/minio server /data --console-address ":9001"
 fi
 
+# Start the Code Interpreter container
+echo "Starting Code Interpreter container..."
+docker run --detach --name onyx_code_interpreter --publish 8000:8000 --user root -v /var/run/docker.sock:/var/run/docker.sock onyxdotapp/code-interpreter:latest bash ./entrypoint.sh code-interpreter-api
+
 # Ensure alembic runs in the correct directory (backend/)
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 PARENT_DIR="$(dirname "$SCRIPT_DIR")"
 cd "$PARENT_DIR"
 

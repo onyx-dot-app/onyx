@@ -14,7 +14,8 @@ from ee.onyx.server.billing.models import CreateCheckoutSessionResponse
 from ee.onyx.server.billing.models import CreateCustomerPortalSessionResponse
 from ee.onyx.server.billing.models import SeatUpdateResponse
 from ee.onyx.server.billing.models import SubscriptionStatusResponse
-from ee.onyx.server.billing.service import BillingServiceError
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 
 
 class TestMakeBillingRequest:
@@ -78,7 +79,7 @@ class TestMakeBillingRequest:
         mock_base_url: MagicMock,
         mock_headers: MagicMock,
     ) -> None:
-        """Should raise BillingServiceError on HTTP error."""
+        """Should raise OnyxError on HTTP error."""
         from ee.onyx.server.billing.service import _make_billing_request
 
         mock_base_url.return_value = "https://api.example.com"
@@ -91,7 +92,7 @@ class TestMakeBillingRequest:
         mock_client = make_mock_http_client("post", side_effect=error)
 
         with patch("httpx.AsyncClient", mock_client):
-            with pytest.raises(BillingServiceError) as exc_info:
+            with pytest.raises(OnyxError) as exc_info:
                 await _make_billing_request(
                     method="POST",
                     path="/test",
@@ -99,7 +100,35 @@ class TestMakeBillingRequest:
                 )
 
         assert exc_info.value.status_code == 400
-        assert "Bad request" in exc_info.value.message
+        assert exc_info.value.error_code is OnyxErrorCode.BAD_GATEWAY
+        assert "Bad request" in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    @patch("ee.onyx.server.billing.service._get_headers")
+    @patch("ee.onyx.server.billing.service._get_base_url")
+    async def test_follows_redirects(
+        self,
+        mock_base_url: MagicMock,
+        mock_headers: MagicMock,
+    ) -> None:
+        """AsyncClient must be created with follow_redirects=True.
+
+        The target server (cloud data plane for self-hosted, control
+        plane for cloud) may sit behind nginx that returns 308
+        (HTTP→HTTPS). httpx does not follow redirects by default,
+        so we must explicitly opt in.
+        """
+        from ee.onyx.server.billing.service import _make_billing_request
+
+        mock_base_url.return_value = "http://api.example.com"
+        mock_headers.return_value = {"Authorization": "Bearer token"}
+        mock_response = make_mock_response({"ok": True})
+        mock_client = make_mock_http_client("get", response=mock_response)
+
+        with patch("httpx.AsyncClient", mock_client):
+            await _make_billing_request(method="GET", path="/test")
+
+        mock_client.assert_called_once_with(timeout=30.0, follow_redirects=True)
 
     @pytest.mark.asyncio
     @patch("ee.onyx.server.billing.service._get_headers")
@@ -109,7 +138,7 @@ class TestMakeBillingRequest:
         mock_base_url: MagicMock,
         mock_headers: MagicMock,
     ) -> None:
-        """Should raise BillingServiceError on connection error."""
+        """Should raise OnyxError on connection error."""
         from ee.onyx.server.billing.service import _make_billing_request
 
         mock_base_url.return_value = "https://api.example.com"
@@ -118,11 +147,12 @@ class TestMakeBillingRequest:
         mock_client = make_mock_http_client("post", side_effect=error)
 
         with patch("httpx.AsyncClient", mock_client):
-            with pytest.raises(BillingServiceError) as exc_info:
+            with pytest.raises(OnyxError) as exc_info:
                 await _make_billing_request(method="POST", path="/test")
 
         assert exc_info.value.status_code == 502
-        assert "Failed to connect" in exc_info.value.message
+        assert exc_info.value.error_code is OnyxErrorCode.BAD_GATEWAY
+        assert "Failed to connect" in exc_info.value.detail
 
 
 class TestCreateCheckoutSession:

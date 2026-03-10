@@ -259,6 +259,145 @@ def test_airtable_connector_basic(
     compare_documents(doc_batch, expected_docs)
 
 
+def test_airtable_connector_url(
+    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
+    airtable_config: AirtableConfig,
+) -> None:
+    """Test that passing an Airtable URL produces the same results as base_id + table_id."""
+    if not airtable_config.table_identifier.startswith("tbl"):
+        pytest.skip("URL test requires table ID, not table name")
+
+    url = f"https://airtable.com/{airtable_config.base_id}/{airtable_config.table_identifier}/{BASE_VIEW_ID}"
+    connector = AirtableConnector(
+        airtable_url=url,
+        treat_all_non_attachment_fields_as_metadata=False,
+    )
+    connector.load_credentials({"airtable_access_token": airtable_config.access_token})
+
+    doc_batch_generator = connector.load_from_state()
+    doc_batch = [
+        doc for doc in next(doc_batch_generator) if not isinstance(doc, HierarchyNode)
+    ]
+    with pytest.raises(StopIteration):
+        next(doc_batch_generator)
+
+    assert len(doc_batch) == 2
+
+    expected_docs = [
+        create_test_document(
+            id="rec8BnxDLyWeegOuO",
+            title="Slow Internet",
+            description="The internet connection is very slow.",
+            priority="Medium",
+            status="In Progress",
+            ticket_id="2",
+            created_time="2024-12-24T21:02:49.000Z",
+            status_last_changed="2024-12-24T21:02:49.000Z",
+            days_since_status_change=0,
+            assignee="Chris Weaver (chris@onyx.app)",
+            submitted_by="Chris Weaver (chris@onyx.app)",
+            all_fields_as_metadata=False,
+            view_id=BASE_VIEW_ID,
+        ),
+        create_test_document(
+            id="reccSlIA4pZEFxPBg",
+            title="Printer Issue",
+            description="The office printer is not working.",
+            priority="High",
+            status="Open",
+            ticket_id="1",
+            created_time="2024-12-24T21:02:49.000Z",
+            status_last_changed="2024-12-24T21:02:49.000Z",
+            days_since_status_change=0,
+            assignee="Chris Weaver (chris@onyx.app)",
+            submitted_by="Chris Weaver (chris@onyx.app)",
+            attachments=[
+                (
+                    "Test.pdf:\ntesting!!!",
+                    f"https://airtable.com/{airtable_config.base_id}/{airtable_config.table_identifier}/{BASE_VIEW_ID}/reccSlIA4pZEFxPBg/fld1u21zkJACIvAEF/attlj2UBWNEDZngCc?blocks=hide",
+                )
+            ],
+            all_fields_as_metadata=False,
+            view_id=BASE_VIEW_ID,
+        ),
+    ]
+
+    compare_documents(doc_batch, expected_docs)
+
+
+def test_airtable_connector_index_all(
+    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
+    airtable_config: AirtableConfig,
+) -> None:
+    """Test index_all mode discovers all bases/tables and returns documents.
+
+    The test token has access to one base ("Onyx") with three tables:
+      - Tickets: 3 records, 2 with content (1 empty record is skipped)
+      - Support Categories: 4 records, all with Category Name field
+      - Table 3: 3 records, 1 with content (2 empty records are skipped)
+    Total expected: 7 documents
+    """
+    connector = AirtableConnector()
+    connector.load_credentials({"airtable_access_token": airtable_config.access_token})
+
+    all_docs: list[Document] = []
+    for batch in connector.load_from_state():
+        for item in batch:
+            if isinstance(item, Document):
+                all_docs.append(item)
+
+    # 2 from Tickets + 4 from Support Categories + 1 from Table 3 = 7
+    assert len(all_docs) == 7
+
+    docs_by_id = {d.id: d for d in all_docs}
+
+    # Verify all expected document IDs are present
+    expected_ids = {
+        # Tickets
+        "airtable__rec8BnxDLyWeegOuO",
+        "airtable__reccSlIA4pZEFxPBg",
+        # Support Categories
+        "airtable__rec5SgUDcHXcBc8kS",
+        "airtable__recD3DQHc0BQkDaqX",
+        "airtable__recPHdnWu1Q9ZxyTg",
+        "airtable__recWbIElUDz9HjgMd",
+        # Table 3
+        "airtable__recNalBz02QU1LhbM",
+    }
+    assert docs_by_id.keys() == expected_ids
+
+    # In index_all mode, semantic identifiers include "Base Name > Table Name: Primary Field"
+    assert (
+        docs_by_id["airtable__rec8BnxDLyWeegOuO"].semantic_identifier
+        == "Onyx > Tickets: Slow Internet"
+    )
+    assert (
+        docs_by_id["airtable__rec5SgUDcHXcBc8kS"].semantic_identifier
+        == "Onyx > Support Categories: Software Development"
+    )
+    assert (
+        docs_by_id["airtable__recNalBz02QU1LhbM"].semantic_identifier
+        == "Onyx > Table 3: A"
+    )
+
+    # Verify hierarchy metadata on a Tickets doc
+    tickets_doc = docs_by_id["airtable__rec8BnxDLyWeegOuO"]
+    assert tickets_doc.doc_metadata is not None
+    hierarchy = tickets_doc.doc_metadata["hierarchy"]
+    assert hierarchy["source_path"] == ["Onyx", "Tickets"]
+    assert hierarchy["base_id"] == airtable_config.base_id
+    assert hierarchy["base_name"] == "Onyx"
+    assert hierarchy["table_name"] == "Tickets"
+
+    # Verify hierarchy on a Support Categories doc
+    cat_doc = docs_by_id["airtable__rec5SgUDcHXcBc8kS"]
+    assert cat_doc.doc_metadata is not None
+    assert cat_doc.doc_metadata["hierarchy"]["source_path"] == [
+        "Onyx",
+        "Support Categories",
+    ]
+
+
 def test_airtable_connector_all_metadata(
     mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
     airtable_config: AirtableConfig,

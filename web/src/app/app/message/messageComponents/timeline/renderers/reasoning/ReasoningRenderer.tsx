@@ -169,7 +169,9 @@ export const ReasoningRenderer: MessageRenderer<
   );
 
   if (!hasStart && !hasEnd && content.length === 0) {
-    return children([{ icon: SvgCircle, status: null, content: <></> }]);
+    return children([
+      { icon: SvgCircle, status: THINKING_STATUS, content: <></> },
+    ]);
   }
 
   const reasoningContent = (

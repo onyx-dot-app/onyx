@@ -12,6 +12,8 @@ import {
   SvgX,
   SvgXOctagon,
 } from "@opal/icons";
+import type { IconFunctionComponent } from "@opal/types";
+
 const containerClasses = {
   flash: {
     default: {
@@ -218,6 +220,7 @@ export interface MessageProps extends React.HTMLAttributes<HTMLDivElement> {
 
   // Features:
   icon?: boolean;
+  iconComponent?: IconFunctionComponent;
   actions?: boolean | string;
   close?: boolean;
 
@@ -244,6 +247,7 @@ function MessageInner(
     description,
 
     icon = true,
+    iconComponent,
     actions,
     close = true,
 
@@ -279,8 +283,9 @@ function MessageInner(
   const textClass = useMemo(() => textClasses[type].text, [type]);
   const descriptionClass = useMemo(() => textClasses[type].description, [type]);
 
-  const IconComponent =
-    level === "success"
+  const IconComponent = iconComponent
+    ? iconComponent
+    : level === "success"
       ? SvgCheckCircle
       : level === "warning"
         ? SvgAlertTriangle
@@ -331,7 +336,8 @@ function MessageInner(
 
       {/* Actions */}
       {actions && (
-        <div className="flex items-start justify-end shrink-0">
+        <div className="flex items-center justify-end shrink-0 self-center pr-2">
+          {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
           <Button
             secondary
             onClick={onAction}
@@ -346,6 +352,7 @@ function MessageInner(
       {close && (
         <div className="flex items-center justify-center shrink-0">
           <div className={cn("flex items-start", closeButtonSize)}>
+            {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
             <IconButton
               internal
               icon={SvgX}

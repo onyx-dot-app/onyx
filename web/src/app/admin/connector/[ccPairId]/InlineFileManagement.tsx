@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useRef } from "react";
-import Button from "@/refresh-components/buttons/Button";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import {
   Table,
   TableBody,
@@ -16,7 +16,7 @@ import {
   updateConnectorFiles,
   type ConnectorFileInfo,
 } from "@/lib/fileConnector";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { ThreeDotsLoader } from "@/components/Loading";
@@ -41,7 +41,6 @@ export default function InlineFileManagement({
   connectorId,
   onRefresh,
 }: InlineFileManagementProps) {
-  const { setPopup } = usePopup();
   const [isEditing, setIsEditing] = useState(false);
   const [selectedFilesToRemove, setSelectedFilesToRemove] = useState<
     Set<string>
@@ -98,11 +97,9 @@ export default function InlineFileManagement({
     ).length;
 
     if (remainingFiles === 0 && filesToAdd.length === 0) {
-      setPopup({
-        message:
-          "Cannot remove all files from a connector. Delete the connector if this is desired.",
-        type: "error",
-      });
+      toast.error(
+        "Cannot remove all files from a connector. Delete the connector if this is desired."
+      );
       return;
     }
 
@@ -120,12 +117,10 @@ export default function InlineFileManagement({
         filesToAdd
       );
 
-      setPopup({
-        message:
-          "Files updated successfully! Document index is being updated in the background. " +
-          "New files are being indexed and removed files will be pruned from the search results.",
-        type: "success",
-      });
+      toast.success(
+        "Files updated successfully! Document index is being updated in the background. " +
+          "New files are being indexed and removed files will be pruned from the search results."
+      );
 
       // Reset editing state
       setIsEditing(false);
@@ -136,11 +131,9 @@ export default function InlineFileManagement({
       refreshFiles();
       onRefresh();
     } catch (error) {
-      setPopup({
-        message:
-          error instanceof Error ? error.message : "Failed to update files",
-        type: "error",
-      });
+      toast.error(
+        error instanceof Error ? error.message : "Failed to update files"
+      );
     } finally {
       setIsSaving(false);
     }
@@ -183,33 +176,33 @@ export default function InlineFileManagement({
         <div className="flex gap-2">
           {!isEditing ? (
             <Button
+              prominence="secondary"
               onClick={() => setIsEditing(true)}
-              secondary
-              leftIcon={SvgEdit}
+              icon={SvgEdit}
             >
               Edit
             </Button>
           ) : (
             <>
-              <Button
-                onClick={handleCancel}
-                secondary
-                leftIcon={SvgX}
-                disabled={isSaving}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleSaveClick}
-                primary
-                leftIcon={SvgCheck}
+              <Disabled disabled={isSaving}>
+                <Button
+                  prominence="secondary"
+                  onClick={handleCancel}
+                  icon={SvgX}
+                >
+                  Cancel
+                </Button>
+              </Disabled>
+              <Disabled
                 disabled={
                   isSaving ||
                   (selectedFilesToRemove.size === 0 && filesToAdd.length === 0)
                 }
               >
-                {isSaving ? "Saving..." : "Save Changes"}
-              </Button>
+                <Button onClick={handleSaveClick} icon={SvgCheck}>
+                  {isSaving ? "Saving..." : "Save Changes"}
+                </Button>
+              </Disabled>
             </>
           )}
         </div>
@@ -302,10 +295,11 @@ export default function InlineFileManagement({
                   >
                     {isEditing && (
                       <TableCell>
-                        <IconButton
+                        <Button
                           icon={SvgX}
-                          danger
-                          internal
+                          variant="danger"
+                          prominence="tertiary"
+                          size="sm"
                           onClick={() => handleRemoveNewFile(index)}
                           tooltip="Remove file"
                           title="Remove file"
@@ -340,14 +334,15 @@ export default function InlineFileManagement({
             className="hidden"
             id={`file-upload-${connectorId}`}
           />
-          <Button
-            onClick={() => fileInputRef.current?.click()}
-            secondary
-            leftIcon={SvgPlusCircle}
-            disabled={isSaving}
-          >
-            Add Files
-          </Button>
+          <Disabled disabled={isSaving}>
+            <Button
+              prominence="secondary"
+              onClick={() => fileInputRef.current?.click()}
+              icon={SvgPlusCircle}
+            >
+              Add Files
+            </Button>
+          </Disabled>
         </div>
       )}
 
@@ -403,16 +398,19 @@ export default function InlineFileManagement({
           </Modal.Body>
 
           <Modal.Footer>
-            <Button
-              onClick={() => setShowSaveConfirm(false)}
-              secondary
-              disabled={isSaving}
-            >
-              Cancel
-            </Button>
-            <Button onClick={handleConfirmSave} disabled={isSaving}>
-              {isSaving ? "Saving..." : "Confirm & Save"}
-            </Button>
+            <Disabled disabled={isSaving}>
+              <Button
+                prominence="secondary"
+                onClick={() => setShowSaveConfirm(false)}
+              >
+                Cancel
+              </Button>
+            </Disabled>
+            <Disabled disabled={isSaving}>
+              <Button onClick={handleConfirmSave}>
+                {isSaving ? "Saving..." : "Confirm & Save"}
+              </Button>
+            </Disabled>
           </Modal.Footer>
         </Modal.Content>
       </Modal>

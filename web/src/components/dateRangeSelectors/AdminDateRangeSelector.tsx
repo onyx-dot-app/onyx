@@ -2,6 +2,7 @@ import React, { memo, useState } from "react";
 import Calendar from "@/refresh-components/Calendar";
 import Popover from "@/refresh-components/Popover";
 import Button from "@/refresh-components/buttons/Button";
+import { Button as OpalButton } from "@opal/components";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { getXDaysAgo } from "./dateUtils";
@@ -49,6 +50,7 @@ export const AdminDateRangeSelector = memo(function AdminDateRangeSelector({
     <div className="grid gap-2">
       <Popover open={isOpen} onOpenChange={setIsOpen}>
         <Popover.Trigger asChild>
+          {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
           <Button
             secondary
             className={cn("justify-start", !value && "text-muted-foreground")}
@@ -87,16 +89,16 @@ export const AdminDateRangeSelector = memo(function AdminDateRangeSelector({
           />
           <div className="border-t p-3">
             {presets.map((preset) => (
-              <Button
+              <OpalButton
                 key={preset.label}
-                internal
-                className="w-full justify-start"
+                prominence="internal"
+                width="full"
                 onClick={() => {
                   onValueChange(preset.value);
                 }}
               >
                 {preset.label}
-              </Button>
+              </OpalButton>
             ))}
           </div>
         </Popover.Content>

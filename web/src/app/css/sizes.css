@@ -1,3 +1,10 @@
 :root {
-  --app-page-main-content-width: 50rem;
+  --app-page-main-content-width: 52.5rem;
+  --block-width-form-input-min: 10rem;
+
+  --container-sm: 42rem;
+  --container-sm-md: 47rem;
+  --container-md: 54.5rem;
+  --container-lg: 62rem;
+  --container-full: 100%;
 }

@@ -1,4 +1,9 @@
-export type WebSearchProviderType = "google_pse" | "serper" | "exa" | "searxng";
+export type WebSearchProviderType =
+  | "google_pse"
+  | "serper"
+  | "exa"
+  | "searxng"
+  | "brave";
 
 export const SEARCH_PROVIDERS_URL = "/api/admin/web-search/search-providers";
 
@@ -25,6 +30,14 @@ export const SEARCH_PROVIDER_DETAILS: Record<
     helper: "Connect to Serper to set up web search.",
     logoSrc: "/Serper.svg",
     apiKeyUrl: "https://serper.dev/api-key",
+  },
+  brave: {
+    label: "Brave",
+    subtitle: "Brave Search API",
+    helper: "Connect to Brave Search API to set up web search.",
+    logoSrc: "/Brave.svg",
+    apiKeyUrl:
+      "https://api-dashboard.search.brave.com/app/documentation/web-search/get-started",
   },
   google_pse: {
     label: "Google PSE",
@@ -90,6 +103,10 @@ const SEARCH_PROVIDER_CAPABILITIES: Record<
     requiredConfigKeys: [],
   },
   serper: {
+    requiresApiKey: true,
+    requiredConfigKeys: [],
+  },
+  brave: {
     requiresApiKey: true,
     requiredConfigKeys: [],
   },

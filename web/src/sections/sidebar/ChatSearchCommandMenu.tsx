@@ -156,7 +156,7 @@ export default function ChatSearchCommandMenu({
   const handleNewSession = useCallback(() => {
     const href =
       combinedSettings?.settings?.disable_default_assistant && currentAgent
-        ? `/app?assistantId=${currentAgent.id}`
+        ? `/app?agentId=${currentAgent.id}`
         : "/app";
     router.push(href as Route);
     setOpen(false);

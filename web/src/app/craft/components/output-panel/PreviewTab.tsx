@@ -5,6 +5,8 @@ import { cn } from "@/lib/utils";
 
 interface PreviewTabProps {
   webappUrl: string | null;
+  /** Changing this value forces the iframe to fully remount / reload */
+  refreshKey?: number;
 }
 
 /**
@@ -14,13 +16,13 @@ interface PreviewTabProps {
  * - No webapp URL yet: Shows blank dark background while SWR fetches
  * - Has webapp URL: Shows iframe with crossfade from blank background
  */
-export default function PreviewTab({ webappUrl }: PreviewTabProps) {
+export default function PreviewTab({ webappUrl, refreshKey }: PreviewTabProps) {
   const [iframeLoaded, setIframeLoaded] = useState(false);
 
-  // Reset loaded state when URL changes
+  // Reset loaded state when URL or refreshKey changes
   useEffect(() => {
     setIframeLoaded(false);
-  }, [webappUrl]);
+  }, [webappUrl, refreshKey]);
 
   // Base background shown while loading or when no webapp exists yet
   return (
@@ -38,6 +40,7 @@ export default function PreviewTab({ webappUrl }: PreviewTabProps) {
         {/* Iframe - fades in when loaded */}
         {webappUrl && (
           <iframe
+            key={refreshKey}
             src={webappUrl}
             onLoad={() => setIframeLoaded(true)}
             className={cn(

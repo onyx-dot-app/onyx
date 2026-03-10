@@ -1,22 +1,31 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import IconButton, { IconButtonProps } from "./IconButton";
+import { Button, ButtonProps } from "@opal/components";
 import { SvgAlertTriangle, SvgCheck, SvgCopy } from "@opal/icons";
+
 type CopyState = "idle" | "copied" | "error";
 
-export interface CopyIconButtonProps
-  extends Omit<IconButtonProps, "icon" | "onClick"> {
+/** Omit that distributes over unions, preserving discriminated-union branches. */
+type DistributiveOmit<T, K extends PropertyKey> = T extends unknown
+  ? Omit<T, K>
+  : never;
+
+export type CopyIconButtonProps = DistributiveOmit<
+  ButtonProps,
+  "variant" | "icon" | "onClick"
+> & {
   // Function that returns the text to copy to clipboard
   getCopyText: () => string;
   // Optional function to get HTML content for rich copy
   getHtmlContent?: () => string;
-}
+};
 
 export default function CopyIconButton({
   getCopyText,
   getHtmlContent,
   tooltip,
+  prominence = "tertiary",
   ...iconButtonProps
 }: CopyIconButtonProps) {
   const [copyState, setCopyState] = useState<CopyState>("idle");
@@ -98,12 +107,15 @@ export default function CopyIconButton({
     }
   }
 
-  return (
-    <IconButton
-      icon={getIcon()}
-      onClick={handleCopy}
-      tooltip={getTooltip()}
-      {...iconButtonProps}
-    />
-  );
+  // Assertion is safe: CopyIconButton always supplies icon + onClick,
+  // satisfying Button's content union. Spread may override prominence.
+  const buttonProps = {
+    prominence,
+    ...iconButtonProps,
+    icon: getIcon(),
+    onClick: handleCopy,
+    tooltip: getTooltip(),
+  } as ButtonProps;
+
+  return <Button {...buttonProps} />;
 }

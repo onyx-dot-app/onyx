@@ -2,11 +2,8 @@ import React, { FunctionComponent } from "react";
 import { cn } from "@/lib/utils";
 import { SvgFold, SvgExpand } from "@opal/icons";
 import { IconProps } from "@opal/types";
-import Button from "@/refresh-components/buttons/Button";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
-import { TimelineTopSpacer } from "./TimelineTopSpacer";
-import { TimelineTopSpacerVariant } from "./tokens";
 
 export interface TimelineStepContentProps {
   children?: React.ReactNode;
@@ -53,8 +50,8 @@ export function TimelineStepContent({
             {showCollapseControls &&
               (buttonTitle ? (
                 <Button
+                  prominence="tertiary"
                   size="md"
-                  tertiary
                   onClick={onToggle}
                   rightIcon={
                     isExpanded ? SvgFold : CollapsedIconComponent || SvgExpand
@@ -63,8 +60,9 @@ export function TimelineStepContent({
                   {buttonTitle}
                 </Button>
               ) : (
-                <IconButton
-                  internal
+                <Button
+                  prominence="tertiary"
+                  size="md"
                   onClick={onToggle}
                   icon={
                     isExpanded ? SvgFold : CollapsedIconComponent || SvgExpand

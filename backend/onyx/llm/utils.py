@@ -322,7 +322,7 @@ def test_llm(llm: LLM) -> str | None:
     error_msg = None
     for _ in range(2):
         try:
-            llm.invoke(UserMessage(content="Do not respond"))
+            llm.invoke(UserMessage(content="Do not respond"), max_tokens=50)
             return None
         except Exception as e:
             error_msg = str(e)

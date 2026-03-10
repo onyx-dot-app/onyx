@@ -23,7 +23,7 @@ def test_tag_creation_and_update(reset: None) -> None:  # noqa: ARG001
         connector_specific_config={
             "file_locations": [],
             "file_names": [],
-            "zip_metadata": {},
+            "zip_metadata_file_id": None,
         },
         user_performing_action=admin_user,
     )
@@ -132,7 +132,7 @@ def test_tag_sharing(reset: None) -> None:  # noqa: ARG001
         connector_specific_config={
             "file_locations": [],
             "file_names": [],
-            "zip_metadata": {},
+            "zip_metadata_file_id": None,
         },
         user_performing_action=admin_user,
     )

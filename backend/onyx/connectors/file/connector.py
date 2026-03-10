@@ -1,3 +1,4 @@
+import json
 import os
 from datetime import datetime
 from datetime import timezone
@@ -107,7 +108,7 @@ def _process_file(
     # These metadata items are not settable by the user
     source_type = onyx_metadata.source_type or DocumentSource.FILE
 
-    doc_id = f"FILE_CONNECTOR__{file_id}"
+    doc_id = onyx_metadata.document_id or f"FILE_CONNECTOR__{file_id}"
     title = metadata.get("title") or file_display_name
 
     # 1) If the file itself is an image, handle that scenario quickly
@@ -240,29 +241,49 @@ class LocalFileConnector(LoadConnector):
         self,
         file_locations: list[Path | str],
         file_names: list[str] | None = None,  # noqa: ARG002
-        zip_metadata: dict[str, Any] | None = None,
+        zip_metadata_file_id: str | None = None,
+        zip_metadata: dict[str, Any] | None = None,  # Deprecated, for backwards compat
         batch_size: int = INDEX_BATCH_SIZE,
     ) -> None:
         self.file_locations = [str(loc) for loc in file_locations]
         self.batch_size = batch_size
         self.pdf_pass: str | None = None
-        self.zip_metadata = zip_metadata or {}
+        self._zip_metadata_file_id = zip_metadata_file_id
+        self._zip_metadata_deprecated = zip_metadata
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         self.pdf_pass = credentials.get("pdf_password")
 
         return None
 
-    def _get_file_metadata(self, file_name: str) -> dict[str, Any]:
-        return self.zip_metadata.get(file_name, {}) or self.zip_metadata.get(
-            os.path.basename(file_name), {}
-        )
-
     def load_from_state(self) -> GenerateDocumentsOutput:
         """
         Iterates over each file path, fetches from Postgres, tries to parse text
         or images, and yields Document batches.
         """
+        # Load metadata dict at start (from file store or deprecated inline format)
+        zip_metadata: dict[str, Any] = {}
+        if self._zip_metadata_file_id:
+            try:
+                file_store = get_default_file_store()
+                metadata_io = file_store.read_file(
+                    file_id=self._zip_metadata_file_id, mode="b"
+                )
+                metadata_bytes = metadata_io.read()
+                loaded_metadata = json.loads(metadata_bytes)
+                if isinstance(loaded_metadata, list):
+                    zip_metadata = {d["filename"]: d for d in loaded_metadata}
+                else:
+                    zip_metadata = loaded_metadata
+            except Exception as e:
+                logger.warning(f"Failed to load metadata from file store: {e}")
+        elif self._zip_metadata_deprecated:
+            logger.warning(
+                "Using deprecated inline zip_metadata dict. "
+                "Re-upload files to use the new file store format."
+            )
+            zip_metadata = self._zip_metadata_deprecated
+
         documents: list[Document | HierarchyNode] = []
 
         for file_id in self.file_locations:
@@ -273,7 +294,9 @@ class LocalFileConnector(LoadConnector):
                 logger.warning(f"No file record found for '{file_id}' in PG; skipping.")
                 continue
 
-            metadata = self._get_file_metadata(file_record.display_name)
+            metadata = zip_metadata.get(
+                file_record.display_name, {}
+            ) or zip_metadata.get(os.path.basename(file_record.display_name), {})
             file_io = file_store.read_file(file_id=file_id, mode="b")
             new_docs = _process_file(
                 file_id=file_id,
@@ -298,7 +321,6 @@ if __name__ == "__main__":
     connector = LocalFileConnector(
         file_locations=[os.environ["TEST_FILE"]],
         file_names=[os.environ["TEST_FILE"]],
-        zip_metadata={},
     )
     connector.load_credentials({"pdf_password": os.environ.get("PDF_PASSWORD")})
     doc_batches = connector.load_from_state()

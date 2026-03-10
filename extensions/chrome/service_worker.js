@@ -43,8 +43,12 @@ async function openSidePanel(tabId) {
   }
 }
 
+function encodeUserPrompt(text) {
+  return encodeURIComponent(text).replace(/\(/g, "%28").replace(/\)/g, "%29");
+}
+
 async function sendToOnyx(info, tab) {
-  const selectedText = encodeURIComponent(info.selectionText);
+  const selectedText = encodeUserPrompt(info.selectionText);
   const currentUrl = encodeURIComponent(tab.url);
 
   try {
@@ -153,6 +157,23 @@ chrome.commands.onCommand.addListener(async (command) => {
   }
 });
 
+async function sendActiveTabUrlToPanel() {
+  try {
+    const [tab] = await chrome.tabs.query({
+      active: true,
+      lastFocusedWindow: true,
+    });
+    if (tab?.url) {
+      chrome.runtime.sendMessage({
+        action: ACTIONS.TAB_URL_UPDATED,
+        url: tab.url,
+      });
+    }
+  } catch (error) {
+    console.error("[Onyx SW] Error sending tab URL:", error);
+  }
+}
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === ACTIONS.GET_CURRENT_ONYX_DOMAIN) {
     chrome.storage.local.get(
@@ -188,7 +209,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       chrome.storage.local.get(
         { [CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN]: DEFAULT_ONYX_DOMAIN },
         (result) => {
-          const encodedText = encodeURIComponent(selectedText);
+          const encodedText = encodeUserPrompt(selectedText);
           const onyxDomain = result[CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN];
           const url = `${onyxDomain}${SIDE_PANEL_PATH}?user-prompt=${encodedText}`;
 
@@ -221,6 +242,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       console.error("[Onyx SW] Missing tabId or windowId");
     }
     return true;
+  }
+  if (request.action === ACTIONS.TAB_READING_ENABLED) {
+    chrome.storage.session.set({ tabReadingEnabled: true });
+    sendActiveTabUrlToPanel();
+    return false;
+  }
+  if (request.action === ACTIONS.TAB_READING_DISABLED) {
+    chrome.storage.session.set({ tabReadingEnabled: false });
+    return false;
   }
 });
 
@@ -270,6 +300,42 @@ chrome.omnibox.onInputChanged.addListener((text, suggest) => {
         description: `Search Onyx for "<match>${text}</match>"`,
       },
     ]);
+  }
+});
+
+chrome.tabs.onActivated.addListener(async (activeInfo) => {
+  const result = await chrome.storage.session.get({ tabReadingEnabled: false });
+  if (!result.tabReadingEnabled) return;
+  try {
+    const tab = await chrome.tabs.get(activeInfo.tabId);
+    if (tab.url) {
+      chrome.runtime.sendMessage({
+        action: ACTIONS.TAB_URL_UPDATED,
+        url: tab.url,
+      });
+    }
+  } catch (error) {
+    console.error("[Onyx SW] Error on tab activated:", error);
+  }
+});
+
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+  if (!changeInfo.url) return;
+  const result = await chrome.storage.session.get({ tabReadingEnabled: false });
+  if (!result.tabReadingEnabled) return;
+  try {
+    const [activeTab] = await chrome.tabs.query({
+      active: true,
+      lastFocusedWindow: true,
+    });
+    if (activeTab?.id === tabId) {
+      chrome.runtime.sendMessage({
+        action: ACTIONS.TAB_URL_UPDATED,
+        url: changeInfo.url,
+      });
+    }
+  } catch (error) {
+    console.error("[Onyx SW] Error on tab updated:", error);
   }
 });
 

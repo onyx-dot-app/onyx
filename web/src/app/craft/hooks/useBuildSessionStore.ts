@@ -51,7 +51,7 @@ import { parsePacket } from "@/app/craft/utils/parsePacket";
  * - tool_call_progress: Full tool call data with status="completed"
  * - agent_plan_update: Plan entries (not rendered as stream items)
  *
- * This function converts assistant messages to StreamItem[] for rendering.
+ * This function converts agent messages to StreamItem[] for rendering.
  */
 function convertMessagesToStreamItems(messages: BuildMessage[]): StreamItem[] {
   const items: StreamItem[] = [];
@@ -149,40 +149,38 @@ function convertMessagesToStreamItems(messages: BuildMessage[]): StreamItem[] {
  * Consolidate raw backend messages into proper conversation turns.
  *
  * The backend stores each streaming packet as a separate message. This function:
- * 1. Groups consecutive assistant messages (between user messages) into turns
+ * 1. Groups consecutive agent messages (between user messages) into turns
  * 2. Converts each group's packets to streamItems
  * 3. Creates consolidated messages with streamItems in message_metadata
  *
- * Returns: Array of consolidated messages (user messages + one assistant message per turn)
+ * Returns: Array of consolidated messages (user messages + one agent message per turn)
  */
 function consolidateMessagesIntoTurns(
   rawMessages: BuildMessage[]
 ): BuildMessage[] {
   const consolidated: BuildMessage[] = [];
-  let currentAssistantPackets: BuildMessage[] = [];
+  let currentAgentPackets: BuildMessage[] = [];
 
   for (const message of rawMessages) {
     if (message.type === "user") {
-      // If we have accumulated assistant packets, consolidate them into one message
-      if (currentAssistantPackets.length > 0) {
-        const streamItems = convertMessagesToStreamItems(
-          currentAssistantPackets
-        );
+      // If we have accumulated agent packets, consolidate them into one message
+      if (currentAgentPackets.length > 0) {
+        const streamItems = convertMessagesToStreamItems(currentAgentPackets);
         const textContent = streamItems
           .filter((item) => item.type === "text")
           .map((item) => item.content)
           .join("");
 
         consolidated.push({
-          id: currentAssistantPackets[0]?.id || genId("assistant-msg"),
+          id: currentAgentPackets[0]?.id || genId("agent-msg"),
           type: "assistant",
           content: textContent,
-          timestamp: currentAssistantPackets[0]?.timestamp || new Date(),
+          timestamp: currentAgentPackets[0]?.timestamp || new Date(),
           message_metadata: {
             streamItems,
           },
         });
-        currentAssistantPackets = [];
+        currentAgentPackets = [];
       }
       // Add the user message as-is
       consolidated.push(message);
@@ -190,48 +188,46 @@ function consolidateMessagesIntoTurns(
       // Check if this message already has consolidated streamItems (from new format)
       if (message.message_metadata?.streamItems) {
         // Already consolidated, add as-is
-        if (currentAssistantPackets.length > 0) {
+        if (currentAgentPackets.length > 0) {
           // Flush any pending packets first
-          const streamItems = convertMessagesToStreamItems(
-            currentAssistantPackets
-          );
+          const streamItems = convertMessagesToStreamItems(currentAgentPackets);
           const textContent = streamItems
             .filter((item) => item.type === "text")
             .map((item) => item.content)
             .join("");
 
           consolidated.push({
-            id: currentAssistantPackets[0]?.id || genId("assistant-msg"),
+            id: currentAgentPackets[0]?.id || genId("agent-msg"),
             type: "assistant",
             content: textContent,
-            timestamp: currentAssistantPackets[0]?.timestamp || new Date(),
+            timestamp: currentAgentPackets[0]?.timestamp || new Date(),
             message_metadata: {
               streamItems,
             },
           });
-          currentAssistantPackets = [];
+          currentAgentPackets = [];
         }
         consolidated.push(message);
       } else {
         // Old format - accumulate for consolidation
-        currentAssistantPackets.push(message);
+        currentAgentPackets.push(message);
       }
     }
   }
 
-  // Don't forget any trailing assistant packets
-  if (currentAssistantPackets.length > 0) {
-    const streamItems = convertMessagesToStreamItems(currentAssistantPackets);
+  // Don't forget any trailing agent packets
+  if (currentAgentPackets.length > 0) {
+    const streamItems = convertMessagesToStreamItems(currentAgentPackets);
     const textContent = streamItems
       .filter((item) => item.type === "text")
       .map((item) => item.content)
       .join("");
 
     consolidated.push({
-      id: currentAssistantPackets[0]?.id || genId("assistant-msg"),
+      id: currentAgentPackets[0]?.id || genId("agent-msg"),
       type: "assistant",
       content: textContent,
-      timestamp: currentAssistantPackets[0]?.timestamp || new Date(),
+      timestamp: currentAgentPackets[0]?.timestamp || new Date(),
       message_metadata: {
         streamItems,
       },
@@ -309,7 +305,7 @@ export interface BuildSessionData {
   /** Active tool calls for the current response */
   toolCalls: ToolCall[];
   /**
-   * FIFO stream items for the current assistant turn.
+   * FIFO stream items for the current agent turn.
    * Items are stored in chronological order as they arrive.
    * Rendered directly without transformation.
    */
@@ -336,7 +332,7 @@ export interface BuildSessionData {
   filesTabState: FilesTabState;
   /** Browser-style tab navigation history for back/forward */
   tabHistory: TabNavigationHistory;
-  /** Follow-up suggestions after first assistant message */
+  /** Follow-up suggestions after first agent message */
   followupSuggestions: SuggestionBubble[] | null;
   /** Whether suggestions are currently being generated */
   suggestionsLoading: boolean;
@@ -1221,29 +1217,28 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
           !sessionData.session_loaded_in_sandbox);
 
       if (needsRestore) {
-        // Update UI: show sandbox as "restoring" and session as loading
+        // Show sandbox as "restoring" while we load messages + restore
         updateSessionData(sessionId, {
           status: "creating",
           sandbox: sessionData.sandbox
             ? { ...sessionData.sandbox, status: "restoring" }
             : null,
         });
-
-        // Call restore endpoint (blocks until complete)
-        sessionData = await restoreSession(sessionId);
-
-        // Clear the "creating" loading indicator so subsequent logic
-        // doesn't mistake this for an active streaming session.
-        updateSessionData(sessionId, { status: "idle" });
       }
 
-      // Now fetch messages and artifacts
-      const [messages, artifacts] = await Promise.all([
-        fetchMessages(sessionId),
-        fetchArtifacts(sessionId),
-      ]);
+      // Messages come from DB and don't need the sandbox running.
+      // Artifacts need sandbox filesystem, so skip during restore.
+      const messages = await fetchMessages(sessionId);
+      const artifacts = needsRestore ? [] : await fetchArtifacts(sessionId);
 
-      // Construct webapp URL if sandbox has a Next.js port and there's a webapp artifact
+      // Preserve optimistic messages if actively streaming (pre-provisioned flow).
+      const currentSession = get().sessions.get(sessionId);
+      const isStreaming =
+        (currentSession?.messages?.length ?? 0) > 0 &&
+        (currentSession?.status === "running" ||
+          currentSession?.status === "creating");
+
+      // Construct webapp URL
       let webappUrl: string | null = null;
       const hasWebapp = artifacts.some(
         (a) => a.type === "nextjs_app" || a.type === "web_app"
@@ -1252,50 +1247,62 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         webappUrl = `http://localhost:${sessionData.sandbox.nextjs_port}`;
       }
 
-      // Re-fetch existing session to check for optimistic messages
-      const currentSession = get().sessions.get(sessionId);
-      const hasOptimisticMessages = (currentSession?.messages.length ?? 0) > 0;
-      const isCurrentlyStreaming =
-        currentSession?.status === "running" ||
-        currentSession?.status === "creating";
-
-      // Consolidate messages into proper conversation turns
-      // Each assistant turn becomes a single message with streamItems in metadata
-      // If there are optimistic messages (active streaming), preserve current state
-      const messagesToUse = hasOptimisticMessages
+      const status = isStreaming
+        ? currentSession!.status
+        : needsRestore
+          ? "creating"
+          : sessionData.status === "active"
+            ? "active"
+            : "idle";
+      const resolvedMessages = isStreaming
         ? currentSession!.messages
         : consolidateMessagesIntoTurns(messages);
-      // Session-level streamItems are only for current streaming response
-      // When loading from history, they should be empty (each message has its own streamItems)
-      const streamItemsToUse = hasOptimisticMessages
-        ? currentSession!.streamItems
-        : [];
-      // Preserve streaming status if currently streaming, otherwise use backend status
-      const statusToUse = isCurrentlyStreaming
-        ? currentSession!.status
-        : sessionData.status === "active"
-          ? "active"
-          : "idle";
+      const streamItems = isStreaming ? currentSession!.streamItems : [];
+      const sandbox =
+        needsRestore && sessionData.sandbox
+          ? { ...sessionData.sandbox, status: "restoring" as const }
+          : sessionData.sandbox;
 
       updateSessionData(sessionId, {
-        status: statusToUse,
-        // Preserve optimistic messages if they exist (e.g., from pre-provisioned flow)
-        messages: messagesToUse,
-        streamItems: streamItemsToUse,
+        status,
+        messages: resolvedMessages,
+        streamItems,
         artifacts,
         webappUrl,
-        sandbox: sessionData.sandbox,
+        sandbox,
         error: null,
         isLoaded: true,
-        // After restore, bump webappNeedsRefresh so OutputPanel's SWR refetches
-        // webapp-info. Done here (not earlier) so all session data is set atomically.
-        ...(needsRestore
-          ? {
-              webappNeedsRefresh:
-                (get().sessions.get(sessionId)?.webappNeedsRefresh || 0) + 1,
-            }
-          : {}),
       });
+
+      // Now restore the sandbox if needed (messages are already visible).
+      // The backend enforces a timeout and returns an error if restore
+      // takes too long, so no frontend timeout needed here.
+      if (needsRestore) {
+        try {
+          sessionData = await restoreSession(sessionId);
+
+          // Sandbox is now running - fetch artifacts
+          const restoredArtifacts = await fetchArtifacts(sessionId);
+
+          updateSessionData(sessionId, {
+            status: sessionData.status === "active" ? "active" : "idle",
+            artifacts: restoredArtifacts,
+            sandbox: sessionData.sandbox,
+            // Bump so OutputPanel's SWR refetches webapp-info (which
+            // derives the actual webappUrl from the backend).
+            webappNeedsRefresh:
+              (get().sessions.get(sessionId)?.webappNeedsRefresh || 0) + 1,
+          });
+        } catch (restoreErr) {
+          console.error("Sandbox restore failed:", restoreErr);
+          updateSessionData(sessionId, {
+            status: "idle",
+            sandbox: sessionData.sandbox
+              ? { ...sessionData.sandbox, status: "failed" }
+              : null,
+          });
+        }
+      }
     } catch (err) {
       console.error("Failed to load session:", err);
       updateSessionData(sessionId, {

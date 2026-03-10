@@ -2,14 +2,15 @@
 
 import {
   buildChatUrl,
+  getAvailableContextTokens,
   nameChatSession,
   updateLlmOverrideForChatSession,
 } from "@/app/app/services/lib";
+import { getMaxSelectedDocumentTokens } from "@/app/app/projects/projectsService";
+import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
 import { StreamStopInfo } from "@/lib/search/interfaces";
-
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Route } from "next";
-import { stopChatSession } from "@/app/app/chat_search/utils";
 import {
   getLastSuccessfulMessageId,
   getLatestMessageChain,
@@ -19,7 +20,7 @@ import {
   buildImmediateMessages,
   buildEmptyMessage,
 } from "@/app/app/services/messageTree";
-import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
+import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
 import { OnyxDocument } from "@/lib/search/interfaces";
@@ -44,13 +45,13 @@ import {
   getFinalLLM,
   modelSupportsImageInput,
   structureValue,
-} from "@/lib/llm/utils";
+} from "@/lib/llmConfig/utils";
 import {
   CurrentMessageFIFO,
   updateCurrentMessageFIFO,
 } from "@/app/app/services/currentMessageFIFO";
 import { buildFilters } from "@/lib/search/utils";
-import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import {
   ReadonlyURLSearchParams,
   usePathname,
@@ -91,6 +92,8 @@ export interface OnSubmitProps {
   isSeededChat?: boolean;
   modelOverride?: LlmDescriptor;
   regenerationRequest?: RegenerationRequest | null;
+  // Additional context injected into the LLM call but not stored/shown in chat.
+  additionalContext?: string;
 }
 
 interface RegenerationRequest {
@@ -102,26 +105,37 @@ interface RegenerationRequest {
 interface UseChatControllerProps {
   filterManager: FilterManager;
   llmManager: LlmManager;
-  liveAssistant: MinimalPersonaSnapshot | undefined;
-  availableAssistants: MinimalPersonaSnapshot[];
+  liveAgent: MinimalPersonaSnapshot | undefined;
+  availableAgents: MinimalPersonaSnapshot[];
   existingChatSessionId: string | null;
   selectedDocuments: OnyxDocument[];
   searchParams: ReadonlyURLSearchParams;
-  setPopup: (popup: PopupSpec) => void;
   resetInputBar: () => void;
-  setSelectedAssistantFromId: (assistantId: number | null) => void;
+  setSelectedAgentFromId: (agentId: number | null) => void;
+}
+
+async function stopChatSession(chatSessionId: string): Promise<void> {
+  const response = await fetch(`/api/chat/stop-chat-session/${chatSessionId}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to stop chat session: ${response.statusText}`);
+  }
 }
 
 export default function useChatController({
   filterManager,
   llmManager,
-  availableAssistants,
-  liveAssistant,
+  availableAgents,
+  liveAgent,
   existingChatSessionId,
   selectedDocuments,
-  setPopup,
   resetInputBar,
-  setSelectedAssistantFromId,
+  setSelectedAgentFromId,
 }: UseChatControllerProps) {
   const pathname = usePathname();
   const router = useRouter();
@@ -129,7 +143,7 @@ export default function useChatController({
   const params = useAppParams();
   const { refreshChatSessions, addPendingChatSession } = useChatSessions();
   const { pinnedAgents, togglePinnedAgent } = usePinnedAgents();
-  const { assistantPreferences } = useAgentPreferences();
+  const { agentPreferences } = useAgentPreferences();
   const { forcedToolIds } = useForcedTools();
   const { fetchProjects, setCurrentMessageFiles, beginUpload } =
     useProjectsContext();
@@ -182,9 +196,6 @@ export default function useChatController({
   const currentChatState = useCurrentChatState();
 
   const navigatingAway = useRef(false);
-
-  // Local state that doesn't need to be in the store
-  const [_maxTokens, setMaxTokens] = useState<number>(4096);
 
   // Sync store state changes
   useEffect(() => {
@@ -359,6 +370,7 @@ export default function useChatController({
       isSeededChat,
       modelOverride,
       regenerationRequest,
+      additionalContext,
     }: OnSubmitProps) => {
       const projectId = params(SEARCH_PARAM_NAMES.PROJECT_ID);
       {
@@ -441,27 +453,21 @@ export default function useChatController({
 
       if (currentChatState != "input") {
         if (currentChatState == "uploading") {
-          setPopup({
-            message: "Please wait for the content to upload",
-            type: "error",
-          });
+          toast.error("Please wait for the content to upload");
         } else {
-          setPopup({
-            message: "Please wait for the response to complete",
-            type: "error",
-          });
+          toast.error("Please wait for the response to complete");
         }
 
         return;
       }
 
       // Auto-pin the agent to sidebar when sending a message if not already pinned
-      if (liveAssistant) {
+      if (liveAgent) {
         const isAlreadyPinned = pinnedAgents.some(
-          (agent) => agent.id === liveAssistant.id
+          (agent) => agent.id === liveAgent.id
         );
         if (!isAlreadyPinned) {
-          togglePinnedAgent(liveAssistant, true).catch((err) => {
+          togglePinnedAgent(liveAgent, true).catch((err) => {
             console.error("Failed to auto-pin agent:", err);
           });
         }
@@ -475,14 +481,14 @@ export default function useChatController({
 
       const searchParamBasedChatSessionName =
         searchParams?.get(SEARCH_PARAM_NAMES.TITLE) || null;
-      // Auto-name only once, after the first assistant response, and only when the chat isn't
+      // Auto-name only once, after the first agent response, and only when the chat isn't
       // already explicitly named (e.g. `?title=...`).
       const hadAnyUserMessagesBeforeSubmit = currentHistory.some(
         (m) => m.type === "user"
       );
       if (isNewSession) {
         currChatSessionId = await createChatSession(
-          liveAssistant?.id || 0,
+          liveAgent?.id || 0,
           searchParamBasedChatSessionName,
           projectId ? parseInt(projectId) : null
         );
@@ -491,7 +497,7 @@ export default function useChatController({
         // This ensures "New Chat" appears immediately, even before any messages are saved
         addPendingChatSession({
           chatSessionId: currChatSessionId,
-          personaId: liveAssistant?.id || 0,
+          personaId: liveAgent?.id || 0,
           projectId: projectId ? parseInt(projectId) : null,
         });
       } else {
@@ -553,11 +559,9 @@ export default function useChatController({
         : null;
 
       if (!messageToResend && messageIdToResend !== undefined) {
-        setPopup({
-          message:
-            "Failed to re-send message - please refresh the page and try again.",
-          type: "error",
-        });
+        toast.error(
+          "Failed to re-send message - please refresh the page and try again."
+        );
         resetRegenerationState(frozenSessionId);
         updateChatStateAction(frozenSessionId, "input");
         return;
@@ -568,6 +572,14 @@ export default function useChatController({
       let currMessage = regenerationRequest
         ? messageToResend?.message || message
         : message;
+
+      // When editing a message that had files attached, preserve the original files.
+      // Skip for regeneration — the regeneration path reuses the existing user node
+      // (and its files), so merging here would send duplicates.
+      const effectiveFileDescriptors = [
+        ...projectFilesToFileDescriptors(currentMessageFiles),
+        ...(!regenerationRequest ? messageToResend?.files ?? [] : []),
+      ];
 
       updateChatStateAction(frozenSessionId, "loading");
 
@@ -589,12 +601,12 @@ export default function useChatController({
       // Add user message immediately to the message tree so that the chat
       // immediately reflects the user message
       let initialUserNode: Message;
-      let initialAssistantNode: Message;
+      let initialAgentNode: Message;
 
       if (regenerationRequest) {
-        // For regeneration: keep the existing user message, only create new assistant
+        // For regeneration: keep the existing user message, only create new agent
         initialUserNode = regenerationRequest.parentMessage;
-        initialAssistantNode = buildEmptyMessage({
+        initialAgentNode = buildEmptyMessage({
           messageType: "assistant",
           parentNodeId: initialUserNode.nodeId,
           nodeIdOffset: 1,
@@ -607,17 +619,17 @@ export default function useChatController({
         const result = buildImmediateMessages(
           parentNodeIdForMessage,
           currMessage,
-          projectFilesToFileDescriptors(currentMessageFiles),
+          effectiveFileDescriptors,
           messageToResend
         );
         initialUserNode = result.initialUserNode;
-        initialAssistantNode = result.initialAssistantNode;
+        initialAgentNode = result.initialAgentNode;
       }
 
       // make messages appear + clear input bar
       const messagesToUpsert = regenerationRequest
-        ? [initialAssistantNode] // Only upsert the new assistant for regeneration
-        : [initialUserNode, initialAssistantNode]; // Upsert both for normal/edit flow
+        ? [initialAgentNode] // Only upsert the new agent for regeneration
+        : [initialUserNode, initialAgentNode]; // Upsert both for normal/edit flow
       currentMessageTreeLocal = upsertToCompleteMessageTree({
         messages: messagesToUpsert,
         completeMessageTreeOverride: currentMessageTreeLocal,
@@ -644,23 +656,23 @@ export default function useChatController({
 
       let finalMessage: BackendMessage | null = null;
       let toolCall: ToolCallMetadata | null = null;
-      let files = projectFilesToFileDescriptors(currentMessageFiles);
+      let files = effectiveFileDescriptors;
       let packets: Packet[] = [];
       let packetsVersion = 0;
 
       let newUserMessageId: number | null = null;
-      let newAssistantMessageId: number | null = null;
+      let newAgentMessageId: number | null = null;
 
       try {
         const lastSuccessfulMessageId = getLastSuccessfulMessageId(
           currentMessageTreeLocal
         );
-        const disabledToolIds = liveAssistant
-          ? assistantPreferences?.[liveAssistant?.id]?.disabled_tool_ids
+        const disabledToolIds = liveAgent
+          ? agentPreferences?.[liveAgent?.id]?.disabled_tool_ids
           : undefined;
 
         // Find the search tool's numeric ID for forceSearch
-        const searchToolNumericId = liveAssistant?.tools.find(
+        const searchToolNumericId = liveAgent?.tools.find(
           (tool) => tool.in_code_tool_id === SEARCH_TOOL_ID
         )?.id;
 
@@ -682,7 +694,7 @@ export default function useChatController({
         updateCurrentMessageFIFO(stack, {
           signal: controller.signal,
           message: currMessage,
-          fileDescriptors: projectFilesToFileDescriptors(currentMessageFiles),
+          fileDescriptors: effectiveFileDescriptors,
           parentMessageId: (() => {
             const parentId =
               regenerationRequest?.parentMessage.messageId ||
@@ -709,13 +721,14 @@ export default function useChatController({
           temperature: llmManager.temperature || undefined,
           deepResearch,
           enabledToolIds:
-            disabledToolIds && liveAssistant
-              ? liveAssistant.tools
+            disabledToolIds && liveAgent
+              ? liveAgent.tools
                   .filter((tool) => !disabledToolIds?.includes(tool.id))
                   .map((tool) => tool.id)
               : undefined,
           forcedToolId: effectiveForcedToolId,
           origin: messageOrigin,
+          additionalContext,
         });
 
         const delay = (ms: number) => {
@@ -754,8 +767,8 @@ export default function useChatController({
               if (isExtension && posthog) {
                 posthog.capture("extension_chat_query", {
                   extension_context: extensionContext,
-                  assistant_id: liveAssistant?.id,
-                  has_files: currentMessageFiles.length > 0,
+                  assistant_id: liveAgent?.id,
+                  has_files: effectiveFileDescriptors.length > 0,
                   deep_research: deepResearch,
                 });
               }
@@ -764,7 +777,7 @@ export default function useChatController({
             if (
               (packet as MessageResponseIDInfo).reserved_assistant_message_id
             ) {
-              newAssistantMessageId = (packet as MessageResponseIDInfo)
+              newAgentMessageId = (packet as MessageResponseIDInfo)
                 .reserved_assistant_message_id;
             }
 
@@ -835,7 +848,7 @@ export default function useChatController({
                   documents = messageStart.final_documents;
                   updateSelectedNodeForDocDisplay(
                     frozenSessionId,
-                    initialAssistantNode.nodeId
+                    initialAgentNode.nodeId
                   );
                 }
               }
@@ -856,8 +869,8 @@ export default function useChatController({
                   files: files,
                 },
                 {
-                  ...initialAssistantNode,
-                  messageId: newAssistantMessageId ?? undefined,
+                  ...initialAgentNode,
+                  messageId: newAgentMessageId ?? undefined,
                   message: error || answer,
                   type: error ? "error" : "assistant",
                   retrievalType,
@@ -898,19 +911,14 @@ export default function useChatController({
               nodeId: initialUserNode.nodeId,
               message: currMessage,
               type: "user",
-              files: currentMessageFiles.map((file) => ({
-                id: file.file_id,
-                type: file.chat_file_type,
-                name: file.name,
-                user_file_id: file.id,
-              })),
+              files: effectiveFileDescriptors,
               toolCall: null,
               parentNodeId: parentMessage?.nodeId || SYSTEM_NODE_ID,
               packets: [],
               packetCount: 0,
             },
             {
-              nodeId: initialAssistantNode.nodeId,
+              nodeId: initialAgentNode.nodeId,
               message: errorMsg,
               type: "error",
               files: aiMessageImages || [],
@@ -947,21 +955,20 @@ export default function useChatController({
       llmManager.currentLlm,
       llmManager.temperature,
       // Others that affect logic
-      liveAssistant,
-      availableAssistants,
+      liveAgent,
+      availableAgents,
       existingChatSessionId,
       selectedDocuments,
       searchParams,
-      setPopup,
       resetInputBar,
-      setSelectedAssistantFromId,
+      setSelectedAgentFromId,
       updateSelectedNodeForDocDisplay,
       currentMessageTree,
       currentChatState,
       // Ensure latest forced tools are used when submitting
       forcedToolIds,
       // Keep tool preference-derived values fresh
-      assistantPreferences,
+      agentPreferences,
       fetchProjects,
       // For auto-pinning agents
       pinnedAgents,
@@ -973,7 +980,7 @@ export default function useChatController({
     async (acceptedFiles: File[]) => {
       const [_, llmModel] = getFinalLLM(
         llmManager.llmProviders || [],
-        liveAssistant || null,
+        liveAgent || null,
         llmManager.currentLlm
       );
       const llmAcceptsImages = modelSupportsImageInput(
@@ -986,23 +993,20 @@ export default function useChatController({
       );
 
       if (imageFiles.length > 0 && !llmAcceptsImages) {
-        setPopup({
-          type: "error",
-          message:
-            "The current model does not support image input. Please select a model with Vision support.",
-        });
+        toast.error(
+          "The current model does not support image input. Please select a model with Vision support."
+        );
         return;
       }
       updateChatStateAction(getCurrentSessionId(), "uploading");
       const uploadedMessageFiles = await beginUpload(
         Array.from(acceptedFiles),
-        null,
-        setPopup
+        null
       );
       setCurrentMessageFiles((prev) => [...prev, ...uploadedMessageFiles]);
       updateChatStateAction(getCurrentSessionId(), "input");
     },
-    [liveAssistant, llmManager, forcedToolIds]
+    [liveAgent, llmManager, forcedToolIds]
   );
 
   useEffect(() => {
@@ -1021,13 +1025,9 @@ export default function useChatController({
   useEffect(() => {
     if (currentMessageHistory.length === 0 && existingChatSessionId === null) {
       // Select from available assistants so shared assistants appear.
-      setSelectedAssistantFromId(null);
+      setSelectedAgentFromId(null);
     }
-  }, [
-    existingChatSessionId,
-    availableAssistants,
-    currentMessageHistory.length,
-  ]);
+  }, [existingChatSessionId, availableAgents, currentMessageHistory.length]);
 
   useEffect(() => {
     const handleSlackChatRedirect = async () => {
@@ -1060,31 +1060,66 @@ export default function useChatController({
         router.push(data.redirect_url);
       } catch (error) {
         console.error("Error seeding chat from Slack:", error);
-        setPopup({
-          message: "Failed to load chat from Slack",
-          type: "error",
-        });
+        toast.error("Failed to load chat from Slack");
       }
     };
 
     handleSlackChatRedirect();
   }, [searchParams, router]);
 
-  // fetch # of allowed document tokens for the selected Persona
-  useEffect(() => {
-    if (!liveAssistant?.id) return; // avoid calling with undefined persona id
+  // Available context tokens: if a chat session exists, fetch from the session
+  // API (dynamic per session/model). Otherwise derive from the persona's max
+  // document tokens. The backend already accounts for system prompt, tools,
+  // and user-message reservations.
+  const [availableContextTokens, setAvailableContextTokens] = useState<number>(
+    DEFAULT_CONTEXT_TOKENS
+  );
 
-    async function fetchMaxTokens() {
-      const response = await fetch(
-        `/api/chat/max-selected-document-tokens?persona_id=${liveAssistant?.id}`
-      );
-      if (response.ok) {
-        const maxTokens = (await response.json()).max_tokens as number;
-        setMaxTokens(maxTokens);
+  useEffect(() => {
+    if (!llmManager.hasAnyProvider) return;
+
+    let cancelled = false;
+
+    const setIfActive = (tokens: number) => {
+      if (!cancelled) setAvailableContextTokens(tokens);
+    };
+
+    // Prefer the Zustand session ID, but fall back to the URL-derived prop
+    // so we don't incorrectly take the persona path while the store is
+    // still initialising on navigation to an existing chat.
+    const sessionId = currentSessionId || existingChatSessionId;
+
+    (async () => {
+      try {
+        if (sessionId) {
+          const available = await getAvailableContextTokens(sessionId);
+          setIfActive(available ?? DEFAULT_CONTEXT_TOKENS);
+          return;
+        }
+
+        const personaId = liveAgent?.id;
+        if (personaId == null) {
+          setIfActive(DEFAULT_CONTEXT_TOKENS);
+          return;
+        }
+
+        const maxTokens = await getMaxSelectedDocumentTokens(personaId);
+        setIfActive(maxTokens ?? DEFAULT_CONTEXT_TOKENS);
+      } catch (e) {
+        console.error("Failed to fetch available context tokens:", e);
+        setIfActive(DEFAULT_CONTEXT_TOKENS);
       }
-    }
-    fetchMaxTokens();
-  }, [liveAssistant]);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    currentSessionId,
+    existingChatSessionId,
+    liveAgent?.id,
+    llmManager.hasAnyProvider,
+  ]);
 
   // check if there's an image file in the message history so that we know
   // which LLMs are available to use
@@ -1113,5 +1148,7 @@ export default function useChatController({
     onSubmit,
     stopGenerating,
     handleMessageSpecificFileUpload,
+    // data
+    availableContextTokens,
   };
 }

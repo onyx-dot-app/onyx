@@ -20,6 +20,7 @@ import {
   stepSupportsCollapsedStreaming,
   stepHasCollapsedStreamingContent,
 } from "@/app/app/message/messageComponents/timeline/packetHelpers";
+import { useTimelineStepState } from "@/app/app/message/messageComponents/timeline/hooks/useTimelineStepState";
 import { StreamingHeader } from "@/app/app/message/messageComponents/timeline/headers/StreamingHeader";
 import { CompletedHeader } from "@/app/app/message/messageComponents/timeline/headers/CompletedHeader";
 import { StoppedHeader } from "@/app/app/message/messageComponents/timeline/headers/StoppedHeader";
@@ -35,7 +36,7 @@ import { TimelineHeaderRow } from "@/app/app/message/messageComponents/timeline/
 // =============================================================================
 
 interface TimelineContainerProps {
-  agent: FullChatState["assistant"];
+  agent: FullChatState["agent"];
   headerContent?: React.ReactNode;
   children?: React.ReactNode;
 }
@@ -146,6 +147,10 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     lastStepSupportsCollapsedStreaming,
   } = useTimelineMetrics(turnGroups, userStopped);
 
+  // Extract memory text, operation, and whether this is a memory-only timeline
+  const { memoryText, memoryOperation, memoryId, memoryIndex, isMemoryOnly } =
+    useTimelineStepState(turnGroups);
+
   // Check if last step is a search tool for INLINE render type
   const lastStepIsSearchTool = useMemo(
     () => lastStep && isSearchToolPackets(lastStep.packets),
@@ -228,7 +233,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
   });
 
   const headerIsInteractive = useMemo(() => {
-    if (!collapsible) {
+    if (!collapsible || isMemoryOnly) {
       return false;
     }
 
@@ -237,7 +242,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     }
 
     return totalSteps > 0;
-  }, [collapsible, uiState, stoppedStepsCount, totalSteps]);
+  }, [collapsible, isMemoryOnly, uiState, stoppedStepsCount, totalSteps]);
 
   // Determine render type override for collapsed streaming view
   const collapsedRenderTypeOverride = useMemo(() => {
@@ -299,6 +304,11 @@ export const AgentTimeline = React.memo(function AgentTimeline({
               toolProcessingDuration ?? processingDurationSeconds
             }
             generatedImageCount={generatedImageCount}
+            isMemoryOnly={isMemoryOnly}
+            memoryText={memoryText}
+            memoryOperation={memoryOperation}
+            memoryId={memoryId}
+            memoryIndex={memoryIndex}
           />
         );
 
@@ -317,6 +327,11 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     headerText,
     buttonTitle,
     streamingStartTime,
+    isMemoryOnly,
+    memoryText,
+    memoryOperation,
+    memoryId,
+    memoryIndex,
     totalSteps,
     stoppedStepsCount,
     processingDurationSeconds,
@@ -328,7 +343,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
   if (uiState === TimelineUIState.EMPTY) {
     return (
       <TimelineContainer
-        agent={chatState.assistant}
+        agent={chatState.agent}
         headerContent={
           <div className="flex w-full h-full items-center pl-[var(--timeline-header-padding-left)] pr-[var(--timeline-header-padding-right)]">
             <Text
@@ -347,12 +362,12 @@ export const AgentTimeline = React.memo(function AgentTimeline({
 
   // Display content only (no timeline steps) - but show header for image generation
   if (uiState === TimelineUIState.DISPLAY_CONTENT_ONLY) {
-    return <TimelineContainer agent={chatState.assistant} />;
+    return <TimelineContainer agent={chatState.agent} />;
   }
 
   return (
     <TimelineContainer
-      agent={chatState.assistant}
+      agent={chatState.agent}
       headerContent={
         <div
           className={cn(

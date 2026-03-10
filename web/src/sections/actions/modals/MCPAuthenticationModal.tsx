@@ -8,7 +8,8 @@ import { FormField } from "@/refresh-components/form/FormField";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import Text from "@/refresh-components/texts/Text";
 import { Formik, Form } from "formik";
@@ -27,7 +28,7 @@ import Tabs from "@/refresh-components/Tabs";
 import { PerUserAuthConfig } from "@/sections/actions/PerUserAuthConfig";
 import { updateMCPServerStatus, upsertMCPServer } from "@/lib/tools/mcpService";
 import Message from "@/refresh-components/messages/Message";
-import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { SvgArrowExchange } from "@opal/icons";
 import { useAuthType } from "@/lib/hooks";
 import { AuthType } from "@/lib/constants";
@@ -35,7 +36,6 @@ import { AuthType } from "@/lib/constants";
 interface MCPAuthenticationModalProps {
   mcpServer: MCPServer | null;
   skipOverlay?: boolean;
-  setPopup?: (spec: PopupSpec) => void;
   onTriggerFetchTools?: (serverId: number) => Promise<void> | void;
   mutateMcpServers: KeyedMutator<MCPServersResponse>;
 }
@@ -101,7 +101,6 @@ const validationSchema = Yup.object().shape({
 export default function MCPAuthenticationModal({
   mcpServer,
   skipOverlay = false,
-  setPopup,
   onTriggerFetchTools,
   mutateMcpServers,
 }: MCPAuthenticationModalProps) {
@@ -303,13 +302,11 @@ export default function MCPAuthenticationModal({
       console.error("Error saving authentication:", error);
       // Ensure UI reflects latest status after any auth/config failure
       await mutateMcpServers();
-      setPopup?.({
-        message:
-          error instanceof Error
-            ? error.message
-            : "Failed to save authentication configuration",
-        type: "error",
-      });
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to save authentication configuration"
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -531,7 +528,8 @@ export default function MCPAuthenticationModal({
                           <CopyIconButton
                             getCopyText={() => redirectUri}
                             tooltip="Copy redirect URI"
-                            internal
+                            prominence="tertiary"
+                            size="sm"
                           />
                         </div>
                       </div>
@@ -636,22 +634,17 @@ export default function MCPAuthenticationModal({
 
                 <Modal.Footer>
                   <Button
-                    main
-                    tertiary
+                    prominence="tertiary"
                     type="button"
                     onClick={() => toggle(false)}
                   >
                     Cancel
                   </Button>
-                  <Button
-                    main
-                    primary
-                    type="submit"
-                    disabled={!isValid || isSubmitting}
-                    data-testid="mcp-auth-connect-button"
-                  >
-                    {isSubmitting ? "Connecting..." : "Connect"}
-                  </Button>
+                  <Disabled disabled={!isValid || isSubmitting}>
+                    <Button type="submit" data-testid="mcp-auth-connect-button">
+                      {isSubmitting ? "Connecting..." : "Connect"}
+                    </Button>
+                  </Disabled>
                 </Modal.Footer>
               </Form>
             );

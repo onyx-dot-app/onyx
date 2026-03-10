@@ -3,6 +3,7 @@
 from pydantic import BaseModel
 
 from onyx.db.models import Tool
+from onyx.tools.constants import MEMORY_TOOL_ID
 from onyx.tools.constants import OPEN_URL_TOOL_ID
 
 # Tool class name constant for OktaProfileTool (not in main constants.py as it's hidden)
@@ -34,6 +35,12 @@ TOOL_VISIBILITY_CONFIG: dict[str, ToolVisibilitySettings] = {
         agent_creation_selectable=False,
         default_enabled=False,
         expose_to_frontend=False,  # Completely hidden from frontend
+    ),
+    MEMORY_TOOL_ID: ToolVisibilitySettings(
+        chat_selectable=False,
+        agent_creation_selectable=False,
+        default_enabled=False,
+        expose_to_frontend=False,
     ),
     # Future tools can be added here with custom visibility rules
 }

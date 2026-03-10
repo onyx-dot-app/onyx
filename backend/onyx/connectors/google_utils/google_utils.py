@@ -16,6 +16,22 @@ from onyx.utils.retry_wrapper import retry_builder
 
 logger = setup_logger()
 
+_RATE_LIMIT_REASONS = {"userRateLimitExceeded", "rateLimitExceeded"}
+
+
+def _is_rate_limit_error(error: HttpError) -> bool:
+    """Google sometimes returns rate-limit errors as 403 with reason
+    'userRateLimitExceeded' instead of 429. This helper detects both."""
+    if error.resp.status == 429:
+        return True
+    if error.resp.status != 403:
+        return False
+    error_details = getattr(error, "error_details", None) or []
+    for detail in error_details:
+        if isinstance(detail, dict) and detail.get("reason") in _RATE_LIMIT_REASONS:
+            return True
+    return "userRateLimitExceeded" in str(error) or "rateLimitExceeded" in str(error)
+
 
 # Google Drive APIs are quite flakey and may 500 for an
 # extended period of time. This is now addressed by checkpointing.
@@ -57,7 +73,7 @@ def _execute_with_retry(request: Any) -> Any:
         except HttpError as error:
             attempt += 1
 
-            if error.resp.status == 429:
+            if _is_rate_limit_error(error):
                 # Attempt to get 'Retry-After' from headers
                 retry_after = error.resp.get("Retry-After")
                 if retry_after:
@@ -140,16 +156,16 @@ def _execute_single_retrieval(
                 )
             logger.error(f"Error executing request: {e}")
             raise e
+        elif _is_rate_limit_error(e):
+            results = _execute_with_retry(
+                lambda: retrieval_function(**request_kwargs).execute()
+            )
         elif e.resp.status == 404 or e.resp.status == 403:
             if continue_on_404_or_403:
                 logger.debug(f"Error executing request: {e}")
                 results = {}
             else:
                 raise e
-        elif e.resp.status == 429:
-            results = _execute_with_retry(
-                lambda: retrieval_function(**request_kwargs).execute()
-            )
         else:
             logger.exception("Error executing request:")
             raise e

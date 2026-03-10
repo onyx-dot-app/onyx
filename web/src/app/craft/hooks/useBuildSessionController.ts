@@ -7,7 +7,7 @@ import { usePreProvisionPolling } from "@/app/craft/hooks/usePreProvisionPolling
 import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
 import { getBuildUserPersona } from "@/app/craft/onboarding/constants";
-import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
+import { useLLMProviders } from "@/hooks/useLLMProviders";
 import { checkPreProvisionedSession } from "@/app/craft/services/apiServices";
 
 interface UseBuildSessionControllerProps {
@@ -165,9 +165,10 @@ export function useBuildSessionController({
     const currentSessionData = currentState.currentSessionId
       ? currentState.sessions.get(currentState.currentSessionId)
       : null;
-    const isCurrentlyStreaming =
-      currentSessionData?.status === "running" ||
-      currentSessionData?.status === "creating";
+    // Only block loading during active LLM streaming ("running").
+    // "creating" means sandbox restore, which should not prevent
+    // navigating to and loading a different session.
+    const isCurrentlyStreaming = currentSessionData?.status === "running";
 
     if (
       controllerState.loadedSessionId !== existingSessionId &&

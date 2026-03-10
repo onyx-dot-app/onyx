@@ -129,7 +129,7 @@ def get_current_search_settings(db_session: Session) -> SearchSettings:
     latest_settings = result.scalars().first()
 
     if not latest_settings:
-        raise RuntimeError("No search settings specified, DB is not in a valid state")
+        raise RuntimeError("No search settings specified; DB is not in a valid state.")
     return latest_settings
 
 

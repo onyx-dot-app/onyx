@@ -6,7 +6,6 @@ from uuid import uuid4
 import requests
 
 from tests.integration.common_utils.constants import API_SERVER_URL
-from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.constants import MAX_DELAY
 from tests.integration.common_utils.test_models import DATestDocumentSet
 from tests.integration.common_utils.test_models import DATestUser
@@ -15,6 +14,7 @@ from tests.integration.common_utils.test_models import DATestUser
 class DocumentSetManager:
     @staticmethod
     def create(
+        user_performing_action: DATestUser,
         name: str | None = None,
         description: str | None = None,
         cc_pair_ids: list[int] | None = None,
@@ -22,7 +22,6 @@ class DocumentSetManager:
         users: list[str] | None = None,
         groups: list[int] | None = None,
         federated_connectors: list[dict[str, Any]] | None = None,
-        user_performing_action: DATestUser | None = None,
     ) -> DATestDocumentSet:
         if name is None:
             name = f"test_doc_set_{str(uuid4())}"
@@ -40,11 +39,7 @@ class DocumentSetManager:
         response = requests.post(
             f"{API_SERVER_URL}/manage/admin/document-set",
             json=doc_set_creation_request,
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         response.raise_for_status()
 
@@ -63,7 +58,7 @@ class DocumentSetManager:
     @staticmethod
     def edit(
         document_set: DATestDocumentSet,
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> bool:
         doc_set_update_request = {
             "id": document_set.id,
@@ -77,11 +72,7 @@ class DocumentSetManager:
         response = requests.patch(
             f"{API_SERVER_URL}/manage/admin/document-set",
             json=doc_set_update_request,
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         response.raise_for_status()
         return True
@@ -89,30 +80,22 @@ class DocumentSetManager:
     @staticmethod
     def delete(
         document_set: DATestDocumentSet,
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> bool:
         response = requests.delete(
             f"{API_SERVER_URL}/manage/admin/document-set/{document_set.id}",
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         response.raise_for_status()
         return True
 
     @staticmethod
     def get_all(
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> list[DATestDocumentSet]:
         response = requests.get(
             f"{API_SERVER_URL}/manage/document-set",
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         response.raise_for_status()
         return [
@@ -132,8 +115,8 @@ class DocumentSetManager:
 
     @staticmethod
     def wait_for_sync(
+        user_performing_action: DATestUser,
         document_sets_to_check: list[DATestDocumentSet] | None = None,
-        user_performing_action: DATestUser | None = None,
     ) -> None:
         # wait for document sets to be synced
         start = time.time()
@@ -175,8 +158,8 @@ class DocumentSetManager:
     @staticmethod
     def verify(
         document_set: DATestDocumentSet,
+        user_performing_action: DATestUser,
         verify_deleted: bool = False,
-        user_performing_action: DATestUser | None = None,
     ) -> None:
         doc_sets = DocumentSetManager.get_all(user_performing_action)
         for doc_set in doc_sets:

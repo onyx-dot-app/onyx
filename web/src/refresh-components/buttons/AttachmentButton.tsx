@@ -67,6 +67,7 @@ import React from "react";
 import { noProp } from "@/lib/utils";
 import Truncated from "@/refresh-components/texts/Truncated";
 import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import type { IconProps } from "@opal/types";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
@@ -128,6 +129,7 @@ export default function AttachmentButton({
               </Truncated>
             </div>
             {onView && (
+              // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
               <IconButton
                 icon={SvgExternalLink}
                 onClick={noProp(onView)}
@@ -152,7 +154,12 @@ export default function AttachmentButton({
         )}
         {actionIcon && onAction && (
           <div className="attachment-button__action-button">
-            <IconButton icon={actionIcon} onClick={noProp(onAction)} internal />
+            <Button
+              icon={actionIcon}
+              onClick={noProp(onAction)}
+              prominence="tertiary"
+              size="sm"
+            />
           </div>
         )}
       </div>

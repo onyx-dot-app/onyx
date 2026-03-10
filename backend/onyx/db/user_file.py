@@ -3,8 +3,12 @@ from uuid import UUID
 
 from sqlalchemy import func
 from sqlalchemy import select
+from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
+from onyx.db.models import Persona
+from onyx.db.models import Project__UserFile
 from onyx.db.models import UserFile
 
 
@@ -56,10 +60,34 @@ def fetch_user_project_ids_for_user_files(
     db_session: Session,
 ) -> dict[str, list[int]]:
     """Fetch user project ids for specified user files"""
-    stmt = select(UserFile).where(UserFile.id.in_(user_file_ids))
+    user_file_uuid_ids = [UUID(user_file_id) for user_file_id in user_file_ids]
+    stmt = select(Project__UserFile.user_file_id, Project__UserFile.project_id).where(
+        Project__UserFile.user_file_id.in_(user_file_uuid_ids)
+    )
+    rows = db_session.execute(stmt).all()
+
+    user_file_id_to_project_ids: dict[str, list[int]] = {
+        user_file_id: [] for user_file_id in user_file_ids
+    }
+    for user_file_id, project_id in rows:
+        user_file_id_to_project_ids[str(user_file_id)].append(project_id)
+
+    return user_file_id_to_project_ids
+
+
+def fetch_persona_ids_for_user_files(
+    user_file_ids: list[str],
+    db_session: Session,
+) -> dict[str, list[int]]:
+    """Fetch persona (assistant) ids for specified user files."""
+    stmt = (
+        select(UserFile)
+        .where(UserFile.id.in_(user_file_ids))
+        .options(selectinload(UserFile.assistants))
+    )
     results = db_session.execute(stmt).scalars().all()
     return {
-        str(user_file.id): [project.id for project in user_file.projects]
+        str(user_file.id): [persona.id for persona in user_file.assistants]
         for user_file in results
     }
 
@@ -92,3 +120,31 @@ def get_file_ids_by_user_file_ids(
 ) -> list[str]:
     user_files = db_session.query(UserFile).filter(UserFile.id.in_(user_file_ids)).all()
     return [user_file.file_id for user_file in user_files]
+
+
+def fetch_user_files_with_access_relationships(
+    user_file_ids: list[str],
+    db_session: Session,
+    eager_load_groups: bool = False,
+) -> list[UserFile]:
+    """Fetch user files with the owner and assistant relationships
+    eagerly loaded (needed for computing access control).
+
+    When eager_load_groups is True, Persona.groups is also loaded so that
+    callers can extract user-group names without a second DB round-trip."""
+    persona_sub_options = [
+        selectinload(Persona.users),
+        selectinload(Persona.user),
+    ]
+    if eager_load_groups:
+        persona_sub_options.append(selectinload(Persona.groups))
+
+    return (
+        db_session.query(UserFile)
+        .options(
+            joinedload(UserFile.user),
+            selectinload(UserFile.assistants).options(*persona_sub_options),
+        )
+        .filter(UserFile.id.in_(user_file_ids))
+        .all()
+    )

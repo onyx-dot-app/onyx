@@ -60,3 +60,44 @@ def test_me_endpoint_returns_authenticated_user_info(
     assert data.get("is_anonymous_user") is not True
     assert data["email"] == admin_user.email
     assert data["role"] == "admin"
+
+
+def test_anonymous_user_can_access_persona_when_enabled(
+    reset: None,  # noqa: ARG001
+) -> None:
+    """Verify that anonymous users can access limited endpoints when enabled."""
+    admin_user: DATestUser = UserManager.create(name="admin_user")
+
+    SettingsManager.update_settings(
+        DATestSettings(anonymous_user_enabled=True),
+        user_performing_action=admin_user,
+    )
+
+    anon_user = UserManager.get_anonymous_user()
+
+    response = requests.get(
+        f"{API_SERVER_URL}/persona",
+        headers=anon_user.headers,
+    )
+    assert response.status_code == 200
+
+
+def test_anonymous_user_denied_persona_when_disabled(
+    reset: None,  # noqa: ARG001
+) -> None:
+    """Verify that anonymous users cannot access endpoints when disabled."""
+    admin_user: DATestUser = UserManager.create(name="admin_user")
+
+    SettingsManager.update_settings(
+        DATestSettings(anonymous_user_enabled=False),
+        user_performing_action=admin_user,
+    )
+
+    anon_user = UserManager.get_anonymous_user()
+
+    response = requests.get(
+        f"{API_SERVER_URL}/persona",
+        headers=anon_user.headers,
+    )
+    # 403 is returned - BasicAuthenticationError uses HTTP 403 for all auth failures
+    assert response.status_code == 403

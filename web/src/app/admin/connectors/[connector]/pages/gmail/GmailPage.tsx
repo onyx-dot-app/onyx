@@ -3,7 +3,7 @@
 import React from "react";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { LoadingAnimation } from "@/components/Loading";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { CCPairBasicInfo, ValidSources } from "@/lib/types";
 import {
   Credential,
@@ -41,7 +41,6 @@ export const GmailMain = ({
   onCredentialCreated,
 }: GmailMainProps) => {
   const { isAdmin, user } = useUser();
-  const { popup, setPopup } = usePopup();
 
   const {
     data: appCredentialData,
@@ -176,12 +175,10 @@ export const GmailMain = ({
 
   return (
     <>
-      {popup}
       <Title className="mb-2 mt-6 ml-auto mr-auto">
         Step 1: Provide your Credentials
       </Title>
       <GmailJsonUploadSection
-        setPopup={setPopup}
         appCredentialData={appCredentialData}
         serviceAccountCredentialData={serviceAccountKeyData}
         isAdmin={isAdmin}
@@ -197,7 +194,6 @@ export const GmailMain = ({
             Step 2: Authenticate with Onyx
           </Title>
           <GmailAuthSection
-            setPopup={setPopup}
             refreshCredentials={handleRefresh}
             gmailPublicCredential={gmailPublicUploadedCredential}
             gmailServiceAccountCredential={gmailServiceAccountCredential}

@@ -5,8 +5,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import Session
 
-from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
-from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.constants import DEFAULT_PERSONA_SLACK_CHANNEL_NAME
 from onyx.db.constants import SLACK_BOT_PERSONA_PREFIX
 from onyx.db.models import ChannelConfig
@@ -45,8 +43,6 @@ def create_slack_channel_persona(
     channel_name: str | None,
     document_set_ids: list[int],
     existing_persona_id: int | None = None,
-    num_chunks: float = MAX_CHUNKS_FED_TO_CHAT,
-    enable_auto_filters: bool = False,
 ) -> Persona:
     """NOTE: does not commit changes"""
 
@@ -73,17 +69,13 @@ def create_slack_channel_persona(
         system_prompt="",
         task_prompt="",
         datetime_aware=True,
-        num_chunks=num_chunks,
-        llm_relevance_filter=True,
-        llm_filter_extraction=enable_auto_filters,
-        recency_bias=RecencyBiasSetting.AUTO,
         tool_ids=[search_tool.id],
         document_set_ids=document_set_ids,
         llm_model_provider_override=None,
         llm_model_version_override=None,
         starter_messages=None,
         is_public=True,
-        is_default_persona=False,
+        featured=False,
         db_session=db_session,
         commit=False,
     )

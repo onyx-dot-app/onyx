@@ -9,8 +9,7 @@ import React, {
 } from "react";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
-import Button from "@/refresh-components/buttons/Button";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
 import Separator from "@/refresh-components/Separator";
@@ -45,7 +44,7 @@ import {
   fetchHierarchyNodes,
   fetchHierarchyNodeDocuments,
 } from "@/lib/hierarchy/svc";
-import { AttachedDocumentSnapshot } from "@/app/admin/assistants/interfaces";
+import { AttachedDocumentSnapshot } from "@/app/admin/agents/interfaces";
 import { timeAgo } from "@/lib/time";
 import Spacer from "@/refresh-components/Spacer";
 
@@ -81,7 +80,7 @@ function HierarchyBreadcrumb({
     >
       {/* Root source link */}
       {path.length > 0 ? (
-        <Button tertiary onClick={onNavigateToRoot}>
+        <Button prominence="tertiary" onClick={onNavigateToRoot}>
           {sourceMetadata.displayName}
         </Button>
       ) : (
@@ -112,7 +111,7 @@ function HierarchyBreadcrumb({
               <Text text03>{node.title}</Text>
             ) : (
               <Button
-                tertiary
+                prominence="tertiary"
                 onClick={() => onNavigateToNode(node, actualIndex)}
               >
                 {node.title}
@@ -698,7 +697,11 @@ export default function SourceHierarchyBrowser({
       {viewSelectedOnly ? (
         <>
           <Spacer rem={0.5} />
-          <Button action tertiary onClick={handleToggleViewSelected}>
+          <Button
+            variant="action"
+            prominence="tertiary"
+            onClick={handleToggleViewSelected}
+          >
             Selected items
           </Button>
         </>
@@ -868,9 +871,10 @@ export default function SourceHierarchyBrowser({
                     >
                       <Truncated>{item.data.title}</Truncated>
                       {isFolder && (
-                        <IconButton
+                        <Button
                           icon={SvgChevronRight}
-                          internal
+                          prominence="tertiary"
+                          size="sm"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleClickIntoFolder(
@@ -921,16 +925,17 @@ export default function SourceHierarchyBrowser({
               {currentSourceSelectedCount}{" "}
               {currentSourceSelectedCount === 1 ? "item" : "items"} selected
             </Text>
-            <IconButton
+            <Button
               icon={SvgEye}
-              internal={!viewSelectedOnly}
-              action={viewSelectedOnly}
-              tertiary={viewSelectedOnly}
+              variant={viewSelectedOnly ? "action" : undefined}
+              prominence="tertiary"
+              size={viewSelectedOnly ? undefined : "sm"}
               onClick={handleToggleViewSelected}
             />
-            <IconButton
+            <Button
               icon={SvgXCircle}
-              internal
+              prominence="tertiary"
+              size="sm"
               onClick={handleDeselectAll}
             />
           </GeneralLayouts.Section>

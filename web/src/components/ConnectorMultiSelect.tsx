@@ -7,8 +7,8 @@ import Label from "@/refresh-components/form/Label";
 import { ErrorMessage } from "formik";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgX } from "@opal/icons";
+import { Button } from "@opal/components";
 
 interface ConnectorMultiSelectProps {
   name: string;
@@ -206,8 +206,9 @@ export const ConnectorMultiSelect = ({
                     />
                   </div>
                 </div>
-                <IconButton
-                  internal
+                <Button
+                  prominence="tertiary"
+                  size="sm"
                   type="button"
                   aria-label="Remove connector"
                   tooltip="Remove connector"

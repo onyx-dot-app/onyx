@@ -3,16 +3,18 @@ IMPORTANT: familiarize yourself with the design concepts prior to contributing t
 An overview can be found in the README.md file in this directory.
 """
 
+import io
 import re
-import time
 import traceback
 from collections.abc import Callable
 from contextvars import Token
 from uuid import UUID
 
-from redis.client import Redis
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from onyx.cache.factory import get_cache_backend
+from onyx.cache.interface import CacheBackend
 from onyx.chat.chat_processing_checker import set_processing_status
 from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.chat_state import run_chat_loop_with_state_containers
@@ -33,17 +35,18 @@ from onyx.chat.models import ChatBasicResponse
 from onyx.chat.models import ChatFullResponse
 from onyx.chat.models import ChatLoadedFile
 from onyx.chat.models import ChatMessageSimple
+from onyx.chat.models import ContextFileMetadata
 from onyx.chat.models import CreateChatSessionID
-from onyx.chat.models import ExtractedProjectFiles
-from onyx.chat.models import MessageResponseIDInfo
-from onyx.chat.models import ProjectFileMetadata
-from onyx.chat.models import ProjectSearchConfig
+from onyx.chat.models import ExtractedContextFiles
+from onyx.chat.models import FileToolMetadata
+from onyx.chat.models import SearchParams
 from onyx.chat.models import StreamingError
 from onyx.chat.models import ToolCallResponse
 from onyx.chat.prompt_utils import calculate_reserved_tokens
 from onyx.chat.save_chat import save_chat_turn
 from onyx.chat.stop_signal_checker import is_connected as check_stop_signal
 from onyx.chat.stop_signal_checker import reset_cancel_status
+from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.constants import DocumentSource
@@ -60,11 +63,13 @@ from onyx.db.models import ChatMessage
 from onyx.db.models import ChatSession
 from onyx.db.models import Persona
 from onyx.db.models import User
-from onyx.db.projects import get_project_token_count
+from onyx.db.models import UserFile
 from onyx.db.projects import get_user_files_from_project
 from onyx.db.tools import get_tools
 from onyx.deep_research.dr_loop import run_deep_research_llm_loop
+from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_store.models import ChatFileType
+from onyx.file_store.models import InMemoryChatFile
 from onyx.file_store.utils import load_in_memory_chat_files
 from onyx.file_store.utils import verify_user_files
 from onyx.llm.factory import get_llm_for_persona
@@ -75,10 +80,8 @@ from onyx.llm.request_context import reset_llm_mock_response
 from onyx.llm.request_context import set_llm_mock_response
 from onyx.llm.utils import litellm_exception_to_error_msg
 from onyx.onyxbot.slack.models import SlackContext
-from onyx.redis.redis_pool import get_redis_client
 from onyx.server.query_and_chat.models import AUTO_PLACE_AFTER_LATEST_MESSAGE
-from onyx.server.query_and_chat.models import CreateChatMessageRequest
-from onyx.server.query_and_chat.models import OptionalSearchSetting
+from onyx.server.query_and_chat.models import MessageResponseIDInfo
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
@@ -87,10 +90,15 @@ from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.tools.constants import SEARCH_TOOL_ID
 from onyx.tools.interface import Tool
+from onyx.tools.models import ChatFile
 from onyx.tools.models import SearchToolUsage
 from onyx.tools.tool_constructor import construct_tools
 from onyx.tools.tool_constructor import CustomToolConfig
+from onyx.tools.tool_constructor import FileReaderToolConfig
 from onyx.tools.tool_constructor import SearchToolConfig
+from onyx.tools.tool_implementations.file_reader.file_reader_tool import (
+    FileReaderTool,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.timing import log_function_time
@@ -98,6 +106,53 @@ from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 ERROR_TYPE_CANCELLED = "cancelled"
+
+
+class _AvailableFiles(BaseModel):
+    """Separated file IDs for the FileReaderTool so it knows which loader to use."""
+
+    # IDs from the ``user_file`` table (project / persona-attached files).
+    user_file_ids: list[UUID] = []
+    # IDs from the ``file_record`` table (chat-attached files).
+    chat_file_ids: list[UUID] = []
+
+
+def _collect_available_file_ids(
+    chat_history: list[ChatMessage],
+    project_id: int | None,
+    user_id: UUID | None,
+    db_session: Session,
+) -> _AvailableFiles:
+    """Collect all file IDs the FileReaderTool should be allowed to access.
+
+    Returns *separate* lists for chat-attached files (``file_record`` IDs) and
+    project/user files (``user_file`` IDs) so the tool can pick the right
+    loader without a try/except fallback."""
+    chat_file_ids: set[UUID] = set()
+    user_file_ids: set[UUID] = set()
+
+    for msg in chat_history:
+        if not msg.files:
+            continue
+        for fd in msg.files:
+            try:
+                chat_file_ids.add(UUID(fd["id"]))
+            except (ValueError, KeyError):
+                pass
+
+    if project_id:
+        user_files = get_user_files_from_project(
+            project_id=project_id,
+            user_id=user_id,
+            db_session=db_session,
+        )
+        for uf in user_files:
+            user_file_ids.add(uf.id)
+
+    return _AvailableFiles(
+        user_file_ids=list(user_file_ids),
+        chat_file_ids=list(chat_file_ids),
+    )
 
 
 def _should_enable_slack_search(
@@ -116,9 +171,90 @@ def _should_enable_slack_search(
     )
 
 
-def _extract_project_file_texts_and_images(
+def _convert_loaded_files_to_chat_files(
+    loaded_files: list[ChatLoadedFile],
+) -> list[ChatFile]:
+    """Convert ChatLoadedFile objects to ChatFile for tool usage (e.g., PythonTool).
+
+    Args:
+        loaded_files: List of ChatLoadedFile objects from the chat history
+
+    Returns:
+        List of ChatFile objects that can be passed to tools
+    """
+    chat_files = []
+    for loaded_file in loaded_files:
+        if len(loaded_file.content) > 0:
+            chat_files.append(
+                ChatFile(
+                    filename=loaded_file.filename or f"file_{loaded_file.file_id}",
+                    content=loaded_file.content,
+                )
+            )
+    return chat_files
+
+
+def resolve_context_user_files(
+    persona: Persona,
     project_id: int | None,
     user_id: UUID | None,
+    db_session: Session,
+) -> list[UserFile]:
+    """Apply the precedence rule to decide which user files to load.
+
+    A custom persona fully supersedes the project.  When a chat uses a
+    custom persona, the project is purely organisational — its files are
+    never loaded and never made searchable.
+
+    Custom persona → persona's own user_files (may be empty).
+    Default persona inside a project → project files.
+    Otherwise → empty list.
+    """
+    if persona.id != DEFAULT_PERSONA_ID:
+        return list(persona.user_files) if persona.user_files else []
+    if project_id:
+        return get_user_files_from_project(
+            project_id=project_id,
+            user_id=user_id,
+            db_session=db_session,
+        )
+    return []
+
+
+def _empty_extracted_context_files() -> ExtractedContextFiles:
+    return ExtractedContextFiles(
+        file_texts=[],
+        image_files=[],
+        use_as_search_filter=False,
+        total_token_count=0,
+        file_metadata=[],
+        uncapped_token_count=None,
+    )
+
+
+def _extract_text_from_in_memory_file(f: InMemoryChatFile) -> str | None:
+    """Extract text content from an InMemoryChatFile.
+
+    PLAIN_TEXT: the content is pre-extracted UTF-8 plaintext stored during
+    ingestion — decode directly.
+    DOC / CSV / other text types: the content is the original file bytes —
+    use extract_file_text which handles encoding detection and format parsing.
+    """
+    try:
+        if f.file_type == ChatFileType.PLAIN_TEXT:
+            return f.content.decode("utf-8", errors="ignore").replace("\x00", "")
+        return extract_file_text(
+            file=io.BytesIO(f.content),
+            file_name=f.filename or "",
+            break_on_unprocessable=False,
+        )
+    except Exception:
+        logger.warning(f"Failed to extract text from file {f.file_id}", exc_info=True)
+        return None
+
+
+def extract_context_files(
+    user_files: list[UserFile],
     llm_max_context_window: int,
     reserved_token_count: int,
     db_session: Session,
@@ -127,8 +263,12 @@ def _extract_project_file_texts_and_images(
     # 60% of the LLM's max context window. The other benefit is that for projects with
     # more files, this makes it so that we don't throw away the history too quickly every time.
     max_llm_context_percentage: float = 0.6,
-) -> ExtractedProjectFiles:
-    """Extract text content from project files if they fit within the context window.
+) -> ExtractedContextFiles:
+    """Load user files into context if they fit; otherwise flag for search.
+
+    The caller is responsible for deciding *which* user files to pass in
+    (project files, persona files, etc.).  This function only cares about
+    the all-or-nothing fit check and the actual content loading.
 
     Args:
         project_id: The project ID to load files from
@@ -137,162 +277,149 @@ def _extract_project_file_texts_and_images(
         reserved_token_count: Number of tokens to reserve for other content
         db_session: Database session
         max_llm_context_percentage: Maximum percentage of the LLM context window to use.
-
     Returns:
-        ExtractedProjectFiles containing:
-        - List of text content strings from project files (text files only)
-        - List of image files from project (ChatLoadedFile objects)
-        - Project id if the the project should be provided as a filter in search or None if not.
+        ExtractedContextFiles containing:
+        - List of text content strings from context files (text files only)
+        - List of image files from context (ChatLoadedFile objects)
         - Total token count of all extracted files
+        - File metadata for context files
+        - Uncapped token count of all extracted files
+        - File metadata for files that don't fit in context and vector DB is disabled
     """
-    # TODO I believe this is not handling all file types correctly.
-    project_as_filter = False
-    if not project_id:
-        return ExtractedProjectFiles(
-            project_file_texts=[],
-            project_image_files=[],
-            project_as_filter=False,
-            total_token_count=0,
-            project_file_metadata=[],
-            project_uncapped_token_count=None,
-        )
+    # TODO(yuhong): I believe this is not handling all file types correctly.
 
+    if not user_files:
+        return _empty_extracted_context_files()
+
+    aggregate_tokens = sum(uf.token_count or 0 for uf in user_files)
     max_actual_tokens = (
         llm_max_context_window - reserved_token_count
     ) * max_llm_context_percentage
 
-    # Calculate total token count for all user files in the project
-    project_tokens = get_project_token_count(
-        project_id=project_id,
-        user_id=user_id,
+    if aggregate_tokens >= max_actual_tokens:
+        tool_metadata = []
+        use_as_search_filter = not DISABLE_VECTOR_DB
+        if DISABLE_VECTOR_DB:
+            tool_metadata = _build_file_tool_metadata_for_user_files(user_files)
+        return ExtractedContextFiles(
+            file_texts=[],
+            image_files=[],
+            use_as_search_filter=use_as_search_filter,
+            total_token_count=0,
+            file_metadata=[],
+            uncapped_token_count=aggregate_tokens,
+            file_metadata_for_tool=tool_metadata,
+        )
+
+    # Files fit — load them into context
+    user_file_map = {str(uf.id): uf for uf in user_files}
+    in_memory_files = load_in_memory_chat_files(
+        user_file_ids=[uf.id for uf in user_files],
         db_session=db_session,
     )
 
-    project_file_texts: list[str] = []
-    project_image_files: list[ChatLoadedFile] = []
-    project_file_metadata: list[ProjectFileMetadata] = []
+    file_texts: list[str] = []
+    image_files: list[ChatLoadedFile] = []
+    file_metadata: list[ContextFileMetadata] = []
     total_token_count = 0
-    if project_tokens < max_actual_tokens:
-        # Load project files into memory using cached plaintext when available
-        project_user_files = get_user_files_from_project(
-            project_id=project_id,
-            user_id=user_id,
-            db_session=db_session,
-        )
-        if project_user_files:
-            # Create a mapping from file_id to UserFile for token count lookup
-            user_file_map = {str(file.id): file for file in project_user_files}
 
-            project_file_ids = [file.id for file in project_user_files]
-            in_memory_project_files = load_in_memory_chat_files(
-                user_file_ids=project_file_ids,
-                db_session=db_session,
+    for f in in_memory_files:
+        uf = user_file_map.get(str(f.file_id))
+        if f.file_type.is_text_file():
+            text_content = _extract_text_from_in_memory_file(f)
+            if not text_content:
+                continue
+            file_texts.append(text_content)
+            file_metadata.append(
+                ContextFileMetadata(
+                    file_id=str(f.file_id),
+                    filename=f.filename or f"file_{f.file_id}",
+                    file_content=text_content,
+                )
+            )
+            if uf and uf.token_count:
+                total_token_count += uf.token_count
+        elif f.file_type == ChatFileType.IMAGE:
+            token_count = uf.token_count if uf and uf.token_count else 0
+            total_token_count += token_count
+            image_files.append(
+                ChatLoadedFile(
+                    file_id=f.file_id,
+                    content=f.content,
+                    file_type=f.file_type,
+                    filename=f.filename,
+                    content_text=None,
+                    token_count=token_count,
+                )
             )
 
-            # Extract text content from loaded files
-            for file in in_memory_project_files:
-                if file.file_type.is_text_file():
-                    try:
-                        text_content = file.content.decode("utf-8", errors="ignore")
-                        # Strip null bytes
-                        text_content = text_content.replace("\x00", "")
-                        if text_content:
-                            project_file_texts.append(text_content)
-                            # Add metadata for citation support
-                            project_file_metadata.append(
-                                ProjectFileMetadata(
-                                    file_id=str(file.file_id),
-                                    filename=file.filename or f"file_{file.file_id}",
-                                    file_content=text_content,
-                                )
-                            )
-                            # Add token count for text file
-                            user_file = user_file_map.get(str(file.file_id))
-                            if user_file and user_file.token_count:
-                                total_token_count += user_file.token_count
-                    except Exception:
-                        # Skip files that can't be decoded
-                        pass
-                elif file.file_type == ChatFileType.IMAGE:
-                    # Convert InMemoryChatFile to ChatLoadedFile
-                    user_file = user_file_map.get(str(file.file_id))
-                    token_count = (
-                        user_file.token_count
-                        if user_file and user_file.token_count
-                        else 0
-                    )
-                    total_token_count += token_count
-                    chat_loaded_file = ChatLoadedFile(
-                        file_id=file.file_id,
-                        content=file.content,
-                        file_type=file.file_type,
-                        filename=file.filename,
-                        content_text=None,  # Images don't have text content
-                        token_count=token_count,
-                    )
-                    project_image_files.append(chat_loaded_file)
-    else:
-        project_as_filter = True
-
-    return ExtractedProjectFiles(
-        project_file_texts=project_file_texts,
-        project_image_files=project_image_files,
-        project_as_filter=project_as_filter,
+    return ExtractedContextFiles(
+        file_texts=file_texts,
+        image_files=image_files,
+        use_as_search_filter=False,
         total_token_count=total_token_count,
-        project_file_metadata=project_file_metadata,
-        project_uncapped_token_count=project_tokens,
+        file_metadata=file_metadata,
+        uncapped_token_count=aggregate_tokens,
     )
 
 
-def _get_project_search_availability(
+APPROX_CHARS_PER_TOKEN = 4
+
+
+def _build_file_tool_metadata_for_user_files(
+    user_files: list[UserFile],
+) -> list[FileToolMetadata]:
+    """Build lightweight FileToolMetadata from a list of UserFile records."""
+    return [
+        FileToolMetadata(
+            file_id=str(uf.id),
+            filename=uf.name,
+            approx_char_count=(uf.token_count or 0) * APPROX_CHARS_PER_TOKEN,
+        )
+        for uf in user_files
+    ]
+
+
+def determine_search_params(
+    persona_id: int,
     project_id: int | None,
-    persona_id: int | None,
-    loaded_project_files: bool,
-    project_has_files: bool,
-    forced_tool_id: int | None,
-    search_tool_id: int | None,
-) -> ProjectSearchConfig:
-    """Determine search tool availability based on project context.
+    extracted_context_files: ExtractedContextFiles,
+) -> SearchParams:
+    """Decide which search filter IDs and search-tool usage apply for a chat turn.
 
-    Search is disabled when ALL of the following are true:
-    - User is in a project
-    - Using the default persona (not a custom agent)
-    - Project files are already loaded in context
+    A custom persona fully supersedes the project — project files are never
+    searchable and the search tool config is entirely controlled by the
+    persona.  The project_id filter is only set for the default persona.
 
-    When search is disabled and the user tried to force the search tool,
-    that forcing is also disabled.
-
-    Returns AUTO (follow persona config) in all other cases.
+    For the default persona inside a project:
+      - Files overflow  → ENABLED  (vector DB scopes to these files)
+      - Files fit       → DISABLED (content already in prompt)
+      - No files at all → DISABLED (nothing to search)
     """
-    # Not in a project, this should have no impact on search tool availability
-    if not project_id:
-        return ProjectSearchConfig(
-            search_usage=SearchToolUsage.AUTO, disable_forced_tool=False
-        )
+    is_custom_persona = persona_id != DEFAULT_PERSONA_ID
 
-    # Custom persona in project - let persona config decide
-    # Even if there are no files in the project, it's still guided by the persona config.
-    if persona_id != DEFAULT_PERSONA_ID:
-        return ProjectSearchConfig(
-            search_usage=SearchToolUsage.AUTO, disable_forced_tool=False
-        )
+    search_project_id: int | None = None
+    search_persona_id: int | None = None
+    if extracted_context_files.use_as_search_filter:
+        if is_custom_persona:
+            search_persona_id = persona_id
+        else:
+            search_project_id = project_id
 
-    # If in a project with the default persona and the files have been already loaded into the context or
-    # there are no files in the project, disable search as there is nothing to search for.
-    if loaded_project_files or not project_has_files:
-        user_forced_search = (
-            forced_tool_id is not None
-            and search_tool_id is not None
-            and forced_tool_id == search_tool_id
-        )
-        return ProjectSearchConfig(
-            search_usage=SearchToolUsage.DISABLED,
-            disable_forced_tool=user_forced_search,
-        )
+    search_usage = SearchToolUsage.AUTO
+    if not is_custom_persona and project_id:
+        has_context_files = bool(extracted_context_files.uncapped_token_count)
+        files_loaded_in_context = bool(extracted_context_files.file_texts)
 
-    # Default persona in a project with files, but also the files have not been loaded into the context already.
-    return ProjectSearchConfig(
-        search_usage=SearchToolUsage.ENABLED, disable_forced_tool=False
+        if extracted_context_files.use_as_search_filter:
+            search_usage = SearchToolUsage.ENABLED
+        elif files_loaded_in_context or not has_context_files:
+            search_usage = SearchToolUsage.DISABLED
+
+    return SearchParams(
+        search_project_id=search_project_id,
+        search_persona_id=search_persona_id,
+        search_usage=search_usage,
     )
 
 
@@ -317,12 +444,11 @@ def handle_stream_message_objects(
     external_state_container: ChatStateContainer | None = None,
 ) -> AnswerStream:
     tenant_id = get_current_tenant_id()
-    processing_start_time = time.monotonic()
     mock_response_token: Token[str | None] | None = None
 
     llm: LLM | None = None
     chat_session: ChatSession | None = None
-    redis_client: Redis | None = None
+    cache: CacheBackend | None = None
 
     user_id = user.id
     if user.is_anonymous:
@@ -461,36 +587,101 @@ def handle_stream_message_objects(
 
             chat_history.append(user_message)
 
+        # Collect file IDs for the file reader tool *before* summary
+        # truncation so that files attached to older (summarized-away)
+        # messages are still accessible via the FileReaderTool.
+        available_files = _collect_available_file_ids(
+            chat_history=chat_history,
+            project_id=chat_session.project_id,
+            user_id=user_id,
+            db_session=db_session,
+        )
+
         # Find applicable summary for the current branch
         # Summary applies if its parent_message_id is in current chat_history
         summary_message = find_summary_for_branch(db_session, chat_history)
+        # Collect file metadata from messages that will be dropped by
+        # summary truncation.  These become "pre-summarized" file metadata
+        # so the forgotten-file mechanism can still tell the LLM about them.
+        summarized_file_metadata: dict[str, FileToolMetadata] = {}
         if summary_message and summary_message.last_summarized_message_id:
             cutoff_id = summary_message.last_summarized_message_id
+            for msg in chat_history:
+                if msg.id > cutoff_id or not msg.files:
+                    continue
+                for fd in msg.files:
+                    file_id = fd.get("id")
+                    if not file_id:
+                        continue
+                    summarized_file_metadata[file_id] = FileToolMetadata(
+                        file_id=file_id,
+                        filename=fd.get("name") or "unknown",
+                        # We don't know the exact size without loading the
+                        # file, but 0 signals "unknown" to the LLM.
+                        approx_char_count=0,
+                    )
             # Filter chat_history to only messages after the cutoff
             chat_history = [m for m in chat_history if m.id > cutoff_id]
 
         user_memory_context = get_memories(user, db_session)
 
+        # This is the custom prompt which may come from the Agent or Project. We fetch it earlier because the inner loop
+        # (run_llm_loop and run_deep_research_llm_loop) should not need to be aware of the Chat History in the DB form processed
+        # here, however we need this early for token reservation.
         custom_agent_prompt = get_custom_agent_prompt(persona, chat_session)
+
+        # When use_memories is disabled, strip memories from the prompt context
+        # but keep user info/preferences. The full context is still passed
+        # to the LLM loop for memory tool persistence.
+        prompt_memory_context = (
+            user_memory_context
+            if user.use_memories
+            else user_memory_context.without_memories()
+        )
+
+        max_reserved_system_prompt_tokens_str = (persona.system_prompt or "") + (
+            custom_agent_prompt or ""
+        )
 
         reserved_token_count = calculate_reserved_tokens(
             db_session=db_session,
-            persona_system_prompt=custom_agent_prompt or "",
+            persona_system_prompt=max_reserved_system_prompt_tokens_str,
             token_counter=token_counter,
             files=new_msg_req.file_descriptors,
-            user_memory_context=user_memory_context,
+            user_memory_context=prompt_memory_context,
         )
 
-        # Process projects, if all of the files fit in the context, it doesn't need to use RAG
-        extracted_project_files = _extract_project_file_texts_and_images(
+        # Determine which user files to use.  A custom persona fully
+        # supersedes the project — project files are never loaded or
+        # searchable when a custom persona is in play.  Only the default
+        # persona inside a project uses the project's files.
+        context_user_files = resolve_context_user_files(
+            persona=persona,
             project_id=chat_session.project_id,
             user_id=user_id,
+            db_session=db_session,
+        )
+
+        extracted_context_files = extract_context_files(
+            user_files=context_user_files,
             llm_max_context_window=llm.config.max_input_tokens,
             reserved_token_count=reserved_token_count,
             db_session=db_session,
         )
 
-        # Build a mapping of tool_id to tool_name for history reconstruction
+        search_params = determine_search_params(
+            persona_id=persona.id,
+            project_id=chat_session.project_id,
+            extracted_context_files=extracted_context_files,
+        )
+
+        # Also grant access to persona-attached user files for FileReaderTool
+        if persona.user_files:
+            existing = set(available_files.user_file_ids)
+            for uf in persona.user_files:
+                if uf.id not in existing:
+                    available_files.user_file_ids.append(uf.id)
+
         all_tools = get_tools(db_session)
         tool_id_to_name_map = {tool.id: tool.name for tool in all_tools}
 
@@ -499,19 +690,13 @@ def handle_stream_message_objects(
             None,
         )
 
-        # Determine if search should be disabled for this project context
         forced_tool_id = new_msg_req.forced_tool_id
-        project_search_config = _get_project_search_availability(
-            project_id=chat_session.project_id,
-            persona_id=persona.id,
-            loaded_project_files=bool(extracted_project_files.project_file_texts),
-            project_has_files=bool(
-                extracted_project_files.project_uncapped_token_count
-            ),
-            forced_tool_id=new_msg_req.forced_tool_id,
-            search_tool_id=search_tool_id,
-        )
-        if project_search_config.disable_forced_tool:
+        if (
+            search_params.search_usage == SearchToolUsage.DISABLED
+            and forced_tool_id is not None
+            and search_tool_id is not None
+            and forced_tool_id == search_tool_id
+        ):
             forced_tool_id = None
 
         emitter = get_default_emitter()
@@ -525,11 +710,8 @@ def handle_stream_message_objects(
             llm=llm,
             search_tool_config=SearchToolConfig(
                 user_selected_filters=new_msg_req.internal_search_filters,
-                project_id=(
-                    chat_session.project_id
-                    if extracted_project_files.project_as_filter
-                    else None
-                ),
+                project_id=search_params.search_project_id,
+                persona_id=search_params.search_persona_id,
                 bypass_acl=bypass_acl,
                 slack_context=slack_context,
                 enable_slack_search=_should_enable_slack_search(
@@ -542,8 +724,12 @@ def handle_stream_message_objects(
                 additional_headers=custom_tool_additional_headers,
                 mcp_headers=mcp_headers,
             ),
+            file_reader_tool_config=FileReaderToolConfig(
+                user_file_ids=available_files.user_file_ids,
+                chat_file_ids=available_files.chat_file_ids,
+            ),
             allowed_tool_ids=new_msg_req.allowed_tool_ids,
-            search_usage_forcing_setting=project_search_config.search_usage,
+            search_usage_forcing_setting=search_params.search_usage,
         )
         tools: list[Tool] = []
         for tool_list in tool_dict.values():
@@ -555,6 +741,9 @@ def handle_stream_message_objects(
         # TODO Once summarization is done, we don't need to load all the files from the beginning anymore.
         # load all files needed for this chat chain in memory
         files = load_all_chat_files(chat_history, db_session)
+
+        # Convert loaded files to ChatFile format for tools like PythonTool
+        chat_files_for_tools = _convert_loaded_files_to_chat_files(files)
 
         # TODO Need to think of some way to support selected docs from the sidebar
 
@@ -571,16 +760,45 @@ def handle_stream_message_objects(
             reserved_assistant_message_id=assistant_response.id,
         )
 
+        # Check whether the FileReaderTool is among the constructed tools.
+        has_file_reader_tool = any(isinstance(t, FileReaderTool) for t in tools)
+
         # Convert the chat history into a simple format that is free of any DB objects
         # and is easy to parse for the agent loop
-        simple_chat_history = convert_chat_history(
+        chat_history_result = convert_chat_history(
             chat_history=chat_history,
             files=files,
-            project_image_files=extracted_project_files.project_image_files,
+            context_image_files=extracted_context_files.image_files,
             additional_context=additional_context,
             token_counter=token_counter,
             tool_id_to_name_map=tool_id_to_name_map,
         )
+        simple_chat_history = chat_history_result.simple_messages
+
+        # Metadata for every text file injected into the history.  After
+        # context-window truncation drops older messages, the LLM loop
+        # compares surviving file_id tags against this map to discover
+        # "forgotten" files and provide their metadata to FileReaderTool.
+        all_injected_file_metadata: dict[str, FileToolMetadata] = (
+            chat_history_result.all_injected_file_metadata
+            if has_file_reader_tool
+            else {}
+        )
+
+        # Merge in file metadata from messages dropped by summary
+        # truncation.  These files are no longer in simple_chat_history
+        # so they would otherwise be invisible to the forgotten-file
+        # mechanism.  They will always appear as "forgotten" since no
+        # surviving message carries their file_id tag.
+        if summarized_file_metadata:
+            for fid, meta in summarized_file_metadata.items():
+                all_injected_file_metadata.setdefault(fid, meta)
+
+        if all_injected_file_metadata:
+            logger.debug(
+                "FileReader: file metadata for LLM: "
+                f"{[(fid, m.filename) for fid, m in all_injected_file_metadata.items()]}"
+            )
 
         # Prepend summary message if compression exists
         if summary_message is not None:
@@ -591,19 +809,19 @@ def handle_stream_message_objects(
             )
             simple_chat_history.insert(0, summary_simple)
 
-        redis_client = get_redis_client()
+        cache = get_cache_backend()
 
         reset_cancel_status(
             chat_session.id,
-            redis_client,
+            cache,
         )
 
         def check_is_connected() -> bool:
-            return check_stop_signal(chat_session.id, redis_client)
+            return check_stop_signal(chat_session.id, cache)
 
         set_processing_status(
             chat_session_id=chat_session.id,
-            redis_client=redis_client,
+            cache=cache,
             value=True,
         )
 
@@ -621,8 +839,12 @@ def handle_stream_message_objects(
                 assistant_message=assistant_response,
                 llm=llm,
                 reserved_tokens=reserved_token_count,
-                processing_start_time=processing_start_time,
             )
+
+        # Release any read transaction before entering the long-running LLM stream.
+        # Without this, the request-scoped session can keep a connection checked out
+        # for the full stream duration.
+        db_session.commit()
 
         # The stream generator can resume on a different worker thread after early yields.
         # Set this right before launching the LLM loop so run_in_background copies the right context.
@@ -642,42 +864,54 @@ def handle_stream_message_objects(
             # (user has already responded to a clarification question)
             skip_clarification = is_last_assistant_message_clarification(chat_history)
 
+            # NOTE: we _could_ pass in a zero argument function since emitter and state_container
+            # are just passed in immediately anyways, but the abstraction is cleaner this way.
             yield from run_chat_loop_with_state_containers(
-                run_deep_research_llm_loop,
+                lambda emitter, state_container: run_deep_research_llm_loop(
+                    emitter=emitter,
+                    state_container=state_container,
+                    simple_chat_history=simple_chat_history,
+                    tools=tools,
+                    custom_agent_prompt=custom_agent_prompt,
+                    llm=llm,
+                    token_counter=token_counter,
+                    db_session=db_session,
+                    skip_clarification=skip_clarification,
+                    user_identity=user_identity,
+                    chat_session_id=str(chat_session.id),
+                    all_injected_file_metadata=all_injected_file_metadata,
+                ),
                 llm_loop_completion_callback,
                 is_connected=check_is_connected,
                 emitter=emitter,
                 state_container=state_container,
-                simple_chat_history=simple_chat_history,
-                tools=tools,
-                custom_agent_prompt=custom_agent_prompt,
-                llm=llm,
-                token_counter=token_counter,
-                db_session=db_session,
-                skip_clarification=skip_clarification,
-                user_identity=user_identity,
-                chat_session_id=str(chat_session.id),
             )
         else:
             yield from run_chat_loop_with_state_containers(
-                run_llm_loop,
+                lambda emitter, state_container: run_llm_loop(
+                    emitter=emitter,
+                    state_container=state_container,
+                    simple_chat_history=simple_chat_history,
+                    tools=tools,
+                    custom_agent_prompt=custom_agent_prompt,
+                    context_files=extracted_context_files,
+                    persona=persona,
+                    user_memory_context=user_memory_context,
+                    llm=llm,
+                    token_counter=token_counter,
+                    db_session=db_session,
+                    forced_tool_id=forced_tool_id,
+                    user_identity=user_identity,
+                    chat_session_id=str(chat_session.id),
+                    chat_files=chat_files_for_tools,
+                    include_citations=new_msg_req.include_citations,
+                    all_injected_file_metadata=all_injected_file_metadata,
+                    inject_memories_in_prompt=user.use_memories,
+                ),
                 llm_loop_completion_callback,
                 is_connected=check_is_connected,  # Not passed through to run_llm_loop
                 emitter=emitter,
                 state_container=state_container,
-                simple_chat_history=simple_chat_history,
-                tools=tools,
-                custom_agent_prompt=custom_agent_prompt,
-                project_files=extracted_project_files,
-                persona=persona,
-                user_memory_context=user_memory_context,
-                llm=llm,
-                token_counter=token_counter,
-                db_session=db_session,
-                forced_tool_id=forced_tool_id,
-                user_identity=user_identity,
-                chat_session_id=str(chat_session.id),
-                include_citations=new_msg_req.include_citations,
             )
 
     except ValueError as e:
@@ -734,10 +968,10 @@ def handle_stream_message_objects(
             reset_llm_mock_response(mock_response_token)
 
         try:
-            if redis_client is not None and chat_session is not None:
+            if cache is not None and chat_session is not None:
                 set_processing_status(
                     chat_session_id=chat_session.id,
-                    redis_client=redis_client,
+                    cache=cache,
                     value=False,
                 )
         except Exception:
@@ -751,7 +985,6 @@ def llm_loop_completion_handle(
     assistant_message: ChatMessage,
     llm: LLM,
     reserved_tokens: int,
-    processing_start_time: float | None = None,  # noqa: ARG001
 ) -> None:
     chat_session_id = assistant_message.chat_session_id
 
@@ -812,68 +1045,6 @@ def llm_loop_completion_handle(
             compression_params=compression_params,
             tool_id_to_name=tool_id_to_name,
         )
-
-
-def stream_chat_message_objects(
-    new_msg_req: CreateChatMessageRequest,
-    user: User,
-    db_session: Session,
-    # if specified, uses the last user message and does not create a new user message based
-    # on the `new_msg_req.message`. Currently, requires a state where the last message is a
-    litellm_additional_headers: dict[str, str] | None = None,
-    custom_tool_additional_headers: dict[str, str] | None = None,
-    bypass_acl: bool = False,
-    # Additional context that should be included in the chat history, for example:
-    # Slack threads where the conversation cannot be represented by a chain of User/Assistant
-    # messages. Both of the below are used for Slack
-    # NOTE: is not stored in the database, only passed in to the LLM as context
-    additional_context: str | None = None,
-    # Slack context for federated Slack search
-    slack_context: SlackContext | None = None,
-) -> AnswerStream:
-    forced_tool_id = (
-        new_msg_req.forced_tool_ids[0] if new_msg_req.forced_tool_ids else None
-    )
-    if (
-        new_msg_req.retrieval_options
-        and new_msg_req.retrieval_options.run_search == OptionalSearchSetting.ALWAYS
-    ):
-        all_tools = get_tools(db_session)
-
-        search_tool_id = next(
-            (tool.id for tool in all_tools if tool.in_code_tool_id == SEARCH_TOOL_ID),
-            None,
-        )
-        forced_tool_id = search_tool_id
-
-    translated_new_msg_req = SendMessageRequest(
-        message=new_msg_req.message,
-        llm_override=new_msg_req.llm_override,
-        mock_llm_response=new_msg_req.mock_llm_response,
-        allowed_tool_ids=new_msg_req.allowed_tool_ids,
-        forced_tool_id=forced_tool_id,
-        file_descriptors=new_msg_req.file_descriptors,
-        internal_search_filters=(
-            new_msg_req.retrieval_options.filters
-            if new_msg_req.retrieval_options
-            else None
-        ),
-        deep_research=new_msg_req.deep_research,
-        parent_message_id=new_msg_req.parent_message_id,
-        chat_session_id=new_msg_req.chat_session_id,
-        origin=new_msg_req.origin,
-        include_citations=new_msg_req.include_citations,
-    )
-    return handle_stream_message_objects(
-        new_msg_req=translated_new_msg_req,
-        user=user,
-        db_session=db_session,
-        litellm_additional_headers=litellm_additional_headers,
-        custom_tool_additional_headers=custom_tool_additional_headers,
-        bypass_acl=bypass_acl,
-        additional_context=additional_context,
-        slack_context=slack_context,
-    )
 
 
 def remove_answer_citations(answer: str) -> str:

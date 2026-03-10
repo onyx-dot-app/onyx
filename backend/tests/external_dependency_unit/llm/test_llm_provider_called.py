@@ -8,7 +8,6 @@ import pytest
 from fastapi_users.password import PasswordHelper
 from sqlalchemy.orm import Session
 
-from onyx.chat.models import MessageResponseIDInfo
 from onyx.db.llm import fetch_existing_llm_provider
 from onyx.db.llm import remove_llm_provider
 from onyx.db.llm import update_default_provider
@@ -21,6 +20,7 @@ from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from onyx.server.query_and_chat.chat_backend import create_new_chat_session
 from onyx.server.query_and_chat.models import ChatSessionCreationRequest
+from onyx.server.query_and_chat.models import MessageResponseIDInfo
 from tests.external_dependency_unit.answer.stream_test_assertions import (
     assert_answer_stream_part_correct,
 )
@@ -64,7 +64,6 @@ def _create_provider(
             name=name,
             provider=provider,
             api_key="sk-ant-api03-...",
-            default_model_name="claude-3-5-sonnet-20240620",
             is_public=is_public,
             model_configurations=[
                 ModelConfigurationUpsertRequest(
@@ -154,7 +153,9 @@ def test_user_sends_message_to_private_provider(
     )
     _create_provider(db_session, LlmProviderNames.GOOGLE, "private-provider", False)
 
-    update_default_provider(public_provider_id, db_session)
+    update_default_provider(
+        public_provider_id, "claude-3-5-sonnet-20240620", db_session
+    )
 
     try:
         # Create chat session

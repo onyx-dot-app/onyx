@@ -19,7 +19,6 @@ from sqlalchemy.exc import MultipleResultsFound
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
-from onyx.chat.models import DocumentRelevance
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import InferenceSection
@@ -39,6 +38,7 @@ from onyx.llm.override_models import LLMOverride
 from onyx.llm.override_models import PromptOverride
 from onyx.server.query_and_chat.models import ChatMessageDetail
 from onyx.utils.logger import setup_logger
+from onyx.utils.postgres_sanitization import sanitize_string
 
 
 logger = setup_logger()
@@ -99,6 +99,7 @@ def get_chat_sessions_by_user(
     db_session: Session,
     include_onyxbot_flows: bool = False,
     limit: int = 50,
+    before: datetime | None = None,
     project_id: int | None = None,
     only_non_project_chats: bool = False,
     include_failed_chats: bool = False,
@@ -112,6 +113,9 @@ def get_chat_sessions_by_user(
 
     if deleted is not None:
         stmt = stmt.where(ChatSession.deleted == deleted)
+
+    if before is not None:
+        stmt = stmt.where(ChatSession.time_updated < before)
 
     if limit:
         stmt = stmt.limit(limit)
@@ -672,79 +676,43 @@ def set_as_latest_chat_message(
     db_session.commit()
 
 
-def update_search_docs_table_with_relevance(
-    db_session: Session,
-    reference_db_search_docs: list[DBSearchDoc],
-    relevance_summary: DocumentRelevance,
-) -> None:
-    for search_doc in reference_db_search_docs:
-        relevance_data = relevance_summary.relevance_summaries.get(
-            search_doc.document_id
-        )
-        if relevance_data is not None:
-            db_session.execute(
-                update(DBSearchDoc)
-                .where(DBSearchDoc.id == search_doc.id)
-                .values(
-                    is_relevant=relevance_data.relevant,
-                    relevance_explanation=relevance_data.content,
-                )
-            )
-    db_session.commit()
-
-
-def _sanitize_for_postgres(value: str) -> str:
-    """Remove NUL (0x00) characters from strings as PostgreSQL doesn't allow them."""
-    sanitized = value.replace("\x00", "")
-    if value and not sanitized:
-        logger.warning("Sanitization removed all characters from string")
-    return sanitized
-
-
-def _sanitize_list_for_postgres(values: list[str]) -> list[str]:
-    """Remove NUL (0x00) characters from all strings in a list."""
-    return [_sanitize_for_postgres(v) for v in values]
-
-
 def create_db_search_doc(
     server_search_doc: ServerSearchDoc,
     db_session: Session,
     commit: bool = True,
 ) -> DBSearchDoc:
-    # Sanitize string fields to remove NUL characters (PostgreSQL doesn't allow them)
     db_search_doc = DBSearchDoc(
-        document_id=_sanitize_for_postgres(server_search_doc.document_id),
+        document_id=sanitize_string(server_search_doc.document_id),
         chunk_ind=server_search_doc.chunk_ind,
-        semantic_id=_sanitize_for_postgres(server_search_doc.semantic_identifier),
+        semantic_id=sanitize_string(server_search_doc.semantic_identifier),
         link=(
-            _sanitize_for_postgres(server_search_doc.link)
+            sanitize_string(server_search_doc.link)
             if server_search_doc.link is not None
             else None
         ),
-        blurb=_sanitize_for_postgres(server_search_doc.blurb),
+        blurb=sanitize_string(server_search_doc.blurb),
         source_type=server_search_doc.source_type,
         boost=server_search_doc.boost,
         hidden=server_search_doc.hidden,
         doc_metadata=server_search_doc.metadata,
         is_relevant=server_search_doc.is_relevant,
         relevance_explanation=(
-            _sanitize_for_postgres(server_search_doc.relevance_explanation)
+            sanitize_string(server_search_doc.relevance_explanation)
             if server_search_doc.relevance_explanation is not None
             else None
         ),
-        # For docs further down that aren't reranked, we can't use the retrieval score
         score=server_search_doc.score or 0.0,
-        match_highlights=_sanitize_list_for_postgres(
-            server_search_doc.match_highlights
-        ),
+        match_highlights=[
+            sanitize_string(h) for h in server_search_doc.match_highlights
+        ],
         updated_at=server_search_doc.updated_at,
         primary_owners=(
-            _sanitize_list_for_postgres(server_search_doc.primary_owners)
+            [sanitize_string(o) for o in server_search_doc.primary_owners]
             if server_search_doc.primary_owners is not None
             else None
         ),
         secondary_owners=(
-            _sanitize_list_for_postgres(server_search_doc.secondary_owners)
+            [sanitize_string(o) for o in server_search_doc.secondary_owners]
             if server_search_doc.secondary_owners is not None
             else None
         ),

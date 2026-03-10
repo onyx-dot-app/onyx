@@ -41,8 +41,9 @@ import { useSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { useAppRouter } from "@/hooks/appNavigation";
 import { ChatFileType } from "@/app/app/interfaces";
-import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { useProjects } from "@/lib/hooks/useProjects";
+import { SettingsContext } from "@/providers/SettingsProvider";
 
 export type { Project, ProjectFile } from "@/app/app/projects/projectsService";
 
@@ -84,6 +85,8 @@ function buildFileKey(file: File): string {
   return `${file.size}|${namePrefix}`;
 }
 
+const DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB = 50;
+
 interface ProjectsContextType {
   projects: Project[];
   recentFiles: ProjectFile[];
@@ -93,7 +96,6 @@ interface ProjectsContextType {
   beginUpload: (
     files: File[],
     projectId?: number | null,
-    setPopup?: (popup: PopupSpec) => void,
     onSuccess?: (uploaded: CategorizedFiles) => void,
     onFailure?: (failedTempIds: string[]) => void
   ) => Promise<ProjectFile[]>;
@@ -158,6 +160,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
     new Map()
   );
   const route = useAppRouter();
+  const settingsContext = useContext(SettingsContext);
 
   // Use SWR's mutate to refresh projects - returns the new data
   const fetchProjects = useCallback(async (): Promise<Project[]> => {
@@ -334,20 +337,43 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
     async (
       files: File[],
       projectId?: number | null,
-      setPopup?: (popup: PopupSpec) => void,
       onSuccess?: (uploaded: CategorizedFiles) => void,
       onFailure?: (failedTempIds: string[]) => void
     ): Promise<ProjectFile[]> => {
-      const optimisticFiles = files.map((f) =>
+      const rawMax = settingsContext?.settings?.user_file_max_upload_size_mb;
+      const maxUploadSizeMb =
+        rawMax && rawMax > 0 ? rawMax : DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB;
+      const maxUploadSizeBytes = maxUploadSizeMb * 1024 * 1024;
+
+      const oversizedFiles = files.filter(
+        (file) => file.size > maxUploadSizeBytes
+      );
+      const validFiles = files.filter(
+        (file) => file.size <= maxUploadSizeBytes
+      );
+
+      if (oversizedFiles.length > 0) {
+        const skippedNames = oversizedFiles.map((file) => file.name).join(", ");
+        toast.warning(
+          `Skipped ${oversizedFiles.length} oversized file(s) (>${maxUploadSizeMb} MB): ${skippedNames}`
+        );
+      }
+
+      if (validFiles.length === 0) {
+        onFailure?.([]);
+        return [];
+      }
+
+      const optimisticFiles = validFiles.map((f) =>
         createOptimisticFile(f, projectId)
       );
-      const tempIdMap = getTempIdMap(files, optimisticFiles);
+      const tempIdMap = getTempIdMap(validFiles, optimisticFiles);
       setAllRecentFiles((prev) => [...optimisticFiles, ...prev]);
       if (projectId) {
         setAllCurrentProjectFiles((prev) => [...optimisticFiles, ...prev]);
         projectToUploadFilesMapRef.current.set(projectId, optimisticFiles);
       }
-      svcUploadFiles(files, projectId, tempIdMap)
+      svcUploadFiles(validFiles, projectId, tempIdMap)
         .then((uploaded) => {
           const uploadedFiles = uploaded.user_files || [];
           const tempIdToUploadedFileMap = new Map(
@@ -392,12 +418,9 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
             );
             const detailsParts = Array.from(uniqueReasons);
 
-            setPopup?.({
-              type: "warning",
-              message: `Some files were not uploaded. ${detailsParts.join(
-                " | "
-              )}`,
-            });
+            toast.warning(
+              `Some files were not uploaded. ${detailsParts.join(" | ")}`
+            );
 
             const failedNameSet = new Set<string>(
               rejected_files.map((file) => file.file_name)
@@ -433,10 +456,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
 
           removeOptimisticFilesByTempIds(optimisticTempIds, projectId);
 
-          setPopup?.({
-            type: "error",
-            message: "Failed to upload files",
-          });
+          toast.error("Failed to upload files");
 
           onFailure?.(Array.from(optimisticTempIds));
         })
@@ -453,6 +473,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
       refreshCurrentProjectDetails,
       refreshRecentFiles,
       removeOptimisticFilesByTempIds,
+      settingsContext,
     ]
   );
 

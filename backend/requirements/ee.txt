@@ -53,8 +53,6 @@ botocore==1.39.11
     #   s3transfer
 brotli==1.2.0
     # via onyx
-cachetools==6.2.2
-    # via google-auth
 certifi==2025.11.12
     # via
     #   httpcore
@@ -79,18 +77,18 @@ colorama==0.4.6 ; sys_platform == 'win32'
     #   click
     #   tqdm
 cryptography==46.0.5
-    # via pyjwt
+    # via
+    #   google-auth
+    #   pyjwt
 decorator==5.2.1
     # via retry
 discord-py==2.4.0
     # via onyx
 distro==1.9.0
     # via openai
-docstring-parser==0.17.0
-    # via google-cloud-aiplatform
 durationpy==0.10
     # via kubernetes
-fastapi==0.128.0
+fastapi==0.133.1
     # via onyx
 fastavro==1.12.1
     # via cohere
@@ -104,63 +102,12 @@ frozenlist==1.8.0
     #   aiosignal
 fsspec==2025.10.0
     # via huggingface-hub
-google-api-core==2.28.1
+google-auth==2.48.0
     # via
-    #   google-cloud-aiplatform
-    #   google-cloud-bigquery
-    #   google-cloud-core
-    #   google-cloud-resource-manager
-    #   google-cloud-storage
-google-auth==2.43.0
-    # via
-    #   google-api-core
-    #   google-cloud-aiplatform
-    #   google-cloud-bigquery
-    #   google-cloud-core
-    #   google-cloud-resource-manager
-    #   google-cloud-storage
     #   google-genai
     #   kubernetes
-google-cloud-aiplatform==1.121.0
-    # via onyx
-google-cloud-bigquery==3.38.0
-    # via google-cloud-aiplatform
-google-cloud-core==2.5.0
-    # via
-    #   google-cloud-bigquery
-    #   google-cloud-storage
-google-cloud-resource-manager==1.15.0
-    # via google-cloud-aiplatform
-google-cloud-storage==2.19.0
-    # via google-cloud-aiplatform
-google-crc32c==1.7.1
-    # via
-    #   google-cloud-storage
-    #   google-resumable-media
 google-genai==1.52.0
-    # via
-    #   google-cloud-aiplatform
-    #   onyx
-google-resumable-media==2.7.2
-    # via
-    #   google-cloud-bigquery
-    #   google-cloud-storage
-googleapis-common-protos==1.72.0
-    # via
-    #   google-api-core
-    #   grpc-google-iam-v1
-    #   grpcio-status
-grpc-google-iam-v1==0.14.3
-    # via google-cloud-resource-manager
-grpcio==1.76.0
-    # via
-    #   google-api-core
-    #   google-cloud-resource-manager
-    #   googleapis-common-protos
-    #   grpc-google-iam-v1
-    #   grpcio-status
-grpcio-status==1.76.0
-    # via google-api-core
+    # via onyx
 h11==0.16.0
     # via
     #   httpcore
@@ -211,7 +158,7 @@ litellm==1.81.6
     # via onyx
 markupsafe==3.0.3
     # via jinja2
-mcp==1.25.0
+mcp==1.26.0
     # via claude-agent-sdk
 monotonic==1.6
     # via posthog
@@ -221,9 +168,7 @@ multidict==6.7.0
     #   aiohttp
     #   yarl
 numpy==2.4.1
-    # via
-    #   shapely
-    #   voyageai
+    # via voyageai
 oauthlib==3.2.2
     # via
     #   kubernetes
@@ -233,10 +178,7 @@ openai==2.14.0
     #   litellm
     #   onyx
 packaging==24.2
-    # via
-    #   google-cloud-aiplatform
-    #   google-cloud-bigquery
-    #   huggingface-hub
+    # via huggingface-hub
 parameterized==0.9.0
     # via cohere
 posthog==3.7.4
@@ -251,20 +193,6 @@ propcache==0.4.1
     # via
     #   aiohttp
     #   yarl
-proto-plus==1.26.1
-    # via
-    #   google-api-core
-    #   google-cloud-aiplatform
-    #   google-cloud-resource-manager
-protobuf==6.33.5
-    # via
-    #   google-api-core
-    #   google-cloud-aiplatform
-    #   google-cloud-resource-manager
-    #   googleapis-common-protos
-    #   grpc-google-iam-v1
-    #   grpcio-status
-    #   proto-plus
 py==1.11.0
     # via retry
 pyasn1==0.6.2
@@ -280,7 +208,6 @@ pydantic==2.11.7
     #   agent-client-protocol
     #   cohere
     #   fastapi
-    #   google-cloud-aiplatform
     #   google-genai
     #   litellm
     #   mcp
@@ -297,7 +224,6 @@ python-dateutil==2.8.2
     # via
     #   aiobotocore
     #   botocore
-    #   google-cloud-bigquery
     #   kubernetes
     #   posthog
 python-dotenv==1.1.1
@@ -321,9 +247,6 @@ regex==2025.11.3
 requests==2.32.5
     # via
     #   cohere
-    #   google-api-core
-    #   google-cloud-bigquery
-    #   google-cloud-storage
     #   google-genai
     #   huggingface-hub
     #   kubernetes
@@ -345,8 +268,6 @@ s3transfer==0.13.1
     # via boto3
 sentry-sdk==2.14.0
     # via onyx
-shapely==2.0.6
-    # via google-cloud-aiplatform
 six==1.17.0
     # via
     #   kubernetes
@@ -385,9 +306,7 @@ typing-extensions==4.15.0
     #   anyio
     #   cohere
     #   fastapi
-    #   google-cloud-aiplatform
     #   google-genai
-    #   grpcio
     #   huggingface-hub
     #   mcp
     #   openai
@@ -398,6 +317,7 @@ typing-extensions==4.15.0
     #   typing-inspection
 typing-inspection==0.4.2
     # via
+    #   fastapi
     #   mcp
     #   pydantic
     #   pydantic-settings

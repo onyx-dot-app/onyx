@@ -59,17 +59,7 @@ def test_connector_permissions(reset: None) -> None:  # noqa: ARG001
 
     """Tests for things Curators should not be able to do"""
 
-    # Curators should not be able to create a public connector
-    with pytest.raises(HTTPError):
-        ConnectorManager.create(
-            name="invalid_connector_1",
-            source=DocumentSource.CONFLUENCE,
-            groups=[user_group_1.id],
-            access_type=AccessType.PUBLIC,
-            user_performing_action=curator,
-        )
-
-    # Curators should not be able to create a cc pair for a
+    # Curators should not be able to create a connector for a
     # user group they are not a curator of
     with pytest.raises(HTTPError):
         ConnectorManager.create(
@@ -133,12 +123,12 @@ def test_connector_permissions(reset: None) -> None:  # noqa: ARG001
             user_performing_action=curator,
         )
 
-    # Test that curator cannot create a public connector
-    with pytest.raises(HTTPError):
-        ConnectorManager.create(
-            name="invalid_connector_4",
-            source=DocumentSource.CONFLUENCE,
-            groups=[user_group_1.id],
-            access_type=AccessType.PUBLIC,
-            user_performing_action=curator,
-        )
+    # Curators should be able to create a public connector
+    public_connector = ConnectorManager.create(
+        name="curator_public_connector",
+        source=DocumentSource.CONFLUENCE,
+        groups=[user_group_1.id],
+        access_type=AccessType.PUBLIC,
+        user_performing_action=curator,
+    )
+    assert public_connector.id is not None

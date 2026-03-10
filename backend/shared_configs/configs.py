@@ -243,12 +243,12 @@ USAGE_LIMIT_CHUNKS_INDEXED_PAID = int(
 )
 
 # Per-week API calls using API keys or Personal Access Tokens
-USAGE_LIMIT_API_CALLS_TRIAL = int(os.environ.get("USAGE_LIMIT_API_CALLS_TRIAL", "400"))
+USAGE_LIMIT_API_CALLS_TRIAL = int(os.environ.get("USAGE_LIMIT_API_CALLS_TRIAL", "0"))
 USAGE_LIMIT_API_CALLS_PAID = int(os.environ.get("USAGE_LIMIT_API_CALLS_PAID", "40000"))
 
 # Per-week non-streaming API calls (more expensive, so lower limits)
 USAGE_LIMIT_NON_STREAMING_CALLS_TRIAL = int(
-    os.environ.get("USAGE_LIMIT_NON_STREAMING_CALLS_TRIAL", "80")
+    os.environ.get("USAGE_LIMIT_NON_STREAMING_CALLS_TRIAL", "0")
 )
 USAGE_LIMIT_NON_STREAMING_CALLS_PAID = int(
     os.environ.get("USAGE_LIMIT_NON_STREAMING_CALLS_PAID", "160")

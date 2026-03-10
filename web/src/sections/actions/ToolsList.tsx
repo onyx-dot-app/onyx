@@ -3,12 +3,11 @@
 import React from "react";
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button } from "@opal/components";
 import FadingEdgeContainer from "@/refresh-components/FadingEdgeContainer";
 import ToolItemSkeleton from "@/sections/actions/skeleton/ToolItemSkeleton";
 import EnabledCount from "@/refresh-components/EnabledCount";
 import { SvgEye, SvgXCircle } from "@opal/icons";
-import Button from "@/refresh-components/buttons/Button";
 
 export interface ToolsListProps {
   // Loading state
@@ -96,11 +95,12 @@ const ToolsList: React.FC<ToolsListProps> = ({
                 />
               )}
               {onToggleShowOnlyEnabled && enabledCount > 0 && (
-                <IconButton
+                <Button
                   icon={SvgEye}
-                  internal
+                  prominence="tertiary"
+                  size="sm"
                   onClick={onToggleShowOnlyEnabled}
-                  transient={showOnlyEnabled}
+                  interaction={showOnlyEnabled ? "hover" : "rest"}
                   tooltip={
                     showOnlyEnabled ? "Show all tools" : "Show only enabled"
                   }
@@ -112,16 +112,20 @@ const ToolsList: React.FC<ToolsListProps> = ({
                 />
               )}
               {onUpdateToolsStatus && enabledCount > 0 && (
-                <IconButton
+                <Button
                   icon={SvgXCircle}
-                  internal
+                  prominence="tertiary"
+                  size="sm"
                   onClick={() => onUpdateToolsStatus(false)}
                   tooltip="Disable all tools"
                   aria-label="Disable all tools"
                 />
               )}
               {onUpdateToolsStatus && enabledCount === 0 && (
-                <Button tertiary onClick={() => onUpdateToolsStatus(true)}>
+                <Button
+                  prominence="tertiary"
+                  onClick={() => onUpdateToolsStatus(true)}
+                >
                   Enable all
                 </Button>
               )}

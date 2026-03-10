@@ -1,6 +1,6 @@
 import { Form, Formik } from "formik";
 import * as Yup from "yup";
-import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { ConnectorStatus, User, UserGroup } from "@/lib/types";
 import { TextFormField } from "@/components/Field";
 import { createUserGroup } from "./lib";
@@ -11,9 +11,9 @@ import Button from "@/refresh-components/buttons/Button";
 import Separator from "@/refresh-components/Separator";
 import Text from "@/refresh-components/texts/Text";
 import { SvgUsers } from "@opal/icons";
+import { useVectorDbEnabled } from "@/providers/SettingsProvider";
 export interface UserGroupCreationFormProps {
   onClose: () => void;
-  setPopup: (popupSpec: PopupSpec | null) => void;
   users: User[];
   ccPairs: ConnectorStatus<any, any>[];
   existingUserGroup?: UserGroup;
@@ -21,14 +21,13 @@ export interface UserGroupCreationFormProps {
 
 export default function UserGroupCreationForm({
   onClose,
-  setPopup,
   users,
   ccPairs,
   existingUserGroup,
 }: UserGroupCreationFormProps) {
   const isUpdate = existingUserGroup !== undefined;
+  const vectorDbEnabled = useVectorDbEnabled();
 
-  // Filter out ccPairs that aren't access_type "private"
   const privateCcPairs = ccPairs.filter(
     (ccPair) => ccPair.access_type === "private"
   );
@@ -61,22 +60,20 @@ export default function UserGroupCreationForm({
               response = await createUserGroup(values);
               formikHelpers.setSubmitting(false);
               if (response.ok) {
-                setPopup({
-                  message: isUpdate
+                toast.success(
+                  isUpdate
                     ? "Successfully updated user group!"
-                    : "Successfully created user group!",
-                  type: "success",
-                });
+                    : "Successfully created user group!"
+                );
                 onClose();
               } else {
                 const responseJson = await response.json();
                 const errorMsg = responseJson.detail || responseJson.message;
-                setPopup({
-                  message: isUpdate
+                toast.error(
+                  isUpdate
                     ? `Error updating user group - ${errorMsg}`
-                    : `Error creating user group - ${errorMsg}`,
-                  type: "error",
-                });
+                    : `Error creating user group - ${errorMsg}`
+                );
               }
             }}
           >
@@ -91,21 +88,31 @@ export default function UserGroupCreationForm({
 
                 <Separator />
 
-                <Text as="p" className="font-medium">
-                  Select which private connectors this group has access to:
-                </Text>
-                <Text as="p" text02>
-                  All documents indexed by the selected connectors will be
-                  visible to users in this group.
-                </Text>
+                {vectorDbEnabled ? (
+                  <>
+                    <Text as="p" className="font-medium">
+                      Select which private connectors this group has access to:
+                    </Text>
+                    <Text as="p" text02>
+                      All documents indexed by the selected connectors will be
+                      visible to users in this group.
+                    </Text>
 
-                <ConnectorEditor
-                  allCCPairs={privateCcPairs}
-                  selectedCCPairIds={values.cc_pair_ids}
-                  setSetCCPairIds={(ccPairsIds) =>
-                    setFieldValue("cc_pair_ids", ccPairsIds)
-                  }
-                />
+                    <ConnectorEditor
+                      allCCPairs={privateCcPairs}
+                      selectedCCPairIds={values.cc_pair_ids}
+                      setSetCCPairIds={(ccPairsIds) =>
+                        setFieldValue("cc_pair_ids", ccPairsIds)
+                      }
+                    />
+                  </>
+                ) : (
+                  <Text as="p" text03>
+                    Connectors are not available in Onyx Lite. Redeploy Onyx
+                    with DISABLE_VECTOR_DB=false to index knowledge via
+                    connectors.
+                  </Text>
+                )}
 
                 <Separator />
 
@@ -127,6 +134,7 @@ export default function UserGroupCreationForm({
                   />
                 </div>
                 <div className="flex">
+                  {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
                   <Button
                     type="submit"
                     disabled={isSubmitting}

@@ -8,6 +8,8 @@ from typing import Any
 from typing import cast
 
 from onyx.llm.interfaces import LLM
+from onyx.llm.model_response import ModelResponse
+from onyx.llm.models import ToolCall
 from onyx.tracing.framework.create import generation_span
 from onyx.tracing.framework.span_data import GenerationSpanData
 from onyx.tracing.framework.spans import Span
@@ -48,16 +50,72 @@ def llm_generation_span(
         yield span
 
 
+def record_llm_response(
+    span: Span[GenerationSpanData],
+    response: ModelResponse,
+) -> None:
+    """Standard way to record a complete LLM response to a generation span.
+
+    Extracts content, reasoning, tool_calls, and usage automatically from the
+    ModelResponse object.
+
+    Args:
+        span: The generation span to record to.
+        response: The ModelResponse from the LLM.
+    """
+    message = response.choice.message
+
+    # Build output dict matching AssistantMessage format
+    output_dict: dict[str, Any] = {"role": "assistant"}
+
+    if message.content is not None:
+        output_dict["content"] = message.content
+
+    if message.tool_calls:
+        output_dict["tool_calls"] = [tc.model_dump() for tc in message.tool_calls]
+
+    span.span_data.output = [output_dict]
+
+    # Record reasoning (extended thinking from reasoning models)
+    if message.reasoning_content:
+        span.span_data.reasoning = message.reasoning_content
+
+    # Record usage
+    if response.usage:
+        usage_dict = _build_usage_dict(response.usage)
+        if usage_dict:
+            span.span_data.usage = usage_dict
+
+
 def record_llm_span_output(
     span: Span[GenerationSpanData],
     output: str | Sequence[Mapping[str, Any]] | None,
     usage: Any | None = None,
     reasoning: str | None = None,
+    tool_calls: list[ToolCall] | None = None,
 ) -> None:
+    """Record LLM output to a generation span for streaming scenarios.
+
+    This function is useful for streaming where content, reasoning, tool_calls,
+    and usage are accumulated separately.
+
+    Args:
+        span: The generation span to record to.
+        output: The text output or list of message dicts.
+        usage: Optional usage information.
+        reasoning: Optional reasoning/extended thinking content.
+        tool_calls: Optional list of tool calls.
+    """
     if output is None:
-        span.span_data.output = [{"content": None}]
+        output_dict: dict[str, Any] = {"role": "assistant", "content": None}
+        if tool_calls:
+            output_dict["tool_calls"] = [tc.model_dump() for tc in tool_calls]
+        span.span_data.output = [output_dict]
     elif isinstance(output, str):
-        span.span_data.output = [{"content": output}]
+        output_dict = {"role": "assistant", "content": output}
+        if tool_calls:
+            output_dict["tool_calls"] = [tc.model_dump() for tc in tool_calls]
+        span.span_data.output = [output_dict]
     else:
         span.span_data.output = cast(Sequence[Mapping[str, Any]], output)
 

@@ -82,7 +82,7 @@ export function AnnouncementBanner() {
                   Your trial is ending soon - submit your billing information to
                   continue using Onyx.{" "}
                   <Link
-                    href={"/ee/admin/billing" as Route}
+                    href={"/admin/billing" as Route}
                     className="ml-2 underline cursor-pointer"
                   >
                     Update here

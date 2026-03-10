@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Button from "@/refresh-components/buttons/Button";
+import { Button as OpalButton } from "@opal/components";
 import {
   ConfigurableSources,
   CredentialFieldSpec,
@@ -25,7 +26,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { DropdownMenuItemWithTooltip } from "@/components/ui/dropdown-menu-with-tooltip";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 
 import { Badge } from "@/components/ui/badge";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
@@ -198,7 +199,6 @@ export function FederatedConnectorForm({
   const router = useRouter();
   const sourceMetadata = getSourceMetadata(connector);
   const isEditMode = connectorId !== undefined;
-  const { popup, setPopup } = usePopup();
 
   const [formState, setFormState] = useState<FormState>({
     credentials: preloadedConnectorData?.credentials || {},
@@ -317,7 +317,6 @@ export function FederatedConnectorForm({
   if (isLoadingSchema) {
     return (
       <div className="mx-auto w-[800px]">
-        {popup}
         <div className="flex flex-col items-center justify-center py-16">
           <Loader2 className="h-8 w-8 animate-spin text-blue-500 mb-4" />
           <div className="text-center">
@@ -390,25 +389,16 @@ export function FederatedConnectorForm({
       const result = await deleteFederatedConnector(connectorId);
 
       if (result.success) {
-        setPopup({
-          message: result.message,
-          type: "success",
-        });
+        toast.success(result.message);
         // Redirect after a short delay
         setTimeout(() => {
           router.push("/admin/indexing/status");
         }, 500);
       } else {
-        setPopup({
-          message: result.message,
-          type: "error",
-        });
+        toast.error(result.message);
       }
     } catch (error) {
-      setPopup({
-        message: `Error deleting connector: ${error}`,
-        type: "error",
-      });
+      toast.error(`Error deleting connector: ${error}`);
     } finally {
       setIsDeleting(false);
     }
@@ -759,7 +749,6 @@ export function FederatedConnectorForm({
 
   return (
     <div className="mx-auto w-[800px] pb-8">
-      {popup}
       <BackButton routerOverride="/admin/indexing/status" />
 
       <div className="flex items-center justify-between h-16 pb-2 border-b border-neutral-200 dark:border-neutral-600">
@@ -792,9 +781,9 @@ export function FederatedConnectorForm({
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <div>
-                  <Button secondary leftIcon={SvgSettings}>
+                  <OpalButton prominence="secondary" icon={SvgSettings}>
                     Manage
-                  </Button>
+                  </OpalButton>
                 </div>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
@@ -851,6 +840,7 @@ export function FederatedConnectorForm({
                 </div>
               )}
 
+              {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
               <Button
                 type="button"
                 secondary
@@ -860,6 +850,7 @@ export function FederatedConnectorForm({
               >
                 {isValidating ? "Validating..." : "Validate"}
               </Button>
+              {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
               <Button
                 type="submit"
                 disabled={isSubmitting || !formState.schema}

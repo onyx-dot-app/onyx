@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 
 interface UseDeepResearchToggleProps {
   chatSessionId: string | null;
-  assistantId: number | undefined;
+  agentId: number | undefined;
 }
 
 /**
@@ -17,12 +17,12 @@ interface UseDeepResearchToggleProps {
  * The toggle is preserved when transitioning from no chat session to a new session.
  *
  * @param chatSessionId - The current chat session ID
- * @param assistantId - The current assistant ID
+ * @param agentId - The current agent ID
  * @returns An object containing the toggle state and toggle function
  */
 export default function useDeepResearchToggle({
   chatSessionId,
-  assistantId,
+  agentId,
 }: UseDeepResearchToggleProps) {
   const [deepResearchEnabled, setDeepResearchEnabled] = useState(false);
   const previousChatSessionId = useRef<string | null>(chatSessionId);
@@ -41,7 +41,7 @@ export default function useDeepResearchToggle({
   // Reset when switching assistants
   useEffect(() => {
     setDeepResearchEnabled(false);
-  }, [assistantId]);
+  }, [agentId]);
 
   const toggleDeepResearch = useCallback(() => {
     setDeepResearchEnabled(!deepResearchEnabled);
