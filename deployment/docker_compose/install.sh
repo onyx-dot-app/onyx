@@ -115,23 +115,6 @@ compose_file_args() {
     echo "$args"
 }
 
-# --- Temp file cleanup ---
-TMPFILES=()
-cleanup_tmpfiles() {
-    local f
-    for f in "${TMPFILES[@]:-}"; do
-        rm -rf "$f" 2>/dev/null || true
-    done
-}
-trap cleanup_tmpfiles EXIT
-
-mktempfile() {
-    local f
-    f="$(mktemp)"
-    TMPFILES+=("$f")
-    echo "$f"
-}
-
 # --- Downloader detection (curl with wget fallback) ---
 DOWNLOADER=""
 detect_downloader() {
@@ -778,6 +761,14 @@ else
             2)
                 LITE_MODE=true
                 print_info "Selected: Lite mode"
+                LITE_FILE="${INSTALL_ROOT}/deployment/${LITE_COMPOSE_FILE}"
+                print_info "Downloading ${LITE_COMPOSE_FILE} (lite overlay)..."
+                if download_file "${GITHUB_RAW_URL}/${LITE_COMPOSE_FILE}" "$LITE_FILE"; then
+                    print_success "Lite overlay downloaded successfully"
+                else
+                    print_error "Failed to download lite overlay"
+                    exit 1
+                fi
                 ;;
             *)
                 print_info "Selected: Standard mode"
@@ -855,6 +846,13 @@ else
     # Use basic auth by default
     AUTH_SCHEMA="basic"
 
+    # Reject craft image tags when running in lite mode (must check before writing .env)
+    if [[ "$LITE_MODE" = true ]] && [[ "${VERSION:-}" == craft-* ]]; then
+        print_error "Cannot use a craft image tag (${VERSION}) with --lite."
+        print_info "Craft requires services (Vespa, Redis, background workers) that lite mode disables."
+        exit 1
+    fi
+
     # Create .env file from template
     print_info "Creating .env file with your selections..."
     cp "$ENV_TEMPLATE" "$ENV_FILE"
@@ -897,13 +895,6 @@ else
     echo "  • Domain settings (for production)"
     echo "  • Onyx Craft (set ENABLE_CRAFT=true)"
     echo ""
-fi
-
-# Reject craft image tags when running in lite mode
-if [[ "$LITE_MODE" = true ]] && [[ "${VERSION:-}" == craft-* ]]; then
-    print_error "Cannot use a craft image tag (${VERSION}) with --lite."
-    print_info "Craft requires services (Vespa, Redis, background workers) that lite mode disables."
-    exit 1
 fi
 
 # Function to check if a port is available
