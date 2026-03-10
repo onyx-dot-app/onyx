@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import ActionCard from "@/sections/actions/ActionCard";
 import Actions from "@/sections/actions/Actions";
 import ToolsList from "@/sections/actions/ToolsList";
@@ -12,7 +12,7 @@ import { extractMethodSpecsFromDefinition } from "@/lib/tools/openApiService";
 import { updateToolStatus } from "@/lib/tools/mcpService";
 import { SvgServer, SvgTrash } from "@opal/icons";
 import Modal from "@/refresh-components/layouts/ConfirmationModalLayout";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
 
@@ -23,7 +23,6 @@ export interface OpenApiActionCardProps {
   onDelete?: (tool: ToolSnapshot) => Promise<void> | void;
   onRename?: (toolId: number, newName: string) => Promise<void>;
   mutateOpenApiTools: () => Promise<unknown> | void;
-  setPopup: (popup: PopupSpec | null) => void;
   onOpenDisconnectModal?: (tool: ToolSnapshot) => void;
 }
 
@@ -34,7 +33,6 @@ export default function OpenApiActionCard({
   onDelete,
   onRename,
   mutateOpenApiTools,
-  setPopup,
   onOpenDisconnectModal,
 }: OpenApiActionCardProps) {
   const [isToolsExpanded, setIsToolsExpanded] = useState(false);
@@ -201,7 +199,7 @@ export default function OpenApiActionCard({
           onClose={() => deleteModal.toggle(false)}
           submit={
             <Button
-              danger
+              variant="danger"
               onClick={async () => {
                 await onDelete(tool);
                 deleteModal.toggle(false);

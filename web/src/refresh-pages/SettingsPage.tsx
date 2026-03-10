@@ -3,11 +3,8 @@
 import { useRef, useCallback, useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import * as InputLayouts from "@/layouts/input-layouts";
-import {
-  LineItemLayout,
-  Section,
-  AttachmentItemLayout,
-} from "@/layouts/general-layouts";
+import { Section, AttachmentItemLayout } from "@/layouts/general-layouts";
+import { Content, ContentAction } from "@opal/layouts";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import {
@@ -24,13 +21,12 @@ import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
-import Button from "@/refresh-components/buttons/Button";
 import Switch from "@/refresh-components/inputs/Switch";
 import { useUser } from "@/providers/UserProvider";
 import { useTheme } from "next-themes";
 import { MemoryItem, ThemePreference } from "@/lib/types";
 import useUserPersonalization from "@/hooks/useUserPersonalization";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import LLMPopover from "@/refresh-components/popovers/LLMPopover";
 import { deleteAllChatSessions } from "@/app/app/services/lib";
 import { useAuthType, useLlmManager } from "@/lib/hooks";
@@ -39,10 +35,11 @@ import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useFilter from "@/hooks/useFilter";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button } from "@opal/components";
 import useFederatedOAuthStatus from "@/hooks/useFederatedOAuthStatus";
 import useCCPairs from "@/hooks/useCCPairs";
 import { ValidSources } from "@/lib/types";
+import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
 import Separator from "@/refresh-components/Separator";
 import Text from "@/refresh-components/texts/Text";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
@@ -60,7 +57,11 @@ import {
 } from "@/lib/constants/chatBackgrounds";
 import { SvgCheck } from "@opal/icons";
 import { cn } from "@/lib/utils";
-import { Interactive } from "@opal/core";
+import { Disabled, Interactive } from "@opal/core";
+import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { useSettingsContext } from "@/providers/SettingsProvider";
+import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import { useCloudSubscription } from "@/hooks/useCloudSubscription";
 
 interface PAT {
   id: number;
@@ -108,12 +109,11 @@ function PATModal({
         !!createdToken?.token ? (
           <Button onClick={onClose}>Done</Button>
         ) : (
-          <Button
-            onClick={onCreate}
-            disabled={isCreating || !newTokenName.trim()}
-          >
-            {isCreating ? "Creating Token..." : "Create Token"}
-          </Button>
+          <Disabled disabled={isCreating || !newTokenName.trim()}>
+            <Button onClick={onCreate}>
+              {isCreating ? "Creating Token..." : "Create Token"}
+            </Button>
+          </Disabled>
         )
       }
       hideCancel={!!createdToken}
@@ -184,7 +184,6 @@ function GeneralSettings() {
     updateUserChatBackground,
   } = useUser();
   const { theme, setTheme, systemTheme } = useTheme();
-  const { popup, setPopup } = usePopup();
   const { refreshChatSessions } = useChatSessions();
   const router = useRouter();
   const pathname = usePathname();
@@ -196,16 +195,8 @@ function GeneralSettings() {
     updatePersonalizationField,
     handleSavePersonalization,
   } = useUserPersonalization(user, updateUserPersonalization, {
-    onSuccess: () =>
-      setPopup({
-        message: "Personalization updated successfully",
-        type: "success",
-      }),
-    onError: () =>
-      setPopup({
-        message: "Failed to update personalization",
-        type: "error",
-      }),
+    onSuccess: () => toast.success("Personalization updated successfully"),
+    onError: () => toast.error("Failed to update personalization"),
   });
 
   // Track initial values to detect changes
@@ -223,44 +214,37 @@ function GeneralSettings() {
     try {
       const response = await deleteAllChatSessions();
       if (response.ok) {
-        setPopup({
-          message: "All your chat sessions have been deleted.",
-          type: "success",
-        });
+        toast.success("All your chat sessions have been deleted.");
         await refreshChatSessions();
         setShowDeleteConfirmation(false);
       } else {
         throw new Error("Failed to delete all chat sessions");
       }
     } catch (error) {
-      setPopup({
-        message: "Failed to delete all chat sessions",
-        type: "error",
-      });
+      toast.error("Failed to delete all chat sessions");
     } finally {
       setIsDeleting(false);
     }
-  }, [pathname, router, setPopup, refreshChatSessions]);
+  }, [pathname, router, refreshChatSessions]);
 
   return (
     <>
-      {popup}
-
       {showDeleteConfirmation && (
         <ConfirmationModalLayout
           icon={SvgTrash}
           title="Delete All Chats"
           onClose={() => setShowDeleteConfirmation(false)}
           submit={
-            <Button
-              danger
-              onClick={() => {
-                void handleDeleteAllChats();
-              }}
-              disabled={isDeleting}
-            >
-              {isDeleting ? "Deleting..." : "Delete"}
-            </Button>
+            <Disabled disabled={isDeleting}>
+              <Button
+                variant="danger"
+                onClick={() => {
+                  void handleDeleteAllChats();
+                }}
+              >
+                {isDeleting ? "Deleting..." : "Delete"}
+              </Button>
+            </Disabled>
           }
         >
           <Section gap={0.5} alignItems="start">
@@ -275,7 +259,12 @@ function GeneralSettings() {
 
       <Section gap={2}>
         <Section gap={0.75}>
-          <InputLayouts.Title title="Profile" />
+          <Content
+            title="Profile"
+            sizePreset="main-content"
+            variant="section"
+            widthVariant="full"
+          />
           <Card>
             <InputLayouts.Horizontal
               title="Full Name"
@@ -331,7 +320,12 @@ function GeneralSettings() {
         </Section>
 
         <Section gap={0.75}>
-          <InputLayouts.Title title="Appearance" />
+          <Content
+            title="Appearance"
+            sizePreset="main-content"
+            variant="section"
+            widthVariant="full"
+          />
           <Card>
             <InputLayouts.Horizontal
               title="Color Mode"
@@ -386,7 +380,7 @@ function GeneralSettings() {
                   const currentBackgroundId =
                     user?.preferences?.chat_background ?? "none";
                   const isSelected = currentBackgroundId === bg.id;
-                  const isNone = bg.url === CHAT_BACKGROUND_NONE;
+                  const isNone = bg.src === CHAT_BACKGROUND_NONE;
 
                   return (
                     <button
@@ -436,7 +430,12 @@ function GeneralSettings() {
         <Separator noPadding />
 
         <Section gap={0.75}>
-          <InputLayouts.Title title="Danger Zone" />
+          <Content
+            title="Danger Zone"
+            sizePreset="main-content"
+            variant="section"
+            widthVariant="full"
+          />
           <Card>
             <InputLayouts.Horizontal
               title="Delete All Chats"
@@ -444,11 +443,11 @@ function GeneralSettings() {
               center
             >
               <Button
-                danger
-                secondary
+                variant="danger"
+                prominence="secondary"
                 onClick={() => setShowDeleteConfirmation(true)}
-                leftIcon={SvgTrash}
-                transient={showDeleteConfirmation}
+                icon={SvgTrash}
+                interaction={showDeleteConfirmation ? "hover" : "rest"}
               >
                 Delete All Chats
               </Button>
@@ -465,7 +464,6 @@ interface LocalShortcut extends InputPrompt {
 }
 
 function PromptShortcuts() {
-  const { popup, setPopup } = usePopup();
   const { promptShortcuts, isLoading, error, refresh } = usePromptShortcuts();
   const [shortcuts, setShortcuts] = useState<LocalShortcut[]>([]);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
@@ -501,68 +499,55 @@ function PromptShortcuts() {
   // Show error popup if fetch fails
   useEffect(() => {
     if (!error) return;
-    setPopup({ message: "Failed to load shortcuts", type: "error" });
-  }, [error, setPopup]);
-
-  // Auto-add empty row when user starts typing in the last row
-  useEffect(() => {
-    // Skip during initial load - the fetch useEffect handles the initial empty row
-    if (isInitialLoad) return;
-
-    // Only manage new/unsaved rows (isNew: true) - never touch existing shortcuts
-    const newShortcuts = shortcuts.filter((s) => s.isNew);
-    const emptyNewRows = newShortcuts.filter(
-      (s) => !s.prompt.trim() && !s.content.trim()
-    );
-    const emptyNewRowsCount = emptyNewRows.length;
-
-    // If we have no empty new rows, add one
-    if (emptyNewRowsCount === 0) {
-      setShortcuts((prev) => [
-        ...prev,
-        {
-          id: Date.now(),
-          prompt: "",
-          content: "",
-          active: true,
-          is_public: false,
-          isNew: true,
-        },
-      ]);
-    }
-    // If we have more than one empty new row, keep only one
-    else if (emptyNewRowsCount > 1) {
-      setShortcuts((prev) => {
-        // Keep all existing shortcuts regardless of their state
-        // Keep all new shortcuts that have at least one field filled
-        // Add one empty new shortcut
-        const existingShortcuts = prev.filter((s) => !s.isNew);
-        const filledNewShortcuts = prev.filter(
-          (s) => s.isNew && (s.prompt.trim() || s.content.trim())
-        );
-        return [
-          ...existingShortcuts,
-          ...filledNewShortcuts,
-          {
-            id: Date.now(),
-            prompt: "",
-            content: "",
-            active: true,
-            is_public: false,
-            isNew: true,
-          },
-        ];
-      });
-    }
-  }, [shortcuts, isInitialLoad]);
+    toast.error("Failed to load shortcuts");
+  }, [error]);
 
   const handleUpdateShortcut = useCallback(
     (index: number, field: "prompt" | "content", value: string) => {
-      setShortcuts((prev) =>
-        prev.map((shortcut, i) =>
+      setShortcuts((prev) => {
+        const next = prev.map((shortcut, i) =>
           i === index ? { ...shortcut, [field]: value } : shortcut
-        )
-      );
+        );
+
+        const isEmptyNew = (s: LocalShortcut) =>
+          s.isNew && !s.prompt.trim() && !s.content.trim();
+
+        const emptyCount = next.filter(isEmptyNew).length;
+
+        if (emptyCount === 0) {
+          return [
+            ...next,
+            {
+              id: Date.now(),
+              prompt: "",
+              content: "",
+              active: true,
+              is_public: false,
+              isNew: true,
+            },
+          ];
+        }
+
+        if (emptyCount > 1) {
+          const userRow = next[index];
+          const userRowEmpty = userRow !== undefined && isEmptyNew(userRow);
+          let keepIndex = -1;
+          if (userRowEmpty) {
+            keepIndex = index;
+          } else {
+            for (let i = next.length - 1; i >= 0; i--) {
+              const row = next[i];
+              if (row !== undefined && isEmptyNew(row)) {
+                keepIndex = i;
+                break;
+              }
+            }
+          }
+          return next.filter((s, i) => !isEmptyNew(s) || i === keepIndex);
+        }
+
+        return next;
+      });
     },
     []
   );
@@ -587,25 +572,22 @@ function PromptShortcuts() {
         if (response.ok) {
           setShortcuts((prev) => prev.filter((_, i) => i !== index));
           await refresh();
-          setPopup({ message: "Shortcut deleted", type: "success" });
+          toast.success("Shortcut deleted");
         } else {
           throw new Error("Failed to delete shortcut");
         }
       } catch (error) {
-        setPopup({ message: "Failed to delete shortcut", type: "error" });
+        toast.error("Failed to delete shortcut");
       }
     },
-    [shortcuts, setPopup, refresh]
+    [shortcuts, refresh]
   );
 
   const handleSaveShortcut = useCallback(
     async (index: number) => {
       const shortcut = shortcuts[index];
       if (!shortcut || !shortcut.prompt.trim() || !shortcut.content.trim()) {
-        setPopup({
-          message: "Both shortcut and expansion are required",
-          type: "error",
-        });
+        toast.error("Both shortcut and expansion are required");
         return;
       }
 
@@ -625,7 +607,7 @@ function PromptShortcuts() {
 
           if (response.ok) {
             await refresh();
-            setPopup({ message: "Shortcut created", type: "success" });
+            toast.success("Shortcut created");
           } else {
             throw new Error("Failed to create shortcut");
           }
@@ -644,19 +626,16 @@ function PromptShortcuts() {
 
           if (response.ok) {
             await refresh();
-            setPopup({ message: "Shortcut updated", type: "success" });
+            toast.success("Shortcut updated");
           } else {
             throw new Error("Failed to update shortcut");
           }
         }
       } catch (error) {
-        setPopup({
-          message: "Failed to save shortcut",
-          type: "error",
-        });
+        toast.error("Failed to save shortcut");
       }
     },
-    [shortcuts, setPopup, refresh]
+    [shortcuts, refresh]
   );
 
   const handleBlurShortcut = useCallback(
@@ -679,8 +658,6 @@ function PromptShortcuts() {
 
   return (
     <>
-      {popup}
-
       {shortcuts.length > 0 && (
         <Section gap={0.75}>
           {shortcuts.map((shortcut, index) => {
@@ -720,18 +697,21 @@ function PromptShortcuts() {
                   }
                 />
                 <Section>
-                  <IconButton
-                    icon={SvgMinusCircle}
-                    onClick={() => void handleRemoveShortcut(index)}
-                    tertiary
+                  <Disabled
                     disabled={(shortcut.isNew && isEmpty) || shortcut.is_public}
-                    aria-label="Remove shortcut"
-                    tooltip={
-                      shortcut.is_public
-                        ? "Cannot delete public prompt-shortcuts."
-                        : undefined
-                    }
-                  />
+                  >
+                    <Button
+                      icon={SvgMinusCircle}
+                      onClick={() => void handleRemoveShortcut(index)}
+                      prominence="tertiary"
+                      aria-label="Remove shortcut"
+                      tooltip={
+                        shortcut.is_public
+                          ? "Cannot delete public prompt-shortcuts."
+                          : undefined
+                      }
+                    />
+                  </Disabled>
                 </Section>
                 <InputTextArea
                   placeholder="Provide a concise 1–2 sentence summary of the following:"
@@ -770,27 +750,31 @@ function ChatPreferencesSettings() {
     updateUserAutoScroll,
     updateUserShortcuts,
     updateUserDefaultModel,
+    updateUserDefaultAppMode,
   } = useUser();
+  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
+  const settings = useSettingsContext();
+  const { isSearchModeAvailable: searchUiEnabled } = settings;
   const llmManager = useLlmManager();
-
-  const { popup, setPopup } = usePopup();
 
   const {
     personalizationValues,
     toggleUseMemories,
+    toggleEnableMemoryTool,
     updateUserPreferences,
     handleSavePersonalization,
   } = useUserPersonalization(user, updateUserPersonalization, {
-    onSuccess: () =>
-      setPopup({ message: "Preferences saved", type: "success" }),
-    onError: () =>
-      setPopup({ message: "Failed to save preferences", type: "error" }),
+    onSuccess: () => toast.success("Preferences saved"),
+    onError: () => toast.error("Failed to save preferences"),
   });
 
   // Wrapper to save memories and return success/failure
   const handleSaveMemories = useCallback(
     async (newMemories: MemoryItem[]): Promise<boolean> => {
-      const result = await handleSavePersonalization({ memories: newMemories });
+      const result = await handleSavePersonalization(
+        { memories: newMemories },
+        true
+      );
       return !!result;
     },
     [handleSavePersonalization]
@@ -798,9 +782,13 @@ function ChatPreferencesSettings() {
 
   return (
     <Section gap={2}>
-      {popup}
       <Section gap={0.75}>
-        <InputLayouts.Title title="Chats" />
+        <Content
+          title="Chats"
+          sizePreset="main-content"
+          variant="section"
+          widthVariant="full"
+        />
         <Card>
           <InputLayouts.Horizontal
             title="Default Model"
@@ -825,16 +813,48 @@ function ChatPreferencesSettings() {
               }}
             />
           </InputLayouts.Horizontal>
+
+          {isPaidEnterpriseFeaturesEnabled && (
+            <SimpleTooltip
+              tooltip={
+                searchUiEnabled
+                  ? undefined
+                  : "Search UI is disabled and can only be enabled by an admin."
+              }
+              side="top"
+            >
+              <InputLayouts.Horizontal
+                title="Default App Mode"
+                description="Choose whether new sessions start in Search or Chat mode."
+                center
+                disabled={!searchUiEnabled}
+              >
+                <InputSelect
+                  value={user?.preferences.default_app_mode ?? "CHAT"}
+                  onValueChange={(value) => {
+                    void updateUserDefaultAppMode(value as "CHAT" | "SEARCH");
+                  }}
+                  disabled={!searchUiEnabled}
+                >
+                  <InputSelect.Trigger />
+                  <InputSelect.Content>
+                    <InputSelect.Item value="CHAT">Chat</InputSelect.Item>
+                    <InputSelect.Item value="SEARCH">Search</InputSelect.Item>
+                  </InputSelect.Content>
+                </InputSelect>
+              </InputLayouts.Horizontal>
+            </SimpleTooltip>
+          )}
         </Card>
       </Section>
 
       <Section gap={0.75}>
         <InputLayouts.Vertical
           title="Personal Preferences"
-          description="Describe how you prefer to interact with Onyx. Onyx uses these preferences to tailor responses."
+          description="Provide your custom preferences in natural language."
         >
           <InputTextArea
-            placeholder="Add your work style, technical level, search habits, response format preferences."
+            placeholder="Describe how you want the system to behave and the tone it should use."
             value={personalizationValues.user_preferences}
             onChange={(e) => updateUserPreferences(e.target.value)}
             onBlur={() => void handleSavePersonalization()}
@@ -848,7 +868,12 @@ function ChatPreferencesSettings() {
             limit={500}
           />
         </InputLayouts.Vertical>
-        <InputLayouts.Title title="Memory" />
+        <Content
+          title="Memory"
+          sizePreset="main-content"
+          variant="section"
+          widthVariant="full"
+        />
         <Card>
           <InputLayouts.Horizontal
             title="Reference Stored Memories"
@@ -862,8 +887,24 @@ function ChatPreferencesSettings() {
               }}
             />
           </InputLayouts.Horizontal>
+          <InputLayouts.Horizontal
+            title="Update Memories"
+            description="Let Onyx generate and update stored memories."
+          >
+            <Switch
+              checked={personalizationValues.enable_memory_tool}
+              onCheckedChange={(checked) => {
+                toggleEnableMemoryTool(checked);
+                void handleSavePersonalization({
+                  enable_memory_tool: checked,
+                });
+              }}
+            />
+          </InputLayouts.Horizontal>
 
-          {personalizationValues.use_memories && (
+          {(personalizationValues.use_memories ||
+            personalizationValues.enable_memory_tool ||
+            personalizationValues.memories.length > 0) && (
             <Memories
               memories={personalizationValues.memories}
               onSaveMemories={handleSaveMemories}
@@ -873,7 +914,12 @@ function ChatPreferencesSettings() {
       </Section>
 
       <Section gap={0.75}>
-        <InputLayouts.Title title="Prompt Shortcuts" />
+        <Content
+          title="Prompt Shortcuts"
+          sizePreset="main-content"
+          variant="section"
+          widthVariant="full"
+        />
         <Card>
           <InputLayouts.Horizontal
             title="Use Prompt Shortcuts"
@@ -896,7 +942,6 @@ function ChatPreferencesSettings() {
 
 function AccountsAccessSettings() {
   const { user, authTypeMetadata } = useUser();
-  const { popup, setPopup } = usePopup();
   const authType = useAuthType();
   const [showPasswordModal, setShowPasswordModal] = useState(false);
 
@@ -921,6 +966,8 @@ function AccountsAccessSettings() {
   const [newlyCreatedToken, setNewlyCreatedToken] =
     useState<CreatedTokenState | null>(null);
   const [tokenToDelete, setTokenToDelete] = useState<PAT | null>(null);
+
+  const canCreateTokens = useCloudSubscription();
 
   const showPasswordSection = Boolean(user?.password_configured);
   const showTokensSection = authType !== null;
@@ -951,13 +998,13 @@ function AccountsAccessSettings() {
   // Show error popup if SWR fetch fails
   useEffect(() => {
     if (error) {
-      setPopup({ message: "Failed to load tokens", type: "error" });
+      toast.error("Failed to load tokens");
     }
-  }, [error, setPopup]);
+  }, [error]);
 
   const createPAT = useCallback(async () => {
     if (!newTokenName.trim()) {
-      setPopup({ message: "Token name is required", type: "error" });
+      toast.error("Token name is required");
       return;
     }
 
@@ -981,22 +1028,19 @@ function AccountsAccessSettings() {
           token: data.token,
           name: newTokenName,
         });
-        setPopup({ message: "Token created successfully", type: "success" });
+        toast.success("Token created successfully");
         // Revalidate the token list
         await mutate();
       } else {
         const errorData = await response.json();
-        setPopup({
-          message: errorData.detail || "Failed to create token",
-          type: "error",
-        });
+        toast.error(errorData.detail || "Failed to create token");
       }
     } catch (error) {
-      setPopup({ message: "Network error creating token", type: "error" });
+      toast.error("Network error creating token");
     } finally {
       setIsCreating(false);
     }
-  }, [newTokenName, expirationDays, mutate, setPopup]);
+  }, [newTokenName, expirationDays, mutate]);
 
   const deletePAT = useCallback(
     async (patId: number) => {
@@ -1011,16 +1055,16 @@ function AccountsAccessSettings() {
             setNewlyCreatedToken(null);
           }
           await mutate();
-          setPopup({ message: "Token deleted successfully", type: "success" });
+          toast.success("Token deleted successfully");
           setTokenToDelete(null);
         } else {
-          setPopup({ message: "Failed to delete token", type: "error" });
+          toast.error("Failed to delete token");
         }
       } catch (error) {
-        setPopup({ message: "Network error deleting token", type: "error" });
+        toast.error("Network error deleting token");
       }
     },
-    [newlyCreatedToken, mutate, setPopup]
+    [newlyCreatedToken, mutate]
   );
 
   const handleChangePassword = useCallback(
@@ -1042,32 +1086,21 @@ function AccountsAccessSettings() {
         });
 
         if (response.ok) {
-          setPopup({
-            type: "success",
-            message: "Password updated successfully",
-          });
+          toast.success("Password updated successfully");
           setShowPasswordModal(false);
         } else {
           const errorData = await response.json();
-          setPopup({
-            message: errorData.detail || "Failed to change password",
-            type: "error",
-          });
+          toast.error(errorData.detail || "Failed to change password");
         }
       } catch (error) {
-        setPopup({
-          message: "An error occurred while changing the password",
-          type: "error",
-        });
+        toast.error("An error occurred while changing the password");
       }
     },
-    [setPopup]
+    []
   );
 
   return (
     <>
-      {popup}
-
       {showCreateModal && (
         <PATModal
           isCreating={isCreating}
@@ -1092,7 +1125,10 @@ function AccountsAccessSettings() {
           title="Revoke Access Token"
           onClose={() => setTokenToDelete(null)}
           submit={
-            <Button danger onClick={() => deletePAT(tokenToDelete.id)}>
+            <Button
+              variant="danger"
+              onClick={() => deletePAT(tokenToDelete.id)}
+            >
               Revoke
             </Button>
           }
@@ -1137,19 +1173,20 @@ function AccountsAccessSettings() {
                 icon={SvgLock}
                 title="Change Password"
                 submit={
-                  <Button
-                    disabled={isSubmitting || !dirty || !isValid}
-                    onClick={async () => {
-                      setSubmitting(true);
-                      try {
-                        await handleChangePassword(values);
-                      } finally {
-                        setSubmitting(false);
-                      }
-                    }}
-                  >
-                    {isSubmitting ? "Updating..." : "Update"}
-                  </Button>
+                  <Disabled disabled={isSubmitting || !dirty || !isValid}>
+                    <Button
+                      onClick={async () => {
+                        setSubmitting(true);
+                        try {
+                          await handleChangePassword(values);
+                        } finally {
+                          setSubmitting(false);
+                        }
+                      }}
+                    >
+                      {isSubmitting ? "Updating..." : "Update"}
+                    </Button>
+                  </Disabled>
                 }
                 onClose={() => {
                   setShowPasswordModal(false);
@@ -1211,7 +1248,12 @@ function AccountsAccessSettings() {
 
       <Section gap={2}>
         <Section gap={0.75}>
-          <InputLayouts.Title title="Accounts" />
+          <Content
+            title="Accounts"
+            sizePreset="main-content"
+            variant="section"
+            widthVariant="full"
+          />
           <Card>
             <InputLayouts.Horizontal
               title="Email"
@@ -1229,10 +1271,10 @@ function AccountsAccessSettings() {
                 center
               >
                 <Button
-                  secondary
-                  leftIcon={SvgLock}
+                  prominence="secondary"
+                  icon={SvgLock}
                   onClick={() => setShowPasswordModal(true)}
-                  transient={showPasswordModal}
+                  interaction={showPasswordModal ? "hover" : "rest"}
                 >
                   Change Password
                 </Button>
@@ -1243,96 +1285,110 @@ function AccountsAccessSettings() {
 
         {showTokensSection && (
           <Section gap={0.75}>
-            <InputLayouts.Title title="Access Tokens" />
-            <Card padding={0.25}>
-              <Section gap={0}>
-                {/* Header with search/empty state and create button */}
-                <Section flexDirection="row" padding={0.25} gap={0.5}>
-                  {pats.length === 0 ? (
-                    <Section padding={0.5} alignItems="start">
-                      <Text as="span" text03 secondaryBody>
-                        {isLoading
-                          ? "Loading tokens..."
-                          : "No access tokens created."}
-                      </Text>
-                    </Section>
-                  ) : (
-                    <InputTypeIn
-                      placeholder="Search..."
-                      value={query}
-                      onChange={(e) => setQuery(e.target.value)}
-                      leftSearchIcon
-                      variant="internal"
-                    />
-                  )}
-                  <CreateButton
-                    onClick={() => setShowCreateModal(true)}
-                    secondary={false}
-                    internal
-                    transient={showCreateModal}
-                    rightIcon
-                  >
-                    New Access Token
-                  </CreateButton>
-                </Section>
+            <Content
+              title="Access Tokens"
+              sizePreset="main-content"
+              variant="section"
+              widthVariant="full"
+            />
+            {canCreateTokens ? (
+              <Card padding={0.25}>
+                <Section gap={0}>
+                  <Section flexDirection="row" padding={0.25} gap={0.5}>
+                    {pats.length === 0 ? (
+                      <Section padding={0.5} alignItems="start">
+                        <Text text03 secondaryBody>
+                          {isLoading
+                            ? "Loading tokens..."
+                            : "No access tokens created."}
+                        </Text>
+                      </Section>
+                    ) : (
+                      <InputTypeIn
+                        placeholder="Search..."
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        leftSearchIcon
+                        variant="internal"
+                      />
+                    )}
+                    <CreateButton
+                      onClick={() => setShowCreateModal(true)}
+                      secondary={false}
+                      internal
+                      transient={showCreateModal}
+                      rightIcon
+                    >
+                      New Access Token
+                    </CreateButton>
+                  </Section>
 
-                {/* Token List */}
-                <Section gap={0.25}>
-                  {filteredPats.map((pat) => {
-                    const now = new Date();
-                    const createdDate = new Date(pat.created_at);
-                    const daysSinceCreation = Math.floor(
-                      (now.getTime() - createdDate.getTime()) /
-                        (1000 * 60 * 60 * 24)
-                    );
-
-                    let expiryText = "Never expires";
-                    if (pat.expires_at) {
-                      const expiresDate = new Date(pat.expires_at);
-                      const daysUntilExpiry = Math.ceil(
-                        (expiresDate.getTime() - now.getTime()) /
+                  <Section gap={0.25}>
+                    {filteredPats.map((pat) => {
+                      const now = new Date();
+                      const createdDate = new Date(pat.created_at);
+                      const daysSinceCreation = Math.floor(
+                        (now.getTime() - createdDate.getTime()) /
                           (1000 * 60 * 60 * 24)
                       );
-                      expiryText = `Expires in ${daysUntilExpiry} day${
-                        daysUntilExpiry === 1 ? "" : "s"
-                      }`;
-                    }
 
-                    const middleText = `Created ${daysSinceCreation} day${
-                      daysSinceCreation === 1 ? "" : "s"
-                    } ago - ${expiryText}`;
+                      let expiryText = "Never expires";
+                      if (pat.expires_at) {
+                        const expiresDate = new Date(pat.expires_at);
+                        const daysUntilExpiry = Math.ceil(
+                          (expiresDate.getTime() - now.getTime()) /
+                            (1000 * 60 * 60 * 24)
+                        );
+                        expiryText = `Expires in ${daysUntilExpiry} day${
+                          daysUntilExpiry === 1 ? "" : "s"
+                        }`;
+                      }
 
-                    return (
-                      <Interactive.Base
-                        key={pat.id}
-                        subvariant="secondary"
-                        static
-                      >
+                      const middleText = `Created ${daysSinceCreation} day${
+                        daysSinceCreation === 1 ? "" : "s"
+                      } ago - ${expiryText}`;
+
+                      return (
                         <Interactive.Container
-                          paddingVariant="none"
+                          key={pat.id}
                           heightVariant="fit"
+                          widthVariant="full"
                         >
-                          <AttachmentItemLayout
-                            icon={SvgKey}
-                            title={pat.name}
-                            description={pat.token_display}
-                            middleText={middleText}
-                            rightChildren={
-                              <IconButton
-                                icon={SvgTrash}
-                                onClick={() => setTokenToDelete(pat)}
-                                internal
-                                aria-label={`Delete token ${pat.name}`}
-                              />
-                            }
-                          />
+                          <div className="w-full bg-background-tint-01">
+                            <AttachmentItemLayout
+                              icon={SvgKey}
+                              title={pat.name}
+                              description={pat.token_display}
+                              middleText={middleText}
+                              rightChildren={
+                                <Button
+                                  icon={SvgTrash}
+                                  onClick={() => setTokenToDelete(pat)}
+                                  prominence="tertiary"
+                                  size="sm"
+                                  aria-label={`Delete token ${pat.name}`}
+                                />
+                              }
+                            />
+                          </div>
                         </Interactive.Container>
-                      </Interactive.Base>
-                    );
-                  })}
+                      );
+                    })}
+                  </Section>
                 </Section>
-              </Section>
-            </Card>
+              </Card>
+            ) : (
+              <Card>
+                <Section flexDirection="row" justifyContent="between">
+                  <Text text03 secondaryBody>
+                    Access tokens require an active paid subscription.
+                  </Text>
+                  <Button prominence="secondary" href="/admin/billing">
+                    Upgrade Plan
+                  </Button>
+                </Section>
+              </Card>
+            )}
           </Section>
         )}
       </Section>
@@ -1342,18 +1398,20 @@ function AccountsAccessSettings() {
 
 interface IndexedConnectorCardProps {
   source: ValidSources;
-  count: number;
+  isActive: boolean;
 }
 
-function IndexedConnectorCard({ source, count }: IndexedConnectorCardProps) {
+function IndexedConnectorCard({ source, isActive }: IndexedConnectorCardProps) {
   const sourceMetadata = getSourceMetadata(source);
 
   return (
     <Card>
-      <LineItemLayout
+      <Content
         icon={sourceMetadata.icon}
         title={sourceMetadata.displayName}
-        description={count > 1 ? `${count} connectors active` : "Connected"}
+        description={isActive ? "Connected" : "Paused"}
+        sizePreset="main-content"
+        variant="section"
       />
     </Card>
   );
@@ -1368,7 +1426,6 @@ function FederatedConnectorCard({
   connector,
   onDisconnectSuccess,
 }: FederatedConnectorCardProps) {
-  const { popup, setPopup } = usePopup();
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   const [showDisconnectConfirmation, setShowDisconnectConfirmation] =
     useState(false);
@@ -1383,42 +1440,32 @@ function FederatedConnectorCard({
       );
 
       if (response.ok) {
-        setPopup({
-          message: "Disconnected successfully",
-          type: "success",
-        });
+        toast.success("Disconnected successfully");
         setShowDisconnectConfirmation(false);
         onDisconnectSuccess();
       } else {
         throw new Error("Failed to disconnect");
       }
     } catch (error) {
-      setPopup({
-        message: "Failed to disconnect",
-        type: "error",
-      });
+      toast.error("Failed to disconnect");
     } finally {
       setIsDisconnecting(false);
     }
-  }, [connector.federated_connector_id, onDisconnectSuccess, setPopup]);
+  }, [connector.federated_connector_id, onDisconnectSuccess]);
 
   return (
     <>
-      {popup}
-
       {showDisconnectConfirmation && (
         <ConfirmationModalLayout
           icon={SvgUnplug}
           title={`Disconnect ${sourceMetadata.displayName}`}
           onClose={() => setShowDisconnectConfirmation(false)}
           submit={
-            <Button
-              danger
-              onClick={() => void handleDisconnect()}
-              disabled={isDisconnecting}
-            >
-              {isDisconnecting ? "Disconnecting..." : "Disconnect"}
-            </Button>
+            <Disabled disabled={isDisconnecting}>
+              <Button variant="danger" onClick={() => void handleDisconnect()}>
+                {isDisconnecting ? "Disconnecting..." : "Disconnect"}
+              </Button>
+            </Disabled>
           }
         >
           <Section gap={0.5} alignItems="start">
@@ -1436,32 +1483,36 @@ function FederatedConnectorCard({
       )}
 
       <Card padding={0.5}>
-        <LineItemLayout
+        <ContentAction
           icon={sourceMetadata.icon}
           title={sourceMetadata.displayName}
           description={
             connector.has_oauth_token ? "Connected" : "Not connected"
           }
+          sizePreset="main-content"
+          variant="section"
+          paddingVariant="sm"
           rightChildren={
             connector.has_oauth_token ? (
-              <IconButton
-                icon={SvgUnplug}
-                internal
-                onClick={() => setShowDisconnectConfirmation(true)}
-                disabled={isDisconnecting}
-              />
+              <Disabled disabled={isDisconnecting}>
+                <Button
+                  icon={SvgUnplug}
+                  prominence="tertiary"
+                  size="sm"
+                  onClick={() => setShowDisconnectConfirmation(true)}
+                />
+              </Disabled>
             ) : connector.authorize_url ? (
               <Button
+                prominence="internal"
                 href={connector.authorize_url}
                 target="_blank"
-                internal
                 rightIcon={SvgArrowExchange}
               >
                 Connect
               </Button>
             ) : undefined
           }
-          reducedPadding
         />
       </Card>
     </>
@@ -1475,19 +1526,23 @@ function ConnectorsSettings() {
   } = useFederatedOAuthStatus();
   const { ccPairs } = useCCPairs();
 
+  const ACTIVE_STATUSES: ConnectorCredentialPairStatus[] = [
+    ConnectorCredentialPairStatus.ACTIVE,
+    ConnectorCredentialPairStatus.SCHEDULED,
+    ConnectorCredentialPairStatus.INITIAL_INDEXING,
+  ];
+
   // Group indexed connectors by source
   const groupedConnectors = ccPairs.reduce(
     (acc, ccPair) => {
       if (!acc[ccPair.source]) {
         acc[ccPair.source] = {
           source: ccPair.source,
-          count: 0,
-          hasSuccessfulRun: false,
+          hasActiveConnector: false,
         };
       }
-      acc[ccPair.source]!.count++;
-      if (ccPair.has_successful_run) {
-        acc[ccPair.source]!.hasSuccessfulRun = true;
+      if (ACTIVE_STATUSES.includes(ccPair.status)) {
+        acc[ccPair.source]!.hasActiveConnector = true;
       }
       return acc;
     },
@@ -1495,8 +1550,7 @@ function ConnectorsSettings() {
       string,
       {
         source: ValidSources;
-        count: number;
-        hasSuccessfulRun: boolean;
+        hasActiveConnector: boolean;
       }
     >
   );
@@ -1507,7 +1561,12 @@ function ConnectorsSettings() {
   return (
     <Section gap={2}>
       <Section gap={0.75} justifyContent="start">
-        <InputLayouts.Title title="Connectors" />
+        <Content
+          title="Connectors"
+          sizePreset="main-content"
+          variant="section"
+          widthVariant="full"
+        />
         {hasConnectors ? (
           <>
             {/* Indexed Connectors */}
@@ -1515,7 +1574,7 @@ function ConnectorsSettings() {
               <IndexedConnectorCard
                 key={connector.source}
                 source={connector.source}
-                count={connector.count}
+                isActive={connector.hasActiveConnector}
               />
             ))}
 

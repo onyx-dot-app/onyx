@@ -92,6 +92,12 @@ Add clear comments:
 - Connector code (data → Onyx documents):
   - Any in-memory structure that can grow without bound based on input must be periodically size-checked.
   - If a connector is OOMing (often shows up as “missing celery tasks”), this is a top thing to check retroactively.
+- Async and event loops:
+  - Never introduce new async/event loop Python code, and try to make existing
+    async code synchronous when possible if it makes sense.
+    - Writing async code without 100% understanding the code and having a
+      concrete reason to do so is likely to introduce bugs and not add any
+      meaningful performance gains.
 
 ---
 
@@ -147,7 +153,7 @@ Add clear comments:
 
 ## Trunk-based development and feature flags
 
-- **PRs should contain no more than 500 lines of real change**
+- **PRs should contain no more than 500 lines of real change.**
 - **Merge to main frequently.** Avoid long-lived feature branches—they create merge conflicts and integration pain.
 - **Use feature flags for incremental rollout.**
   - Large features should be merged in small, shippable increments behind a flag.
@@ -155,3 +161,24 @@ Add clear comments:
 - **Keep flags short-lived.** Once a feature is fully rolled out, remove the flag and dead code paths promptly.
 - **Flag at the right level.** Prefer flagging at API/UI entry points rather than deep in business logic.
 - **Test both flag states.** Ensure the codebase works correctly with the flag on and off.
+
+---
+
+## Misc
+
+- Any TODOs you add in the code must be accompanied by either the name/username
+  of the owner of that TODO, or an issue number for an issue referencing that
+  piece of work.
+- Avoid module-level logic that runs on import, which leads to import-time side
+  effects. Essentially every piece of meaningful logic should exist within some
+  function that has to be explicitly invoked. Acceptable exceptions to this may
+  include loading environment variables or setting up loggers.
+  - If you find yourself needing something like this, you may want that logic to
+    exist in a file dedicated for manual execution (contains `if __name__ ==
+    "__main__":`) which should not be imported by anything else.
+- Related to the above, do not conflate Python scripts you intend to run from
+  the command line (contains `if __name__ == "__main__":`) with modules you
+  intend to import from elsewhere. If for some unlikely reason they have to be
+  the same file, any logic specific to executing the file (including imports)
+  should be contained in the `if __name__ == "__main__":` block.
+  - Generally these executable files exist in `backend/scripts/`.

@@ -1,13 +1,11 @@
 import json
 from typing import cast
 
-from redis.client import Redis
-
+from onyx.cache.interface import CacheBackend
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import KVStore
 from onyx.key_value_store.interface import KeyValueStore
 from onyx.key_value_store.interface import KvKeyNotFoundError
-from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.logger import setup_logger
 from onyx.utils.special_types import JSON_ro
 
@@ -20,22 +18,27 @@ KV_REDIS_KEY_EXPIRATION = 60 * 60 * 24  # 1 Day
 
 
 class PgRedisKVStore(KeyValueStore):
-    def __init__(self, redis_client: Redis | None = None) -> None:
-        # If no redis_client is provided, fall back to the context var
-        if redis_client is not None:
-            self.redis_client = redis_client
-        else:
-            self.redis_client = get_redis_client()
+    def __init__(self, cache: CacheBackend | None = None) -> None:
+        self._cache = cache
+
+    def _get_cache(self) -> CacheBackend:
+        if self._cache is None:
+            from onyx.cache.factory import get_cache_backend
+
+            self._cache = get_cache_backend()
+        return self._cache
 
     def store(self, key: str, val: JSON_ro, encrypt: bool = False) -> None:
-        # Not encrypted in Redis, but encrypted in Postgres
+        # Not encrypted in Cache backend (typically Redis), but encrypted in Postgres
         try:
-            self.redis_client.set(
+            self._get_cache().set(
                 REDIS_KEY_PREFIX + key, json.dumps(val), ex=KV_REDIS_KEY_EXPIRATION
             )
         except Exception as e:
-            # Fallback gracefully to Postgres if Redis fails
-            logger.error(f"Failed to set value in Redis for key '{key}': {str(e)}")
+            # Fallback gracefully to Postgres if Cache backend fails
+            logger.error(
+                f"Failed to set value in Cache backend for key '{key}': {str(e)}"
+            )
 
         encrypted_val = val if encrypt else None
         plain_val = val if not encrypt else None
@@ -53,16 +56,12 @@ class PgRedisKVStore(KeyValueStore):
     def load(self, key: str, refresh_cache: bool = False) -> JSON_ro:
         if not refresh_cache:
             try:
-                redis_value = self.redis_client.get(REDIS_KEY_PREFIX + key)
-                if redis_value:
-                    if not isinstance(redis_value, bytes):
-                        raise ValueError(
-                            f"Redis value for key '{key}' is not a bytes object"
-                        )
-                    return json.loads(redis_value.decode("utf-8"))
+                cached = self._get_cache().get(REDIS_KEY_PREFIX + key)
+                if cached is not None:
+                    return json.loads(cached.decode("utf-8"))
             except Exception as e:
                 logger.error(
-                    f"Failed to get value from Redis for key '{key}': {str(e)}"
+                    f"Failed to get value from cache for key '{key}': {str(e)}"
                 )
 
         with get_session_with_current_tenant() as db_session:
@@ -79,21 +78,21 @@ class PgRedisKVStore(KeyValueStore):
                 value = None
 
             try:
-                self.redis_client.set(
+                self._get_cache().set(
                     REDIS_KEY_PREFIX + key,
                     json.dumps(value),
                     ex=KV_REDIS_KEY_EXPIRATION,
                 )
             except Exception as e:
-                logger.error(f"Failed to set value in Redis for key '{key}': {str(e)}")
+                logger.error(f"Failed to set value in cache for key '{key}': {str(e)}")
 
             return cast(JSON_ro, value)
 
     def delete(self, key: str) -> None:
         try:
-            self.redis_client.delete(REDIS_KEY_PREFIX + key)
+            self._get_cache().delete(REDIS_KEY_PREFIX + key)
         except Exception as e:
-            logger.error(f"Failed to delete value from Redis for key '{key}': {str(e)}")
+            logger.error(f"Failed to delete value from cache for key '{key}': {str(e)}")
 
         with get_session_with_current_tenant() as db_session:
             result = db_session.query(KVStore).filter_by(key=key).delete()

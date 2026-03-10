@@ -1,8 +1,8 @@
 "use client";
 
 import { FeedbackType } from "@/app/app/interfaces";
-import Button from "@/refresh-components/buttons/Button";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import useFeedbackController from "@/hooks/useFeedbackController";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import { SvgThumbsDown, SvgThumbsUp } from "@opal/icons";
@@ -26,8 +26,7 @@ export default function FeedbackModal({
   messageId,
 }: FeedbackModalProps) {
   const modal = useModal();
-  const { popup, setPopup } = usePopup();
-  const { handleFeedbackChange } = useFeedbackController({ setPopup });
+  const { handleFeedbackChange } = useFeedbackController();
 
   const initialValues: FeedbackFormValues = {
     additional_feedback: "",
@@ -58,8 +57,6 @@ export default function FeedbackModal({
 
   return (
     <>
-      {popup}
-
       <Modal open={modal.isOpen} onOpenChange={modal.toggle}>
         <Modal.Content width="sm">
           <Modal.Header
@@ -94,21 +91,22 @@ export default function FeedbackModal({
 
                 <Modal.Footer>
                   <Button
+                    prominence="secondary"
                     onClick={() => modal.toggle(false)}
-                    secondary
                     type="button"
                   >
                     Cancel
                   </Button>
-                  <Button
-                    onClick={() => formikHandleSubmit()}
+                  <Disabled
                     disabled={
                       isSubmitting ||
                       (feedbackType === "dislike" && (!dirty || !isValid))
                     }
                   >
-                    {isSubmitting ? "Submitting..." : "Submit"}
-                  </Button>
+                    <Button onClick={() => formikHandleSubmit()}>
+                      {isSubmitting ? "Submitting..." : "Submit"}
+                    </Button>
+                  </Disabled>
                 </Modal.Footer>
               </>
             )}

@@ -99,6 +99,7 @@ export function CustomEmbeddingModelForm({
               subtext="Prefix for passage embeddings"
             />
 
+            {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
             <Button
               type="submit"
               disabled={isSubmitting}

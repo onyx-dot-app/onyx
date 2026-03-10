@@ -14,7 +14,6 @@ from onyx.db.search_settings import get_current_search_settings
 from onyx.server.documents.models import IndexAttemptSnapshot
 from onyx.server.documents.models import PaginatedReturn
 from tests.integration.common_utils.constants import API_SERVER_URL
-from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.constants import MAX_DELAY
 from tests.integration.common_utils.test_models import DATestIndexAttempt
 from tests.integration.common_utils.test_models import DATestUser
@@ -86,9 +85,9 @@ class IndexAttemptManager:
     @staticmethod
     def get_index_attempt_page(
         cc_pair_id: int,
+        user_performing_action: DATestUser,
         page: int = 0,
         page_size: int = 10,
-        user_performing_action: DATestUser | None = None,
     ) -> PaginatedReturn[IndexAttemptSnapshot]:
         query_params: dict[str, str | int] = {
             "page_num": page,
@@ -101,11 +100,7 @@ class IndexAttemptManager:
         )
         response = requests.get(
             url=url,
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         response.raise_for_status()
         data = response.json()
@@ -117,7 +112,7 @@ class IndexAttemptManager:
     @staticmethod
     def get_latest_index_attempt_for_cc_pair(
         cc_pair_id: int,
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> IndexAttemptSnapshot | None:
         """Get an IndexAttempt by ID"""
         index_attempts = IndexAttemptManager.get_index_attempt_page(
@@ -134,9 +129,9 @@ class IndexAttemptManager:
     @staticmethod
     def wait_for_index_attempt_start(
         cc_pair_id: int,
+        user_performing_action: DATestUser,
         index_attempts_to_ignore: list[int] | None = None,
         timeout: float = MAX_DELAY,
-        user_performing_action: DATestUser | None = None,
     ) -> IndexAttemptSnapshot:
         """Wait for an IndexAttempt to start"""
         start = datetime.now()
@@ -164,7 +159,7 @@ class IndexAttemptManager:
     def get_index_attempt_by_id(
         index_attempt_id: int,
         cc_pair_id: int,
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> IndexAttemptSnapshot:
         page_num = 0
         page_size = 10
@@ -190,8 +185,8 @@ class IndexAttemptManager:
     def wait_for_index_attempt_completion(
         index_attempt_id: int,
         cc_pair_id: int,
+        user_performing_action: DATestUser,
         timeout: float = MAX_DELAY,
-        user_performing_action: DATestUser | None = None,
     ) -> None:
         """Wait for an IndexAttempt to complete"""
         start = time.monotonic()
@@ -223,19 +218,15 @@ class IndexAttemptManager:
     @staticmethod
     def get_index_attempt_errors_for_cc_pair(
         cc_pair_id: int,
+        user_performing_action: DATestUser,
         include_resolved: bool = True,
-        user_performing_action: DATestUser | None = None,
     ) -> list[IndexAttemptErrorPydantic]:
         url = f"{API_SERVER_URL}/manage/admin/cc-pair/{cc_pair_id}/errors?page_size=100"
         if include_resolved:
             url += "&include_resolved=true"
         response = requests.get(
             url=url,
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         response.raise_for_status()
         data = response.json()

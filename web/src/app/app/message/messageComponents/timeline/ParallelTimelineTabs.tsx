@@ -14,9 +14,14 @@ import {
   TimelineRendererComponent,
   TimelineRendererOutput,
 } from "./TimelineRendererComponent";
+import {
+  isReasoningPackets,
+  isDeepResearchPlanPackets,
+  isMemoryToolPackets,
+} from "./packetHelpers";
 import Tabs from "@/refresh-components/Tabs";
 import { SvgBranch, SvgFold, SvgExpand } from "@opal/icons";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button } from "@opal/components";
 import { TimelineRow } from "@/app/app/message/messageComponents/timeline/primitives/TimelineRow";
 import { TimelineSurface } from "@/app/app/message/messageComponents/timeline/primitives/TimelineSurface";
 import { TimelineTopSpacer } from "@/app/app/message/messageComponents/timeline/primitives/TimelineTopSpacer";
@@ -51,8 +56,6 @@ export function ParallelTimelineTabs({
   const handleToggle = useCallback(() => setIsExpanded((prev) => !prev), []);
   const handleHeaderEnter = useCallback(() => setIsHover(true), []);
   const handleHeaderLeave = useCallback(() => setIsHover(false), []);
-  const noopComplete = useCallback(() => {}, []);
-
   const topSpacerVariant = isFirstTurnGroup ? "first" : "none";
   const shouldShowResults = !(!isExpanded && stopPacketSeen);
 
@@ -61,6 +64,13 @@ export function ParallelTimelineTabs({
     () => turnGroup.steps.find((step) => step.key === activeTab),
     [turnGroup.steps, activeTab]
   );
+
+  // Determine if the active step needs full-width content (no right padding)
+  const noPaddingRight = activeStep
+    ? isReasoningPackets(activeStep.packets) ||
+      isDeepResearchPlanPackets(activeStep.packets) ||
+      isMemoryToolPackets(activeStep.packets)
+    : false;
 
   // Memoized loading states for each step
   const loadingStates = useMemo(
@@ -84,9 +94,10 @@ export function ParallelTimelineTabs({
         isFirstStep={false}
         isSingleStep={false}
         collapsible={true}
+        noPaddingRight={noPaddingRight}
       />
     ),
-    [isLastTurnGroup]
+    [isLastTurnGroup, noPaddingRight]
   );
 
   const hasActivePackets = Boolean(activeStep && activeStep.packets.length > 0);
@@ -134,8 +145,9 @@ export function ParallelTimelineTabs({
                   "transition-colors duration-200"
                 )}
                 rightContent={
-                  <IconButton
-                    internal
+                  <Button
+                    prominence="tertiary"
+                    size="sm"
                     onClick={handleToggle}
                     icon={isExpanded ? SvgFold : SvgExpand}
                   />
@@ -164,7 +176,6 @@ export function ParallelTimelineTabs({
             key={`${activeTab}-${isExpanded}`}
             packets={activeStep.packets}
             chatState={chatState}
-            onComplete={noopComplete}
             animate={!stopPacketSeen}
             stopPacketSeen={stopPacketSeen}
             stopReason={stopReason}

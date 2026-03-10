@@ -59,7 +59,7 @@ export enum UserFileStatus {
 export type ProjectDetails = {
   project: Project;
   files?: ProjectFile[];
-  persona_id_to_is_default?: Record<number, boolean>;
+  persona_id_to_featured?: Record<number, boolean>;
 };
 
 export async function fetchProjects(): Promise<Project[]> {
@@ -308,15 +308,15 @@ export async function getProjectTokenCount(projectId: number): Promise<number> {
 
 export async function getMaxSelectedDocumentTokens(
   personaId: number
-): Promise<number> {
+): Promise<number | null> {
   const response = await fetch(
     `/api/chat/max-selected-document-tokens?persona_id=${personaId}`
   );
   if (!response.ok) {
-    return 128_000;
+    return null;
   }
   const json = await response.json();
-  return (json?.max_tokens as number) ?? 128_000;
+  return (json?.max_tokens as number) ?? null;
 }
 
 export async function moveChatSession(

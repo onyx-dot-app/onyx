@@ -3,12 +3,13 @@
 import React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { cn } from "@/lib/utils";
-import type { IconProps } from "@opal/types";
-import Text from "@/refresh-components/texts/Text";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import type { IconFunctionComponent } from "@opal/types";
+import { Button } from "@opal/components";
+import { Content } from "@opal/layouts";
 import { SvgX } from "@opal/icons";
 import { WithoutStyles } from "@/types";
 import { Section, SectionProps } from "@/layouts/general-layouts";
+import useContainerCenter from "@/hooks/useContainerCenter";
 
 /**
  * Modal Root Component
@@ -113,7 +114,7 @@ const heightClasses = {
  * </Modal.Content>
  * ```
  */
-interface ModalContentProps
+export interface ModalContentProps
   extends WithoutStyles<
     React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
   > {
@@ -264,11 +265,29 @@ const ModalContent = React.forwardRef<
       contentRef(node);
     };
 
+    const { centerX, centerY, hasContainerCenter } = useContainerCenter();
+
     const animationClasses = cn(
       "data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
       "data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95",
       "data-[state=open]:slide-in-from-top-1/2 data-[state=closed]:slide-out-to-top-1/2",
       "duration-200"
+    );
+
+    const containerStyle: React.CSSProperties | undefined = hasContainerCenter
+      ? ({
+          left: centerX,
+          top: centerY,
+          "--tw-enter-translate-x": "-50%",
+          "--tw-exit-translate-x": "-50%",
+          "--tw-enter-translate-y": "-50%",
+          "--tw-exit-translate-y": "-50%",
+        } as React.CSSProperties)
+      : undefined;
+
+    const positionClasses = cn(
+      "fixed -translate-x-1/2 -translate-y-1/2",
+      !hasContainerCenter && "left-1/2 top-1/2"
     );
 
     const dialogEventHandlers = {
@@ -315,8 +334,9 @@ const ModalContent = React.forwardRef<
               {...dialogEventHandlers}
             >
               <div
+                style={containerStyle}
                 className={cn(
-                  "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2",
+                  positionClasses,
                   "z-modal",
                   "flex flex-col gap-4 items-center",
                   "max-w-[calc(100dvw-2rem)] max-h-[calc(100dvh-2rem)]",
@@ -334,8 +354,10 @@ const ModalContent = React.forwardRef<
             // Without bottomSlot: original single-element rendering
             <DialogPrimitive.Content
               ref={handleRef}
+              style={containerStyle}
               className={cn(
-                "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 overflow-hidden",
+                positionClasses,
+                "overflow-hidden",
                 "z-modal",
                 background === "gray"
                   ? "bg-background-tint-01"
@@ -366,9 +388,16 @@ ModalContent.displayName = DialogPrimitive.Content.displayName;
  * (icon, title, description, close button) are now controlled via this single
  * component using props, so no additional subcomponents are required.
  *
+ * When `icon` is omitted the header renders a minimal variant: just the
+ * title + description with the close button inline to the right of the title.
+ * This is JUST to be used for preview windows
+ *
  * @example
  * ```tsx
  * <Modal.Header icon={SvgWarning} title="Confirm Action" description="Are you sure?" />
+ *
+ * // Minimal variant (no icon)
+ * <Modal.Header title="Confirm Action" description="Are you sure?" />
  *
  * // With custom content
  * // Children render below the provided title/description stack.
@@ -378,64 +407,85 @@ ModalContent.displayName = DialogPrimitive.Content.displayName;
  * ```
  */
 interface ModalHeaderProps extends WithoutStyles<SectionProps> {
-  icon: React.FunctionComponent<IconProps>;
+  icon?: IconFunctionComponent;
+  moreIcon1?: IconFunctionComponent;
+  moreIcon2?: IconFunctionComponent;
   title: string;
   description?: string;
   onClose?: () => void;
 }
 const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
-  ({ icon: Icon, title, description, onClose, children, ...props }, ref) => {
+  (
+    {
+      icon,
+      moreIcon1,
+      moreIcon2,
+      title,
+      description,
+      onClose,
+      children,
+      ...props
+    },
+    ref
+  ) => {
     const { closeButtonRef, setHasDescription } = useModalContext();
 
-    // useLayoutEffect ensures aria-describedby is set before paint,
-    // so screen readers announce the description when the dialog opens
     React.useLayoutEffect(() => {
       setHasDescription(!!description);
     }, [description, setHasDescription]);
 
+    const closeButton = onClose && (
+      <div
+        tabIndex={-1}
+        ref={closeButtonRef as React.RefObject<HTMLDivElement>}
+      >
+        <DialogPrimitive.Close asChild>
+          <Button
+            icon={SvgX}
+            prominence="tertiary"
+            size="sm"
+            onClick={onClose}
+          />
+        </DialogPrimitive.Close>
+      </div>
+    );
+
     return (
       <Section ref={ref} padding={1} alignItems="start" height="fit" {...props}>
-        <Section gap={0.5}>
-          <Section
-            gap={0}
-            padding={0}
-            flexDirection="row"
-            justifyContent="between"
-          >
-            {/*
-              The `h-[1.5rem]` and `w-[1.5rem]` were added as backups here.
-              However, prop-resolution technically resolves to choosing classNames over size props, so technically the `size={24}` is the backup.
-              We specify both to be safe.
-
-              # Note
-              1.5rem === 24px
-            */}
-            <Icon className="stroke-text-04 h-[1.5rem] w-[1.5rem]" size={24} />
-            {onClose && (
-              <div
-                tabIndex={-1}
-                ref={closeButtonRef as React.RefObject<HTMLDivElement>}
-              >
-                <DialogPrimitive.Close asChild>
-                  <IconButton icon={SvgX} internal onClick={onClose} />
-                </DialogPrimitive.Close>
-              </div>
-            )}
-          </Section>
-
-          <Section alignItems="start" gap={0}>
+        <Section
+          flexDirection="row"
+          justifyContent="between"
+          alignItems="start"
+          gap={0}
+          padding={0}
+        >
+          <div className="relative w-full">
+            {/* Close button is absolutely positioned because:
+               1. Figma mocks place it overlapping the top-right of the content area
+               2. Using ContentAction with rightChildren causes the description
+                  to wrap to the second line early due to the button reserving space */}
+            <div className="absolute top-0 right-0">{closeButton}</div>
             <DialogPrimitive.Title asChild>
-              <Text headingH3>{title}</Text>
+              <div>
+                <Content
+                  icon={icon}
+                  moreIcon1={moreIcon1}
+                  moreIcon2={moreIcon2}
+                  title={title}
+                  description={description}
+                  sizePreset="section"
+                  variant="heading"
+                />
+                {description && (
+                  <DialogPrimitive.Description className="hidden">
+                    {description}
+                  </DialogPrimitive.Description>
+                )}
+              </div>
             </DialogPrimitive.Title>
-            {description && (
-              <DialogPrimitive.Description asChild>
-                <Text secondaryBody text03>
-                  {description}
-                </Text>
-              </DialogPrimitive.Description>
-            )}
-          </Section>
+          </div>
         </Section>
+
         {children}
       </Section>
     );
@@ -465,10 +515,16 @@ const ModalBody = React.forwardRef<HTMLDivElement, ModalBodyProps>(
         ref={ref}
         className={cn(
           twoTone && "bg-background-tint-01",
-          "h-full min-h-0 overflow-y-auto w-full"
+          "flex-auto min-h-0 overflow-y-auto w-full"
         )}
       >
-        <Section padding={1} gap={1} alignItems="start" {...props}>
+        <Section
+          height="auto"
+          padding={1}
+          gap={1}
+          alignItems="start"
+          {...props}
+        >
           {children}
         </Section>
       </div>

@@ -8,7 +8,7 @@ on:
   pull_request:
     branches:
       - main
-      - 'release/**'
+      - "release/**"
   push:
     tags:
       - "v*.*.*"
@@ -21,7 +21,13 @@ jobs:
     # See https://runs-on.com/runners/linux/
     # Note: Mypy seems quite optimized for x64 compared to arm64.
     # Similarly, mypy is single-threaded and incremental, so 2cpu is sufficient.
-    runs-on: [runs-on, runner=2cpu-linux-x64, "run-id=${{ github.run_id }}-mypy-check", "extras=s3-cache"]
+    runs-on:
+      [
+        runs-on,
+        runner=2cpu-linux-x64,
+        "run-id=${{ github.run_id }}-mypy-check",
+        "extras=s3-cache",
+      ]
     timeout-minutes: 45
 
     steps:
@@ -52,21 +58,14 @@ jobs:
         if: ${{ vars.DISABLE_MYPY_CACHE != 'true' }}
         uses: runs-on/cache@50350ad4242587b6c8c2baa2e740b1bc11285ff4 # ratchet:runs-on/cache@v4
         with:
-          path: backend/.mypy_cache
-          key: mypy-${{ runner.os }}-${{ github.base_ref || github.event.merge_group.base_ref || 'main' }}-${{ hashFiles('**/*.py', '**/*.pyi', 'backend/pyproject.toml') }}
+          path: .mypy_cache
+          key: mypy-${{ runner.os }}-${{ github.base_ref || github.event.merge_group.base_ref || 'main' }}-${{ hashFiles('**/*.py', '**/*.pyi', 'pyproject.toml') }}
           restore-keys: |
             mypy-${{ runner.os }}-${{ github.base_ref || github.event.merge_group.base_ref || 'main' }}-
             mypy-${{ runner.os }}-
 
       - name: Run MyPy
-        working-directory: ./backend
         env:
           MYPY_FORCE_COLOR: 1
           TERM: xterm-256color
         run: mypy .
-
-      - name: Run MyPy (tools/)
-        env:
-          MYPY_FORCE_COLOR: 1
-          TERM: xterm-256color
-        run: mypy tools/

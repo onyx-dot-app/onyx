@@ -20,8 +20,6 @@ from onyx.document_index.vespa_constants import TENANT_ID
 from onyx.document_index.vespa_constants import USER_PROJECT
 from shared_configs.configs import MULTI_TENANT
 
-# Import the function under test
-
 
 class TestBuildVespaFilters:
     def test_empty_filters(self) -> None:
@@ -179,11 +177,27 @@ class TestBuildVespaFilters:
         assert f"!({HIDDEN}=true) and " == result
 
     def test_user_project_filter(self) -> None:
-        """Test user project filtering (replacement for user folder IDs)."""
-        # Single project id
+        """Test user project filtering.
+
+        project_id alone does NOT trigger a knowledge scope restriction
+        (an agent with no explicit knowledge should search everything).
+        It only participates when explicit knowledge filters are present.
+        """
+        # project_id alone → no restriction
         filters = IndexFilters(access_control_list=[], project_id=789)
         result = build_vespa_filters(filters)
-        assert f'!({HIDDEN}=true) and ({USER_PROJECT} contains "789") and ' == result
+        assert f"!({HIDDEN}=true) and " == result
+
+        # project_id with user_file_ids → both OR'd
+        id1 = UUID("00000000-0000-0000-0000-000000000123")
+        filters = IndexFilters(
+            access_control_list=[], project_id=789, user_file_ids=[id1]
+        )
+        result = build_vespa_filters(filters)
+        assert (
+            f'!({HIDDEN}=true) and (({DOCUMENT_ID} contains "{str(id1)}") or ({USER_PROJECT} contains "789")) and '
+            == result
+        )
 
         # No project id
         filters = IndexFilters(access_control_list=[], project_id=None)
@@ -217,7 +231,11 @@ class TestBuildVespaFilters:
         )
 
     def test_combined_filters(self) -> None:
-        """Test combining multiple filter types."""
+        """Test combining multiple filter types.
+
+        Knowledge-scope filters (document_set, user_file_ids, project_id,
+        persona_id) are OR'd together, while all other filters are AND'd.
+        """
         id1 = UUID("00000000-0000-0000-0000-000000000123")
         filters = IndexFilters(
             access_control_list=["user1", "group1"],
@@ -231,7 +249,6 @@ class TestBuildVespaFilters:
 
         result = build_vespa_filters(filters)
 
-        # Build expected result piece by piece for readability
         expected = f"!({HIDDEN}=true) and "
         expected += (
             '(access_control_list contains "user1" or '
@@ -239,9 +256,13 @@ class TestBuildVespaFilters:
         )
         expected += f'({SOURCE_TYPE} contains "web") and '
         expected += f'({METADATA_LIST} contains "color{INDEX_SEPARATOR}red") and '
-        expected += f'({DOCUMENT_SETS} contains "set1") and '
-        expected += f'({DOCUMENT_ID} contains "{str(id1)}") and '
-        expected += f'({USER_PROJECT} contains "789") and '
+        # Knowledge scope filters are OR'd together
+        expected += (
+            f'(({DOCUMENT_SETS} contains "set1")'
+            f' or ({DOCUMENT_ID} contains "{str(id1)}")'
+            f' or ({USER_PROJECT} contains "789")'
+            f") and "
+        )
         cutoff_secs = int(datetime(2023, 1, 1, tzinfo=timezone.utc).timestamp())
         expected += f"!({DOC_UPDATED_AT} < {cutoff_secs}) and "
 
@@ -250,6 +271,32 @@ class TestBuildVespaFilters:
         # With trailing AND removed
         result_no_trailing = build_vespa_filters(filters, remove_trailing_and=True)
         assert expected[:-5] == result_no_trailing  # Remove trailing " and "
+
+    def test_knowledge_scope_single_filter_not_wrapped(self) -> None:
+        """When only one knowledge-scope filter is present it should not
+        be wrapped in an extra OR group."""
+        filters = IndexFilters(access_control_list=[], document_set=["set1"])
+        result = build_vespa_filters(filters)
+        assert f'!({HIDDEN}=true) and ({DOCUMENT_SETS} contains "set1") and ' == result
+
+    def test_knowledge_scope_document_set_and_user_files_ored(self) -> None:
+        """Document set filter and user file IDs must be OR'd so that
+        connector documents (in the set) and user files (with specific
+        IDs) can both be found."""
+        id1 = UUID("00000000-0000-0000-0000-000000000123")
+        filters = IndexFilters(
+            access_control_list=[],
+            document_set=["engineering"],
+            user_file_ids=[id1],
+        )
+        result = build_vespa_filters(filters)
+        expected = (
+            f"!({HIDDEN}=true) and "
+            f'(({DOCUMENT_SETS} contains "engineering")'
+            f' or ({DOCUMENT_ID} contains "{str(id1)}")'
+            f") and "
+        )
+        assert expected == result
 
     def test_empty_or_none_values(self) -> None:
         """Test with empty or None values in filter lists."""

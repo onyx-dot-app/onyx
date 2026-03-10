@@ -1,4 +1,4 @@
-import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import React, { useState, useEffect } from "react";
 import { useSWRConfig } from "swr";
 import * as Yup from "yup";
@@ -6,15 +6,12 @@ import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { adminDeleteCredential } from "@/lib/credential";
 import { setupGoogleDriveOAuth } from "@/lib/googleDrive";
-import {
-  DOCS_ADMINS_PATH,
-  GOOGLE_DRIVE_AUTH_IS_ADMIN_COOKIE_NAME,
-} from "@/lib/constants";
-import Cookies from "js-cookie";
+import { DOCS_ADMINS_PATH } from "@/lib/constants";
 import { TextFormField, SectionHeader } from "@/components/Field";
 import { Form, Formik } from "formik";
 import { User } from "@/lib/types";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import {
   Credential,
   GoogleDriveCredentialJson,
@@ -28,13 +25,7 @@ import { cn, truncateString } from "@/lib/utils";
 
 type GoogleDriveCredentialJsonTypes = "authorized_user" | "service_account";
 
-export const DriveJsonUpload = ({
-  setPopup,
-  onSuccess,
-}: {
-  setPopup: (popupSpec: PopupSpec | null) => void;
-  onSuccess?: () => void;
-}) => {
+export const DriveJsonUpload = ({ onSuccess }: { onSuccess?: () => void }) => {
   const { mutate } = useSWRConfig();
   const [isUploading, setIsUploading] = useState(false);
   const [fileName, setFileName] = useState<string | undefined>();
@@ -67,10 +58,7 @@ export const DriveJsonUpload = ({
           );
         }
       } catch (e) {
-        setPopup({
-          message: `Invalid file provided - ${e}`,
-          type: "error",
-        });
+        toast.error(`Invalid file provided - ${e}`);
         setIsUploading(false);
         return;
       }
@@ -87,20 +75,14 @@ export const DriveJsonUpload = ({
           }
         );
         if (response.ok) {
-          setPopup({
-            message: "Successfully uploaded app credentials",
-            type: "success",
-          });
+          toast.success("Successfully uploaded app credentials");
           mutate("/api/manage/admin/connector/google-drive/app-credential");
           if (onSuccess) {
             onSuccess();
           }
         } else {
           const errorMsg = await response.text();
-          setPopup({
-            message: `Failed to upload app credentials - ${errorMsg}`,
-            type: "error",
-          });
+          toast.error(`Failed to upload app credentials - ${errorMsg}`);
         }
       }
 
@@ -116,10 +98,7 @@ export const DriveJsonUpload = ({
           }
         );
         if (response.ok) {
-          setPopup({
-            message: "Successfully uploaded service account key",
-            type: "success",
-          });
+          toast.success("Successfully uploaded service account key");
           mutate(
             "/api/manage/admin/connector/google-drive/service-account-key"
           );
@@ -128,10 +107,7 @@ export const DriveJsonUpload = ({
           }
         } else {
           const errorMsg = await response.text();
-          setPopup({
-            message: `Failed to upload service account key - ${errorMsg}`,
-            type: "error",
-          });
+          toast.error(`Failed to upload service account key - ${errorMsg}`);
         }
       }
       setIsUploading(false);
@@ -175,10 +151,7 @@ export const DriveJsonUpload = ({
       ) {
         handleFileUpload(file);
       } else {
-        setPopup({
-          message: "Please upload a JSON file",
-          type: "error",
-        });
+        toast.error("Please upload a JSON file");
       }
     }
   };
@@ -242,7 +215,6 @@ export const DriveJsonUpload = ({
 };
 
 interface DriveJsonUploadSectionProps {
-  setPopup: (popupSpec: PopupSpec | null) => void;
   appCredentialData?: { client_id: string };
   serviceAccountCredentialData?: { service_account_email: string };
   isAdmin: boolean;
@@ -251,7 +223,6 @@ interface DriveJsonUploadSectionProps {
 }
 
 export const DriveJsonUploadSection = ({
-  setPopup,
   appCredentialData,
   serviceAccountCredentialData,
   isAdmin,
@@ -344,7 +315,7 @@ export const DriveJsonUploadSection = ({
           {isAdmin && !existingAuthCredential && (
             <div className="mt-2">
               <Button
-                danger
+                variant="danger"
                 onClick={async () => {
                   const endpoint =
                     localServiceAccountData?.service_account_email
@@ -373,14 +344,13 @@ export const DriveJsonUploadSection = ({
                       "/api/manage/admin/connector/google-drive/service-account-credential"
                     );
 
-                    setPopup({
-                      message: `Successfully deleted ${
+                    toast.success(
+                      `Successfully deleted ${
                         localServiceAccountData
                           ? "service account key"
                           : "app credentials"
-                      }`,
-                      type: "success",
-                    });
+                      }`
+                    );
                     // Immediately update local state
                     if (localServiceAccountData) {
                       setLocalServiceAccountData(undefined);
@@ -390,10 +360,7 @@ export const DriveJsonUploadSection = ({
                     handleSuccess();
                   } else {
                     const errorMsg = await response.text();
-                    setPopup({
-                      message: `Failed to delete credentials - ${errorMsg}`,
-                      type: "error",
-                    });
+                    toast.error(`Failed to delete credentials - ${errorMsg}`);
                   }
                 }}
               >
@@ -407,7 +374,7 @@ export const DriveJsonUploadSection = ({
       {!(
         localServiceAccountData?.service_account_email ||
         localAppCredentialData?.client_id
-      ) && <DriveJsonUpload setPopup={setPopup} onSuccess={handleSuccess} />}
+      ) && <DriveJsonUpload onSuccess={handleSuccess} />}
     </div>
   );
 };
@@ -417,7 +384,6 @@ interface DriveCredentialSectionProps {
   googleDriveServiceAccountCredential?: Credential<GoogleDriveServiceAccountCredentialJson>;
   serviceAccountKeyData?: { service_account_email: string };
   appCredentialData?: { client_id: string };
-  setPopup: (popupSpec: PopupSpec | null) => void;
   refreshCredentials: () => void;
   connectorAssociated: boolean;
   user: User | null;
@@ -425,7 +391,6 @@ interface DriveCredentialSectionProps {
 
 async function handleRevokeAccess(
   connectorAssociated: boolean,
-  setPopup: (popupSpec: PopupSpec | null) => void,
   existingCredential:
     | Credential<GoogleDriveCredentialJson>
     | Credential<GoogleDriveServiceAccountCredentialJson>,
@@ -435,18 +400,12 @@ async function handleRevokeAccess(
     const message =
       "Cannot revoke the Google Drive credential while any connector is still associated with the credential. " +
       "Please delete all associated connectors, then try again.";
-    setPopup({
-      message: message,
-      type: "error",
-    });
+    toast.error(message);
     return;
   }
 
   await adminDeleteCredential(existingCredential.id);
-  setPopup({
-    message: "Successfully revoked the Google Drive credential!",
-    type: "success",
-  });
+  toast.success("Successfully revoked the Google Drive credential!");
 
   refreshCredentials();
 }
@@ -456,7 +415,6 @@ export const DriveAuthSection = ({
   googleDriveServiceAccountCredential,
   serviceAccountKeyData,
   appCredentialData,
-  setPopup,
   refreshCredentials,
   connectorAssociated,
   user,
@@ -510,11 +468,10 @@ export const DriveAuthSection = ({
             </div>
           </div>
           <Button
-            danger
+            variant="danger"
             onClick={async () => {
               handleRevokeAccess(
                 connectorAssociated,
-                setPopup,
                 existingCredential,
                 refreshCredentials
               );
@@ -578,23 +535,20 @@ export const DriveAuthSection = ({
                 );
 
                 if (response.ok) {
-                  setPopup({
-                    message: "Successfully created service account credential",
-                    type: "success",
-                  });
+                  toast.success(
+                    "Successfully created service account credential"
+                  );
                   refreshCredentials();
                 } else {
                   const errorMsg = await response.text();
-                  setPopup({
-                    message: `Failed to create service account credential - ${errorMsg}`,
-                    type: "error",
-                  });
+                  toast.error(
+                    `Failed to create service account credential - ${errorMsg}`
+                  );
                 }
               } catch (error) {
-                setPopup({
-                  message: `Failed to create service account credential - ${error}`,
-                  type: "error",
-                });
+                toast.error(
+                  `Failed to create service account credential - ${error}`
+                );
               } finally {
                 formikHelpers.setSubmitting(false);
               }
@@ -608,9 +562,11 @@ export const DriveAuthSection = ({
                   subtext="Enter the email of an admin/owner of the Google Organization that owns the Google Drive(s) you want to index."
                 />
                 <div className="flex">
-                  <Button type="submit" disabled={isSubmitting}>
-                    {isSubmitting ? "Creating..." : "Create Credential"}
-                  </Button>
+                  <Disabled disabled={isSubmitting}>
+                    <Button type="submit">
+                      {isSubmitting ? "Creating..." : "Create Credential"}
+                    </Button>
+                  </Disabled>
                 </div>
               </Form>
             )}
@@ -630,43 +586,35 @@ export const DriveAuthSection = ({
             Google Drive account.
           </p>
         </div>
-        <Button
-          disabled={isAuthenticating}
-          onClick={async () => {
-            setIsAuthenticating(true);
-            try {
-              // cookie used by callback to determine where to finally redirect to
-              Cookies.set(GOOGLE_DRIVE_AUTH_IS_ADMIN_COOKIE_NAME, "true", {
-                path: "/",
-              });
-
-              const [authUrl, errorMsg] = await setupGoogleDriveOAuth({
-                isAdmin: true,
-                name: "OAuth (uploaded)",
-              });
-
-              if (authUrl) {
-                router.push(authUrl as Route);
-              } else {
-                setPopup({
-                  message: errorMsg,
-                  type: "error",
+        <Disabled disabled={isAuthenticating}>
+          <Button
+            onClick={async () => {
+              setIsAuthenticating(true);
+              try {
+                const [authUrl, errorMsg] = await setupGoogleDriveOAuth({
+                  isAdmin: true,
+                  name: "OAuth (uploaded)",
                 });
+
+                if (authUrl) {
+                  router.push(authUrl as Route);
+                } else {
+                  toast.error(errorMsg);
+                  setIsAuthenticating(false);
+                }
+              } catch (error) {
+                toast.error(
+                  `Failed to authenticate with Google Drive - ${error}`
+                );
                 setIsAuthenticating(false);
               }
-            } catch (error) {
-              setPopup({
-                message: `Failed to authenticate with Google Drive - ${error}`,
-                type: "error",
-              });
-              setIsAuthenticating(false);
-            }
-          }}
-        >
-          {isAuthenticating
-            ? "Authenticating..."
-            : "Authenticate with Google Drive"}
-        </Button>
+            }}
+          >
+            {isAuthenticating
+              ? "Authenticating..."
+              : "Authenticate with Google Drive"}
+          </Button>
+        </Disabled>
       </div>
     );
   }

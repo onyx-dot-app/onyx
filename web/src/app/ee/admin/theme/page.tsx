@@ -1,19 +1,22 @@
 "use client";
 
 import * as SettingsLayouts from "@/layouts/settings-layouts";
-import { SvgPaintBrush } from "@opal/icons";
-import Button from "@/refresh-components/buttons/Button";
+import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
+import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import {
   AppearanceThemeSettings,
   AppearanceThemeSettingsRef,
 } from "./AppearanceThemeSettings";
 import { useContext, useRef, useState } from "react";
 import { SettingsContext } from "@/providers/SettingsProvider";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
-import { EnterpriseSettings } from "@/app/admin/settings/interfaces";
+import { EnterpriseSettings } from "@/interfaces/settings";
 import { useRouter } from "next/navigation";
+
+const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.THEME]!;
 
 const CHAR_LIMITS = {
   application_name: 50,
@@ -30,7 +33,6 @@ export default function ThemePage() {
   const settings = useContext(SettingsContext);
   const [selectedLogo, setSelectedLogo] = useState<File | null>(null);
   const appearanceSettingsRef = useRef<AppearanceThemeSettingsRef>(null);
-  const { popup, setPopup } = usePopup();
 
   if (!settings) {
     return null;
@@ -191,10 +193,7 @@ export default function ThemePage() {
         // dirty comparisons reflect the newly-saved values.
         if (success) {
           formikHelpers.resetForm({ values });
-          setPopup({
-            type: "success",
-            message: "Appearance settings saved successfully!",
-          });
+          toast.success("Appearance settings saved successfully!");
         }
 
         formikHelpers.setSubmitting(false);
@@ -213,28 +212,32 @@ export default function ThemePage() {
 
         return (
           <Form className="w-full h-full">
-            {popup}
             <SettingsLayouts.Root>
               <SettingsLayouts.Header
-                title="Appearance & Theming"
+                title={route.title}
                 description="Customize how the application appears to users across your organization."
-                icon={SvgPaintBrush}
+                icon={route.icon}
                 rightChildren={
-                  <Button
-                    type="button"
+                  <Disabled
                     disabled={isSubmitting || (!dirty && !hasLogoChange)}
-                    onClick={async () => {
-                      const errors = await validateForm();
-                      if (Object.keys(errors).length > 0) {
-                        setErrors(errors);
-                        appearanceSettingsRef.current?.focusFirstError(errors);
-                        return;
-                      }
-                      await submitForm();
-                    }}
                   >
-                    {isSubmitting ? "Applying..." : "Apply Changes"}
-                  </Button>
+                    <Button
+                      type="button"
+                      onClick={async () => {
+                        const errors = await validateForm();
+                        if (Object.keys(errors).length > 0) {
+                          setErrors(errors);
+                          appearanceSettingsRef.current?.focusFirstError(
+                            errors
+                          );
+                          return;
+                        }
+                        await submitForm();
+                      }}
+                    >
+                      {isSubmitting ? "Applying..." : "Apply Changes"}
+                    </Button>
+                  </Disabled>
                 }
               />
               <SettingsLayouts.Body>

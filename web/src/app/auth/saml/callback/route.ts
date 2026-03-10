@@ -17,16 +17,7 @@ async function handleSamlCallback(
 
   const fetchOptions: RequestInit = {
     method,
-    headers: {
-      "X-Forwarded-Host":
-        request.headers.get("X-Forwarded-Host") ||
-        request.headers.get("host") ||
-        "",
-      "X-Forwarded-Port":
-        request.headers.get("X-Forwarded-Port") ||
-        new URL(request.url).port ||
-        "",
-    },
+    headers: {},
   };
 
   let relayState: string | null = null;

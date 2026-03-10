@@ -116,12 +116,15 @@ def get_connector_credential_pairs_for_user(
     order_by_desc: bool = False,
     source: DocumentSource | None = None,
     processing_mode: ProcessingMode | None = ProcessingMode.REGULAR,
+    defer_connector_config: bool = False,
 ) -> list[ConnectorCredentialPair]:
     """Get connector credential pairs for a user.
 
     Args:
         processing_mode: Filter by processing mode. Defaults to REGULAR to hide
             FILE_SYSTEM connectors from standard admin UI. Pass None to get all.
+        defer_connector_config: If True, skips loading Connector.connector_specific_config
+            to avoid fetching large JSONB blobs when they aren't needed.
     """
     if eager_load_user:
         assert (
@@ -130,7 +133,10 @@ def get_connector_credential_pairs_for_user(
     stmt = select(ConnectorCredentialPair).distinct()
 
     if eager_load_connector:
-        stmt = stmt.options(selectinload(ConnectorCredentialPair.connector))
+        connector_load = selectinload(ConnectorCredentialPair.connector)
+        if defer_connector_config:
+            connector_load = connector_load.defer(Connector.connector_specific_config)
+        stmt = stmt.options(connector_load)
 
     if eager_load_credential:
         load_opts = selectinload(ConnectorCredentialPair.credential)
@@ -170,6 +176,7 @@ def get_connector_credential_pairs_for_user_parallel(
     order_by_desc: bool = False,
     source: DocumentSource | None = None,
     processing_mode: ProcessingMode | None = ProcessingMode.REGULAR,
+    defer_connector_config: bool = False,
 ) -> list[ConnectorCredentialPair]:
     with get_session_with_current_tenant() as db_session:
         return get_connector_credential_pairs_for_user(
@@ -183,6 +190,7 @@ def get_connector_credential_pairs_for_user_parallel(
             order_by_desc=order_by_desc,
             source=source,
             processing_mode=processing_mode,
+            defer_connector_config=defer_connector_config,
         )
 
 

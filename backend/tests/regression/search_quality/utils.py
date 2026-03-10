@@ -87,7 +87,7 @@ def get_doc_contents(
 ) -> dict[tuple[str, int], str]:
     with get_session_with_tenant(tenant_id=tenant_id) as db_session:
         search_settings = get_current_search_settings(db_session)
-        document_index = get_default_document_index(search_settings, None)
+        document_index = get_default_document_index(search_settings, None, db_session)
 
     filters = IndexFilters(access_control_list=None, tenant_id=tenant_id)
 

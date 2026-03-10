@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import Button from "@/refresh-components/buttons/Button";
-import { FullPersona } from "@/app/admin/assistants/interfaces";
+import { Button as OpalButton } from "@opal/components";
+import { Disabled } from "@opal/core";
+import { FullPersona } from "@/app/admin/agents/interfaces";
 import { buildImgUrl } from "@/app/app/components/files/images/utils";
 import { Formik, Form, FieldArray } from "formik";
 import * as Yup from "yup";
@@ -13,17 +15,17 @@ import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import InputTypeInElementField from "@/refresh-components/form/InputTypeInElementField";
 import InputDatePickerField from "@/refresh-components/form/InputDatePickerField";
+import Message from "@/refresh-components/messages/Message";
 import Separator from "@/refresh-components/Separator";
 import * as InputLayouts from "@/layouts/input-layouts";
 import { useFormikContext } from "formik";
 import LLMSelector from "@/components/llm/LLMSelector";
-import { parseLlmDescriptor, structureValue } from "@/lib/llm/utils";
-import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
+import { parseLlmDescriptor, structureValue } from "@/lib/llmConfig/utils";
+import { useLLMProviders } from "@/hooks/useLLMProviders";
 import {
   STARTER_MESSAGES_EXAMPLES,
   MAX_CHARACTERS_STARTER_MESSAGE,
   MAX_CHARACTERS_AGENT_DESCRIPTION,
-  MAX_CHUNKS_FED_TO_CHAT,
 } from "@/lib/constants";
 import {
   IMAGE_GENERATION_TOOL_ID,
@@ -40,7 +42,7 @@ import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import { useDocumentSets } from "@/app/admin/documents/sets/hooks";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import UserFilesModal from "@/components/modals/UserFilesModal";
 import {
   ProjectFile,
@@ -56,6 +58,7 @@ import {
   SvgLock,
   SvgOnyxOctagon,
   SvgSliders,
+  SvgUsers,
   SvgTrash,
 } from "@opal/icons";
 import CustomAgentAvatar, {
@@ -68,7 +71,7 @@ import {
   createPersona,
   updatePersona,
   PersonaUpsertParameters,
-} from "@/app/admin/assistants/lib";
+} from "@/app/admin/agents/lib";
 import useMcpServersForAgentEditor from "@/hooks/useMcpServersForAgentEditor";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
@@ -80,11 +83,19 @@ import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import useFilter from "@/hooks/useFilter";
 import EnabledCount from "@/refresh-components/EnabledCount";
 import { useAppRouter } from "@/hooks/appNavigation";
-import { deleteAgent } from "@/lib/agents";
+import {
+  deleteAgent,
+  updateAgentFeaturedStatus,
+  updateAgentSharedStatus,
+} from "@/lib/agents";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import ShareAgentModal from "@/sections/modals/ShareAgentModal";
 import AgentKnowledgePane from "@/sections/knowledge/AgentKnowledgePane";
 import { ValidSources } from "@/lib/types";
+import { useVectorDbEnabled } from "@/providers/SettingsProvider";
+import { useUser } from "@/providers/UserProvider";
+import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
+import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 
 interface AgentIconEditorProps {
   existingAgent?: FullPersona | null;
@@ -208,6 +219,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
               iconName={values.icon_name ?? undefined}
               name={values.name}
             />
+            {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
             <Button
               className="absolute bottom-0 left-1/2 -translate-x-1/2 h-[1.75rem] mb-2 invisible group-hover/InputAvatar:visible"
               secondary
@@ -309,7 +321,11 @@ function MCPServerCard({
         description={server.description}
         icon={getActionIcon(server.server_url, server.name)}
         rightChildren={
-          <GeneralLayouts.Section flexDirection="row" gap={0.5}>
+          <GeneralLayouts.Section
+            flexDirection="row"
+            gap={0.5}
+            alignItems="start"
+          >
             <EnabledCount
               enabledCount={enabledCount}
               totalCount={enabledTools.length}
@@ -336,30 +352,21 @@ function MCPServerCard({
             onChange={(e) => setQuery(e.target.value)}
           />
           {enabledTools.length > 0 && (
-            <Button
-              internal
+            <OpalButton
+              prominence="internal"
               rightIcon={isFolded ? SvgExpand : SvgFold}
               onClick={() => setIsFolded((prev) => !prev)}
             >
               {isFolded ? "Expand" : "Fold"}
-            </Button>
+            </OpalButton>
           )}
         </GeneralLayouts.Section>
       </ActionsLayouts.Header>
       {isLoading ? (
         <ActionsLayouts.Content>
-          {Array.from({ length: 3 }).map((_, index) => (
-            <Card key={index} padding={0.75}>
-              <GeneralLayouts.LineItemLayout
-                // We provide dummy values here.
-                // The `loading` prop will always render a pulsing box instead, so the dummy-values will actually NOT be rendered at all.
-                title="..."
-                description="..."
-                rightChildren={<></>}
-                loading
-              />
-            </Card>
-          ))}
+          <GeneralLayouts.Section padding={1}>
+            <SimpleLoader />
+          </GeneralLayouts.Section>
         </ActionsLayouts.Content>
       ) : (
         enabledTools.length > 0 &&
@@ -445,10 +452,13 @@ export default function AgentEditorPage({
 }: AgentEditorPageProps) {
   const router = useRouter();
   const appRouter = useAppRouter();
-  const { popup, setPopup } = usePopup();
   const { refresh: refreshAgents } = useAgents();
   const shareAgentModal = useCreateModal();
   const deleteAgentModal = useCreateModal();
+  const { isAdmin, isCurator } = useUser();
+  const canUpdateFeaturedStatus = isAdmin || isCurator;
+  const vectorDbEnabled = useVectorDbEnabled();
+  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
 
   // LLM Model Selection
   const getCurrentLlm = useCallback(
@@ -558,9 +568,12 @@ export default function AgentEditorPage({
       (_, i) => existingAgent?.starter_messages?.[i]?.message ?? ""
     ),
 
-    // Knowledge - enabled if num_chunks is greater than 0
-    // (num_chunks of 0 or null means knowledge is disabled)
-    enable_knowledge: (existingAgent?.num_chunks ?? 0) > 0,
+    // Knowledge - enabled if agent has any knowledge sources attached
+    enable_knowledge:
+      (existingAgent?.document_sets?.length ?? 0) > 0 ||
+      (existingAgent?.hierarchy_nodes?.length ?? 0) > 0 ||
+      (existingAgent?.attached_documents?.length ?? 0) > 0 ||
+      (existingAgent?.user_file_ids?.length ?? 0) > 0,
     document_set_ids: existingAgent?.document_sets?.map((ds) => ds.id) ?? [],
     // Individual document IDs from hierarchy browsing
     document_ids: existingAgent?.attached_documents?.map((doc) => doc.id) ?? [],
@@ -582,9 +595,9 @@ export default function AgentEditorPage({
     replace_base_system_prompt:
       existingAgent?.replace_base_system_prompt ?? false,
     reminders: existingAgent?.task_prompt ?? "",
-    // For new assistants, default to false for optional tools to avoid
+    // For new agents, default to false for optional tools to avoid
     // "Tool not available" errors when the tool isn't configured.
-    // For existing assistants, preserve the current tool configuration.
+    // For existing agents, preserve the current tool configuration.
     image_generation:
       !!imageGenTool &&
       (existingAgent?.tools?.some(
@@ -609,7 +622,6 @@ export default function AgentEditorPage({
         (tool) => tool.in_code_tool_id === PYTHON_TOOL_ID
       ) ??
         false),
-
     // MCP servers - dynamically add fields for each server with nested tool fields
     ...Object.fromEntries(
       mcpServersWithTools.map(({ server, tools }) => {
@@ -650,6 +662,8 @@ export default function AgentEditorPage({
     shared_user_ids: existingAgent?.users?.map((user) => user.id) ?? [],
     shared_group_ids: existingAgent?.groups ?? [],
     is_public: existingAgent?.is_public ?? true,
+    label_ids: existingAgent?.labels?.map((l) => l.id) ?? [],
+    featured: existingAgent?.featured ?? false,
   };
 
   const validationSchema = Yup.object().shape({
@@ -681,19 +695,6 @@ export default function AgentEditorPage({
     hierarchy_node_ids: Yup.array().of(Yup.number()),
     user_file_ids: Yup.array().of(Yup.string()),
     selected_sources: Yup.array().of(Yup.string()),
-    num_chunks: Yup.number()
-      .nullable()
-      .transform((value, originalValue) =>
-        originalValue === "" || originalValue === null ? null : value
-      )
-      .test(
-        "is-non-negative-integer",
-        "The number of chunks must be a non-negative integer (0, 1, 2, etc.)",
-        (value) =>
-          value === null ||
-          value === undefined ||
-          (Number.isInteger(value) && value >= 0)
-      ),
 
     // Advanced
     llm_model_provider_override: Yup.string().nullable().optional(),
@@ -733,14 +734,13 @@ export default function AgentEditorPage({
       const finalStarterMessages =
         starterMessages.length > 0 ? starterMessages : null;
 
-      // Determine knowledge settings
-      const numChunks = values.enable_knowledge ? MAX_CHUNKS_FED_TO_CHAT : 0;
-
       // Always look up tools in availableTools to ensure we can find all tools
 
       const toolIds = [];
-      if (values.enable_knowledge && searchTool) {
-        toolIds.push(searchTool.id);
+      if (values.enable_knowledge) {
+        if (vectorDbEnabled && searchTool) {
+          toolIds.push(searchTool.id);
+        }
       }
       if (values.image_generation && imageGenTool) {
         toolIds.push(imageGenTool.id);
@@ -793,11 +793,7 @@ export default function AgentEditorPage({
         document_set_ids: values.enable_knowledge
           ? values.document_set_ids
           : [],
-        num_chunks: numChunks,
         is_public: values.is_public,
-        // recency_bias: ...,
-        // llm_filter_extraction: ...,
-        llm_relevance_filter: false,
         llm_model_provider_override: values.llm_model_provider_override || null,
         llm_model_version_override: values.llm_model_version_override || null,
         starter_messages: finalStarterMessages,
@@ -809,8 +805,8 @@ export default function AgentEditorPage({
         uploaded_image_id: values.uploaded_image_id,
         icon_name: values.icon_name,
         search_start_date: values.knowledge_cutoff_date || null,
-        label_ids: null,
-        is_default_persona: false,
+        label_ids: values.label_ids,
+        featured: values.featured,
         // display_priority: ...,
 
         user_file_ids: values.enable_knowledge ? values.user_file_ids : [],
@@ -838,23 +834,19 @@ export default function AgentEditorPage({
         const error = personaResponse
           ? await personaResponse.text()
           : "No response received";
-        setPopup({
-          type: "error",
-          message: `Failed to ${
-            existingAgent ? "update" : "create"
-          } agent - ${error}`,
-        });
+        toast.error(
+          `Failed to ${existingAgent ? "update" : "create"} agent - ${error}`
+        );
         return;
       }
 
       // Success
       const agent = await personaResponse.json();
-      setPopup({
-        type: "success",
-        message: `Agent "${agent.name}" ${
+      toast.success(
+        `Agent "${agent.name}" ${
           existingAgent ? "updated" : "created"
-        } successfully`,
-      });
+        } successfully`
+      );
 
       // Refresh agents list and the specific agent
       await refreshAgents();
@@ -866,10 +858,7 @@ export default function AgentEditorPage({
       appRouter({ agentId: agent.id });
     } catch (error) {
       console.error("Submit error:", error);
-      setPopup({
-        type: "error",
-        message: `An error occurred: ${error}`,
-      });
+      toast.error(`An error occurred: ${error}`);
     }
   }
 
@@ -880,15 +869,9 @@ export default function AgentEditorPage({
     const error = await deleteAgent(existingAgent.id);
 
     if (error) {
-      setPopup({
-        type: "error",
-        message: `Failed to delete agent: ${error}`,
-      });
+      toast.error(`Failed to delete agent: ${error}`);
     } else {
-      setPopup({
-        type: "success",
-        message: "Agent deleted successfully",
-      });
+      toast.success("Agent deleted successfully");
 
       deleteAgentModal.toggle(false);
       await refreshAgents();
@@ -937,7 +920,6 @@ export default function AgentEditorPage({
       const optimistic = await beginUpload(
         Array.from(files),
         null,
-        setPopup,
         (result) => {
           const uploadedFiles = result.user_files || [];
           if (uploadedFiles.length === 0) return;
@@ -973,8 +955,6 @@ export default function AgentEditorPage({
 
   return (
     <>
-      {popup}
-
       <div
         data-testid="AgentsEditorPage/container"
         aria-label="Agents Editor Page"
@@ -1008,6 +988,10 @@ export default function AgentEditorPage({
               (fileId: string) =>
                 fileStatusMap.get(fileId) === UserFileStatus.PROCESSING
             );
+            const isShared =
+              values.is_public ||
+              values.shared_user_ids.length > 0 ||
+              values.shared_group_ids.length > 0;
 
             return (
               <>
@@ -1067,11 +1051,113 @@ export default function AgentEditorPage({
                     userIds={values.shared_user_ids}
                     groupIds={values.shared_group_ids}
                     isPublic={values.is_public}
-                    onShare={(userIds, groupIds, isPublic) => {
-                      setFieldValue("shared_user_ids", userIds);
-                      setFieldValue("shared_group_ids", groupIds);
-                      setFieldValue("is_public", isPublic);
+                    isFeatured={values.featured}
+                    labelIds={values.label_ids}
+                    onShare={async (
+                      userIds,
+                      groupIds,
+                      isPublic,
+                      isFeatured,
+                      labelIds
+                    ) => {
+                      if (!existingAgent) {
+                        // New agents are not persisted until the main Create action.
+                        setFieldValue("shared_user_ids", userIds);
+                        setFieldValue("shared_group_ids", groupIds);
+                        setFieldValue("is_public", isPublic);
+                        setFieldValue("featured", isFeatured);
+                        setFieldValue("label_ids", labelIds);
+                        shareAgentModal.toggle(false);
+                        return;
+                      }
+
+                      const applySharingFields = () => {
+                        setFieldValue("shared_user_ids", userIds);
+                        setFieldValue("shared_group_ids", groupIds);
+                        setFieldValue("is_public", isPublic);
+                        setFieldValue("label_ids", labelIds);
+                      };
+
+                      const refreshSharedUi = async () => {
+                        try {
+                          await refreshAgents();
+                          refreshAgent?.();
+                        } catch (error) {
+                          console.error(
+                            "Refresh failed after successful share:",
+                            error
+                          );
+                          toast.error(
+                            "Agent sharing was saved, but failed to refresh. Please reload."
+                          );
+                        }
+                      };
+
+                      let shareError: string | null;
+                      try {
+                        shareError = await updateAgentSharedStatus(
+                          existingAgent.id,
+                          userIds,
+                          groupIds,
+                          isPublic,
+                          isPaidEnterpriseFeaturesEnabled,
+                          labelIds
+                        );
+                      } catch (error) {
+                        console.error(
+                          "Share agent mutation failed unexpectedly:",
+                          error
+                        );
+                        toast.error("Failed to share agent. Please try again.");
+                        return;
+                      }
+
+                      if (shareError) {
+                        toast.error(`Failed to share agent: ${shareError}`);
+                        return;
+                      }
+
+                      if (canUpdateFeaturedStatus) {
+                        let featuredError: string | null;
+                        try {
+                          featuredError = await updateAgentFeaturedStatus(
+                            existingAgent.id,
+                            isFeatured
+                          );
+                        } catch (error) {
+                          console.error(
+                            "Featured mutation failed unexpectedly:",
+                            error
+                          );
+                          // Share succeeded; sync form and UI before returning.
+                          applySharingFields();
+                          await refreshSharedUi();
+                          toast.error(
+                            "Failed to update featured status. Please try again."
+                          );
+                          return;
+                        }
+
+                        if (featuredError) {
+                          // Share succeeded, featured failed: keep modal open for retry.
+                          applySharingFields();
+                          await refreshSharedUi();
+                          toast.error(
+                            `Failed to update featured status: ${featuredError}`
+                          );
+                          return;
+                        }
+
+                        applySharingFields();
+                        setFieldValue("featured", isFeatured);
+                        shareAgentModal.toggle(false);
+                        await refreshSharedUi();
+                        return;
+                      }
+
+                      applySharingFields();
                       shareAgentModal.toggle(false);
+                      await refreshSharedUi();
                     }}
                   />
                 </shareAgentModal.Provider>
@@ -1081,9 +1167,12 @@ export default function AgentEditorPage({
                       icon={SvgTrash}
                       title="Delete Agent"
                       submit={
-                        <Button danger onClick={handleDeleteAgent}>
+                        <OpalButton
+                          variant="danger"
+                          onClick={handleDeleteAgent}
+                        >
                           Delete Agent
-                        </Button>
+                        </OpalButton>
                       }
                       onClose={() => deleteAgentModal.toggle(false)}
                     >
@@ -1105,15 +1194,14 @@ export default function AgentEditorPage({
                       title={existingAgent ? "Edit Agent" : "Create Agent"}
                       rightChildren={
                         <div className="flex gap-2">
-                          <Button
+                          <OpalButton
+                            prominence="secondary"
                             type="button"
-                            secondary
                             onClick={() => router.back()}
                           >
                             Cancel
-                          </Button>
-                          <Button
-                            type="submit"
+                          </OpalButton>
+                          <Disabled
                             disabled={
                               isSubmitting ||
                               !isValid ||
@@ -1121,8 +1209,10 @@ export default function AgentEditorPage({
                               hasUploadingFiles
                             }
                           >
-                            {existingAgent ? "Save" : "Create"}
-                          </Button>
+                            <OpalButton type="submit">
+                              {existingAgent ? "Save" : "Create"}
+                            </OpalButton>
+                          </Disabled>
                         </div>
                       }
                       backButton
@@ -1160,7 +1250,6 @@ export default function AgentEditorPage({
                           <InputLayouts.Vertical
                             name="agent_avatar"
                             title="Agent Avatar"
-                            center
                           >
                             <AgentIconEditor existingAgent={existingAgent} />
                           </InputLayouts.Vertical>
@@ -1234,6 +1323,7 @@ export default function AgentEditorPage({
                           existingAgent?.attached_documents
                         }
                         initialHierarchyNodes={existingAgent?.hierarchy_nodes}
+                        vectorDbEnabled={vectorDbEnabled}
                       />
 
                       <Separator noPadding />
@@ -1372,17 +1462,36 @@ export default function AgentEditorPage({
                             <Card>
                               <InputLayouts.Horizontal
                                 title="Share This Agent"
-                                description="Share this agent with other users, groups, or everyone in your organization."
+                                description="with other users, groups, or everyone in your organization."
                                 center
                               >
-                                <Button
-                                  secondary
-                                  leftIcon={SvgLock}
+                                <OpalButton
+                                  prominence="secondary"
+                                  icon={isShared ? SvgUsers : SvgLock}
                                   onClick={() => shareAgentModal.toggle(true)}
                                 >
                                   Share
-                                </Button>
+                                </OpalButton>
                               </InputLayouts.Horizontal>
+                              {canUpdateFeaturedStatus && (
+                                <>
+                                  <InputLayouts.Horizontal
+                                    name="featured"
+                                    title="Feature This Agent"
+                                    description="Show this agent at the top of the explore agents list and automatically pin it to the sidebar for new users with access."
+                                  >
+                                    <SwitchField name="featured" />
+                                  </InputLayouts.Horizontal>
+                                  {values.featured && !isShared && (
+                                    <Message
+                                      static
+                                      close={false}
+                                      className="w-full"
+                                      text="This agent is private to you and will only be featured for yourself."
+                                    />
+                                  )}
+                                </>
+                              )}
                             </Card>
 
                             <Card>
@@ -1451,13 +1560,13 @@ export default function AgentEditorPage({
                               description="Anyone using this agent will no longer be able to access it."
                               center
                             >
-                              <Button
-                                secondary
-                                danger
+                              <OpalButton
+                                variant="danger"
+                                prominence="secondary"
                                 onClick={() => deleteAgentModal.toggle(true)}
                               >
                                 Delete Agent
-                              </Button>
+                              </OpalButton>
                             </InputLayouts.Horizontal>
                           </Card>
                         </>

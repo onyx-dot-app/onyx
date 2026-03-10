@@ -13,12 +13,15 @@ from onyx.db.constants import UNSET
 from onyx.db.constants import UnsetType
 from onyx.db.enums import MCPServerStatus
 from onyx.db.models import MCPServer
+from onyx.db.models import OAuthConfig
 from onyx.db.models import Tool
 from onyx.db.models import ToolCall
 from onyx.server.features.tool.models import Header
 from onyx.tools.built_in_tools import BUILT_IN_TOOL_TYPES
 from onyx.utils.headers import HeaderItemDict
 from onyx.utils.logger import setup_logger
+from onyx.utils.postgres_sanitization import sanitize_json_like
+from onyx.utils.postgres_sanitization import sanitize_string
 
 if TYPE_CHECKING:
     pass
@@ -55,6 +58,8 @@ def get_tools(
             # To avoid showing rows that have JSON literal `null` stored in the column to the user.
             # tools from mcp servers will not have an openapi schema but it has `null`, so we need to exclude them.
             func.jsonb_typeof(Tool.openapi_schema) == "object",
+            # Exclude built-in tools that happen to have an openapi_schema
+            Tool.in_code_tool_id.is_(None),
         )
 
     return list(db_session.scalars(query).all())
@@ -157,10 +162,26 @@ def update_tool(
         ]
     if passthrough_auth is not None:
         tool.passthrough_auth = passthrough_auth
+    old_oauth_config_id = tool.oauth_config_id
     if not isinstance(oauth_config_id, UnsetType):
         tool.oauth_config_id = oauth_config_id
-    db_session.commit()
+        db_session.flush()
 
+    # Clean up orphaned OAuthConfig if the oauth_config_id was changed
+    if (
+        old_oauth_config_id is not None
+        and not isinstance(oauth_config_id, UnsetType)
+        and old_oauth_config_id != oauth_config_id
+    ):
+        other_tools = db_session.scalars(
+            select(Tool).where(Tool.oauth_config_id == old_oauth_config_id)
+        ).all()
+        if not other_tools:
+            oauth_config = db_session.get(OAuthConfig, old_oauth_config_id)
+            if oauth_config:
+                db_session.delete(oauth_config)
+
+    db_session.commit()
     return tool
 
 
@@ -169,8 +190,21 @@ def delete_tool__no_commit(tool_id: int, db_session: Session) -> None:
     if tool is None:
         raise ValueError(f"Tool with ID {tool_id} does not exist")
 
+    oauth_config_id = tool.oauth_config_id
+
     db_session.delete(tool)
-    db_session.flush()  # Don't commit yet, let caller decide when to commit
+    db_session.flush()
+
+    # Clean up orphaned OAuthConfig if no other tools reference it
+    if oauth_config_id is not None:
+        other_tools = db_session.scalars(
+            select(Tool).where(Tool.oauth_config_id == oauth_config_id)
+        ).all()
+        if not other_tools:
+            oauth_config = db_session.get(OAuthConfig, oauth_config_id)
+            if oauth_config:
+                db_session.delete(oauth_config)
+                db_session.flush()
 
 
 def get_builtin_tool(
@@ -254,11 +288,13 @@ def create_tool_call_no_commit(
         tab_index=tab_index,
         tool_id=tool_id,
         tool_call_id=tool_call_id,
-        reasoning_tokens=reasoning_tokens,
-        tool_call_arguments=tool_call_arguments,
-        tool_call_response=tool_call_response,
+        reasoning_tokens=(
+            sanitize_string(reasoning_tokens) if reasoning_tokens else reasoning_tokens
+        ),
+        tool_call_arguments=sanitize_json_like(tool_call_arguments),
+        tool_call_response=sanitize_json_like(tool_call_response),
         tool_call_tokens=tool_call_tokens,
-        generated_images=generated_images,
+        generated_images=sanitize_json_like(generated_images),
     )
 
     db_session.add(tool_call)

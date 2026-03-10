@@ -9,6 +9,7 @@
 #   /workspace/
 #   ├── demo_data/       # Demo data (baked into image, for demo sessions)
 #   ├── files/           # User's knowledge files (synced from S3)
+#   ├── skills/          # Agent skills (baked into image, copied per-session)
 #   ├── templates/       # Output templates (baked into image)
 #   └── sessions/        # Per-session workspaces (created via exec)
 #       └── $session_id/
@@ -20,7 +21,7 @@
 FROM node:20-slim
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     python3-pip \
     python3-venv \
@@ -28,6 +29,17 @@ RUN apt-get update && apt-get install -y \
     git \
     procps \
     unzip \
+    \
+    libreoffice-core \
+    libreoffice-common \
+    libreoffice-impress \
+    libreoffice-draw \
+    poppler-utils \
+    gcc \
+    libc6-dev \
+    fontconfig \
+    fonts-dejavu-core \
+    fonts-liberation \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user (matches pod securityContext)
@@ -73,6 +85,9 @@ RUN python3 -m venv /workspace/.venv && \
 # Add venv to PATH so python/pip use it by default
 ENV PATH="/workspace/.venv/bin:${PATH}"
 
+# Install pptxgenjs globally for creating presentations from scratch
+RUN npm install -g pptxgenjs
+
 # Install opencode CLI as sandbox user so it goes to their home directory
 USER sandbox
 RUN curl -fsSL https://opencode.ai/install | bash
@@ -80,6 +95,9 @@ USER root
 
 # Add opencode to PATH (installs to ~/.opencode/bin)
 ENV PATH="/home/sandbox/.opencode/bin:${PATH}"
+
+# Copy agent skills (symlinked into each session's .opencode/skills/ at setup time)
+COPY --exclude=__pycache__ skills/ /workspace/skills/
 
 # Set ownership
 RUN chown -R sandbox:sandbox /workspace

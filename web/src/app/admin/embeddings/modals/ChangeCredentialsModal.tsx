@@ -14,7 +14,7 @@ import {
 import {
   EMBEDDING_PROVIDERS_ADMIN_URL,
   LLM_PROVIDERS_ADMIN_URL,
-} from "@/app/admin/configuration/llm/constants";
+} from "@/lib/llmConfig/constants";
 import { mutate } from "swr";
 import { testEmbedding } from "@/app/admin/embeddings/pages/utils";
 import { SvgSettings } from "@opal/icons";
@@ -268,6 +268,7 @@ export default function ChangeCredentialsModal({
                   </Callout>
                 )}
 
+                {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
                 <Button
                   className="mr-auto mt-4"
                   onClick={() => handleSubmit()}
@@ -289,6 +290,7 @@ export default function ChangeCredentialsModal({
             embedding type!
           </Text>
 
+          {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
           <Button className="mr-auto" onClick={handleDelete} danger>
             Delete Configuration
           </Button>

@@ -9,6 +9,8 @@ from onyx.connectors.jira.utils import JIRA_SERVER_API_VERSION
 from onyx.db.models import ConnectorCredentialPair
 from onyx.utils.sensitive import make_mock_sensitive_value
 
+pytestmark = pytest.mark.usefixtures("enable_ee")
+
 
 @pytest.fixture
 def mock_jira_cc_pair(

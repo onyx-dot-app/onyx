@@ -39,7 +39,7 @@ export function ToggleWarningModal({
           {/* Message */}
           <div className="flex justify-center">
             <Text mainUiBody text04 className="text-center">
-              We recommend using <strong>Claude Opus 4.5</strong> for Crafting.
+              We recommend using <strong>Claude Opus 4.6</strong> for Crafting.
               <br />
               Other models may have reduced capabilities for code creation,
               <br />

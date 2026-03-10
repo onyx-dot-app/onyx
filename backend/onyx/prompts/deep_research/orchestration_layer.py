@@ -143,7 +143,7 @@ The original research plan is included below (use it as a helpful reference but 
 {{research_plan}}
 ```
 
-Based on all of the context provided in the research history, provide a comprehensive, well structured, and insightful answer to my previous query. \
+Based on all of the context provided in the research history, provide a comprehensive, well structured, and insightful answer to the user's previous query. \
 CRITICAL: be extremely thorough in your response and address all relevant aspects of the query.
 
 Ignore the format styles of the intermediate {RESEARCH_AGENT_TOOL_NAME} reports, those are not end user facing and different from your task.

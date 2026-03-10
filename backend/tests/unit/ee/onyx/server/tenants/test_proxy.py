@@ -428,6 +428,37 @@ class TestForwardToControlPlane:
             assert "Failed to connect to control plane" in str(exc_info.value.detail)
 
     @pytest.mark.asyncio
+    async def test_follows_redirects(self) -> None:
+        """Test that AsyncClient is created with follow_redirects=True.
+
+        The control plane may sit behind a reverse proxy that returns
+        308 (HTTP→HTTPS). httpx does not follow redirects by default,
+        so we must explicitly opt in.
+        """
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"ok": True}
+        mock_response.raise_for_status = MagicMock()
+
+        with (
+            patch(
+                "ee.onyx.server.tenants.proxy.generate_data_plane_token"
+            ) as mock_token,
+            patch("ee.onyx.server.tenants.proxy.httpx.AsyncClient") as mock_client,
+            patch(
+                "ee.onyx.server.tenants.proxy.CONTROL_PLANE_API_BASE_URL",
+                "http://control.example.com",
+            ),
+        ):
+            mock_token.return_value = "cp_token"
+            mock_client.return_value.__aenter__.return_value.get = AsyncMock(
+                return_value=mock_response
+            )
+
+            await forward_to_control_plane("GET", "/test")
+
+            mock_client.assert_called_once_with(timeout=30.0, follow_redirects=True)
+
+    @pytest.mark.asyncio
     async def test_unsupported_method(self) -> None:
         """Test that unsupported HTTP methods raise ValueError."""
         with (

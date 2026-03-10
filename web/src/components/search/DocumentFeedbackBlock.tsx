@@ -1,4 +1,4 @@
-import { PopupSpec } from "../admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { ChevronsDownIcon, ChevronsUpIcon } from "../icons/icons";
 import { CustomTooltip } from "../tooltip/CustomTooltip";
 
@@ -32,7 +32,6 @@ interface DocumentFeedbackIconProps {
   documentId: string;
   messageId: number;
   documentRank: number;
-  setPopup: (popupSpec: PopupSpec | null) => void;
   feedbackType: DocumentFeedbackType;
 }
 
@@ -40,7 +39,6 @@ const DocumentFeedback = ({
   documentId,
   messageId,
   documentRank,
-  setPopup,
   feedbackType,
 }: DocumentFeedbackIconProps) => {
   let icon = null;
@@ -76,15 +74,9 @@ const DocumentFeedback = ({
           feedbackType
         );
         if (!errorMsg) {
-          setPopup({
-            message: "Thanks for your feedback!",
-            type: "success",
-          });
+          toast.success("Thanks for your feedback!");
         } else {
-          setPopup({
-            message: `Error giving feedback - ${errorMsg}`,
-            type: "error",
-          });
+          toast.error(`Error giving feedback - ${errorMsg}`);
         }
       }}
       className="cursor-pointer"
@@ -98,14 +90,12 @@ interface DocumentFeedbackBlockProps {
   documentId: string;
   messageId: number;
   documentRank: number;
-  setPopup: (popupSpec: PopupSpec | null) => void;
 }
 
 export const DocumentFeedbackBlock = ({
   documentId,
   messageId,
   documentRank,
-  setPopup,
 }: DocumentFeedbackBlockProps) => {
   return (
     <div className="flex items-center gap-x-2">
@@ -114,7 +104,6 @@ export const DocumentFeedbackBlock = ({
           documentId={documentId}
           messageId={messageId}
           documentRank={documentRank}
-          setPopup={setPopup}
           feedbackType="endorse"
         />
       </CustomTooltip>
@@ -123,7 +112,6 @@ export const DocumentFeedbackBlock = ({
           documentId={documentId}
           messageId={messageId}
           documentRank={documentRank}
-          setPopup={setPopup}
           feedbackType="reject"
         />
       </CustomTooltip>

@@ -4,7 +4,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import useSWR, { mutate } from "swr";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { buildSimilarCredentialInfoURL } from "@/app/admin/connector/[ccPairId]/lib";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { useFormContext } from "@/components/context/FormContext";
 import { getSourceDisplayName, getSourceMetadata } from "@/lib/sources";
 import { SourceIcon } from "@/components/SourceIcon";
@@ -55,7 +55,8 @@ import {
 } from "@/lib/connectors/oauth";
 import { CreateStdOAuthCredential } from "@/components/credentials/actions/CreateStdOAuthCredential";
 import { Spinner } from "@/components/Spinner";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import { deleteConnector } from "@/lib/connector";
 import ConnectorDocsLink from "@/components/admin/connectors/ConnectorDocsLink";
 import Text from "@/refresh-components/texts/Text";
@@ -178,7 +179,6 @@ export default function AddConnector({
 
   // Form context and popup management
   const { setFormStep, setAllowCreate, formStep } = useFormContext();
-  const { popup, setPopup } = usePopup();
   const [uploading, setUploading] = useState(false);
   const [creatingConnector, setCreatingConnector] = useState(false);
 
@@ -237,26 +237,17 @@ export default function AddConnector({
   const onDeleteCredential = async (credential: Credential<any | null>) => {
     const response = await deleteCredential(credential.id, true);
     if (response.ok) {
-      setPopup({
-        message: "Credential deleted successfully!",
-        type: "success",
-      });
+      toast.success("Credential deleted successfully!");
     } else {
       const errorData = await response.json();
-      setPopup({
-        message: errorData.message,
-        type: "error",
-      });
+      toast.error(errorData.detail || errorData.message);
     }
   };
 
   const onSwap = async (selectedCredential: Credential<any>) => {
     setCurrentCredential(selectedCredential);
     setAllowCreate(true);
-    setPopup({
-      message: "Swapped credential successfully!",
-      type: "success",
-    });
+    toast.success("Swapped credential successfully!");
     refresh();
   };
 
@@ -280,15 +271,15 @@ export default function AddConnector({
         setOauthUrl(response.url);
         window.open(response.url, "_blank", "noopener,noreferrer");
       } else {
-        setPopup({ message: "Failed to fetch OAuth URL", type: "error" });
+        toast.error("Failed to fetch OAuth URL");
       }
     } catch (error: unknown) {
       // Narrow the type of error
       if (error instanceof Error) {
-        setPopup({ message: `Error: ${error.message}`, type: "error" });
+        toast.error(`Error: ${error.message}`);
       } else {
         // Handle non-standard errors
-        setPopup({ message: "An unknown error occurred", type: "error" });
+        toast.error("An unknown error occurred");
       }
     } finally {
       setIsAuthorizing(false);
@@ -358,7 +349,6 @@ export default function AddConnector({
           const response = await submitGoogleSite(
             selectedFiles,
             values?.base_url,
-            setPopup,
             advancedConfiguration.refreshFreq,
             advancedConfiguration.pruneFreq,
             advancedConfiguration.indexingStart,
@@ -377,7 +367,6 @@ export default function AddConnector({
           try {
             const response = await submitFiles(
               selectedFiles,
-              setPopup,
               name,
               access_type,
               groups
@@ -386,7 +375,7 @@ export default function AddConnector({
               onSuccess();
             }
           } catch (error) {
-            setPopup({ message: "Error uploading files", type: "error" });
+            toast.error("Error uploading files");
           } finally {
             setUploading(false);
           }
@@ -430,7 +419,7 @@ export default function AddConnector({
               if (isSuccess) {
                 onSuccess();
               } else {
-                setPopup({ message: message, type: "error" });
+                toast.error(message);
               }
             }
 
@@ -455,16 +444,13 @@ export default function AddConnector({
 
                 if (!timeoutErrorHappenedRef.current) {
                   // Only show error if timeout didn't happen
-                  setPopup({
-                    message: errorData.message || errorData.detail,
-                    type: "error",
-                  });
+                  toast.error(errorData.detail || errorData.message);
                 }
               }
             } else if (isSuccess) {
               onSuccess();
             } else {
-              setPopup({ message: message, type: "error" });
+              toast.error(message);
             }
 
             timeoutErrorHappenedRef.current = false;
@@ -480,12 +466,11 @@ export default function AddConnector({
 
           if (result.isTimeout) {
             timeoutErrorHappenedRef.current = true;
-            setPopup({
-              message: `Operation timed out after ${
+            toast.error(
+              `Operation timed out after ${
                 CONNECTOR_CREATION_TIMEOUT_MS / 1000
-              } seconds. Check your configuration for errors?`,
-              type: "error",
-            });
+              } seconds. Check your configuration for errors?`
+            );
 
             if (connectorIdRef.current) {
               await deleteConnector(connectorIdRef.current);
@@ -500,8 +485,6 @@ export default function AddConnector({
     >
       {(formikProps) => (
         <div className="mx-auto w-full">
-          {popup}
-
           {uploading && <Spinner />}
 
           {creatingConnector && <Spinner />}
@@ -597,18 +580,19 @@ export default function AddConnector({
                       {/* Button to sign in via OAuth */}
                       {oauthSupportedSources.includes(connector) &&
                         (NEXT_PUBLIC_CLOUD_ENABLED || NEXT_PUBLIC_TEST_ENV) && (
-                          <Button
-                            action
-                            onClick={handleAuthorize}
-                            disabled={isAuthorizing}
-                            hidden={!isAuthorizeVisible}
-                          >
-                            {isAuthorizing
-                              ? "Authorizing..."
-                              : `Authorize with ${getSourceDisplayName(
-                                  connector
-                                )}`}
-                          </Button>
+                          <Disabled disabled={isAuthorizing}>
+                            <Button
+                              variant="action"
+                              onClick={handleAuthorize}
+                              hidden={!isAuthorizeVisible}
+                            >
+                              {isAuthorizing
+                                ? "Authorizing..."
+                                : `Authorize with ${getSourceDisplayName(
+                                    connector
+                                  )}`}
+                            </Button>
+                          </Disabled>
                         )}
                     </div>
                   )}
@@ -644,7 +628,6 @@ export default function AddConnector({
                                   refresh={refresh}
                                   sourceType={connector}
                                   accessType={formikProps.values.access_type}
-                                  setPopup={setPopup}
                                   onSwitch={onSwap}
                                   onClose={() =>
                                     setCreateCredentialFormToggle(false)

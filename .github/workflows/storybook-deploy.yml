@@ -1,0 +1,69 @@
+name: Storybook Deploy
+env:
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: prj_sG49mVsA25UsxIPhN2pmBJlikJZM
+  VERCEL_CLI: vercel@50.14.1
+  VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+
+concurrency:
+  group: storybook-deploy-production
+  cancel-in-progress: true
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "web/lib/opal/**"
+      - "web/src/refresh-components/**"
+      - "web/.storybook/**"
+      - "web/package.json"
+      - "web/package-lock.json"
+permissions:
+  contents: read
+jobs:
+  Deploy-Storybook:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup node
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # ratchet:actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "npm"
+          cache-dependency-path: ./web/package-lock.json
+
+      - name: Install dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Build Storybook
+        working-directory: web
+        run: npm run storybook:build
+
+      - name: Deploy to Vercel (Production)
+        working-directory: web
+        run: npx --yes "$VERCEL_CLI" deploy storybook-static/ --prod --yes
+
+  notify-slack-on-failure:
+    needs: Deploy-Storybook
+    if: always() && needs.Deploy-Storybook.result == 'failure'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/actions/slack-notify
+
+      - name: Send Slack notification
+        uses: ./.github/actions/slack-notify
+        with:
+          webhook-url: ${{ secrets.MONITOR_DEPLOYMENTS_WEBHOOK }}
+          failed-jobs: "• Deploy-Storybook"
+          title: "🚨 Storybook Deploy Failed"

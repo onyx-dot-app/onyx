@@ -1,4 +1,8 @@
+import os
+import threading
 from collections.abc import Iterator
+from contextlib import contextmanager
+from contextlib import nullcontext
 from typing import Any
 from typing import cast
 from typing import TYPE_CHECKING
@@ -38,6 +42,7 @@ from onyx.llm.well_known_providers.constants import AWS_SECRET_ACCESS_KEY_KWARG
 from onyx.llm.well_known_providers.constants import (
     AWS_SECRET_ACCESS_KEY_KWARG_ENV_VAR_FORMAT,
 )
+from onyx.llm.well_known_providers.constants import LM_STUDIO_API_KEY_CONFIG_KEY
 from onyx.llm.well_known_providers.constants import OLLAMA_API_KEY_CONFIG_KEY
 from onyx.llm.well_known_providers.constants import VERTEX_CREDENTIALS_FILE_KWARG
 from onyx.llm.well_known_providers.constants import (
@@ -49,6 +54,8 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+_env_lock = threading.Lock()
+
 if TYPE_CHECKING:
     from litellm import CustomStreamWrapper
     from litellm import HTTPHandler
@@ -57,6 +64,10 @@ if TYPE_CHECKING:
 _LLM_PROMPT_LONG_TERM_LOG_CATEGORY = "llm_prompt"
 LEGACY_MAX_TOKENS_KWARG = "max_tokens"
 STANDARD_MAX_TOKENS_KWARG = "max_completion_tokens"
+_VERTEX_ANTHROPIC_MODELS_REJECTING_OUTPUT_CONFIG = (
+    "claude-opus-4-5",
+    "claude-opus-4-6",
+)
 
 
 class LLMTimeoutError(Exception):
@@ -80,6 +91,106 @@ def _prompt_to_dicts(prompt: LanguageModelInput) -> list[dict[str, Any]]:
     if isinstance(prompt, list):
         return [msg.model_dump(exclude_none=True) for msg in prompt]
     return [prompt.model_dump(exclude_none=True)]
+
+
+def _normalize_content(raw: Any) -> str:
+    """Normalize a message content field to a plain string.
+
+    Content can be a string, None, or a list of content-block dicts
+    (e.g. [{"type": "text", "text": "..."}]).
+    """
+    if raw is None:
+        return ""
+    if isinstance(raw, str):
+        return raw
+    if isinstance(raw, list):
+        return "\n".join(
+            block.get("text", "") if isinstance(block, dict) else str(block)
+            for block in raw
+        )
+    return str(raw)
+
+
+def _strip_tool_content_from_messages(
+    messages: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Convert tool-related messages to plain text.
+
+    Bedrock's Converse API requires toolConfig when messages contain
+    toolUse/toolResult content blocks. When no tools are provided for the
+    current request, we must convert any tool-related history into plain text
+    to avoid the "toolConfig field must be defined" error.
+
+    This is the same approach used by _OllamaHistoryMessageFormatter.
+    """
+    result: list[dict[str, Any]] = []
+    for msg in messages:
+        role = msg.get("role")
+        tool_calls = msg.get("tool_calls")
+
+        if role == "assistant" and tool_calls:
+            # Convert structured tool calls to text representation
+            tool_call_lines = []
+            for tc in tool_calls:
+                func = tc.get("function", {})
+                name = func.get("name", "unknown")
+                args = func.get("arguments", "{}")
+                tc_id = tc.get("id", "")
+                tool_call_lines.append(
+                    f"[Tool Call] name={name} id={tc_id} args={args}"
+                )
+
+            existing_content = _normalize_content(msg.get("content"))
+            parts = (
+                [existing_content] + tool_call_lines
+                if existing_content
+                else tool_call_lines
+            )
+            new_msg = {
+                "role": "assistant",
+                "content": "\n".join(parts),
+            }
+            result.append(new_msg)
+
+        elif role == "tool":
+            # Convert tool response to user message with text content
+            tool_call_id = msg.get("tool_call_id", "")
+            content = _normalize_content(msg.get("content"))
+            tool_result_text = f"[Tool Result] id={tool_call_id}\n{content}"
+            # Merge into previous user message if it is also a converted
+            # tool result to avoid consecutive user messages (Bedrock requires
+            # strict user/assistant alternation).
+            if (
+                result
+                and result[-1]["role"] == "user"
+                and "[Tool Result]" in result[-1].get("content", "")
+            ):
+                result[-1]["content"] += "\n\n" + tool_result_text
+            else:
+                result.append({"role": "user", "content": tool_result_text})
+
+        else:
+            result.append(msg)
+
+    return result
+
+
+def _messages_contain_tool_content(messages: list[dict[str, Any]]) -> bool:
+    """Check if any messages contain tool-related content blocks."""
+    for msg in messages:
+        if msg.get("role") == "tool":
+            return True
+        if msg.get("role") == "assistant" and msg.get("tool_calls"):
+            return True
+    return False
+
+
+def _is_vertex_model_rejecting_output_config(model_name: str) -> bool:
+    normalized_model_name = model_name.lower()
+    return any(
+        blocked_model in normalized_model_name
+        for blocked_model in _VERTEX_ANTHROPIC_MODELS_REJECTING_OUTPUT_CONFIG
+    )
 
 
 class LitellmLLM(LLM):
@@ -139,6 +250,9 @@ class LitellmLLM(LLM):
                 elif model_provider == LlmProviderNames.OLLAMA_CHAT:
                     if k == OLLAMA_API_KEY_CONFIG_KEY:
                         model_kwargs["api_key"] = v
+                elif model_provider == LlmProviderNames.LM_STUDIO:
+                    if k == LM_STUDIO_API_KEY_CONFIG_KEY:
+                        model_kwargs["api_key"] = v
                 elif model_provider == LlmProviderNames.BEDROCK:
                     if k == AWS_REGION_NAME_KWARG:
                         model_kwargs[k] = v
@@ -154,6 +268,19 @@ class LitellmLLM(LLM):
                         model_kwargs[k] = v
                     elif k == AWS_SECRET_ACCESS_KEY_KWARG_ENV_VAR_FORMAT:
                         model_kwargs[AWS_SECRET_ACCESS_KEY_KWARG] = v
+
+        # LM Studio: LiteLLM defaults to "fake-api-key" when no key is provided,
+        # which LM Studio rejects. Ensure we always pass an explicit key (or empty
+        # string) to prevent LiteLLM from injecting its fake default.
+        if model_provider == LlmProviderNames.LM_STUDIO:
+            model_kwargs.setdefault("api_key", "")
+
+            # Users provide the server root (e.g. http://localhost:1234) but LiteLLM
+            # needs /v1 for OpenAI-compatible calls.
+            if self._api_base is not None:
+                base = self._api_base.rstrip("/")
+                self._api_base = base if base.endswith("/v1") else f"{base}/v1"
+                model_kwargs["api_base"] = self._api_base
 
         # Default vertex_location to "global" if not provided for Vertex AI
         # Latest gemini models are only available through the global region
@@ -260,10 +387,11 @@ class LitellmLLM(LLM):
         is_ollama = self._model_provider == LlmProviderNames.OLLAMA_CHAT
         is_mistral = self._model_provider == LlmProviderNames.MISTRAL
         is_vertex_ai = self._model_provider == LlmProviderNames.VERTEX_AI
-        # Vertex Anthropic Opus 4.5 rejects output_config.
-        # Keep this guard until LiteLLM/Vertex accept the field for this model.
-        is_vertex_opus_4_5 = (
-            is_vertex_ai and "claude-opus-4-5" in self.config.model_name.lower()
+        # Some Vertex Anthropic models reject output_config.
+        # Keep this guard until LiteLLM/Vertex accept the field for these models.
+        is_vertex_model_rejecting_output_config = (
+            is_vertex_ai
+            and _is_vertex_model_rejecting_output_config(self.config.model_name)
         )
 
         #########################
@@ -295,7 +423,7 @@ class LitellmLLM(LLM):
         # Temperature
         temperature = 1 if is_reasoning else self._temperature
 
-        if stream and not is_vertex_opus_4_5:
+        if stream and not is_vertex_model_rejecting_output_config:
             optional_kwargs["stream_options"] = {"include_usage": True}
 
         # Note, there is a reasoning_effort parameter in LiteLLM but it is completely jank and does not work for any
@@ -304,7 +432,7 @@ class LitellmLLM(LLM):
             is_reasoning
             # The default of this parameter not set is surprisingly not the equivalent of an Auto but is actually Off
             and reasoning_effort != ReasoningEffort.OFF
-            and not is_vertex_opus_4_5
+            and not is_vertex_model_rejecting_output_config
         ):
             if is_openai_model:
                 # OpenAI API does not accept reasoning params for GPT 5 chat models
@@ -378,23 +506,47 @@ class LitellmLLM(LLM):
             if "api_key" not in passthrough_kwargs:
                 passthrough_kwargs["api_key"] = self._api_key or None
 
-            response = litellm.completion(
-                mock_response=get_llm_mock_response() or MOCK_LLM_RESPONSE,
-                model=model,
-                base_url=self._api_base or None,
-                api_version=self._api_version or None,
-                custom_llm_provider=self._custom_llm_provider or None,
-                messages=_prompt_to_dicts(prompt),
-                tools=tools,
-                tool_choice=tool_choice,
-                stream=stream,
-                temperature=temperature,
-                timeout=timeout_override or self._timeout,
-                max_tokens=max_tokens,
-                client=client,
-                **optional_kwargs,
-                **passthrough_kwargs,
+            # We only need to set environment variables if custom config is set
+            env_ctx = (
+                temporary_env_and_lock(self._custom_config)
+                if self._custom_config
+                else nullcontext()
             )
+            with env_ctx:
+                messages = _prompt_to_dicts(prompt)
+
+                # Bedrock's Converse API requires toolConfig when messages
+                # contain toolUse/toolResult content blocks. When no tools are
+                # provided for this request but the history contains tool
+                # content from previous turns, strip it to plain text.
+                is_bedrock = self._model_provider in {
+                    LlmProviderNames.BEDROCK,
+                    LlmProviderNames.BEDROCK_CONVERSE,
+                }
+                if (
+                    is_bedrock
+                    and not tools
+                    and _messages_contain_tool_content(messages)
+                ):
+                    messages = _strip_tool_content_from_messages(messages)
+
+                response = litellm.completion(
+                    mock_response=get_llm_mock_response() or MOCK_LLM_RESPONSE,
+                    model=model,
+                    base_url=self._api_base or None,
+                    api_version=self._api_version or None,
+                    custom_llm_provider=self._custom_llm_provider or None,
+                    messages=messages,
+                    tools=tools,
+                    tool_choice=tool_choice,
+                    stream=stream,
+                    temperature=temperature,
+                    timeout=timeout_override or self._timeout,
+                    max_tokens=max_tokens,
+                    client=client,
+                    **optional_kwargs,
+                    **passthrough_kwargs,
+                )
             return response
         except Exception as e:
             # for break pointing
@@ -475,13 +627,21 @@ class LitellmLLM(LLM):
             client = HTTPHandler(timeout=timeout_override or self._timeout)
 
         try:
-            response = cast(
-                LiteLLMModelResponse,
+            # When custom_config is set, env vars are temporarily injected
+            # under a global lock. Using stream=True here means the lock is
+            # only held during connection setup (not the full inference).
+            # The chunks are then collected outside the lock and reassembled
+            # into a single ModelResponse via stream_chunk_builder.
+            from litellm import stream_chunk_builder
+            from litellm import CustomStreamWrapper as LiteLLMCustomStreamWrapper
+
+            stream_response = cast(
+                LiteLLMCustomStreamWrapper,
                 self._completion(
                     prompt=prompt,
                     tools=tools,
                     tool_choice=tool_choice,
-                    stream=False,
+                    stream=True,
                     structured_response_format=structured_response_format,
                     timeout_override=timeout_override,
                     max_tokens=max_tokens,
@@ -490,6 +650,11 @@ class LitellmLLM(LLM):
                     user_identity=user_identity,
                     client=client,
                 ),
+            )
+            chunks = list(stream_response)
+            response = cast(
+                LiteLLMModelResponse,
+                stream_chunk_builder(chunks),
             )
 
             model_response = from_litellm_model_response(response)
@@ -581,3 +746,29 @@ class LitellmLLM(LLM):
         finally:
             if client is not None:
                 client.close()
+
+
+@contextmanager
+def temporary_env_and_lock(env_variables: dict[str, str]) -> Iterator[None]:
+    """
+    Temporarily sets the environment variables to the given values.
+    Code path is locked while the environment variables are set.
+    Then cleans up the environment and frees the lock.
+    """
+    with _env_lock:
+        logger.debug("Acquired lock in temporary_env_and_lock")
+        # Store original values (None if key didn't exist)
+        original_values: dict[str, str | None] = {
+            key: os.environ.get(key) for key in env_variables
+        }
+        try:
+            os.environ.update(env_variables)
+            yield
+        finally:
+            for key, original_value in original_values.items():
+                if original_value is None:
+                    os.environ.pop(key, None)  # Remove if it didn't exist before
+                else:
+                    os.environ[key] = original_value  # Restore original value
+
+    logger.debug("Released lock in temporary_env_and_lock")

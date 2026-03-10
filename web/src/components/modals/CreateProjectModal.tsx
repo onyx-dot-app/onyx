@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import { useKeyPress } from "@/hooks/useKeyPress";
 import * as InputLayouts from "@/layouts/input-layouts";
@@ -10,7 +11,7 @@ import { useModal } from "@/refresh-components/contexts/ModalContext";
 import { SvgFolderPlus } from "@opal/icons";
 import Modal from "@/refresh-components/Modal";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 
 interface CreateProjectModalProps {
   initialProjectName?: string;
@@ -23,7 +24,6 @@ export default function CreateProjectModal({
   const modal = useModal();
   const route = useAppRouter();
   const [projectName, setProjectName] = useState(initialProjectName ?? "");
-  const { popup, setPopup } = usePopup();
 
   // Reset when prop changes (modal reopens with different value)
   useEffect(() => {
@@ -39,10 +39,7 @@ export default function CreateProjectModal({
       route({ projectId: newProject.id });
       modal.toggle(false);
     } catch (e) {
-      setPopup({
-        type: "error",
-        message: `Failed to create the project ${name}`,
-      });
+      toast.error(`Failed to create the project ${name}`);
     }
   }
 
@@ -50,8 +47,6 @@ export default function CreateProjectModal({
 
   return (
     <>
-      {popup}
-
       <Modal open={modal.isOpen} onOpenChange={modal.toggle}>
         <Modal.Content width="sm">
           <Modal.Header
@@ -71,10 +66,12 @@ export default function CreateProjectModal({
             </InputLayouts.Vertical>
           </Modal.Body>
           <Modal.Footer>
-            <Button secondary onClick={() => modal.toggle(false)}>
+            <Button prominence="secondary" onClick={() => modal.toggle(false)}>
               Cancel
             </Button>
-            <Button onClick={handleSubmit}>Create Project</Button>
+            <Disabled disabled={!projectName.trim()}>
+              <Button onClick={handleSubmit}>Create Project</Button>
+            </Disabled>
           </Modal.Footer>
         </Modal.Content>
       </Modal>

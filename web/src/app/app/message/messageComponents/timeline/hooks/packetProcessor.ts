@@ -10,6 +10,8 @@ import {
   Stop,
   ImageGenerationToolDelta,
   MessageStart,
+  ToolCallArgumentDelta,
+  CODE_INTERPRETER_TOOL_TYPES,
 } from "@/app/app/services/streamingModels";
 import { CitationMap } from "@/app/app/interfaces";
 import { OnyxDocument } from "@/lib/search/interfaces";
@@ -138,17 +140,28 @@ const CONTENT_PACKET_TYPES_SET = new Set<PacketType>([
   PacketType.SEARCH_TOOL_START,
   PacketType.IMAGE_GENERATION_TOOL_START,
   PacketType.PYTHON_TOOL_START,
+  PacketType.TOOL_CALL_ARGUMENT_DELTA,
   PacketType.CUSTOM_TOOL_START,
+  PacketType.FILE_READER_START,
   PacketType.FETCH_TOOL_START,
+  PacketType.MEMORY_TOOL_START,
+  PacketType.MEMORY_TOOL_NO_ACCESS,
   PacketType.REASONING_START,
   PacketType.DEEP_RESEARCH_PLAN_START,
   PacketType.RESEARCH_AGENT_START,
 ]);
 
 function hasContentPackets(packets: Packet[]): boolean {
-  return packets.some((packet) =>
-    CONTENT_PACKET_TYPES_SET.has(packet.obj.type as PacketType)
-  );
+  return packets.some((packet) => {
+    const type = packet.obj.type as PacketType;
+    if (type === PacketType.TOOL_CALL_ARGUMENT_DELTA) {
+      return (
+        (packet.obj as ToolCallArgumentDelta).tool_type ===
+        CODE_INTERPRETER_TOOL_TYPES.PYTHON
+      );
+    }
+    return CONTENT_PACKET_TYPES_SET.has(type);
+  });
 }
 
 /**
@@ -346,11 +359,11 @@ function processPacket(state: ProcessorState, packet: Packet): void {
     if (isDisplayPacket(packet)) {
       state.displayGroupKeys.add(groupKey);
     }
+  }
 
-    // Track image generation for header display
-    if (packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_START) {
-      state.isGeneratingImage = true;
-    }
+  // Track image generation for header display (regardless of group position)
+  if (packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_START) {
+    state.isGeneratingImage = true;
   }
 
   // Count generated images from DELTA packets

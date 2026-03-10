@@ -37,6 +37,7 @@ class IndexingCallbackBase(IndexingHeartbeatInterface):
         redis_connector: RedisConnector,
         redis_lock: RedisLock,
         redis_client: Redis,
+        timeout_seconds: int | None = None,
     ):
         super().__init__()
         self.parent_pid = parent_pid
@@ -51,11 +52,29 @@ class IndexingCallbackBase(IndexingHeartbeatInterface):
         self.last_lock_monotonic = time.monotonic()
 
         self.last_parent_check = time.monotonic()
+        self.start_monotonic = time.monotonic()
+        self.timeout_seconds = timeout_seconds
 
     def should_stop(self) -> bool:
         # Check if the associated indexing attempt has been cancelled
         # TODO: Pass index_attempt_id to the callback and check cancellation using the db
-        return bool(self.redis_connector.stop.fenced)
+        if bool(self.redis_connector.stop.fenced):
+            return True
+
+        # Check if the task has exceeded its timeout
+        # NOTE: Celery's soft_time_limit does not work with thread pools,
+        # so we must enforce timeouts internally.
+        if self.timeout_seconds is not None:
+            elapsed = time.monotonic() - self.start_monotonic
+            if elapsed > self.timeout_seconds:
+                logger.warning(
+                    f"IndexingCallback Docprocessing - task timeout exceeded: "
+                    f"elapsed={elapsed:.0f}s timeout={self.timeout_seconds}s "
+                    f"cc_pair={self.redis_connector.cc_pair_id}"
+                )
+                return True
+
+        return False
 
     def progress(self, tag: str, amount: int) -> None:  # noqa: ARG002
         """Amount isn't used yet."""

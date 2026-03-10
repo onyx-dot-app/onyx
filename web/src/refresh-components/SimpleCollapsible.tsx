@@ -47,8 +47,8 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/refresh-components/Collapsible";
-import IconButton from "@/refresh-components/buttons/IconButton";
-import Text from "@/refresh-components/texts/Text";
+import { Button } from "@opal/components";
+import { Content } from "@opal/layouts";
 import { SvgFold, SvgExpand } from "@opal/icons";
 import { WithoutStyles } from "@/types";
 
@@ -198,20 +198,19 @@ const Header = React.forwardRef<HTMLDivElement, SimpleCollapsibleHeaderProps>(
           className="flex flex-row items-center justify-between gap-4 cursor-pointer select-none"
           {...props}
         >
-          <div ref={boundingRef} className="flex flex-col w-full">
-            <Text as="p" mainContentEmphasis>
-              {title}
-            </Text>
-            {description && (
-              <Text as="p" secondaryBody text03>
-                {description}
-              </Text>
-            )}
+          <div ref={boundingRef} className="w-full">
+            <Content
+              title={title}
+              description={description}
+              sizePreset="main-content"
+              variant="section"
+            />
           </div>
-          <IconButton
+          <Button
             icon={open ? SvgFold : SvgExpand}
-            internal
-            transient={inside}
+            prominence="tertiary"
+            size="sm"
+            interaction={inside ? "hover" : "rest"}
             tooltip={open ? "Fold" : "Expand"}
           />
         </div>
@@ -236,7 +235,7 @@ Header.displayName = "SimpleCollapsible.Header";
  * </SimpleCollapsible>
  * ```
  */
-const Content = React.forwardRef<
+const ContentPanel = React.forwardRef<
   HTMLDivElement,
   WithoutStyles<React.HTMLAttributes<HTMLDivElement>>
 >(({ children, ...props }, ref) => {
@@ -248,9 +247,9 @@ const Content = React.forwardRef<
     </CollapsibleContent>
   );
 });
-Content.displayName = "SimpleCollapsible.Content";
+ContentPanel.displayName = "SimpleCollapsible.Content";
 
 export default Object.assign(Root, {
   Header,
-  Content,
+  Content: ContentPanel,
 });

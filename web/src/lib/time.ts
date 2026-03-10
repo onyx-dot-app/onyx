@@ -1,4 +1,4 @@
-import { User } from "./types";
+import { User } from "@/lib/types";
 
 const conditionallyAddPlural = (noun: string, cnt: number) => {
   if (cnt > 1) {
@@ -155,6 +155,24 @@ export function getSecondsUntilExpiration(
       secondsUntilOIDCExpiration ?? Infinity
     )
   );
+}
+
+export type TimeFilter = "day" | "week" | "month" | "year";
+
+export function getTimeFilterDate(filter: TimeFilter): Date | null {
+  const now = new Date();
+  switch (filter) {
+    case "day":
+      return new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    case "week":
+      return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    case "month":
+      return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    case "year":
+      return new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+    default:
+      return null;
+  }
 }
 
 export function formatDurationSeconds(seconds: number): string {

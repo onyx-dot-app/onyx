@@ -8,5 +8,5 @@
 
 ## Additional Options
 
-- [ ] [Required] I have considered whether this PR needs to be cherry-picked to the latest beta branch.
+- [ ] [Optional] Please cherry-pick this PR to the latest release version.
 - [ ] [Optional] Override Linear Check

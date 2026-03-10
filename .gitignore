@@ -6,6 +6,8 @@
 !/.vscode/tasks.template.jsonc
 .zed
 .cursor
+!/.cursor/mcp.json
+!/.cursor/skills/
 
 # macos
 .DS_store

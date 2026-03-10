@@ -117,7 +117,7 @@ def create_connector(env_name: str, file_paths: list[str]) -> int:
         connector_specific_config={
             "file_locations": file_paths,
             "file_names": [],  # For regression tests, no need for file_names
-            "zip_metadata": {},
+            "zip_metadata_file_id": None,
         },
         refresh_freq=None,
         prune_freq=None,

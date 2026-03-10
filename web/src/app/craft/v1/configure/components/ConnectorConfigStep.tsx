@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { Formik, Form, useFormikContext } from "formik";
 import { Section } from "@/layouts/general-layouts";
-import Button from "@/refresh-components/buttons/Button";
-import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
+import { toast } from "@/hooks/useToast";
 import { ValidSources } from "@/lib/types";
 import { Credential } from "@/lib/connectors/credentials";
 import Separator from "@/refresh-components/Separator";
@@ -22,7 +23,6 @@ interface ConnectorConfigStepProps {
   credential: Credential<any>;
   onSuccess: () => void;
   onBack: () => void;
-  setPopup: (popupSpec: PopupSpec | null) => void;
 }
 
 function ConnectorConfigForm({
@@ -30,7 +30,6 @@ function ConnectorConfigForm({
   credential,
   onSuccess,
   onBack,
-  setPopup,
 }: ConnectorConfigStepProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { values } = useFormikContext<Record<string, any>>();
@@ -61,11 +60,9 @@ function ConnectorConfigForm({
 
       onSuccess();
     } catch (err) {
-      setPopup({
-        message:
-          err instanceof Error ? err.message : "Failed to create connector",
-        type: "error",
-      });
+      toast.error(
+        err instanceof Error ? err.message : "Failed to create connector"
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -99,17 +96,16 @@ function ConnectorConfigForm({
             />
           ))}
         <Section flexDirection="row" justifyContent="between" height="fit">
-          <Button secondary onClick={onBack} disabled={isSubmitting}>
-            Back
-          </Button>
-          <Button
-            primary
-            type="button"
-            onClick={handleSubmit}
-            disabled={isSubmitting}
-          >
-            {isSubmitting ? "Creating..." : "Create Connector"}
-          </Button>
+          <Disabled disabled={isSubmitting}>
+            <Button prominence="secondary" onClick={onBack}>
+              Back
+            </Button>
+          </Disabled>
+          <Disabled disabled={isSubmitting}>
+            <Button type="button" onClick={handleSubmit}>
+              {isSubmitting ? "Creating..." : "Create Connector"}
+            </Button>
+          </Disabled>
         </Section>
       </CardSection>
     </Form>
@@ -127,7 +123,6 @@ export default function ConnectorConfigStep({
   credential,
   onSuccess,
   onBack,
-  setPopup,
 }: ConnectorConfigStepProps) {
   const { user } = useUser();
   const baseInitialValues = createConnectorInitialValues(connectorType as any);
@@ -148,7 +143,6 @@ export default function ConnectorConfigStep({
         credential={credential}
         onSuccess={onSuccess}
         onBack={onBack}
-        setPopup={setPopup}
       />
     </Formik>
   );

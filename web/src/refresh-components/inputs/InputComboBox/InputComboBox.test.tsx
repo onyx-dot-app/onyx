@@ -195,12 +195,11 @@ describe("InputComboBox", () => {
 
       await user.type(input, "app");
 
-      // Get all options and check the first one contains Apple
+      // Search should only show matching options by default
       const options = screen.getAllByRole("option");
-      expect(options.length).toBeGreaterThan(0);
+      expect(options.length).toBe(1);
       expect(options[0]!.textContent).toBe("Apple");
-      // Banana and Cherry should be in "Other options" section
-      expect(screen.getByText("Banana")).toBeInTheDocument();
+      expect(screen.queryByText("Banana")).not.toBeInTheDocument();
     });
 
     test("shows 'No options found' when no matches and strict mode", async () => {
@@ -217,12 +216,10 @@ describe("InputComboBox", () => {
 
       await user.type(input, "xyz");
 
-      // In strict mode with no matches, all options go to "Other options" section
-      // which shows all options (not "No options found")
-      expect(screen.getByText("Other options")).toBeInTheDocument();
+      expect(screen.getByText("No options found")).toBeInTheDocument();
     });
 
-    test("shows separator between matched and unmatched options", async () => {
+    test("shows separator between matched and unmatched options when enabled", async () => {
       const user = setupUser();
       render(
         <InputComboBox
@@ -230,6 +227,7 @@ describe("InputComboBox", () => {
           value=""
           options={mockOptions}
           separatorLabel="Other fruits"
+          showOtherOptions
         />
       );
       const input = screen.getByPlaceholderText("Select");

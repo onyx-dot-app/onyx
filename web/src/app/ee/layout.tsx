@@ -1,5 +1,6 @@
 import { SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED } from "@/lib/constants";
 import { fetchStandardSettingsSS } from "@/components/settings/lib";
+import EEFeatureRedirect from "@/app/ee/EEFeatureRedirect";
 
 export default async function AdminLayout({
   children,
@@ -8,13 +9,7 @@ export default async function AdminLayout({
 }) {
   // First check build-time constant (fast path)
   if (!SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED) {
-    return (
-      <div className="flex h-screen">
-        <div className="mx-auto my-auto text-lg font-bold text-red-500">
-          This functionality is only available in the Enterprise Edition :(
-        </div>
-      </div>
-    );
+    return <EEFeatureRedirect />;
   }
 
   // Then check runtime license status (for license enforcement mode)
@@ -24,13 +19,14 @@ export default async function AdminLayout({
     if (settingsResponse?.ok) {
       const settings = await settingsResponse.json();
       if (settings.ee_features_enabled === false) {
-        return (
-          <div className="flex h-screen">
-            <div className="mx-auto my-auto text-lg font-bold text-red-500">
-              This functionality requires an active Enterprise license.
-            </div>
-          </div>
-        );
+        // When the app is in GATED_ACCESS (expired or missing license), defer
+        // to the root layout's GatedContentWrapper which handles path-based
+        // exemptions (e.g. allowing /admin/billing for license management).
+        if (settings.application_status === "gated_access") {
+          return children;
+        }
+
+        return <EEFeatureRedirect />;
       }
     }
   } catch (error) {

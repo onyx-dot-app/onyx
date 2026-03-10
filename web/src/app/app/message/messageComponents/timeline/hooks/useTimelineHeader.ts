@@ -82,6 +82,10 @@ export function useTimelineHeader(
       return { headerText: "Generating images", hasPackets, userStopped };
     }
 
+    if (packetType === PacketType.FILE_READER_START) {
+      return { headerText: "Reading file", hasPackets, userStopped };
+    }
+
     if (packetType === PacketType.CUSTOM_TOOL_START) {
       const toolName = (firstPacket.obj as CustomToolStart).tool_name;
       return {
@@ -89,6 +93,13 @@ export function useTimelineHeader(
         hasPackets,
         userStopped,
       };
+    }
+
+    if (
+      packetType === PacketType.MEMORY_TOOL_START ||
+      packetType === PacketType.MEMORY_TOOL_NO_ACCESS
+    ) {
+      return { headerText: "Updating memory...", hasPackets, userStopped };
     }
 
     if (packetType === PacketType.REASONING_START) {

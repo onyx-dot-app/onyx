@@ -1,5 +1,7 @@
 import logging
 import time
+from contextlib import AbstractContextManager
+from contextlib import nullcontext
 from typing import Any
 from typing import Generic
 from typing import TypeVar
@@ -9,6 +11,7 @@ from opensearchpy import TransportError
 from opensearchpy.helpers import bulk
 from pydantic import BaseModel
 
+from onyx.configs.app_configs import DEFAULT_OPENSEARCH_CLIENT_TIMEOUT_S
 from onyx.configs.app_configs import OPENSEARCH_ADMIN_PASSWORD
 from onyx.configs.app_configs import OPENSEARCH_ADMIN_USERNAME
 from onyx.configs.app_configs import OPENSEARCH_HOST
@@ -19,6 +22,9 @@ from onyx.document_index.opensearch.schema import get_opensearch_doc_chunk_id
 from onyx.document_index.opensearch.search import DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW
 from onyx.utils.logger import setup_logger
 from onyx.utils.timing import log_function_time
+
+
+CLIENT_THRESHOLD_TO_LOG_SLOW_SEARCH_MS = 2000
 
 
 logger = setup_logger(__name__)
@@ -50,10 +56,216 @@ class SearchHit(BaseModel, Generic[SchemaDocumentModel]):
     # Maps schema property name to a list of highlighted snippets with match
     # terms wrapped in tags (e.g. "something <hi>keyword</hi> other thing").
     match_highlights: dict[str, list[str]] = {}
+    # Score explanation from OpenSearch when "explain": true is set in the query.
+    # Contains detailed breakdown of how the score was calculated.
+    explanation: dict[str, Any] | None = None
 
 
-class OpenSearchClient:
-    """Client for interacting with OpenSearch.
+class IndexInfo(BaseModel):
+    """
+    Represents information about an OpenSearch index.
+    """
+
+    model_config = {"frozen": True}
+
+    name: str
+    health: str
+    status: str
+    num_primary_shards: str
+    num_replica_shards: str
+    docs_count: str
+    docs_deleted: str
+    created_at: str
+    total_size: str
+    primary_shards_size: str
+
+
+def get_new_body_without_vectors(body: dict[str, Any]) -> dict[str, Any]:
+    """Recursively replaces vectors in the body with their length.
+
+    TODO(andrei): Do better.
+
+    Args:
+        body: The body to replace the vectors.
+
+    Returns:
+        A copy of body with vectors replaced with their length.
+    """
+    new_body: dict[str, Any] = {}
+    for k, v in body.items():
+        if k == "vector":
+            new_body[k] = len(v)
+        elif isinstance(v, dict):
+            new_body[k] = get_new_body_without_vectors(v)
+        elif isinstance(v, list) and len(v) > 0 and isinstance(v[0], dict):
+            new_body[k] = [get_new_body_without_vectors(item) for item in v]
+        else:
+            new_body[k] = v
+    return new_body
+
+
+class OpenSearchClient(AbstractContextManager):
+    """Client for interacting with OpenSearch for cluster-level operations.
+
+    Args:
+        host: The host of the OpenSearch cluster.
+        port: The port of the OpenSearch cluster.
+        auth: The authentication credentials for the OpenSearch cluster. A tuple
+            of (username, password).
+        use_ssl: Whether to use SSL for the OpenSearch cluster. Defaults to
+            True.
+        verify_certs: Whether to verify the SSL certificates for the OpenSearch
+            cluster. Defaults to False.
+        ssl_show_warn: Whether to show warnings for SSL certificates. Defaults
+            to False.
+        timeout: The timeout for the OpenSearch cluster. Defaults to
+            DEFAULT_OPENSEARCH_CLIENT_TIMEOUT_S.
+    """
+
+    def __init__(
+        self,
+        host: str = OPENSEARCH_HOST,
+        port: int = OPENSEARCH_REST_API_PORT,
+        auth: tuple[str, str] = (OPENSEARCH_ADMIN_USERNAME, OPENSEARCH_ADMIN_PASSWORD),
+        use_ssl: bool = True,
+        verify_certs: bool = False,
+        ssl_show_warn: bool = False,
+        timeout: int = DEFAULT_OPENSEARCH_CLIENT_TIMEOUT_S,
+    ):
+        logger.debug(
+            f"Creating OpenSearch client with host {host}, port {port} and timeout {timeout} seconds."
+        )
+        self._client = OpenSearch(
+            hosts=[{"host": host, "port": port}],
+            http_auth=auth,
+            use_ssl=use_ssl,
+            verify_certs=verify_certs,
+            ssl_show_warn=ssl_show_warn,
+            # NOTE: This timeout applies to all requests the client makes,
+            # including bulk indexing. When exceeded, the client will raise a
+            # ConnectionTimeout and return no useful results. The OpenSearch
+            # server will log that the client cancelled the request. To get
+            # partial results from OpenSearch, pass in a timeout parameter to
+            # your request body that is less than this value.
+            timeout=timeout,
+        )
+
+    def __exit__(self, *_: Any) -> None:
+        self.close()
+
+    def __del__(self) -> None:
+        try:
+            self.close()
+        except Exception:
+            pass
+
+    @log_function_time(print_only=True, debug_only=True, include_args=True)
+    def create_search_pipeline(
+        self,
+        pipeline_id: str,
+        pipeline_body: dict[str, Any],
+    ) -> None:
+        """Creates a search pipeline.
+
+        See the OpenSearch documentation for more information on the search
+        pipeline body.
+        https://docs.opensearch.org/latest/search-plugins/search-pipelines/index/
+
+        Args:
+            pipeline_id: The ID of the search pipeline to create.
+            pipeline_body: The body of the search pipeline to create.
+
+        Raises:
+            Exception: There was an error creating the search pipeline.
+        """
+        response = self._client.search_pipeline.put(id=pipeline_id, body=pipeline_body)
+        if not response.get("acknowledged", False):
+            raise RuntimeError(f"Failed to create search pipeline {pipeline_id}.")
+
+    @log_function_time(print_only=True, debug_only=True, include_args=True)
+    def delete_search_pipeline(self, pipeline_id: str) -> None:
+        """Deletes a search pipeline.
+
+        Args:
+            pipeline_id: The ID of the search pipeline to delete.
+
+        Raises:
+            Exception: There was an error deleting the search pipeline.
+        """
+        response = self._client.search_pipeline.delete(id=pipeline_id)
+        if not response.get("acknowledged", False):
+            raise RuntimeError(f"Failed to delete search pipeline {pipeline_id}.")
+
+    @log_function_time(print_only=True, debug_only=True, include_args=True)
+    def put_cluster_settings(self, settings: dict[str, Any]) -> bool:
+        """Puts cluster settings.
+
+        Args:
+            settings: The settings to put.
+
+        Raises:
+            Exception: There was an error putting the cluster settings.
+
+        Returns:
+            True if the settings were put successfully, False otherwise.
+        """
+        response = self._client.cluster.put_settings(body=settings)
+        if response.get("acknowledged", False):
+            logger.info("Successfully put cluster settings.")
+            return True
+        else:
+            logger.error(f"Failed to put cluster settings: {response}.")
+            return False
+
+    @log_function_time(print_only=True, debug_only=True)
+    def list_indices_with_info(self) -> list[IndexInfo]:
+        """
+        Lists the indices in the OpenSearch cluster with information about each
+        index.
+
+        Returns:
+            A list of IndexInfo objects for each index.
+        """
+        response = self._client.cat.indices(format="json")
+        indices: list[IndexInfo] = []
+        for raw_index_info in response:
+            indices.append(
+                IndexInfo(
+                    name=raw_index_info.get("index", ""),
+                    health=raw_index_info.get("health", ""),
+                    status=raw_index_info.get("status", ""),
+                    num_primary_shards=raw_index_info.get("pri", ""),
+                    num_replica_shards=raw_index_info.get("rep", ""),
+                    docs_count=raw_index_info.get("docs.count", ""),
+                    docs_deleted=raw_index_info.get("docs.deleted", ""),
+                    created_at=raw_index_info.get("creation.date.string", ""),
+                    total_size=raw_index_info.get("store.size", ""),
+                    primary_shards_size=raw_index_info.get("pri.store.size", ""),
+                )
+            )
+        return indices
+
+    @log_function_time(print_only=True, debug_only=True)
+    def ping(self) -> bool:
+        """Pings the OpenSearch cluster.
+
+        Returns:
+            True if OpenSearch could be reached, False if it could not.
+        """
+        return self._client.ping()
+
+    @log_function_time(print_only=True, debug_only=True)
+    def close(self) -> None:
+        """Closes the client.
+
+        Raises:
+            Exception: There was an error closing the client.
+        """
+        self._client.close()
+
+
+class OpenSearchIndexClient(OpenSearchClient):
+    """Client for interacting with OpenSearch for index-level operations.
 
     OpenSearch's Python module has pretty bad typing support so this client
     attempts to protect the rest of the codebase from this. As a consequence,
@@ -63,6 +275,21 @@ class OpenSearchClient:
     TODO(andrei): This class currently assumes the structure of the database
     schema when it returns a DocumentChunk. Make the class, or at least the
     search method, templated on the structure the caller can expect.
+
+    Args:
+        index_name: The name of the index to interact with.
+        host: The host of the OpenSearch cluster.
+        port: The port of the OpenSearch cluster.
+        auth: The authentication credentials for the OpenSearch cluster. A tuple
+            of (username, password).
+        use_ssl: Whether to use SSL for the OpenSearch cluster. Defaults to
+            True.
+        verify_certs: Whether to verify the SSL certificates for the OpenSearch
+            cluster. Defaults to False.
+        ssl_show_warn: Whether to show warnings for SSL certificates. Defaults
+            to False.
+        timeout: The timeout for the OpenSearch cluster. Defaults to
+            DEFAULT_OPENSEARCH_CLIENT_TIMEOUT_S.
     """
 
     def __init__(
@@ -74,18 +301,18 @@ class OpenSearchClient:
         use_ssl: bool = True,
         verify_certs: bool = False,
         ssl_show_warn: bool = False,
+        timeout: int = DEFAULT_OPENSEARCH_CLIENT_TIMEOUT_S,
     ):
-        self._index_name = index_name
-        logger.debug(
-            f"Creating OpenSearch client for index {index_name} with host {host} and port {port}."
-        )
-        self._client = OpenSearch(
-            hosts=[{"host": host, "port": port}],
-            http_auth=auth,
+        super().__init__(
+            host=host,
+            port=port,
+            auth=auth,
             use_ssl=use_ssl,
             verify_certs=verify_certs,
             ssl_show_warn=ssl_show_warn,
+            timeout=timeout,
         )
+        self._index_name = index_name
         logger.debug(
             f"OpenSearch client created successfully for index {self._index_name}."
         )
@@ -152,6 +379,38 @@ class OpenSearchClient:
             True if the index exists, False if it does not.
         """
         return self._client.indices.exists(index=self._index_name)
+
+    @log_function_time(print_only=True, debug_only=True, include_args=True)
+    def put_mapping(self, mappings: dict[str, Any]) -> None:
+        """Updates the index mapping in an idempotent manner.
+
+        - Existing fields with the same definition: No-op (succeeds silently).
+        - New fields: Added to the index.
+        - Existing fields with different types: Raises exception (requires
+          reindex).
+
+        See the OpenSearch documentation for more information:
+        https://docs.opensearch.org/latest/api-reference/index-apis/put-mapping/
+
+        Args:
+            mappings: The complete mapping definition to apply. This will be
+                merged with existing mappings in the index.
+
+        Raises:
+            Exception: There was an error updating the mappings, such as
+                attempting to change the type of an existing field.
+        """
+        logger.debug(
+            f"Putting mappings for index {self._index_name} with mappings {mappings}."
+        )
+        response = self._client.indices.put_mapping(
+            index=self._index_name, body=mappings
+        )
+        if not response.get("acknowledged", False):
+            raise RuntimeError(
+                f"Failed to put the mapping update for index {self._index_name}."
+            )
+        logger.debug(f"Successfully put mappings for index {self._index_name}.")
 
     @log_function_time(print_only=True, debug_only=True, include_args=True)
     def validate_index(self, expected_mappings: dict[str, Any]) -> bool:
@@ -571,43 +830,6 @@ class OpenSearchClient:
         )
         return DocumentChunk.model_validate(document_chunk_source)
 
-    @log_function_time(print_only=True, debug_only=True, include_args=True)
-    def create_search_pipeline(
-        self,
-        pipeline_id: str,
-        pipeline_body: dict[str, Any],
-    ) -> None:
-        """Creates a search pipeline.
-
-        See the OpenSearch documentation for more information on the search
-        pipeline body.
-        https://docs.opensearch.org/latest/search-plugins/search-pipelines/index/
-
-        Args:
-            pipeline_id: The ID of the search pipeline to create.
-            pipeline_body: The body of the search pipeline to create.
-
-        Raises:
-            Exception: There was an error creating the search pipeline.
-        """
-        result = self._client.search_pipeline.put(id=pipeline_id, body=pipeline_body)
-        if not result.get("acknowledged", False):
-            raise RuntimeError(f"Failed to create search pipeline {pipeline_id}.")
-
-    @log_function_time(print_only=True, debug_only=True, include_args=True)
-    def delete_search_pipeline(self, pipeline_id: str) -> None:
-        """Deletes a search pipeline.
-
-        Args:
-            pipeline_id: The ID of the search pipeline to delete.
-
-        Raises:
-            Exception: There was an error deleting the search pipeline.
-        """
-        result = self._client.search_pipeline.delete(id=pipeline_id)
-        if not result.get("acknowledged", False):
-            raise RuntimeError(f"Failed to delete search pipeline {pipeline_id}.")
-
     @log_function_time(print_only=True, debug_only=True)
     def search(
         self, body: dict[str, Any], search_pipeline_id: str | None
@@ -635,14 +857,31 @@ class OpenSearchClient:
             f"Trying to search index {self._index_name} with search pipeline {search_pipeline_id}."
         )
         result: dict[str, Any]
+        params = {"phase_took": "true"}
         if search_pipeline_id:
             result = self._client.search(
-                index=self._index_name, search_pipeline=search_pipeline_id, body=body
+                index=self._index_name,
+                search_pipeline=search_pipeline_id,
+                body=body,
+                params=params,
             )
         else:
-            result = self._client.search(index=self._index_name, body=body)
+            result = self._client.search(
+                index=self._index_name, body=body, params=params
+            )
 
-        hits = self._get_hits_from_search_result(result)
+        hits, time_took, timed_out, phase_took, profile = (
+            self._get_hits_and_profile_from_search_result(result)
+        )
+        self._log_search_result_perf(
+            time_took=time_took,
+            timed_out=timed_out,
+            phase_took=phase_took,
+            profile=profile,
+            body=body,
+            search_pipeline_id=search_pipeline_id,
+            raise_on_timeout=True,
+        )
 
         search_hits: list[SearchHit[DocumentChunk]] = []
         for hit in hits:
@@ -653,10 +892,12 @@ class OpenSearchClient:
                 )
             document_chunk_score = hit.get("_score", None)
             match_highlights: dict[str, list[str]] = hit.get("highlight", {})
+            explanation: dict[str, Any] | None = hit.get("_explanation", None)
             search_hit = SearchHit[DocumentChunk](
                 document_chunk=DocumentChunk.model_validate(document_chunk_source),
                 score=document_chunk_score,
                 match_highlights=match_highlights,
+                explanation=explanation,
             )
             search_hits.append(search_hit)
         logger.debug(
@@ -698,9 +939,22 @@ class OpenSearchClient:
                 '"_source": False. This query will therefore be inefficient.'
             )
 
-        result: dict[str, Any] = self._client.search(index=self._index_name, body=body)
+        params = {"phase_took": "true"}
+        result: dict[str, Any] = self._client.search(
+            index=self._index_name, body=body, params=params
+        )
 
-        hits = self._get_hits_from_search_result(result)
+        hits, time_took, timed_out, phase_took, profile = (
+            self._get_hits_and_profile_from_search_result(result)
+        )
+        self._log_search_result_perf(
+            time_took=time_took,
+            timed_out=timed_out,
+            phase_took=phase_took,
+            profile=profile,
+            body=body,
+            raise_on_timeout=True,
+        )
 
         # TODO(andrei): Implement scroll/point in time for results so that we
         # can return arbitrarily-many IDs.
@@ -736,80 +990,78 @@ class OpenSearchClient:
         """
         self._client.indices.refresh(index=self._index_name)
 
-    @log_function_time(print_only=True, debug_only=True, include_args=True)
-    def set_cluster_auto_create_index_setting(self, enabled: bool) -> bool:
-        """Sets the cluster auto create index setting.
-
-        By default, when you index a document to a non-existent index,
-        OpenSearch will automatically create the index. This behavior is
-        undesirable so this function exposes the ability to disable it.
-
-        See
-        https://docs.opensearch.org/latest/install-and-configure/configuring-opensearch/index/#updating-cluster-settings-using-the-api
-
-        Args:
-            enabled: Whether to enable the auto create index setting.
-
-        Returns:
-            True if the setting was updated successfully, False otherwise. Does
-                not raise.
-        """
-        try:
-            body = {"persistent": {"action.auto_create_index": enabled}}
-            response = self._client.cluster.put_settings(body=body)
-            if response.get("acknowledged", False):
-                logger.info(f"Successfully set action.auto_create_index to {enabled}.")
-                return True
-            else:
-                logger.error(f"Failed to update setting: {response}.")
-                return False
-        except Exception:
-            logger.exception("Error setting auto_create_index.")
-            return False
-
-    @log_function_time(print_only=True, debug_only=True)
-    def ping(self) -> bool:
-        """Pings the OpenSearch cluster.
-
-        Returns:
-            True if OpenSearch could be reached, False if it could not.
-        """
-        return self._client.ping()
-
-    @log_function_time(print_only=True, debug_only=True)
-    def close(self) -> None:
-        """Closes the client.
-
-        TODO(andrei): Can we have some way to auto close when the client no
-        longer has any references?
-
-        Raises:
-            Exception: There was an error closing the client.
-        """
-        self._client.close()
-
-    def _get_hits_from_search_result(self, result: dict[str, Any]) -> list[Any]:
-        """Extracts the hits from a search result.
+    def _get_hits_and_profile_from_search_result(
+        self, result: dict[str, Any]
+    ) -> tuple[list[Any], int | None, bool | None, dict[str, Any], dict[str, Any]]:
+        """Extracts the hits and profiling information from a search result.
 
         Args:
             result: The search result to extract the hits from.
 
         Raises:
             Exception: There was an error extracting the hits from the search
-                result. This includes the case where the search timed out.
+                result.
 
         Returns:
-            The hits from the search result.
+            A tuple containing the hits from the search result, the time taken
+                to execute the search in milliseconds, whether the search timed
+                out, the time taken to execute each phase of the search, and the
+                profile.
         """
-        if result.get("timed_out", False):
-            raise RuntimeError(f"Search timed out for index {self._index_name}.")
+        time_took: int | None = result.get("took")
+        timed_out: bool | None = result.get("timed_out")
+        phase_took: dict[str, Any] = result.get("phase_took", {})
+        profile: dict[str, Any] = result.get("profile", {})
+
         hits_first_layer: dict[str, Any] = result.get("hits", {})
         if not hits_first_layer:
             raise RuntimeError(
                 f"Hits field missing from response when trying to search index {self._index_name}."
             )
         hits_second_layer: list[Any] = hits_first_layer.get("hits", [])
-        return hits_second_layer
+
+        return hits_second_layer, time_took, timed_out, phase_took, profile
+
+    def _log_search_result_perf(
+        self,
+        time_took: int | None,
+        timed_out: bool | None,
+        phase_took: dict[str, Any],
+        profile: dict[str, Any],
+        body: dict[str, Any],
+        search_pipeline_id: str | None = None,
+        raise_on_timeout: bool = False,
+    ) -> None:
+        """Logs the performance of a search result.
+
+        Args:
+            time_took: The time taken to execute the search in milliseconds.
+            timed_out: Whether the search timed out.
+            phase_took: The time taken to execute each phase of the search.
+            profile: The profile for the search.
+            body: The body of the search request for logging.
+            search_pipeline_id: The ID of the search pipeline used for the
+                search, if any, for logging. Defaults to None.
+            raise_on_timeout: Whether to raise an exception if the search timed
+                out. Note that the result may still contain useful partial
+                results. Defaults to False.
+
+        Raises:
+            Exception: If raise_on_timeout is True and the search timed out.
+        """
+        if time_took and time_took > CLIENT_THRESHOLD_TO_LOG_SLOW_SEARCH_MS:
+            logger.warning(
+                f"OpenSearch client warning: Search for index {self._index_name} took {time_took} milliseconds.\n"
+                f"Body: {get_new_body_without_vectors(body)}\n"
+                f"Search pipeline ID: {search_pipeline_id}\n"
+                f"Phase took: {phase_took}\n"
+                f"Profile: {profile}\n"
+            )
+        if timed_out:
+            error_str = f"OpenSearch client error: Search timed out for index {self._index_name}."
+            logger.error(error_str)
+            if raise_on_timeout:
+                raise RuntimeError(error_str)
 
 
 def wait_for_opensearch_with_timeout(
@@ -834,14 +1086,7 @@ def wait_for_opensearch_with_timeout(
     Returns:
         True if OpenSearch is ready, False otherwise.
     """
-    made_client = False
-    try:
-        if client is None:
-            # NOTE: index_name does not matter because we are only using this object
-            # to ping.
-            # TODO(andrei): Make this better.
-            client = OpenSearchClient(index_name="")
-            made_client = True
+    with nullcontext(client) if client else OpenSearchClient() as client:
         time_start = time.monotonic()
         while True:
             if client.ping():
@@ -858,7 +1103,3 @@ def wait_for_opensearch_with_timeout(
                 f"[OpenSearch] Readiness probe ongoing. elapsed={time_elapsed:.1f} timeout={wait_limit_s:.1f}"
             )
             time.sleep(wait_interval_s)
-    finally:
-        if made_client:
-            assert client is not None
-            client.close()

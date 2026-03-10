@@ -10,7 +10,7 @@ import {
   useSelectedNodeForDocDisplay,
 } from "@/app/app/stores/useChatSessionStore";
 import Text from "@/refresh-components/texts/Text";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button } from "@opal/components";
 import { SvgSearchMenu, SvgX } from "@opal/icons";
 import Separator from "@/refresh-components/Separator";
 
@@ -53,9 +53,9 @@ function Header({ children, onClose }: HeaderProps) {
             {children}
           </Text>
         </div>
-        <IconButton
+        <Button
           icon={SvgX}
-          tertiary
+          prominence="tertiary"
           onClick={onClose}
           tooltip="Close Sidebar"
         />

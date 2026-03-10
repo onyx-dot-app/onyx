@@ -7,7 +7,7 @@ from onyx.llm.utils import llm_response_to_string
 from onyx.prompts.chat_prompts import CHAT_NAMING_REMINDER
 from onyx.prompts.chat_prompts import CHAT_NAMING_SYSTEM_PROMPT
 from onyx.tracing.llm_utils import llm_generation_span
-from onyx.tracing.llm_utils import record_llm_span_output
+from onyx.tracing.llm_utils import record_llm_response
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -26,7 +26,7 @@ def generate_chat_session_name(
     reminder_prompt = ChatMessageSimple(
         message=CHAT_NAMING_REMINDER,
         token_count=100,
-        message_type=MessageType.USER,
+        message_type=MessageType.USER_REMINDER,
     )
 
     complete_message_history = [system_prompt] + chat_history + [reminder_prompt]
@@ -40,7 +40,7 @@ def generate_chat_session_name(
         llm=llm, flow="chat_session_naming", input_messages=llm_facing_history
     ) as span_generation:
         response = llm.invoke(llm_facing_history, reasoning_effort=ReasoningEffort.OFF)
+        record_llm_response(span_generation, response)
         new_name_raw = llm_response_to_string(response)
-        record_llm_span_output(span_generation, new_name_raw, response.usage)
 
     return new_name_raw.strip().strip('"')

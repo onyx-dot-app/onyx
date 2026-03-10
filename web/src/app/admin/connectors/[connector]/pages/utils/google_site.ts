@@ -1,4 +1,4 @@
-import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { createConnector, runConnector } from "@/lib/connector";
 import { linkCredential } from "@/lib/credential";
 import { GoogleSitesConfig } from "@/lib/connectors/connectors";
@@ -7,7 +7,6 @@ import { ValidSources } from "@/lib/types";
 export const submitGoogleSite = async (
   selectedFiles: File[],
   base_url: any,
-  setPopup: (popup: PopupSpec) => void,
   refreshFreq: number,
   pruneFreq: number,
   indexingStart: Date,
@@ -28,30 +27,23 @@ export const submitGoogleSite = async (
     });
     const responseJson = await response.json();
     if (!response.ok) {
-      setPopup({
-        message: `Unable to upload files - ${responseJson.detail}`,
-        type: "error",
-      });
+      toast.error(`Unable to upload files - ${responseJson.detail}`);
       return false;
     }
 
     const filePaths = responseJson.file_paths as string[];
     if (!filePaths || filePaths.length === 0) {
-      setPopup({
-        message:
-          "File upload was successful, but no file path was returned. Cannot create connector.",
-        type: "error",
-      });
+      toast.error(
+        "File upload was successful, but no file path was returned. Cannot create connector."
+      );
       return false;
     }
 
     const filePath = filePaths[0];
     if (filePath === undefined) {
-      setPopup({
-        message:
-          "File upload was successful, but file path is undefined. Cannot create connector.",
-        type: "error",
-      });
+      toast.error(
+        "File upload was successful, but file path is undefined. Cannot create connector."
+      );
       return false;
     }
 
@@ -70,10 +62,7 @@ export const submitGoogleSite = async (
         indexing_start: indexingStart,
       });
     if (connectorErrorMsg || !connector) {
-      setPopup({
-        message: `Unable to create connector - ${connectorErrorMsg}`,
-        type: "error",
-      });
+      toast.error(`Unable to create connector - ${connectorErrorMsg}`);
       return false;
     }
 
@@ -86,25 +75,18 @@ export const submitGoogleSite = async (
     );
     if (!credentialResponse.ok) {
       const credentialResponseJson = await credentialResponse.json();
-      setPopup({
-        message: `Unable to link connector to credential - ${credentialResponseJson.detail}`,
-        type: "error",
-      });
+      toast.error(
+        `Unable to link connector to credential - ${credentialResponseJson.detail}`
+      );
       return false;
     }
 
     const runConnectorErrorMsg = await runConnector(connector.id, [0]);
     if (runConnectorErrorMsg) {
-      setPopup({
-        message: `Unable to run connector - ${runConnectorErrorMsg}`,
-        type: "error",
-      });
+      toast.error(`Unable to run connector - ${runConnectorErrorMsg}`);
       return false;
     }
-    setPopup({
-      type: "success",
-      message: "Successfully created Google Site connector!",
-    });
+    toast.success("Successfully created Google Site connector!");
     return true;
   };
 

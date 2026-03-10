@@ -5,7 +5,7 @@ import { ErrorCallout } from "@/components/ErrorCallout";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { SourceIcon } from "@/components/SourceIcon";
 import { CCPairStatus, PermissionSyncStatus } from "@/components/Status";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import CredentialSection from "@/components/credentials/CredentialSection";
 import Text from "@/refresh-components/texts/Text";
 import {
@@ -62,8 +62,10 @@ import { DropdownMenuItemWithTooltip } from "@/components/ui/dropdown-menu-with-
 import { timeAgo } from "@/lib/time";
 import { useStatusChange } from "./useStatusChange";
 import { useReIndexModal } from "./ReIndexModal";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { SvgSettings } from "@opal/icons";
+import { UserRole } from "@/lib/types";
+import { useUser } from "@/providers/UserProvider";
 // synchronize these validations with the SQLAlchemy connector class until we have a
 // centralized schema for both frontend and backend
 const RefreshFrequencySchema = Yup.object().shape({
@@ -89,7 +91,7 @@ const PAGES_PER_BATCH = 8;
 
 function Main({ ccPairId }: { ccPairId: number }) {
   const router = useRouter();
-  const { popup, setPopup } = usePopup();
+  const { user } = useUser();
 
   const {
     data: ccPair,
@@ -124,8 +126,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
   const { showReIndexModal, ReIndexModal } = useReIndexModal(
     ccPair?.connector?.id ?? null,
     ccPair?.credential?.id ?? null,
-    ccPairId,
-    setPopup
+    ccPairId
   );
 
   const {
@@ -165,11 +166,8 @@ function Main({ ccPairId }: { ccPairId: number }) {
     isSchedulingConnectorDeletionRef.current = true;
 
     try {
-      await deleteCCPair(
-        ccPair.connector.id,
-        ccPair.credential.id,
-        setPopup,
-        () => mutate(buildCCPairInfoUrl(ccPair.id))
+      await deleteCCPair(ccPair.connector.id, ccPair.credential.id, () =>
+        mutate(buildCCPairInfoUrl(ccPair.id))
       );
       refresh();
     } catch (error) {
@@ -178,9 +176,15 @@ function Main({ ccPairId }: { ccPairId: number }) {
       setShowDeleteConnectorConfirmModal(false);
       isSchedulingConnectorDeletionRef.current = false;
     }
-  }, [ccPair, refresh, setPopup]);
+  }, [ccPair, refresh]);
 
   const latestIndexAttempt = indexAttempts?.[0];
+  const canManageInlineFileConnectorFiles =
+    ccPair?.connector.source === "file" &&
+    (ccPair.is_editable_for_current_user ||
+      (user?.role === UserRole.GLOBAL_CURATOR &&
+        ccPair.access_type === "public"));
+
   const isResolvingErrors =
     (latestIndexAttempt?.status === "in_progress" ||
       latestIndexAttempt?.status === "not_started") &&
@@ -212,29 +216,23 @@ function Main({ ccPairId }: { ccPairId: number }) {
         fromBeginning,
         ccPair.connector.id,
         ccPair.credential.id,
-        ccPair.id,
-        setPopup
+        ccPair.id
       );
 
       if (result.success) {
-        setPopup({
-          message: `${
+        toast.success(
+          `${
             fromBeginning ? "Complete re-indexing" : "Indexing update"
-          } started successfully`,
-          type: "success",
-        });
+          } started successfully`
+        );
       } else {
-        setPopup({
-          message: result.message || "Failed to start indexing",
-          type: "error",
-        });
+        toast.error(result.message || "Failed to start indexing");
       }
     } catch (error) {
       console.error("Failed to trigger indexing:", error);
-      setPopup({
-        message: "An unexpected error occurred while trying to start indexing",
-        type: "error",
-      });
+      toast.error(
+        "An unexpected error occurred while trying to start indexing"
+      );
     } finally {
       setShowIsResolvingKickoffLoader(false);
     }
@@ -273,15 +271,9 @@ function Main({ ccPairId }: { ccPairId: number }) {
         throw new Error(await response.text());
       }
       mutate(buildCCPairInfoUrl(ccPairId));
-      setPopup({
-        message: "Connector name updated successfully",
-        type: "success",
-      });
+      toast.success("Connector name updated successfully");
     } catch (error) {
-      setPopup({
-        message: `Failed to update connector name`,
-        type: "error",
-      });
+      toast.error("Failed to update connector name");
     }
   };
 
@@ -300,10 +292,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
     const parsedRefreshFreqMinutes = parseInt(propertyValue, 10);
 
     if (isNaN(parsedRefreshFreqMinutes)) {
-      setPopup({
-        message: "Invalid refresh frequency: must be an integer",
-        type: "error",
-      });
+      toast.error("Invalid refresh frequency: must be an integer");
       return;
     }
 
@@ -320,15 +309,9 @@ function Main({ ccPairId }: { ccPairId: number }) {
         throw new Error(await response.text());
       }
       mutate(buildCCPairInfoUrl(ccPairId));
-      setPopup({
-        message: "Connector refresh frequency updated successfully",
-        type: "success",
-      });
+      toast.success("Connector refresh frequency updated successfully");
     } catch (error) {
-      setPopup({
-        message: "Failed to update connector refresh frequency",
-        type: "error",
-      });
+      toast.error("Failed to update connector refresh frequency");
     }
   };
 
@@ -339,10 +322,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
     const parsedFreqHours = parseFloat(propertyValue);
 
     if (isNaN(parsedFreqHours)) {
-      setPopup({
-        message: "Invalid pruning frequency: must be a valid number",
-        type: "error",
-      });
+      toast.error("Invalid pruning frequency: must be a valid number");
       return;
     }
 
@@ -359,15 +339,9 @@ function Main({ ccPairId }: { ccPairId: number }) {
         throw new Error(await response.text());
       }
       mutate(buildCCPairInfoUrl(ccPairId));
-      setPopup({
-        message: "Connector pruning frequency updated successfully",
-        type: "success",
-      });
+      toast.success("Connector pruning frequency updated successfully");
     } catch (error) {
-      setPopup({
-        message: "Failed to update connector pruning frequency",
-        type: "error",
-      });
+      toast.error("Failed to update connector pruning frequency");
     }
   };
 
@@ -398,7 +372,6 @@ function Main({ ccPairId }: { ccPairId: number }) {
 
   return (
     <>
-      {popup}
       {showIsResolvingKickoffLoader && !isResolvingErrors && <Spinner />}
       {ReIndexModal}
       {ConfirmModal}
@@ -483,7 +456,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
           {ccPair.is_editable_for_current_user && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button leftIcon={SvgSettings} secondary>
+                <Button prominence="secondary" icon={SvgSettings}>
                   Manage
                 </Button>
               </DropdownMenuTrigger>
@@ -727,15 +700,14 @@ function Main({ ccPairId }: { ccPairId: number }) {
               />
 
               {/* Inline file management for file connectors */}
-              {ccPair.connector.source === "file" &&
-                ccPair.is_editable_for_current_user && (
-                  <div className="mt-6">
-                    <InlineFileManagement
-                      connectorId={ccPair.connector.id}
-                      onRefresh={refresh}
-                    />
-                  </div>
-                )}
+              {canManageInlineFileConnectorFiles && (
+                <div className="mt-6">
+                  <InlineFileManagement
+                    connectorId={ccPair.connector.id}
+                    onRefresh={refresh}
+                  />
+                </div>
+              )}
             </Card>
           </>
         )}

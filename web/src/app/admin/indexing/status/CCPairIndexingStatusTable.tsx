@@ -33,7 +33,7 @@ import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidE
 import { ConnectorCredentialPairStatus } from "../../connector/[ccPairId]/types";
 import { PageSelector } from "@/components/PageSelector";
 import { ConnectorStaggeredSkeleton } from "./ConnectorRowSkeleton";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button } from "@opal/components";
 import { SvgSettings } from "@opal/icons";
 
 // Helper to handle navigation with cmd/ctrl+click support
@@ -165,7 +165,7 @@ function ConnectorRow({
       onClick={handleRowClick}
     >
       <TableCell className="">
-        <p className="lg:w-[200px] xl:w-[400px] inline-block ellipsis truncate">
+        <p className="max-w-[200px] xl:max-w-[400px] inline-block ellipsis truncate">
           {ccPairsIndexingStatus.name}
         </p>
       </TableCell>
@@ -210,7 +210,7 @@ function ConnectorRow({
       <TableCell>
         {isEditable && (
           <SimpleTooltip tooltip="Manage Connector">
-            <IconButton icon={SvgSettings} tertiary />
+            <Button icon={SvgSettings} prominence="tertiary" />
           </SimpleTooltip>
         )}
       </TableCell>
@@ -246,7 +246,7 @@ function FederatedConnectorRow({
       onClick={handleRowClick}
     >
       <TableCell className="">
-        <p className="lg:w-[200px] xl:w-[400px] inline-block ellipsis truncate">
+        <p className="max-w-[200px] xl:max-w-[400px] inline-block ellipsis truncate">
           {federatedConnector.name}
         </p>
       </TableCell>
@@ -263,9 +263,9 @@ function FederatedConnectorRow({
       )}
       <TableCell>N/A</TableCell>
       <TableCell>
-        <IconButton
+        <Button
           icon={SvgSettings}
-          tertiary
+          prominence="tertiary"
           onClick={(e: React.MouseEvent) => {
             e.stopPropagation();
             navigateWithModifier(e, federatedUrl, router);
@@ -293,7 +293,7 @@ export function CCPairIndexingStatusTable({
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
 
   return (
-    <Table className="-mt-8">
+    <Table className="-mt-8 table-fixed">
       <TableHeader>
         <ConnectorRow
           invisible

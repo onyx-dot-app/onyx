@@ -36,6 +36,28 @@ export enum ChatSessionSharedStatus {
   Public = "public",
 }
 
+export interface ChatSessionSummary {
+  id: string;
+  name: string | null;
+  persona_id: number | null;
+  time_created: string;
+  shared_status: ChatSessionSharedStatus;
+  current_alternate_model: string | null;
+  current_temperature_override: number | null;
+  highlights?: string[];
+}
+
+export interface ChatSessionGroup {
+  title: string;
+  chats: ChatSessionSummary[];
+}
+
+export interface ChatSearchResponse {
+  groups: ChatSessionGroup[];
+  has_more: boolean;
+  next_page: number | null;
+}
+
 // The number of messages to buffer on the client side.
 export const BUFFER_COUNT = 35;
 
@@ -119,7 +141,7 @@ export interface Message {
   messageId?: number;
   nodeId: number; // Unique identifier for tree structure (can be negative for temp messages)
   message: string;
-  type: "user" | "assistant" | "system" | "error";
+  type: "user" | "assistant" | "system" | "error"; // TODO: rename "assistant" to "agent" — https://linear.app/onyx-app/issue/ENG-3766
   retrievalType?: RetrievalType;
   researchType?: ResearchType;
   query?: string | null;
@@ -129,7 +151,7 @@ export interface Message {
   parentNodeId: number | null;
   childrenNodeIds?: number[];
   latestChildNodeId?: number | null;
-  alternateAssistantID?: number | null;
+  alternateAgentID?: number | null;
   stackTrace?: string | null;
   errorCode?: string | null;
   isRetryable?: boolean;
@@ -148,7 +170,7 @@ export interface Message {
   // feedback state
   currentFeedback?: FeedbackType | null;
 
-  // Duration in seconds for processing this message (assistant messages only)
+  // Duration in seconds for processing this message (agent messages only)
   processingDurationSeconds?: number;
 }
 
@@ -164,6 +186,7 @@ export interface BackendChatSession {
   current_temperature_override: number | null;
   current_alternate_model?: string;
 
+  owner_name: string | null;
   packets: Packet[][];
 }
 
@@ -193,13 +216,13 @@ export interface BackendMessage {
   context_docs: OnyxDocument[] | null;
   time_sent: string;
   overridden_model: string;
-  alternate_assistant_id: number | null;
+  alternate_assistant_id: number | null; // TODO: rename to agent — https://linear.app/onyx-app/issue/ENG-3766
   chat_session_id: string;
   citations: CitationMap | null;
   files: FileDescriptor[];
   tool_call: ToolCallFinalResult | null;
   current_feedback: string | null;
-  // Duration in seconds for processing this message (assistant messages only)
+  // Duration in seconds for processing this message (agent messages only)
   processing_duration_seconds?: number;
 
   sub_questions: SubQuestionDetail[];
@@ -212,7 +235,7 @@ export interface BackendMessage {
 
 export interface MessageResponseIDInfo {
   user_message_id: number | null;
-  reserved_assistant_message_id: number;
+  reserved_assistant_message_id: number; // TODO: rename to agent — https://linear.app/onyx-app/issue/ENG-3766
 }
 
 export interface UserKnowledgeFilePacket {

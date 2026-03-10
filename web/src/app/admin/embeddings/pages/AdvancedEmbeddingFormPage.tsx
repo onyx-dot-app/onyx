@@ -15,11 +15,10 @@ import {
 import NumberInput from "../../connectors/[connector]/pages/ConnectorInput/NumberInput";
 import { StringOrNumberOption } from "@/components/Dropdown";
 import useSWR from "swr";
-import { LLM_CONTEXTUAL_COST_ADMIN_URL } from "../../configuration/llm/constants";
+import { LLM_CONTEXTUAL_COST_ADMIN_URL } from "@/lib/llmConfig/constants";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import Button from "@/refresh-components/buttons/Button";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgPlusCircle, SvgTrash } from "@opal/icons";
 // Number of tokens to show cost calculation for
 const COST_CALCULATION_TOKENS = 1_000_000;

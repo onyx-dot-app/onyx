@@ -4,17 +4,18 @@ import { TextFormField } from "@/components/Field";
 import { Form, Formik } from "formik";
 import * as Yup from "yup";
 import { createSlackBot, updateSlackBot } from "./new/lib";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import Separator from "@/refresh-components/Separator";
 import { useEffect } from "react";
 import { DOCS_ADMINS_PATH } from "@/lib/constants";
+import { toast } from "@/hooks/useToast";
 
 export const SlackTokensForm = ({
   isUpdate,
   initialValues,
   existingSlackBotId,
   refreshSlackBot,
-  setPopup,
   router,
   onValuesChange,
 }: {
@@ -22,7 +23,6 @@ export const SlackTokensForm = ({
   initialValues: any;
   existingSlackBotId?: number;
   refreshSlackBot?: () => void;
-  setPopup: (popup: { message: string; type: "error" | "success" }) => void;
   router: any;
   onValuesChange?: (values: any) => void;
 }) => {
@@ -59,12 +59,11 @@ export const SlackTokensForm = ({
           }
           const responseJson = await response.json();
           const botId = isUpdate ? existingSlackBotId : responseJson.id;
-          setPopup({
-            message: isUpdate
+          toast.success(
+            isUpdate
               ? "Successfully updated Slack Bot!"
-              : "Successfully created Slack Bot!",
-            type: "success",
-          });
+              : "Successfully created Slack Bot!"
+          );
           router.push(`/admin/bots/${encodeURIComponent(botId)}`);
         } else {
           const responseJson = await response.json();
@@ -75,12 +74,11 @@ export const SlackTokensForm = ({
           } else if (errorMsg.includes("Invalid app token:")) {
             errorMsg = "Slack App Token is invalid";
           }
-          setPopup({
-            message: isUpdate
+          toast.error(
+            isUpdate
               ? `Error updating Slack Bot - ${errorMsg}`
-              : `Error creating Slack Bot - ${errorMsg}`,
-            type: "error",
-          });
+              : `Error creating Slack Bot - ${errorMsg}`
+          );
         }
       }}
       enableReinitialize={true}
@@ -129,8 +127,7 @@ export const SlackTokensForm = ({
             subtext="Optional: User OAuth token for enhanced private channel access"
           />
           <div className="flex justify-end w-full mt-4">
-            <Button
-              type="submit"
+            <Disabled
               disabled={
                 isSubmitting ||
                 !values.bot_token ||
@@ -138,8 +135,8 @@ export const SlackTokensForm = ({
                 !values.name
               }
             >
-              {isUpdate ? "Update" : "Create"}
-            </Button>
+              <Button type="submit">{isUpdate ? "Update" : "Create"}</Button>
+            </Disabled>
           </div>
         </Form>
       )}

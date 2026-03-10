@@ -4,10 +4,11 @@ import { LoadingAnimation } from "@/components/Loading";
 import { useMostReactedToDocuments } from "@/lib/hooks";
 import { DocumentFeedbackTable } from "./DocumentFeedbackTable";
 import { numPages, numToDisplay } from "./constants";
-import { AdminPageTitle } from "@/components/admin/Title";
 import Title from "@/components/ui/title";
-import { SvgThumbsUp } from "@opal/icons";
-const Main = () => {
+import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
+
+function Main() {
   const {
     data: mostLikedDocuments,
     isLoading: isMostLikedDocumentsLoading,
@@ -57,16 +58,17 @@ const Main = () => {
       />
     </div>
   );
-};
+}
 
-const Page = () => {
+export default function Page() {
+  const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.DOCUMENT_FEEDBACK]!;
+
   return (
-    <>
-      <AdminPageTitle icon={SvgThumbsUp} title="Document Feedback" />
-
-      <Main />
-    </>
+    <SettingsLayouts.Root>
+      <SettingsLayouts.Header icon={route.icon} title={route.title} separator />
+      <SettingsLayouts.Body>
+        <Main />
+      </SettingsLayouts.Body>
+    </SettingsLayouts.Root>
   );
-};
-
-export default Page;
+}

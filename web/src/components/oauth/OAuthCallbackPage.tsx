@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
 import { CheckmarkIcon, TriangleAlertIcon } from "@/components/icons/icons";
 import CardSection from "@/components/admin/CardSection";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 
 interface OAuthCallbackConfig {
   // UI customization
@@ -86,6 +86,8 @@ export default function OAuthCallbackPage({ config }: OAuthCallbackPageProps) {
   ]);
 
   useEffect(() => {
+    const controller = new AbortController();
+
     const handleOAuthCallback = async () => {
       // Handle OAuth error from provider
       if (error) {
@@ -122,6 +124,7 @@ export default function OAuthCallbackPage({ config }: OAuthCallbackPageProps) {
             "Content-Type": "application/json",
           },
           credentials: "include",
+          signal: controller.signal,
         });
 
         if (!response.ok) {
@@ -181,6 +184,7 @@ export default function OAuthCallbackPage({ config }: OAuthCallbackPageProps) {
         setIsError(false);
         setIsLoading(false);
       } catch (error) {
+        if (controller.signal.aborted) return;
         console.error("OAuth callback error:", error);
         setStatusMessage(config.errorMessage || "Something Went Wrong");
         setStatusDetails(
@@ -194,6 +198,7 @@ export default function OAuthCallbackPage({ config }: OAuthCallbackPageProps) {
     };
 
     handleOAuthCallback();
+    return () => controller.abort();
   }, [code, state, error, errorDescription, searchParams, config]);
 
   const getStatusIcon = () => {
@@ -260,7 +265,7 @@ export default function OAuthCallbackPage({ config }: OAuthCallbackPageProps) {
                         redirectPath || config.defaultRedirectPath || "/app";
                       router.push(target as Route);
                     }}
-                    className="w-full"
+                    width="full"
                   >
                     {config.backButtonText || "Back to Chat"}
                   </Button>

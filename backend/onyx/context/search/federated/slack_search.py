@@ -32,6 +32,7 @@ from onyx.context.search.federated.slack_search_utils import should_include_mess
 from onyx.context.search.models import ChunkIndexRequest
 from onyx.context.search.models import InferenceChunk
 from onyx.db.document import DocumentSource
+from onyx.db.models import SearchSettings
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.document_index_utils import (
     get_multipass_config,
@@ -905,13 +906,15 @@ def convert_slack_score(slack_score: float) -> float:
 def slack_retrieval(
     query: ChunkIndexRequest,
     access_token: str,
-    db_session: Session,
+    db_session: Session | None = None,
     connector: FederatedConnectorDetail | None = None,  # noqa: ARG001
     entities: dict[str, Any] | None = None,
     limit: int | None = None,
     slack_event_context: SlackContext | None = None,
     bot_token: str | None = None,  # Add bot token parameter
     team_id: str | None = None,
+    # Pre-fetched data — when provided, avoids DB query (no session needed)
+    search_settings: SearchSettings | None = None,
 ) -> list[InferenceChunk]:
     """
     Main entry point for Slack federated search with entity filtering.
@@ -925,7 +928,7 @@ def slack_retrieval(
     Args:
         query: Search query object
         access_token: User OAuth access token
-        db_session: Database session
+        db_session: Database session (optional if search_settings provided)
         connector: Federated connector detail (unused, kept for backwards compat)
         entities: Connector-level config (entity filtering configuration)
         limit: Maximum number of results
@@ -1153,7 +1156,10 @@ def slack_retrieval(
 
     # chunk index docs into doc aware chunks
     # a single index doc can get split into multiple chunks
-    search_settings = get_current_search_settings(db_session)
+    if search_settings is None:
+        if db_session is None:
+            raise ValueError("Either db_session or search_settings must be provided")
+        search_settings = get_current_search_settings(db_session)
     embedder = DefaultIndexingEmbedder.from_db_search_settings(
         search_settings=search_settings
     )

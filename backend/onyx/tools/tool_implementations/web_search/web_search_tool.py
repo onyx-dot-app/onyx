@@ -1,6 +1,5 @@
 import json
 from typing import Any
-from typing import cast
 
 from sqlalchemy.orm import Session
 from typing_extensions import override
@@ -26,6 +25,9 @@ from onyx.tools.tool_implementations.web_search.models import DEFAULT_MAX_RESULT
 from onyx.tools.tool_implementations.web_search.models import WebSearchResult
 from onyx.tools.tool_implementations.web_search.providers import (
     build_search_provider_from_config,
+)
+from onyx.tools.tool_implementations.web_search.providers import (
+    provider_requires_api_key,
 )
 from onyx.tools.tool_implementations.web_search.utils import (
     filter_web_search_results_with_no_title_or_snippet,
@@ -54,6 +56,30 @@ def _sanitize_query(query: str) -> str:
     return " ".join(sanitized.split())
 
 
+def _normalize_queries_input(raw: Any) -> list[str]:
+    """Coerce LLM output to a list of sanitized query strings.
+
+    Accepts a bare string or a list (possibly with non-string elements).
+    Sanitizes each query (strip control chars, normalize whitespace) and
+    drops empty or whitespace-only entries.
+    """
+    if isinstance(raw, str):
+        raw = raw.strip()
+        if not raw:
+            return []
+        raw = [raw]
+    elif not isinstance(raw, list):
+        return []
+    result: list[str] = []
+    for q in raw:
+        if q is None:
+            continue
+        sanitized = _sanitize_query(str(q))
+        if sanitized:
+            result.append(sanitized)
+    return result
+
+
 class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
     NAME = "web_search"
     DESCRIPTION = "Search the web for information."
@@ -76,9 +102,10 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
             )
             config = provider_model.config
 
-        # TODO - This should just be enforced at the DB level
-        if api_key is None:
-            raise RuntimeError("No API key configured for web search provider.")
+        if provider_requires_api_key(provider_type) and api_key is None:
+            raise RuntimeError(
+                f"No API key configured for {provider_type.value} web search provider."
+            )
 
         self._provider = build_search_provider_from_config(
             provider_type=provider_type,
@@ -185,13 +212,7 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
                     f'like: {{"queries": ["your search query here"]}}'
                 ),
             )
-        raw_queries = cast(list[str], llm_kwargs[QUERIES_FIELD])
-
-        # Normalize queries:
-        # - remove control characters (null bytes, etc.) that LLMs sometimes produce
-        # - collapse whitespace and strip
-        # - drop empty/whitespace-only queries
-        queries = [sanitized for q in raw_queries if (sanitized := _sanitize_query(q))]
+        queries = _normalize_queries_input(llm_kwargs[QUERIES_FIELD])
         if not queries:
             raise ToolCallException(
                 message=(

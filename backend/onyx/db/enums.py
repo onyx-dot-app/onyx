@@ -60,7 +60,8 @@ class ProcessingMode(str, PyEnum):
     """Determines how documents are processed after fetching."""
 
     REGULAR = "REGULAR"  # Full pipeline: chunk → embed → Vespa
-    FILE_SYSTEM = "FILE_SYSTEM"  # Write to file system only
+    FILE_SYSTEM = "FILE_SYSTEM"  # Write to file system only (JSON documents)
+    RAW_BINARY = "RAW_BINARY"  # Write raw binary to S3 (no text extraction)
 
 
 class SyncType(str, PyEnum):
@@ -185,6 +186,7 @@ class EmbeddingPrecision(str, PyEnum):
 
 class UserFileStatus(str, PyEnum):
     PROCESSING = "PROCESSING"
+    INDEXING = "INDEXING"
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
     CANCELED = "CANCELED"
@@ -195,6 +197,12 @@ class ThemePreference(str, PyEnum):
     LIGHT = "light"
     DARK = "dark"
     SYSTEM = "system"
+
+
+class DefaultAppMode(str, PyEnum):
+    AUTO = "AUTO"
+    CHAT = "CHAT"
+    SEARCH = "SEARCH"
 
 
 class SwitchoverType(str, PyEnum):
@@ -223,6 +231,12 @@ class OpenSearchTenantMigrationStatus(str, PyEnum):
 class BuildSessionStatus(str, PyEnum):
     ACTIVE = "active"
     IDLE = "idle"
+
+
+class SharingScope(str, PyEnum):
+    PRIVATE = "private"
+    PUBLIC_ORG = "public_org"
+    PUBLIC_GLOBAL = "public_global"
 
 
 class SandboxStatus(str, PyEnum):
@@ -289,4 +303,4 @@ class HierarchyNodeType(str, PyEnum):
 class LLMModelFlowType(str, PyEnum):
     CHAT = "chat"
     VISION = "vision"
-    EMBEDDINGS = "embeddings"
+    CONTEXTUAL_RAG = "contextual_rag"

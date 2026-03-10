@@ -1,19 +1,40 @@
 "use client";
 
-import { usePopup } from "@/components/admin/connectors/Popup";
-import { SlackBot, ValidSources } from "@/lib/types";
+import { toast } from "@/hooks/useToast";
+import { SlackBot } from "@/lib/types";
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 import { updateSlackBotField } from "@/lib/updateSlackBotField";
-import { Checkbox } from "@/app/admin/settings/SettingsForm";
 import { SlackTokensForm } from "./SlackTokensForm";
-import { SourceIcon } from "@/components/SourceIcon";
+
 import { EditableStringFieldDisplay } from "@/components/EditableStringFieldDisplay";
 import { deleteSlackBot } from "./new/lib";
 import GenericConfirmModal from "@/components/modals/GenericConfirmModal";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { cn } from "@/lib/utils";
 import { SvgChevronDownSmall, SvgTrash } from "@opal/icons";
+
+function Checkbox({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+}) {
+  return (
+    <label className="flex text-xs cursor-pointer">
+      <input
+        checked={checked}
+        onChange={onChange}
+        type="checkbox"
+        className="mr-2 w-3.5 h-3.5 my-auto"
+      />
+      <span className="block font-medium text-text-700 text-sm">{label}</span>
+    </label>
+  );
+}
 
 export const ExistingSlackBotForm = ({
   existingSlackBot,
@@ -24,7 +45,6 @@ export const ExistingSlackBotForm = ({
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [formValues, setFormValues] = useState(existingSlackBot);
-  const { popup, setPopup } = usePopup();
   const router = useRouter();
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -42,15 +62,9 @@ export const ExistingSlackBotForm = ({
       if (!response.ok) {
         throw new Error(await response.text());
       }
-      setPopup({
-        message: `Connector ${field} updated successfully`,
-        type: "success",
-      });
+      toast.success(`Connector ${field} updated successfully`);
     } catch (error) {
-      setPopup({
-        message: `Failed to update connector ${field}`,
-        type: "error",
-      });
+      toast.error(`Failed to update connector ${field}`);
     }
     setFormValues((prev) => ({ ...prev, [field]: value }));
   };
@@ -74,13 +88,9 @@ export const ExistingSlackBotForm = ({
 
   return (
     <div>
-      {popup}
       <div className="flex items-center justify-between h-14">
         <div className="flex items-center gap-2">
-          <div className="my-auto">
-            <SourceIcon iconSize={32} sourceType={ValidSources.Slack} />
-          </div>
-          <div className="ml-1">
+          <div>
             <EditableStringFieldDisplay
               value={formValues.name}
               isEditable={true}
@@ -93,20 +103,20 @@ export const ExistingSlackBotForm = ({
         <div className="flex flex-col" ref={dropdownRef}>
           <div className="flex items-center gap-4">
             <Button
-              leftIcon={({ className }) => (
+              prominence="secondary"
+              icon={({ className }) => (
                 <SvgChevronDownSmall
                   className={cn(className, !isExpanded && "-rotate-90")}
                 />
               )}
               onClick={() => setIsExpanded(!isExpanded)}
-              secondary
             >
               Update Tokens
             </Button>
             <Button
-              danger
+              variant="danger"
               onClick={() => setShowDeleteModal(true)}
-              leftIcon={SvgTrash}
+              icon={SvgTrash}
             >
               Delete
             </Button>
@@ -120,7 +130,6 @@ export const ExistingSlackBotForm = ({
                   initialValues={formValues}
                   existingSlackBotId={existingSlackBot.id}
                   refreshSlackBot={refreshSlackBot}
-                  setPopup={setPopup}
                   router={router}
                   onValuesChange={(values) => setFormValues(values)}
                 />
@@ -149,16 +158,10 @@ export const ExistingSlackBotForm = ({
                 if (!response.ok) {
                   throw new Error(await response.text());
                 }
-                setPopup({
-                  message: "Slack bot deleted successfully",
-                  type: "success",
-                });
+                toast.success("Slack bot deleted successfully");
                 router.push("/admin/bots");
               } catch (error) {
-                setPopup({
-                  message: "Failed to delete Slack bot",
-                  type: "error",
-                });
+                toast.error("Failed to delete Slack bot");
               }
               setShowDeleteModal(false);
             }}

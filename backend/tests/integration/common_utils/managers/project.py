@@ -6,7 +6,6 @@ from onyx.server.features.projects.models import CategorizedFilesSnapshot
 from onyx.server.features.projects.models import UserFileSnapshot
 from onyx.server.features.projects.models import UserProjectSnapshot
 from tests.integration.common_utils.constants import API_SERVER_URL
-from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.test_models import DATestUser
 
 
@@ -20,7 +19,7 @@ class ProjectManager:
         response = requests.post(
             f"{API_SERVER_URL}/user/projects/create",
             params={"name": name},
-            headers=user_performing_action.headers or GENERAL_HEADERS,
+            headers=user_performing_action.headers,
         )
         response.raise_for_status()
         return UserProjectSnapshot.model_validate(response.json())
@@ -32,7 +31,7 @@ class ProjectManager:
         """Get all projects for a user via API."""
         response = requests.get(
             f"{API_SERVER_URL}/user/projects",
-            headers=user_performing_action.headers or GENERAL_HEADERS,
+            headers=user_performing_action.headers,
         )
         response.raise_for_status()
         return [UserProjectSnapshot.model_validate(obj) for obj in response.json()]
@@ -45,7 +44,7 @@ class ProjectManager:
         """Delete a project via API."""
         response = requests.delete(
             f"{API_SERVER_URL}/user/projects/{project_id}",
-            headers=user_performing_action.headers or GENERAL_HEADERS,
+            headers=user_performing_action.headers,
         )
         return response.status_code == 204
 
@@ -57,7 +56,7 @@ class ProjectManager:
         """Verify that a project has been deleted by ensuring it's not in list."""
         response = requests.get(
             f"{API_SERVER_URL}/user/projects",
-            headers=user_performing_action.headers or GENERAL_HEADERS,
+            headers=user_performing_action.headers,
         )
         response.raise_for_status()
         projects = [UserProjectSnapshot.model_validate(obj) for obj in response.json()]
@@ -66,16 +65,12 @@ class ProjectManager:
     @staticmethod
     def verify_files_unlinked(
         project_id: int,
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> bool:
         """Verify that all files have been unlinked from the project via API."""
         response = requests.get(
             f"{API_SERVER_URL}/user/projects/files/{project_id}",
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         if response.status_code == 404:
             return True
@@ -87,16 +82,12 @@ class ProjectManager:
     @staticmethod
     def verify_chat_sessions_unlinked(
         project_id: int,
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> bool:
         """Verify that all chat sessions have been unlinked from the project via API."""
         response = requests.get(
             f"{API_SERVER_URL}/user/projects/{project_id}",
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         if response.status_code == 404:
             return True
@@ -144,16 +135,12 @@ class ProjectManager:
     @staticmethod
     def get_project_files(
         project_id: int,
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> List[UserFileSnapshot]:
         """Get all files associated with a project via API."""
         response = requests.get(
             f"{API_SERVER_URL}/user/projects/files/{project_id}",
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         if response.status_code == 404:
             return []
@@ -170,7 +157,7 @@ class ProjectManager:
         response = requests.post(
             f"{API_SERVER_URL}/user/projects/{project_id}/instructions",
             json={"instructions": instructions},
-            headers=user_performing_action.headers or GENERAL_HEADERS,
+            headers=user_performing_action.headers,
         )
         response.raise_for_status()
         return (response.json() or {}).get("instructions") or ""

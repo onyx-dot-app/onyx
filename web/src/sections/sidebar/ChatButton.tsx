@@ -6,7 +6,6 @@ import useChatSessions from "@/hooks/useChatSessions";
 import { deleteChatSession, renameChatSession } from "@/app/app/services/lib";
 import { ChatSession } from "@/app/app/interfaces";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
-import Button from "@/refresh-components/buttons/Button";
 import { cn, noProp } from "@/lib/utils";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import { useAppRouter } from "@/hooks/appNavigation";
@@ -18,11 +17,11 @@ import {
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import MoveCustomAgentChatModal from "@/components/modals/MoveCustomAgentChatModal";
 import { UNNAMED_CHAT } from "@/lib/constants";
-import ShareChatSessionModal from "@/app/app/components/modal/ShareChatSessionModal";
+import ShareChatSessionModal from "@/sections/modals/ShareChatSessionModal";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button } from "@opal/components";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import { usePopup } from "@/components/admin/connectors/Popup";
 import { DRAG_TYPES, LOCAL_STORAGE_KEYS } from "@/sections/sidebar/constants";
 import {
   shouldShowMoveModal,
@@ -75,10 +74,11 @@ export function PopoverSearchInput({
 
   return (
     <div className="flex flex-row items-center">
-      <IconButton
+      <Button
         icon={SvgChevronLeft}
         onClick={handleClickBackButton}
-        internal
+        prominence="tertiary"
+        size="sm"
       />
       <InputTypeIn
         type="text"
@@ -121,7 +121,7 @@ const ChatButton = memo(
     const [showShareModal, setShowShareModal] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
     const [popoverItems, setPopoverItems] = useState<React.ReactNode[]>([]);
-    const { refreshChatSessions } = useChatSessions();
+    const { refreshChatSessions, removeSession } = useChatSessions();
     const {
       refreshCurrentProjectDetails,
       projects,
@@ -129,7 +129,6 @@ const ChatButton = memo(
       currentProjectId,
       createProject,
     } = useProjectsContext();
-    const { popup, setPopup } = usePopup();
     const { agents } = useAgents();
     const { pinnedAgents, togglePinnedAgent } = usePinnedAgents();
     const [popoverOpen, setPopoverOpen] = useState(false);
@@ -302,6 +301,7 @@ const ChatButton = memo(
     async function handleChatDelete() {
       try {
         await deleteChatSession(chatSession.id);
+        removeSession(chatSession.id);
 
         if (project) {
           await fetchProjects();
@@ -315,26 +315,20 @@ const ChatButton = memo(
         await refreshChatSessions();
       } catch (error) {
         console.error("Failed to delete chat:", error);
-        showErrorNotification(
-          setPopup,
-          "Failed to delete chat. Please try again."
-        );
+        showErrorNotification("Failed to delete chat. Please try again.");
       }
     }
 
     async function performMove(targetProjectId: number) {
       try {
-        await handleMoveOperation(
-          {
-            chatSession,
-            targetProjectId,
-            refreshChatSessions,
-            refreshCurrentProjectDetails,
-            fetchProjects,
-            currentProjectId,
-          },
-          setPopup
-        );
+        await handleMoveOperation({
+          chatSession,
+          targetProjectId,
+          refreshChatSessions,
+          refreshCurrentProjectDetails,
+          fetchProjects,
+          currentProjectId,
+        });
         setShowMoveOptions(false);
         setSearchTerm("");
       } catch (error) {
@@ -394,10 +388,7 @@ const ChatButton = memo(
         setNavigateAfterMoveProjectId(null);
       } catch (error) {
         console.error("Failed to create project and move chat:", error);
-        showErrorNotification(
-          setPopup,
-          "Failed to create project. Please try again."
-        );
+        showErrorNotification("Failed to create project. Please try again.");
         setNavigateAfterMoveProjectId(null);
       }
     }
@@ -406,6 +397,7 @@ const ChatButton = memo(
       <>
         <Popover.Trigger asChild onClick={noProp()}>
           <div>
+            {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
             <IconButton
               icon={SvgMoreHorizontal}
               className={cn(
@@ -437,9 +429,8 @@ const ChatButton = memo(
           <SidebarTab
             href={isDragging ? undefined : `/app?chatId=${chatSession.id}`}
             onClick={handleClick}
-            transient={active}
+            selected={active}
             rightChildren={rightMenu}
-            focused={renaming}
             nested={!!project}
           >
             {renaming ? (
@@ -458,8 +449,6 @@ const ChatButton = memo(
 
     return (
       <>
-        {popup}
-
         {deleteConfirmationModalOpen && (
           <ConfirmationModalLayout
             title="Delete Chat"
@@ -467,7 +456,7 @@ const ChatButton = memo(
             onClose={() => setDeleteConfirmationModalOpen(false)}
             submit={
               <Button
-                danger
+                variant="danger"
                 onClick={() => {
                   setDeleteConfirmationModalOpen(false);
                   handleChatDelete();

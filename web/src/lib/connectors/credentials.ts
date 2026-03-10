@@ -459,6 +459,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
   google_sites: null,
   file: null,
   user_file: null,
+  craft_file: null, // User Library - managed through dedicated UI
   wikipedia: null,
   mediawiki: null,
   web: null,

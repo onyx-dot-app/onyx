@@ -6,12 +6,14 @@ from datetime import timedelta
 from datetime import timezone
 from io import BytesIO
 from io import StringIO
+from uuid import UUID
 from zipfile import ZipFile
 
 import pytest
 import requests
 
 from ee.onyx.db.usage_export import UsageReportMetadata
+from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.db.seeding.chat_history_seeding import seed_chat_history
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.test_models import DATestUser
@@ -26,7 +28,13 @@ class TestUsageExportAPI:
         self, reset: None, admin_user: DATestUser  # noqa: ARG002
     ) -> None:
         # Seed some chat history data for the report
-        seed_chat_history(num_sessions=10, num_messages=4, days=30)
+        seed_chat_history(
+            num_sessions=10,
+            num_messages=4,
+            days=30,
+            user_id=UUID(admin_user.id),
+            persona_id=DEFAULT_PERSONA_ID,
+        )
 
         # Get initial list of reports
         initial_response = requests.get(
@@ -76,7 +84,13 @@ class TestUsageExportAPI:
         self, reset: None, admin_user: DATestUser  # noqa: ARG002
     ) -> None:
         # Seed some chat history data
-        seed_chat_history(num_sessions=20, num_messages=4, days=60)
+        seed_chat_history(
+            num_sessions=20,
+            num_messages=4,
+            days=60,
+            user_id=UUID(admin_user.id),
+            persona_id=DEFAULT_PERSONA_ID,
+        )
 
         # Get initial list of reports
         initial_response = requests.get(
@@ -148,7 +162,13 @@ class TestUsageExportAPI:
         self, reset: None, admin_user: DATestUser  # noqa: ARG002
     ) -> None:
         # First generate a report to ensure we have at least one
-        seed_chat_history(num_sessions=5, num_messages=4, days=30)
+        seed_chat_history(
+            num_sessions=5,
+            num_messages=4,
+            days=30,
+            user_id=UUID(admin_user.id),
+            persona_id=DEFAULT_PERSONA_ID,
+        )
 
         # Get initial count
         initial_response = requests.get(
@@ -204,7 +224,13 @@ class TestUsageExportAPI:
         self, reset: None, admin_user: DATestUser  # noqa: ARG002
     ) -> None:
         # First generate a report
-        seed_chat_history(num_sessions=5, num_messages=4, days=30)
+        seed_chat_history(
+            num_sessions=5,
+            num_messages=4,
+            days=30,
+            user_id=UUID(admin_user.id),
+            persona_id=DEFAULT_PERSONA_ID,
+        )
 
         # Get initial reports count
         initial_response = requests.get(
@@ -352,7 +378,13 @@ class TestUsageExportAPI:
         self, reset: None, admin_user: DATestUser  # noqa: ARG002
     ) -> None:
         # Seed some data
-        seed_chat_history(num_sessions=10, num_messages=4, days=30)
+        seed_chat_history(
+            num_sessions=10,
+            num_messages=4,
+            days=30,
+            user_id=UUID(admin_user.id),
+            persona_id=DEFAULT_PERSONA_ID,
+        )
 
         # Get initial count of reports
         initial_response = requests.get(

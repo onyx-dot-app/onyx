@@ -902,6 +902,11 @@ class JiraConnector(
                         external_access=self._get_project_permissions(
                             project_key, add_prefix=False
                         ),
+                        parent_hierarchy_raw_node_id=(
+                            self._get_parent_hierarchy_raw_node_id(issue, project_key)
+                            if project_key
+                            else None
+                        ),
                     )
                 )
                 current_offset += 1

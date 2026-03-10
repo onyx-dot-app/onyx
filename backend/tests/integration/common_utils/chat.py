@@ -29,7 +29,7 @@ def test_create_chat_session_and_send_messages() -> None:
     # Send first message
     first_message = "Hello, this is a test message."
     send_message_response = requests.post(
-        f"{base_url}/chat/send-message",
+        f"{base_url}/chat/send-chat-message",
         json={
             "chat_session_id": chat_session_id,
             "message": first_message,
@@ -43,7 +43,7 @@ def test_create_chat_session_and_send_messages() -> None:
     # Send second message
     second_message = "Can you provide more information?"
     send_message_response = requests.post(
-        f"{base_url}/chat/send-message",
+        f"{base_url}/chat/send-chat-message",
         json={
             "chat_session_id": chat_session_id,
             "message": second_message,

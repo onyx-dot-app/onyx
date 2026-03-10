@@ -1,8 +1,7 @@
 "use client";
 
-import { AdminPageTitle } from "@/components/admin/Title";
-import { ClipboardIcon, EditIcon } from "@/components/icons/icons";
-import { PopupSpec, usePopup } from "@/components/admin/connectors/Popup";
+import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { toast } from "@/hooks/useToast";
 import { useStandardAnswers, useStandardAnswerCategories } from "./hooks";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { ErrorCallout } from "@/components/ErrorCallout";
@@ -29,9 +28,12 @@ import { PageSelector } from "@/components/PageSelector";
 import Text from "@/components/ui/text";
 import { TableHeader } from "@/components/ui/table";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
-import IconButton from "@/refresh-components/buttons/IconButton";
-import { SvgTrash } from "@opal/icons";
+import { SvgEdit, SvgTrash } from "@opal/icons";
+import { Button } from "@opal/components";
+import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
 const NUM_RESULTS_PER_PAGE = 10;
+
+const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.STANDARD_ANSWERS]!;
 
 type Displayable = JSX.Element | string;
 
@@ -113,7 +115,7 @@ const StandardAnswersTableRow = ({
           key={`edit-${standardAnswer.id}`}
           href={`/ee/admin/standard-answer/${standardAnswer.id}` as Route}
         >
-          <EditIcon />
+          <SvgEdit size={16} />
         </Link>,
         <div key={`categories-${standardAnswer.id}`}>
           {standardAnswer.categories.map((category) => (
@@ -142,7 +144,7 @@ const StandardAnswersTableRow = ({
         >
           {standardAnswer.answer}
         </ReactMarkdown>,
-        <IconButton
+        <Button
           key={`delete-${standardAnswer.id}`}
           icon={SvgTrash}
           onClick={() => handleDelete(standardAnswer.id)}
@@ -156,12 +158,10 @@ const StandardAnswersTable = ({
   standardAnswers,
   standardAnswerCategories,
   refresh,
-  setPopup,
 }: {
   standardAnswers: StandardAnswer[];
   standardAnswerCategories: StandardAnswerCategory[];
   refresh: () => void;
-  setPopup: (popup: PopupSpec | null) => void;
 }) => {
   const [query, setQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -215,16 +215,10 @@ const StandardAnswersTable = ({
   const handleDelete = async (id: number) => {
     const response = await deleteStandardAnswer(id);
     if (response.ok) {
-      setPopup({
-        message: `Standard answer ${id} deleted`,
-        type: "success",
-      });
+      toast.success(`Standard answer ${id} deleted`);
     } else {
       const errorMsg = await response.text();
-      setPopup({
-        message: `Failed to delete standard answer - ${errorMsg}`,
-        type: "error",
-      });
+      toast.error(`Failed to delete standard answer - ${errorMsg}`);
     }
     refresh();
   };
@@ -352,8 +346,7 @@ const StandardAnswersTable = ({
   );
 };
 
-const Main = () => {
-  const { popup, setPopup } = usePopup();
+function Main() {
   const {
     data: standardAnswers,
     error: standardAnswersError,
@@ -375,8 +368,8 @@ const Main = () => {
       <ErrorCallout
         errorTitle="Error loading standard answers"
         errorMsg={
-          standardAnswersError.info?.message ||
-          standardAnswersError.message.info?.detail
+          standardAnswersError.info?.detail ||
+          standardAnswersError.info?.message
         }
       />
     );
@@ -387,8 +380,8 @@ const Main = () => {
       <ErrorCallout
         errorTitle="Error loading standard answer categories"
         errorMsg={
-          standardAnswerCategoriesError.info?.message ||
-          standardAnswerCategoriesError.message.info?.detail
+          standardAnswerCategoriesError.info?.detail ||
+          standardAnswerCategoriesError.info?.message
         }
       />
     );
@@ -396,8 +389,6 @@ const Main = () => {
 
   return (
     <div className="mb-8">
-      {popup}
-
       <Text className="mb-2">
         Manage the standard answers for pre-defined questions.
         <br />
@@ -420,23 +411,19 @@ const Main = () => {
           standardAnswers={standardAnswers}
           standardAnswerCategories={standardAnswerCategories}
           refresh={refreshStandardAnswers}
-          setPopup={setPopup}
         />
       </div>
     </div>
   );
-};
+}
 
-const Page = () => {
+export default function Page() {
   return (
-    <>
-      <AdminPageTitle
-        icon={<ClipboardIcon size={32} />}
-        title="Standard Answers"
-      />
-      <Main />
-    </>
+    <SettingsLayouts.Root>
+      <SettingsLayouts.Header icon={route.icon} title={route.title} separator />
+      <SettingsLayouts.Body>
+        <Main />
+      </SettingsLayouts.Body>
+    </SettingsLayouts.Root>
   );
-};
-
-export default Page;
+}

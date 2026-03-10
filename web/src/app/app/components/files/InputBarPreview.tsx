@@ -3,7 +3,7 @@ import { FileDescriptor } from "@/app/app/interfaces";
 import { FiLoader, FiFileText } from "react-icons/fi";
 import { InputBarPreviewImage } from "./images/InputBarPreviewImage";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button } from "@opal/components";
 import { SvgX } from "@opal/icons";
 export interface InputBarPreviewImageProviderProps {
   file: FileDescriptor;
@@ -24,7 +24,14 @@ export function InputBarPreviewImageProvider({
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      {isHovered && <IconButton icon={SvgX} onClick={onDelete} internal />}
+      {isHovered && (
+        <Button
+          icon={SvgX}
+          onClick={onDelete}
+          prominence="tertiary"
+          size="sm"
+        />
+      )}
       {isUploading && (
         <div
           className="
@@ -116,7 +123,12 @@ export function InputBarPreview({
           </div>
         </SimpleTooltip>
 
-        <IconButton onClick={onDelete} icon={SvgX} internal />
+        <Button
+          onClick={onDelete}
+          icon={SvgX}
+          prominence="tertiary"
+          size="sm"
+        />
       </div>
     </div>
   );

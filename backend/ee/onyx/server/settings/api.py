@@ -1,9 +1,14 @@
 """EE Settings API - provides license-aware settings override."""
 
 from redis.exceptions import RedisError
+from sqlalchemy.exc import SQLAlchemyError
 
 from ee.onyx.configs.app_configs import LICENSE_ENFORCEMENT_ENABLED
 from ee.onyx.db.license import get_cached_license_metadata
+from ee.onyx.db.license import refresh_license_cache
+from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
+from onyx.configs.app_configs import ENTERPRISE_EDITION_ENABLED
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.server.settings.models import ApplicationStatus
 from onyx.server.settings.models import Settings
 from onyx.utils.logger import setup_logger
@@ -40,6 +45,14 @@ def check_ee_features_enabled() -> bool:
     tenant_id = get_current_tenant_id()
     try:
         metadata = get_cached_license_metadata(tenant_id)
+        if not metadata:
+            # Cache miss — warm from DB so cold-start doesn't block EE features
+            try:
+                with get_session_with_current_tenant() as db_session:
+                    metadata = refresh_license_cache(db_session, tenant_id)
+            except SQLAlchemyError as db_error:
+                logger.warning(f"Failed to load license from DB: {db_error}")
+
         if metadata and metadata.status != _BLOCKING_STATUS:
             # Has a valid license (GRACE_PERIOD/PAYMENT_REMINDER still allow EE features)
             return True
@@ -81,17 +94,39 @@ def apply_license_status_to_settings(settings: Settings) -> Settings:
     tenant_id = get_current_tenant_id()
     try:
         metadata = get_cached_license_metadata(tenant_id)
+        if not metadata:
+            # Cache miss (e.g. after TTL expiry). Fall back to DB so
+            # the /settings request doesn't falsely return GATED_ACCESS
+            # while the cache is cold.
+            try:
+                with get_session_with_current_tenant() as db_session:
+                    metadata = refresh_license_cache(db_session, tenant_id)
+            except SQLAlchemyError as db_error:
+                logger.warning(
+                    f"Failed to load license from DB for settings: {db_error}"
+                )
+
         if metadata:
             if metadata.status == _BLOCKING_STATUS:
                 settings.application_status = metadata.status
                 settings.ee_features_enabled = False
+            elif metadata.used_seats > metadata.seats:
+                # License is valid but seat limit exceeded
+                settings.application_status = ApplicationStatus.SEAT_LIMIT_EXCEEDED
+                settings.seat_count = metadata.seats
+                settings.used_seats = metadata.used_seats
+                settings.ee_features_enabled = True
             else:
                 # Has a valid license (GRACE_PERIOD/PAYMENT_REMINDER still allow EE features)
                 settings.ee_features_enabled = True
         else:
-            # No license = community edition, disable EE features
+            # No license found in cache or DB.
+            if ENTERPRISE_EDITION_ENABLED:
+                # Legacy EE flag is set → prior EE usage (e.g. permission
+                # syncing) means indexed data may need protection.
+                settings.application_status = _BLOCKING_STATUS
             settings.ee_features_enabled = False
-    except RedisError as e:
+    except CACHE_TRANSIENT_ERRORS as e:
         logger.warning(f"Failed to check license metadata for settings: {e}")
         # Fail closed - disable EE features if we can't verify license
         settings.ee_features_enabled = False

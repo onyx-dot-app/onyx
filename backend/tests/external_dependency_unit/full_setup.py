@@ -75,7 +75,9 @@ def ensure_full_deployment_setup(
                 )
             else:
                 document_indices = [
-                    get_default_document_index(active.primary, active.secondary)
+                    get_default_document_index(
+                        active.primary, active.secondary, db_session
+                    )
                 ]
             ok = setup_document_indices(
                 document_indices=document_indices,

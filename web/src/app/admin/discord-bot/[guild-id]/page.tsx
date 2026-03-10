@@ -4,14 +4,16 @@ import { use, useState, useEffect, useCallback, useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { usePopup } from "@/components/admin/connectors/Popup";
-import { Section, LineItemLayout } from "@/layouts/general-layouts";
+import { toast } from "@/hooks/useToast";
+import { Section } from "@/layouts/general-layouts";
+import { ContentAction } from "@opal/layouts";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import Text from "@/refresh-components/texts/Text";
 import Card from "@/refresh-components/cards/Card";
 import { Callout } from "@/components/ui/callout";
 import Message from "@/refresh-components/messages/Message";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import { SvgServer } from "@opal/icons";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import {
@@ -25,7 +27,7 @@ import {
 import { DiscordChannelsTable } from "@/app/admin/discord-bot/[guild-id]/DiscordChannelsTable";
 import { DiscordChannelConfig } from "@/app/admin/discord-bot/types";
 import { useAdminPersonas } from "@/hooks/useAdminPersonas";
-import { Persona } from "@/app/admin/assistants/interfaces";
+import { Persona } from "@/app/admin/agents/interfaces";
 
 interface Props {
   params: Promise<{ "guild-id": string }>;
@@ -89,9 +91,11 @@ function GuildDetailContent({
       )}
 
       <Card variant={disabled ? "disabled" : "primary"}>
-        <LineItemLayout
+        <ContentAction
           title="Channel Configuration"
           description="Run !sync-channels in Discord to update the channel list."
+          sizePreset="main-content"
+          variant="section"
           rightChildren={
             isRegistered && !channelsLoading && !channelsError ? (
               <Section
@@ -101,16 +105,16 @@ function GuildDetailContent({
                 width="fit"
                 gap={0.5}
               >
-                <Button onClick={handleEnableAll} disabled={disabled} secondary>
-                  Enable All
-                </Button>
-                <Button
-                  onClick={handleDisableAll}
-                  disabled={disabled}
-                  secondary
-                >
-                  Disable All
-                </Button>
+                <Disabled disabled={disabled}>
+                  <Button prominence="secondary" onClick={handleEnableAll}>
+                    Enable All
+                  </Button>
+                </Disabled>
+                <Disabled disabled={disabled}>
+                  <Button prominence="secondary" onClick={handleDisableAll}>
+                    Disable All
+                  </Button>
+                </Disabled>
               </Section>
             ) : undefined
           }
@@ -144,7 +148,6 @@ function GuildDetailContent({
 export default function Page({ params }: Props) {
   const unwrappedParams = use(params);
   const guildId = Number(unwrappedParams["guild-id"]);
-  const { popup, setPopup } = usePopup();
   const { data: guild, refreshGuild } = useDiscordGuild(guildId);
   const {
     data: channels,
@@ -271,26 +274,20 @@ export default function Page({ params }: Props) {
       );
 
       if (failed > 0) {
-        setPopup({
-          type: "error",
-          message: `Updated ${succeeded} channels, but ${failed} failed`,
-        });
+        toast.error(`Updated ${succeeded} channels, but ${failed} failed`);
         // Refresh to get actual server state when some updates failed
         refreshChannels();
       } else {
-        setPopup({
-          type: "success",
-          message: `Updated ${succeeded} channel${succeeded !== 1 ? "s" : ""}`,
-        });
+        toast.success(
+          `Updated ${succeeded} channel${succeeded !== 1 ? "s" : ""}`
+        );
         // Update original to match local (avoids flash from refresh)
         setOriginalChannels(localChannels);
       }
     } catch (err) {
-      setPopup({
-        type: "error",
-        message:
-          err instanceof Error ? err.message : "Failed to update channels",
-      });
+      toast.error(
+        err instanceof Error ? err.message : "Failed to update channels"
+      );
     } finally {
       setIsUpdating(false);
     }
@@ -305,18 +302,13 @@ export default function Page({ params }: Props) {
         default_persona_id: personaId,
       });
       refreshGuild();
-      setPopup({
-        type: "success",
-        message: personaId
-          ? "Default assistant updated"
-          : "Default assistant cleared",
-      });
+      toast.success(
+        personaId ? "Default agent updated" : "Default agent cleared"
+      );
     } catch (err) {
-      setPopup({
-        type: "error",
-        message:
-          err instanceof Error ? err.message : "Failed to update assistant",
-      });
+      toast.error(
+        err instanceof Error ? err.message : "Failed to update agent"
+      );
     } finally {
       setIsUpdating(false);
     }
@@ -337,24 +329,25 @@ export default function Page({ params }: Props) {
 
   return (
     <SettingsLayouts.Root>
-      {popup}
       <SettingsLayouts.Header
         icon={SvgServer}
         title={guild?.guild_name || `Server #${guildId}`}
         description={registeredText}
         backButton
         rightChildren={
-          <Button onClick={handleSaveChanges} disabled={isUpdateDisabled}>
-            Update Configuration
-          </Button>
+          <Disabled disabled={isUpdateDisabled}>
+            <Button onClick={handleSaveChanges}>Update Configuration</Button>
+          </Disabled>
         }
       />
       <SettingsLayouts.Body>
         {/* Default Persona Selector */}
         <Card variant={!guild?.enabled ? "disabled" : "primary"}>
-          <LineItemLayout
+          <ContentAction
             title="Default Agent"
             description="The agent used by the bot in all channels unless overridden."
+            sizePreset="main-content"
+            variant="section"
             rightChildren={
               <InputSelect
                 value={guild?.default_persona_id?.toString() ?? "default"}
@@ -368,7 +361,7 @@ export default function Page({ params }: Props) {
                 <InputSelect.Trigger placeholder="Select agent" />
                 <InputSelect.Content>
                   <InputSelect.Item value="default">
-                    Default Assistant
+                    Default Agent
                   </InputSelect.Item>
                   {personas.map((persona) => (
                     <InputSelect.Item

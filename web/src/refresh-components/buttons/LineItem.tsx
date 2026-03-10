@@ -54,9 +54,15 @@ const iconClassNames = {
 
 export interface LineItemProps
   extends Omit<
-    WithoutStyles<React.HTMLAttributes<HTMLButtonElement>>,
+    WithoutStyles<React.HTMLAttributes<HTMLDivElement>>,
     "children"
   > {
+  /**
+   * Whether the row should behave like a standalone interactive button.
+   * Set to false when nested inside another interactive primitive
+   * (e.g. Radix Select.Item) to avoid nested focus targets.
+   */
+  interactive?: boolean;
   // line-item variants
   strikethrough?: boolean;
   danger?: boolean;
@@ -72,7 +78,9 @@ export interface LineItemProps
   description?: string;
   rightChildren?: React.ReactNode;
   href?: string;
-  ref?: React.Ref<HTMLButtonElement>;
+  rel?: string;
+  target?: string;
+  ref?: React.Ref<HTMLDivElement>;
   children?: React.ReactNode;
 }
 
@@ -129,6 +137,7 @@ export interface LineItemProps
  * - The component automatically adds a `data-selected="true"` attribute for custom styling
  */
 export default function LineItem({
+  interactive = true,
   selected,
   strikethrough,
   danger,
@@ -141,6 +150,8 @@ export default function LineItem({
   children,
   rightChildren,
   href,
+  rel,
+  target,
   ref,
   ...props
 }: LineItemProps) {
@@ -159,17 +170,48 @@ export default function LineItem({
 
   const emphasisKey = emphasized ? "emphasized" : "normal";
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!interactive) {
+      props.onKeyDown?.(e);
+      return;
+    }
+
+    if (e.key === "Enter") {
+      e.preventDefault();
+      (e.currentTarget as HTMLDivElement).click();
+    } else if (e.key === " ") {
+      e.preventDefault();
+    }
+    props.onKeyDown?.(e);
+  };
+
+  const handleKeyUp = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!interactive) {
+      props.onKeyUp?.(e);
+      return;
+    }
+
+    if (e.key === " ") {
+      e.preventDefault();
+      (e.currentTarget as HTMLDivElement).click();
+    }
+    props.onKeyUp?.(e);
+  };
+
   const content = (
-    <button
+    <div
       ref={ref}
+      role={interactive ? "button" : undefined}
+      tabIndex={interactive ? 0 : undefined}
       className={cn(
         "flex flex-row w-full items-start p-2 rounded-08 group/LineItem gap-2",
         !!(children && description) ? "items-start" : "items-center",
         buttonClassNames[variant][emphasisKey]
       )}
-      type="button"
       data-selected={selected}
       {...props}
+      onKeyDown={handleKeyDown}
+      onKeyUp={handleKeyUp}
     >
       {Icon && (
         <div
@@ -216,9 +258,13 @@ export default function LineItem({
           </Section>
         ) : null}
       </Section>
-    </button>
+    </div>
   );
 
   if (!href) return content;
-  return <Link href={href as Route}>{content}</Link>;
+  return (
+    <Link href={href as Route} rel={rel} target={target}>
+      {content}
+    </Link>
+  );
 }

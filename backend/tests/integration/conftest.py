@@ -88,11 +88,8 @@ def reset() -> None:
 
 
 @pytest.fixture
-def new_admin_user(reset: None) -> DATestUser | None:  # noqa: ARG001
-    try:
-        return UserManager.create(name=ADMIN_USER_NAME)
-    except Exception:
-        return None
+def new_admin_user(reset: None) -> DATestUser:  # noqa: ARG001
+    return UserManager.create(name=ADMIN_USER_NAME)
 
 
 @pytest.fixture
@@ -182,18 +179,18 @@ def reset_multitenant() -> None:
 
 
 @pytest.fixture
-def llm_provider(admin_user: DATestUser | None) -> DATestLLMProvider:
+def llm_provider(admin_user: DATestUser) -> DATestLLMProvider:
     return LLMProviderManager.create(user_performing_action=admin_user)
 
 
 @pytest.fixture
 def image_generation_config(
-    admin_user: DATestUser | None,
+    admin_user: DATestUser,
 ) -> DATestImageGenerationConfig:
     """Create a default image generation config for tests."""
     return ImageGenerationConfigManager.create(
-        is_default=True,
         user_performing_action=admin_user,
+        is_default=True,
     )
 
 

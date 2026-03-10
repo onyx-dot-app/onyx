@@ -92,7 +92,7 @@ class CacheableMessage(BaseModel):
 
 class SystemMessage(CacheableMessage):
     role: Literal["system"] = "system"
-    content: str | list[ContentPart]
+    content: str
 
 
 class UserMessage(CacheableMessage):

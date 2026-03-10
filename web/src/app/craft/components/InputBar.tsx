@@ -14,7 +14,7 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import { cn, isImageFile } from "@/lib/utils";
-import { Disabled } from "@/refresh-components/Disabled";
+import { Disabled } from "@opal/core";
 import {
   useUploadFilesContext,
   BuildFile,
@@ -24,6 +24,7 @@ import { useDemoDataEnabled } from "@/app/craft/hooks/useBuildSessionStore";
 import { CRAFT_CONFIGURE_PATH } from "@/app/craft/v1/constants";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SelectButton from "@/refresh-components/buttons/SelectButton";
+import { Button } from "@opal/components";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import {
   SvgArrowUp,
@@ -257,17 +258,21 @@ const InputBar = memo(
       );
 
       const handleSubmit = useCallback(() => {
-        if (
-          !message.trim() ||
-          disabled ||
-          isRunning ||
-          hasUploadingFiles ||
-          sandboxInitializing
-        )
+        if (disabled || isRunning || hasUploadingFiles || sandboxInitializing)
           return;
-        onSubmit(message.trim(), currentMessageFiles, demoDataEnabled);
-        setMessage("");
-        clearFiles();
+
+        const hasMessage = message.trim().length > 0;
+        const hasFiles = currentMessageFiles.length > 0;
+
+        if (hasMessage) {
+          onSubmit(message.trim(), currentMessageFiles, demoDataEnabled);
+          setMessage("");
+          clearFiles({ suppressRefetch: true });
+        } else if (hasFiles) {
+          // User hit Enter with only files attached: remove files from input bar
+          // (File stays in session; no way to delete from session for now)
+          clearFiles({ suppressRefetch: true });
+        }
       }, [
         message,
         disabled,
@@ -368,13 +373,14 @@ const InputBar = memo(
               {/* Bottom left controls */}
               <div className="flex flex-row items-center gap-1">
                 {/* (+) button for file upload */}
-                <IconButton
-                  icon={SvgPaperclip}
-                  tooltip="Attach Files"
-                  tertiary
-                  disabled={disabled}
-                  onClick={() => fileInputRef.current?.click()}
-                />
+                <Disabled disabled={disabled}>
+                  <Button
+                    icon={SvgPaperclip}
+                    tooltip="Attach Files"
+                    prominence="tertiary"
+                    onClick={() => fileInputRef.current?.click()}
+                  />
+                </Disabled>
                 {/* Demo Data indicator pill - only show on welcome page (no session) when demo data is enabled */}
                 {demoDataEnabled && isWelcomePage && (
                   <SimpleTooltip
@@ -382,17 +388,18 @@ const InputBar = memo(
                     side="top"
                   >
                     <span>
-                      <SelectButton
-                        leftIcon={SvgOrganization}
-                        engaged={demoDataEnabled}
-                        action
-                        folded
-                        disabled={disabled}
-                        onClick={() => router.push(CRAFT_CONFIGURE_PATH)}
-                        className="bg-action-link-01"
-                      >
-                        Demo Data Active
-                      </SelectButton>
+                      <Disabled disabled={disabled}>
+                        <SelectButton
+                          leftIcon={SvgOrganization}
+                          engaged={demoDataEnabled}
+                          action
+                          folded
+                          onClick={() => router.push(CRAFT_CONFIGURE_PATH)}
+                          className="bg-action-link-01"
+                        >
+                          Demo Data Active
+                        </SelectButton>
+                      </Disabled>
                     </span>
                   </SimpleTooltip>
                 )}
@@ -401,6 +408,7 @@ const InputBar = memo(
               {/* Bottom right controls */}
               <div className="flex flex-row items-center gap-1">
                 {/* Submit button */}
+                {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
                 <IconButton
                   icon={sandboxInitializing ? SvgLoader : SvgArrowUp}
                   onClick={handleSubmit}

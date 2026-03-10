@@ -5,14 +5,14 @@ from langchain_core.messages import BaseMessage
 
 from onyx.configs.constants import DocumentSource
 from onyx.prompts.chat_prompts import ADDITIONAL_INFO
-from onyx.prompts.chat_prompts import ALT_CITATION_GUIDANCE_REPLACEMENT_PAT
-from onyx.prompts.chat_prompts import ALT_DATETIME_REPLACEMENT_PAT
 from onyx.prompts.chat_prompts import CITATION_GUIDANCE_REPLACEMENT_PAT
 from onyx.prompts.chat_prompts import COMPANY_DESCRIPTION_BLOCK
 from onyx.prompts.chat_prompts import COMPANY_NAME_BLOCK
 from onyx.prompts.chat_prompts import DATETIME_REPLACEMENT_PAT
+from onyx.prompts.chat_prompts import REMINDER_TAG_REPLACEMENT_PAT
 from onyx.prompts.chat_prompts import REQUIRE_CITATION_GUIDANCE
 from onyx.prompts.constants import CODE_BLOCK_PAT
+from onyx.prompts.constants import REMINDER_TAG_DESCRIPTION
 from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
 
@@ -54,11 +54,8 @@ def replace_current_datetime_tag(
         include_day_of_week=include_day_of_week,
     )
 
-    # Check and replace both patterns: {{CURRENT_DATETIME}} and [[CURRENT_DATETIME]]
     if DATETIME_REPLACEMENT_PAT in prompt_str:
         prompt_str = prompt_str.replace(DATETIME_REPLACEMENT_PAT, datetime_str)
-    if ALT_DATETIME_REPLACEMENT_PAT in prompt_str:
-        prompt_str = prompt_str.replace(ALT_DATETIME_REPLACEMENT_PAT, datetime_str)
 
     return prompt_str
 
@@ -70,7 +67,7 @@ def replace_citation_guidance_tag(
     include_all_guidance: bool = False,
 ) -> tuple[str, bool]:
     """
-    Replace {{CITATION_GUIDANCE}} or [[CITATION_GUIDANCE]] placeholder with citation guidance if needed.
+    Replace {{CITATION_GUIDANCE}} placeholder with citation guidance if needed.
 
     Returns:
         tuple[str, bool]: (prompt_with_replacement, should_append_fallback)
@@ -78,10 +75,7 @@ def replace_citation_guidance_tag(
         - should_append_fallback: True if citation guidance should be appended
             (placeholder is not present and citations are needed)
     """
-    # Check for both patterns: {{CITATION_GUIDANCE}} and [[CITATION_GUIDANCE]]
-    has_primary_pattern = CITATION_GUIDANCE_REPLACEMENT_PAT in prompt_str
-    has_alt_pattern = ALT_CITATION_GUIDANCE_REPLACEMENT_PAT in prompt_str
-    placeholder_was_present = has_primary_pattern or has_alt_pattern
+    placeholder_was_present = CITATION_GUIDANCE_REPLACEMENT_PAT in prompt_str
 
     if not placeholder_was_present:
         # Placeholder not present - caller should append if citations are needed
@@ -96,30 +90,32 @@ def replace_citation_guidance_tag(
         else ""
     )
 
-    # Replace both patterns if present
-    if has_primary_pattern:
-        prompt_str = prompt_str.replace(
-            CITATION_GUIDANCE_REPLACEMENT_PAT,
-            citation_guidance,
-        )
-    if has_alt_pattern:
-        prompt_str = prompt_str.replace(
-            ALT_CITATION_GUIDANCE_REPLACEMENT_PAT,
-            citation_guidance,
-        )
+    prompt_str = prompt_str.replace(
+        CITATION_GUIDANCE_REPLACEMENT_PAT,
+        citation_guidance,
+    )
 
     return prompt_str, False
 
 
+def replace_reminder_tag(prompt_str: str) -> str:
+    """Replace {{REMINDER_TAG_DESCRIPTION}} with the reminder tag content."""
+    if REMINDER_TAG_REPLACEMENT_PAT in prompt_str:
+        prompt_str = prompt_str.replace(
+            REMINDER_TAG_REPLACEMENT_PAT, REMINDER_TAG_DESCRIPTION
+        )
+
+    return prompt_str
+
+
 def handle_onyx_date_awareness(
     prompt_str: str,
-    # We always replace the pattern {{CURRENT_DATETIME}} or [[CURRENT_DATETIME]] if it shows up
+    # We always replace the pattern {{CURRENT_DATETIME}} if it shows up
     # but if it doesn't show up and the prompt is datetime aware, add it to the prompt at the end.
     datetime_aware: bool = False,
 ) -> str:
     """
-    If there is a {{CURRENT_DATETIME}} or [[CURRENT_DATETIME]] tag, replace it with the current
-    date and time no matter what.
+    If there is a {{CURRENT_DATETIME}} tag, replace it with the current date and time no matter what.
     If the prompt is datetime aware, and there are no datetime tags, add it to the prompt.
     Do nothing otherwise.
     This can later be expanded to support other tags.

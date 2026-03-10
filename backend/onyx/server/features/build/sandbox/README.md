@@ -100,6 +100,29 @@ python3 -m venv /templates/venv
 /templates/venv/bin/pip install -r backend/onyx/server/features/build/sandbox/kubernetes/docker/initial-requirements.txt
 ```
 
+#### System Dependencies (for PPTX skill)
+
+The PPTX skill requires LibreOffice and Poppler for PDF conversion and thumbnail generation:
+
+**macOS:**
+
+```bash
+brew install poppler
+brew install --cask libreoffice
+```
+
+Ensure `soffice` is on your PATH:
+
+```bash
+export PATH="/Applications/LibreOffice.app/Contents/MacOS:$PATH"
+```
+
+**Linux (Debian/Ubuntu):**
+
+```bash
+sudo apt-get install libreoffice-impress poppler-utils
+```
+
 **That's it!** When sandboxes are created:
 
 1. Web template is copied from `/templates/outputs/web`

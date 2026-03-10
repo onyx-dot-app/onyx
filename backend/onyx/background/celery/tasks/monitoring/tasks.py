@@ -146,14 +146,26 @@ def _collect_queue_metrics(redis_celery: Redis) -> list[Metric]:
     """Collect metrics about queue lengths for different Celery queues"""
     metrics = []
     queue_mappings = {
-        "celery_queue_length": "celery",
-        "docprocessing_queue_length": "docprocessing",
-        "sync_queue_length": "sync",
-        "deletion_queue_length": "deletion",
-        "pruning_queue_length": "pruning",
+        "celery_queue_length": OnyxCeleryQueues.PRIMARY,
+        "docprocessing_queue_length": OnyxCeleryQueues.DOCPROCESSING,
+        "docfetching_queue_length": OnyxCeleryQueues.CONNECTOR_DOC_FETCHING,
+        "sync_queue_length": OnyxCeleryQueues.VESPA_METADATA_SYNC,
+        "deletion_queue_length": OnyxCeleryQueues.CONNECTOR_DELETION,
+        "pruning_queue_length": OnyxCeleryQueues.CONNECTOR_PRUNING,
         "permissions_sync_queue_length": OnyxCeleryQueues.CONNECTOR_DOC_PERMISSIONS_SYNC,
         "external_group_sync_queue_length": OnyxCeleryQueues.CONNECTOR_EXTERNAL_GROUP_SYNC,
         "permissions_upsert_queue_length": OnyxCeleryQueues.DOC_PERMISSIONS_UPSERT,
+        "hierarchy_fetching_queue_length": OnyxCeleryQueues.CONNECTOR_HIERARCHY_FETCHING,
+        "llm_model_update_queue_length": OnyxCeleryQueues.LLM_MODEL_UPDATE,
+        "checkpoint_cleanup_queue_length": OnyxCeleryQueues.CHECKPOINT_CLEANUP,
+        "index_attempt_cleanup_queue_length": OnyxCeleryQueues.INDEX_ATTEMPT_CLEANUP,
+        "csv_generation_queue_length": OnyxCeleryQueues.CSV_GENERATION,
+        "user_file_processing_queue_length": OnyxCeleryQueues.USER_FILE_PROCESSING,
+        "user_file_project_sync_queue_length": OnyxCeleryQueues.USER_FILE_PROJECT_SYNC,
+        "user_file_delete_queue_length": OnyxCeleryQueues.USER_FILE_DELETE,
+        "monitoring_queue_length": OnyxCeleryQueues.MONITORING,
+        "sandbox_queue_length": OnyxCeleryQueues.SANDBOX,
+        "opensearch_migration_queue_length": OnyxCeleryQueues.OPENSEARCH_MIGRATION,
     }
 
     for name, queue in queue_mappings.items():
@@ -881,7 +893,7 @@ def monitor_celery_queues_helper(
     """A task to monitor all celery queue lengths."""
 
     r_celery = task.app.broker_connection().channel().client  # type: ignore
-    n_celery = celery_get_queue_length("celery", r_celery)
+    n_celery = celery_get_queue_length(OnyxCeleryQueues.PRIMARY, r_celery)
     n_docfetching = celery_get_queue_length(
         OnyxCeleryQueues.CONNECTOR_DOC_FETCHING, r_celery
     )
@@ -908,6 +920,26 @@ def monitor_celery_queues_helper(
     n_permissions_upsert = celery_get_queue_length(
         OnyxCeleryQueues.DOC_PERMISSIONS_UPSERT, r_celery
     )
+    n_hierarchy_fetching = celery_get_queue_length(
+        OnyxCeleryQueues.CONNECTOR_HIERARCHY_FETCHING, r_celery
+    )
+    n_llm_model_update = celery_get_queue_length(
+        OnyxCeleryQueues.LLM_MODEL_UPDATE, r_celery
+    )
+    n_checkpoint_cleanup = celery_get_queue_length(
+        OnyxCeleryQueues.CHECKPOINT_CLEANUP, r_celery
+    )
+    n_index_attempt_cleanup = celery_get_queue_length(
+        OnyxCeleryQueues.INDEX_ATTEMPT_CLEANUP, r_celery
+    )
+    n_csv_generation = celery_get_queue_length(
+        OnyxCeleryQueues.CSV_GENERATION, r_celery
+    )
+    n_monitoring = celery_get_queue_length(OnyxCeleryQueues.MONITORING, r_celery)
+    n_sandbox = celery_get_queue_length(OnyxCeleryQueues.SANDBOX, r_celery)
+    n_opensearch_migration = celery_get_queue_length(
+        OnyxCeleryQueues.OPENSEARCH_MIGRATION, r_celery
+    )
 
     n_docfetching_prefetched = celery_get_unacked_task_ids(
         OnyxCeleryQueues.CONNECTOR_DOC_FETCHING, r_celery
@@ -931,6 +963,14 @@ def monitor_celery_queues_helper(
         f"permissions_sync={n_permissions_sync} "
         f"external_group_sync={n_external_group_sync} "
         f"permissions_upsert={n_permissions_upsert} "
+        f"hierarchy_fetching={n_hierarchy_fetching} "
+        f"llm_model_update={n_llm_model_update} "
+        f"checkpoint_cleanup={n_checkpoint_cleanup} "
+        f"index_attempt_cleanup={n_index_attempt_cleanup} "
+        f"csv_generation={n_csv_generation} "
+        f"monitoring={n_monitoring} "
+        f"sandbox={n_sandbox} "
+        f"opensearch_migration={n_opensearch_migration} "
     )
 
 

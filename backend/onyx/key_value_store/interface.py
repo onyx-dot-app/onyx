@@ -1,10 +1,24 @@
 import abc
+from typing import cast
 
 from onyx.utils.special_types import JSON_ro
 
 
 class KvKeyNotFoundError(Exception):
     pass
+
+
+def unwrap_str(val: JSON_ro) -> str:
+    """Unwrap a string stored as {"value": str} in the encrypted KV store.
+    Also handles legacy plain-string values cached in Redis."""
+    if isinstance(val, dict):
+        try:
+            return cast(str, val["value"])
+        except KeyError:
+            raise ValueError(
+                f"Expected dict with 'value' key, got keys: {list(val.keys())}"
+            )
+    return cast(str, val)
 
 
 class KeyValueStore:

@@ -1,8 +1,8 @@
 "use client";
 import { ActionStatus } from "@/lib/tools/interfaces";
 import React from "react";
-import IconButton from "@/refresh-components/buttons/IconButton";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import {
   SvgArrowExchange,
   SvgChevronDown,
@@ -62,20 +62,20 @@ const Actions = React.memo(
                     : "opacity-0 translate-x-2 pointer-events-none"
                 )}
               >
-                <IconButton
+                <Button
                   icon={SvgUnplug}
                   tooltip="Disconnect Server"
-                  tertiary
+                  prominence="tertiary"
                   onClick={onDisconnect}
                   aria-label={`Disconnect ${serverName} server`}
                 />
               </div>
             )}
             {onManage && (
-              <IconButton
+              <Button
                 icon={SvgSettings}
                 tooltip="Manage Server"
-                tertiary
+                prominence="tertiary"
                 onClick={onManage}
                 aria-label={`Manage ${serverName} server`}
               />
@@ -83,7 +83,7 @@ const Actions = React.memo(
           </div>
           {showViewToolsButton && (
             <Button
-              tertiary
+              prominence="tertiary"
               onClick={onToggleTools}
               rightIcon={SvgChevronDown}
               aria-label={`View tools for ${serverName}`}
@@ -103,7 +103,7 @@ const Actions = React.memo(
         <div className="flex flex-col gap-1 items-end shrink-0">
           {onAuthenticate && (
             <Button
-              tertiary
+              prominence="tertiary"
               onClick={onAuthenticate}
               rightIcon={SvgArrowExchange}
               aria-label={`Authenticate and connect to ${serverName}`}
@@ -120,19 +120,19 @@ const Actions = React.memo(
             )}
           >
             {onDelete && (
-              <IconButton
+              <Button
                 icon={SvgTrash}
                 tooltip="Delete Server"
-                tertiary
+                prominence="tertiary"
                 onClick={onDelete}
                 aria-label={`Delete ${serverName} server`}
               />
             )}
             {onManage && (
-              <IconButton
+              <Button
                 icon={SvgSettings}
                 tooltip="Manage Server"
-                tertiary
+                prominence="tertiary"
                 onClick={onManage}
                 aria-label={`Manage ${serverName} server`}
               />
@@ -148,7 +148,7 @@ const Actions = React.memo(
         <div className="flex gap-1 items-end">
           {onReconnect && (
             <Button
-              secondary
+              prominence="secondary"
               onClick={onReconnect}
               rightIcon={SvgPlug}
               aria-label={`Reconnect to ${serverName}`}
@@ -157,25 +157,26 @@ const Actions = React.memo(
             </Button>
           )}
           {onManage && (
-            <IconButton
+            <Button
               icon={SvgSettings}
               tooltip="Manage Server"
-              tertiary
+              prominence="tertiary"
               onClick={onManage}
               aria-label={`Manage ${serverName} server`}
             />
           )}
         </div>
         {showViewToolsButton && (
-          <Button
-            tertiary
-            onClick={onToggleTools}
-            rightIcon={SvgChevronDown}
-            aria-label={`View tools for ${serverName}`}
-            disabled
-          >
-            {`View ${toolCount ?? 0} tool${toolCount !== 1 ? "s" : ""}`}
-          </Button>
+          <Disabled disabled>
+            <Button
+              prominence="tertiary"
+              onClick={onToggleTools}
+              rightIcon={SvgChevronDown}
+              aria-label={`View tools for ${serverName}`}
+            >
+              {`View ${toolCount ?? 0} tool${toolCount !== 1 ? "s" : ""}`}
+            </Button>
+          </Disabled>
         )}
       </div>
     );

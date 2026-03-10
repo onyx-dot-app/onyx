@@ -9,13 +9,14 @@ from onyx.db.persona import get_default_behavior_persona
 from onyx.db.user_file import calculate_user_files_token_count
 from onyx.file_store.models import FileDescriptor
 from onyx.prompts.chat_prompts import CITATION_REMINDER
-from onyx.prompts.chat_prompts import CODE_BLOCK_MARKDOWN
 from onyx.prompts.chat_prompts import DEFAULT_SYSTEM_PROMPT
+from onyx.prompts.chat_prompts import FILE_REMINDER
 from onyx.prompts.chat_prompts import LAST_CYCLE_CITATION_REMINDER
 from onyx.prompts.chat_prompts import REQUIRE_CITATION_GUIDANCE
 from onyx.prompts.prompt_utils import get_company_context
 from onyx.prompts.prompt_utils import handle_onyx_date_awareness
 from onyx.prompts.prompt_utils import replace_citation_guidance_tag
+from onyx.prompts.prompt_utils import replace_reminder_tag
 from onyx.prompts.tool_prompts import GENERATE_IMAGE_GUIDANCE
 from onyx.prompts.tool_prompts import INTERNAL_SEARCH_GUIDANCE
 from onyx.prompts.tool_prompts import MEMORY_GUIDANCE
@@ -25,7 +26,12 @@ from onyx.prompts.tool_prompts import TOOL_DESCRIPTION_SEARCH_GUIDANCE
 from onyx.prompts.tool_prompts import TOOL_SECTION_HEADER
 from onyx.prompts.tool_prompts import WEB_SEARCH_GUIDANCE
 from onyx.prompts.tool_prompts import WEB_SEARCH_SITE_DISABLED_GUIDANCE
+from onyx.prompts.user_info import BASIC_INFORMATION_PROMPT
+from onyx.prompts.user_info import TEAM_INFORMATION_PROMPT
 from onyx.prompts.user_info import USER_INFORMATION_HEADER
+from onyx.prompts.user_info import USER_MEMORIES_PROMPT
+from onyx.prompts.user_info import USER_PREFERENCES_PROMPT
+from onyx.prompts.user_info import USER_ROLE_PROMPT
 from onyx.tools.interface import Tool
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
@@ -120,6 +126,7 @@ def calculate_reserved_tokens(
 def build_reminder_message(
     reminder_text: str | None,
     include_citation_reminder: bool,
+    include_file_reminder: bool,
     is_last_cycle: bool,
 ) -> str | None:
     reminder = reminder_text.strip() if reminder_text else ""
@@ -127,8 +134,63 @@ def build_reminder_message(
         reminder += "\n\n" + LAST_CYCLE_CITATION_REMINDER
     if include_citation_reminder:
         reminder += "\n\n" + CITATION_REMINDER
+    if include_file_reminder:
+        reminder += "\n\n" + FILE_REMINDER
     reminder = reminder.strip()
     return reminder if reminder else None
+
+
+def _build_user_information_section(
+    user_memory_context: UserMemoryContext | None,
+    company_context: str | None,
+) -> str:
+    """Build the complete '# User Information' section with all sub-sections
+    in the correct order: Basic Info → Team Info → Preferences → Memories."""
+    sections: list[str] = []
+
+    if user_memory_context:
+        ctx = user_memory_context
+        has_basic_info = ctx.user_info.name or ctx.user_info.email or ctx.user_info.role
+
+        if has_basic_info:
+            role_line = (
+                USER_ROLE_PROMPT.format(user_role=ctx.user_info.role).strip()
+                if ctx.user_info.role
+                else ""
+            )
+            if role_line:
+                role_line = "\n" + role_line
+            sections.append(
+                BASIC_INFORMATION_PROMPT.format(
+                    user_name=ctx.user_info.name or "",
+                    user_email=ctx.user_info.email or "",
+                    user_role=role_line,
+                )
+            )
+
+    if company_context:
+        sections.append(
+            TEAM_INFORMATION_PROMPT.format(team_information=company_context.strip())
+        )
+
+    if user_memory_context:
+        ctx = user_memory_context
+
+        if ctx.user_preferences:
+            sections.append(
+                USER_PREFERENCES_PROMPT.format(user_preferences=ctx.user_preferences)
+            )
+
+        if ctx.memories:
+            formatted_memories = "\n".join(f"- {memory}" for memory in ctx.memories)
+            sections.append(
+                USER_MEMORIES_PROMPT.format(user_memories=formatted_memories)
+            )
+
+    if not sections:
+        return ""
+
+    return USER_INFORMATION_HEADER + "\n".join(sections)
 
 
 def build_system_prompt(
@@ -138,17 +200,11 @@ def build_system_prompt(
     tools: Sequence[Tool] | None = None,
     should_cite_documents: bool = False,
     include_all_guidance: bool = False,
-    open_ai_formatting_enabled: bool = False,
 ) -> str:
     """Should only be called with the default behavior system prompt.
     If the user has replaced the default behavior prompt with their custom agent prompt, do not call this function.
     """
     system_prompt = handle_onyx_date_awareness(base_system_prompt, datetime_aware)
-
-    # See https://simonwillison.net/tags/markdown/ for context on why this is needed
-    # for OpenAI reasoning models to have correct markdown generation
-    if open_ai_formatting_enabled:
-        system_prompt = CODE_BLOCK_MARKDOWN + system_prompt
 
     # Replace citation guidance placeholder if present
     system_prompt, should_append_citation_guidance = replace_citation_guidance_tag(
@@ -157,16 +213,14 @@ def build_system_prompt(
         include_all_guidance=include_all_guidance,
     )
 
+    # Replace reminder tag placeholder if present
+    system_prompt = replace_reminder_tag(system_prompt)
+
     company_context = get_company_context()
-    formatted_user_context = (
-        user_memory_context.as_formatted_prompt() if user_memory_context else ""
+    user_info_section = _build_user_information_section(
+        user_memory_context, company_context
     )
-    if company_context or formatted_user_context:
-        system_prompt += USER_INFORMATION_HEADER
-        if company_context:
-            system_prompt += company_context
-        if formatted_user_context:
-            system_prompt += formatted_user_context
+    system_prompt += user_info_section
 
     # Append citation guidance after company context if placeholder was not present
     # This maintains backward compatibility and ensures citations are always enforced when needed
@@ -174,23 +228,21 @@ def build_system_prompt(
         system_prompt += REQUIRE_CITATION_GUIDANCE
 
     if include_all_guidance:
-        system_prompt += (
-            TOOL_SECTION_HEADER
-            + TOOL_DESCRIPTION_SEARCH_GUIDANCE
-            + INTERNAL_SEARCH_GUIDANCE
-            + WEB_SEARCH_GUIDANCE.format(
+        tool_sections = [
+            TOOL_DESCRIPTION_SEARCH_GUIDANCE,
+            INTERNAL_SEARCH_GUIDANCE,
+            WEB_SEARCH_GUIDANCE.format(
                 site_colon_disabled=WEB_SEARCH_SITE_DISABLED_GUIDANCE
-            )
-            + OPEN_URLS_GUIDANCE
-            + PYTHON_TOOL_GUIDANCE
-            + GENERATE_IMAGE_GUIDANCE
-            + MEMORY_GUIDANCE
-        )
+            ),
+            OPEN_URLS_GUIDANCE,
+            PYTHON_TOOL_GUIDANCE,
+            GENERATE_IMAGE_GUIDANCE,
+            MEMORY_GUIDANCE,
+        ]
+        system_prompt += TOOL_SECTION_HEADER + "\n".join(tool_sections)
         return system_prompt
 
     if tools:
-        system_prompt += TOOL_SECTION_HEADER
-
         has_web_search = any(isinstance(tool, WebSearchTool) for tool in tools)
         has_internal_search = any(isinstance(tool, SearchTool) for tool in tools)
         has_open_urls = any(isinstance(tool, OpenURLTool) for tool in tools)
@@ -200,12 +252,14 @@ def build_system_prompt(
         )
         has_memory = any(isinstance(tool, MemoryTool) for tool in tools)
 
+        tool_guidance_sections: list[str] = []
+
         if has_web_search or has_internal_search or include_all_guidance:
-            system_prompt += TOOL_DESCRIPTION_SEARCH_GUIDANCE
+            tool_guidance_sections.append(TOOL_DESCRIPTION_SEARCH_GUIDANCE)
 
         # These are not included at the Tool level because the ordering may matter.
         if has_internal_search or include_all_guidance:
-            system_prompt += INTERNAL_SEARCH_GUIDANCE
+            tool_guidance_sections.append(INTERNAL_SEARCH_GUIDANCE)
 
         if has_web_search or include_all_guidance:
             site_disabled_guidance = ""
@@ -215,20 +269,23 @@ def build_system_prompt(
                 )
                 if web_search_tool and not web_search_tool.supports_site_filter:
                     site_disabled_guidance = WEB_SEARCH_SITE_DISABLED_GUIDANCE
-            system_prompt += WEB_SEARCH_GUIDANCE.format(
-                site_colon_disabled=site_disabled_guidance
+            tool_guidance_sections.append(
+                WEB_SEARCH_GUIDANCE.format(site_colon_disabled=site_disabled_guidance)
             )
 
         if has_open_urls or include_all_guidance:
-            system_prompt += OPEN_URLS_GUIDANCE
+            tool_guidance_sections.append(OPEN_URLS_GUIDANCE)
 
         if has_python or include_all_guidance:
-            system_prompt += PYTHON_TOOL_GUIDANCE
+            tool_guidance_sections.append(PYTHON_TOOL_GUIDANCE)
 
         if has_generate_image or include_all_guidance:
-            system_prompt += GENERATE_IMAGE_GUIDANCE
+            tool_guidance_sections.append(GENERATE_IMAGE_GUIDANCE)
 
         if has_memory or include_all_guidance:
-            system_prompt += MEMORY_GUIDANCE
+            tool_guidance_sections.append(MEMORY_GUIDANCE)
+
+        if tool_guidance_sections:
+            system_prompt += TOOL_SECTION_HEADER + "\n".join(tool_guidance_sections)
 
     return system_prompt

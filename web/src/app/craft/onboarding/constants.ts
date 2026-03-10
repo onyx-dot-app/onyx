@@ -5,12 +5,12 @@
 export interface BuildLlmSelection {
   providerName: string; // e.g., "build-mode-anthropic" (LLMProviderDescriptor.name)
   provider: string; // e.g., "anthropic"
-  modelName: string; // e.g., "claude-opus-4-5"
+  modelName: string; // e.g., "claude-opus-4-6"
 }
 
 // Priority order for smart default LLM selection
 const LLM_SELECTION_PRIORITY = [
-  { provider: "anthropic", modelName: "claude-opus-4-5" },
+  { provider: "anthropic", modelName: "claude-opus-4-6" },
   { provider: "openai", modelName: "gpt-5.2" },
   { provider: "openrouter", modelName: "minimax/minimax-m2.1" },
 ] as const;
@@ -19,13 +19,12 @@ const LLM_SELECTION_PRIORITY = [
 interface MinimalLlmProvider {
   name: string;
   provider: string;
-  default_model_name: string;
-  is_default_provider: boolean | null;
+  model_configurations: { name: string; is_visible: boolean }[];
 }
 
 /**
  * Get the best default LLM selection based on available providers.
- * Priority: Anthropic > OpenAI > OpenRouter > system default > first available
+ * Priority: Anthropic > OpenAI > OpenRouter > first available
  */
 export function getDefaultLlmSelection(
   llmProviders: MinimalLlmProvider[] | undefined
@@ -44,23 +43,16 @@ export function getDefaultLlmSelection(
     }
   }
 
-  // Fallback: use the default provider's default model
-  const defaultProvider = llmProviders.find((p) => p.is_default_provider);
-  if (defaultProvider) {
-    return {
-      providerName: defaultProvider.name,
-      provider: defaultProvider.provider,
-      modelName: defaultProvider.default_model_name,
-    };
-  }
-
-  // Final fallback: first available provider
+  // Fallback: first available provider, use its first visible model
   const firstProvider = llmProviders[0];
   if (firstProvider) {
+    const firstModel = firstProvider.model_configurations.find(
+      (m) => m.is_visible
+    );
     return {
       providerName: firstProvider.name,
       provider: firstProvider.provider,
-      modelName: firstProvider.default_model_name,
+      modelName: firstModel?.name ?? "",
     };
   }
 
@@ -71,11 +63,11 @@ export function getDefaultLlmSelection(
 export const RECOMMENDED_BUILD_MODELS = {
   preferred: {
     provider: "anthropic",
-    modelName: "claude-opus-4-5",
-    displayName: "Claude Opus 4.5",
+    modelName: "claude-opus-4-6",
+    displayName: "Claude Opus 4.6",
   },
   alternatives: [
-    { provider: "anthropic", modelName: "claude-sonnet-4-5" },
+    { provider: "anthropic", modelName: "claude-sonnet-4-6" },
     { provider: "openai", modelName: "gpt-5.2" },
     { provider: "openai", modelName: "gpt-5.1-codex" },
     { provider: "openrouter", modelName: "minimax/minimax-m2.1" },
@@ -156,8 +148,8 @@ export const BUILD_MODE_PROVIDERS: BuildModeProvider[] = [
     providerName: "anthropic",
     recommended: true,
     models: [
-      { name: "claude-opus-4-5", label: "Claude Opus 4.5", recommended: true },
-      { name: "claude-sonnet-4-5", label: "Claude Sonnet 4.5" },
+      { name: "claude-opus-4-6", label: "Claude Opus 4.6", recommended: true },
+      { name: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
     ],
     apiKeyPlaceholder: "sk-ant-...",
     apiKeyUrl: "https://console.anthropic.com/dashboard",

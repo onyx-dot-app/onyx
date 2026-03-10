@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { Section } from "@/layouts/general-layouts";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import Text from "@/refresh-components/texts/Text";
@@ -19,10 +19,9 @@ import {
 import { createGuildConfig } from "@/app/admin/discord-bot/lib";
 import { DiscordGuildsTable } from "@/app/admin/discord-bot/DiscordGuildsTable";
 import { BotConfigCard } from "@/app/admin/discord-bot/BotConfigCard";
-import { SvgDiscordMono } from "@opal/icons";
+import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
 
 function DiscordBotContent() {
-  const { popup, setPopup } = usePopup();
   const { data: guilds, isLoading, error, refreshGuilds } = useDiscordGuilds();
   const { data: botConfig, isManaged } = useDiscordBotConfig();
   const [registrationKey, setRegistrationKey] = useState<string | null>(null);
@@ -39,12 +38,11 @@ function DiscordBotContent() {
       const result = await createGuildConfig();
       setRegistrationKey(result.registration_key);
       refreshGuilds();
-      setPopup({ type: "success", message: "Server configuration created!" });
+      toast.success("Server configuration created!");
     } catch (err) {
-      setPopup({
-        type: "error",
-        message: err instanceof Error ? err.message : "Failed to create server",
-      });
+      toast.error(
+        err instanceof Error ? err.message : "Failed to create server"
+      );
     } finally {
       setIsCreating(false);
     }
@@ -65,9 +63,7 @@ function DiscordBotContent() {
 
   return (
     <>
-      {popup}
-
-      <BotConfigCard setPopup={setPopup} />
+      <BotConfigCard />
 
       <Modal open={!!registrationKey}>
         <Modal.Content width="sm">
@@ -115,22 +111,20 @@ function DiscordBotContent() {
             {isCreating ? "Creating..." : "Add Server"}
           </CreateButton>
         </Section>
-        <DiscordGuildsTable
-          guilds={guilds}
-          onRefresh={refreshGuilds}
-          setPopup={setPopup}
-        />
+        <DiscordGuildsTable guilds={guilds} onRefresh={refreshGuilds} />
       </Card>
     </>
   );
 }
 
 export default function Page() {
+  const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.DISCORD_BOTS]!;
+
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
-        icon={SvgDiscordMono}
-        title="Discord Bots"
+        icon={route.icon}
+        title={route.title}
         description="Connect Onyx to your Discord servers. Users can ask questions directly in Discord channels."
       />
       <SettingsLayouts.Body>

@@ -173,13 +173,9 @@ export function FileCard({
         removeFile && doneUploading ? () => removeFile(file.id) : undefined
       }
     >
-      <div className="max-w-[12rem]">
-        <Interactive.Base variant="none" static>
-          <Interactive.Container
-            paddingVariant="none"
-            border
-            heightVariant="fit"
-          >
+      <div className="min-w-0 max-w-[12rem]">
+        <Interactive.Container border heightVariant="fit">
+          <div className="[&_.opal-content-md-body]:min-w-0 [&_.opal-content-md-title]:break-all">
             <AttachmentItemLayout
               icon={isProcessing ? SimpleLoader : SvgFileText}
               title={file.name}
@@ -191,9 +187,9 @@ export function FileCard({
                   : typeLabel
               }
             />
-            <Spacer horizontal rem={0.5} />
-          </Interactive.Container>
-        </Interactive.Base>
+          </div>
+          <Spacer horizontal rem={0.5} />
+        </Interactive.Container>
       </div>
     </Removable>
   );

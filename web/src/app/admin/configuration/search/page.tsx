@@ -1,11 +1,11 @@
 "use client";
 
 import { ThreeDotsLoader } from "@/components/Loading";
-import { AdminPageTitle } from "@/components/admin/Title";
 import { errorHandlingFetcher } from "@/lib/fetcher";
+import * as SettingsLayouts from "@/layouts/settings-layouts";
 import Text from "@/components/ui/text";
 import Title from "@/components/ui/title";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import useSWR from "swr";
 import { ModelPreview } from "@/components/embedding/ModelSelector";
 import {
@@ -18,8 +18,11 @@ import { useContext } from "react";
 import { SettingsContext } from "@/providers/SettingsProvider";
 import CardSection from "@/components/admin/CardSection";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { usePopupFromQuery } from "@/components/popup/PopupFromQuery";
-import { SvgSearch } from "@opal/icons";
+import { useToastFromQuery } from "@/hooks/useToast";
+import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
+
+const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.SEARCH_SETTINGS]!;
+
 export interface EmbeddingDetails {
   api_key: string;
   custom_config: any;
@@ -29,7 +32,7 @@ export interface EmbeddingDetails {
 
 function Main() {
   const settings = useContext(SettingsContext);
-  const { popup: searchSettingsPopup } = usePopupFromQuery({
+  useToastFromQuery({
     "search-settings": {
       message: `Changed search settings successfully`,
       type: "success",
@@ -80,7 +83,6 @@ function Main() {
 
   return (
     <div>
-      {searchSettingsPopup}
       {!futureEmbeddingModel ? (
         <>
           {settings?.settings.needs_reindexing && (
@@ -128,7 +130,7 @@ function Main() {
           </CardSection>
 
           <div className="mt-4">
-            <Button action href="/admin/embeddings">
+            <Button variant="action" href="/admin/embeddings">
               Update Search Settings
             </Button>
           </div>
@@ -142,9 +144,11 @@ function Main() {
 
 export default function Page() {
   return (
-    <>
-      <AdminPageTitle title="Search Settings" icon={SvgSearch} />
-      <Main />
-    </>
+    <SettingsLayouts.Root>
+      <SettingsLayouts.Header title={route.title} icon={route.icon} separator />
+      <SettingsLayouts.Body>
+        <Main />
+      </SettingsLayouts.Body>
+    </SettingsLayouts.Root>
   );
 }

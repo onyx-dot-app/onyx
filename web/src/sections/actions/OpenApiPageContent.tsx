@@ -9,7 +9,7 @@ import OpenAPIAuthenticationModal, {
 } from "./modals/OpenAPIAuthenticationModal";
 import AddOpenAPIActionModal from "./modals/AddOpenAPIActionModal";
 import Actionbar from "./Actionbar";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import OpenApiActionCard from "./OpenApiActionCard";
 import { createOAuthConfig, updateOAuthConfig } from "@/lib/oauth/api";
 import { updateCustomTool, deleteCustomTool } from "@/lib/tools/openApiService";
@@ -27,7 +27,6 @@ export default function OpenApiPageContent() {
   const addOpenAPIActionModal = useCreateModal();
   const openAPIAuthModal = useCreateModal();
   const disconnectModal = useCreateModal();
-  const { popup, setPopup } = usePopup();
   const [selectedTool, setSelectedTool] = useState<ToolSnapshot | null>(null);
   const [toolBeingEdited, setToolBeingEdited] = useState<ToolSnapshot | null>(
     null
@@ -113,12 +112,11 @@ export default function OpenApiPageContent() {
             throw new Error(response.error);
           }
 
-          setPopup({
-            message: `${selectedTool.name} authentication ${
+          toast.success(
+            `${selectedTool.name} authentication ${
               selectedTool.oauth_config_id ? "updated" : "saved"
-            } successfully.`,
-            type: "success",
-          });
+            } successfully.`
+          );
         } else if (values.authMethod === "custom-header") {
           const customHeaders = values.headers
             .map(({ key, value }) => ({
@@ -137,10 +135,9 @@ export default function OpenApiPageContent() {
             throw new Error(response.error);
           }
 
-          setPopup({
-            message: `${selectedTool.name} authentication headers saved successfully.`,
-            type: "success",
-          });
+          toast.success(
+            `${selectedTool.name} authentication headers saved successfully.`
+          );
         } else if (values.authMethod === "pt-oauth") {
           const response = await updateCustomTool(selectedTool.id, {
             passthrough_auth: true,
@@ -150,10 +147,9 @@ export default function OpenApiPageContent() {
           if (response.error) {
             throw new Error(response.error);
           }
-          setPopup({
-            message: `${selectedTool.name} authentication passthrough saved successfully.`,
-            type: "success",
-          });
+          toast.success(
+            `${selectedTool.name} authentication passthrough saved successfully.`
+          );
         }
 
         await mutateOpenApiTools();
@@ -163,14 +159,11 @@ export default function OpenApiPageContent() {
           error instanceof Error
             ? error.message
             : "Failed to save authentication settings.";
-        setPopup({
-          message,
-          type: "error",
-        });
+        toast.error(message);
         throw error;
       }
     },
-    [selectedTool, mutateOpenApiTools, setPopup]
+    [selectedTool, mutateOpenApiTools]
   );
 
   const handleManageTool = useCallback(
@@ -194,10 +187,7 @@ export default function OpenApiPageContent() {
       try {
         await updateToolStatus(tool.id, false);
 
-        setPopup({
-          message: `${tool.name} has been disconnected.`,
-          type: "success",
-        });
+        toast.success(`${tool.name} has been disconnected.`);
 
         await mutateOpenApiTools();
       } catch (error) {
@@ -205,16 +195,13 @@ export default function OpenApiPageContent() {
           error instanceof Error
             ? error.message
             : "Failed to disconnect OpenAPI action.";
-        setPopup({
-          message,
-          type: "error",
-        });
+        toast.error(message);
         throw error instanceof Error
           ? error
           : new Error("Failed to disconnect OpenAPI action.");
       }
     },
-    [mutateOpenApiTools, setPopup]
+    [mutateOpenApiTools]
   );
 
   const handleOpenDisconnectModal = useCallback(
@@ -247,29 +234,24 @@ export default function OpenApiPageContent() {
         setIsDeleting(true);
         const response = await deleteCustomTool(tool.id);
         if (response.data) {
-          setPopup({
-            message: `${tool.name} deleted successfully.`,
-            type: "success",
-          });
+          toast.success(`${tool.name} deleted successfully.`);
           await mutateOpenApiTools();
         } else {
           throw new Error(response.error || "Failed to delete tool.");
         }
       } catch (error) {
         console.error("Failed to delete OpenAPI tool", error);
-        setPopup({
-          message:
-            error instanceof Error
-              ? error.message
-              : "An unexpected error occurred while deleting the tool.",
-          type: "error",
-        });
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "An unexpected error occurred while deleting the tool."
+        );
         throw error;
       } finally {
         setIsDeleting(false);
       }
     },
-    [mutateOpenApiTools, setPopup]
+    [mutateOpenApiTools]
   );
 
   const handleDeleteToolFromModal = useCallback(async () => {
@@ -309,24 +291,19 @@ export default function OpenApiPageContent() {
         if (response.error) {
           throw new Error(response.error);
         }
-        setPopup({
-          message: "OpenAPI action renamed successfully",
-          type: "success",
-        });
+        toast.success("OpenAPI action renamed successfully");
         await mutateOpenApiTools();
       } catch (error) {
         console.error("Error renaming tool:", error);
-        setPopup({
-          message:
-            error instanceof Error
-              ? error.message
-              : "Failed to rename OpenAPI action",
-          type: "error",
-        });
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Failed to rename OpenAPI action"
+        );
         throw error; // Re-throw so ButtonRenaming can handle it
       }
     },
-    [setPopup, mutateOpenApiTools]
+    [mutateOpenApiTools]
   );
 
   const authenticationModalTitle = useMemo(() => {
@@ -364,7 +341,6 @@ export default function OpenApiPageContent() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {popup}
       {showSharedOverlay && (
         <div
           className="fixed inset-0 z-modal-overlay bg-mask-03 backdrop-blur-03 pointer-events-none data-[state=open]:animate-in data-[state=open]:fade-in-0"
@@ -401,7 +377,6 @@ export default function OpenApiPageContent() {
                 onDelete={handleDeleteTool}
                 onRename={handleRenameTool}
                 mutateOpenApiTools={mutateOpenApiTools}
-                setPopup={setPopup}
                 onOpenDisconnectModal={handleOpenDisconnectModal}
               />
             ))
@@ -412,7 +387,6 @@ export default function OpenApiPageContent() {
       <addOpenAPIActionModal.Provider>
         <AddOpenAPIActionModal
           skipOverlay
-          setPopup={setPopup}
           existingTool={toolBeingEdited}
           onEditAuthentication={handleEditAuthenticationFromModal}
           onDisconnectTool={(tool: ToolSnapshot) => {
