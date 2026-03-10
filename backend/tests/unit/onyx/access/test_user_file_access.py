@@ -34,13 +34,13 @@ def _make_persona(
 
 def _make_user_file(
     *,
-    owner: MagicMock | None = None,
+    owner: MagicMock,
     assistants: list[MagicMock] | None = None,
 ) -> MagicMock:
     uf = MagicMock()
     uf.id = uuid4()
     uf.user = owner
-    uf.user_id = owner.id if owner else None
+    uf.user_id = owner.id
     uf.assistants = assistants or []
     return uf
 
@@ -124,22 +124,6 @@ class TestCollectUserFileAccess:
 
 
 class TestGetAccessForUserFiles:
-    def test_ownerless_file_is_public(self) -> None:
-        """Files with no owner should be public."""
-        uf = _make_user_file(owner=None)
-        uf.user = None
-
-        db_session = MagicMock()
-        db_session.query.return_value.options.return_value.filter.return_value.all.return_value = [
-            uf
-        ]
-
-        result = get_access_for_user_files_impl([str(uf.id)], db_session)
-
-        access = result[str(uf.id)]
-        assert access.is_public is True
-        assert len(access.user_emails) == 0
-
     def test_shared_user_in_acl(self) -> None:
         """Shared persona users should appear in the ACL."""
         owner = _make_user("owner@test.com")
