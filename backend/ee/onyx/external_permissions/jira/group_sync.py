@@ -74,9 +74,10 @@ def _get_group_member_emails(
             page = _fetch_group_member_page(jira_client, group_name, start_at)
         except Exception as e:
             logger.error(f"Error fetching members for group {group_name}: {e}")
-            break
+            raise
 
-        for member in page.get("values", []):
+        members = page.get("values", [])
+        for member in members:
             if member.get("accountType") != _ATLASSIAN_ACCOUNT_TYPE:
                 continue
 
@@ -91,7 +92,7 @@ def _get_group_member_emails(
 
         if page.get("isLast", True):
             break
-        start_at += _GROUP_MEMBER_PAGE_SIZE
+        start_at += len(members)
 
     return emails
 
