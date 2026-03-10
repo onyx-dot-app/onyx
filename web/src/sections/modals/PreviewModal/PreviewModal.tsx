@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
+import FrostedDiv from "@/refresh-components/FrostedDiv";
 import Modal from "@/refresh-components/Modal";
 import Text from "@/refresh-components/texts/Text";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
@@ -166,46 +167,69 @@ export default function PreviewModal({
           onClose={onClose}
         />
 
-        {/* Body + floating footer wrapper */}
-        <Modal.Body padding={0} gap={0}>
-          <Section padding={0} gap={0}>
-            {isLoading ? (
-              <Section>
-                <SimpleLoader className="h-8 w-8" />
-              </Section>
-            ) : loadError ? (
-              <Section padding={1}>
-                <Text text03 mainUiBody>
-                  {loadError}
-                </Text>
-              </Section>
-            ) : (
-              variant.renderContent(ctx)
-            )}
-          </Section>
-        </Modal.Body>
+        {/* Content mask: fully visible until 70%, then fades to transparent */}
+        <div
+          className="flex flex-col flex-auto min-h-0 overflow-hidden"
+          style={
+            !isLoading && !loadError
+              ? {
+                  maskImage:
+                    "linear-gradient(to bottom, black calc(100% - 4rem), transparent calc(100% - 1.2rem))",
+                  WebkitMaskImage:
+                    "linear-gradient(to bottom, black calc(100% - 4rem), transparent calc(100% - 1.2rem))",
+                }
+              : undefined
+          }
+        >
+          <Modal.Body padding={0} gap={0}>
+            <Section padding={0} gap={0}>
+              {isLoading ? (
+                <Section>
+                  <SimpleLoader className="h-8 w-8" />
+                </Section>
+              ) : loadError ? (
+                <Section padding={1}>
+                  <Text text03 mainUiBody>
+                    {loadError}
+                  </Text>
+                </Section>
+              ) : (
+                variant.renderContent(ctx)
+              )}
+            </Section>
+          </Modal.Body>
+        </div>
 
         {/* Floating footer */}
         {!isLoading && !loadError && (
-          <div
-            className={cn(
-              "absolute bottom-0 left-0 right-0",
-              "flex items-center justify-between",
-              "p-4 pointer-events-none w-full"
-            )}
-            style={{
-              background:
-                "linear-gradient(to top, var(--background-tint-01) 40%, transparent)",
-            }}
-          >
-            {/* Left slot */}
-            <div className="pointer-events-auto">
-              {variant.renderFooterLeft(ctx)}
-            </div>
+          <div className="absolute bottom-0 left-0 right-0 pointer-events-none">
+            {/* Gradient blur overlay */}
+            <div
+              className="absolute inset-0"
+              style={{
+                backdropFilter: "blur(2px)",
+                WebkitBackdropFilter: "blur(2px)",
+                maskImage:
+                  "linear-gradient(to bottom, transparent 0%, black 100%)",
+                WebkitMaskImage:
+                  "linear-gradient(to bottom, transparent 0%, black 100%)",
+              }}
+            />
 
-            {/* Right slot */}
-            <div className="pointer-events-auto rounded-12 bg-background-tint-00 p-1 shadow-lg">
-              {variant.renderFooterRight(ctx)}
+            {/* Controls */}
+            <div
+              className={cn(
+                "relative flex items-center justify-between",
+                "p-4 w-full"
+              )}
+            >
+              <FrostedDiv className="pointer-events-auto">
+                {variant.renderFooterLeft(ctx)}
+              </FrostedDiv>
+
+              <div className="pointer-events-auto rounded-12 bg-background-tint-00 p-1 shadow-lg">
+                {variant.renderFooterRight(ctx)}
+              </div>
             </div>
           </div>
         )}
