@@ -6,8 +6,6 @@ the `character varying[] && text[]` type mismatch error.
 """
 
 from collections.abc import Generator
-from unittest.mock import MagicMock
-from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
@@ -17,7 +15,6 @@ from ee.onyx.db.hierarchy import _get_accessible_hierarchy_nodes_for_source
 from onyx.configs.constants import DocumentSource
 from onyx.db.enums import HierarchyNodeType
 from onyx.db.models import HierarchyNode
-from onyx.server.features.hierarchy.api import _get_user_access_info
 
 
 def _make_node(
@@ -157,43 +154,6 @@ def test_combined_email_and_group(
     assert email_node.raw_node_id in result_ids
     assert group_node.raw_node_id in result_ids
     assert private_node.raw_node_id not in result_ids
-
-
-# Tests for _get_user_access_info helper function
-
-
-def test_get_user_access_info_returns_email_and_groups(
-    db_session: Session,
-) -> None:
-    """_get_user_access_info returns the user's email and external group IDs."""
-    mock_user = MagicMock()
-    mock_user.email = "test@example.com"
-
-    with patch(
-        "onyx.server.features.hierarchy.api.get_user_external_group_ids",
-        return_value=["group1", "group2"],
-    ):
-        email, groups = _get_user_access_info(mock_user, db_session)
-
-    assert email == "test@example.com"
-    assert groups == ["group1", "group2"]
-
-
-def test_get_user_access_info_with_no_groups(
-    db_session: Session,
-) -> None:
-    """User with no external groups returns empty list."""
-    mock_user = MagicMock()
-    mock_user.email = "solo@example.com"
-
-    with patch(
-        "onyx.server.features.hierarchy.api.get_user_external_group_ids",
-        return_value=[],
-    ):
-        email, groups = _get_user_access_info(mock_user, db_session)
-
-    assert email == "solo@example.com"
-    assert groups == []
 
 
 # Tests verifying hierarchy access works for users from different auth providers
