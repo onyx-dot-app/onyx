@@ -12,8 +12,6 @@ from redis import Redis
 from redis.lock import Lock as RedisLock
 from retry import retry
 from sqlalchemy import select
-from sqlalchemy.orm import joinedload
-from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
 from onyx.access.access import build_access_for_user_files
@@ -42,10 +40,10 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import HierarchyNode
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import UserFileStatus
-from onyx.db.models import Persona
 from onyx.db.models import UserFile
 from onyx.db.search_settings import get_active_search_settings
 from onyx.db.search_settings import get_active_search_settings_list
+from onyx.db.user_file import fetch_user_files_with_access_relationships
 from onyx.document_index.factory import get_all_document_indices
 from onyx.document_index.interfaces import VespaDocumentFields
 from onyx.document_index.interfaces import VespaDocumentUserFields
@@ -58,6 +56,7 @@ from onyx.indexing.adapters.user_file_indexing_adapter import UserFileIndexingAd
 from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.indexing_pipeline import run_indexing_pipeline
 from onyx.redis.redis_pool import get_redis_client
+from onyx.utils.variable_functionality import global_version
 
 
 def _as_uuid(value: str | UUID) -> UUID:
@@ -795,21 +794,12 @@ def project_sync_user_file_impl(
 
     try:
         with get_session_with_current_tenant() as db_session:
-            user_file = (
-                db_session.execute(
-                    select(UserFile)
-                    .where(UserFile.id == _as_uuid(user_file_id))
-                    .options(
-                        joinedload(UserFile.user),
-                        joinedload(UserFile.assistants).options(
-                            selectinload(Persona.users),
-                            selectinload(Persona.user),
-                        ),
-                    )
-                )
-                .unique()
-                .scalar_one_or_none()
+            user_files = fetch_user_files_with_access_relationships(
+                [user_file_id],
+                db_session,
+                eager_load_groups=global_version.is_ee_version(),
             )
+            user_file = user_files[0] if user_files else None
             if not user_file:
                 task_logger.info(
                     f"project_sync_user_file_impl - User file not found id={user_file_id}"

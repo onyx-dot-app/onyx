@@ -27,7 +27,9 @@ def _mock_session_returning_none() -> MagicMock:
     """Return a mock session whose .get() returns None (file not found)."""
     session = MagicMock()
     session.get.return_value = None
-    session.execute.return_value.scalar_one_or_none.return_value = None
+    session.query.return_value.options.return_value.filter.return_value.all.return_value = (
+        []
+    )
     return session
 
 

@@ -143,7 +143,7 @@ def fetch_user_files_with_access_relationships(
         db_session.query(UserFile)
         .options(
             joinedload(UserFile.user),
-            joinedload(UserFile.assistants).options(*persona_sub_options),
+            selectinload(UserFile.assistants).options(*persona_sub_options),
         )
         .filter(UserFile.id.in_(user_file_ids))
         .all()
