@@ -163,7 +163,7 @@ class _EncryptedBase(TypeDecorator):
 
 
 class EncryptedString(_EncryptedBase):
-    # Have to redeclare for children since we explicitly re-declare _is_json
+    # Must redeclare cache_ok in this child class since we explicitly redeclare _is_json
     cache_ok = True
     _is_json: bool = False
 
