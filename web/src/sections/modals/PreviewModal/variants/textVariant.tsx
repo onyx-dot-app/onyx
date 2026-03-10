@@ -14,7 +14,7 @@ const TEXT_MIMES = [
   "text/tab-separated-values",
 ];
 
-const TEXT_EXTENSIONS = [".txt", ".log", ".conf", ".sql", ".tsv"];
+const TEXT_EXTENSIONS = [".txt", ".log", ".conf", ".tsv"];
 
 export const textVariant: PreviewVariant = {
   matches: (name, mime) => {
