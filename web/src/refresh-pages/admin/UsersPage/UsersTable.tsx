@@ -60,7 +60,7 @@ const columns = [
   tc.column("email", {
     header: "Name",
     weight: 22,
-    minWidth: 160,
+    minWidth: 140,
     cell: (value, row) => (
       <Content
         sizePreset="main-ui"
@@ -73,7 +73,7 @@ const columns = [
   tc.column("groups", {
     header: "Groups",
     weight: 20,
-    minWidth: 120,
+    minWidth: 180,
     cell: (value) => {
       if (!value.length) {
         return (
@@ -85,11 +85,11 @@ const columns = [
       const visible = value.slice(0, 2);
       const overflow = value.length - visible.length;
       return (
-        <div className="flex items-center gap-1 flex-wrap">
+        <div className="flex items-center gap-1 flex-nowrap overflow-hidden min-w-0">
           {visible.map((g) => (
             <span
               key={g.id}
-              className="inline-flex items-center rounded-md bg-background-tint-02 px-2 py-0.5"
+              className="inline-flex items-center flex-shrink-0 rounded-md bg-background-tint-02 px-2 py-0.5 whitespace-nowrap"
             >
               <Text as="span" secondaryBody text03>
                 {g.name}
@@ -108,7 +108,7 @@ const columns = [
   tc.column("role", {
     header: "Account Type",
     weight: 16,
-    minWidth: 100,
+    minWidth: 180,
     cell: (value) => {
       const Icon = ROLE_ICONS[value];
       return (
