@@ -200,7 +200,7 @@ export const DisabledStory: StoryObj = {
   name: "Disabled",
   render: () => (
     <div style={{ display: "flex", gap: "0.75rem" }}>
-      <Disabled>
+      <Disabled disabled>
         <Interactive.Stateless
           variant="default"
           prominence="secondary"
