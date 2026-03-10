@@ -637,3 +637,49 @@ class TestDeltaDuplicateDocumentDedup:
         )
         yielded, _ = _consume_generator(gen)
         assert len(_docs_from(yielded)) == 1
+
+    def test_same_id_across_drives_not_skipped(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Graph item IDs are only unique within a drive.  An item in drive B
+        that happens to share an ID with an item already seen in drive A must
+        NOT be skipped."""
+        connector = _setup_connector(monkeypatch)
+        _mock_convert(monkeypatch)
+
+        def fake_fetch_page(
+            self: SharepointConnector,  # noqa: ARG001
+            page_url: str,  # noqa: ARG001
+            drive_id: str,  # noqa: ARG001
+            start: datetime | None = None,  # noqa: ARG001
+            end: datetime | None = None,  # noqa: ARG001
+            page_size: int = 200,  # noqa: ARG001
+        ) -> tuple[list[DriveItemData], str | None]:
+            return [_make_item("shared-id")], None
+
+        monkeypatch.setattr(
+            SharepointConnector, "_fetch_one_delta_page", fake_fetch_page
+        )
+
+        checkpoint = _build_ready_checkpoint(drive_names=["DriveA", "DriveB"])
+
+        # Drive A: yields the item
+        gen = connector._load_from_checkpoint(
+            _START_TS, _END_TS, checkpoint, include_permissions=False
+        )
+        yielded, checkpoint = _consume_generator(gen)
+        docs = _docs_from(yielded)
+        assert len(docs) == 1
+        assert docs[0].id == "shared-id"
+
+        # seen_document_ids should have been cleared when drive A finished
+        assert len(checkpoint.seen_document_ids) == 0
+
+        # Drive B: same ID must be yielded again (different drive)
+        gen = connector._load_from_checkpoint(
+            _START_TS, _END_TS, checkpoint, include_permissions=False
+        )
+        yielded, checkpoint = _consume_generator(gen)
+        docs = _docs_from(yielded)
+        assert len(docs) == 1
+        assert docs[0].id == "shared-id"

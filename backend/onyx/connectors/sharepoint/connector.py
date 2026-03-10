@@ -1561,6 +1561,7 @@ class SharepointConnector(
         checkpoint.current_drive_id = None
         checkpoint.current_drive_web_url = None
         checkpoint.current_drive_delta_next_link = None
+        checkpoint.seen_document_ids.clear()
 
     def _fetch_slim_documents_from_sharepoint(self) -> GenerateSlimDocumentOutput:
         site_descriptors = self.site_descriptors or self.fetch_sites()
