@@ -8,6 +8,7 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+from uuid import UUID
 
 from onyx.utils.logger import setup_logger
 
@@ -27,6 +28,7 @@ class ProcessManager:
         self,
         web_dir: Path,
         port: int,
+        session_id: UUID,
         timeout: float = 180.0,
     ) -> subprocess.Popen[bytes]:
         """Start Next.js dev server.
@@ -76,6 +78,10 @@ class ProcessManager:
             cwd=web_dir,
             stdout=None,
             stderr=None,
+            env={
+                **os.environ,
+                "CRAFT_ASSET_PREFIX": f"/api/build/sessions/{session_id}/webapp",
+            },
         )
         logger.info(f"Next.js process started with PID {process.pid}")
 
