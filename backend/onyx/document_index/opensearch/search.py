@@ -13,10 +13,21 @@ from onyx.configs.constants import INDEX_SEPARATOR
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import Tag
 from onyx.document_index.interfaces_new import TenantState
+from onyx.document_index.opensearch.constants import CONTENT_MATCH_BOOST
+from onyx.document_index.opensearch.constants import CONTENT_MATCH_PHRASE_BOOST
+from onyx.document_index.opensearch.constants import HIGHLIGHT_FRAGMENT_SIZE
+from onyx.document_index.opensearch.constants import HIGHLIGHT_NUM_FRAGMENTS
 from onyx.document_index.opensearch.constants import (
-    DEFAULT_NUM_HYBRID_SEARCH_CANDIDATES,
+    HYBRID_SEARCH_CONTENT_VECTOR_CANDIDATES,
 )
 from onyx.document_index.opensearch.constants import HYBRID_SEARCH_NORMALIZATION_WEIGHTS
+from onyx.document_index.opensearch.constants import HYBRID_SEARCH_PAGINATION_DEPTH
+from onyx.document_index.opensearch.constants import (
+    HYBRID_SEARCH_TITLE_VECTOR_CANDIDATES,
+)
+from onyx.document_index.opensearch.constants import MATCH_PHRASE_SLOP
+from onyx.document_index.opensearch.constants import TITLE_MATCH_BOOST
+from onyx.document_index.opensearch.constants import TITLE_MATCH_PHRASE_BOOST
 from onyx.document_index.opensearch.schema import ACCESS_CONTROL_LIST_FIELD_NAME
 from onyx.document_index.opensearch.schema import ANCESTOR_HIERARCHY_NODE_IDS_FIELD_NAME
 from onyx.document_index.opensearch.schema import CHUNK_INDEX_FIELD_NAME
@@ -290,7 +301,7 @@ class DocumentQuery:
                 # Sources:
                 # https://docs.opensearch.org/latest/vector-search/ai-search/hybrid-search/pagination/
                 # https://opensearch.org/blog/navigating-pagination-in-hybrid-queries-with-the-pagination_depth-parameter/
-                "pagination_depth": DEFAULT_NUM_HYBRID_SEARCH_CANDIDATES,
+                "pagination_depth": HYBRID_SEARCH_PAGINATION_DEPTH,
                 # Applied to all the sub-queries independently (this avoids having subqueries having a lot of results thrown out).
                 # Sources:
                 # https://docs.opensearch.org/latest/query-dsl/compound/hybrid/
@@ -374,10 +385,10 @@ class DocumentQuery:
     def _get_hybrid_search_subqueries(
         query_text: str,
         query_vector: list[float],
-        # The default number of neighbors to consider for knn vector similarity search.
+        # The number of neighbors to consider for each kNN clause.
         # This is higher than the number of results because the scoring is hybrid.
-        # for a detailed breakdown, see where the default value is set.
-        vector_candidates: int = DEFAULT_NUM_HYBRID_SEARCH_CANDIDATES,
+        title_vector_candidates: int = HYBRID_SEARCH_TITLE_VECTOR_CANDIDATES,
+        content_vector_candidates: int = HYBRID_SEARCH_CONTENT_VECTOR_CANDIDATES,
     ) -> list[dict[str, Any]]:
         """Returns subqueries for hybrid search.
 
@@ -418,8 +429,10 @@ class DocumentQuery:
         Args:
             query_text: The text of the query to search for.
             query_vector: The vector embedding of the query to search for.
-            num_candidates: The number of candidates to consider for vector
-                similarity search.
+            title_vector_candidates: The number of title-vector candidates to
+                consider for vector similarity search.
+            content_vector_candidates: The number of content-vector candidates
+                to consider for vector similarity search.
         """
         # Build sub-queries for hybrid search. Order must match normalization
         # pipeline weights: title vector, content vector, keyword (title + content).
@@ -429,7 +442,7 @@ class DocumentQuery:
                 "knn": {
                     TITLE_VECTOR_FIELD_NAME: {
                         "vector": query_vector,
-                        "k": vector_candidates,
+                        "k": title_vector_candidates,
                     }
                 }
             },
@@ -438,7 +451,7 @@ class DocumentQuery:
                 "knn": {
                     CONTENT_VECTOR_FIELD_NAME: {
                         "vector": query_vector,
-                        "k": vector_candidates,
+                        "k": content_vector_candidates,
                     }
                 }
             },
@@ -453,7 +466,7 @@ class DocumentQuery:
                                     "operator": "or",
                                     # The title fields are strongly discounted as they are included in the content.
                                     # It just acts as a minor boost
-                                    "boost": 0.1,
+                                    "boost": TITLE_MATCH_BOOST,
                                 }
                             }
                         },
@@ -461,8 +474,8 @@ class DocumentQuery:
                             "match_phrase": {
                                 TITLE_FIELD_NAME: {
                                     "query": query_text,
-                                    "slop": 1,
-                                    "boost": 0.2,
+                                    "slop": MATCH_PHRASE_SLOP,
+                                    "boost": TITLE_MATCH_PHRASE_BOOST,
                                 }
                             }
                         },
@@ -471,7 +484,7 @@ class DocumentQuery:
                                 CONTENT_FIELD_NAME: {
                                     "query": query_text,
                                     "operator": "or",
-                                    "boost": 1.0,
+                                    "boost": CONTENT_MATCH_BOOST,
                                 }
                             }
                         },
@@ -479,8 +492,8 @@ class DocumentQuery:
                             "match_phrase": {
                                 CONTENT_FIELD_NAME: {
                                     "query": query_text,
-                                    "slop": 1,
-                                    "boost": 1.5,
+                                    "slop": MATCH_PHRASE_SLOP,
+                                    "boost": CONTENT_MATCH_PHRASE_BOOST,
                                 }
                             }
                         },
@@ -817,10 +830,10 @@ class DocumentQuery:
                     # arbitrarily-chosen. The Vespa codepath limited total
                     # highlights length to 400 chars. fragment_size *
                     # number_of_fragments = 400 should be good enough.
-                    "fragment_size": 100,
+                    "fragment_size": HIGHLIGHT_FRAGMENT_SIZE,
                     # The number of snippets to return per field per document
                     # hit.
-                    "number_of_fragments": 4,
+                    "number_of_fragments": HIGHLIGHT_NUM_FRAGMENTS,
                     # These tags wrap matched keywords and they match what Vespa
                     # used to return. Use them to minimize changes to our code.
                     "pre_tags": ["<hi>"],
