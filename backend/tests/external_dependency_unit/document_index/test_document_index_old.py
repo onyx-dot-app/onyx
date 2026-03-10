@@ -64,7 +64,11 @@ def tenant_context() -> Generator[None, None, None]:
 
 @pytest.fixture(scope="module")
 def httpx_client() -> Generator[httpx.Client, None, None]:
-    yield get_vespa_http_client()
+    client = get_vespa_http_client()
+    try:
+        yield client
+    finally:
+        client.close()
 
 
 @pytest.fixture(scope="module")
@@ -195,7 +199,9 @@ def document_indices(
 
 
 @pytest.fixture(scope="function")
-def chunks() -> Generator[list[DocMetadataAwareIndexChunk], None, None]:
+def chunks(
+    tenant_context: None,  # noqa: ARG001
+) -> Generator[list[DocMetadataAwareIndexChunk], None, None]:
     result = []
     chunk_count = 5
     doc_id = "test_doc"
@@ -267,7 +273,19 @@ def chunks() -> Generator[list[DocMetadataAwareIndexChunk], None, None]:
 
 
 @pytest.fixture(scope="function")
-def index_batch_params() -> Generator[IndexBatchParams, None, None]:
+def index_batch_params(
+    tenant_context: None,  # noqa: ARG001
+) -> Generator[IndexBatchParams, None, None]:
+    # WARNING: doc_id_to_previous_chunk_cnt={"test_doc": 0} is hardcoded to 0,
+    # which is only correct on the very first index call. The document_indices
+    # fixture is scope="module", meaning the same OpenSearch and Vespa backends
+    # persist across all test functions in this module. When a second test
+    # function uses this fixture and calls document_index.index(...), the
+    # backend already has 5 chunks for "test_doc" from the previous test run,
+    # but the batch params still claim 0 prior chunks exist. This can lead to
+    # orphaned/duplicate chunks that make subsequent assertions incorrect.
+    # TODO: Whenever adding a second test, either change this or cleanup the
+    # index between test cases.
     yield IndexBatchParams(
         doc_id_to_previous_chunk_cnt={"test_doc": 0},
         doc_id_to_new_chunk_cnt={"test_doc": 5},
@@ -285,6 +303,7 @@ class TestDocumentIndexOld:
         # This test case assumes all these chunks correspond to one document.
         chunks: list[DocMetadataAwareIndexChunk],
         index_batch_params: IndexBatchParams,
+        tenant_context: None,  # noqa: ARG002
     ) -> None:
         """
         Tests that update_single can clear user_projects and personas.
@@ -327,7 +346,9 @@ class TestDocumentIndexOld:
             # ensure that the latest data is present is not exposed in this
             # class and is not the same for Vespa and OpenSearch, so we just
             # tolerate a sleep for now. As a consequence the number of tests in
-            # this suite should be small.
+            # this suite should be small. We only need to tolerate this for as
+            # long as we continue to use Vespa, we can consider exposing
+            # something for OpenSearch later.
             time.sleep(1)
             inference_chunks = document_index.id_based_retrieval(
                 chunk_requests=[chunk_request],
