@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import DataTable from "@/refresh-components/table/DataTable";
 import { createTableColumns } from "@/refresh-components/table/columns";
 import { Content } from "@opal/layouts";
@@ -9,6 +9,7 @@ import { timeAgo } from "@/lib/time";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import useAdminUsers from "@/hooks/useAdminUsers";
+import { ThreeDotsLoader } from "@/components/Loading";
 import { SvgUser, SvgUsers, SvgSlack } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
 import type { UserRow, UserGroupInfo } from "./interfaces";
@@ -19,7 +20,6 @@ import { getInitials } from "./utils";
 // ---------------------------------------------------------------------------
 
 const PAGE_SIZE = 8;
-const SEARCH_DEBOUNCE_MS = 300;
 
 const ROLE_ICONS: Record<UserRole, IconFunctionComponent> = {
   [UserRole.BASIC]: SvgUser,
@@ -163,31 +163,17 @@ const columns = [
 
 export default function UsersTable() {
   const [searchTerm, setSearchTerm] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [pageIndex, setPageIndex] = useState(0);
+  const { users, isLoading } = useAdminUsers();
 
-  useEffect(() => {
-    const timer = setTimeout(
-      () => setDebouncedSearch(searchTerm),
-      SEARCH_DEBOUNCE_MS
-    );
-    return () => clearTimeout(timer);
-  }, [searchTerm]);
-
-  const { users, totalItems, isLoading } = useAdminUsers({
-    pageIndex,
-    pageSize: PAGE_SIZE,
-    searchTerm: debouncedSearch || undefined,
-  });
+  if (isLoading) {
+    return <ThreeDotsLoader />;
+  }
 
   return (
     <div className="flex flex-col gap-3">
       <InputTypeIn
         value={searchTerm}
-        onChange={(e) => {
-          setSearchTerm(e.target.value);
-          setPageIndex(0);
-        }}
+        onChange={(e) => setSearchTerm(e.target.value)}
         placeholder="Search users..."
         leftSearchIcon
       />
@@ -196,21 +182,8 @@ export default function UsersTable() {
         columns={columns}
         getRowId={(row) => row.id}
         pageSize={PAGE_SIZE}
-        searchTerm={debouncedSearch}
+        searchTerm={searchTerm}
         footer={{ mode: "summary" }}
-        serverSide={{
-          totalItems,
-          isLoading,
-          onSortingChange: () => {
-            // sorting not yet wired to backend
-          },
-          onPaginationChange: (idx) => {
-            setPageIndex(idx);
-          },
-          onSearchTermChange: () => {
-            // search state managed via searchTerm prop above
-          },
-        }}
       />
     </div>
   );

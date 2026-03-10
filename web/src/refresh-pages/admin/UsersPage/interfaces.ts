@@ -17,9 +17,4 @@ export interface UserRow {
   groups: UserGroupInfo[];
 }
 
-export interface PaginatedUsersResponse {
-  items: UserRow[];
-  total_items: number;
-}
-
 export type StatusFilter = "all" | "active" | "inactive";
