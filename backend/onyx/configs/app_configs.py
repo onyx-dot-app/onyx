@@ -204,6 +204,12 @@ JWT_PUBLIC_KEY_URL: str | None = os.getenv("JWT_PUBLIC_KEY_URL", None)
 
 USER_AUTH_SECRET = os.environ.get("USER_AUTH_SECRET", "")
 
+if AUTH_TYPE == AuthType.BASIC and not USER_AUTH_SECRET:
+    logger.warning(
+        "USER_AUTH_SECRET is not set. This is required for secure password reset "
+        "and email verification tokens. Please set USER_AUTH_SECRET in production."
+    )
+
 # Duration (in seconds) for which the FastAPI Users JWT token remains valid in the user's browser.
 # By default, this is set to match the Redis expiry time for consistency.
 AUTH_COOKIE_EXPIRE_TIME_SECONDS = int(
