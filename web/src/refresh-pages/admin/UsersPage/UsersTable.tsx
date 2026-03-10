@@ -72,8 +72,8 @@ const columns = [
   }),
   tc.column("groups", {
     header: "Groups",
-    weight: 20,
-    minWidth: 180,
+    weight: 24,
+    minWidth: 200,
     cell: (value) => {
       if (!value.length) {
         return (
