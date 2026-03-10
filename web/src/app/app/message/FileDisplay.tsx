@@ -1,6 +1,7 @@
 "use client";
 
 import { ReactNode, useState } from "react";
+import { cn } from "@/lib/utils";
 import { ChatFileType, FileDescriptor } from "@/app/app/interfaces";
 import Attachment from "@/refresh-components/Attachment";
 import { InMessageImage } from "@/app/app/components/files/images/InMessageImage";
@@ -11,6 +12,7 @@ import ExpandableContentWrapper from "@/components/tools/ExpandableContentWrappe
 
 interface FileContainerProps {
   children: ReactNode;
+  className?: string;
   id?: string;
 }
 
@@ -18,11 +20,11 @@ interface FileDisplayProps {
   files: FileDescriptor[];
 }
 
-function FileContainer({ children, id }: FileContainerProps) {
+function FileContainer({ children, className, id }: FileContainerProps) {
   return (
     <div
       id={id}
-      className="flex w-full flex-col items-end gap-2 overflow-hidden py-2"
+      className={cn("flex w-full flex-col items-end gap-2 py-2", className)}
     >
       {children}
     </div>
@@ -77,7 +79,7 @@ export default function FileDisplay({ files }: FileDisplayProps) {
       )}
 
       {csvFiles.length > 0 && (
-        <FileContainer>
+        <FileContainer className="overflow-auto">
           {csvFiles.map((file) =>
             close ? (
               <ExpandableContentWrapper
