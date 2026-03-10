@@ -117,7 +117,12 @@ export const CodeBlock = memo(function CodeBlock({
   return (
     <>
       {showHeader ? (
-        <div className={cn("bg-background-tint-00 rounded-12 max-w-full min-w-0", !noPadding && "px-1 pb-1")}>
+        <div
+          className={cn(
+            "bg-background-tint-00 rounded-12 max-w-full min-w-0",
+            !noPadding && "px-1 pb-1"
+          )}
+        >
           {language && (
             <div className="flex items-center px-2 py-1 text-sm text-text-04 gap-x-2">
               <SvgCode
