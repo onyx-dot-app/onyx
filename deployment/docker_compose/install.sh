@@ -260,6 +260,12 @@ else
     exit 1
 fi
 
+# Check openssl (needed for generating secure secrets)
+if ! command -v openssl &> /dev/null; then
+    print_error "openssl is required to generate secure secrets but was not found."
+    exit 1
+fi
+
 # Function to compare version numbers
 version_compare() {
     # Returns 0 if $1 <= $2, 1 if $1 > $2
