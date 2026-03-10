@@ -2,6 +2,7 @@
 
 import { FeedbackType } from "@/app/app/interfaces";
 import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import useFeedbackController from "@/hooks/useFeedbackController";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import { SvgThumbsDown, SvgThumbsUp } from "@opal/icons";
@@ -96,15 +97,16 @@ export default function FeedbackModal({
                   >
                     Cancel
                   </Button>
-                  <Button
-                    onClick={() => formikHandleSubmit()}
+                  <Disabled
                     disabled={
                       isSubmitting ||
                       (feedbackType === "dislike" && (!dirty || !isValid))
                     }
                   >
-                    {isSubmitting ? "Submitting..." : "Submit"}
-                  </Button>
+                    <Button onClick={() => formikHandleSubmit()}>
+                      {isSubmitting ? "Submitting..." : "Submit"}
+                    </Button>
+                  </Disabled>
                 </Modal.Footer>
               </>
             )}

@@ -40,7 +40,7 @@ import { SvgUser, SvgMenu, SvgAlertTriangle } from "@opal/icons";
 import { useAppBackground } from "@/providers/AppBackgroundProvider";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import DocumentsSidebar from "@/sections/document-sidebar/DocumentsSidebar";
-import TextViewModal from "@/sections/modals/TextViewModal";
+import PreviewModal from "@/sections/modals/PreviewModal";
 import { personaIncludesRetrieval } from "@/app/app/services/lib";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { eeGated } from "@/ce";
@@ -484,12 +484,8 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                 ref={chatInputBarRef}
                 deepResearchEnabled={deepResearchEnabled}
                 toggleDeepResearch={toggleDeepResearch}
-                toggleDocumentSidebar={() => {}}
                 filterManager={filterManager}
                 llmManager={llmManager}
-                removeDocs={() => {}}
-                retrievalEnabled={retrievalEnabled}
-                selectedDocuments={[]}
                 initialMessage={message}
                 stopGenerating={stopGenerating}
                 onSubmit={handleChatInputSubmit}
@@ -541,7 +537,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
       {/* Text/document preview modal */}
       {presentingDocument && (
-        <TextViewModal
+        <PreviewModal
           presentingDocument={presentingDocument}
           onClose={() => setPresentingDocument(null)}
         />

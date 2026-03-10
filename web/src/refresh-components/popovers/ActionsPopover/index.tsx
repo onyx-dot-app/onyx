@@ -29,6 +29,7 @@ import { SourceMetadata } from "@/lib/search/interfaces";
 import { SourceIcon } from "@/components/SourceIcon";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
 import useCCPairs from "@/hooks/useCCPairs";
+import { useLLMProviders } from "@/hooks/useLLMProviders";
 import { useVectorDbEnabled } from "@/providers/SettingsProvider";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { useToolOAuthStatus } from "@/lib/hooks/useToolOAuthStatus";
@@ -41,6 +42,7 @@ import MCPLineItem, {
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import { SvgActions, SvgChevronRight, SvgKey, SvgSliders } from "@opal/icons";
 import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 
 function buildTooltipMessage(
   actionDescription: string,
@@ -177,6 +179,10 @@ export default function ActionsPopover({
   // const [showTopShadow, setShowTopShadow] = useState(false);
   const { selectedSources, setSelectedSources } = filterManager;
   const [mcpServers, setMcpServers] = useState<MCPServer[]>([]);
+  const { llmProviders, isLoading: isLLMLoading } = useLLMProviders(
+    selectedAgent.id
+  );
+  const hasAnyProvider = !isLLMLoading && (llmProviders?.length ?? 0) > 0;
 
   // Use the OAuth hook
   const { getToolAuthStatus, authenticateTool } = useToolOAuthStatus(
@@ -492,7 +498,8 @@ export default function ActionsPopover({
 
   // Fetch MCP servers for the agent on mount
   useEffect(() => {
-    if (selectedAgent == null || selectedAgent.id == null) return;
+    if (selectedAgent == null || selectedAgent.id == null || !hasAnyProvider)
+      return;
 
     const abortController = new AbortController();
 
@@ -533,7 +540,7 @@ export default function ActionsPopover({
     return () => {
       abortController.abort();
     };
-  }, [selectedAgent?.id]);
+  }, [selectedAgent?.id, hasAnyProvider]);
 
   // No separate MCP tool loading; tools already exist in selectedAgent.tools
 
@@ -1027,13 +1034,14 @@ export default function ActionsPopover({
       <Popover open={open} onOpenChange={handleOpenChange}>
         <Popover.Trigger asChild>
           <div data-testid="action-management-toggle">
-            <Button
-              icon={SvgSliders}
-              transient={open}
-              prominence="tertiary"
-              tooltip="Manage Actions"
-              disabled={disabled}
-            />
+            <Disabled disabled={disabled}>
+              <Button
+                icon={SvgSliders}
+                interaction={open ? "hover" : "rest"}
+                prominence="tertiary"
+                tooltip="Manage Actions"
+              />
+            </Disabled>
           </div>
         </Popover.Trigger>
         <Popover.Content side="bottom" align="start" width="lg">

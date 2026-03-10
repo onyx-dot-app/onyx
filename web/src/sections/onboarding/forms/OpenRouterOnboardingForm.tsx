@@ -8,6 +8,7 @@ import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn
 import InputComboBox from "@/refresh-components/inputs/InputComboBox";
 import Separator from "@/refresh-components/Separator";
 import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import { cn, noProp } from "@/lib/utils";
 import { SvgRefreshCw } from "@opal/icons";
 import { WellKnownLLMProviderDescriptor } from "@/interfaces/llm";
@@ -139,24 +140,25 @@ function OpenRouterFormFields(
                   disabled || isFetchingModels || modelOptions.length === 0
                 }
                 rightSection={
-                  <Button
-                    prominence="tertiary"
-                    size="sm"
-                    icon={({ className }) => (
-                      <SvgRefreshCw
-                        className={cn(
-                          className,
-                          isFetchingModels && "animate-spin"
-                        )}
-                      />
-                    )}
-                    onClick={noProp((e) => {
-                      e.preventDefault();
-                      handleFetchModels();
-                    })}
-                    tooltip="Fetch available models"
-                    disabled={disabled || isFetchingModels}
-                  />
+                  <Disabled disabled={disabled || isFetchingModels}>
+                    <Button
+                      prominence="tertiary"
+                      size="sm"
+                      icon={({ className }) => (
+                        <SvgRefreshCw
+                          className={cn(
+                            className,
+                            isFetchingModels && "animate-spin"
+                          )}
+                        />
+                      )}
+                      onClick={noProp((e) => {
+                        e.preventDefault();
+                        handleFetchModels();
+                      })}
+                      tooltip="Fetch available models"
+                    />
+                  </Disabled>
                 }
                 onBlur={field.onBlur}
                 placeholder="Select a model"

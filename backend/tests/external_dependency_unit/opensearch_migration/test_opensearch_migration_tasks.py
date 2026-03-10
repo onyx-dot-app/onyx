@@ -17,6 +17,9 @@ from unittest.mock import patch
 import pytest
 from sqlalchemy.orm import Session
 
+from onyx.background.celery.tasks.opensearch_migration.constants import (
+    GET_VESPA_CHUNKS_SLICE_COUNT,
+)
 from onyx.background.celery.tasks.opensearch_migration.tasks import (
     is_continuation_token_done_for_all_slices,
 )
@@ -322,9 +325,15 @@ def test_embedding_dimension(db_session: Session) -> Generator[int, None, None]:
 @pytest.fixture(scope="function")
 def patch_get_vespa_chunks_page_size() -> Generator[int, None, None]:
     test_page_size = 5
-    with patch(
-        "onyx.background.celery.tasks.opensearch_migration.tasks.GET_VESPA_CHUNKS_PAGE_SIZE",
-        test_page_size,
+    with (
+        patch(
+            "onyx.background.celery.tasks.opensearch_migration.tasks.GET_VESPA_CHUNKS_PAGE_SIZE",
+            test_page_size,
+        ),
+        patch(
+            "onyx.background.celery.tasks.opensearch_migration.constants.GET_VESPA_CHUNKS_PAGE_SIZE",
+            test_page_size,
+        ),
     ):
         yield test_page_size  # Test runs here.
 
@@ -562,6 +571,175 @@ class TestMigrateChunksFromVespaToOpenSearchTask:
         tenant_record = db_session.query(OpenSearchTenantMigrationRecord).first()
         assert tenant_record is not None
         assert tenant_record.total_chunks_migrated > partial_chunks_migrated
+        assert tenant_record.total_chunks_migrated == len(all_chunks)
+        # Visit is complete so continuation token should be None.
+        assert tenant_record.vespa_visit_continuation_token is not None
+        assert is_continuation_token_done_for_all_slices(
+            json.loads(tenant_record.vespa_visit_continuation_token)
+        )
+        assert tenant_record.migration_completed_at is not None
+        assert tenant_record.approx_chunk_count_in_vespa == len(all_chunks)
+
+        # Verify chunks were indexed in OpenSearch.
+        for document in test_documents:
+            opensearch_chunks = _get_document_chunks_from_opensearch(
+                opensearch_client, document.id, get_current_tenant_id()
+            )
+            assert len(opensearch_chunks) == CHUNK_COUNT
+            opensearch_chunks.sort(key=lambda x: x.chunk_index)
+            for opensearch_chunk in opensearch_chunks:
+                _assert_chunk_matches_vespa_chunk(
+                    opensearch_chunk,
+                    document_chunks[document.id][opensearch_chunk.chunk_index],
+                )
+
+    def test_chunk_migration_visits_all_chunks_even_when_batch_size_varies(
+        self,
+        db_session: Session,
+        test_documents: list[Document],
+        vespa_document_index: VespaDocumentIndex,
+        opensearch_client: OpenSearchIndexClient,
+        test_embedding_dimension: int,
+        clean_migration_tables: None,  # noqa: ARG002
+        enable_opensearch_indexing_for_onyx: None,  # noqa: ARG002
+    ) -> None:
+        """
+        Tests that chunk migration works correctly even when the batch size
+        changes halfway through a migration.
+
+        Simulates task time running out my mocking the locking behavior.
+        """
+        # Precondition.
+        # Index chunks into Vespa.
+        document_chunks: dict[str, list[dict[str, Any]]] = {
+            document.id: [
+                _create_raw_document_chunk(
+                    document_id=document.id,
+                    chunk_index=i,
+                    content=f"Test content {i} for {document.id}",
+                    embedding=_generate_test_vector(test_embedding_dimension),
+                    now=datetime.now(),
+                    title=f"Test title {document.id}",
+                    title_embedding=_generate_test_vector(test_embedding_dimension),
+                )
+                for i in range(CHUNK_COUNT)
+            ]
+            for document in test_documents
+        }
+        all_chunks: list[dict[str, Any]] = []
+        for chunks in document_chunks.values():
+            all_chunks.extend(chunks)
+        vespa_document_index.index_raw_chunks(all_chunks)
+
+        # Run the initial batch. To simulate partial progress we will mock the
+        # redis lock to return True for the first invocation of .owned() and
+        # False subsequently.
+        # NOTE: The batch size is currently set to 5 in
+        # patch_get_vespa_chunks_page_size.
+        mock_redis_client = Mock()
+        mock_lock = Mock()
+        mock_lock.owned.side_effect = [True, False, False]
+        mock_lock.acquire.return_value = True
+        mock_redis_client.lock.return_value = mock_lock
+        with patch(
+            "onyx.background.celery.tasks.opensearch_migration.tasks.get_redis_client",
+            return_value=mock_redis_client,
+        ):
+            result_1 = migrate_chunks_from_vespa_to_opensearch_task(
+                tenant_id=get_current_tenant_id()
+            )
+
+        assert result_1 is True
+        # Expire the session cache to see the committed changes from the task.
+        db_session.expire_all()
+
+        # Verify partial progress was saved.
+        tenant_record = db_session.query(OpenSearchTenantMigrationRecord).first()
+        assert tenant_record is not None
+        partial_chunks_migrated = tenant_record.total_chunks_migrated
+        assert partial_chunks_migrated > 0
+        # page_size applies per slice, so one iteration can fetch up to
+        # page_size * GET_VESPA_CHUNKS_SLICE_COUNT chunks total.
+        assert partial_chunks_migrated <= 5 * GET_VESPA_CHUNKS_SLICE_COUNT
+        assert tenant_record.vespa_visit_continuation_token is not None
+        # Slices are not necessarily evenly distributed across all document
+        # chunks so we can't test that every token is non-None, but certainly at
+        # least one must be.
+        assert any(json.loads(tenant_record.vespa_visit_continuation_token).values())
+        assert tenant_record.migration_completed_at is None
+        assert tenant_record.approx_chunk_count_in_vespa is not None
+
+        # Under test.
+        # Now patch the batch size to be some other number, like 2.
+        mock_redis_client = Mock()
+        mock_lock = Mock()
+        mock_lock.owned.side_effect = [True, False, False]
+        mock_lock.acquire.return_value = True
+        mock_redis_client.lock.return_value = mock_lock
+        with (
+            patch(
+                "onyx.background.celery.tasks.opensearch_migration.tasks.GET_VESPA_CHUNKS_PAGE_SIZE",
+                2,
+            ),
+            patch(
+                "onyx.background.celery.tasks.opensearch_migration.constants.GET_VESPA_CHUNKS_PAGE_SIZE",
+                2,
+            ),
+            patch(
+                "onyx.background.celery.tasks.opensearch_migration.tasks.get_redis_client",
+                return_value=mock_redis_client,
+            ),
+        ):
+            result_2 = migrate_chunks_from_vespa_to_opensearch_task(
+                tenant_id=get_current_tenant_id()
+            )
+
+        # Postcondition.
+        assert result_2 is True
+        # Expire the session cache to see the committed changes from the task.
+        db_session.expire_all()
+
+        # Verify next partial progress was saved.
+        tenant_record = db_session.query(OpenSearchTenantMigrationRecord).first()
+        assert tenant_record is not None
+        new_partial_chunks_migrated = tenant_record.total_chunks_migrated
+        assert new_partial_chunks_migrated > partial_chunks_migrated
+        # page_size applies per slice, so one iteration can fetch up to
+        # page_size * GET_VESPA_CHUNKS_SLICE_COUNT chunks total.
+        assert new_partial_chunks_migrated <= (5 + 2) * GET_VESPA_CHUNKS_SLICE_COUNT
+        assert tenant_record.vespa_visit_continuation_token is not None
+        # Slices are not necessarily evenly distributed across all document
+        # chunks so we can't test that every token is non-None, but certainly at
+        # least one must be.
+        assert any(json.loads(tenant_record.vespa_visit_continuation_token).values())
+        assert tenant_record.migration_completed_at is None
+        assert tenant_record.approx_chunk_count_in_vespa is not None
+
+        # Under test.
+        # Run the remainder of the migration.
+        with (
+            patch(
+                "onyx.background.celery.tasks.opensearch_migration.tasks.GET_VESPA_CHUNKS_PAGE_SIZE",
+                2,
+            ),
+            patch(
+                "onyx.background.celery.tasks.opensearch_migration.constants.GET_VESPA_CHUNKS_PAGE_SIZE",
+                2,
+            ),
+        ):
+            result_3 = migrate_chunks_from_vespa_to_opensearch_task(
+                tenant_id=get_current_tenant_id()
+            )
+
+        # Postcondition.
+        assert result_3 is True
+        # Expire the session cache to see the committed changes from the task.
+        db_session.expire_all()
+
+        # Verify completion.
+        tenant_record = db_session.query(OpenSearchTenantMigrationRecord).first()
+        assert tenant_record is not None
+        assert tenant_record.total_chunks_migrated > new_partial_chunks_migrated
         assert tenant_record.total_chunks_migrated == len(all_chunks)
         # Visit is complete so continuation token should be None.
         assert tenant_record.vespa_visit_continuation_token is not None

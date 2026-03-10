@@ -376,3 +376,8 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
                     rich_response=None,
                     llm_facing_response=llm_response,
                 )
+
+    @classmethod
+    @override
+    def should_emit_argument_deltas(cls) -> bool:
+        return True

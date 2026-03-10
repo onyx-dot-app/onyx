@@ -16,6 +16,7 @@ Cache Strategy:
   using only the SOURCE-type node as the ancestor
 """
 
+from typing import cast
 from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
@@ -202,6 +203,30 @@ def cache_hierarchy_nodes_batch(
 
     redis_client.expire(cache_key, HIERARCHY_CACHE_TTL_SECONDS)
     redis_client.expire(raw_id_key, HIERARCHY_CACHE_TTL_SECONDS)
+
+
+def evict_hierarchy_nodes_from_cache(
+    redis_client: Redis,
+    source: DocumentSource,
+    raw_node_ids: list[str],
+) -> None:
+    """Remove specific hierarchy nodes from the Redis cache.
+
+    Deletes entries from both the parent-chain hash and the raw_id→node_id hash.
+    """
+    if not raw_node_ids:
+        return
+
+    cache_key = _cache_key(source)
+    raw_id_key = _raw_id_cache_key(source)
+
+    # Look up node_ids so we can remove them from the parent-chain hash
+    raw_values = cast(list[str | None], redis_client.hmget(raw_id_key, raw_node_ids))
+    node_id_strs = [v for v in raw_values if v is not None]
+
+    if node_id_strs:
+        redis_client.hdel(cache_key, *node_id_strs)
+    redis_client.hdel(raw_id_key, *raw_node_ids)
 
 
 def get_node_id_from_raw_id(

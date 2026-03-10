@@ -15,7 +15,7 @@ import {
   getOnboardingForm,
   getProviderDisplayInfo,
 } from "../forms/getOnboardingForm";
-import { Disabled } from "@/refresh-components/Disabled";
+import { Disabled } from "@opal/core";
 import { ProviderIcon } from "@/app/admin/configuration/llm/ProviderIcon";
 import { SvgCheckCircle, SvgCpu, SvgExternalLink } from "@opal/icons";
 import { ContentAction } from "@opal/layouts";
@@ -137,14 +137,15 @@ const LLMStepInner = ({
             variant="section"
             paddingVariant="lg"
             rightChildren={
-              <Button
-                prominence="tertiary"
-                rightIcon={SvgExternalLink}
-                disabled={disabled}
-                href="/admin/configuration/llm"
-              >
-                View in Admin Panel
-              </Button>
+              <Disabled disabled={disabled}>
+                <Button
+                  prominence="tertiary"
+                  rightIcon={SvgExternalLink}
+                  href="/admin/configuration/llm"
+                >
+                  View in Admin Panel
+                </Button>
+              </Disabled>
             }
           />
           <Separator />

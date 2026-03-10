@@ -1,7 +1,6 @@
 /**
  * Shared test helpers and mocks for onboarding form tests
  */
-import React from "react";
 
 // Mock Element.prototype.scrollIntoView for JSDOM (not implemented in jsdom)
 Element.prototype.scrollIntoView = jest.fn();
@@ -161,11 +160,6 @@ export async function waitForModalOpen(screen: any, waitFor: any) {
 /**
  * Common provider descriptors for testing
  */
-/**
- * The curated list of OpenAI visible models that are returned by
- * /api/admin/llm/built-in/options. This must match OPENAI_VISIBLE_MODEL_NAMES
- * in backend/onyx/llm/llm_provider_options.py
- */
 export const OPENAI_DEFAULT_VISIBLE_MODELS = [
   {
     name: "gpt-5.2",
@@ -211,11 +205,6 @@ export const OPENAI_DEFAULT_VISIBLE_MODELS = [
   },
 ];
 
-/**
- * The curated list of Anthropic visible models that are returned by
- * /api/admin/llm/built-in/options. This must match ANTHROPIC_VISIBLE_MODEL_NAMES
- * in backend/onyx/llm/llm_provider_options.py
- */
 export const ANTHROPIC_DEFAULT_VISIBLE_MODELS = [
   {
     name: "claude-opus-4-5",
@@ -240,11 +229,6 @@ export const ANTHROPIC_DEFAULT_VISIBLE_MODELS = [
   },
 ];
 
-/**
- * The curated list of Vertex AI visible models that are returned by
- * /api/admin/llm/built-in/options. This must match VERTEXAI_VISIBLE_MODEL_NAMES
- * in backend/onyx/llm/llm_provider_options.py
- */
 export const VERTEXAI_DEFAULT_VISIBLE_MODELS = [
   {
     name: "gemini-2.5-flash",

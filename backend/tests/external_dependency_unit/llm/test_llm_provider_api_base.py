@@ -111,7 +111,7 @@ class TestLLMProviderChanges:
 
                 assert exc_info.value.error_code == OnyxErrorCode.VALIDATION_ERROR
                 assert "cannot be changed without changing the API key" in str(
-                    exc_info.value.message
+                    exc_info.value.detail
                 )
         finally:
             _cleanup_provider(db_session, provider_name)
@@ -247,7 +247,7 @@ class TestLLMProviderChanges:
 
                 assert exc_info.value.error_code == OnyxErrorCode.VALIDATION_ERROR
                 assert "cannot be changed without changing the API key" in str(
-                    exc_info.value.message
+                    exc_info.value.detail
                 )
         finally:
             _cleanup_provider(db_session, provider_name)
@@ -350,7 +350,7 @@ class TestLLMProviderChanges:
 
                 assert exc_info.value.error_code == OnyxErrorCode.VALIDATION_ERROR
                 assert "cannot be changed without changing the API key" in str(
-                    exc_info.value.message
+                    exc_info.value.detail
                 )
         finally:
             _cleanup_provider(db_session, provider_name)
@@ -386,7 +386,7 @@ class TestLLMProviderChanges:
 
                 assert exc_info.value.error_code == OnyxErrorCode.VALIDATION_ERROR
                 assert "cannot be changed without changing the API key" in str(
-                    exc_info.value.message
+                    exc_info.value.detail
                 )
         finally:
             _cleanup_provider(db_session, provider_name)

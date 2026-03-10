@@ -3,7 +3,7 @@
 Raise ``OnyxError`` instead of ``HTTPException`` in business code.  A global
 FastAPI exception handler (registered via ``register_onyx_exception_handlers``)
 converts it into a JSON response with the standard
-``{"error_code": "...", "message": "..."}`` shape.
+``{"error_code": "...", "detail": "..."}`` shape.
 
 Usage::
 
@@ -37,21 +37,22 @@ class OnyxError(Exception):
 
     Attributes:
         error_code: The ``OnyxErrorCode`` enum member.
-        message: Human-readable message (defaults to the error code string).
+        detail: Human-readable detail (defaults to the error code string).
         status_code: HTTP status — either overridden or from the error code.
     """
 
     def __init__(
         self,
         error_code: OnyxErrorCode,
-        message: str | None = None,
+        detail: str | None = None,
         *,
         status_code_override: int | None = None,
     ) -> None:
+        resolved_detail = detail or error_code.code
+        super().__init__(resolved_detail)
         self.error_code = error_code
-        self.message = message or error_code.code
+        self.detail = resolved_detail
         self._status_code_override = status_code_override
-        super().__init__(self.message)
 
     @property
     def status_code(self) -> int:
@@ -72,11 +73,11 @@ def register_onyx_exception_handlers(app: FastAPI) -> None:
     ) -> JSONResponse:
         status_code = exc.status_code
         if status_code >= 500:
-            logger.error(f"OnyxError {exc.error_code.code}: {exc.message}")
+            logger.error(f"OnyxError {exc.error_code.code}: {exc.detail}")
         elif status_code >= 400:
-            logger.warning(f"OnyxError {exc.error_code.code}: {exc.message}")
+            logger.warning(f"OnyxError {exc.error_code.code}: {exc.detail}")
 
         return JSONResponse(
             status_code=status_code,
-            content=exc.error_code.detail(exc.message),
+            content=exc.error_code.detail(exc.detail),
         )

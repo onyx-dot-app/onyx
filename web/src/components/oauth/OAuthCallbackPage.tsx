@@ -162,12 +162,19 @@ export default function OAuthCallbackPage({ config }: OAuthCallbackPageProps) {
 
         setServiceName(result.serviceName || "");
         // Respect backend-provided redirect path (from state.return_path)
-        setRedirectPath(
+        // Sanitize to prevent open redirects (e.g. "//evil.com")
+        const rawPath =
           responseData.redirect_url ||
-            searchParams?.get("return_path") ||
-            config.defaultRedirectPath ||
-            "/app"
-        );
+          searchParams?.get("return_path") ||
+          config.defaultRedirectPath ||
+          "/app";
+        const sanitizedPath =
+          rawPath.startsWith("http://") || rawPath.startsWith("https://")
+            ? "/app"
+            : "/" + rawPath.replace(/^\/+/, "");
+        const redirectUrl = new URL(sanitizedPath, window.location.origin);
+        redirectUrl.searchParams.set("message", "oauth_connected");
+        setRedirectPath(redirectUrl.pathname + redirectUrl.search);
         setStatusMessage(config.successMessage || "Success!");
 
         const successDetails = config.successDetailsTemplate

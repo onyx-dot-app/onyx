@@ -18,6 +18,10 @@ variable "INTEGRATION_REPOSITORY" {
   default = "onyxdotapp/onyx-integration"
 }
 
+variable "CLI_REPOSITORY" {
+  default = "onyxdotapp/onyx-cli"
+}
+
 variable "TAG" {
   default = "latest"
 }
@@ -63,4 +67,14 @@ target "integration" {
   }
 
   tags      = ["${INTEGRATION_REPOSITORY}:${TAG}"]
+}
+
+target "cli" {
+  context    = "cli"
+  dockerfile = "Dockerfile"
+
+  cache-from = ["type=registry,ref=${CLI_REPOSITORY}:latest"]
+  cache-to   = ["type=inline"]
+
+  tags      = ["${CLI_REPOSITORY}:${TAG}"]
 }

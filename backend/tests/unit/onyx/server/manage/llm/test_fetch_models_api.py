@@ -10,6 +10,8 @@ from unittest.mock import patch
 
 import pytest
 
+from onyx.server.manage.llm.models import LMStudioFinalModelResponse
+from onyx.server.manage.llm.models import LMStudioModelsRequest
 from onyx.server.manage.llm.models import OllamaFinalModelResponse
 from onyx.server.manage.llm.models import OllamaModelsRequest
 from onyx.server.manage.llm.models import OpenRouterFinalModelResponse
@@ -317,3 +319,298 @@ class TestGetOpenRouterAvailableModels:
             # No DB operations should happen
             mock_session.execute.assert_not_called()
             mock_session.commit.assert_not_called()
+
+
+class TestGetLMStudioAvailableModels:
+    """Tests for the LM Studio model fetch endpoint."""
+
+    @pytest.fixture
+    def mock_lm_studio_response(self) -> dict:
+        """Mock response from LM Studio /api/v1/models endpoint."""
+        return {
+            "models": [
+                {
+                    "key": "lmstudio-community/Meta-Llama-3-8B",
+                    "type": "llm",
+                    "display_name": "Meta Llama 3 8B",
+                    "max_context_length": 8192,
+                    "capabilities": {"vision": False},
+                },
+                {
+                    "key": "lmstudio-community/Qwen2.5-VL-7B",
+                    "type": "llm",
+                    "display_name": "Qwen 2.5 VL 7B",
+                    "max_context_length": 32768,
+                    "capabilities": {"vision": True},
+                },
+                {
+                    "key": "text-embedding-nomic-embed-text-v1.5",
+                    "type": "embedding",
+                    "display_name": "Nomic Embed Text v1.5",
+                    "max_context_length": 2048,
+                    "capabilities": {},
+                },
+                {
+                    "key": "lmstudio-community/DeepSeek-R1-8B",
+                    "type": "llm",
+                    "display_name": "DeepSeek R1 8B",
+                    "max_context_length": 65536,
+                    "capabilities": {"vision": False},
+                },
+            ]
+        }
+
+    def test_returns_model_list(self, mock_lm_studio_response: dict) -> None:
+        """Test that endpoint returns properly formatted LLM-only model list."""
+        from onyx.server.manage.llm.api import get_lm_studio_available_models
+
+        mock_session = MagicMock()
+
+        with patch("onyx.server.manage.llm.api.httpx") as mock_httpx:
+            mock_response = MagicMock()
+            mock_response.json.return_value = mock_lm_studio_response
+            mock_response.raise_for_status = MagicMock()
+            mock_httpx.get.return_value = mock_response
+
+            request = LMStudioModelsRequest(api_base="http://localhost:1234")
+            results = get_lm_studio_available_models(request, MagicMock(), mock_session)
+
+            # Only LLM-type models should be returned (embedding filtered out)
+            assert len(results) == 3
+            assert all(isinstance(r, LMStudioFinalModelResponse) for r in results)
+            names = [r.name for r in results]
+            assert "text-embedding-nomic-embed-text-v1.5" not in names
+            # Results should be alphabetically sorted by model name
+            assert names == sorted(names, key=str.lower)
+
+    def test_infers_vision_support(self, mock_lm_studio_response: dict) -> None:
+        """Test that vision support is correctly read from capabilities."""
+        from onyx.server.manage.llm.api import get_lm_studio_available_models
+
+        mock_session = MagicMock()
+
+        with patch("onyx.server.manage.llm.api.httpx") as mock_httpx:
+            mock_response = MagicMock()
+            mock_response.json.return_value = mock_lm_studio_response
+            mock_response.raise_for_status = MagicMock()
+            mock_httpx.get.return_value = mock_response
+
+            request = LMStudioModelsRequest(api_base="http://localhost:1234")
+            results = get_lm_studio_available_models(request, MagicMock(), mock_session)
+
+            qwen = next(r for r in results if "Qwen" in r.display_name)
+            llama = next(r for r in results if "Llama" in r.display_name)
+
+            assert qwen.supports_image_input is True
+            assert llama.supports_image_input is False
+
+    def test_infers_reasoning_from_model_name(self) -> None:
+        """Test that reasoning is inferred from model name when not in capabilities."""
+        from onyx.server.manage.llm.api import get_lm_studio_available_models
+
+        mock_session = MagicMock()
+        response = {
+            "models": [
+                {
+                    "key": "lmstudio-community/DeepSeek-R1-8B",
+                    "type": "llm",
+                    "display_name": "DeepSeek R1 8B",
+                    "max_context_length": 65536,
+                    "capabilities": {},
+                },
+                {
+                    "key": "lmstudio-community/Meta-Llama-3-8B",
+                    "type": "llm",
+                    "display_name": "Meta Llama 3 8B",
+                    "max_context_length": 8192,
+                    "capabilities": {},
+                },
+            ]
+        }
+
+        with patch("onyx.server.manage.llm.api.httpx") as mock_httpx:
+            mock_response = MagicMock()
+            mock_response.json.return_value = response
+            mock_response.raise_for_status = MagicMock()
+            mock_httpx.get.return_value = mock_response
+
+            request = LMStudioModelsRequest(api_base="http://localhost:1234")
+            results = get_lm_studio_available_models(request, MagicMock(), mock_session)
+
+            deepseek = next(r for r in results if "DeepSeek" in r.display_name)
+            llama = next(r for r in results if "Llama" in r.display_name)
+
+            assert deepseek.supports_reasoning is True
+            assert llama.supports_reasoning is False
+
+    def test_uses_display_name_from_api(self, mock_lm_studio_response: dict) -> None:
+        """Test that display_name from the API is used directly."""
+        from onyx.server.manage.llm.api import get_lm_studio_available_models
+
+        mock_session = MagicMock()
+
+        with patch("onyx.server.manage.llm.api.httpx") as mock_httpx:
+            mock_response = MagicMock()
+            mock_response.json.return_value = mock_lm_studio_response
+            mock_response.raise_for_status = MagicMock()
+            mock_httpx.get.return_value = mock_response
+
+            request = LMStudioModelsRequest(api_base="http://localhost:1234")
+            results = get_lm_studio_available_models(request, MagicMock(), mock_session)
+
+            llama = next(r for r in results if "Llama" in r.name)
+            assert llama.display_name == "Meta Llama 3 8B"
+            assert llama.max_input_tokens == 8192
+
+    def test_strips_trailing_v1_from_api_base(self) -> None:
+        """Test that /v1 suffix is stripped before building the native API URL."""
+        from onyx.server.manage.llm.api import get_lm_studio_available_models
+
+        mock_session = MagicMock()
+        response = {
+            "models": [
+                {
+                    "key": "test-model",
+                    "type": "llm",
+                    "display_name": "Test",
+                    "max_context_length": 4096,
+                    "capabilities": {},
+                },
+            ]
+        }
+
+        with patch("onyx.server.manage.llm.api.httpx") as mock_httpx:
+            mock_response = MagicMock()
+            mock_response.json.return_value = response
+            mock_response.raise_for_status = MagicMock()
+            mock_httpx.get.return_value = mock_response
+
+            request = LMStudioModelsRequest(api_base="http://localhost:1234/v1")
+            get_lm_studio_available_models(request, MagicMock(), mock_session)
+
+            # Should hit /api/v1/models, not /v1/api/v1/models
+            mock_httpx.get.assert_called_once()
+            called_url = mock_httpx.get.call_args[0][0]
+            assert called_url == "http://localhost:1234/api/v1/models"
+
+    def test_falls_back_to_stored_api_key(self) -> None:
+        """Test that stored API key is used when api_key_changed is False."""
+        from onyx.server.manage.llm.api import get_lm_studio_available_models
+
+        mock_session = MagicMock()
+        mock_provider = MagicMock()
+        mock_provider.custom_config = {"LM_STUDIO_API_KEY": "stored-secret"}
+
+        response = {
+            "models": [
+                {
+                    "key": "test-model",
+                    "type": "llm",
+                    "display_name": "Test",
+                    "max_context_length": 4096,
+                    "capabilities": {},
+                },
+            ]
+        }
+
+        with (
+            patch("onyx.server.manage.llm.api.httpx") as mock_httpx,
+            patch(
+                "onyx.server.manage.llm.api.fetch_existing_llm_provider",
+                return_value=mock_provider,
+            ),
+        ):
+            mock_response = MagicMock()
+            mock_response.json.return_value = response
+            mock_response.raise_for_status = MagicMock()
+            mock_httpx.get.return_value = mock_response
+
+            request = LMStudioModelsRequest(
+                api_base="http://localhost:1234",
+                api_key="masked-value",
+                api_key_changed=False,
+                provider_name="my-lm-studio",
+            )
+            get_lm_studio_available_models(request, MagicMock(), mock_session)
+
+            headers = mock_httpx.get.call_args[1]["headers"]
+            assert headers["Authorization"] == "Bearer stored-secret"
+
+    def test_uses_submitted_api_key_when_changed(self) -> None:
+        """Test that submitted API key is used when api_key_changed is True."""
+        from onyx.server.manage.llm.api import get_lm_studio_available_models
+
+        mock_session = MagicMock()
+        response = {
+            "models": [
+                {
+                    "key": "test-model",
+                    "type": "llm",
+                    "display_name": "Test",
+                    "max_context_length": 4096,
+                    "capabilities": {},
+                },
+            ]
+        }
+
+        with patch("onyx.server.manage.llm.api.httpx") as mock_httpx:
+            mock_response = MagicMock()
+            mock_response.json.return_value = response
+            mock_response.raise_for_status = MagicMock()
+            mock_httpx.get.return_value = mock_response
+
+            request = LMStudioModelsRequest(
+                api_base="http://localhost:1234",
+                api_key="new-secret",
+                api_key_changed=True,
+                provider_name="my-lm-studio",
+            )
+            get_lm_studio_available_models(request, MagicMock(), mock_session)
+
+            headers = mock_httpx.get.call_args[1]["headers"]
+            assert headers["Authorization"] == "Bearer new-secret"
+
+    def test_raises_on_empty_models(self) -> None:
+        """Test that an error is raised when no models are returned."""
+        from onyx.error_handling.exceptions import OnyxError
+        from onyx.server.manage.llm.api import get_lm_studio_available_models
+
+        mock_session = MagicMock()
+
+        with patch("onyx.server.manage.llm.api.httpx") as mock_httpx:
+            mock_response = MagicMock()
+            mock_response.json.return_value = {"models": []}
+            mock_response.raise_for_status = MagicMock()
+            mock_httpx.get.return_value = mock_response
+
+            request = LMStudioModelsRequest(api_base="http://localhost:1234")
+            with pytest.raises(OnyxError):
+                get_lm_studio_available_models(request, MagicMock(), mock_session)
+
+    def test_raises_on_only_non_llm_models(self) -> None:
+        """Test that an error is raised when all models are non-LLM type."""
+        from onyx.error_handling.exceptions import OnyxError
+        from onyx.server.manage.llm.api import get_lm_studio_available_models
+
+        mock_session = MagicMock()
+        response = {
+            "models": [
+                {
+                    "key": "embedding-model",
+                    "type": "embedding",
+                    "display_name": "Embedding",
+                    "max_context_length": 2048,
+                    "capabilities": {},
+                },
+            ]
+        }
+
+        with patch("onyx.server.manage.llm.api.httpx") as mock_httpx:
+            mock_response = MagicMock()
+            mock_response.json.return_value = response
+            mock_response.raise_for_status = MagicMock()
+            mock_httpx.get.return_value = mock_response
+
+            request = LMStudioModelsRequest(api_base="http://localhost:1234")
+            with pytest.raises(OnyxError):
+                get_lm_studio_available_models(request, MagicMock(), mock_session)

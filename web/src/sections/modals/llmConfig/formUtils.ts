@@ -7,9 +7,11 @@ import {
   LLM_ADMIN_URL,
   LLM_PROVIDERS_ADMIN_URL,
 } from "@/lib/llmConfig/constants";
+import { refreshLlmProviderCaches } from "@/lib/llmConfig/cache";
 import { toast } from "@/hooks/useToast";
 import * as Yup from "yup";
 import isEqual from "lodash/isEqual";
+import { ScopedMutator } from "swr";
 
 // Common class names for the Form component across all LLM provider forms
 export const LLM_FORM_CLASS_NAME = "flex flex-col gap-y-4 items-stretch mt-6";
@@ -105,7 +107,7 @@ export interface SubmitLLMProviderParams<
   hideSuccess?: boolean;
   setIsTesting: (testing: boolean) => void;
   setTestError: (error: string) => void;
-  mutate: (key: string) => void;
+  mutate: ScopedMutator;
   onClose: () => void;
   setSubmitting: (submitting: boolean) => void;
 }
@@ -287,7 +289,7 @@ export const submitLLMProvider = async <T extends BaseLLMFormValues>({
     }
   }
 
-  mutate(LLM_PROVIDERS_ADMIN_URL);
+  await refreshLlmProviderCaches(mutate);
   onClose();
 
   if (!hideSuccess) {

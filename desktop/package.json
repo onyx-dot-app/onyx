@@ -9,10 +9,10 @@
     "build:dmg": "tauri build --target universal-apple-darwin",
     "build:linux": "tauri build --bundles deb,rpm"
   },
-  "devDependencies": {
-    "@tauri-apps/cli": "^2.0.0"
-  },
   "dependencies": {
-    "@tauri-apps/api": "^2.0.0"
+    "@tauri-apps/api": "^2.10.1"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.10.1"
   }
 }

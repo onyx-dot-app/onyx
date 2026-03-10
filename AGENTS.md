@@ -104,6 +104,10 @@ Onyx uses Celery for asynchronous task processing with multiple specialized work
 
 - Always use `@shared_task` rather than `@celery_app`
 - Put tasks under `background/celery/tasks/` or `ee/background/celery/tasks`
+- Never enqueue a task without an expiration. Always supply `expires=` when
+  sending tasks, either from the beat schedule or directly from another task. It
+  should never be acceptable to submit code which enqueues tasks without an
+  expiration, as doing so can lead to unbounded task queue growth.
 
 **Defining APIs**:
 When creating new FastAPI APIs, do NOT use the `response_model` field. Instead, just type the
@@ -540,6 +544,8 @@ To run them:
 npx playwright test <TEST_NAME>
 ```
 
+For shared fixtures, best practices, and detailed guidance, see `backend/tests/README.md`.
+
 ## Logs
 
 When (1) writing integration tests or (2) doing live tests (e.g. curl / playwright) you can get access
@@ -592,7 +598,7 @@ Before writing your plan, make sure to do research. Explore the relevant section
 Never hardcode status codes or use `starlette.status` / `fastapi.status` constants directly.**
 
 A global FastAPI exception handler converts `OnyxError` into a JSON response with the standard
-`{"error_code": "...", "message": "..."}` shape. This eliminates boilerplate and keeps error
+`{"error_code": "...", "detail": "..."}` shape. This eliminates boilerplate and keeps error
 handling consistent across the entire backend.
 
 ```python

@@ -55,7 +55,7 @@ export default function SearchCard({
   );
 
   return (
-    <Interactive.Base onClick={handleClick} prominence="secondary">
+    <Interactive.Stateless onClick={handleClick} prominence="secondary">
       <Interactive.Container heightVariant="fit">
         <Section alignItems="start" gap={0} padding={0.25}>
           {/* Title Row */}
@@ -107,6 +107,6 @@ export default function SearchCard({
           </div>
         </Section>
       </Interactive.Container>
-    </Interactive.Base>
+    </Interactive.Stateless>
   );
 }

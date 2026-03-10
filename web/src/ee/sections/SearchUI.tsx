@@ -198,16 +198,15 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
   const showEmpty = !error && results.length === 0;
 
   return (
-    <>
-      <div
-        className="flex-1 min-h-0 w-full grid gap-x-4"
-        style={{
-          gridTemplateColumns: showEmpty ? "1fr" : "3fr 1fr",
-          gridTemplateRows: "auto 1fr auto",
-        }}
-      >
-        {/* Top-left: Search filters */}
-        <div className="row-start-1 col-start-1 flex flex-col justify-end gap-3">
+    <div className="flex-1 min-h-0 w-full flex flex-col gap-3">
+      {/* ── Top row: Filters + Result count ── */}
+      <div className="flex-shrink-0 flex flex-row gap-x-4">
+        <div
+          className={cn(
+            "flex flex-col justify-end gap-3",
+            showEmpty ? "flex-1" : "flex-[3]"
+          )}
+        >
           <div className="flex flex-row gap-2">
             {/* Time filter */}
             <Popover open={timeFilterOpen} onOpenChange={setTimeFilterOpen}>
@@ -307,9 +306,8 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
           <Separator noPadding />
         </div>
 
-        {/* Top-right: Number of results */}
         {!showEmpty && (
-          <div className="row-start-1 col-start-2 flex flex-col justify-end gap-3">
+          <div className="flex-1 flex flex-col justify-end gap-3">
             <Section alignItems="start">
               <Text text03 mainUiMuted>
                 {results.length} Results
@@ -319,12 +317,14 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
             <Separator noPadding />
           </div>
         )}
+      </div>
 
-        {/* Bottom-left: Search results */}
+      {/* ── Middle row: Results + Source filter ── */}
+      <div className="flex-1 min-h-0 flex flex-row gap-x-4">
         <div
           className={cn(
-            "row-start-2 col-start-1 min-h-0 overflow-y-scroll py-3 flex flex-col gap-2",
-            showEmpty && "justify-center"
+            "min-h-0 overflow-y-scroll flex flex-col gap-2",
+            showEmpty ? "flex-1 justify-center" : "flex-[3]"
           )}
         >
           {error ? (
@@ -332,12 +332,16 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
           ) : paginatedResults.length > 0 ? (
             <>
               {paginatedResults.map((doc) => (
-                <SearchCard
+                <div
                   key={`${doc.document_id}-${doc.chunk_ind}`}
-                  document={doc}
-                  isLlmSelected={llmSelectedSet.has(doc.document_id)}
-                  onDocumentClick={onDocumentClick}
-                />
+                  className="flex-shrink-0"
+                >
+                  <SearchCard
+                    document={doc}
+                    isLlmSelected={llmSelectedSet.has(doc.document_id)}
+                    onDocumentClick={onDocumentClick}
+                  />
+                </div>
               ))}
             </>
           ) : (
@@ -349,20 +353,8 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
           )}
         </div>
 
-        {/* Pagination */}
         {!showEmpty && (
-          <div className="row-start-3 col-start-1 col-span-2 pt-3">
-            <Pagination
-              currentPage={currentPage}
-              totalPages={totalPages}
-              onPageChange={setCurrentPage}
-            />
-          </div>
-        )}
-
-        {/* Bottom-right: Source filter */}
-        {!showEmpty && (
-          <div className="row-start-2 col-start-2 min-h-0 overflow-y-auto flex flex-col gap-4 px-1 py-3">
+          <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-4 px-1">
             <Section gap={0.25} height="fit">
               {sourcesWithMeta.map(({ source, meta, count }) => (
                 <LineItem
@@ -386,6 +378,15 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
           </div>
         )}
       </div>
-    </>
+
+      {/* ── Bottom row: Pagination ── */}
+      {!showEmpty && (
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={setCurrentPage}
+        />
+      )}
+    </div>
   );
 }
