@@ -20,7 +20,7 @@ async function deleteAllProviders(client: OnyxApiClient): Promise<void> {
   const providers = await client.listLlmProviders();
   for (const provider of providers) {
     try {
-      await client.deleteProvider(provider.id);
+      await client.deleteProvider(provider.id, { force: true });
     } catch (error) {
       console.warn(
         `Failed to delete provider ${provider.id}: ${String(error)}`

@@ -18,15 +18,18 @@ import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import InputSelectField from "@/refresh-components/form/InputSelectField";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import {
-  SvgBubbleText,
   SvgAddLines,
   SvgActions,
   SvgExpand,
   SvgFold,
   SvgExternalLink,
 } from "@opal/icons";
+import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
 import { Content } from "@opal/layouts";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import {
+  useSettingsContext,
+  useVectorDbEnabled,
+} from "@/providers/SettingsProvider";
 import useCCPairs from "@/hooks/useCCPairs";
 import { getSourceMetadata } from "@/lib/sources";
 import EmptyMessage from "@/refresh-components/EmptyMessage";
@@ -49,11 +52,13 @@ import useOpenApiTools from "@/hooks/useOpenApiTools";
 import * as ExpandableCard from "@/layouts/expandable-card-layouts";
 import * as ActionsLayouts from "@/layouts/actions-layouts";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
-import Disabled from "@/refresh-components/Disabled";
+import { Disabled } from "@opal/core";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import useFilter from "@/hooks/useFilter";
 import { MCPServer } from "@/lib/tools/interfaces";
 import type { IconProps } from "@opal/types";
+
+const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.CHAT_PREFERENCES]!;
 
 interface DefaultAgentConfiguration {
   tool_ids: number[];
@@ -184,7 +189,7 @@ function ChatPreferencesForm() {
 
   // Tools availability
   const { tools: availableTools } = useAvailableTools();
-  const vectorDbEnabled = settings?.settings.vector_db_enabled !== false;
+  const vectorDbEnabled = useVectorDbEnabled();
   const searchTool = availableTools.find(
     (t) => t.in_code_tool_id === SEARCH_TOOL_ID
   );
@@ -323,8 +328,8 @@ function ChatPreferencesForm() {
     <>
       <SettingsLayouts.Root>
         <SettingsLayouts.Header
-          icon={SvgBubbleText}
-          title="Chat Preferences"
+          icon={route.icon}
+          title={route.title}
           description="Organization-wide chat settings and defaults. Users can override some of these in their personal settings."
           separator
         />

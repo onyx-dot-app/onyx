@@ -9,7 +9,8 @@ import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import Switch from "@/refresh-components/inputs/Switch";
 import CharacterCount from "@/refresh-components/CharacterCount";
 import InputImage from "@/refresh-components/inputs/InputImage";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import { useFormikContext } from "formik";
 import {
   forwardRef,
@@ -312,14 +313,15 @@ export const AppearanceThemeSettings = forwardRef<
             />
           </FormField.Control>
           <div className="mt-2 w-full justify-center items-center flex">
-            <Button
-              secondary
-              disabled={!hasLogo}
-              onClick={handleLogoEdit}
-              leftIcon={SvgEdit}
-            >
-              Update
-            </Button>
+            <Disabled disabled={!hasLogo}>
+              <Button
+                prominence="secondary"
+                onClick={handleLogoEdit}
+                icon={SvgEdit}
+              >
+                Update
+              </Button>
+            </Disabled>
           </div>
         </FormField>
       </div>

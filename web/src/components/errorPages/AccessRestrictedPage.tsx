@@ -3,7 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import ErrorPageLayout from "@/components/errorPages/ErrorPageLayout";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import InlineExternalLink from "@/refresh-components/InlineExternalLink";
 import { logout } from "@/lib/user";
 import { loadStripe } from "@stripe/stripe-js";
@@ -136,11 +137,13 @@ export default function AccessRestricted() {
           </Text>
 
           <div className="flex flex-row gap-2">
-            <Button onClick={handleResubscribe} disabled={isLoading}>
-              {isLoading ? "Loading..." : "Resubscribe"}
-            </Button>
+            <Disabled disabled={isLoading}>
+              <Button onClick={handleResubscribe}>
+                {isLoading ? "Loading..." : "Resubscribe"}
+              </Button>
+            </Disabled>
             <Button
-              secondary
+              prominence="secondary"
               onClick={async () => {
                 await logout();
                 window.location.reload();

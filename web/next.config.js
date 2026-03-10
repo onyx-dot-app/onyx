@@ -8,7 +8,8 @@ const cspHeader = `
     base-uri 'self';
     form-action 'self';
     ${
-      process.env.NEXT_PUBLIC_CLOUD_ENABLED === "true"
+      process.env.NEXT_PUBLIC_CLOUD_ENABLED === "true" &&
+      process.env.NODE_ENV !== "development"
         ? "upgrade-insecure-requests;"
         : ""
     }
@@ -78,6 +79,16 @@ const nextConfig = {
   },
   async rewrites() {
     return [
+      {
+        source: "/ph_ingest/static/:path*",
+        destination: "https://us-assets.i.posthog.com/static/:path*",
+      },
+      {
+        source: "/ph_ingest/:path*",
+        destination: `${
+          process.env.NEXT_PUBLIC_POSTHOG_HOST || "https://us.i.posthog.com"
+        }/:path*`,
+      },
       {
         source: "/api/docs/:path*", // catch /api/docs and /api/docs/...
         destination: `${

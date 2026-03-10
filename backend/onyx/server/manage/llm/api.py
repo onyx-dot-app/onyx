@@ -11,7 +11,6 @@ from botocore.exceptions import ClientError
 from botocore.exceptions import NoCredentialsError
 from fastapi import APIRouter
 from fastapi import Depends
-from fastapi import HTTPException
 from fastapi import Query
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
@@ -38,6 +37,8 @@ from onyx.db.llm import upsert_llm_provider
 from onyx.db.llm import validate_persona_ids_exist
 from onyx.db.models import User
 from onyx.db.persona import user_can_access_persona
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.factory import get_default_llm
 from onyx.llm.factory import get_llm
 from onyx.llm.factory import get_max_input_tokens_from_llm_provider
@@ -47,6 +48,7 @@ from onyx.llm.utils import test_llm
 from onyx.llm.well_known_providers.auto_update_service import (
     fetch_llm_recommendations_from_github,
 )
+from onyx.llm.well_known_providers.constants import LM_STUDIO_API_KEY_CONFIG_KEY
 from onyx.llm.well_known_providers.llm_provider_options import (
     fetch_available_well_known_llms,
 )
@@ -61,6 +63,8 @@ from onyx.server.manage.llm.models import LLMProviderDescriptor
 from onyx.server.manage.llm.models import LLMProviderResponse
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import LLMProviderView
+from onyx.server.manage.llm.models import LMStudioFinalModelResponse
+from onyx.server.manage.llm.models import LMStudioModelsRequest
 from onyx.server.manage.llm.models import OllamaFinalModelResponse
 from onyx.server.manage.llm.models import OllamaModelDetails
 from onyx.server.manage.llm.models import OllamaModelsRequest
@@ -72,6 +76,7 @@ from onyx.server.manage.llm.models import VisionProviderResponse
 from onyx.server.manage.llm.utils import generate_bedrock_display_name
 from onyx.server.manage.llm.utils import generate_ollama_display_name
 from onyx.server.manage.llm.utils import infer_vision_support
+from onyx.server.manage.llm.utils import is_reasoning_model
 from onyx.server.manage.llm.utils import is_valid_bedrock_model
 from onyx.server.manage.llm.utils import ModelMetadata
 from onyx.server.manage.llm.utils import strip_openrouter_vendor_prefix
@@ -186,7 +191,7 @@ def _validate_llm_provider_change(
     Only enforced in MULTI_TENANT mode.
 
     Raises:
-        HTTPException: If api_base or custom_config changed without changing API key
+        OnyxError: If api_base or custom_config changed without changing API key
     """
     if not MULTI_TENANT or api_key_changed:
         return
@@ -200,9 +205,9 @@ def _validate_llm_provider_change(
     )
 
     if api_base_changed or custom_config_changed:
-        raise HTTPException(
-            status_code=400,
-            detail="API base and/or custom config cannot be changed without changing the API key",
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "API base and/or custom config cannot be changed without changing the API key",
         )
 
 
@@ -222,7 +227,7 @@ def fetch_llm_provider_options(
     for well_known_llm in well_known_llms:
         if well_known_llm.name == provider_name:
             return well_known_llm
-    raise HTTPException(status_code=404, detail=f"Provider {provider_name} not found")
+    raise OnyxError(OnyxErrorCode.NOT_FOUND, f"Provider {provider_name} not found")
 
 
 @admin_router.post("/test")
@@ -281,7 +286,7 @@ def test_llm_configuration(
     error_msg = test_llm(llm)
 
     if error_msg:
-        raise HTTPException(status_code=400, detail=error_msg)
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, error_msg)
 
 
 @admin_router.post("/test/default")
@@ -292,11 +297,11 @@ def test_default_provider(
         llm = get_default_llm()
     except ValueError:
         logger.exception("Failed to fetch default LLM Provider")
-        raise HTTPException(status_code=400, detail="No LLM Provider setup")
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, "No LLM Provider setup")
 
     error = test_llm(llm)
     if error:
-        raise HTTPException(status_code=400, detail=str(error))
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(error))
 
 
 @admin_router.get("/provider")
@@ -362,35 +367,31 @@ def put_llm_provider(
     # Check name constraints
     # TODO: Once port from name to id is complete, unique name will no longer be required
     if existing_provider and llm_provider_upsert_request.name != existing_provider.name:
-        raise HTTPException(
-            status_code=400,
-            detail="Renaming providers is not currently supported",
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Renaming providers is not currently supported",
         )
 
     found_provider = fetch_existing_llm_provider(
         name=llm_provider_upsert_request.name, db_session=db_session
     )
     if found_provider is not None and found_provider is not existing_provider:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Provider with name={llm_provider_upsert_request.name} already exists",
+        raise OnyxError(
+            OnyxErrorCode.DUPLICATE_RESOURCE,
+            f"Provider with name={llm_provider_upsert_request.name} already exists",
         )
 
     if existing_provider and is_creation:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"LLM Provider with name {llm_provider_upsert_request.name} and "
-                f"id={llm_provider_upsert_request.id} already exists"
-            ),
+        raise OnyxError(
+            OnyxErrorCode.DUPLICATE_RESOURCE,
+            f"LLM Provider with name {llm_provider_upsert_request.name} and "
+            f"id={llm_provider_upsert_request.id} already exists",
         )
     elif not existing_provider and not is_creation:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"LLM Provider with name {llm_provider_upsert_request.name} and "
-                f"id={llm_provider_upsert_request.id} does not exist"
-            ),
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            f"LLM Provider with name {llm_provider_upsert_request.name} and "
+            f"id={llm_provider_upsert_request.id} does not exist",
         )
 
     # SSRF Protection: Validate api_base and custom_config match stored values
@@ -415,9 +416,9 @@ def put_llm_provider(
             db_session, persona_ids
         )
         if missing_personas:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid persona IDs: {', '.join(map(str, missing_personas))}",
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR,
+                f"Invalid persona IDs: {', '.join(map(str, missing_personas))}",
             )
         # Remove duplicates while preserving order
         seen: set[int] = set()
@@ -444,6 +445,17 @@ def put_llm_provider(
         not existing_provider or not existing_provider.is_auto_mode
     )
 
+    # Before the upsert, check if this provider currently owns the global
+    # CHAT default. The upsert may cascade-delete model_configurations
+    # (and their flow mappings), so we need to remember this beforehand.
+    was_default_provider = False
+    if existing_provider and transitioning_to_auto_mode:
+        current_default = fetch_default_llm_model(db_session)
+        was_default_provider = (
+            current_default is not None
+            and current_default.llm_provider_id == existing_provider.id
+        )
+
     try:
         result = upsert_llm_provider(
             llm_provider_upsert_request=llm_provider_upsert_request,
@@ -466,6 +478,20 @@ def put_llm_provider(
                         updated_provider,
                         config,
                     )
+
+                    # If this provider was the default before the transition,
+                    # restore the default using the recommended model.
+                    if was_default_provider:
+                        recommended = config.get_default_model(
+                            llm_provider_upsert_request.provider
+                        )
+                        if recommended:
+                            update_default_provider(
+                                provider_id=updated_provider.id,
+                                model_name=recommended.name,
+                                db_session=db_session,
+                            )
+
                     # Refresh result with synced models
                     result = LLMProviderView.from_model(updated_provider)
 
@@ -473,19 +499,29 @@ def put_llm_provider(
         return result
     except ValueError as e:
         logger.exception("Failed to upsert LLM Provider")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
 
 
 @admin_router.delete("/provider/{provider_id}")
 def delete_llm_provider(
     provider_id: int,
+    force: bool = Query(False),
     _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
+    if not force:
+        model = fetch_default_llm_model(db_session)
+
+        if model and model.llm_provider_id == provider_id:
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR,
+                "Cannot delete the default LLM provider",
+            )
+
     try:
         remove_llm_provider(db_session, provider_id)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e))
 
 
 @admin_router.post("/default")
@@ -525,9 +561,9 @@ def get_auto_config(
     """
     config = fetch_llm_recommendations_from_github()
     if not config:
-        raise HTTPException(
-            status_code=502,
-            detail="Failed to fetch configuration from GitHub",
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY,
+            "Failed to fetch configuration from GitHub",
         )
     return config.model_dump()
 
@@ -684,13 +720,13 @@ def list_llm_providers_for_persona(
 
     persona = fetch_persona_with_groups(db_session, persona_id)
     if not persona:
-        raise HTTPException(status_code=404, detail="Persona not found")
+        raise OnyxError(OnyxErrorCode.PERSONA_NOT_FOUND, "Persona not found")
 
     # Verify user has access to this persona
     if not user_can_access_persona(db_session, persona_id, user, get_editable=False):
-        raise HTTPException(
-            status_code=403,
-            detail="You don't have access to this assistant",
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "You don't have access to this assistant",
         )
 
     is_admin = user.role == UserRole.ADMIN
@@ -844,9 +880,9 @@ def get_bedrock_available_models(
         try:
             bedrock = session.client("bedrock")
         except Exception as e:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Failed to create Bedrock client: {e}. Check AWS credentials and region.",
+            raise OnyxError(
+                OnyxErrorCode.CREDENTIAL_INVALID,
+                f"Failed to create Bedrock client: {e}. Check AWS credentials and region.",
             )
 
         # Build model info dict from foundation models (modelId -> metadata)
@@ -965,14 +1001,14 @@ def get_bedrock_available_models(
         return results
 
     except (ClientError, NoCredentialsError, BotoCoreError) as e:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Failed to connect to AWS Bedrock: {e}",
+        raise OnyxError(
+            OnyxErrorCode.CREDENTIAL_INVALID,
+            f"Failed to connect to AWS Bedrock: {e}",
         )
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Unexpected error fetching Bedrock models: {e}",
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR,
+            f"Unexpected error fetching Bedrock models: {e}",
         )
 
 
@@ -984,9 +1020,9 @@ def _get_ollama_available_model_names(api_base: str) -> set[str]:
         response.raise_for_status()
         response_json = response.json()
     except Exception as e:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Failed to fetch Ollama models: {e}",
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY,
+            f"Failed to fetch Ollama models: {e}",
         )
 
     models = response_json.get("models", [])
@@ -1003,9 +1039,9 @@ def get_ollama_available_models(
 
     cleaned_api_base = request.api_base.strip().rstrip("/")
     if not cleaned_api_base:
-        raise HTTPException(
-            status_code=400,
-            detail="API base URL is required to fetch Ollama models.",
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "API base URL is required to fetch Ollama models.",
         )
 
     # NOTE: most people run Ollama locally, so we don't disallow internal URLs
@@ -1014,9 +1050,9 @@ def get_ollama_available_models(
     # with the same response format
     model_names = _get_ollama_available_model_names(cleaned_api_base)
     if not model_names:
-        raise HTTPException(
-            status_code=400,
-            detail="No models found from your Ollama server",
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "No models found from your Ollama server",
         )
 
     all_models_with_context_size_and_vision: list[OllamaFinalModelResponse] = []
@@ -1118,9 +1154,9 @@ def _get_openrouter_models_response(api_base: str, api_key: str) -> dict:
         response.raise_for_status()
         return response.json()
     except Exception as e:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Failed to fetch OpenRouter models: {e}",
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY,
+            f"Failed to fetch OpenRouter models: {e}",
         )
 
 
@@ -1141,9 +1177,9 @@ def get_openrouter_available_models(
 
     data = response_json.get("data", [])
     if not isinstance(data, list) or len(data) == 0:
-        raise HTTPException(
-            status_code=400,
-            detail="No models found from your OpenRouter endpoint",
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "No models found from your OpenRouter endpoint",
         )
 
     results: list[OpenRouterFinalModelResponse] = []
@@ -1178,8 +1214,9 @@ def get_openrouter_available_models(
             )
 
     if not results:
-        raise HTTPException(
-            status_code=400, detail="No compatible models found from OpenRouter"
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "No compatible models found from OpenRouter",
         )
 
     sorted_results = sorted(results, key=lambda m: m.name.lower())
@@ -1207,5 +1244,119 @@ def get_openrouter_available_models(
                 )
         except ValueError as e:
             logger.warning(f"Failed to sync OpenRouter models to DB: {e}")
+
+    return sorted_results
+
+
+@admin_router.post("/lm-studio/available-models")
+def get_lm_studio_available_models(
+    request: LMStudioModelsRequest,
+    _: User = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
+) -> list[LMStudioFinalModelResponse]:
+    """Fetch available models from an LM Studio server.
+
+    Uses the LM Studio-native /api/v1/models endpoint which exposes
+    rich metadata including capabilities (vision, reasoning),
+    display names, and context lengths.
+    """
+    cleaned_api_base = request.api_base.strip().rstrip("/")
+    # Strip /v1 suffix that users may copy from OpenAI-compatible tool configs;
+    # the native metadata endpoint lives at /api/v1/models, not /v1/api/v1/models.
+    cleaned_api_base = cleaned_api_base.removesuffix("/v1")
+    if not cleaned_api_base:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "API base URL is required to fetch LM Studio models.",
+        )
+
+    # If provider_name is given and the api_key hasn't been changed by the user,
+    # fall back to the stored API key from the database (the form value is masked).
+    api_key = request.api_key
+    if request.provider_name and not request.api_key_changed:
+        existing_provider = fetch_existing_llm_provider(
+            name=request.provider_name, db_session=db_session
+        )
+        if existing_provider and existing_provider.custom_config:
+            api_key = existing_provider.custom_config.get(LM_STUDIO_API_KEY_CONFIG_KEY)
+
+    url = f"{cleaned_api_base}/api/v1/models"
+    headers: dict[str, str] = {}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    try:
+        response = httpx.get(url, headers=headers, timeout=10.0)
+        response.raise_for_status()
+        response_json = response.json()
+    except Exception as e:
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY,
+            f"Failed to fetch LM Studio models: {e}",
+        )
+
+    models = response_json.get("models", [])
+    if not isinstance(models, list) or len(models) == 0:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "No models found from your LM Studio server.",
+        )
+
+    results: list[LMStudioFinalModelResponse] = []
+    for item in models:
+        # Filter to LLM-type models only (skip embeddings, etc.)
+        if item.get("type") != "llm":
+            continue
+
+        model_key = item.get("key")
+        if not model_key:
+            continue
+
+        display_name = item.get("display_name") or model_key
+        max_context_length = item.get("max_context_length")
+        capabilities = item.get("capabilities") or {}
+
+        results.append(
+            LMStudioFinalModelResponse(
+                name=model_key,
+                display_name=display_name,
+                max_input_tokens=max_context_length,
+                supports_image_input=capabilities.get("vision", False),
+                supports_reasoning=capabilities.get("reasoning", False)
+                or is_reasoning_model(model_key, display_name),
+            )
+        )
+
+    if not results:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "No compatible models found from LM Studio server.",
+        )
+
+    sorted_results = sorted(results, key=lambda m: m.name.lower())
+
+    # Sync new models to DB if provider_name is specified
+    if request.provider_name:
+        try:
+            models_to_sync = [
+                {
+                    "name": r.name,
+                    "display_name": r.display_name,
+                    "max_input_tokens": r.max_input_tokens,
+                    "supports_image_input": r.supports_image_input,
+                }
+                for r in sorted_results
+            ]
+            new_count = sync_model_configurations(
+                db_session=db_session,
+                provider_name=request.provider_name,
+                models=models_to_sync,
+            )
+            if new_count > 0:
+                logger.info(
+                    f"Added {new_count} new LM Studio models to provider '{request.provider_name}'"
+                )
+        except ValueError as e:
+            logger.warning(f"Failed to sync LM Studio models to DB: {e}")
 
     return sorted_results

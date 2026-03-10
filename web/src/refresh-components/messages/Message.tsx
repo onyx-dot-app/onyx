@@ -337,6 +337,7 @@ function MessageInner(
       {/* Actions */}
       {actions && (
         <div className="flex items-center justify-end shrink-0 self-center pr-2">
+          {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
           <Button
             secondary
             onClick={onAction}
@@ -351,6 +352,7 @@ function MessageInner(
       {close && (
         <div className="flex items-center justify-center shrink-0">
           <div className={cn("flex items-start", closeButtonSize)}>
+            {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
             <IconButton
               internal
               icon={SvgX}

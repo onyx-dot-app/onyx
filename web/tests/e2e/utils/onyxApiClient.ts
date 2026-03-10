@@ -218,15 +218,31 @@ export class OnyxApiClient {
   }
 
   /**
+   * Checks whether the vector database is enabled in this deployment.
+   *
+   * @returns true if vector DB is enabled, false if DISABLE_VECTOR_DB is set
+   */
+  async isVectorDbEnabled(): Promise<boolean> {
+    const response = await this.get("/settings");
+    const data = await this.handleResponse<{ vector_db_enabled: boolean }>(
+      response,
+      "Failed to fetch settings"
+    );
+    return data.vector_db_enabled;
+  }
+
+  /**
    * Creates a simple file connector with mock credentials.
    * This enables the Knowledge toggle in assistant creation.
    *
    * @param connectorName - Name for the connector (defaults to "Test File Connector")
+   * @param accessType - Access type for the connector (defaults to "public")
    * @returns The connector-credential pair ID (ccPairId)
    * @throws Error if the connector creation fails
    */
   async createFileConnector(
-    connectorName: string = "Test File Connector"
+    connectorName: string = "Test File Connector",
+    accessType: "public" | "private" = "public"
   ): Promise<number> {
     const response = await this.post(
       "/manage/admin/connector-with-mock-credential",
@@ -240,7 +256,7 @@ export class OnyxApiClient {
         refresh_freq: null,
         prune_freq: null,
         indexing_start: null,
-        access_type: "public",
+        access_type: accessType,
         groups: [],
       }
     );
@@ -526,8 +542,14 @@ export class OnyxApiClient {
    *
    * @param providerId - The provider ID to delete
    */
-  async deleteProvider(providerId: number): Promise<void> {
-    const response = await this.delete(`/admin/llm/provider/${providerId}`);
+  async deleteProvider(
+    providerId: number,
+    { force = false }: { force?: boolean } = {}
+  ): Promise<void> {
+    const query = force ? "?force=true" : "";
+    const response = await this.delete(
+      `/admin/llm/provider/${providerId}${query}`
+    );
 
     await this.handleResponseSoft(
       response,
@@ -541,17 +563,20 @@ export class OnyxApiClient {
    * Creates a user group.
    *
    * @param groupName - Name for the user group
+   * @param userIds - Optional list of user IDs to add to the group
+   * @param ccPairIds - Optional list of connector-credential pair IDs to associate
    * @returns The user group ID
    * @throws Error if the user group creation fails
    */
   async createUserGroup(
     groupName: string,
-    userIds: string[] = []
+    userIds: string[] = [],
+    ccPairIds: number[] = []
   ): Promise<number> {
     const response = await this.post("/manage/admin/user-group", {
       name: groupName,
       user_ids: userIds,
-      cc_pair_ids: [],
+      cc_pair_ids: ccPairIds,
     });
 
     const responseData = await this.handleResponse<{ id: number }>(

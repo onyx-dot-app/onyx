@@ -1,7 +1,7 @@
 "use client";
 
 import Logo from "@/refresh-components/Logo";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button } from "@opal/components";
 import { SvgEditBig, SvgExternalLink } from "@opal/icons";
 
 interface SidePanelHeaderProps {
@@ -22,16 +22,16 @@ export default function SidePanelHeader({
     <header className="flex items-center justify-between px-4 py-3 border-b border-border-01 bg-background">
       <Logo />
       <div className="flex items-center gap-1">
-        <IconButton
+        <Button
+          prominence="tertiary"
           icon={SvgEditBig}
           onClick={onNewChat}
-          tertiary
           tooltip="New chat"
         />
-        <IconButton
+        <Button
+          prominence="tertiary"
           icon={SvgExternalLink}
           onClick={handleOpenInOnyx}
-          tertiary
           tooltip="Open in Onyx"
         />
       </div>

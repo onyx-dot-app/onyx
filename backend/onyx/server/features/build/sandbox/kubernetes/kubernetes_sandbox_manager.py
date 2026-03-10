@@ -1133,7 +1133,8 @@ done
                 # Already deleted
                 service_deleted = True
             else:
-                logger.warning(f"Error deleting Service {service_name}: {e}")
+                logger.error(f"Error deleting Service {service_name}: {e}")
+                raise
 
         pod_deleted = False
         try:
@@ -1148,7 +1149,8 @@ done
                 # Already deleted
                 pod_deleted = True
             else:
-                logger.warning(f"Error deleting Pod {pod_name}: {e}")
+                logger.error(f"Error deleting Pod {pod_name}: {e}")
+                raise
 
         # Wait for resources to be fully deleted to prevent 409 conflicts
         # on immediate re-provisioning

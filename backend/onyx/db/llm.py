@@ -25,7 +25,10 @@ from onyx.server.manage.embedding.models import CloudEmbeddingProvider
 from onyx.server.manage.embedding.models import CloudEmbeddingProviderCreationRequest
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import LLMProviderView
+from onyx.utils.logger import setup_logger
 from shared_configs.enums import EmbeddingProvider
+
+logger = setup_logger()
 
 
 def update_group_llm_provider_relationships__no_commit(
@@ -532,6 +535,7 @@ def fetch_default_model(
 ) -> ModelConfiguration | None:
     model_config = db_session.scalar(
         select(ModelConfiguration)
+        .options(selectinload(ModelConfiguration.llm_provider))
         .join(LLMModelFlow)
         .where(
             ModelConfiguration.is_visible == True,  # noqa: E712
@@ -811,6 +815,43 @@ def sync_auto_mode_models(
             changes += 1
 
     db_session.commit()
+
+    # Update the default if this provider currently holds the global CHAT default
+    recommended_default = llm_recommendations.get_default_model(provider.provider)
+    if recommended_default:
+        current_default_name = db_session.scalar(
+            select(ModelConfiguration.name)
+            .join(
+                LLMModelFlow,
+                LLMModelFlow.model_configuration_id == ModelConfiguration.id,
+            )
+            .where(
+                ModelConfiguration.llm_provider_id == provider.id,
+                LLMModelFlow.llm_model_flow_type == LLMModelFlowType.CHAT,
+                LLMModelFlow.is_default == True,  # noqa: E712
+            )
+        )
+
+        if (
+            current_default_name is not None
+            and current_default_name != recommended_default.name
+        ):
+            try:
+                _update_default_model(
+                    db_session=db_session,
+                    provider_id=provider.id,
+                    model=recommended_default.name,
+                    flow_type=LLMModelFlowType.CHAT,
+                )
+                changes += 1
+            except ValueError:
+                logger.warning(
+                    "Recommended default model '%s' not found "
+                    "for provider_id=%s; skipping default update.",
+                    recommended_default.name,
+                    provider.id,
+                )
+
     return changes
 
 

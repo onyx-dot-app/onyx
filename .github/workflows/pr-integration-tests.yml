@@ -316,6 +316,7 @@ jobs:
           # Base config shared by both editions
           cat <<EOF > deployment/docker_compose/.env
           COMPOSE_PROFILES=s3-filestore
+          OPENSEARCH_FOR_ONYX_ENABLED=false
           AUTH_TYPE=basic
           POSTGRES_POOL_PRE_PING=true
           POSTGRES_USE_NULL_POOL=true
@@ -335,7 +336,6 @@ jobs:
           # TODO(Nik): https://linear.app/onyx-app/issue/ENG-1/update-test-infra-to-use-test-license
           LICENSE_ENFORCEMENT_ENABLED=false
           CHECK_TTL_MANAGEMENT_TASK_FREQUENCY_IN_HOURS=0.001
-          USE_LIGHTWEIGHT_BACKGROUND_WORKER=false
           EOF
           fi
 
@@ -419,6 +419,7 @@ jobs:
               -e POSTGRES_POOL_PRE_PING=true \
               -e POSTGRES_USE_NULL_POOL=true \
               -e VESPA_HOST=index \
+              -e ENABLE_OPENSEARCH_INDEXING_FOR_ONYX=false \
               -e REDIS_HOST=cache \
               -e API_SERVER_HOST=api_server \
               -e OPENAI_API_KEY=${OPENAI_API_KEY} \
@@ -471,13 +472,13 @@ jobs:
           path: ${{ github.workspace }}/docker-compose.log
       # ------------------------------------------------------------
 
-  no-vectordb-tests:
+  onyx-lite-tests:
     needs: [build-backend-image, build-integration-image]
     runs-on:
       [
         runs-on,
         runner=4cpu-linux-arm64,
-        "run-id=${{ github.run_id }}-no-vectordb-tests",
+        "run-id=${{ github.run_id }}-onyx-lite-tests",
         "extras=ecr-cache",
       ]
     timeout-minutes: 45
@@ -495,13 +496,12 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
 
-      - name: Create .env file for no-vectordb Docker Compose
+      - name: Create .env file for Onyx Lite Docker Compose
         env:
           ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
           RUN_ID: ${{ github.run_id }}
         run: |
           cat <<EOF > deployment/docker_compose/.env
-          COMPOSE_PROFILES=s3-filestore
           ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
           LICENSE_ENFORCEMENT_ENABLED=false
           AUTH_TYPE=basic
@@ -509,28 +509,23 @@ jobs:
           POSTGRES_USE_NULL_POOL=true
           REQUIRE_EMAIL_VERIFICATION=false
           DISABLE_TELEMETRY=true
-          DISABLE_VECTOR_DB=true
           ONYX_BACKEND_IMAGE=${ECR_CACHE}:integration-test-backend-test-${RUN_ID}
           INTEGRATION_TESTS_MODE=true
-          USE_LIGHTWEIGHT_BACKGROUND_WORKER=true
           EOF
 
-      # Start only the services needed for no-vectordb mode (no Vespa, no model servers)
-      - name: Start Docker containers (no-vectordb)
+      # Start only the services needed for Onyx Lite (Postgres + API server)
+      - name: Start Docker containers (onyx-lite)
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.yml -f docker-compose.no-vectordb.yml -f docker-compose.dev.yml up \
+          docker compose -f docker-compose.yml -f docker-compose.onyx-lite.yml -f docker-compose.dev.yml up \
             relational_db \
-            cache \
-            minio \
             api_server \
-            background \
             -d
-        id: start_docker_no_vectordb
+        id: start_docker_onyx_lite
 
       - name: Wait for services to be ready
         run: |
-          echo "Starting wait-for-service script (no-vectordb)..."
+          echo "Starting wait-for-service script (onyx-lite)..."
           start_time=$(date +%s)
           timeout=300
           while true; do
@@ -552,14 +547,14 @@ jobs:
             sleep 5
           done
 
-      - name: Run No-VectorDB Integration Tests
+      - name: Run Onyx Lite Integration Tests
         uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # ratchet:nick-fields/retry@v3
         with:
           timeout_minutes: 20
           max_attempts: 3
           retry_wait_seconds: 10
           command: |
-            echo "Running no-vectordb integration tests..."
+            echo "Running onyx-lite integration tests..."
             docker run --rm --network onyx_default \
               --name test-runner \
               -e POSTGRES_HOST=relational_db \
@@ -570,39 +565,38 @@ jobs:
               -e DB_READONLY_PASSWORD=password \
               -e POSTGRES_POOL_PRE_PING=true \
               -e POSTGRES_USE_NULL_POOL=true \
-              -e REDIS_HOST=cache \
               -e API_SERVER_HOST=api_server \
               -e OPENAI_API_KEY=${OPENAI_API_KEY} \
               -e TEST_WEB_HOSTNAME=test-runner \
               ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-${{ github.run_id }} \
               /app/tests/integration/tests/no_vectordb
 
-      - name: Dump API server logs (no-vectordb)
+      - name: Dump API server logs (onyx-lite)
         if: always()
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.yml -f docker-compose.no-vectordb.yml -f docker-compose.dev.yml \
-            logs --no-color api_server > $GITHUB_WORKSPACE/api_server_no_vectordb.log || true
+          docker compose -f docker-compose.yml -f docker-compose.onyx-lite.yml -f docker-compose.dev.yml \
+            logs --no-color api_server > $GITHUB_WORKSPACE/api_server_onyx_lite.log || true
 
-      - name: Dump all-container logs (no-vectordb)
+      - name: Dump all-container logs (onyx-lite)
         if: always()
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.yml -f docker-compose.no-vectordb.yml -f docker-compose.dev.yml \
-            logs --no-color > $GITHUB_WORKSPACE/docker-compose-no-vectordb.log || true
+          docker compose -f docker-compose.yml -f docker-compose.onyx-lite.yml -f docker-compose.dev.yml \
+            logs --no-color > $GITHUB_WORKSPACE/docker-compose-onyx-lite.log || true
 
-      - name: Upload logs (no-vectordb)
+      - name: Upload logs (onyx-lite)
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
-          name: docker-all-logs-no-vectordb
-          path: ${{ github.workspace }}/docker-compose-no-vectordb.log
+          name: docker-all-logs-onyx-lite
+          path: ${{ github.workspace }}/docker-compose-onyx-lite.log
 
-      - name: Stop Docker containers (no-vectordb)
+      - name: Stop Docker containers (onyx-lite)
         if: always()
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.yml -f docker-compose.no-vectordb.yml -f docker-compose.dev.yml down -v
+          docker compose -f docker-compose.yml -f docker-compose.onyx-lite.yml -f docker-compose.dev.yml down -v
 
   multitenant-tests:
     needs:
@@ -645,6 +639,7 @@ jobs:
           ONYX_BACKEND_IMAGE=${ECR_CACHE}:integration-test-backend-test-${RUN_ID} \
           ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:integration-test-model-server-test-${RUN_ID} \
           DEV_MODE=true \
+          OPENSEARCH_FOR_ONYX_ENABLED=false \
           docker compose -f docker-compose.multitenant-dev.yml up \
             relational_db \
             index \
@@ -699,6 +694,7 @@ jobs:
             -e POSTGRES_DB=postgres \
             -e POSTGRES_USE_NULL_POOL=true \
             -e VESPA_HOST=index \
+            -e ENABLE_OPENSEARCH_INDEXING_FOR_ONYX=false \
             -e REDIS_HOST=cache \
             -e API_SERVER_HOST=api_server \
             -e OPENAI_API_KEY=${OPENAI_API_KEY} \
@@ -744,7 +740,7 @@ jobs:
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
     runs-on: ubuntu-slim
     timeout-minutes: 45
-    needs: [integration-tests, no-vectordb-tests, multitenant-tests]
+    needs: [integration-tests, onyx-lite-tests, multitenant-tests]
     if: ${{ always() }}
     steps:
       - name: Check job status

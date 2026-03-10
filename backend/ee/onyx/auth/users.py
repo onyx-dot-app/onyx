@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 
 import jwt
@@ -20,7 +21,13 @@ logger = setup_logger()
 
 
 def verify_auth_setting() -> None:
-    # All the Auth flows are valid for EE version
+    # All the Auth flows are valid for EE version, but warn about deprecated 'disabled'
+    raw_auth_type = (os.environ.get("AUTH_TYPE") or "").lower()
+    if raw_auth_type == "disabled":
+        logger.warning(
+            "AUTH_TYPE='disabled' is no longer supported. "
+            "Using 'basic' instead. Please update your configuration."
+        )
     logger.notice(f"Using Auth Type: {AUTH_TYPE.value}")
 
 

@@ -1,4 +1,5 @@
 import json
+import os
 import random
 import secrets
 import string
@@ -120,7 +121,6 @@ from onyx.db.models import User
 from onyx.db.pat import fetch_user_for_pat
 from onyx.db.users import get_user_by_email
 from onyx.redis.redis_pool import get_async_redis_connection
-from onyx.redis.redis_pool import get_redis_client
 from onyx.server.settings.store import load_settings
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
@@ -146,10 +146,22 @@ def is_user_admin(user: User) -> bool:
 
 
 def verify_auth_setting() -> None:
-    if AUTH_TYPE == AuthType.CLOUD:
+    """Log warnings for AUTH_TYPE issues.
+
+    This only runs on app startup not during migrations/scripts.
+    """
+    raw_auth_type = (os.environ.get("AUTH_TYPE") or "").lower()
+
+    if raw_auth_type == "cloud":
         raise ValueError(
-            f"{AUTH_TYPE.value} is not a valid auth type for self-hosted deployments."
+            "'cloud' is not a valid auth type for self-hosted deployments."
         )
+    if raw_auth_type == "disabled":
+        logger.warning(
+            "AUTH_TYPE='disabled' is no longer supported. "
+            "Using 'basic' instead. Please update your configuration."
+        )
+
     logger.notice(f"Using Auth Type: {AUTH_TYPE.value}")
 
 
@@ -201,13 +213,14 @@ def user_needs_to_be_verified() -> bool:
 
 
 def anonymous_user_enabled(*, tenant_id: str | None = None) -> bool:
-    redis_client = get_redis_client(tenant_id=tenant_id)
-    value = redis_client.get(OnyxRedisLocks.ANONYMOUS_USER_ENABLED)
+    from onyx.cache.factory import get_cache_backend
+
+    cache = get_cache_backend(tenant_id=tenant_id)
+    value = cache.get(OnyxRedisLocks.ANONYMOUS_USER_ENABLED)
 
     if value is None:
         return False
 
-    assert isinstance(value, bytes)
     return int(value.decode("utf-8")) == 1
 
 

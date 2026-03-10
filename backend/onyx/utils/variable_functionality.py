@@ -24,6 +24,9 @@ class OnyxVersion:
     def set_ee(self) -> None:
         self._is_ee = True
 
+    def unset_ee(self) -> None:
+        self._is_ee = False
+
     def is_ee_version(self) -> bool:
         return self._is_ee
 

@@ -20,6 +20,7 @@ import { buildSimilarCredentialInfoURL } from "@/app/admin/connector/[ccPairId]/
 import { Credential } from "@/lib/connectors/credentials";
 import { useFederatedConnectors } from "@/lib/hooks";
 import Text from "@/refresh-components/texts/Text";
+import { useToastFromQuery } from "@/hooks/useToast";
 
 export default function ConnectorWrapper({
   connector,
@@ -28,6 +29,13 @@ export default function ConnectorWrapper({
 }) {
   const searchParams = useSearchParams();
   const mode = searchParams?.get("mode"); // 'federated' or 'regular'
+
+  useToastFromQuery({
+    oauth_failed: {
+      message: "OAuth authentication failed. Please try again.",
+      type: "error",
+    },
+  });
 
   // Check if the connector is valid
   if (!isValidSource(connector)) {
@@ -40,6 +48,7 @@ export default function ConnectorWrapper({
               <HeaderTitle>
                 <p>&lsquo;{connector}&rsquo; is not a valid Connector Type!</p>
               </HeaderTitle>
+              {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
               <Button
                 onClick={() => window.open("/admin/indexing/status", "_self")}
                 className="mr-auto"

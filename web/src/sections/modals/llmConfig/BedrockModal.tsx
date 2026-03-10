@@ -32,6 +32,7 @@ import Separator from "@/refresh-components/Separator";
 import Text from "@/refresh-components/texts/Text";
 import Tabs from "@/refresh-components/Tabs";
 import { cn } from "@/lib/utils";
+import { ScopedMutator } from "swr";
 
 export const BEDROCK_PROVIDER_NAME = "bedrock";
 const BEDROCK_DISPLAY_NAME = "AWS Bedrock";
@@ -83,7 +84,7 @@ interface BedrockModalInternalsProps {
   modelConfigurations: ModelConfiguration[];
   isTesting: boolean;
   testError: string;
-  mutate: (key: string) => void;
+  mutate: ScopedMutator;
   onClose: () => void;
 }
 

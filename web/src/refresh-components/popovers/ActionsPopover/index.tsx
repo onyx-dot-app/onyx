@@ -29,7 +29,8 @@ import { SourceMetadata } from "@/lib/search/interfaces";
 import { SourceIcon } from "@/components/SourceIcon";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
 import useCCPairs from "@/hooks/useCCPairs";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useLLMProviders } from "@/hooks/useLLMProviders";
+import { useVectorDbEnabled } from "@/providers/SettingsProvider";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { useToolOAuthStatus } from "@/lib/hooks/useToolOAuthStatus";
 import LineItem from "@/refresh-components/buttons/LineItem";
@@ -41,27 +42,47 @@ import MCPLineItem, {
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import { SvgActions, SvgChevronRight, SvgKey, SvgSliders } from "@opal/icons";
 import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 
-const UNAVAILABLE_TOOL_TOOLTIP_FALLBACK =
-  "This action is not configured yet. Ask an admin to enable it.";
-const UNAVAILABLE_TOOL_TOOLTIP_ADMIN_FALLBACK =
-  "This action is not configured yet. If you have access, enable it in the admin panel.";
-const UNAVAILABLE_TOOL_TOOLTIPS: Record<string, string> = {
-  [IMAGE_GENERATION_TOOL_ID]:
-    "Image generation requires a configured model. If you have access, set one up under Settings > Image Generation, or ask an admin.",
-  [WEB_SEARCH_TOOL_ID]:
-    "Web search requires a configured provider. If you have access, set one up under Settings > Web Search, or ask an admin.",
-  [PYTHON_TOOL_ID]:
-    "Code Interpreter requires the service to be configured with a valid base URL. If you have access, configure it in the admin panel, or ask an admin.",
+function buildTooltipMessage(
+  actionDescription: string,
+  isConfigured: boolean,
+  canManageAction: boolean
+) {
+  const _CONFIGURE_MESSAGE = "Press the settings cog to enable.";
+  const _USER_NOT_ADMIN_MESSAGE = "Ask an admin to configure.";
+
+  if (isConfigured) {
+    return actionDescription;
+  }
+
+  if (canManageAction) {
+    return actionDescription + " " + _CONFIGURE_MESSAGE;
+  }
+
+  return actionDescription + " " + _USER_NOT_ADMIN_MESSAGE;
+}
+
+const TOOL_DESCRIPTIONS: Record<string, string> = {
+  [SEARCH_TOOL_ID]: "Search through connected knowledge to inform the answer.",
+  [IMAGE_GENERATION_TOOL_ID]: "Generate images based on a prompt.",
+  [WEB_SEARCH_TOOL_ID]: "Search the web for up-to-date information.",
+  [PYTHON_TOOL_ID]: "Execute code for complex analysis.",
 };
-const getUnavailableToolTooltip = (
-  inCodeToolId?: string | null,
-  canAdminConfigure?: boolean
-) =>
-  (inCodeToolId && UNAVAILABLE_TOOL_TOOLTIPS[inCodeToolId]) ??
-  (canAdminConfigure
-    ? UNAVAILABLE_TOOL_TOOLTIP_ADMIN_FALLBACK
-    : UNAVAILABLE_TOOL_TOOLTIP_FALLBACK);
+
+const DEFAULT_TOOL_DESCRIPTION = "This action is not configured yet.";
+
+function getToolTooltip(
+  tool: ToolSnapshot,
+  isConfigured: boolean,
+  canManageAction: boolean
+): string {
+  const description =
+    (tool.in_code_tool_id && TOOL_DESCRIPTIONS[tool.in_code_tool_id]) ||
+    tool.description ||
+    DEFAULT_TOOL_DESCRIPTION;
+  return buildTooltipMessage(description, isConfigured, canManageAction);
+}
 
 const ADMIN_CONFIG_LINKS: Record<string, { href: string; tooltip: string }> = {
   [IMAGE_GENERATION_TOOL_ID]: {
@@ -71,6 +92,10 @@ const ADMIN_CONFIG_LINKS: Record<string, { href: string; tooltip: string }> = {
   [WEB_SEARCH_TOOL_ID]: {
     href: "/admin/configuration/web-search",
     tooltip: "Configure Web Search",
+  },
+  [PYTHON_TOOL_ID]: {
+    href: "/admin/configuration/code-interpreter",
+    tooltip: "Configure Code Interpreter",
   },
   KnowledgeGraphTool: {
     href: "/admin/kg",
@@ -154,6 +179,10 @@ export default function ActionsPopover({
   // const [showTopShadow, setShowTopShadow] = useState(false);
   const { selectedSources, setSelectedSources } = filterManager;
   const [mcpServers, setMcpServers] = useState<MCPServer[]>([]);
+  const { llmProviders, isLoading: isLLMLoading } = useLLMProviders(
+    selectedAgent.id
+  );
+  const hasAnyProvider = !isLLMLoading && (llmProviders?.length ?? 0) > 0;
 
   // Use the OAuth hook
   const { getToolAuthStatus, authenticateTool } = useToolOAuthStatus(
@@ -275,8 +304,7 @@ export default function ActionsPopover({
   }, [selectedAgent.id, setForcedToolIds]);
 
   const { isAdmin, isCurator } = useUser();
-  const settings = useSettingsContext();
-  const vectorDbEnabled = settings?.settings.vector_db_enabled !== false;
+  const vectorDbEnabled = useVectorDbEnabled();
 
   const { tools: availableTools } = useAvailableTools();
   const { ccPairs } = useCCPairs(vectorDbEnabled);
@@ -470,7 +498,8 @@ export default function ActionsPopover({
 
   // Fetch MCP servers for the agent on mount
   useEffect(() => {
-    if (selectedAgent == null || selectedAgent.id == null) return;
+    if (selectedAgent == null || selectedAgent.id == null || !hasAnyProvider)
+      return;
 
     const abortController = new AbortController();
 
@@ -511,7 +540,7 @@ export default function ActionsPopover({
     return () => {
       abortController.abort();
     };
-  }, [selectedAgent?.id]);
+  }, [selectedAgent?.id, hasAnyProvider]);
 
   // No separate MCP tool loading; tools already exist in selectedAgent.tools
 
@@ -892,14 +921,11 @@ export default function ActionsPopover({
                 disabled={disabledToolIds.includes(tool.id)}
                 isForced={forcedToolIds.includes(tool.id)}
                 isUnavailable={isUnavailable}
-                unavailableReason={
-                  isUnavailable
-                    ? getUnavailableToolTooltip(
-                        tool.in_code_tool_id,
-                        canAdminConfigure
-                      )
-                    : undefined
-                }
+                tooltip={getToolTooltip(
+                  tool,
+                  isToolAvailable,
+                  canAdminConfigure
+                )}
                 showAdminConfigure={!!adminConfigureInfo}
                 adminConfigureHref={adminConfigureInfo?.href}
                 adminConfigureTooltip={adminConfigureInfo?.tooltip}
@@ -1008,13 +1034,14 @@ export default function ActionsPopover({
       <Popover open={open} onOpenChange={handleOpenChange}>
         <Popover.Trigger asChild>
           <div data-testid="action-management-toggle">
-            <Button
-              icon={SvgSliders}
-              transient={open}
-              prominence="tertiary"
-              tooltip="Manage Actions"
-              disabled={disabled}
-            />
+            <Disabled disabled={disabled}>
+              <Button
+                icon={SvgSliders}
+                interaction={open ? "hover" : "rest"}
+                prominence="tertiary"
+                tooltip="Manage Actions"
+              />
+            </Disabled>
           </div>
         </Popover.Trigger>
         <Popover.Content side="bottom" align="start" width="lg">

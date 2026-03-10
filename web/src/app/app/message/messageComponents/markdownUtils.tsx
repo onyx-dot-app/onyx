@@ -14,6 +14,8 @@ import {
 import { extractCodeText, preprocessLaTeX } from "@/app/app/message/codeUtils";
 import { CodeBlock } from "@/app/app/message/CodeBlock";
 import { transformLinkUri, cn } from "@/lib/utils";
+import { InMessageImage } from "@/app/app/components/files/images/InMessageImage";
+import { extractChatImageFileId } from "@/app/app/components/files/images/utils";
 
 /**
  * Processes content for markdown rendering by handling code blocks and LaTeX
@@ -58,17 +60,31 @@ export const useMarkdownComponents = (
   );
 
   const anchorCallback = useCallback(
-    (props: any) => (
-      <MemoizedAnchor
-        updatePresentingDocument={state?.setPresentingDocument || (() => {})}
-        docs={state?.docs || []}
-        userFiles={state?.userFiles || []}
-        citations={state?.citations}
-        href={props.href}
-      >
-        {props.children}
-      </MemoizedAnchor>
-    ),
+    (props: any) => {
+      const imageFileId = extractChatImageFileId(
+        props.href,
+        String(props.children ?? "")
+      );
+      if (imageFileId) {
+        return (
+          <InMessageImage
+            fileId={imageFileId}
+            fileName={String(props.children ?? "")}
+          />
+        );
+      }
+      return (
+        <MemoizedAnchor
+          updatePresentingDocument={state?.setPresentingDocument || (() => {})}
+          docs={state?.docs || []}
+          userFiles={state?.userFiles || []}
+          citations={state?.citations}
+          href={props.href}
+        >
+          {props.children}
+        </MemoizedAnchor>
+      );
+    },
     [
       state?.docs,
       state?.userFiles,

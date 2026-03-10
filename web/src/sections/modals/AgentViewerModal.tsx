@@ -29,7 +29,7 @@ import { MCPServer, ToolSnapshot } from "@/lib/tools/interfaces";
 import EmptyMessage from "@/refresh-components/EmptyMessage";
 import { Horizontal } from "@/layouts/input-layouts";
 import Switch from "@/refresh-components/inputs/Switch";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import AppInputBar from "@/sections/input/AppInputBar";
 import { useFilters, useLlmManager } from "@/lib/hooks";
@@ -66,7 +66,7 @@ function ViewerMCPServerCard({ server, tools }: ViewerMCPServerCardProps) {
             variant="section"
             rightChildren={
               <Button
-                internal
+                prominence="internal"
                 rightIcon={folded ? SvgExpand : SvgFold}
                 onClick={() => setFolded((prev) => !prev)}
               >
@@ -116,8 +116,6 @@ function ViewerOpenApiToolCard({ tool }: { tool: ToolSnapshot }) {
   );
 }
 
-const EMPTY_DOCS: [] = [];
-
 /**
  * Floating ChatInputBar below the AgentViewerModal.
  * On submit, navigates to the agent's chat with the message pre-filled.
@@ -137,14 +135,10 @@ function AgentChatInput({ agent, onSubmit }: AgentChatInputProps) {
       chatState="input"
       filterManager={filterManager}
       selectedAgent={agent}
-      selectedDocuments={EMPTY_DOCS}
-      removeDocs={() => {}}
       stopGenerating={() => {}}
       handleFileUpload={() => {}}
-      toggleDocumentSidebar={() => {}}
       currentSessionFileTokenCount={0}
       availableContextTokens={Infinity}
-      retrievalEnabled={false}
       deepResearchEnabled={false}
       toggleDeepResearch={() => {}}
       disabled={false}
@@ -410,7 +404,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
               />
               <div className="grid grid-cols-2 gap-1 w-full">
                 {agent.starter_messages.map((starter, index) => (
-                  <Interactive.Base
+                  <Interactive.Stateless
                     key={index}
                     onClick={() => handleStartChat(starter.message)}
                     prominence="tertiary"
@@ -425,7 +419,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
                         widthVariant="full"
                       />
                     </Interactive.Container>
-                  </Interactive.Base>
+                  </Interactive.Stateless>
                 ))}
               </div>
             </>

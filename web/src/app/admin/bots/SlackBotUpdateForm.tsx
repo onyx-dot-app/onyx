@@ -1,16 +1,16 @@
 "use client";
 
 import { toast } from "@/hooks/useToast";
-import { SlackBot, ValidSources } from "@/lib/types";
+import { SlackBot } from "@/lib/types";
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 import { updateSlackBotField } from "@/lib/updateSlackBotField";
 import { SlackTokensForm } from "./SlackTokensForm";
-import { SourceIcon } from "@/components/SourceIcon";
+
 import { EditableStringFieldDisplay } from "@/components/EditableStringFieldDisplay";
 import { deleteSlackBot } from "./new/lib";
 import GenericConfirmModal from "@/components/modals/GenericConfirmModal";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { cn } from "@/lib/utils";
 import { SvgChevronDownSmall, SvgTrash } from "@opal/icons";
 
@@ -90,10 +90,7 @@ export const ExistingSlackBotForm = ({
     <div>
       <div className="flex items-center justify-between h-14">
         <div className="flex items-center gap-2">
-          <div className="my-auto">
-            <SourceIcon iconSize={32} sourceType={ValidSources.Slack} />
-          </div>
-          <div className="ml-1">
+          <div>
             <EditableStringFieldDisplay
               value={formValues.name}
               isEditable={true}
@@ -106,20 +103,20 @@ export const ExistingSlackBotForm = ({
         <div className="flex flex-col" ref={dropdownRef}>
           <div className="flex items-center gap-4">
             <Button
-              leftIcon={({ className }) => (
+              prominence="secondary"
+              icon={({ className }) => (
                 <SvgChevronDownSmall
                   className={cn(className, !isExpanded && "-rotate-90")}
                 />
               )}
               onClick={() => setIsExpanded(!isExpanded)}
-              secondary
             >
               Update Tokens
             </Button>
             <Button
-              danger
+              variant="danger"
               onClick={() => setShowDeleteModal(true)}
-              leftIcon={SvgTrash}
+              icon={SvgTrash}
             >
               Delete
             </Button>

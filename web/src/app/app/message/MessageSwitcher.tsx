@@ -1,4 +1,5 @@
 import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import Text from "@/refresh-components/texts/Text";
 import { SvgChevronLeft, SvgChevronRight } from "@opal/icons";
 const DISABLED_MESSAGE = "Wait for agent message to complete";
@@ -32,13 +33,14 @@ export default function MessageSwitcher({
       className="flex flex-row items-center gap-1"
       data-testid="MessageSwitcher/container"
     >
-      <Button
-        icon={SvgChevronLeft}
-        onClick={previous}
-        prominence="tertiary"
-        disabled={disableForStreaming}
-        tooltip={disableForStreaming ? DISABLED_MESSAGE : "Previous"}
-      />
+      <Disabled disabled={disableForStreaming}>
+        <Button
+          icon={SvgChevronLeft}
+          onClick={previous}
+          prominence="tertiary"
+          tooltip={disableForStreaming ? DISABLED_MESSAGE : "Previous"}
+        />
+      </Disabled>
 
       <div className="flex flex-row items-center justify-center">
         <Text as="p" text03 mainUiAction>
@@ -52,13 +54,14 @@ export default function MessageSwitcher({
         </Text>
       </div>
 
-      <Button
-        icon={SvgChevronRight}
-        onClick={next}
-        prominence="tertiary"
-        disabled={disableForStreaming}
-        tooltip={disableForStreaming ? DISABLED_MESSAGE : "Next"}
-      />
+      <Disabled disabled={disableForStreaming}>
+        <Button
+          icon={SvgChevronRight}
+          onClick={next}
+          prominence="tertiary"
+          tooltip={disableForStreaming ? DISABLED_MESSAGE : "Next"}
+        />
+      </Disabled>
     </div>
   );
 }

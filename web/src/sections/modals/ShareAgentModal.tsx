@@ -1,8 +1,7 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
-import Button from "@/refresh-components/buttons/Button";
 import {
   SvgLink,
   SvgOrganization,
@@ -28,7 +27,8 @@ import { useModal } from "@/refresh-components/contexts/ModalContext";
 import { useUser } from "@/providers/UserProvider";
 import { Formik, useFormikContext } from "formik";
 import { useAgent } from "@/hooks/useAgents";
-import { Button as OpalButton } from "@opal/components";
+import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import { useLabels } from "@/lib/hooks";
 import { PersonaLabel } from "@/app/admin/agents/interfaces";
 
@@ -56,7 +56,7 @@ interface ShareAgentFormContentProps {
 }
 
 function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
-  const { values, setFieldValue, handleSubmit, dirty } =
+  const { values, setFieldValue, handleSubmit, dirty, isSubmitting } =
     useFormikContext<ShareAgentFormValues>();
   const { data: usersData } = useShareableUsers({ includeApiKeys: true });
   const { data: groupsData } = useShareableGroups();
@@ -250,7 +250,7 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
                             ) : (
                               // For all other cases (including for "self-unsharing"),
                               // we render an `IconButton SvgX` to remove a person from the list.
-                              <OpalButton
+                              <Button
                                 prominence="tertiary"
                                 size="sm"
                                 icon={SvgX}
@@ -270,7 +270,7 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
                         key={`group-${group.id}`}
                         icon={SvgUsers}
                         rightChildren={
-                          <OpalButton
+                          <Button
                             prominence="tertiary"
                             size="sm"
                             icon={SvgX}
@@ -343,20 +343,26 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
         <BasicModalFooter
           left={
             agentId ? (
-              <Button secondary leftIcon={SvgLink} onClick={handleCopyLink}>
+              <Button
+                prominence="secondary"
+                icon={SvgLink}
+                onClick={handleCopyLink}
+              >
                 Copy Link
               </Button>
             ) : undefined
           }
           cancel={
-            <Button secondary onClick={handleClose}>
-              Cancel
-            </Button>
+            <Disabled disabled={isSubmitting}>
+              <Button prominence="secondary" onClick={handleClose}>
+                Cancel
+              </Button>
+            </Disabled>
           }
           submit={
-            <Button onClick={() => handleSubmit()} disabled={!dirty}>
-              Save
-            </Button>
+            <Disabled disabled={!dirty || isSubmitting}>
+              <Button onClick={() => handleSubmit()}>Save</Button>
+            </Disabled>
           }
         />
       </Modal.Footer>
@@ -381,7 +387,7 @@ export interface ShareAgentModalProps {
     isPublic: boolean,
     isFeatured: boolean,
     labelIds: number[]
-  ) => void;
+  ) => Promise<void> | void;
 }
 
 export default function ShareAgentModal({
@@ -395,16 +401,31 @@ export default function ShareAgentModal({
 }: ShareAgentModalProps) {
   const shareAgentModal = useModal();
 
-  const initialValues: ShareAgentFormValues = {
-    selectedUserIds: userIds,
-    selectedGroupIds: groupIds,
-    isPublic: isPublic,
-    isFeatured: isFeatured,
-    labelIds: labelIds,
-  };
+  const initialValues = useMemo(
+    (): ShareAgentFormValues => ({
+      selectedUserIds: userIds,
+      selectedGroupIds: groupIds,
+      isPublic: isPublic,
+      isFeatured: isFeatured,
+      labelIds: labelIds,
+    }),
+    [userIds, groupIds, isPublic, isFeatured, labelIds]
+  );
+  const [modalInitialValues, setModalInitialValues] =
+    useState<ShareAgentFormValues>(initialValues);
+  const wasOpenRef = useRef(false);
 
-  function handleSubmit(values: ShareAgentFormValues) {
-    onShare?.(
+  useEffect(() => {
+    // Capture fresh props exactly when the modal opens, then keep them stable
+    // while open so in-flight parent updates don't reset form state.
+    if (shareAgentModal.isOpen && !wasOpenRef.current) {
+      setModalInitialValues(initialValues);
+    }
+    wasOpenRef.current = shareAgentModal.isOpen;
+  }, [shareAgentModal.isOpen, initialValues]);
+
+  async function handleSubmit(values: ShareAgentFormValues) {
+    await onShare?.(
       values.selectedUserIds,
       values.selectedGroupIds,
       values.isPublic,
@@ -416,7 +437,7 @@ export default function ShareAgentModal({
   return (
     <Modal open={shareAgentModal.isOpen} onOpenChange={shareAgentModal.toggle}>
       <Formik
-        initialValues={initialValues}
+        initialValues={modalInitialValues}
         onSubmit={handleSubmit}
         enableReinitialize
       >

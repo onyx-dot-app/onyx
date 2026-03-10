@@ -76,7 +76,10 @@ vespa:
       memory: 32000Mi
 
 opensearch:
-  enabled: false
+  # Enabled by default. Override to false and set the appropriate env vars in
+  # the instance-specific values yaml if using AWS-managed OpenSearch, or simply
+  # override to false to entirely disable.
+  enabled: true
   # These values are passed to the opensearch subchart.
   # See https://github.com/opensearch-project/helm-charts/blob/main/charts/opensearch/values.yaml
 
@@ -1158,8 +1161,10 @@ auth:
   opensearch:
     # Enable or disable this secret entirely. Will remove from env var
     # configurations and remove any created secrets.
-    # Set to true when opensearch.enabled is true.
-    enabled: false
+    # Enabled by default. Override to false and set the appropriate env vars in
+    # the instance-specific values yaml if using AWS-managed OpenSearch, or
+    # simply override to false to entirely disable.
+    enabled: true
     # Overwrite the default secret name, ignored if existingSecret is defined.
     secretName: 'onyx-opensearch'
     # Use a secret specified elsewhere.
@@ -1261,3 +1266,5 @@ configMap:
   SKIP_USERFILE_THRESHOLD: ""
   # For multi-tenant: comma-separated list of tenant IDs to skip threshold
   SKIP_USERFILE_THRESHOLD_TENANT_IDS: ""
+  # Maximum user upload file size in MB for chat/projects uploads
+  USER_FILE_MAX_UPLOAD_SIZE_MB: ""

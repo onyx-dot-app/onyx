@@ -3,10 +3,9 @@
 import React, { useState } from "react";
 import type { IconProps } from "@opal/types";
 import { cn, noProp } from "@/lib/utils";
-import { Disabled } from "@/refresh-components/Disabled";
+import { Disabled } from "@opal/core";
 import Text from "@/refresh-components/texts/Text";
-import Button from "@/refresh-components/buttons/Button";
-import { Button as OpalButton } from "@opal/components";
+import { Button } from "@opal/components";
 import SelectButton from "@/refresh-components/buttons/SelectButton";
 import {
   SvgArrowExchange,
@@ -125,40 +124,42 @@ export default function Select({
         <div className="flex items-center justify-end gap-1">
           {/* Disconnected: Show Connect button */}
           {isDisconnected && (
-            <Button
-              action={false}
-              tertiary
-              disabled={disabled || !onConnect}
-              onClick={noProp(onConnect)}
-              rightIcon={SvgArrowExchange}
-            >
-              {connectLabel}
-            </Button>
+            <Disabled disabled={disabled || !onConnect}>
+              <Button
+                prominence="tertiary"
+                onClick={noProp(onConnect)}
+                rightIcon={SvgArrowExchange}
+              >
+                {connectLabel}
+              </Button>
+            </Disabled>
           )}
 
           {/* Connected: Show select icon + settings icon */}
           {isConnected && (
             <>
-              <SelectButton
-                action
-                folded
-                transient={isHovered}
-                disabled={disabled || !onSelect}
-                onClick={onSelect}
-                rightIcon={SvgArrowRightCircle}
-              >
-                {selectLabel}
-              </SelectButton>
+              <Disabled disabled={disabled || !onSelect}>
+                <SelectButton
+                  action
+                  folded
+                  transient={isHovered}
+                  onClick={onSelect}
+                  rightIcon={SvgArrowRightCircle}
+                >
+                  {selectLabel}
+                </SelectButton>
+              </Disabled>
               {onEdit && (
-                <OpalButton
-                  icon={SvgSettings}
-                  tooltip="Edit"
-                  prominence="tertiary"
-                  size="sm"
-                  disabled={disabled}
-                  onClick={noProp(onEdit)}
-                  aria-label={`Edit ${title}`}
-                />
+                <Disabled disabled={disabled}>
+                  <Button
+                    icon={SvgSettings}
+                    tooltip="Edit"
+                    prominence="tertiary"
+                    size="sm"
+                    onClick={noProp(onEdit)}
+                    aria-label={`Edit ${title}`}
+                  />
+                </Disabled>
               )}
             </>
           )}
@@ -166,25 +167,27 @@ export default function Select({
           {/* Selected: Show "Current Default" label + settings icon */}
           {isSelected && (
             <>
-              <SelectButton
-                action
-                engaged
-                disabled={disabled}
-                onClick={onDeselect}
-                leftIcon={SvgCheckSquare}
-              >
-                {selectedLabel}
-              </SelectButton>
+              <Disabled disabled={disabled}>
+                <SelectButton
+                  action
+                  engaged
+                  onClick={onDeselect}
+                  leftIcon={SvgCheckSquare}
+                >
+                  {selectedLabel}
+                </SelectButton>
+              </Disabled>
               {onEdit && (
-                <OpalButton
-                  icon={SvgSettings}
-                  tooltip="Edit"
-                  prominence="tertiary"
-                  size="sm"
-                  disabled={disabled}
-                  onClick={noProp(onEdit)}
-                  aria-label={`Edit ${title}`}
-                />
+                <Disabled disabled={disabled}>
+                  <Button
+                    icon={SvgSettings}
+                    tooltip="Edit"
+                    prominence="tertiary"
+                    size="sm"
+                    onClick={noProp(onEdit)}
+                    aria-label={`Edit ${title}`}
+                  />
+                </Disabled>
               )}
             </>
           )}

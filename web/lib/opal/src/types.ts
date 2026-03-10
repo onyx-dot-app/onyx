@@ -30,6 +30,11 @@ export interface IconProps extends SVGProps<SVGSVGElement> {
 /** Strips `className` and `style` from a props type to enforce design-system styling. */
 export type WithoutStyles<T> = Omit<T, "className" | "style">;
 
+/** Like `Omit` but distributes over union types, preserving discriminated unions. */
+export type DistributiveOmit<T, K extends keyof any> = T extends any
+  ? Omit<T, K>
+  : never;
+
 /**
  * A React function component that accepts {@link IconProps}.
  *

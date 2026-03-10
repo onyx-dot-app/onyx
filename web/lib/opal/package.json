@@ -18,6 +18,10 @@
       "types": "./src/icons/index.ts",
       "default": "./src/icons/index.ts"
     },
+    "./illustrations": {
+      "types": "./src/illustrations/index.ts",
+      "default": "./src/illustrations/index.ts"
+    },
     "./types": {
       "types": "./src/types.ts",
       "default": "./src/types.ts"

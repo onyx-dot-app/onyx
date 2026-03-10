@@ -7,7 +7,6 @@ import Modal from "@/refresh-components/Modal";
 import * as InputLayouts from "@/layouts/input-layouts";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
-import Button from "@/refresh-components/buttons/Button";
 import { createMCPServer, updateMCPServer } from "@/lib/tools/mcpService";
 import {
   MCPServerCreateRequest,
@@ -16,7 +15,8 @@ import {
 } from "@/lib/tools/interfaces";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import Separator from "@/refresh-components/Separator";
-import { Button as OpalButton } from "@opal/components";
+import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import { toast } from "@/hooks/useToast";
 import { ModalCreationInterface } from "@/refresh-components/contexts/ModalContext";
 import { SvgCheckCircle, SvgServer, SvgUnplug } from "@opal/icons";
@@ -214,7 +214,7 @@ export default function AddMCPServerModal({
                         alignItems="center"
                         width="fit"
                       >
-                        <OpalButton
+                        <Button
                           icon={SvgUnplug}
                           prominence="tertiary"
                           type="button"
@@ -222,7 +222,7 @@ export default function AddMCPServerModal({
                           onClick={handleDisconnectClick}
                         />
                         <Button
-                          secondary
+                          prominence="secondary"
                           type="button"
                           onClick={() => {
                             // Close this modal and open the auth modal for this server
@@ -238,27 +238,26 @@ export default function AddMCPServerModal({
               </Modal.Body>
 
               <Modal.Footer>
-                <Button
-                  secondary
-                  type="button"
-                  onClick={() => handleModalClose(false)}
-                  disabled={isSubmitting}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  primary
-                  type="submit"
-                  disabled={isSubmitting || !isValid || !dirty}
-                >
-                  {isSubmitting
-                    ? isEditMode
-                      ? "Saving..."
-                      : "Adding..."
-                    : isEditMode
-                      ? "Save Changes"
-                      : "Add Server"}
-                </Button>
+                <Disabled disabled={isSubmitting}>
+                  <Button
+                    prominence="secondary"
+                    type="button"
+                    onClick={() => handleModalClose(false)}
+                  >
+                    Cancel
+                  </Button>
+                </Disabled>
+                <Disabled disabled={isSubmitting || !isValid || !dirty}>
+                  <Button type="submit">
+                    {isSubmitting
+                      ? isEditMode
+                        ? "Saving..."
+                        : "Adding..."
+                      : isEditMode
+                        ? "Save Changes"
+                        : "Add Server"}
+                  </Button>
+                </Disabled>
               </Modal.Footer>
             </Form>
           )}

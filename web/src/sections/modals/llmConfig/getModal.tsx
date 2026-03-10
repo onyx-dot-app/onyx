@@ -7,6 +7,7 @@ import { VertexAIModal } from "./VertexAIModal";
 import { OpenRouterModal } from "./OpenRouterModal";
 import { CustomModal } from "./CustomModal";
 import { BedrockModal } from "./BedrockModal";
+import { LMStudioForm } from "./LMStudioForm";
 
 export function detectIfRealOpenAIProvider(provider: LLMProviderView) {
   return (
@@ -44,6 +45,8 @@ export function getModalForExistingProvider(
       return <BedrockModal {...props} />;
     case LLMProviderName.OPENROUTER:
       return <OpenRouterModal {...props} />;
+    case LLMProviderName.LM_STUDIO:
+      return <LMStudioForm {...props} />;
     default:
       return <CustomModal {...props} />;
   }

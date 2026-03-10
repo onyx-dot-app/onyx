@@ -5,7 +5,8 @@ import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { Section } from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import { TextFormField } from "@/components/Field";
 import { ValidSources } from "@/lib/types";
 import {
@@ -40,7 +41,7 @@ export default function CreateCredentialInline({
           No credential configuration available for {sourceMetadata.displayName}
           .
         </Text>
-        <Button action secondary onClick={onCancel}>
+        <Button variant="action" prominence="secondary" onClick={onCancel}>
           Cancel
         </Button>
       </Section>
@@ -149,22 +150,20 @@ export default function CreateCredentialInline({
               gap={0.5}
               height="fit"
             >
-              <Button
-                action
-                secondary
-                onClick={onCancel}
-                disabled={isSubmitting}
-              >
-                Cancel
-              </Button>
-              <Button
-                action
-                primary
-                type="submit"
-                disabled={!isValid || !dirty || isSubmitting}
-              >
-                {isSubmitting ? "Creating..." : "Create Credential"}
-              </Button>
+              <Disabled disabled={isSubmitting}>
+                <Button
+                  variant="action"
+                  prominence="secondary"
+                  onClick={onCancel}
+                >
+                  Cancel
+                </Button>
+              </Disabled>
+              <Disabled disabled={!isValid || !dirty || isSubmitting}>
+                <Button variant="action" type="submit">
+                  {isSubmitting ? "Creating..." : "Create Credential"}
+                </Button>
+              </Disabled>
             </Section>
           </Section>
         </Form>

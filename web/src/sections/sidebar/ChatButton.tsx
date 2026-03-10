@@ -6,7 +6,6 @@ import useChatSessions from "@/hooks/useChatSessions";
 import { deleteChatSession, renameChatSession } from "@/app/app/services/lib";
 import { ChatSession } from "@/app/app/interfaces";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
-import Button from "@/refresh-components/buttons/Button";
 import { cn, noProp } from "@/lib/utils";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import { useAppRouter } from "@/hooks/appNavigation";
@@ -21,7 +20,7 @@ import { UNNAMED_CHAT } from "@/lib/constants";
 import ShareChatSessionModal from "@/sections/modals/ShareChatSessionModal";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import { Button as OpalButton } from "@opal/components";
+import { Button } from "@opal/components";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { DRAG_TYPES, LOCAL_STORAGE_KEYS } from "@/sections/sidebar/constants";
 import {
@@ -75,7 +74,7 @@ export function PopoverSearchInput({
 
   return (
     <div className="flex flex-row items-center">
-      <OpalButton
+      <Button
         icon={SvgChevronLeft}
         onClick={handleClickBackButton}
         prominence="tertiary"
@@ -398,6 +397,7 @@ const ChatButton = memo(
       <>
         <Popover.Trigger asChild onClick={noProp()}>
           <div>
+            {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
             <IconButton
               icon={SvgMoreHorizontal}
               className={cn(
@@ -429,9 +429,8 @@ const ChatButton = memo(
           <SidebarTab
             href={isDragging ? undefined : `/app?chatId=${chatSession.id}`}
             onClick={handleClick}
-            transient={active}
+            selected={active}
             rightChildren={rightMenu}
-            focused={renaming}
             nested={!!project}
           >
             {renaming ? (
@@ -457,7 +456,7 @@ const ChatButton = memo(
             onClose={() => setDeleteConfirmationModalOpen(false)}
             submit={
               <Button
-                danger
+                variant="danger"
                 onClick={() => {
                   setDeleteConfirmationModalOpen(false);
                   handleChatDelete();

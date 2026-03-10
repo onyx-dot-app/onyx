@@ -401,6 +401,7 @@ export default function BuildChatPanel({
           </div>
           {/* Output panel toggle - only show when panel is fully closed (after animation) */}
           {isOutputPanelFullyClosed && (
+            // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
             <IconButton
               icon={SvgSidebar}
               onClick={toggleOutputPanel}

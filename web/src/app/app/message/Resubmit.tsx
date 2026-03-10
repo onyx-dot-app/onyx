@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { SvgChevronDown, SvgChevronRight } from "@opal/icons";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import { getErrorIcon, getErrorTitle } from "./errorHelpers";
 
@@ -59,10 +59,8 @@ export const ErrorBanner = ({
             <div className="mt-2 border-t border-neutral-200 dark:border-neutral-700 pt-2">
               <div className="flex flex-1 items-center justify-between">
                 <Button
-                  tertiary
-                  leftIcon={
-                    isStackTraceExpanded ? SvgChevronDown : SvgChevronRight
-                  }
+                  prominence="tertiary"
+                  icon={isStackTraceExpanded ? SvgChevronDown : SvgChevronRight}
                   onClick={() => setIsStackTraceExpanded(!isStackTraceExpanded)}
                 >
                   Stack trace

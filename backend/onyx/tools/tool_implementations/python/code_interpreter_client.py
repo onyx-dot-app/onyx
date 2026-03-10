@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import json
+import time
 from collections.abc import Generator
 from typing import Literal
 from typing import TypedDict
@@ -11,6 +14,9 @@ from onyx.configs.app_configs import CODE_INTERPRETER_BASE_URL
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+_HEALTH_CACHE_TTL_SECONDS = 30
+_health_cache: dict[str, tuple[float, bool]] = {}
 
 
 class FileInput(TypedDict):
@@ -80,6 +86,19 @@ class CodeInterpreterClient:
             raise ValueError("CODE_INTERPRETER_BASE_URL not configured")
         self.base_url = base_url.rstrip("/")
         self.session = requests.Session()
+        self._closed = False
+
+    def __enter__(self) -> CodeInterpreterClient:
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        self.close()
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self.session.close()
+        self._closed = True
 
     def _build_payload(
         self,
@@ -98,16 +117,32 @@ class CodeInterpreterClient:
             payload["files"] = files
         return payload
 
-    def health(self) -> bool:
-        """Check if the Code Interpreter service is healthy"""
+    def health(self, use_cache: bool = False) -> bool:
+        """Check if the Code Interpreter service is healthy
+
+        Args:
+            use_cache: When True, return a cached result if available and
+                       within the TTL window. The cache is always populated
+                       after a live request regardless of this flag.
+        """
+        if use_cache:
+            cached = _health_cache.get(self.base_url)
+            if cached is not None:
+                cached_at, cached_result = cached
+                if time.monotonic() - cached_at < _HEALTH_CACHE_TTL_SECONDS:
+                    return cached_result
+
         url = f"{self.base_url}/health"
         try:
             response = self.session.get(url, timeout=5)
             response.raise_for_status()
-            return response.json().get("status") == "ok"
+            result = response.json().get("status") == "ok"
         except Exception as e:
             logger.warning(f"Exception caught when checking health, e={e}")
-            return False
+            result = False
+
+        _health_cache[self.base_url] = (time.monotonic(), result)
+        return result
 
     def execute(
         self,
@@ -157,8 +192,11 @@ class CodeInterpreterClient:
             yield from self._batch_as_stream(code, stdin, timeout_ms, files)
             return
 
-        response.raise_for_status()
-        yield from self._parse_sse(response)
+        try:
+            response.raise_for_status()
+            yield from self._parse_sse(response)
+        finally:
+            response.close()
 
     def _parse_sse(
         self, response: requests.Response

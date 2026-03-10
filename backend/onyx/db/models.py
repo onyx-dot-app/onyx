@@ -36,9 +36,11 @@ from sqlalchemy import Text
 from sqlalchemy import text
 from sqlalchemy import UniqueConstraint
 from sqlalchemy.dialects import postgresql
+from sqlalchemy import event
 from sqlalchemy.engine.interfaces import Dialect
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.orm import Mapped
+from sqlalchemy.orm import Mapper
 from sqlalchemy.orm import mapped_column
 from sqlalchemy.orm import relationship
 from sqlalchemy.types import LargeBinary
@@ -117,10 +119,50 @@ class Base(DeclarativeBase):
     __abstract__ = True
 
 
-class EncryptedString(TypeDecorator):
+class _EncryptedBase(TypeDecorator):
+    """Base for encrypted column types that wrap values in SensitiveValue."""
+
     impl = LargeBinary
-    # This type's behavior is fully deterministic and doesn't depend on any external factors.
     cache_ok = True
+    _is_json: bool = False
+
+    def wrap_raw(self, value: Any) -> SensitiveValue:
+        """Encrypt a raw value and wrap it in SensitiveValue.
+
+        Called by the attribute set event so the Python-side type is always
+        SensitiveValue, regardless of whether the value was loaded from the DB
+        or assigned in application code.
+        """
+        if self._is_json:
+            if not isinstance(value, dict):
+                raise TypeError(
+                    f"EncryptedJson column expected dict, got {type(value).__name__}"
+                )
+            raw_str = json.dumps(value)
+        else:
+            if not isinstance(value, str):
+                raise TypeError(
+                    f"EncryptedString column expected str, got {type(value).__name__}"
+                )
+            raw_str = value
+        return SensitiveValue(
+            encrypted_bytes=encrypt_string_to_bytes(raw_str),
+            decrypt_fn=decrypt_bytes_to_string,
+            is_json=self._is_json,
+        )
+
+    def compare_values(self, x: Any, y: Any) -> bool:
+        if x is None or y is None:
+            return x == y
+        if isinstance(x, SensitiveValue):
+            x = x.get_value(apply_mask=False)
+        if isinstance(y, SensitiveValue):
+            y = y.get_value(apply_mask=False)
+        return x == y
+
+
+class EncryptedString(_EncryptedBase):
+    _is_json: bool = False
 
     def process_bind_param(
         self, value: str | SensitiveValue[str] | None, dialect: Dialect  # noqa: ARG002
@@ -144,20 +186,9 @@ class EncryptedString(TypeDecorator):
             )
         return None
 
-    def compare_values(self, x: Any, y: Any) -> bool:
-        if x is None or y is None:
-            return x == y
-        if isinstance(x, SensitiveValue):
-            x = x.get_value(apply_mask=False)
-        if isinstance(y, SensitiveValue):
-            y = y.get_value(apply_mask=False)
-        return x == y
 
-
-class EncryptedJson(TypeDecorator):
-    impl = LargeBinary
-    # This type's behavior is fully deterministic and doesn't depend on any external factors.
-    cache_ok = True
+class EncryptedJson(_EncryptedBase):
+    _is_json: bool = True
 
     def process_bind_param(
         self,
@@ -165,9 +196,7 @@ class EncryptedJson(TypeDecorator):
         dialect: Dialect,  # noqa: ARG002
     ) -> bytes | None:
         if value is not None:
-            # Handle both raw dicts and SensitiveValue wrappers
             if isinstance(value, SensitiveValue):
-                # Get raw value for storage
                 value = value.get_value(apply_mask=False)
             json_str = json.dumps(value)
             return encrypt_string_to_bytes(json_str)
@@ -184,14 +213,40 @@ class EncryptedJson(TypeDecorator):
             )
         return None
 
-    def compare_values(self, x: Any, y: Any) -> bool:
-        if x is None or y is None:
-            return x == y
-        if isinstance(x, SensitiveValue):
-            x = x.get_value(apply_mask=False)
-        if isinstance(y, SensitiveValue):
-            y = y.get_value(apply_mask=False)
-        return x == y
+
+_REGISTERED_ATTRS: set[str] = set()
+
+
+@event.listens_for(Mapper, "mapper_configured")
+def _register_sensitive_value_set_events(
+    mapper: Mapper,
+    class_: type,
+) -> None:
+    """Auto-wrap raw values in SensitiveValue when assigned to encrypted columns."""
+    for prop in mapper.column_attrs:
+        for col in prop.columns:
+            if isinstance(col.type, _EncryptedBase):
+                col_type = col.type
+                attr = getattr(class_, prop.key)
+
+                # Guard against double-registration (e.g. if mapper is
+                # re-configured in test setups)
+                attr_key = f"{class_.__qualname__}.{prop.key}"
+                if attr_key in _REGISTERED_ATTRS:
+                    continue
+                _REGISTERED_ATTRS.add(attr_key)
+
+                @event.listens_for(attr, "set", retval=True)
+                def _wrap_value(
+                    target: Any,  # noqa: ARG001
+                    value: Any,
+                    oldvalue: Any,  # noqa: ARG001
+                    initiator: Any,  # noqa: ARG001
+                    _col_type: _EncryptedBase = col_type,
+                ) -> Any:
+                    if value is not None and not isinstance(value, SensitiveValue):
+                        return _col_type.wrap_raw(value)
+                    return value
 
 
 class NullFilteredString(TypeDecorator):
@@ -4926,7 +4981,9 @@ class ScimUserMapping(Base):
     __tablename__ = "scim_user_mapping"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    external_id: Mapped[str] = mapped_column(String, unique=True, index=True)
+    external_id: Mapped[str | None] = mapped_column(
+        String, unique=True, index=True, nullable=True
+    )
     user_id: Mapped[UUID] = mapped_column(
         ForeignKey("user.id", ondelete="CASCADE"), unique=True, nullable=False
     )
@@ -4983,3 +5040,25 @@ class CodeInterpreterServer(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     server_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+
+class CacheStore(Base):
+    """Key-value cache table used by ``PostgresCacheBackend``.
+
+    Replaces Redis for simple KV caching, locks, and list operations
+    when ``CACHE_BACKEND=postgres`` (NO_VECTOR_DB deployments).
+
+    Intentionally separate from ``KVStore``:
+    - Stores raw bytes (LargeBinary) vs JSONB, matching Redis semantics.
+    - Has ``expires_at`` for TTL; rows are periodically garbage-collected.
+    - Holds ephemeral data (tokens, stop signals, lock state) not
+      persistent application config, so cleanup can be aggressive.
+    """
+
+    __tablename__ = "cache_store"
+
+    key: Mapped[str] = mapped_column(String, primary_key=True)
+    value: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    expires_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )

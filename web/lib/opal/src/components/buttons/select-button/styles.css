@@ -1,0 +1,9 @@
+/* SelectButton — layout only; colors handled by Interactive.Stateful */
+
+.opal-select-button {
+  @apply flex flex-row items-center gap-1;
+}
+
+.opal-select-button-label {
+  @apply whitespace-nowrap;
+}

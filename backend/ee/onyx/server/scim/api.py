@@ -423,14 +423,62 @@ def create_user(
 
     email = user_resource.userName.strip()
 
-    # Enforce seat limit
+    # Check for existing user — if they exist but aren't SCIM-managed yet,
+    # link them to the IdP rather than rejecting with 409.
+    external_id: str | None = user_resource.externalId
+    scim_username: str = user_resource.userName.strip()
+    fields: ScimMappingFields = _fields_from_resource(user_resource)
+
+    existing_user = dal.get_user_by_email(email)
+    if existing_user:
+        existing_mapping = dal.get_user_mapping_by_user_id(existing_user.id)
+        if existing_mapping:
+            return _scim_error_response(409, f"User with email {email} already exists")
+
+        # Adopt pre-existing user into SCIM management.
+        # Reactivating a deactivated user consumes a seat, so enforce the
+        # seat limit the same way replace_user does.
+        if user_resource.active and not existing_user.is_active:
+            seat_error = _check_seat_availability(dal)
+            if seat_error:
+                return _scim_error_response(403, seat_error)
+
+        personal_name = _scim_name_to_str(user_resource.name)
+        dal.update_user(
+            existing_user,
+            is_active=user_resource.active,
+            **({"personal_name": personal_name} if personal_name else {}),
+        )
+
+        try:
+            dal.create_user_mapping(
+                external_id=external_id,
+                user_id=existing_user.id,
+                scim_username=scim_username,
+                fields=fields,
+            )
+            dal.commit()
+        except IntegrityError:
+            dal.rollback()
+            return _scim_error_response(
+                409, f"User with email {email} already has a SCIM mapping"
+            )
+
+        return _scim_resource_response(
+            provider.build_user_resource(
+                existing_user,
+                external_id,
+                scim_username=scim_username,
+                fields=fields,
+            ),
+            status_code=201,
+        )
+
+    # Only enforce seat limit for net-new users — adopting a pre-existing
+    # user doesn't consume a new seat.
     seat_error = _check_seat_availability(dal)
     if seat_error:
         return _scim_error_response(403, seat_error)
-
-    # Check for existing user
-    if dal.get_user_by_email(email):
-        return _scim_error_response(409, f"User with email {email} already exists")
 
     # Create user with a random password (SCIM users authenticate via IdP)
     personal_name = _scim_name_to_str(user_resource.name)
@@ -449,21 +497,21 @@ def create_user(
         dal.rollback()
         return _scim_error_response(409, f"User with email {email} already exists")
 
-    # Create SCIM mapping when externalId is provided — this is how the IdP
-    # correlates this user on subsequent requests.  Per RFC 7643, externalId
-    # is optional and assigned by the provisioning client.
-    external_id = user_resource.externalId
-    scim_username = user_resource.userName.strip()
-    fields = _fields_from_resource(user_resource)
-    if external_id:
+    # Always create a SCIM mapping so that the user is marked as
+    # SCIM-managed. externalId may be None (RFC 7643 says it's optional).
+    try:
         dal.create_user_mapping(
             external_id=external_id,
             user_id=user.id,
             scim_username=scim_username,
             fields=fields,
         )
-
-    dal.commit()
+        dal.commit()
+    except IntegrityError:
+        dal.rollback()
+        return _scim_error_response(
+            409, f"User with email {email} already has a SCIM mapping"
+        )
 
     return _scim_resource_response(
         provider.build_user_resource(

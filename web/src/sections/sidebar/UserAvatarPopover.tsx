@@ -25,7 +25,7 @@ import {
 import { Section } from "@/layouts/general-layouts";
 import { toast } from "@/hooks/useToast";
 import useAppFocus from "@/hooks/useAppFocus";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useVectorDbEnabled } from "@/providers/SettingsProvider";
 
 function getDisplayName(email?: string, personalName?: string): string {
   // Prioritize custom personal name if set
@@ -166,8 +166,7 @@ export default function UserAvatarPopover({
   const { user } = useUser();
   const router = useRouter();
   const appFocus = useAppFocus();
-  const settings = useSettingsContext();
-  const vectorDbEnabled = settings?.settings.vector_db_enabled !== false;
+  const vectorDbEnabled = useVectorDbEnabled();
 
   // Fetch notifications for display
   // The GET endpoint also triggers a refresh if release notes are stale
@@ -201,7 +200,7 @@ export default function UserAvatarPopover({
       <Popover.Trigger asChild>
         <div id="onyx-user-dropdown">
           <SidebarTab
-            leftIcon={({ className }) => (
+            icon={({ className }) => (
               <InputAvatar
                 className={cn(
                   "flex items-center justify-center bg-background-neutral-inverted-00",
@@ -221,8 +220,16 @@ export default function UserAvatarPopover({
                 </Section>
               ) : undefined
             }
-            transient={!!popupState || appFocus.isUserSettings()}
+            selected={!!popupState || appFocus.isUserSettings()}
             folded={folded}
+            // TODO (@raunakab)
+            //
+            // The internals of `SidebarTab` (`Interactive.Base`) was designed such that providing an `onClick` or `href` would trigger rendering a `cursor-pointer`.
+            // However, since instance is wired up as a "trigger", it doesn't have either of those explicitly specified.
+            // Therefore, the default cursor would be rendered.
+            //
+            // Specifying a dummy `onClick` handler solves that.
+            onClick={() => undefined}
           >
             {displayName}
           </SidebarTab>

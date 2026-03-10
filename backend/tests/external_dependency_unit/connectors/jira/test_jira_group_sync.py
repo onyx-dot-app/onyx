@@ -1,5 +1,6 @@
 from typing import Any
 
+import pytest
 from sqlalchemy.orm import Session
 
 from ee.onyx.external_permissions.jira.group_sync import jira_group_sync
@@ -17,6 +18,8 @@ from tests.daily.connectors.confluence.models import ExternalUserGroupSet
 # In order to get these tests to run, use the credentials from Bitwarden.
 # Search up "ENV vars for local and Github tests", and find the Jira relevant key-value pairs.
 # Required env vars: JIRA_USER_EMAIL, JIRA_API_TOKEN
+
+pytestmark = pytest.mark.usefixtures("enable_ee")
 
 # Expected groups from the danswerai.atlassian.net Jira instance
 # Note: These groups are shared with Confluence since they're both Atlassian products

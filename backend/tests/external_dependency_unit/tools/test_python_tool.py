@@ -950,6 +950,7 @@ from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import PythonToolDelta
 from onyx.server.query_and_chat.streaming_models import PythonToolStart
 from onyx.server.query_and_chat.streaming_models import SectionEnd
+from onyx.server.query_and_chat.streaming_models import ToolCallArgumentDelta
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from tests.external_dependency_unit.answer.stream_test_builder import StreamTestBuilder
 from tests.external_dependency_unit.answer.stream_test_utils import create_chat_session
@@ -1024,6 +1025,13 @@ class _MockCIHandler(BaseHTTPRequestHandler):
                     "files": [],
                 },
             )
+        else:
+            self._respond_json(404, {"error": "not found"})
+
+    def do_GET(self) -> None:
+        self._capture("GET", b"")
+        if self.path == "/health":
+            self._respond_json(200, {"status": "ok"})
         else:
             self._respond_json(404, {"error": "not found"})
 
@@ -1105,6 +1113,14 @@ def mock_ci_server() -> Generator[MockCodeInterpreterServer, None, None]:
     server.start()
     yield server
     server.shutdown()
+
+
+@pytest.fixture(autouse=True)
+def _clear_health_cache() -> None:
+    """Reset the health check cache before every test."""
+    import onyx.tools.tool_implementations.python.code_interpreter_client as mod
+
+    mod._health_cache = {}
 
 
 @pytest.fixture()
@@ -1279,9 +1295,18 @@ def test_code_interpreter_replay_packets_include_code_and_output(
             ).expect(
                 Packet(
                     placement=create_placement(0),
-                    obj=PythonToolStart(code=code),
+                    obj=ToolCallArgumentDelta(
+                        tool_type="python",
+                        argument_deltas={"code": code},
+                    ),
                 ),
                 forward=2,
+            ).expect(
+                Packet(
+                    placement=create_placement(0),
+                    obj=PythonToolStart(code=code),
+                ),
+                forward=False,
             ).expect(
                 Packet(
                     placement=create_placement(0),

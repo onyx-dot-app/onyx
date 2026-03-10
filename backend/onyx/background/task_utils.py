@@ -75,31 +75,41 @@ def _claim_next_processing_file(db_session: Session) -> UUID | None:
     return file_id
 
 
-def _claim_next_deleting_file(db_session: Session) -> UUID | None:
+def _claim_next_deleting_file(
+    db_session: Session,
+    exclude_ids: set[UUID] | None = None,
+) -> UUID | None:
     """Claim the next DELETING file.
 
     No status transition needed — the impl deletes the row on success.
     The short-lived FOR UPDATE lock prevents concurrent claims.
+    *exclude_ids* prevents re-processing the same file if the impl fails.
     """
-    file_id = db_session.execute(
+    stmt = (
         select(UserFile.id)
         .where(UserFile.status == UserFileStatus.DELETING)
         .order_by(UserFile.created_at)
         .limit(1)
         .with_for_update(skip_locked=True)
-    ).scalar_one_or_none()
-    # Commit to release the row lock promptly.
+    )
+    if exclude_ids:
+        stmt = stmt.where(UserFile.id.notin_(exclude_ids))
+    file_id = db_session.execute(stmt).scalar_one_or_none()
     db_session.commit()
     return file_id
 
 
-def _claim_next_sync_file(db_session: Session) -> UUID | None:
+def _claim_next_sync_file(
+    db_session: Session,
+    exclude_ids: set[UUID] | None = None,
+) -> UUID | None:
     """Claim the next file needing project/persona sync.
 
     No status transition needed — the impl clears the sync flags on
     success.  The short-lived FOR UPDATE lock prevents concurrent claims.
+    *exclude_ids* prevents re-processing the same file if the impl fails.
     """
-    file_id = db_session.execute(
+    stmt = (
         select(UserFile.id)
         .where(
             sa.and_(
@@ -113,7 +123,10 @@ def _claim_next_sync_file(db_session: Session) -> UUID | None:
         .order_by(UserFile.created_at)
         .limit(1)
         .with_for_update(skip_locked=True)
-    ).scalar_one_or_none()
+    )
+    if exclude_ids:
+        stmt = stmt.where(UserFile.id.notin_(exclude_ids))
+    file_id = db_session.execute(stmt).scalar_one_or_none()
     db_session.commit()
     return file_id
 
@@ -135,11 +148,14 @@ def drain_processing_loop(tenant_id: str) -> None:
             file_id = _claim_next_processing_file(session)
         if file_id is None:
             break
-        process_user_file_impl(
-            user_file_id=str(file_id),
-            tenant_id=tenant_id,
-            redis_locking=False,
-        )
+        try:
+            process_user_file_impl(
+                user_file_id=str(file_id),
+                tenant_id=tenant_id,
+                redis_locking=False,
+            )
+        except Exception:
+            logger.exception(f"Failed to process user file {file_id}")
 
 
 def drain_delete_loop(tenant_id: str) -> None:
@@ -149,16 +165,21 @@ def drain_delete_loop(tenant_id: str) -> None:
     )
     from onyx.db.engine.sql_engine import get_session_with_current_tenant
 
+    failed: set[UUID] = set()
     while True:
         with get_session_with_current_tenant() as session:
-            file_id = _claim_next_deleting_file(session)
+            file_id = _claim_next_deleting_file(session, exclude_ids=failed)
         if file_id is None:
             break
-        delete_user_file_impl(
-            user_file_id=str(file_id),
-            tenant_id=tenant_id,
-            redis_locking=False,
-        )
+        try:
+            delete_user_file_impl(
+                user_file_id=str(file_id),
+                tenant_id=tenant_id,
+                redis_locking=False,
+            )
+        except Exception:
+            logger.exception(f"Failed to delete user file {file_id}")
+            failed.add(file_id)
 
 
 def drain_project_sync_loop(tenant_id: str) -> None:
@@ -168,13 +189,18 @@ def drain_project_sync_loop(tenant_id: str) -> None:
     )
     from onyx.db.engine.sql_engine import get_session_with_current_tenant
 
+    failed: set[UUID] = set()
     while True:
         with get_session_with_current_tenant() as session:
-            file_id = _claim_next_sync_file(session)
+            file_id = _claim_next_sync_file(session, exclude_ids=failed)
         if file_id is None:
             break
-        project_sync_user_file_impl(
-            user_file_id=str(file_id),
-            tenant_id=tenant_id,
-            redis_locking=False,
-        )
+        try:
+            project_sync_user_file_impl(
+                user_file_id=str(file_id),
+                tenant_id=tenant_id,
+                redis_locking=False,
+            )
+        except Exception:
+            logger.exception(f"Failed to sync user file {file_id}")
+            failed.add(file_id)

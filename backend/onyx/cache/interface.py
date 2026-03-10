@@ -1,6 +1,20 @@
 import abc
 from enum import Enum
 
+from redis.exceptions import RedisError
+from sqlalchemy.exc import SQLAlchemyError
+
+TTL_KEY_NOT_FOUND = -2
+TTL_NO_EXPIRY = -1
+
+CACHE_TRANSIENT_ERRORS: tuple[type[Exception], ...] = (RedisError, SQLAlchemyError)
+"""Exception types that represent transient cache connectivity / operational
+failures.  Callers that want to fail-open (or fail-closed) on cache errors
+should catch this tuple instead of bare ``Exception``.
+
+When adding a new ``CacheBackend`` implementation, add its transient error
+base class(es) here so all call-sites pick it up automatically."""
+
 
 class CacheBackendType(str, Enum):
     REDIS = "redis"
@@ -25,6 +39,14 @@ class CacheLock(abc.ABC):
     @abc.abstractmethod
     def owned(self) -> bool:
         raise NotImplementedError
+
+    def __enter__(self) -> "CacheLock":
+        if not self.acquire():
+            raise RuntimeError("Failed to acquire lock")
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        self.release()
 
 
 class CacheBackend(abc.ABC):
@@ -65,7 +87,11 @@ class CacheBackend(abc.ABC):
 
     @abc.abstractmethod
     def ttl(self, key: str) -> int:
-        """Return remaining TTL in seconds. -1 if no expiry, -2 if key missing."""
+        """Return remaining TTL in seconds.
+
+        Returns ``TTL_NO_EXPIRY`` (-1) if key exists without expiry,
+        ``TTL_KEY_NOT_FOUND`` (-2) if key is missing or expired.
+        """
         raise NotImplementedError
 
     # -- distributed lock --------------------------------------------------

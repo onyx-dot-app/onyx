@@ -7,12 +7,13 @@ import { useCallback, useEffect, useState, useRef } from "react";
 import { getSecondsUntilExpiration } from "@/lib/time";
 import { refreshToken } from "@/lib/user";
 import { NEXT_PUBLIC_CUSTOM_REFRESH_URL } from "@/lib/constants";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { logout } from "@/lib/user";
 import { usePathname, useRouter } from "next/navigation";
 import { SvgAlertTriangle, SvgLogOut } from "@opal/icons";
 import { Content } from "@opal/layouts";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { getExtensionContext } from "@/lib/extension/utils";
 
 export default function AppHealthBanner() {
   const router = useRouter();
@@ -39,7 +40,18 @@ export default function AppHealthBanner() {
   // Function to handle the "Log in" button click
   function handleLogin() {
     setShowLoggedOutModal(false);
-    router.push("/auth/login");
+    const { isExtension } = getExtensionContext();
+    if (isExtension) {
+      // In the Chrome extension, open login in a new tab so OAuth popups
+      // work correctly (the extension iframe has no navigable URL origin).
+      window.open(
+        window.location.origin + "/auth/login",
+        "_blank",
+        "noopener,noreferrer"
+      );
+    } else {
+      router.push("/auth/login");
+    }
   }
 
   // Function to set up expiration timeout

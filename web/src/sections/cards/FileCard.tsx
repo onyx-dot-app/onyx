@@ -173,19 +173,21 @@ export function FileCard({
         removeFile && doneUploading ? () => removeFile(file.id) : undefined
       }
     >
-      <div className="max-w-[12rem]">
+      <div className="min-w-0 max-w-[12rem]">
         <Interactive.Container border heightVariant="fit">
-          <AttachmentItemLayout
-            icon={isProcessing ? SimpleLoader : SvgFileText}
-            title={file.name}
-            description={
-              isProcessing
-                ? file.status === UserFileStatus.UPLOADING
-                  ? "Uploading..."
-                  : "Processing..."
-                : typeLabel
-            }
-          />
+          <div className="[&_.opal-content-md-body]:min-w-0 [&_.opal-content-md-title]:break-all">
+            <AttachmentItemLayout
+              icon={isProcessing ? SimpleLoader : SvgFileText}
+              title={file.name}
+              description={
+                isProcessing
+                  ? file.status === UserFileStatus.UPLOADING
+                    ? "Uploading..."
+                    : "Processing..."
+                  : typeLabel
+              }
+            />
+          </div>
           <Spacer horizontal rem={0.5} />
         </Interactive.Container>
       </div>

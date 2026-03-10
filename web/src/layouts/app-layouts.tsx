@@ -23,7 +23,6 @@
 import { cn, ensureHrefProtocol, noProp } from "@/lib/utils";
 import type { Components } from "react-markdown";
 import Text from "@/refresh-components/texts/Text";
-import RefreshButton from "@/refresh-components/buttons/Button";
 import { useCallback, useMemo, useState, useEffect } from "react";
 import { useAppBackground } from "@/providers/AppBackgroundProvider";
 import { useTheme } from "next-themes";
@@ -65,6 +64,7 @@ import { AppMode, useAppMode } from "@/providers/AppModeProvider";
 import useAppFocus from "@/hooks/useAppFocus";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import useBrowserInfo from "@/hooks/useBrowserInfo";
 
 /**
  * App Header Component
@@ -287,9 +287,9 @@ function Header() {
           icon={SvgTrash}
           onClose={() => setDeleteModalOpen(false)}
           submit={
-            <RefreshButton danger onClick={handleDeleteChat}>
+            <Button variant="danger" onClick={handleDeleteChat}>
               Delete
-            </RefreshButton>
+            </Button>
           }
         >
           Are you sure you want to delete this chat? This action cannot be
@@ -314,10 +314,10 @@ function Header() {
         */}
         <div className="flex-1 flex flex-row items-center gap-2 h-[3.3rem]">
           {isMobile && (
-            <IconButton
+            <Button
+              prominence="internal"
               icon={SvgSidebar}
               onClick={() => setFolded(false)}
-              internal
             />
           )}
           {isPaidEnterpriseFeaturesEnabled &&
@@ -394,15 +394,16 @@ function Header() {
               <Button
                 icon={SvgShare}
                 prominence="tertiary"
-                transient={showShareModal}
+                interaction={showShareModal ? "hover" : "rest"}
                 responsiveHideText
                 onClick={() => setShowShareModal(true)}
                 aria-label="share-chat-button"
               >
-                Share Chat
+                Share
               </Button>
               <SimplePopover
                 trigger={
+                  /* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */
                   <IconButton
                     icon={SvgMoreHorizontal}
                     className="ml-2"
@@ -527,8 +528,16 @@ function Root({ children, enableBackground }: AppRootProps) {
   const { hasBackground, appBackgroundUrl } = useAppBackground();
   const { resolvedTheme } = useTheme();
   const appFocus = useAppFocus();
+  const { isSafari } = useBrowserInfo();
   const isLightMode = resolvedTheme === "light";
   const showBackground = hasBackground && enableBackground;
+  const horizontalBlurMask = `linear-gradient(
+    to right,
+    transparent 0%,
+    black max(0%, calc(50% - 25rem)),
+    black min(100%, calc(50% + 25rem)),
+    transparent 100%
+  )`;
 
   return (
     /* NOTE: Some elements, markdown tables in particular, refer to this `@container` in order to
@@ -568,25 +577,25 @@ function Root({ children, enableBackground }: AppRootProps) {
       {showBackground && appFocus.isChat() && (
         <>
           <div className="absolute inset-0 backdrop-blur-[1px] pointer-events-none" />
-          <div
-            className="absolute z-0 inset-0 backdrop-blur-md transition-all duration-600 pointer-events-none"
-            style={{
-              maskImage: `linear-gradient(
-                to right,
-                transparent 0%,
-                black max(0%, calc(50% - 25rem)),
-                black min(100%, calc(50% + 25rem)),
-                transparent 100%
-              )`,
-              WebkitMaskImage: `linear-gradient(
-                to right,
-                transparent 0%,
-                black max(0%, calc(50% - 25rem)),
-                black min(100%, calc(50% + 25rem)),
-                transparent 100%
-              )`,
-            }}
-          />
+          {isSafari ? (
+            <div
+              className="absolute z-0 inset-0 bg-cover bg-center bg-fixed pointer-events-none"
+              style={{
+                backgroundImage: `url(${appBackgroundUrl})`,
+                filter: "blur(16px)",
+                maskImage: horizontalBlurMask,
+                WebkitMaskImage: horizontalBlurMask,
+              }}
+            />
+          ) : (
+            <div
+              className="absolute z-0 inset-0 backdrop-blur-md transition-all duration-600 pointer-events-none"
+              style={{
+                maskImage: horizontalBlurMask,
+                WebkitMaskImage: horizontalBlurMask,
+              }}
+            />
+          )}
         </>
       )}
 

@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
@@ -33,10 +34,14 @@ func NewCherryPickCommand() *cobra.Command {
 	opts := &CherryPickOptions{}
 
 	cmd := &cobra.Command{
-		Use:     "cherry-pick <commit-sha> [<commit-sha>...]",
+		Use:     "cherry-pick <commit-or-pr> [<commit-or-pr>...]",
 		Aliases: []string{"cp"},
-		Short:   "Cherry-pick one or more commits to a release branch",
+		Short:   "Cherry-pick one or more commits (or PRs) to a release branch",
 		Long: `Cherry-pick one or more commits to a release branch and create a PR.
+
+Arguments can be commit SHAs or GitHub PR numbers. A purely numeric argument
+with fewer than 6 digits is treated as a PR number and resolved to its merge
+commit automatically.
 
 This command will:
   1. Find the nearest stable version tag
@@ -54,7 +59,8 @@ If a cherry-pick hits a merge conflict, resolve it manually, then run:
 Example usage:
 
 	$ ods cherry-pick foo123 bar456 --release 2.5 --release 2.6
-	$ ods cp foo123 --release 2.5`,
+	$ ods cp foo123 --release 2.5
+	$ ods cp 1234 --release 2.5   # cherry-pick merge commit of PR #1234`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			cont, _ := cmd.Flags().GetBool("continue")
 			if cont {
@@ -90,11 +96,12 @@ Example usage:
 func runCherryPick(cmd *cobra.Command, args []string, opts *CherryPickOptions) {
 	git.CheckGitHubCLI()
 
-	commitSHAs := args
+	// Resolve any PR numbers (e.g. "1234") to their merge commit SHAs
+	commitSHAs, labels := resolveArgs(args)
 	if len(commitSHAs) == 1 {
-		log.Debugf("Cherry-picking commit: %s", commitSHAs[0])
+		log.Debugf("Cherry-picking %s (%s)", labels[0], commitSHAs[0])
 	} else {
-		log.Debugf("Cherry-picking %d commits: %s", len(commitSHAs), strings.Join(commitSHAs, ", "))
+		log.Debugf("Cherry-picking %d commits: %s", len(commitSHAs), strings.Join(labels, ", "))
 	}
 
 	if opts.DryRun {
@@ -294,6 +301,11 @@ func runCherryPickContinue() {
 
 	log.Infof("Resuming cherry-pick (original branch: %s, releases: %v)", state.OriginalBranch, state.Releases)
 
+	// If a rebase is in progress (REBASE_HEAD exists), it must be resolved first
+	if git.IsRebaseInProgress() {
+		log.Fatal("A git rebase is in progress. Resolve it first:\n  To continue: git rebase --continue\n  To abort:    git rebase --abort\nThen re-run: ods cherry-pick --continue")
+	}
+
 	// If git cherry-pick is still in progress (CHERRY_PICK_HEAD exists), continue it
 	if git.IsCherryPickInProgress() {
 		log.Info("Continuing in-progress cherry-pick...")
@@ -325,6 +337,23 @@ func cherryPickToRelease(commitSHAs, commitMessages []string, branchSuffix, vers
 		log.Infof("Hotfix branch %s already exists, switching", hotfixBranch)
 		if err := git.RunCommand("switch", "--quiet", hotfixBranch); err != nil {
 			return "", fmt.Errorf("failed to checkout existing hotfix branch: %w", err)
+		}
+
+		// Only rebase when the branch has no unique commits (pure fast-forward).
+		// If unique commits exist (e.g. after --continue resolved a cherry-pick
+		// conflict), rebasing would re-apply them and risk the same conflicts.
+		remoteRef := fmt.Sprintf("origin/%s", releaseBranch)
+		uniqueCount, err := git.CountUniqueCommits(hotfixBranch, remoteRef)
+		if err != nil {
+			log.Warnf("Could not determine unique commits, skipping rebase: %v", err)
+		} else if uniqueCount == 0 {
+			log.Infof("Rebasing %s onto %s", hotfixBranch, releaseBranch)
+			if err := git.RunCommand("rebase", "--quiet", remoteRef); err != nil {
+				_ = git.RunCommand("rebase", "--abort")
+				return "", fmt.Errorf("failed to rebase hotfix branch onto %s (rebase aborted, re-run to retry): %w", releaseBranch, err)
+			}
+		} else {
+			log.Infof("Branch %s has %d unique commit(s), skipping rebase", hotfixBranch, uniqueCount)
 		}
 
 		// Check which commits need to be cherry-picked
@@ -364,7 +393,6 @@ func cherryPickToRelease(commitSHAs, commitMessages []string, branchSuffix, vers
 		return "", nil
 	}
 
-	// Push the hotfix branch
 	log.Infof("Pushing hotfix branch: %s", hotfixBranch)
 	pushArgs := []string{"push", "-u", "origin", hotfixBranch}
 	if noVerify {
@@ -430,6 +458,40 @@ func performCherryPick(commitSHAs []string) error {
 		return fmt.Errorf("failed to cherry-pick commits: %w", err)
 	}
 	return nil
+}
+
+// isPRNumber returns true if the argument looks like a GitHub PR number
+// (purely numeric with fewer than 6 digits).
+func isPRNumber(arg string) bool {
+	if len(arg) == 0 || len(arg) >= 6 {
+		return false
+	}
+	n, err := strconv.Atoi(arg)
+	return err == nil && n > 0
+}
+
+// resolveArgs resolves arguments that may be PR numbers into commit SHAs.
+// Returns the resolved commit SHAs and a display-friendly label for logging
+// (e.g. "PR #1234" instead of raw SHA).
+func resolveArgs(args []string) (commitSHAs []string, labels []string) {
+	commitSHAs = make([]string, len(args))
+	labels = make([]string, len(args))
+	for i, arg := range args {
+		if isPRNumber(arg) {
+			log.Infof("Resolving PR #%s to merge commit...", arg)
+			sha, err := git.ResolvePRToMergeCommit(arg)
+			if err != nil {
+				log.Fatalf("Failed to resolve PR #%s: %v", arg, err)
+			}
+			log.Infof("PR #%s → %s", arg, sha)
+			commitSHAs[i] = sha
+			labels[i] = fmt.Sprintf("PR #%s", arg)
+		} else {
+			commitSHAs[i] = arg
+			labels[i] = arg
+		}
+	}
+	return commitSHAs, labels
 }
 
 // normalizeVersion ensures the version has a 'v' prefix
