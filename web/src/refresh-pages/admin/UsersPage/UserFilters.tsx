@@ -1,11 +1,22 @@
 "use client";
 
-import { SvgFilter, SvgUsers } from "@opal/icons";
+import { useState } from "react";
+import { SvgCheck, SvgSlack, SvgUser, SvgUsers } from "@opal/icons";
+import type { IconFunctionComponent } from "@opal/types";
 import FilterButton from "@/refresh-components/buttons/FilterButton";
 import Popover from "@/refresh-components/Popover";
-import Checkbox from "@/refresh-components/inputs/Checkbox";
+import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import LineItem from "@/refresh-components/buttons/LineItem";
 import Text from "@/refresh-components/texts/Text";
-import { UserRole, USER_ROLE_LABELS } from "@/lib/types";
+import Separator from "@/refresh-components/Separator";
+import {
+  UserRole,
+  UserStatus,
+  USER_ROLE_LABELS,
+  USER_STATUS_LABELS,
+} from "@/lib/types";
+import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
+import type { GroupOption, StatusFilter } from "./interfaces";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -14,8 +25,13 @@ import { UserRole, USER_ROLE_LABELS } from "@/lib/types";
 interface UserFiltersProps {
   selectedRoles: UserRole[];
   onRolesChange: (roles: UserRole[]) => void;
-  selectedStatus: "all" | "active" | "inactive";
-  onStatusChange: (status: "all" | "active" | "inactive") => void;
+  selectedGroups: number[];
+  onGroupsChange: (groupIds: number[]) => void;
+  groups: GroupOption[];
+  selectedStatuses: StatusFilter;
+  onStatusesChange: (statuses: StatusFilter) => void;
+  roleCounts: Record<string, number>;
+  statusCounts: Record<string, number>;
 }
 
 // ---------------------------------------------------------------------------
@@ -26,11 +42,35 @@ const FILTERABLE_ROLES = Object.entries(USER_ROLE_LABELS).filter(
   ([role]) => role !== UserRole.EXT_PERM_USER
 ) as [UserRole, string][];
 
-const STATUS_OPTIONS = [
-  { value: "all" as const, label: "All Status" },
-  { value: "active" as const, label: "Active" },
-  { value: "inactive" as const, label: "Inactive" },
-];
+const FILTERABLE_STATUSES = (
+  Object.entries(USER_STATUS_LABELS) as [UserStatus, string][]
+).filter(
+  ([value]) => value !== UserStatus.REQUESTED || NEXT_PUBLIC_CLOUD_ENABLED
+);
+
+const ROLE_ICONS: Partial<Record<UserRole, IconFunctionComponent>> = {
+  [UserRole.SLACK_USER]: SvgSlack,
+};
+
+/** Map UserStatus enum values to the keys returned by the counts endpoint. */
+const STATUS_COUNT_KEY: Record<UserStatus, string> = {
+  [UserStatus.ACTIVE]: "active",
+  [UserStatus.INACTIVE]: "inactive",
+  [UserStatus.INVITED]: "invited",
+  [UserStatus.REQUESTED]: "requested",
+};
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function CountBadge({ count }: { count: number | undefined }) {
+  return (
+    <Text as="span" secondaryBody text03>
+      {count ?? 0}
+    </Text>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Component
@@ -39,11 +79,18 @@ const STATUS_OPTIONS = [
 export default function UserFilters({
   selectedRoles,
   onRolesChange,
-  selectedStatus,
-  onStatusChange,
+  selectedGroups,
+  onGroupsChange,
+  groups,
+  selectedStatuses,
+  onStatusesChange,
+  roleCounts,
+  statusCounts,
 }: UserFiltersProps) {
   const hasRoleFilter = selectedRoles.length > 0;
-  const hasStatusFilter = selectedStatus !== "all";
+  const hasGroupFilter = selectedGroups.length > 0;
+  const hasStatusFilter = selectedStatuses.length > 0;
+  const [groupSearch, setGroupSearch] = useState("");
 
   const toggleRole = (role: UserRole) => {
     if (selectedRoles.includes(role)) {
@@ -54,14 +101,53 @@ export default function UserFilters({
   };
 
   const roleLabel = hasRoleFilter
-    ? `${selectedRoles.length} role${
-        selectedRoles.length > 1 ? "s" : ""
-      } selected`
-    : "All Roles";
+    ? FILTERABLE_ROLES.filter(([role]) => selectedRoles.includes(role))
+        .map(([, label]) => label)
+        .slice(0, 2)
+        .join(", ") +
+      (selectedRoles.length > 2 ? `, +${selectedRoles.length - 2}` : "")
+    : "All Account Types";
+
+  const toggleGroup = (groupId: number) => {
+    if (selectedGroups.includes(groupId)) {
+      onGroupsChange(selectedGroups.filter((id) => id !== groupId));
+    } else {
+      onGroupsChange([...selectedGroups, groupId]);
+    }
+  };
+
+  const groupLabel = hasGroupFilter
+    ? groups
+        .filter((g) => selectedGroups.includes(g.id))
+        .map((g) => g.name)
+        .slice(0, 2)
+        .join(", ") +
+      (selectedGroups.length > 2 ? `, +${selectedGroups.length - 2}` : "")
+    : "All Groups";
+
+  const toggleStatus = (status: UserStatus) => {
+    if (selectedStatuses.includes(status)) {
+      onStatusesChange(selectedStatuses.filter((s) => s !== status));
+    } else {
+      onStatusesChange([...selectedStatuses, status]);
+    }
+  };
 
   const statusLabel = hasStatusFilter
-    ? STATUS_OPTIONS.find((o) => o.value === selectedStatus)?.label ?? "Status"
+    ? FILTERABLE_STATUSES.filter(([status]) =>
+        selectedStatuses.includes(status)
+      )
+        .map(([, label]) => label)
+        .slice(0, 2)
+        .join(", ") +
+      (selectedStatuses.length > 2 ? `, +${selectedStatuses.length - 2}` : "")
     : "All Status";
+
+  const filteredGroups = groupSearch
+    ? groups.filter((g) =>
+        g.name.toLowerCase().includes(groupSearch.toLowerCase())
+      )
+    : groups;
 
   return (
     <div className="flex gap-2">
@@ -77,21 +163,84 @@ export default function UserFilters({
           </FilterButton>
         </Popover.Trigger>
         <Popover.Content align="start">
-          <div className="flex flex-col gap-1 p-2 min-w-[200px]">
-            {FILTERABLE_ROLES.map(([role, label]) => (
-              <label
-                key={role}
-                className="flex items-center gap-2 px-2 py-1.5 rounded-8 cursor-pointer hover:bg-background-tint-01"
-              >
-                <Checkbox
-                  checked={selectedRoles.includes(role)}
-                  onCheckedChange={() => toggleRole(role)}
-                />
-                <Text as="span" mainUiAction>
+          <div className="flex flex-col gap-1 p-1 min-w-[200px]">
+            <LineItem
+              icon={SvgUsers}
+              selected={!hasRoleFilter}
+              onClick={() => onRolesChange([])}
+            >
+              All Account Types
+            </LineItem>
+            <Separator noPadding />
+            {FILTERABLE_ROLES.map(([role, label]) => {
+              const isSelected = selectedRoles.includes(role);
+              const roleIcon = ROLE_ICONS[role] ?? SvgUser;
+              return (
+                <LineItem
+                  key={role}
+                  icon={isSelected ? SvgCheck : roleIcon}
+                  selected={isSelected}
+                  onClick={() => toggleRole(role)}
+                  rightChildren={<CountBadge count={roleCounts[role]} />}
+                >
                   {label}
+                </LineItem>
+              );
+            })}
+          </div>
+        </Popover.Content>
+      </Popover>
+
+      {/* Groups filter */}
+      <Popover>
+        <Popover.Trigger asChild>
+          <FilterButton
+            leftIcon={SvgUsers}
+            active={hasGroupFilter}
+            onClear={() => onGroupsChange([])}
+          >
+            {groupLabel}
+          </FilterButton>
+        </Popover.Trigger>
+        <Popover.Content align="start">
+          <div className="flex flex-col gap-1 p-1 min-w-[200px]">
+            <div className="px-1 pt-1">
+              <InputTypeIn
+                value={groupSearch}
+                onChange={(e) => setGroupSearch(e.target.value)}
+                placeholder="Search groups..."
+                leftSearchIcon
+              />
+            </div>
+            <LineItem
+              icon={SvgUsers}
+              selected={!hasGroupFilter}
+              onClick={() => onGroupsChange([])}
+            >
+              All Groups
+            </LineItem>
+            <Separator noPadding />
+            <div className="flex flex-col gap-1 max-h-[240px] overflow-y-auto">
+              {filteredGroups.map((group) => {
+                const isSelected = selectedGroups.includes(group.id);
+                return (
+                  <LineItem
+                    key={group.id}
+                    icon={isSelected ? SvgCheck : undefined}
+                    selected={isSelected}
+                    onClick={() => toggleGroup(group.id)}
+                    rightChildren={<CountBadge count={group.memberCount} />}
+                  >
+                    {group.name}
+                  </LineItem>
+                );
+              })}
+              {filteredGroups.length === 0 && (
+                <Text as="span" secondaryBody text03 className="px-2 py-1.5">
+                  No groups found
                 </Text>
-              </label>
-            ))}
+              )}
+            </div>
           </div>
         </Popover.Content>
       </Popover>
@@ -100,29 +249,38 @@ export default function UserFilters({
       <Popover>
         <Popover.Trigger asChild>
           <FilterButton
-            leftIcon={SvgFilter}
+            leftIcon={SvgUsers}
             active={hasStatusFilter}
-            onClear={() => onStatusChange("all")}
+            onClear={() => onStatusesChange([])}
           >
             {statusLabel}
           </FilterButton>
         </Popover.Trigger>
         <Popover.Content align="start">
-          <div className="flex flex-col gap-1 p-2 min-w-[160px]">
-            {STATUS_OPTIONS.map((option) => (
-              <label
-                key={option.value}
-                className="flex items-center gap-2 px-2 py-1.5 rounded-8 cursor-pointer hover:bg-background-tint-01"
-              >
-                <Checkbox
-                  checked={selectedStatus === option.value}
-                  onCheckedChange={() => onStatusChange(option.value)}
-                />
-                <Text as="span" mainUiAction>
-                  {option.label}
-                </Text>
-              </label>
-            ))}
+          <div className="flex flex-col gap-1 p-1 min-w-[200px]">
+            <LineItem
+              icon={SvgCheck}
+              selected={!hasStatusFilter}
+              onClick={() => onStatusesChange([])}
+            >
+              All Status
+            </LineItem>
+            <Separator noPadding />
+            {FILTERABLE_STATUSES.map(([status, label]) => {
+              const isSelected = selectedStatuses.includes(status);
+              const countKey = STATUS_COUNT_KEY[status];
+              return (
+                <LineItem
+                  key={status}
+                  icon={isSelected ? SvgCheck : undefined}
+                  selected={isSelected}
+                  onClick={() => toggleStatus(status)}
+                  rightChildren={<CountBadge count={statusCounts[countKey]} />}
+                >
+                  {label}
+                </LineItem>
+              );
+            })}
           </div>
         </Popover.Content>
       </Popover>

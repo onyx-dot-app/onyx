@@ -5,22 +5,26 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import type { InvitedUserSnapshot } from "@/lib/types";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 
-type PaginatedCountResponse = {
-  total_items: number;
+type UserCountsResponse = {
+  role_counts: Record<string, number>;
+  status_counts: Record<string, number>;
 };
 
 type UserCounts = {
   activeCount: number | null;
   invitedCount: number | null;
   pendingCount: number | null;
+  roleCounts: Record<string, number>;
+  statusCounts: Record<string, number>;
+  refreshCounts: () => void;
 };
 
 export default function useUserCounts(): UserCounts {
-  // Active user count — lightweight fetch (page_size=1 to minimize payload)
-  const { data: activeData } = useSWR<PaginatedCountResponse>(
-    "/api/manage/users/accepted?page_num=0&page_size=1",
-    errorHandlingFetcher
-  );
+  const { data: countsData, mutate: refreshCounts } =
+    useSWR<UserCountsResponse>(
+      "/api/manage/users/counts",
+      errorHandlingFetcher
+    );
 
   const { data: invitedUsers } = useSWR<InvitedUserSnapshot[]>(
     "/api/manage/users/invited",
@@ -32,9 +36,20 @@ export default function useUserCounts(): UserCounts {
     errorHandlingFetcher
   );
 
+  const activeCount = countsData?.status_counts?.active ?? null;
+  const inactiveCount = countsData?.status_counts?.inactive ?? null;
+
   return {
-    activeCount: activeData?.total_items ?? null,
+    activeCount,
     invitedCount: invitedUsers?.length ?? null,
     pendingCount: pendingUsers?.length ?? null,
+    roleCounts: countsData?.role_counts ?? {},
+    statusCounts: {
+      ...(activeCount !== null ? { active: activeCount } : {}),
+      ...(inactiveCount !== null ? { inactive: inactiveCount } : {}),
+      ...(invitedUsers ? { invited: invitedUsers.length } : {}),
+      ...(pendingUsers ? { requested: pendingUsers.length } : {}),
+    } as Record<string, number>,
+    refreshCounts,
   };
 }

@@ -196,6 +196,15 @@ def get_all_accepted_users(
     return db_session.scalars(stmt).unique().all()
 
 
+_USER_SORTABLE_COLUMNS: dict[str, KeyedColumnElement[Any]] = {
+    "email": User.email,
+    "role": User.role,
+    "is_active": User.is_active,
+    "created_at": User.created_at,
+    "updated_at": User.updated_at,
+}
+
+
 def get_page_of_filtered_users(
     db_session: Session,
     page_size: int,
@@ -204,6 +213,8 @@ def get_page_of_filtered_users(
     is_active_filter: bool | None = None,
     roles_filter: list[UserRole] = [],
     include_external: bool = False,
+    sort_by: str | None = None,
+    sort_dir: str | None = None,
 ) -> Sequence[User]:
     users_stmt = select(User)
 
@@ -213,10 +224,18 @@ def get_page_of_filtered_users(
         include_external=include_external,
         is_active_filter=is_active_filter,
     )
-    # Apply pagination
-    users_stmt = users_stmt.offset((page_num) * page_size).limit(page_size)
     # Apply filtering
     users_stmt = users_stmt.where(*where_clause)
+
+    # Apply sorting
+    col = _USER_SORTABLE_COLUMNS.get(sort_by) if sort_by else None
+    if col is not None:
+        users_stmt = users_stmt.order_by(
+            col.desc() if sort_dir == "desc" else col.asc()
+        )
+
+    # Apply pagination
+    users_stmt = users_stmt.offset((page_num) * page_size).limit(page_size)
 
     return db_session.scalars(users_stmt).unique().all()
 
@@ -239,6 +258,36 @@ def get_total_filtered_users_count(
     total_count_stmt = total_count_stmt.where(*where_clause)
 
     return db_session.scalar(total_count_stmt) or 0
+
+
+def get_user_counts_by_role_and_status(
+    db_session: Session,
+) -> dict[str, dict[str, int]]:
+    """Returns user counts grouped by role and by active/inactive status.
+
+    Excludes API key users, anonymous users, and no-auth placeholder users.
+    """
+    base_where = _get_accepted_user_where_clause()
+
+    # Counts by role
+    role_col = User.__table__.c.role
+    role_stmt = select(role_col, func.count()).where(*base_where).group_by(role_col)
+    role_counts: dict[str, int] = {}
+    for role_val, count in db_session.execute(role_stmt).all():
+        key = role_val.value if hasattr(role_val, "value") else str(role_val)
+        role_counts[key] = count
+
+    # Counts by is_active
+    is_active_col = User.__table__.c.is_active
+    status_stmt = (
+        select(is_active_col, func.count()).where(*base_where).group_by(is_active_col)
+    )
+    status_counts: dict[str, int] = {}
+    for is_active_val, count in db_session.execute(status_stmt).all():
+        key = "active" if is_active_val else "inactive"
+        status_counts[key] = count
+
+    return {"role_counts": role_counts, "status_counts": status_counts}
 
 
 def get_user_by_email(email: str, db_session: Session) -> User | None:

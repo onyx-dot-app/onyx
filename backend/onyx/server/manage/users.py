@@ -76,6 +76,7 @@ from onyx.db.users import get_all_users
 from onyx.db.users import get_page_of_filtered_users
 from onyx.db.users import get_total_filtered_users_count
 from onyx.db.users import get_user_by_email
+from onyx.db.users import get_user_counts_by_role_and_status
 from onyx.db.users import validate_user_role_update
 from onyx.key_value_store.factory import get_kv_store
 from onyx.redis.redis_pool import get_raw_redis_client
@@ -182,6 +183,8 @@ def list_accepted_users(
     page_size: int = Query(10, ge=1, le=1000),
     roles: list[UserRole] = Query(default=[]),
     is_active: bool | None = Query(default=None),
+    sort_by: str | None = Query(default=None),
+    sort_dir: str | None = Query(default=None),
     _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> PaginatedReturn[FullUserSnapshot]:
@@ -192,6 +195,8 @@ def list_accepted_users(
         email_filter_string=q,
         is_active_filter=is_active,
         roles_filter=roles,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
     )
 
     total_accepted_users_count = get_total_filtered_users_count(
@@ -283,6 +288,14 @@ def list_all_accepted_users(
         )
         for user in users
     ]
+
+
+@router.get("/manage/users/counts")
+def get_user_counts(
+    _: User = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
+) -> dict[str, dict[str, int]]:
+    return get_user_counts_by_role_and_status(db_session)
 
 
 @router.get("/manage/users/invited", tags=PUBLIC_API_TAGS)

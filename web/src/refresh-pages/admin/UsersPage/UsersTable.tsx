@@ -4,23 +4,29 @@ import { useMemo, useState } from "react";
 import DataTable from "@/refresh-components/table/DataTable";
 import { createTableColumns } from "@/refresh-components/table/columns";
 import { Content } from "@opal/layouts";
-import { USER_ROLE_LABELS, UserRole } from "@/lib/types";
+import { SvgUser, SvgUsers, SvgSlack } from "@opal/icons";
+import SvgNoResult from "@opal/illustrations/no-result";
+import { IllustrationContent } from "@opal/layouts";
+import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
+import type { IconFunctionComponent } from "@opal/types";
+import {
+  UserRole,
+  UserStatus,
+  USER_ROLE_LABELS,
+  USER_STATUS_LABELS,
+} from "@/lib/types";
 import { timeAgo } from "@/lib/time";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import useAdminUsers from "@/hooks/useAdminUsers";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
-import { SvgUser, SvgUsers, SvgSlack } from "@opal/icons";
-import type { IconFunctionComponent } from "@opal/types";
+import useGroups from "@/hooks/useGroups";
 import UserFilters from "./UserFilters";
-import type { UserRow, UserGroupInfo, StatusFilter } from "./interfaces";
+import type { UserRow, UserGroupInfo, GroupOption, StatusFilter } from "./interfaces";
 import { getInitials } from "./utils";
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-
-const PAGE_SIZE = 8;
 
 const ROLE_ICONS: Record<UserRole, IconFunctionComponent> = {
   [UserRole.BASIC]: SvgUser,
@@ -78,7 +84,14 @@ function renderGroupsColumn(groups: UserGroupInfo[]) {
   );
 }
 
-function renderRoleColumn(role: UserRole) {
+function renderRoleColumn(role: UserRole | null) {
+  if (!role) {
+    return (
+      <Text as="span" secondaryBody text03>
+        —
+      </Text>
+    );
+  }
   const Icon = ROLE_ICONS[role];
   return (
     <div className="flex items-center gap-1.5">
@@ -90,11 +103,11 @@ function renderRoleColumn(role: UserRole) {
   );
 }
 
-function renderStatusColumn(isActive: boolean, row: UserRow) {
+function renderStatusColumn(value: UserStatus, row: UserRow) {
   return (
     <div className="flex flex-col">
       <Text as="span" mainUiBody text03>
-        {isActive ? "Active" : "Inactive"}
+        {USER_STATUS_LABELS[value] ?? value}
       </Text>
       {row.is_scim_synced && (
         <Text as="span" secondaryBody text03>
@@ -135,6 +148,7 @@ const columns = [
     header: "Groups",
     weight: 24,
     minWidth: 200,
+    enableSorting: false,
     cell: renderGroupsColumn,
   }),
   tc.column("role", {
@@ -143,9 +157,9 @@ const columns = [
     minWidth: 180,
     cell: renderRoleColumn,
   }),
-  tc.column("is_active", {
+  tc.column("status", {
     header: "Status",
-    weight: 15,
+    weight: 14,
     minWidth: 100,
     cell: renderStatusColumn,
   }),
@@ -162,28 +176,61 @@ const columns = [
 // Component
 // ---------------------------------------------------------------------------
 
-export default function UsersTable() {
+const PAGE_SIZE = 8;
+
+interface UsersTableProps {
+  selectedStatuses: StatusFilter;
+  onStatusesChange: (statuses: StatusFilter) => void;
+  roleCounts: Record<string, number>;
+  statusCounts: Record<string, number>;
+}
+
+export default function UsersTable({
+  selectedStatuses,
+  onStatusesChange,
+  roleCounts,
+  statusCounts,
+}: UsersTableProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedRoles, setSelectedRoles] = useState<UserRole[]>([]);
-  const [selectedStatus, setSelectedStatus] = useState<StatusFilter>("all");
+  const [selectedGroups, setSelectedGroups] = useState<number[]>([]);
+
+  const { data: allGroups } = useGroups();
+
+  const groupOptions: GroupOption[] = useMemo(
+    () =>
+      (allGroups ?? []).map((g) => ({
+        id: g.id,
+        name: g.name,
+        memberCount: g.users.length,
+      })),
+    [allGroups]
+  );
 
   const { users, isLoading, error } = useAdminUsers();
 
+  // Client-side filtering
   const filteredUsers = useMemo(() => {
     let result = users;
 
     if (selectedRoles.length > 0) {
-      result = result.filter((u) => selectedRoles.includes(u.role));
+      result = result.filter(
+        (u) => u.role !== null && selectedRoles.includes(u.role)
+      );
     }
 
-    if (selectedStatus === "active") {
-      result = result.filter((u) => u.is_active);
-    } else if (selectedStatus === "inactive") {
-      result = result.filter((u) => !u.is_active);
+    if (selectedStatuses.length > 0) {
+      result = result.filter((u) => selectedStatuses.includes(u.status));
+    }
+
+    if (selectedGroups.length > 0) {
+      result = result.filter((u) =>
+        u.groups.some((g) => selectedGroups.includes(g.id))
+      );
     }
 
     return result;
-  }, [users, selectedRoles, selectedStatus]);
+  }, [users, selectedRoles, selectedStatuses, selectedGroups]);
 
   if (isLoading) {
     return (
@@ -212,17 +259,34 @@ export default function UsersTable() {
       <UserFilters
         selectedRoles={selectedRoles}
         onRolesChange={setSelectedRoles}
-        selectedStatus={selectedStatus}
-        onStatusChange={setSelectedStatus}
+        selectedGroups={selectedGroups}
+        onGroupsChange={setSelectedGroups}
+        groups={groupOptions}
+        selectedStatuses={selectedStatuses}
+        onStatusesChange={onStatusesChange}
+        roleCounts={roleCounts}
+        statusCounts={statusCounts}
       />
-      <DataTable
-        data={filteredUsers}
-        columns={columns}
-        getRowId={(row) => row.id}
-        pageSize={PAGE_SIZE}
-        searchTerm={searchTerm}
-        footer={{ mode: "summary" }}
-      />
+      {filteredUsers.length === 0 ? (
+        <IllustrationContent
+          illustration={SvgNoResult}
+          title="No users found"
+          description={
+            searchTerm
+              ? "Try a different search term or adjust your filters."
+              : "No users match the current filters."
+          }
+        />
+      ) : (
+        <DataTable
+          data={filteredUsers}
+          columns={columns}
+          getRowId={(row) => row.id ?? row.email}
+          pageSize={PAGE_SIZE}
+          searchTerm={searchTerm}
+          footer={{ mode: "summary" }}
+        />
+      )}
     </div>
   );
 }
