@@ -38,11 +38,11 @@ async def _probe_loop(interval: float) -> None:
     loop = asyncio.get_running_loop()
 
     while True:
-        before = loop.time()
-        await asyncio.sleep(interval)
-        after = loop.time()
-
         try:
+            before = loop.time()
+            await asyncio.sleep(interval)
+            after = loop.time()
+
             lag = (after - before) - interval
             if lag < 0:
                 lag = 0.0
@@ -52,6 +52,8 @@ async def _probe_loop(interval: float) -> None:
             if lag > _max_lag:
                 _max_lag = lag
                 _LAG_MAX.set(_max_lag)
+        except asyncio.CancelledError:
+            raise
         except Exception:
             logger.warning(
                 "Error in event loop lag probe, skipping iteration",
@@ -70,10 +72,20 @@ def get_max_lag() -> float:
 
 
 def start_event_loop_lag_probe() -> None:
-    """Start the background lag measurement task."""
+    """Start the background lag measurement task.
+
+    Idempotent — restarts the probe if the previous task finished
+    or failed (e.g. after an unhandled exception).
+    """
     global _probe_task
-    if _probe_task is not None:
+    if _probe_task is not None and not _probe_task.done():
         return
+
+    # Initialize gauges so Prometheus sees 0 on first scrape
+    # instead of missing time series.
+    _LAG.set(0.0)
+    _LAG_MAX.set(0.0)
+
     _probe_task = asyncio.create_task(
         _probe_loop(EVENT_LOOP_LAG_PROBE_INTERVAL_SECONDS)
     )

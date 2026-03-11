@@ -21,7 +21,9 @@ async def test_probe_measures_lag(
     """Verify the probe records non-negative lag after sleeping."""
     import onyx.server.metrics.event_loop_lag as mod
 
+    original_lag = mod._current_lag
     original_max = mod._max_lag
+    mod._current_lag = 0.0
     mod._max_lag = 0.0
 
     try:
@@ -40,6 +42,7 @@ async def test_probe_measures_lag(
         for call in mock_lag.set.call_args_list:
             assert call[0][0] >= 0.0
     finally:
+        mod._current_lag = original_lag
         mod._max_lag = original_max
 
 
