@@ -266,7 +266,11 @@ def _inject_asset_fixer(content: bytes, session_id: str) -> bytes:
     text = content.decode("utf-8")
     # Inject immediately after <head> so it runs before React initialises
     text = re.sub(
-        r"(<head\b[^>]*>)", rf"\1{script}", text, count=1, flags=re.IGNORECASE
+        r"(<head\b[^>]*>)",
+        lambda m: m.group(0) + script,
+        text,
+        count=1,
+        flags=re.IGNORECASE,
     )
     return text.encode("utf-8")
 
