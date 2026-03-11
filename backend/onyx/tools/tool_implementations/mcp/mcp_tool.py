@@ -201,7 +201,7 @@ class MCPTool(Tool[None]):
                 )
 
             # For OAuth servers, construct OAuthClientProvider so the MCP SDK
-            # can refresh expired tokens automatically 
+            # can refresh expired tokens automatically
             auth = None
             if (
                 self.mcp_server.auth_type == MCPAuthenticationType.OAUTH
@@ -270,6 +270,7 @@ class MCPTool(Tool[None]):
                 "invalid token",
                 "invalid api key",
                 "invalid credentials",
+                "reconnect",
             ]
 
             is_auth_error = any(
