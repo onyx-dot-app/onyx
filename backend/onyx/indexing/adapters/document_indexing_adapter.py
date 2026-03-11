@@ -126,7 +126,8 @@ class DocumentIndexingBatchAdapter:
             doc_id: 0 for doc_id in updatable_ids
         }
         for chunk in chunks_with_embeddings:
-            doc_id_to_new_chunk_cnt[chunk.source_document.id] += 1
+            if chunk.source_document.id in doc_id_to_new_chunk_cnt:
+                doc_id_to_new_chunk_cnt[chunk.source_document.id] += 1
 
         # Get ancestor hierarchy node IDs for each document
         doc_id_to_ancestor_ids = self._get_ancestor_ids_for_documents(
