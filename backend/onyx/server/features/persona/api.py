@@ -43,6 +43,8 @@ from onyx.db.persona import update_persona_public_status
 from onyx.db.persona import update_persona_shared
 from onyx.db.persona import update_persona_visibility
 from onyx.db.persona import update_personas_display_priority
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import ChatFileType
 from onyx.server.documents.models import PaginatedReturn
@@ -566,7 +568,7 @@ def list_persona_input_prompts(
             is_for_edit=False,
         )
     except ValueError as e:
-        raise HTTPException(status_code=403, detail=str(e))
+        raise OnyxError(OnyxErrorCode.UNAUTHORIZED, str(e))
     input_prompts = fetch_input_prompts_by_persona(
         db_session=db_session,
         persona_id=persona_id,

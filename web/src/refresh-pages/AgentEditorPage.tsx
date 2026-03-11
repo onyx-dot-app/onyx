@@ -582,9 +582,26 @@ export default function AgentEditorPage({
     fallback: string
   ): Promise<string> {
     const errorData = (await response.json().catch(() => ({}))) as {
-      detail?: string;
+      detail?: unknown;
     };
-    return errorData.detail || fallback;
+    const { detail } = errorData;
+    if (typeof detail === "string") {
+      return detail || fallback;
+    }
+    if (Array.isArray(detail)) {
+      const messages = detail
+        .map((item) =>
+          typeof item === "object" && item !== null && "msg" in item
+            ? String((item as Record<string, unknown>).msg)
+            : String(item)
+        )
+        .filter(Boolean);
+      return messages.length > 0 ? messages.join("; ") : fallback;
+    }
+    if (typeof detail === "object" && detail !== null && "msg" in detail) {
+      return String((detail as Record<string, unknown>).msg) || fallback;
+    }
+    return fallback;
   }
 
   useEffect(() => {
