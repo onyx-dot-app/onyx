@@ -124,6 +124,12 @@ const collections = (
               ...(enableEnterprise ? [sidebarItem(ADMIN_PATHS.GROUPS)] : []),
               sidebarItem(ADMIN_PATHS.API_KEYS),
               sidebarItem(ADMIN_PATHS.TOKEN_RATE_LIMITS),
+            ],
+          },
+          {
+            name: "Permissions",
+            items: [
+              sidebarItem(ADMIN_PATHS.USERS),
               ...(enableEnterprise ? [sidebarItem(ADMIN_PATHS.SCIM)] : []),
             ],
           },
