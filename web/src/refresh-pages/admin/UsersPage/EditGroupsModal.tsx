@@ -2,13 +2,17 @@
 
 import { useState, useMemo, useRef, useCallback } from "react";
 import { Button } from "@opal/components";
-import { SvgUsers, SvgUser, SvgLogOut } from "@opal/icons";
+import { SvgUsers, SvgUser, SvgLogOut, SvgCheck } from "@opal/icons";
 import { Disabled } from "@opal/core";
+import { ContentAction } from "@opal/layouts";
 import Modal from "@/refresh-components/Modal";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
+import LineItem from "@/refresh-components/buttons/LineItem";
 import Separator from "@/refresh-components/Separator";
+import ShadowDiv from "@/refresh-components/ShadowDiv";
+import { Section } from "@/layouts/general-layouts";
 import { toast } from "@/hooks/useToast";
 import { UserRole } from "@/lib/types";
 import useGroups from "@/hooks/useGroups";
@@ -21,6 +25,7 @@ import type { UserRow } from "./interfaces";
 
 const ASSIGNABLE_ROLES: { value: UserRole; label: string }[] = [
   { value: UserRole.ADMIN, label: "Admin" },
+  { value: UserRole.GLOBAL_CURATOR, label: "Global Curator" },
   { value: UserRole.BASIC, label: "Basic" },
 ];
 
@@ -153,151 +158,147 @@ export default function EditGroupsModal({
         <Modal.Header
           icon={SvgUsers}
           title="Edit User's Groups & Roles"
-          description={`${displayName} (${user.email})`}
+          description={
+            user.personal_name
+              ? `${user.personal_name} (${user.email})`
+              : user.email
+          }
           onClose={onClose}
         />
         <Modal.Body twoTone>
-          <div className="flex flex-col gap-3 w-full min-h-[240px]">
-            <div ref={containerRef} className="relative w-full">
-              <InputTypeIn
-                value={searchTerm}
-                onChange={(e) => {
-                  setSearchTerm(e.target.value);
-                  if (!dropdownOpen) setDropdownOpen(true);
-                }}
-                onFocus={() => setDropdownOpen(true)}
-                onBlur={closeDropdown}
-                placeholder="Search groups to join..."
-                leftSearchIcon
-              />
-              {dropdownOpen && (
-                <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-background-neutral-00 border border-border-02 rounded-12 shadow-md max-h-[200px] overflow-y-auto p-1">
-                  {groupsLoading ? (
-                    <div className="px-3 py-2">
-                      <Text as="p" text03 secondaryBody>
-                        Loading groups...
-                      </Text>
+          <Section
+            gap={1}
+            height="auto"
+            alignItems="stretch"
+            justifyContent="start"
+          >
+            {/* Subsection: white card behind search + groups */}
+            <div className="relative">
+              <div className="absolute -inset-2 bg-background-neutral-00 rounded-12" />
+              <Section
+                gap={0.5}
+                height="auto"
+                alignItems="stretch"
+                justifyContent="start"
+              >
+                <div ref={containerRef} className="relative">
+                  <InputTypeIn
+                    value={searchTerm}
+                    onChange={(e) => {
+                      setSearchTerm(e.target.value);
+                      if (!dropdownOpen) setDropdownOpen(true);
+                    }}
+                    onFocus={() => setDropdownOpen(true)}
+                    onBlur={closeDropdown}
+                    placeholder="Search groups to join..."
+                    leftSearchIcon
+                  />
+                  {dropdownOpen && (
+                    <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-background-neutral-00 border border-border-02 rounded-12 shadow-md p-1">
+                      {groupsLoading ? (
+                        <Text as="p" text03 secondaryBody className="px-3 py-2">
+                          Loading groups...
+                        </Text>
+                      ) : dropdownGroups.length === 0 ? (
+                        <Text as="p" text03 secondaryBody className="px-3 py-2">
+                          No groups found
+                        </Text>
+                      ) : (
+                        <ShadowDiv className="max-h-[200px] flex flex-col gap-1">
+                          {dropdownGroups.map((group) => {
+                            const isMember = memberGroupIds.has(group.id);
+                            return (
+                              <LineItem
+                                key={group.id}
+                                icon={isMember ? SvgCheck : SvgUsers}
+                                description={`${group.users.length} ${
+                                  group.users.length === 1 ? "user" : "users"
+                                }`}
+                                selected={isMember}
+                                emphasized={isMember}
+                                onMouseDown={(e: React.MouseEvent) =>
+                                  e.preventDefault()
+                                }
+                                onClick={() => toggleGroup(group.id)}
+                              >
+                                {group.name}
+                              </LineItem>
+                            );
+                          })}
+                        </ShadowDiv>
+                      )}
                     </div>
-                  ) : dropdownGroups.length === 0 ? (
-                    <div className="px-3 py-2">
-                      <Text as="p" text03 secondaryBody>
-                        No groups found
-                      </Text>
-                    </div>
-                  ) : (
-                    dropdownGroups.map((group, idx) => {
-                      const isMember = memberGroupIds.has(group.id);
-                      return (
-                        <button
-                          key={group.id}
-                          type="button"
-                          onMouseDown={(e) => e.preventDefault()}
-                          onClick={() => toggleGroup(group.id)}
-                          className={`flex items-center justify-between gap-2 px-3 py-2.5 w-full hover:bg-background-neutral-02 transition-colors text-left rounded-lg ${
-                            idx > 0 ? "border-t border-border-01" : ""
-                          }`}
-                        >
-                          <div className="flex flex-col gap-0.5">
-                            <Text as="span" mainUiAction text05>
-                              {group.name}
-                            </Text>
-                            <Text as="span" secondaryBody text03>
-                              {group.users.length}{" "}
-                              {group.users.length === 1 ? "user" : "users"}
-                            </Text>
-                          </div>
-                          {isMember && (
-                            <Text as="span" secondaryBody text03>
-                              Joined
-                            </Text>
-                          )}
-                        </button>
-                      );
-                    })
                   )}
                 </div>
-              )}
-            </div>
 
-            {joinedGroups.length === 0 ? (
-              <div className="flex items-start gap-3 px-3 py-2">
-                <SvgUsers className="w-4 h-4 text-text-03 flex-shrink-0 mt-0.5" />
-                <div className="flex flex-col gap-0.5">
-                  <Text as="span" mainUiAction text05>
-                    No groups found
-                  </Text>
-                  <Text as="span" secondaryBody text03>
-                    {displayName} is not in any groups.
-                  </Text>
-                </div>
-              </div>
-            ) : (
-              <div className="flex flex-col overflow-y-auto max-h-[200px]">
-                {joinedGroups.map((group, idx) => (
-                  <button
-                    key={group.id}
-                    type="button"
-                    onClick={() => toggleGroup(group.id)}
-                    className={`flex items-center justify-between gap-2 px-3 py-2.5 hover:bg-background-neutral-02 transition-colors text-left ${
-                      idx > 0 ? "border-t border-border-01" : ""
-                    }`}
+                {joinedGroups.length === 0 ? (
+                  <LineItem
+                    icon={SvgUsers}
+                    description={`${displayName} is not in any groups.`}
+                    muted
                   >
-                    <div className="flex items-center gap-3">
-                      <SvgUsers className="w-4 h-4 text-text-03 flex-shrink-0" />
-                      <div className="flex flex-col gap-0.5">
-                        <Text as="span" mainUiAction text05>
-                          {group.name}
-                        </Text>
-                        <Text as="span" secondaryBody text03>
-                          {group.users.length}{" "}
-                          {group.users.length === 1 ? "user" : "users"}
-                        </Text>
-                      </div>
-                    </div>
-                    <SvgLogOut className="w-4 h-4 text-text-03 flex-shrink-0" />
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </Modal.Body>
-
-        {user.role && (
-          <>
-            <Separator noPadding />
-
-            <div className="flex items-center justify-between w-full gap-4 px-4 py-3">
-              <div className="flex flex-col gap-0.5">
-                <Text as="p" mainUiAction text04>
-                  User Role
-                </Text>
-                <Text as="p" secondaryBody text03>
-                  This controls their general permissions.
-                </Text>
-              </div>
-
-              <div className="w-[200px] flex-shrink-0">
-                <InputSelect
-                  value={selectedRole}
-                  onValueChange={setSelectedRole}
-                >
-                  <InputSelect.Trigger />
-                  <InputSelect.Content>
-                    {ASSIGNABLE_ROLES.map(({ value, label }) => (
-                      <InputSelect.Item
-                        key={value}
-                        value={value}
-                        icon={SvgUser}
+                    No groups found
+                  </LineItem>
+                ) : (
+                  <ShadowDiv className="flex flex-col gap-1 max-h-[200px]">
+                    {joinedGroups.map((group) => (
+                      <div
+                        key={group.id}
+                        className="bg-background-tint-01 rounded-08"
                       >
-                        {label}
-                      </InputSelect.Item>
+                        <LineItem
+                          icon={SvgUsers}
+                          description={`${group.users.length} ${
+                            group.users.length === 1 ? "user" : "users"
+                          }`}
+                          rightChildren={
+                            <SvgLogOut className="w-4 h-4 text-text-03" />
+                          }
+                          onClick={() => toggleGroup(group.id)}
+                        >
+                          {group.name}
+                        </LineItem>
+                      </div>
                     ))}
-                  </InputSelect.Content>
-                </InputSelect>
-              </div>
+                  </ShadowDiv>
+                )}
+              </Section>
             </div>
-          </>
-        )}
+
+            {user.role && (
+              <>
+                <Separator noPadding />
+
+                <ContentAction
+                  title="User Role"
+                  description="This controls their general permissions."
+                  sizePreset="main-ui"
+                  variant="section"
+                  paddingVariant="fit"
+                  rightChildren={
+                    <InputSelect
+                      value={selectedRole}
+                      onValueChange={setSelectedRole}
+                    >
+                      <InputSelect.Trigger />
+                      <InputSelect.Content>
+                        {ASSIGNABLE_ROLES.map(({ value, label }) => (
+                          <InputSelect.Item
+                            key={value}
+                            value={value}
+                            icon={SvgUser}
+                          >
+                            {label}
+                          </InputSelect.Item>
+                        ))}
+                      </InputSelect.Content>
+                    </InputSelect>
+                  }
+                />
+              </>
+            )}
+          </Section>
+        </Modal.Body>
 
         <Modal.Footer>
           <Button prominence="secondary" onClick={onClose}>

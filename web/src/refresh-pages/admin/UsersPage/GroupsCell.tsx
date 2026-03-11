@@ -140,6 +140,7 @@ export default function GroupsCell({
         ) : hasOverflow ? (
           <SimpleTooltip
             side="bottom"
+            align="start"
             tooltip={allGroupsTooltip}
             className="bg-background-neutral-01 border border-border-01 shadow-sm"
             delayDuration={200}

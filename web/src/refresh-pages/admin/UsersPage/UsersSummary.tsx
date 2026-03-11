@@ -1,8 +1,9 @@
-import { SvgArrowUpRight, SvgFilter, SvgUserSync } from "@opal/icons";
+import { SvgArrowUpRight, SvgFilterPlus, SvgUserSync } from "@opal/icons";
 import { ContentAction } from "@opal/layouts";
 import { Button } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import Card from "@/refresh-components/cards/Card";
+import IconButton from "@/refresh-components/buttons/IconButton";
 import Text from "@/refresh-components/texts/Text";
 import Link from "next/link";
 import { ADMIN_PATHS } from "@/lib/admin-routes";
@@ -34,12 +35,18 @@ function StatCell({ value, label, onFilter }: StatCellProps) {
         {label}
       </Text>
       {onFilter && (
-        <div className="absolute right-2 top-2 flex items-center gap-1 opacity-0 group-hover/stat:opacity-100 transition-opacity">
-          <Text as="span" secondaryBody text03>
-            Filter
-          </Text>
-          <SvgFilter size={16} className="text-text-03" />
-        </div>
+        <IconButton
+          tertiary
+          icon={SvgFilterPlus}
+          tooltip="Add Filter"
+          toolTipPosition="left"
+          tooltipSize="sm"
+          className="absolute right-1 top-1 opacity-0 group-hover/stat:opacity-100 transition-opacity"
+          onClick={(e) => {
+            e.stopPropagation();
+            onFilter();
+          }}
+        />
       )}
     </div>
   );
