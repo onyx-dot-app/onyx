@@ -97,7 +97,8 @@ class TestNextjsPathRewriting:
     def test_rewrites_root_hmr_path(self) -> None:
         html = 'new WebSocket("wss://craft-dev.onyx.app/_next/webpack-hmr?id=abc")'
         result = rewrite(html)
-        assert f'"{BASE}/_next/webpack-hmr?id=abc"' in result
+        assert '"wss://craft-dev.onyx.app/_next/webpack-hmr?id=abc"' not in result
+        assert '"/_next/webpack-hmr?id=abc"' in result
 
     def test_rewrites_escaped_absolute_next_font_url(self) -> None:
         html = (
@@ -114,21 +115,37 @@ class TestRuntimeFixerInjection:
     def test_injects_websocket_rewrite_shim(self) -> None:
         html = "<html><head></head><body></body></html>"
         result = inject(html)
-        assert "window.WebSocket = function (u, p)" in result
-        assert f'var B = "{BASE}"' in result
+        assert "window.WebSocket = function (url, protocols)" in result
+        assert f'var WEBAPP_BASE = "{BASE}"' in result
 
     def test_injects_hmr_websocket_stub(self) -> None:
         html = "<html><head></head><body></body></html>"
         result = inject(html)
-        assert "function H(u)" in result
-        assert "if (h(u)) return new H(r(u));" in result
+        assert "function MockHmrWebSocket(url)" in result
+        assert "return new MockHmrWebSocket(rewriteNextAssetUrl(url));" in result
 
     def test_injects_before_head_contents(self) -> None:
         html = "<html><head><title>x</title></head><body></body></html>"
         result = inject(html)
-        assert result.index("window.WebSocket = function (u, p)") < result.index(
-            "<title>x</title>"
+        assert result.index(
+            "window.WebSocket = function (url, protocols)"
+        ) < result.index("<title>x</title>")
+
+    def test_rewritten_hmr_url_still_matches_shim_intercept_logic(self) -> None:
+        html = (
+            "<html><head></head><body>"
+            'new WebSocket("wss://craft-dev.onyx.app/_next/webpack-hmr?id=abc")'
+            "</body></html>"
         )
+
+        rewritten = rewrite(html)
+        assert '"wss://craft-dev.onyx.app/_next/webpack-hmr?id=abc"' not in rewritten
+        assert 'new WebSocket("/_next/webpack-hmr?id=abc")' in rewritten
+
+        injected = inject(rewritten)
+
+        assert 'new WebSocket("/_next/webpack-hmr?id=abc")' in injected
+        assert 'parsedUrl.pathname.indexOf("/_next/webpack-hmr") === 0' in injected
 
 
 class TestProxyHeaderRewriting:
@@ -221,8 +238,8 @@ class TestProxyRequestWiring:
         )
         body = cast(bytes, response.body).decode("utf-8")
 
-        assert "window.WebSocket = function (u, p)" in body
-        assert body.index("window.WebSocket = function (u, p)") < body.index(
+        assert "window.WebSocket = function (url, protocols)" in body
+        assert body.index("window.WebSocket = function (url, protocols)") < body.index(
             "<title>x</title>"
         )
 

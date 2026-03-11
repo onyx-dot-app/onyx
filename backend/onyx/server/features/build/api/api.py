@@ -262,6 +262,7 @@ def _rewrite_asset_paths(content: bytes, session_id: str) -> bytes:
     """Rewrite Next.js asset paths to go through the proxy."""
     webapp_base_path = f"/api/build/sessions/{session_id}/webapp"
     escaped_webapp_base_path = webapp_base_path.replace("/", r"\/")
+    hmr_paths = ("/_next/webpack-hmr", "/_next/hmr")
 
     text = content.decode("utf-8")
     # Anchor on delimiter so already-prefixed URLs (from assetPrefix) aren't double-rewritten.
@@ -288,6 +289,15 @@ def _rewrite_asset_paths(content: bytes, session_id: str) -> bytes:
         rf"{escaped_webapp_base_path}\/_next\/",
         text,
     )
+    for hmr_path in hmr_paths:
+        text = text.replace(
+            f"{webapp_base_path}{hmr_path}",
+            hmr_path,
+        )
+        text = text.replace(
+            f"{escaped_webapp_base_path}{hmr_path.replace('/', r'\/')}",
+            hmr_path.replace("/", r"\/"),
+        )
     text = re.sub(
         r'"(/(?:[a-zA-Z0-9_-]+/)*[a-zA-Z0-9_-]+\.json)"',
         f'"{webapp_base_path}\\1"',
