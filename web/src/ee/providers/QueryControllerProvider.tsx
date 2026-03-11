@@ -62,10 +62,11 @@ export function QueryControllerProvider({
   const setAppMode = useCallback(
     (mode: AppMode) => {
       if (!isPaidEnterpriseFeaturesEnabled || !searchUiEnabled) return;
-      appModeRef.current = mode;
-      setState((prev) =>
-        prev.phase === "idle" ? { phase: "idle", appMode: mode } : prev
-      );
+      setState((prev) => {
+        if (prev.phase !== "idle") return prev;
+        appModeRef.current = mode;
+        return { phase: "idle", appMode: mode };
+      });
     },
     [isPaidEnterpriseFeaturesEnabled, searchUiEnabled]
   );
