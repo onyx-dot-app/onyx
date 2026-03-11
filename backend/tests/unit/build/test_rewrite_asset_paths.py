@@ -103,19 +103,19 @@ class TestRuntimeFixerInjection:
     def test_injects_websocket_rewrite_shim(self):
         html = "<html><head></head><body></body></html>"
         result = inject(html)
-        assert "window.WebSocket=function" in result
-        assert f"var B='{BASE}'" in result
+        assert "window.WebSocket = function (u, p)" in result
+        assert f'var B = "{BASE}"' in result
 
     def test_injects_hmr_websocket_stub(self):
         html = "<html><head></head><body></body></html>"
         result = inject(html)
         assert "function H(u)" in result
-        assert "if(h(u))return new H(r(u));" in result
+        assert "if (h(u)) return new H(r(u));" in result
 
     def test_injects_before_head_contents(self):
         html = "<html><head><title>x</title></head><body></body></html>"
         result = inject(html)
-        assert result.index("window.WebSocket=function") < result.index(
+        assert result.index("window.WebSocket = function (u, p)") < result.index(
             "<title>x</title>"
         )
 

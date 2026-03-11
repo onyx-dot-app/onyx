@@ -41,6 +41,9 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+_TEMPLATES_DIR = Path(__file__).parent / "templates"
+_WEBAPP_HMR_FIXER_TEMPLATE = (_TEMPLATES_DIR / "webapp_hmr_fixer.js").read_text()
+
 
 def require_onyx_craft_enabled(user: User = Depends(current_user)) -> User:
     """
@@ -243,39 +246,7 @@ def _stream_response(response: httpx.Response) -> Iterator[bytes]:
 def _inject_hmr_fixer(content: bytes, session_id: str) -> bytes:
     """Inject a script that stubs root-scoped Next HMR websocket connections."""
     base = f"/api/build/sessions/{session_id}/webapp"
-    script = (
-        f"<script>(function(){{var B='{base}';"
-        "function h(u){if(!u)return false;"
-        "try{var x=new URL(String(u),window.location.href);"
-        "return x.pathname.indexOf('/_next/webpack-hmr')===0||x.pathname.indexOf('/_next/hmr')===0;"
-        "}catch(e){}"
-        "if(typeof u==='string')return u.indexOf('/_next/webpack-hmr')===0||u.indexOf('/_next/hmr')===0;"
-        "return false;}"
-        "function r(u){if(!u)return u;"
-        "try{var x=new URL(String(u),window.location.href);"
-        "if(x.pathname.indexOf('/_next/')===0)return B+x.pathname+x.search+x.hash;"
-        "}catch(e){}"
-        "if(typeof u==='string'&&u.indexOf('/_next/')===0)return B+u;"
-        "return u;}"
-        "function e(t){return typeof Event==='function'?new Event(t):{type:t};}"
-        "function H(u){this.url=String(u);this.readyState=1;this.bufferedAmount=0;this.extensions='';this.protocol='';"
-        "this.binaryType='blob';this.onopen=null;this.onmessage=null;this.onerror=null;this.onclose=null;this._l={};"
-        "var s=this;setTimeout(function(){s._d('open',e('open'));},0);}"
-        "H.CONNECTING=0;H.OPEN=1;H.CLOSING=2;H.CLOSED=3;"
-        "H.prototype.addEventListener=function(t,c){(this._l[t]||(this._l[t]=[])).push(c);};"
-        "H.prototype.removeEventListener=function(t,c){var a=this._l[t]||[];this._l[t]=a.filter(function(f){return f!==c;});};"
-        "H.prototype._d=function(t,v){var a=this._l[t]||[];for(var i=0;i<a.length;i++)a[i].call(this,v);"
-        "var n=this['on'+t];if(typeof n==='function')n.call(this,v);};"
-        "H.prototype.send=function(){};"
-        "H.prototype.close=function(c,r){if(this.readyState>=2)return;this.readyState=3;"
-        "var v=e('close');v.code=c===undefined?1000:c;v.reason=r||'';v.wasClean=true;this._d('close',v);};"
-        "if(window.WebSocket){var O=window.WebSocket;"
-        "window.WebSocket=function(u,p){if(h(u))return new H(r(u));return p===undefined?new O(u):new O(u,p);};"
-        "window.WebSocket.prototype=O.prototype;"
-        "Object.setPrototypeOf(window.WebSocket,O);"
-        "['CONNECTING','OPEN','CLOSING','CLOSED'].forEach(function(k){window.WebSocket[k]=O[k];});}"
-        "})()</script>"
-    )
+    script = f"<script>{_WEBAPP_HMR_FIXER_TEMPLATE.replace('__WEBAPP_BASE__', base)}</script>"
     text = content.decode("utf-8")
     text = re.sub(
         r"(<head\b[^>]*>)",
@@ -480,7 +451,7 @@ def _check_webapp_access(
     return session
 
 
-_OFFLINE_HTML_PATH = Path(__file__).parent / "templates" / "webapp_offline.html"
+_OFFLINE_HTML_PATH = _TEMPLATES_DIR / "webapp_offline.html"
 
 
 def _offline_html_response() -> Response:
