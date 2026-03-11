@@ -1703,9 +1703,7 @@ echo "SNAPSHOT_RESTORED"
 
             # Start NextJS dev server (check node_modules since restoring from snapshot)
             start_script = _build_nextjs_start_script(
-                safe_session_path,
-                nextjs_port,
-                check_node_modules=True,
+                safe_session_path, nextjs_port, check_node_modules=True
             )
             k8s_stream(
                 self._stream_core_api.connect_get_namespaced_pod_exec,
