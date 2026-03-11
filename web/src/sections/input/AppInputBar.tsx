@@ -670,7 +670,7 @@ const AppInputBar = React.memo(
           ref={containerRef}
           id="onyx-chat-input"
           className={cn(
-            "w-full flex flex-col shadow-01 bg-background-neutral-00 rounded-16 relative"
+            "w-full flex flex-col shadow-01 bg-background-neutral-00 rounded-16"
             // # Note (from @raunakab):
             //
             // `shadow-01` extends ~14px below the element (2px offset + 12px blur).
@@ -683,6 +683,32 @@ const AppInputBar = React.memo(
             // modes. See the corresponding note there for details.
           )}
         >
+          {/* Voice waveform above input */}
+          {isTTSActuallySpeaking ? (
+            <div className="flex justify-start px-1">
+              <Waveform
+                variant="speaking"
+                isActive={isTTSActuallySpeaking}
+                isMuted={isTTSMuted}
+                onMuteToggle={toggleTTSMute}
+              />
+            </div>
+          ) : isRecording &&
+            !isVoicePlaybackActive &&
+            !shouldShowRecordingWaveformBelow ? (
+            <div className="px-1">
+              <Waveform
+                variant="recording"
+                isActive={isRecording}
+                isMuted={isMuted}
+                audioLevel={audioLevel}
+                onMuteToggle={() => {
+                  setMutedRef.current?.(!isMuted);
+                }}
+              />
+            </div>
+          ) : null}
+
           {/* Attached Files */}
           <div
             ref={filesWrapperRef}
@@ -837,35 +863,9 @@ const AppInputBar = React.memo(
 
           {chatControls}
 
-          {/* Voice waveform - always shown in a consistent top slot */}
-          {isTTSActuallySpeaking ? (
-            <div className="absolute left-0 right-0 -top-12 flex justify-start px-1">
-              <Waveform
-                variant="speaking"
-                isActive={isTTSActuallySpeaking}
-                isMuted={isTTSMuted}
-                onMuteToggle={toggleTTSMute}
-              />
-            </div>
-          ) : isRecording &&
-            !isVoicePlaybackActive &&
-            !shouldShowRecordingWaveformBelow ? (
-            <div className="absolute left-0 right-0 -top-12 px-1">
-              <Waveform
-                variant="recording"
-                isActive={isRecording}
-                isMuted={isMuted}
-                audioLevel={audioLevel}
-                onMuteToggle={() => {
-                  setMutedRef.current?.(!isMuted);
-                }}
-              />
-            </div>
-          ) : null}
-
-          {/* First recording cycle appears below input bar */}
+          {/* First recording cycle waveform below input */}
           {shouldShowRecordingWaveformBelow && (
-            <div className="absolute left-0 right-0 -bottom-12 px-1">
+            <div className="px-1">
               <Waveform
                 variant="recording"
                 isActive={isRecording}
