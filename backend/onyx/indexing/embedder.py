@@ -210,8 +210,11 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
                     )[0]
                     title_embed_dict[title] = title_embedding
 
-            new_embedded_chunk = IndexChunk(
-                **chunk.model_dump(),
+            new_embedded_chunk = IndexChunk.model_construct(
+                **{
+                    field_name: getattr(chunk, field_name)
+                    for field_name in chunk.__class__.model_fields
+                },
                 embeddings=ChunkEmbedding(
                     full_embedding=chunk_embeddings[0],
                     mini_chunk_embeddings=chunk_embeddings[1:],

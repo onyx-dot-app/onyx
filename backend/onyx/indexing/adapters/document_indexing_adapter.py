@@ -1,4 +1,5 @@
 import contextlib
+from collections import defaultdict
 from collections.abc import Generator
 
 from sqlalchemy.engine.util import TransactionalContext
@@ -122,16 +123,9 @@ class DocumentIndexingBatchAdapter:
             )
         }
 
-        doc_id_to_new_chunk_cnt: dict[str, int] = {
-            document_id: len(
-                [
-                    chunk
-                    for chunk in chunks_with_embeddings
-                    if chunk.source_document.id == document_id
-                ]
-            )
-            for document_id in updatable_ids
-        }
+        doc_id_to_new_chunk_cnt: dict[str, int] = defaultdict(int)
+        for chunk in chunks_with_embeddings:
+            doc_id_to_new_chunk_cnt[chunk.source_document.id] += 1
 
         # Get ancestor hierarchy node IDs for each document
         doc_id_to_ancestor_ids = self._get_ancestor_ids_for_documents(

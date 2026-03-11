@@ -133,9 +133,11 @@ class DocMetadataAwareIndexChunk(IndexChunk):
         tenant_id: str,
         ancestor_hierarchy_node_ids: list[int] | None = None,
     ) -> "DocMetadataAwareIndexChunk":
-        index_chunk_data = index_chunk.model_dump()
-        return cls(
-            **index_chunk_data,
+        return cls.model_construct(
+            **{
+                field_name: getattr(index_chunk, field_name)
+                for field_name in index_chunk.__class__.model_fields
+            },
             access=access,
             document_sets=document_sets,
             user_project=user_project,
