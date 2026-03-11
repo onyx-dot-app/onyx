@@ -20,9 +20,9 @@ import {
   BaseLLMFormValues,
 } from "./formUtils";
 import {
-  AdvancedOptions,
   DisplayModelsField,
   DisplayNameField,
+  ModelsAccessField,
   SingleDefaultModelField,
 } from "./shared";
 import Separator from "@/refresh-components/Separator";
@@ -213,7 +213,7 @@ export function VertexAIModal({
             />
           )}
 
-          {!isOnboarding && <AdvancedOptions formikProps={formikProps} />}
+          {!isOnboarding && <ModelsAccessField formikProps={formikProps} />}
         </LLMConfigurationModalWrapper>
       )}
     </Formik>

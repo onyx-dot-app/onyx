@@ -25,9 +25,9 @@ import {
   BaseLLMFormValues,
 } from "./formUtils";
 import {
-  AdvancedOptions,
   DisplayModelsField,
   DisplayNameField,
+  ModelsAccessField,
   FetchModelsButton,
   SingleDefaultModelField,
 } from "./shared";
@@ -261,7 +261,7 @@ function BedrockModalInternals({
       {!isOnboarding && (
         <>
           <Separator />
-          <AdvancedOptions formikProps={formikProps} />
+          <ModelsAccessField formikProps={formikProps} />
         </>
       )}
     </LLMConfigurationModalWrapper>

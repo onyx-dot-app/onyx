@@ -14,7 +14,7 @@ import {
   buildDefaultValidationSchema,
   buildOnboardingInitialValues,
 } from "./formUtils";
-import { AdvancedOptions, APIKeyField, DisplayNameField } from "./shared";
+import { APIKeyField, DisplayNameField, ModelsAccessField } from "./shared";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import * as InputLayouts from "@/layouts/input-layouts";
 import { ModelConfigurationField } from "@/app/admin/configuration/llm/ModelConfigurationField";
@@ -338,7 +338,7 @@ export function CustomModal({
             />
           </InputLayouts.Vertical>
 
-          {!isOnboarding && <AdvancedOptions formikProps={formikProps} />}
+          {!isOnboarding && <ModelsAccessField formikProps={formikProps} />}
         </LLMConfigurationModalWrapper>
       )}
     </Formik>

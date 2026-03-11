@@ -2,14 +2,15 @@
 
 import { useState, useEffect } from "react";
 import { FormikProps } from "formik";
-import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
-import { IsPublicGroupSelector } from "@/components/IsPublicGroupSelector";
-import { AgentsMultiSelect } from "@/components/AgentsMultiSelect";
+import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { useAgents } from "@/hooks/useAgents";
+import { useUserGroups } from "@/lib/hooks";
 import { ModelConfiguration, SimpleKnownModel } from "@/interfaces/llm";
 import * as InputLayouts from "@/layouts/input-layouts";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
+import InputComboBox from "@/refresh-components/inputs/InputComboBox";
+import InputSelect from "@/refresh-components/inputs/InputSelect";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import Switch from "@/refresh-components/inputs/Switch";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
@@ -20,7 +21,20 @@ import { WithoutStyles } from "@opal/types";
 import Separator from "@/refresh-components/Separator";
 import { Section } from "@/layouts/general-layouts";
 import { Disabled, Hoverable } from "@opal/core";
-import { SvgRefreshCw } from "@opal/icons";
+import { Content } from "@opal/layouts";
+import {
+  SvgOnyxOctagon,
+  SvgOrganization,
+  SvgRefreshCw,
+  SvgSparkle,
+  SvgUserManage,
+  SvgUsers,
+  SvgX,
+} from "@opal/icons";
+import { Card, NameCard } from "@/refresh-components/cards";
+import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
+import useUsers from "@/hooks/useUsers";
+import { UserRole } from "@/lib/types";
 
 export function FieldSeparator() {
   return <Separator noPadding className="px-2" />;
@@ -106,6 +120,230 @@ export function SingleDefaultModelField({
   );
 }
 
+// ─── ModelsAccessField ──────────────────────────────────────────────────────
+
+/** Prefix used to distinguish group IDs from agent IDs in the combobox. */
+const GROUP_PREFIX = "group:";
+const AGENT_PREFIX = "agent:";
+
+interface ModelsAccessFieldProps<T> {
+  formikProps: FormikProps<T>;
+}
+
+export function ModelsAccessField<T extends BaseLLMFormValues>({
+  formikProps,
+}: ModelsAccessFieldProps<T>) {
+  const { agents } = useAgents();
+  const { data: userGroups, isLoading: userGroupsIsLoading } = useUserGroups();
+  const { data: usersData } = useUsers({ includeApiKeys: false });
+  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
+
+  const adminCount =
+    usersData?.accepted.filter((u) => u.role === UserRole.ADMIN).length ?? 0;
+
+  const isPublic = formikProps.values.is_public;
+  const selectedGroupIds = formikProps.values.groups ?? [];
+  const selectedAgentIds = formikProps.values.personas ?? [];
+
+  // Build a flat list of combobox options from groups + agents
+  const groupOptions =
+    isPaidEnterpriseFeaturesEnabled && !userGroupsIsLoading && userGroups
+      ? userGroups.map((g) => ({
+          value: `${GROUP_PREFIX}${g.id}`,
+          label: g.name,
+          description: "Group",
+        }))
+      : [];
+
+  const agentOptions = agents.map((a) => ({
+    value: `${AGENT_PREFIX}${a.id}`,
+    label: a.name,
+    description: "Agent",
+  }));
+
+  // Exclude already-selected items from the dropdown
+  const selectedKeys = new Set([
+    ...selectedGroupIds.map((id) => `${GROUP_PREFIX}${id}`),
+    ...selectedAgentIds.map((id) => `${AGENT_PREFIX}${id}`),
+  ]);
+
+  const availableOptions = [...groupOptions, ...agentOptions].filter(
+    (opt) => !selectedKeys.has(opt.value)
+  );
+
+  // Resolve selected IDs back to full objects for display
+  const groupById = new Map((userGroups ?? []).map((g) => [g.id, g]));
+  const agentMap = new Map(agents.map((a) => [a.id, a]));
+
+  function handleAccessChange(value: string) {
+    if (value === "public") {
+      formikProps.setFieldValue("is_public", true);
+      formikProps.setFieldValue("groups", []);
+      formikProps.setFieldValue("personas", []);
+    } else {
+      formikProps.setFieldValue("is_public", false);
+    }
+  }
+
+  function handleSelect(compositeValue: string) {
+    if (compositeValue.startsWith(GROUP_PREFIX)) {
+      const id = Number(compositeValue.slice(GROUP_PREFIX.length));
+      if (!selectedGroupIds.includes(id)) {
+        formikProps.setFieldValue("groups", [...selectedGroupIds, id]);
+      }
+    } else if (compositeValue.startsWith(AGENT_PREFIX)) {
+      const id = Number(compositeValue.slice(AGENT_PREFIX.length));
+      if (!selectedAgentIds.includes(id)) {
+        formikProps.setFieldValue("personas", [...selectedAgentIds, id]);
+      }
+    }
+  }
+
+  function handleRemoveGroup(id: number) {
+    formikProps.setFieldValue(
+      "groups",
+      selectedGroupIds.filter((gid) => gid !== id)
+    );
+  }
+
+  function handleRemoveAgent(id: number) {
+    formikProps.setFieldValue(
+      "personas",
+      selectedAgentIds.filter((aid) => aid !== id)
+    );
+  }
+
+  const hasSelections =
+    selectedGroupIds.length > 0 || selectedAgentIds.length > 0;
+
+  return (
+    <div className="flex flex-col w-full">
+      <FieldWrapper>
+        <InputLayouts.Horizontal
+          name="is_public"
+          title="Models Access"
+          description="Who can access this provider."
+        >
+          <InputSelect
+            value={isPublic ? "public" : "private"}
+            onValueChange={handleAccessChange}
+          >
+            <InputSelect.Trigger placeholder="Select access level" />
+            <InputSelect.Content>
+              <InputSelect.Item value="public" icon={SvgOrganization}>
+                All Users & Agents
+              </InputSelect.Item>
+              <InputSelect.Item value="private" icon={SvgUsers}>
+                Named Groups & Agents
+              </InputSelect.Item>
+            </InputSelect.Content>
+          </InputSelect>
+        </InputLayouts.Horizontal>
+      </FieldWrapper>
+
+      {!isPublic && (
+        <Card variant="borderless" padding={0.5}>
+          <Section gap={0.5}>
+            <InputComboBox
+              placeholder="Add groups and agents"
+              value=""
+              onChange={() => {}}
+              onValueChange={handleSelect}
+              options={availableOptions}
+              strict
+              leftSearchIcon
+            />
+
+            <NameCard
+              icon={SvgUserManage}
+              title="Admin"
+              description={`${adminCount} ${
+                adminCount === 1 ? "member" : "members"
+              }`}
+              rightChildren={
+                <Text secondaryBody text03>
+                  Always shared
+                </Text>
+              }
+            />
+            {selectedGroupIds.length > 0 && (
+              <div className="grid grid-cols-2 gap-1 w-full">
+                {selectedGroupIds.map((id) => {
+                  const group = groupById.get(id);
+                  const memberCount = group?.users.length ?? 0;
+                  return (
+                    <div key={`group-${id}`} className="min-w-0">
+                      <NameCard
+                        icon={SvgUsers}
+                        title={group?.name ?? `Group ${id}`}
+                        description={`${memberCount} ${
+                          memberCount === 1 ? "member" : "members"
+                        }`}
+                        rightChildren={
+                          <OpalButton
+                            size="sm"
+                            prominence="internal"
+                            icon={SvgX}
+                            onClick={() => handleRemoveGroup(id)}
+                            type="button"
+                          />
+                        }
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <FieldSeparator />
+
+            {selectedAgentIds.length > 0 ? (
+              <div className="grid grid-cols-2 gap-1 w-full">
+                {selectedAgentIds.map((id) => {
+                  const agent = agentMap.get(id);
+                  return (
+                    <div key={`agent-${id}`} className="min-w-0">
+                      <NameCard
+                        customIcon={
+                          agent ? (
+                            <AgentAvatar agent={agent} size={20} />
+                          ) : undefined
+                        }
+                        icon={!agent ? SvgSparkle : undefined}
+                        title={agent?.name ?? `Agent ${id}`}
+                        description="Agent"
+                        rightChildren={
+                          <OpalButton
+                            size="sm"
+                            prominence="internal"
+                            icon={SvgX}
+                            onClick={() => handleRemoveAgent(id)}
+                            type="button"
+                          />
+                        }
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="w-full p-2">
+                <Content
+                  icon={SvgOnyxOctagon}
+                  title="No agents added"
+                  description="This provider will not be used by any agents."
+                  variant="section"
+                  sizePreset="main-ui"
+                />
+              </div>
+            )}
+          </Section>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 // ─── FetchModelsButton ───────────────────────────────────────────────────────
 
 interface FetchModelsButtonProps {
@@ -176,53 +414,6 @@ export function FetchModelsButton({
         </Text>
       )}
     </div>
-  );
-}
-
-// ─── AdvancedOptions ─────────────────────────────────────────────────────────
-
-interface AdvancedOptionsProps {
-  formikProps: FormikProps<any>;
-}
-
-export function AdvancedOptions({ formikProps }: AdvancedOptionsProps) {
-  const { agents, isLoading: agentsLoading, error: agentsError } = useAgents();
-  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
-
-  return (
-    <>
-      <AdvancedOptionsToggle
-        showAdvancedOptions={showAdvancedOptions}
-        setShowAdvancedOptions={setShowAdvancedOptions}
-      />
-
-      {showAdvancedOptions && (
-        <>
-          <div className="flex flex-col gap-3">
-            <Text as="p" headingH3>
-              Access Controls
-            </Text>
-            <IsPublicGroupSelector
-              formikProps={formikProps}
-              objectName="LLM Provider"
-              publicToWhom="Users"
-              enforceGroupSelection={true}
-              smallLabels={true}
-            />
-            <AgentsMultiSelect
-              formikProps={formikProps}
-              agents={agents}
-              isLoading={agentsLoading}
-              error={agentsError}
-              label="Agent Whitelist"
-              subtext="Restrict this provider to specific agents."
-              disabled={formikProps.values.is_public}
-              disabledMessage="This LLM Provider is public and available to all agents."
-            />
-          </div>
-        </>
-      )}
-    </>
   );
 }
 
@@ -303,12 +494,13 @@ export function DisplayModelsField<T extends BaseLLMFormValues>({
   const visibleModels = modelConfigurations.filter((m) => m.is_visible);
 
   return (
-    <FieldWrapper>
+    <Card variant="borderless" padding={0.5}>
       <Section gap={0.5}>
         <InputLayouts.Horizontal
           title="Models"
           description="Select models to make available for this provider."
           nonInteractive
+          center
         >
           <Section flexDirection="row" gap={0}>
             <Disabled disabled={isAutoMode}>
@@ -426,6 +618,6 @@ export function DisplayModelsField<T extends BaseLLMFormValues>({
           </InputLayouts.Horizontal>
         )}
       </Section>
-    </FieldWrapper>
+    </Card>
   );
 }

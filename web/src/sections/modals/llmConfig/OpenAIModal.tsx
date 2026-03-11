@@ -20,6 +20,7 @@ import {
   DisplayModelsField,
   DisplayNameField,
   FieldSeparator,
+  ModelsAccessField,
   SingleDefaultModelField,
 } from "./shared";
 
@@ -153,7 +154,7 @@ export function OpenAIModal({
           {!isOnboarding && (
             <>
               <FieldSeparator />
-              {/*<AdvancedOptions formikProps={formikProps} />*/}
+              <ModelsAccessField formikProps={formikProps} />
             </>
           )}
         </LLMConfigurationModalWrapper>

@@ -24,10 +24,10 @@ import {
   BaseLLMFormValues,
 } from "./formUtils";
 import {
-  AdvancedOptions,
   APIKeyField,
   DisplayModelsField,
   DisplayNameField,
+  ModelsAccessField,
   FetchModelsButton,
   SingleDefaultModelField,
 } from "./shared";
@@ -262,7 +262,7 @@ export function OpenRouterModal({
               />
             )}
 
-            {!isOnboarding && <AdvancedOptions formikProps={formikProps} />}
+            {!isOnboarding && <ModelsAccessField formikProps={formikProps} />}
           </LLMConfigurationModalWrapper>
         );
       }}

@@ -4,7 +4,6 @@ import { useState } from "react";
 import { useSWRConfig } from "swr";
 import { Formik } from "formik";
 import { LLMProviderFormProps } from "@/interfaces/llm";
-import Spacer from "@/refresh-components/Spacer";
 import * as Yup from "yup";
 import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
 import { LLMConfigurationModalWrapper } from "./LLMConfigurationModalWrapper";
@@ -17,10 +16,11 @@ import {
   buildOnboardingInitialValues,
 } from "./formUtils";
 import {
-  AdvancedOptions,
   APIKeyField,
   DisplayModelsField,
   DisplayNameField,
+  ModelsAccessField,
+  FieldSeparator,
   SingleDefaultModelField,
 } from "./shared";
 
@@ -134,11 +134,12 @@ export function AnthropicModal({
 
           {!isOnboarding && (
             <>
-              <Spacer />
+              <FieldSeparator />
               <DisplayNameField disabled={!!existingLlmProvider} />
             </>
           )}
 
+          <FieldSeparator />
           {isOnboarding ? (
             <SingleDefaultModelField placeholder="E.g. claude-sonnet-4-5" />
           ) : (
@@ -152,7 +153,12 @@ export function AnthropicModal({
             />
           )}
 
-          {!isOnboarding && <AdvancedOptions formikProps={formikProps} />}
+          {!isOnboarding && (
+            <>
+              <FieldSeparator />
+              <ModelsAccessField formikProps={formikProps} />
+            </>
+          )}
         </LLMConfigurationModalWrapper>
       )}
     </Formik>

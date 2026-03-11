@@ -24,9 +24,9 @@ import {
   BaseLLMFormValues,
 } from "./formUtils";
 import {
-  AdvancedOptions,
   DisplayModelsField,
   DisplayNameField,
+  ModelsAccessField,
   SingleDefaultModelField,
 } from "./shared";
 import { fetchOllamaModels } from "@/app/admin/configuration/llm/utils";
@@ -159,7 +159,7 @@ function OllamaModalContent({
         />
       )}
 
-      {!isOnboarding && <AdvancedOptions formikProps={formikProps} />}
+      {!isOnboarding && <ModelsAccessField formikProps={formikProps} />}
     </LLMConfigurationModalWrapper>
   );
 }

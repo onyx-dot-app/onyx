@@ -19,9 +19,9 @@ import {
   BaseLLMFormValues,
 } from "./formUtils";
 import {
-  AdvancedOptions,
   APIKeyField,
   DisplayNameField,
+  ModelsAccessField,
   SingleDefaultModelField,
 } from "./shared";
 import {
@@ -205,7 +205,7 @@ export function AzureModal({
           <SingleDefaultModelField placeholder="E.g. gpt-4o" />
           <Separator />
 
-          {!isOnboarding && <AdvancedOptions formikProps={formikProps} />}
+          {!isOnboarding && <ModelsAccessField formikProps={formikProps} />}
         </LLMConfigurationModalWrapper>
       )}
     </Formik>

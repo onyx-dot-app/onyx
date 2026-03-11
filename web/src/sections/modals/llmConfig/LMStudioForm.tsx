@@ -25,9 +25,9 @@ import {
   BaseLLMFormValues,
 } from "./formUtils";
 import {
-  AdvancedOptions,
   DisplayModelsField,
   DisplayNameField,
+  ModelsAccessField,
   SingleDefaultModelField,
 } from "./shared";
 import { fetchModels } from "@/app/admin/configuration/llm/utils";
@@ -180,7 +180,7 @@ function LMStudioFormContent({
         />
       )}
 
-      {!isOnboarding && <AdvancedOptions formikProps={formikProps} />}
+      {!isOnboarding && <ModelsAccessField formikProps={formikProps} />}
     </LLMConfigurationModalWrapper>
   );
 }
