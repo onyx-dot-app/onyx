@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { cn } from "@/lib/utils";
+import { formatElapsedTime } from "@/lib/dateUtils";
 import { Button } from "@opal/components";
 import { SvgMicrophone, SvgMicrophoneOff } from "@opal/icons";
 
@@ -32,14 +33,10 @@ function RecordingWaveform({
     return () => clearInterval(interval);
   }, [isRecording]);
 
-  // Format time as MM:SS
-  const formattedTime = useMemo(() => {
-    const minutes = Math.floor(elapsedSeconds / 60);
-    const seconds = elapsedSeconds % 60;
-    return `${minutes.toString().padStart(2, "0")}:${seconds
-      .toString()
-      .padStart(2, "0")}`;
-  }, [elapsedSeconds]);
+  const formattedTime = useMemo(
+    () => formatElapsedTime(elapsedSeconds),
+    [elapsedSeconds]
+  );
 
   // Generate bar heights for waveform animation
   const bars = useMemo(() => {
