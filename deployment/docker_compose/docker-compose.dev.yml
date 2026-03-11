@@ -41,6 +41,8 @@ services:
     # Rootless Docker can reject the base OpenSearch ulimit settings, so clear
     # the inherited block entirely in the dev override.
     ulimits: !reset null
+    environment:
+      - bootstrap.memory_lock=false
 
   inference_model_server:
     ports:
