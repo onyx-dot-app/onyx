@@ -40,15 +40,17 @@ export function FieldSeparator() {
   return <Separator noPadding className="px-2" />;
 }
 
-type FieldWrapperProps = WithoutStyles<React.HTMLAttributes<HTMLDivElement>>;
+export type FieldWrapperProps = WithoutStyles<
+  React.HTMLAttributes<HTMLDivElement>
+>;
 
-function FieldWrapper(props: FieldWrapperProps) {
+export function FieldWrapper(props: FieldWrapperProps) {
   return <div {...props} className="p-2 w-full" />;
 }
 
 // ─── DisplayNameField ────────────────────────────────────────────────────────
 
-interface DisplayNameFieldProps {
+export interface DisplayNameFieldProps {
   disabled?: boolean;
 }
 
@@ -73,7 +75,7 @@ export function DisplayNameField({ disabled = false }: DisplayNameFieldProps) {
 
 // ─── APIKeyField ─────────────────────────────────────────────────────────────
 
-interface APIKeyFieldProps {
+export interface APIKeyFieldProps {
   optional?: boolean;
   providerName?: string;
 }
@@ -102,7 +104,7 @@ export function APIKeyField({
 
 // ─── SingleDefaultModelField ─────────────────────────────────────────────────
 
-interface SingleDefaultModelFieldProps {
+export interface SingleDefaultModelFieldProps {
   placeholder?: string;
 }
 

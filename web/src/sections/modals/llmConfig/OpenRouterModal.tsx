@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useSWRConfig } from "swr";
-import Separator from "@/refresh-components/Separator";
 import { Formik } from "formik";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import * as InputLayouts from "@/layouts/input-layouts";
@@ -28,6 +27,7 @@ import {
   DisplayModelsField,
   DisplayNameField,
   ModelsAccessField,
+  FieldSeparator,
   FetchModelsButton,
   SingleDefaultModelField,
 } from "./shared";
@@ -245,7 +245,7 @@ export function OpenRouterModal({
               autoFetchOnInitialLoad={!!existingLlmProvider}
             />
 
-            <Separator />
+            <FieldSeparator />
 
             {isOnboarding ? (
               <SingleDefaultModelField placeholder="E.g. openai/gpt-4o" />

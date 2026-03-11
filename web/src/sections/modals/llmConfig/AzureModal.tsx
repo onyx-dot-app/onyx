@@ -21,6 +21,7 @@ import {
 import {
   APIKeyField,
   DisplayNameField,
+  FieldSeparator,
   ModelsAccessField,
   SingleDefaultModelField,
 } from "./shared";
@@ -28,7 +29,6 @@ import {
   isValidAzureTargetUri,
   parseAzureTargetUri,
 } from "@/lib/azureTargetUri";
-import Separator from "@/refresh-components/Separator";
 
 export const AZURE_PROVIDER_NAME = "azure";
 const AZURE_DISPLAY_NAME = "Microsoft Azure Cloud";
@@ -201,9 +201,9 @@ export function AzureModal({
             />
           </InputLayouts.Vertical>
 
-          <Separator />
+          <FieldSeparator />
           <SingleDefaultModelField placeholder="E.g. gpt-4o" />
-          <Separator />
+          <FieldSeparator />
 
           {!isOnboarding && <ModelsAccessField formikProps={formikProps} />}
         </LLMConfigurationModalWrapper>

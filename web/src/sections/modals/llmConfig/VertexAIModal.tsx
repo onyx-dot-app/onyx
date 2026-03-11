@@ -22,10 +22,12 @@ import {
 import {
   DisplayModelsField,
   DisplayNameField,
+  FieldSeparator,
+  FieldWrapper,
   ModelsAccessField,
   SingleDefaultModelField,
 } from "./shared";
-import Separator from "@/refresh-components/Separator";
+import { Section } from "@/layouts/general-layouts";
 
 export const VERTEXAI_PROVIDER_NAME = "vertex_ai";
 const VERTEXAI_DISPLAY_NAME = "Google Cloud Vertex AI";
@@ -176,29 +178,41 @@ export function VertexAIModal({
           isFormValid={formikProps.isValid}
           isTesting={isTesting}
         >
+          <Section gap={0}>
+            <FieldWrapper>
+              <InputLayouts.Vertical
+                name="custom_config.vertex_location"
+                title="Google Cloud Region Name"
+                subDescription="Region where your Google Vertex AI models are hosted. See full list of regions supported at Google Cloud."
+              >
+                <InputTypeInField
+                  name="custom_config.vertex_location"
+                  placeholder={VERTEXAI_DEFAULT_LOCATION}
+                />
+              </InputLayouts.Vertical>
+            </FieldWrapper>
+
+            <FieldWrapper>
+              <InputLayouts.Vertical
+                name="custom_config.vertex_credentials"
+                title="API Key"
+                subDescription="Attach your API key JSON from Google Cloud to access your models."
+              >
+                <FileUploadFormField
+                  name="custom_config.vertex_credentials"
+                  label=""
+                />
+              </InputLayouts.Vertical>
+            </FieldWrapper>
+          </Section>
+
+          <FieldSeparator />
+
           {!isOnboarding && (
             <DisplayNameField disabled={!!existingLlmProvider} />
           )}
 
-          <FileUploadFormField
-            name="custom_config.vertex_credentials"
-            label="Credentials File"
-            subtext="Upload your Google Cloud service account JSON credentials file."
-          />
-
-          <InputLayouts.Vertical
-            name="custom_config.vertex_location"
-            title="Location"
-            description="The Google Cloud region for your Vertex AI models (e.g., global, us-east1, us-central1, europe-west1)."
-            optional
-          >
-            <InputTypeInField
-              name="custom_config.vertex_location"
-              placeholder={VERTEXAI_DEFAULT_LOCATION}
-            />
-          </InputLayouts.Vertical>
-
-          <Separator />
+          <FieldSeparator />
 
           {isOnboarding ? (
             <SingleDefaultModelField placeholder="E.g. gemini-2.5-pro" />

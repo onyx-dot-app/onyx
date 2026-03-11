@@ -3,8 +3,9 @@
 import { useState, useEffect } from "react";
 import { useSWRConfig } from "swr";
 import { Formik, FormikProps } from "formik";
-import { SelectorFormField } from "@/components/Field";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
+import InputSelectField from "@/refresh-components/form/InputSelectField";
+import InputSelect from "@/refresh-components/inputs/InputSelect";
 import * as InputLayouts from "@/layouts/input-layouts";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import {
@@ -27,12 +28,12 @@ import {
 import {
   DisplayModelsField,
   DisplayNameField,
+  FieldSeparator,
   ModelsAccessField,
   FetchModelsButton,
   SingleDefaultModelField,
 } from "./shared";
 import { fetchBedrockModels } from "@/app/admin/configuration/llm/utils";
-import Separator from "@/refresh-components/Separator";
 import Text from "@/refresh-components/texts/Text";
 import Tabs from "@/refresh-components/Tabs";
 
@@ -139,12 +140,22 @@ function BedrockModalInternals({
     >
       {!isOnboarding && <DisplayNameField disabled={!!existingLlmProvider} />}
 
-      <SelectorFormField
+      <InputLayouts.Vertical
         name={FIELD_AWS_REGION_NAME}
-        label="AWS Region"
-        subtext="Region where your Amazon Bedrock models are hosted."
-        options={AWS_REGION_OPTIONS}
-      />
+        title="AWS Region"
+        description="Region where your Amazon Bedrock models are hosted."
+      >
+        <InputSelectField name={FIELD_AWS_REGION_NAME}>
+          <InputSelect.Trigger placeholder="Select a region" />
+          <InputSelect.Content>
+            {AWS_REGION_OPTIONS.map((option) => (
+              <InputSelect.Item key={option.value} value={option.value}>
+                {option.name}
+              </InputSelect.Item>
+            ))}
+          </InputSelect.Content>
+        </InputSelectField>
+      </InputLayouts.Vertical>
 
       <div>
         <Text as="p" mainUiAction>
@@ -241,7 +252,7 @@ function BedrockModalInternals({
         autoFetchOnInitialLoad={!!existingLlmProvider}
       />
 
-      <Separator />
+      <FieldSeparator />
 
       {isOnboarding ? (
         <SingleDefaultModelField placeholder="E.g. us.anthropic.claude-sonnet-4-5-v1" />
@@ -260,7 +271,7 @@ function BedrockModalInternals({
 
       {!isOnboarding && (
         <>
-          <Separator />
+          <FieldSeparator />
           <ModelsAccessField formikProps={formikProps} />
         </>
       )}

@@ -2,8 +2,7 @@
 
 import { useState } from "react";
 import { useSWRConfig } from "swr";
-import Separator from "@/refresh-components/Separator";
-import { ArrayHelpers, Field, FieldArray, Formik, ErrorMessage } from "formik";
+import { ArrayHelpers, FieldArray, Formik } from "formik";
 import { LLMProviderFormProps } from "@/interfaces/llm";
 import * as Yup from "yup";
 import { LLMConfigurationModalWrapper } from "./LLMConfigurationModalWrapper";
@@ -14,7 +13,12 @@ import {
   buildDefaultValidationSchema,
   buildOnboardingInitialValues,
 } from "./formUtils";
-import { APIKeyField, DisplayNameField, ModelsAccessField } from "./shared";
+import {
+  APIKeyField,
+  DisplayNameField,
+  FieldSeparator,
+  ModelsAccessField,
+} from "./shared";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import * as InputLayouts from "@/layouts/input-layouts";
 import { ModelConfigurationField } from "@/app/admin/configuration/llm/ModelConfigurationField";
@@ -215,7 +219,7 @@ export function CustomModal({
             />
           </InputLayouts.Vertical>
 
-          <Separator />
+          <FieldSeparator />
 
           <Text as="p" secondaryBody text03>
             Fill in the following as needed. Refer to the LiteLLM documentation
@@ -237,7 +241,7 @@ export function CustomModal({
             <InputTypeInField name="api_version" placeholder="API Version" />
           </InputLayouts.Vertical>
 
-          <Separator />
+          <FieldSeparator />
 
           <Text as="p" mainUiAction>
             [Optional] Custom Configs
@@ -258,74 +262,53 @@ export function CustomModal({
           <FieldArray
             name="custom_config_list"
             render={(arrayHelpers: ArrayHelpers<any[]>) => (
-              <div className="w-full">
+              <div className="w-full flex flex-col gap-4">
                 {formikProps.values.custom_config_list.map((_, index) => (
-                  <div
-                    key={index}
-                    className={(index === 0 ? "mt-2" : "mt-6") + " w-full"}
-                  >
-                    <div className="flex w-full">
-                      <div className="w-full mr-6 border border-border p-3 rounded">
-                        <div>
-                          <Text as="p" mainUiAction>
-                            Key
-                          </Text>
-                          <Field
-                            name={`custom_config_list[${index}][0]`}
-                            className="border border-border bg-background rounded w-full py-2 px-3 mr-4"
-                            autoComplete="off"
-                          />
-                          <ErrorMessage
-                            name={`custom_config_list[${index}][0]`}
-                            component="div"
-                            className="text-status-text-error-05 text-sm mt-1"
-                          />
-                        </div>
-                        <div className="mt-3">
-                          <Text as="p" mainUiAction>
-                            Value
-                          </Text>
-                          <Field
-                            name={`custom_config_list[${index}][1]`}
-                            className="border border-border bg-background rounded w-full py-2 px-3 mr-4"
-                            autoComplete="off"
-                          />
-                          <ErrorMessage
-                            name={`custom_config_list[${index}][1]`}
-                            component="div"
-                            className="text-status-text-error-05 text-sm mt-1"
-                          />
-                        </div>
-                      </div>
-                      <div className="my-auto">
-                        {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
-                        <IconButton
-                          icon={SvgX}
-                          className="my-auto"
-                          onClick={() => arrayHelpers.remove(index)}
-                          secondary
+                  <div key={index} className="flex w-full gap-2 items-start">
+                    <div className="flex-1 min-w-0 flex flex-col gap-3 border border-border-02 p-3 rounded-08">
+                      <InputLayouts.Vertical
+                        name={`custom_config_list[${index}][0]`}
+                        title="Key"
+                      >
+                        <InputTypeInField
+                          name={`custom_config_list[${index}][0]`}
+                          placeholder="e.g. CLOUDFLARE_ACCOUNT_ID"
                         />
-                      </div>
+                      </InputLayouts.Vertical>
+                      <InputLayouts.Vertical
+                        name={`custom_config_list[${index}][1]`}
+                        title="Value"
+                      >
+                        <InputTypeInField
+                          name={`custom_config_list[${index}][1]`}
+                          placeholder="Value"
+                        />
+                      </InputLayouts.Vertical>
+                    </div>
+                    <div className="pt-6">
+                      <IconButton
+                        icon={SvgX}
+                        onClick={() => arrayHelpers.remove(index)}
+                        secondary
+                      />
                     </div>
                   </div>
                 ))}
-                <div className="mt-3">
-                  <CreateButton onClick={() => arrayHelpers.push(["", ""])}>
-                    Add New
-                  </CreateButton>
-                </div>
+                <CreateButton onClick={() => arrayHelpers.push(["", ""])}>
+                  Add New
+                </CreateButton>
               </div>
             )}
           />
 
-          <Separator />
+          <FieldSeparator />
 
           <ModelConfigurationField
             name="model_configurations"
             formikProps={formikProps as any}
           />
 
-          <Separator />
+          <FieldSeparator />
 
           <InputLayouts.Vertical
             name="default_model_name"
