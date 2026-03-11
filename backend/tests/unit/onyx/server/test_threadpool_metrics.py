@@ -53,8 +53,8 @@ def test_instrumented_executor_handles_exceptions() -> None:
 
 def test_thread_count_collector_reports_threads() -> None:
     """Verify the collector returns the process thread count."""
-    with patch("onyx.server.metrics.threadpool._process") as mock_process:
-        mock_process.num_threads.return_value = 15
+    with patch("onyx.server.metrics.threadpool._get_process") as mock_get_process:
+        mock_get_process.return_value.num_threads.return_value = 15
 
         collector = ThreadCountCollector()
         families = collector.collect()

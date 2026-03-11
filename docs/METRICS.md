@@ -234,7 +234,7 @@ onyx_api_event_loop_lag_seconds > 0.1
 
 ## Thread Pool Metrics
 
-Always-on via `InstrumentedThreadPoolExecutor` (wraps all `ThreadPoolExecutor` usage).
+Collected via `InstrumentedThreadPoolExecutor` (wraps `ThreadPoolExecutor` usage in `threadpool_concurrency.py`).
 
 | Metric | Type | Labels | Description |
 |--------|------|--------|-------------|

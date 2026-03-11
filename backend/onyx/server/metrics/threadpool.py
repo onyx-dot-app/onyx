@@ -11,6 +11,7 @@ Metrics:
 - onyx_process_thread_count: Gauge of total process threads (via psutil)
 """
 
+import os
 import time
 from collections.abc import Callable
 from concurrent.futures import Future
@@ -44,7 +45,22 @@ _TASK_DURATION: Histogram = Histogram(
     "Thread pool task execution duration in seconds",
 )
 
-_process: psutil.Process = psutil.Process()
+
+def _get_process() -> psutil.Process:
+    """Return a psutil.Process for the *current* PID.
+
+    Lazily created and invalidated when PID changes (fork).
+    """
+    global _process, _process_pid
+    pid = os.getpid()
+    if _process is None or _process_pid != pid:
+        _process = psutil.Process(pid)
+        _process_pid = pid
+    return _process
+
+
+_process: psutil.Process | None = None
+_process_pid: int | None = None
 
 
 class InstrumentedThreadPoolExecutor(ThreadPoolExecutor):
@@ -69,6 +85,8 @@ class InstrumentedThreadPoolExecutor(ThreadPoolExecutor):
                 _TASKS_ACTIVE.dec()
                 _TASK_DURATION.observe(time.monotonic() - start)
 
+        # Increment *after* super().submit() so we don't count tasks
+        # that fail to submit (e.g. pool already shut down).
         future = super().submit(_wrapped)
         _TASKS_SUBMITTED.inc()
         return future
@@ -83,13 +101,16 @@ class ThreadCountCollector(Collector):
             "Total OS threads in the process",
         )
         try:
-            family.add_metric([], _process.num_threads())
+            family.add_metric([], _get_process().num_threads())
         except (psutil.Error, OSError):
             logger.warning("Failed to read process thread count", exc_info=True)
             family.add_metric([], 0)
         return [family]
 
     def describe(self) -> list[GaugeMetricFamily]:
+        # Return empty to mark this as an "unchecked" collector.
+        # Prometheus checks describe() vs collect() for consistency;
+        # returning empty opts out since our metrics are dynamic.
         return []
 
 
@@ -100,6 +121,9 @@ def setup_threadpool_metrics() -> None:
     """Register the process thread count collector and enable instrumentation.
 
     Idempotent — safe to call multiple times (e.g. Uvicorn hot-reload).
+    Uses try/except on REGISTRY.register() to handle the case where the
+    module is reimported (guard resets) but REGISTRY still holds the old
+    collector.
     """
     global _thread_collector
     if _thread_collector is not None:
@@ -109,5 +133,8 @@ def setup_threadpool_metrics() -> None:
 
     enable_threadpool_instrumentation()
     collector = ThreadCountCollector()
-    REGISTRY.register(collector)
+    try:
+        REGISTRY.register(collector)
+    except ValueError:
+        logger.debug("Thread count collector already registered, skipping")
     _thread_collector = collector
