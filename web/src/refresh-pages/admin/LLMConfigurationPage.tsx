@@ -44,6 +44,7 @@ import { VertexAIModal } from "@/sections/modals/llmConfig/VertexAIModal";
 import { OpenRouterModal } from "@/sections/modals/llmConfig/OpenRouterModal";
 import { CustomModal } from "@/sections/modals/llmConfig/CustomModal";
 import { LMStudioForm } from "@/sections/modals/llmConfig/LMStudioForm";
+import { LiteLLMProxyModal } from "@/sections/modals/llmConfig/LiteLLMProxyModal";
 import { Section } from "@/layouts/general-layouts";
 
 const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.LLM_MODELS]!;
@@ -111,6 +112,13 @@ const PROVIDER_MODAL_MAP: Record<
   ),
   lm_studio: (d, open, onOpenChange) => (
     <LMStudioForm
+      shouldMarkAsDefault={d}
+      open={open}
+      onOpenChange={onOpenChange}
+    />
+  ),
+  litellm_proxy: (d, open, onOpenChange) => (
+    <LiteLLMProxyModal
       shouldMarkAsDefault={d}
       open={open}
       onOpenChange={onOpenChange}

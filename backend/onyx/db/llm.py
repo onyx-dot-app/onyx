@@ -25,6 +25,7 @@ from onyx.server.manage.embedding.models import CloudEmbeddingProvider
 from onyx.server.manage.embedding.models import CloudEmbeddingProviderCreationRequest
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import LLMProviderView
+from onyx.server.manage.llm.models import SyncModelEntry
 from onyx.utils.logger import setup_logger
 from shared_configs.enums import EmbeddingProvider
 
@@ -369,9 +370,9 @@ def upsert_llm_provider(
 def sync_model_configurations(
     db_session: Session,
     provider_name: str,
-    models: list[dict],
+    models: list[SyncModelEntry],
 ) -> int:
-    """Sync model configurations for a dynamic provider (OpenRouter, Bedrock, Ollama).
+    """Sync model configurations for a dynamic provider (OpenRouter, Bedrock, Ollama, etc.).
 
     This inserts NEW models from the source API without overwriting existing ones.
     User preferences (is_visible, max_input_tokens) are preserved for existing models.
@@ -379,7 +380,7 @@ def sync_model_configurations(
     Args:
         db_session: Database session
         provider_name: Name of the LLM provider
-        models: List of model dicts with keys: name, display_name, max_input_tokens, supports_image_input
+        models: List of SyncModelEntry objects describing the fetched models
 
     Returns:
         Number of new models added
@@ -393,21 +394,20 @@ def sync_model_configurations(
 
     new_count = 0
     for model in models:
-        model_name = model["name"]
-        if model_name not in existing_names:
+        if model.name not in existing_names:
             # Insert new model with is_visible=False (user must explicitly enable)
             supported_flows = [LLMModelFlowType.CHAT]
-            if model.get("supports_image_input", False):
+            if model.supports_image_input:
                 supported_flows.append(LLMModelFlowType.VISION)
 
             insert_new_model_configuration__no_commit(
                 db_session=db_session,
                 llm_provider_id=provider.id,
-                model_name=model_name,
+                model_name=model.name,
                 supported_flows=supported_flows,
                 is_visible=False,
-                max_input_tokens=model.get("max_input_tokens"),
-                display_name=model.get("display_name"),
+                max_input_tokens=model.max_input_tokens,
+                display_name=model.display_name,
             )
             new_count += 1
 

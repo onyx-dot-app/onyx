@@ -24,7 +24,7 @@
  * 4. **ProviderContextProvider** - LLM provider configuration
  * 5. **ModalProvider** - Global modal state management
  * 6. **AppSidebarProvider** - Sidebar open/closed state
- * 7. **AppModeProvider** - Search/Chat mode selection
+ * 7. **QueryControllerProvider** - Search/Chat mode + query lifecycle
  *
  * ## Usage
  *
@@ -40,7 +40,7 @@
  * - `useSettingsContext()` - from SettingsProvider
  * - `useUser()` - from UserProvider
  * - `useAppBackground()` - from AppBackgroundProvider
- * - `useAppMode()` - from AppModeProvider
+ * - `useQueryController()` - from QueryControllerProvider (includes appMode)
  * - etc.
  *
  * @TODO(@raunakab): The providers wrapped by this component are currently
@@ -65,7 +65,6 @@ import { User } from "@/lib/types";
 import { ModalProvider } from "@/components/context/ModalContext";
 import { AuthTypeMetadata } from "@/lib/userSS";
 import { AppSidebarProvider } from "@/providers/AppSidebarProvider";
-import { AppModeProvider } from "@/providers/AppModeProvider";
 import { AppBackgroundProvider } from "@/providers/AppBackgroundProvider";
 import { QueryControllerProvider } from "@/providers/QueryControllerProvider";
 import ToastProvider from "@/providers/ToastProvider";
@@ -96,11 +95,9 @@ export default function AppProvider({
           <ProviderContextProvider>
             <ModalProvider user={user}>
               <AppSidebarProvider folded={!!folded}>
-                <AppModeProvider>
-                  <QueryControllerProvider>
-                    <ToastProvider>{children}</ToastProvider>
-                  </QueryControllerProvider>
-                </AppModeProvider>
+                <QueryControllerProvider>
+                  <ToastProvider>{children}</ToastProvider>
+                </QueryControllerProvider>
               </AppSidebarProvider>
             </ModalProvider>
           </ProviderContextProvider>

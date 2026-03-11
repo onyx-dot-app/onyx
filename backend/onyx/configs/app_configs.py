@@ -311,6 +311,12 @@ VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT = (
     os.environ.get("VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT", "true").lower()
     == "true"
 )
+OPENSEARCH_MIGRATION_GET_VESPA_CHUNKS_PAGE_SIZE = int(
+    os.environ.get("OPENSEARCH_MIGRATION_GET_VESPA_CHUNKS_PAGE_SIZE") or 500
+)
+OPENSEARCH_OVERRIDE_DEFAULT_NUM_HYBRID_SEARCH_CANDIDATES = int(
+    os.environ.get("OPENSEARCH_DEFAULT_NUM_HYBRID_SEARCH_CANDIDATES") or 0
+)
 
 VESPA_HOST = os.environ.get("VESPA_HOST") or "localhost"
 # NOTE: this is used if and only if the vespa config server is accessible via a
