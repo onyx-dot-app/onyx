@@ -73,7 +73,7 @@ Create env vars from secrets
 */}}
 {{- define "onyx.envSecrets" -}}
     {{- $secretFilesEnabled := include "onyx.secretsAsFiles.enabled" . }}
-    {{- $secretFilesMountPath := dig "secretsAsFiles" "mountPath" "/etc/onyx-secrets" .Values }}
+    {{- $secretFilesMountPath := include "onyx.secretsAsFiles.mountPath" . }}
     {{- range $secretSuffix, $secretContent := .Values.auth }}
     {{- if and (kindIs "map" $secretContent) (ne $secretContent.enabled false) ($secretContent.secretKeys) }}
     {{- range $name, $key := $secretContent.secretKeys }}
@@ -101,9 +101,17 @@ Secret file mounting helpers.
 {{- if and .Values.secretsAsFiles .Values.secretsAsFiles.enabled }}true{{- end }}
 {{- end }}
 
+{{- define "onyx.secretsAsFiles.mountPath" -}}
+{{- if and .Values.secretsAsFiles .Values.secretsAsFiles.mountPath -}}
+{{- .Values.secretsAsFiles.mountPath -}}
+{{- else -}}
+/etc/onyx-secrets
+{{- end }}
+{{- end }}
+
 {{- define "onyx.secretsAsFiles.volumeMounts" -}}
 {{- if (include "onyx.secretsAsFiles.enabled" .) }}
-{{- $mountPath := .Values.secretsAsFiles.mountPath | default "/etc/onyx-secrets" }}
+{{- $mountPath := include "onyx.secretsAsFiles.mountPath" . }}
 {{- range $secretSuffix, $secretContent := .Values.auth }}
 {{- if and (kindIs "map" $secretContent) (ne $secretContent.enabled false) ($secretContent.secretKeys) }}
 - name: {{ printf "auth-secret-%s" ($secretSuffix | lower | replace "_" "-") }}
