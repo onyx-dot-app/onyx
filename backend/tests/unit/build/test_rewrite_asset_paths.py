@@ -1,5 +1,6 @@
-"""Unit tests for _rewrite_asset_paths in the webapp proxy."""
+"""Unit tests for webapp proxy path rewriting/injection."""
 
+from onyx.server.features.build.api.api import _inject_asset_fixer
 from onyx.server.features.build.api.api import _rewrite_asset_paths
 
 SESSION_ID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
@@ -8,6 +9,10 @@ BASE = f"/api/build/sessions/{SESSION_ID}/webapp"
 
 def rewrite(html: str) -> str:
     return _rewrite_asset_paths(html.encode(), SESSION_ID).decode()
+
+
+def inject(html: str) -> str:
+    return _inject_asset_fixer(html.encode(), SESSION_ID).decode()
 
 
 class TestNextjsPathRewriting:
@@ -50,3 +55,59 @@ class TestNextjsPathRewriting:
         html = "fetch('/data/items.json')"
         result = rewrite(html)
         assert f"'{BASE}/data/items.json'" in result
+
+    def test_rewrites_escaped_next_font_path_in_json_script(self):
+        """Next dev can embed font asset paths in JSON-escaped script payloads."""
+        html = r'{"src":"\/_next\/static\/media\/font.woff2"}'
+        result = rewrite(html)
+        assert (
+            r'{"src":"\/api\/build\/sessions\/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee\/webapp\/_next\/static\/media\/font.woff2"}'
+            in result
+        )
+
+    def test_rewrites_escaped_next_font_path_in_style_payload(self):
+        """Keep dynamically generated next/font URLs inside the session proxy."""
+        html = r'{"css":"@font-face{src:url(\"\/_next\/static\/media\/font.woff2\")"}'
+        result = rewrite(html)
+        assert (
+            r"\/api\/build\/sessions\/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee\/webapp\/_next\/static\/media\/font.woff2"
+            in result
+        )
+
+    def test_rewrites_absolute_next_font_url(self):
+        html = (
+            '<link rel="preload" as="font" '
+            'href="https://craft-dev.onyx.app/_next/static/media/font.woff2">'
+        )
+        result = rewrite(html)
+        assert f'"{BASE}/_next/static/media/font.woff2"' in result
+
+    def test_rewrites_root_hmr_path(self):
+        html = 'new WebSocket("wss://craft-dev.onyx.app/_next/webpack-hmr?id=abc")'
+        result = rewrite(html)
+        assert f'"{BASE}/_next/webpack-hmr?id=abc"' in result
+
+    def test_rewrites_escaped_absolute_next_font_url(self):
+        html = (
+            r'{"href":"https:\/\/craft-dev.onyx.app\/_next\/static\/media\/font.woff2"}'
+        )
+        result = rewrite(html)
+        assert (
+            r'{"href":"\/api\/build\/sessions\/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee\/webapp\/_next\/static\/media\/font.woff2"}'
+            in result
+        )
+
+
+class TestRuntimeFixerInjection:
+    def test_injects_websocket_rewrite_shim(self):
+        html = "<html><head></head><body></body></html>"
+        result = inject(html)
+        assert "window.WebSocket=function" in result
+        assert f"var B='{BASE}'" in result
+
+    def test_injects_before_head_contents(self):
+        html = "<html><head><title>x</title></head><body></body></html>"
+        result = inject(html)
+        assert result.index("window.WebSocket=function") < result.index(
+            "<title>x</title>"
+        )
