@@ -213,7 +213,7 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
             new_embedded_chunk = IndexChunk.model_construct(
                 **{
                     field_name: getattr(chunk, field_name)
-                    for field_name in chunk.__class__.model_fields
+                    for field_name in DocAwareChunk.model_fields
                 },
                 embeddings=ChunkEmbedding(
                     full_embedding=chunk_embeddings[0],

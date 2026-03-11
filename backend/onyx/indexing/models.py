@@ -136,7 +136,7 @@ class DocMetadataAwareIndexChunk(IndexChunk):
         return cls.model_construct(
             **{
                 field_name: getattr(index_chunk, field_name)
-                for field_name in index_chunk.__class__.model_fields
+                for field_name in IndexChunk.model_fields
             },
             access=access,
             document_sets=document_sets,
