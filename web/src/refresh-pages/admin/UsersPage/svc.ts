@@ -126,3 +126,18 @@ export async function inviteUsers(emails: string[]): Promise<void> {
     throw new Error(await parseErrorDetail(res, "Failed to invite users"));
   }
 }
+
+export async function downloadUsersCsv(): Promise<void> {
+  const res = await fetch("/api/manage/users/download");
+  if (!res.ok) {
+    const detail = (await res.json()).detail;
+    throw new Error(detail ?? "Failed to download users CSV");
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "onyx_users.csv";
+  a.click();
+  URL.revokeObjectURL(url);
+}
