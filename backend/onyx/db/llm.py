@@ -25,6 +25,7 @@ from onyx.server.manage.embedding.models import CloudEmbeddingProvider
 from onyx.server.manage.embedding.models import CloudEmbeddingProviderCreationRequest
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import LLMProviderView
+from onyx.server.manage.llm.models import SyncModelEntry
 from onyx.utils.logger import setup_logger
 from shared_configs.enums import EmbeddingProvider
 
@@ -270,10 +271,35 @@ def upsert_llm_provider(
         mc.name for mc in llm_provider_upsert_request.model_configurations
     }
 
+    # Build a lookup of requested visibility by model name
+    requested_visibility = {
+        mc.name: mc.is_visible
+        for mc in llm_provider_upsert_request.model_configurations
+    }
+
     # Delete removed models
     removed_ids = [
         mc.id for name, mc in existing_by_name.items() if name not in models_to_exist
     ]
+
+    default_model = fetch_default_llm_model(db_session)
+
+    # Prevent removing and hiding the default model
+    if default_model:
+        for name, mc in existing_by_name.items():
+            if mc.id == default_model.id:
+                if default_model.id in removed_ids:
+                    raise ValueError(
+                        f"Cannot remove the default model '{name}'. "
+                        "Please change the default model before removing."
+                    )
+                if not requested_visibility.get(name, True):
+                    raise ValueError(
+                        f"Cannot hide the default model '{name}'. "
+                        "Please change the default model before hiding."
+                    )
+                break
+
     if removed_ids:
         db_session.query(ModelConfiguration).filter(
             ModelConfiguration.id.in_(removed_ids)
@@ -344,9 +370,9 @@ def upsert_llm_provider(
 def sync_model_configurations(
     db_session: Session,
     provider_name: str,
-    models: list[dict],
+    models: list[SyncModelEntry],
 ) -> int:
-    """Sync model configurations for a dynamic provider (OpenRouter, Bedrock, Ollama).
+    """Sync model configurations for a dynamic provider (OpenRouter, Bedrock, Ollama, etc.).
 
     This inserts NEW models from the source API without overwriting existing ones.
     User preferences (is_visible, max_input_tokens) are preserved for existing models.
@@ -354,7 +380,7 @@ def sync_model_configurations(
     Args:
         db_session: Database session
         provider_name: Name of the LLM provider
-        models: List of model dicts with keys: name, display_name, max_input_tokens, supports_image_input
+        models: List of SyncModelEntry objects describing the fetched models
 
     Returns:
         Number of new models added
@@ -368,21 +394,20 @@ def sync_model_configurations(
 
     new_count = 0
     for model in models:
-        model_name = model["name"]
-        if model_name not in existing_names:
+        if model.name not in existing_names:
             # Insert new model with is_visible=False (user must explicitly enable)
             supported_flows = [LLMModelFlowType.CHAT]
-            if model.get("supports_image_input", False):
+            if model.supports_image_input:
                 supported_flows.append(LLMModelFlowType.VISION)
 
             insert_new_model_configuration__no_commit(
                 db_session=db_session,
                 llm_provider_id=provider.id,
-                model_name=model_name,
+                model_name=model.name,
                 supported_flows=supported_flows,
                 is_visible=False,
-                max_input_tokens=model.get("max_input_tokens"),
-                display_name=model.get("display_name"),
+                max_input_tokens=model.max_input_tokens,
+                display_name=model.display_name,
             )
             new_count += 1
 
@@ -538,7 +563,6 @@ def fetch_default_model(
         .options(selectinload(ModelConfiguration.llm_provider))
         .join(LLMModelFlow)
         .where(
-            ModelConfiguration.is_visible == True,  # noqa: E712
             LLMModelFlow.llm_model_flow_type == flow_type,
             LLMModelFlow.is_default == True,  # noqa: E712
         )
@@ -814,44 +838,30 @@ def sync_auto_mode_models(
             )
             changes += 1
 
-    db_session.commit()
+    # Update the default if this provider currently holds the global CHAT default.
+    # We flush (but don't commit) so that _update_default_model can see the new
+    # model rows, then commit everything atomically to avoid a window where the
+    # old default is invisible but still pointed-to.
+    db_session.flush()
 
-    # Update the default if this provider currently holds the global CHAT default
     recommended_default = llm_recommendations.get_default_model(provider.provider)
     if recommended_default:
-        current_default_name = db_session.scalar(
-            select(ModelConfiguration.name)
-            .join(
-                LLMModelFlow,
-                LLMModelFlow.model_configuration_id == ModelConfiguration.id,
-            )
-            .where(
-                ModelConfiguration.llm_provider_id == provider.id,
-                LLMModelFlow.llm_model_flow_type == LLMModelFlowType.CHAT,
-                LLMModelFlow.is_default == True,  # noqa: E712
-            )
-        )
+        current_default = fetch_default_llm_model(db_session)
 
         if (
-            current_default_name is not None
-            and current_default_name != recommended_default.name
+            current_default
+            and current_default.llm_provider_id == provider.id
+            and current_default.name != recommended_default.name
         ):
-            try:
-                _update_default_model(
-                    db_session=db_session,
-                    provider_id=provider.id,
-                    model=recommended_default.name,
-                    flow_type=LLMModelFlowType.CHAT,
-                )
-                changes += 1
-            except ValueError:
-                logger.warning(
-                    "Recommended default model '%s' not found "
-                    "for provider_id=%s; skipping default update.",
-                    recommended_default.name,
-                    provider.id,
-                )
+            _update_default_model__no_commit(
+                db_session=db_session,
+                provider_id=provider.id,
+                model=recommended_default.name,
+                flow_type=LLMModelFlowType.CHAT,
+            )
+            changes += 1
 
+    db_session.commit()
     return changes
 
 
@@ -982,7 +992,7 @@ def update_model_configuration__no_commit(
     db_session.flush()
 
 
-def _update_default_model(
+def _update_default_model__no_commit(
     db_session: Session,
     provider_id: int,
     model: str,
@@ -1020,6 +1030,14 @@ def _update_default_model(
     new_default.is_default = True
     model_config.is_visible = True
 
+
+def _update_default_model(
+    db_session: Session,
+    provider_id: int,
+    model: str,
+    flow_type: LLMModelFlowType,
+) -> None:
+    _update_default_model__no_commit(db_session, provider_id, model, flow_type)
     db_session.commit()
 
 

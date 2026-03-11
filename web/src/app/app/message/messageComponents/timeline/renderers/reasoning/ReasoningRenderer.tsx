@@ -170,7 +170,12 @@ export const ReasoningRenderer: MessageRenderer<
 
   if (!hasStart && !hasEnd && content.length === 0) {
     return children([
-      { icon: SvgCircle, status: THINKING_STATUS, content: <></> },
+      {
+        icon: SvgCircle,
+        status: THINKING_STATUS,
+        content: <></>,
+        noPaddingRight: true,
+      },
     ]);
   }
 
@@ -192,6 +197,7 @@ export const ReasoningRenderer: MessageRenderer<
       status: displayStatus,
       content: reasoningContent,
       expandedText: reasoningContent,
+      noPaddingRight: true,
     },
   ]);
 };

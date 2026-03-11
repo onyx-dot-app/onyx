@@ -11,7 +11,7 @@ import { Button } from "@opal/components";
 import { SvgBubbleText, SvgSearchMenu, SvgSidebar } from "@opal/icons";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import { useSettingsContext } from "@/providers/SettingsProvider";
-import { AppMode, useAppMode } from "@/providers/AppModeProvider";
+import type { AppMode } from "@/providers/QueryControllerProvider";
 import useAppFocus from "@/hooks/useAppFocus";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
@@ -58,15 +58,15 @@ const footerMarkdownComponents = {
  */
 export default function NRFChrome() {
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
-  const { appMode, setAppMode } = useAppMode();
+  const { state, setAppMode } = useQueryController();
   const settings = useSettingsContext();
   const { isMobile } = useScreenSize();
   const { setFolded } = useAppSidebarContext();
   const appFocus = useAppFocus();
-  const { classification } = useQueryController();
   const [modePopoverOpen, setModePopoverOpen] = useState(false);
 
-  const effectiveMode: AppMode = appFocus.isNewSession() ? appMode : "chat";
+  const effectiveMode: AppMode =
+    appFocus.isNewSession() && state.phase === "idle" ? state.appMode : "chat";
 
   const customFooterContent =
     settings?.enterpriseSettings?.custom_lower_disclaimer_content ||
@@ -78,7 +78,7 @@ export default function NRFChrome() {
     isPaidEnterpriseFeaturesEnabled &&
     settings.isSearchModeAvailable &&
     appFocus.isNewSession() &&
-    !classification;
+    state.phase === "idle";
 
   const showHeader = isMobile || showModeToggle;
 

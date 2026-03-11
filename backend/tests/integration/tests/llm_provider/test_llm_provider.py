@@ -427,7 +427,7 @@ def test_delete_default_llm_provider_rejected(reset: None) -> None:  # noqa: ARG
         headers=admin_user.headers,
     )
     assert delete_response.status_code == 400
-    assert "Cannot delete the default LLM provider" in delete_response.json()["message"]
+    assert "Cannot delete the default LLM provider" in delete_response.json()["detail"]
 
     # Verify provider still exists
     provider_data = _get_provider_by_id(admin_user, created_provider["id"])
@@ -674,7 +674,7 @@ def test_duplicate_provider_name_rejected(reset: None) -> None:  # noqa: ARG001
         json=base_payload,
     )
     assert response.status_code == 409
-    assert "already exists" in response.json()["message"]
+    assert "already exists" in response.json()["detail"]
 
 
 def test_rename_provider_rejected(reset: None) -> None:  # noqa: ARG001
@@ -711,7 +711,7 @@ def test_rename_provider_rejected(reset: None) -> None:  # noqa: ARG001
         json=update_payload,
     )
     assert response.status_code == 400
-    assert "not currently supported" in response.json()["message"]
+    assert "not currently supported" in response.json()["detail"]
 
     # Verify no duplicate was created — only the original provider should exist
     provider = _get_provider_by_id(admin_user, provider_id)

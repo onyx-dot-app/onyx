@@ -48,7 +48,7 @@ def test_gitlab_connector_basic(gitlab_connector: GitlabConnector) -> None:
 
     # --- Specific Document Details to Validate ---
     target_mr_id = f"https://{gitlab_base_url}/{project_path}/-/merge_requests/1"
-    target_issue_id = f"https://{gitlab_base_url}/{project_path}/-/issues/2"
+    target_issue_id = f"https://{gitlab_base_url}/{project_path}/-/work_items/2"
     target_code_file_semantic_id = "README.md"
     # ---
 

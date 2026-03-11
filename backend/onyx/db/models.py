@@ -25,6 +25,7 @@ from sqlalchemy import desc
 from sqlalchemy import Enum
 from sqlalchemy import Float
 from sqlalchemy import ForeignKey
+from sqlalchemy import ForeignKeyConstraint
 from sqlalchemy import func
 from sqlalchemy import Index
 from sqlalchemy import Integer
@@ -162,6 +163,8 @@ class _EncryptedBase(TypeDecorator):
 
 
 class EncryptedString(_EncryptedBase):
+    # Must redeclare cache_ok in this child class since we explicitly redeclare _is_json
+    cache_ok = True
     _is_json: bool = False
 
     def process_bind_param(
@@ -188,6 +191,7 @@ class EncryptedString(_EncryptedBase):
 
 
 class EncryptedJson(_EncryptedBase):
+    cache_ok = True
     _is_json: bool = True
 
     def process_bind_param(
@@ -2421,6 +2425,38 @@ class SyncRecord(Base):
             "entity_id",
             "sync_type",
             "sync_status",
+        ),
+    )
+
+
+class HierarchyNodeByConnectorCredentialPair(Base):
+    """Tracks which cc_pairs reference each hierarchy node.
+
+    During pruning, stale entries are removed for the current cc_pair.
+    Hierarchy nodes with zero remaining entries are then deleted.
+    """
+
+    __tablename__ = "hierarchy_node_by_connector_credential_pair"
+
+    hierarchy_node_id: Mapped[int] = mapped_column(
+        ForeignKey("hierarchy_node.id", ondelete="CASCADE"), primary_key=True
+    )
+    connector_id: Mapped[int] = mapped_column(primary_key=True)
+    credential_id: Mapped[int] = mapped_column(primary_key=True)
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["connector_id", "credential_id"],
+            [
+                "connector_credential_pair.connector_id",
+                "connector_credential_pair.credential_id",
+            ],
+            ondelete="CASCADE",
+        ),
+        Index(
+            "ix_hierarchy_node_cc_pair_connector_credential",
+            "connector_id",
+            "credential_id",
         ),
     )
 

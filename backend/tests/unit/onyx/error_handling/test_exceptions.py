@@ -15,12 +15,12 @@ class TestOnyxError:
     def test_basic_construction(self) -> None:
         err = OnyxError(OnyxErrorCode.NOT_FOUND, "Session not found")
         assert err.error_code is OnyxErrorCode.NOT_FOUND
-        assert err.message == "Session not found"
+        assert err.detail == "Session not found"
         assert err.status_code == 404
 
     def test_message_defaults_to_code(self) -> None:
         err = OnyxError(OnyxErrorCode.UNAUTHENTICATED)
-        assert err.message == "UNAUTHENTICATED"
+        assert err.detail == "UNAUTHENTICATED"
         assert str(err) == "UNAUTHENTICATED"
 
     def test_status_code_override(self) -> None:
@@ -73,18 +73,18 @@ class TestExceptionHandler:
         assert resp.status_code == 404
         body = resp.json()
         assert body["error_code"] == "NOT_FOUND"
-        assert body["message"] == "Thing not found"
+        assert body["detail"] == "Thing not found"
 
     def test_status_code_override_in_response(self, client: TestClient) -> None:
         resp = client.get("/boom-override")
         assert resp.status_code == 503
         body = resp.json()
         assert body["error_code"] == "BAD_GATEWAY"
-        assert body["message"] == "upstream 503"
+        assert body["detail"] == "upstream 503"
 
     def test_default_message(self, client: TestClient) -> None:
         resp = client.get("/boom-default-msg")
         assert resp.status_code == 401
         body = resp.json()
         assert body["error_code"] == "UNAUTHENTICATED"
-        assert body["message"] == "UNAUTHENTICATED"
+        assert body["detail"] == "UNAUTHENTICATED"

@@ -45,6 +45,7 @@ from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import IndexingStatus
 from onyx.db.enums import IndexModelStatus
 from onyx.db.enums import ProcessingMode
+from onyx.db.hierarchy import upsert_hierarchy_node_cc_pair_entries
 from onyx.db.hierarchy import upsert_hierarchy_nodes_batch
 from onyx.db.index_attempt import create_index_attempt_error
 from onyx.db.index_attempt import get_index_attempt
@@ -585,6 +586,14 @@ def connector_document_extraction(
                             source=db_connector.source,
                             commit=True,
                             is_connector_public=is_connector_public,
+                        )
+
+                        upsert_hierarchy_node_cc_pair_entries(
+                            db_session=db_session,
+                            hierarchy_node_ids=[n.id for n in upserted_nodes],
+                            connector_id=db_connector.id,
+                            credential_id=db_credential.id,
+                            commit=True,
                         )
 
                         # Cache in Redis for fast ancestor resolution during doc processing

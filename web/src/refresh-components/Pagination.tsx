@@ -66,7 +66,7 @@ export default function Pagination({
   const pageNumbers = getPageNumbers();
 
   return (
-    <Section flexDirection="row" gap={0.25}>
+    <Section flexDirection="row" height="auto" gap={0.25}>
       {/* Previous button */}
       <Disabled disabled={currentPage === 1}>
         <Button
@@ -77,7 +77,7 @@ export default function Pagination({
       </Disabled>
 
       {/* Page numbers */}
-      <Section flexDirection="row" gap={0} width="fit">
+      <Section flexDirection="row" height="auto" gap={0} width="fit">
         {pageNumbers.map((page, index) => {
           if (page === "...") {
             return (
