@@ -2,6 +2,7 @@
 
 from onyx.server.features.build.api.api import _inject_asset_fixer
 from onyx.server.features.build.api.api import _rewrite_asset_paths
+from onyx.server.features.build.api.api import _rewrite_proxy_response_headers
 
 SESSION_ID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 BASE = f"/api/build/sessions/{SESSION_ID}/webapp"
@@ -105,9 +106,42 @@ class TestRuntimeFixerInjection:
         assert "window.WebSocket=function" in result
         assert f"var B='{BASE}'" in result
 
+    def test_injects_hmr_websocket_stub(self):
+        html = "<html><head></head><body></body></html>"
+        result = inject(html)
+        assert "function H(u)" in result
+        assert "if(h(u))return new H(r(u));" in result
+
     def test_injects_before_head_contents(self):
         html = "<html><head><title>x</title></head><body></body></html>"
         result = inject(html)
         assert result.index("window.WebSocket=function") < result.index(
             "<title>x</title>"
         )
+
+
+class TestProxyHeaderRewriting:
+    def test_rewrites_link_header_font_preload_paths(self):
+        headers = {
+            "link": (
+                '</_next/static/media/font.woff2>; rel=preload; as="font"; crossorigin, '
+                '</_next/static/media/font2.woff2>; rel=preload; as="font"; crossorigin'
+            )
+        }
+
+        result = _rewrite_proxy_response_headers(headers, SESSION_ID)
+
+        assert f"<{BASE}/_next/static/media/font.woff2>" in result["link"]
+        assert f"<{BASE}/_next/static/media/font2.woff2>" in result["link"]
+
+    def test_rewrites_absolute_link_header_font_preload_paths(self):
+        headers = {
+            "link": (
+                "<https://craft-dev.onyx.app/_next/static/media/font.woff2>; "
+                'rel=preload; as="font"; crossorigin'
+            )
+        }
+
+        result = _rewrite_proxy_response_headers(headers, SESSION_ID)
+
+        assert f"<{BASE}/_next/static/media/font.woff2>" in result["link"]

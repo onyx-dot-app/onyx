@@ -256,12 +256,30 @@ def _inject_asset_fixer(content: bytes, session_id: str) -> bytes:
     base = f"/api/build/sessions/{session_id}/webapp"
     script = (
         f"<script>(function(){{var B='{base}';"
+        "function h(u){if(!u)return false;"
+        "try{var x=new URL(String(u),window.location.href);"
+        "return x.pathname.indexOf('/_next/webpack-hmr')===0||x.pathname.indexOf('/_next/hmr')===0;"
+        "}catch(e){}"
+        "if(typeof u==='string')return u.indexOf('/_next/webpack-hmr')===0||u.indexOf('/_next/hmr')===0;"
+        "return false;}"
         "function r(u){if(!u)return u;"
         "try{var x=new URL(String(u),window.location.href);"
         "if(x.pathname.indexOf('/_next/')===0)return B+x.pathname+x.search+x.hash;"
         "}catch(e){}"
         "if(typeof u==='string'&&u.indexOf('/_next/')===0)return B+u;"
         "return u;}"
+        "function e(t){return typeof Event==='function'?new Event(t):{type:t};}"
+        "function H(u){this.url=String(u);this.readyState=1;this.bufferedAmount=0;this.extensions='';this.protocol='';"
+        "this.binaryType='blob';this.onopen=null;this.onmessage=null;this.onerror=null;this.onclose=null;this._l={};"
+        "var s=this;setTimeout(function(){s._d('open',e('open'));},0);}"
+        "H.CONNECTING=0;H.OPEN=1;H.CLOSING=2;H.CLOSED=3;"
+        "H.prototype.addEventListener=function(t,c){(this._l[t]||(this._l[t]=[])).push(c);};"
+        "H.prototype.removeEventListener=function(t,c){var a=this._l[t]||[];this._l[t]=a.filter(function(f){return f!==c;});};"
+        "H.prototype._d=function(t,v){var a=this._l[t]||[];for(var i=0;i<a.length;i++)a[i].call(this,v);"
+        "var n=this['on'+t];if(typeof n==='function')n.call(this,v);};"
+        "H.prototype.send=function(){};"
+        "H.prototype.close=function(c,r){if(this.readyState>=2)return;this.readyState=3;"
+        "var v=e('close');v.code=c===undefined?1000:c;v.reason=r||'';v.wasClean=true;this._d('close',v);};"
         "function f(n){if(!n||n.nodeType!==1)return;"
         "if(n.tagName==='STYLE'&&n.textContent)"
         "n.textContent=n.textContent.replace(/(url\\s*\\(\\s*['\"]?)\\/_next\\//g,'$1'+B+'/_next/');"
@@ -272,7 +290,7 @@ def _inject_asset_fixer(content: bytes, session_id: str) -> bytes:
         "w('appendChild');w('insertBefore');"
         "document.querySelectorAll('link[href],script[src],style').forEach(f);"
         "if(window.WebSocket){var O=window.WebSocket;"
-        "window.WebSocket=function(u,p){var v=r(u);return p===undefined?new O(v):new O(v,p);};"
+        "window.WebSocket=function(u,p){if(h(u))return new H(r(u));var v=r(u);return p===undefined?new O(v):new O(v,p);};"
         "window.WebSocket.prototype=O.prototype;"
         "Object.setPrototypeOf(window.WebSocket,O);"
         "['CONNECTING','OPEN','CLOSING','CLOSED'].forEach(function(k){window.WebSocket[k]=O[k];});}"
@@ -332,6 +350,25 @@ def _rewrite_asset_paths(content: bytes, session_id: str) -> bytes:
     )
     text = text.replace('"/favicon.ico', f'"{webapp_base_path}/favicon.ico')
     return text.encode("utf-8")
+
+
+def _rewrite_proxy_response_headers(
+    headers: dict[str, str], session_id: str
+) -> dict[str, str]:
+    """Rewrite response headers that can leak root-scoped asset URLs."""
+    link = headers.get("link")
+    if link:
+        webapp_base_path = f"/api/build/sessions/{session_id}/webapp"
+        rewritten_link = re.sub(
+            r"<https?://[^>]+/_next/",
+            f"<{webapp_base_path}/_next/",
+            link,
+        )
+        rewritten_link = rewritten_link.replace(
+            "</_next/", f"<{webapp_base_path}/_next/"
+        )
+        headers["link"] = rewritten_link
+    return headers
 
 
 # Content types that may contain asset path references that need rewriting
@@ -410,6 +447,9 @@ def _proxy_request(
                 for key, value in response.headers.items()
                 if key.lower() not in EXCLUDED_HEADERS
             }
+            response_headers = _rewrite_proxy_response_headers(
+                response_headers, str(session_id)
+            )
 
             content_type = response.headers.get("content-type", "")
 
