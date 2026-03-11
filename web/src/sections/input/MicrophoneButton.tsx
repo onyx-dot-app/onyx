@@ -37,6 +37,8 @@ interface MicrophoneButtonProps {
   onMuteChange?: (isMuted: boolean) => void;
   /** Ref to expose setMuted function to parent */
   setMutedRef?: React.MutableRefObject<((muted: boolean) => void) | null>;
+  /** Called with current microphone audio level (0-1) for waveform visualization */
+  onAudioLevel?: (level: number) => void;
   /** Whether current chat is a new session (used to reset auto-listen arming) */
   isNewSession?: boolean;
 }
@@ -53,6 +55,7 @@ function MicrophoneButton({
   onRecordingStart,
   onMuteChange,
   setMutedRef,
+  onAudioLevel,
   isNewSession = false,
 }: MicrophoneButtonProps) {
   const {
@@ -89,6 +92,7 @@ function MicrophoneButton({
     isMuted,
     error,
     liveTranscript,
+    audioLevel,
     startRecording,
     stopRecording,
     setMuted,
@@ -112,6 +116,11 @@ function MicrophoneButton({
   useEffect(() => {
     onMuteChange?.(isMuted);
   }, [isMuted, onMuteChange]);
+
+  // Forward audio level to parent for waveform visualization
+  useEffect(() => {
+    onAudioLevel?.(audioLevel);
+  }, [audioLevel, onAudioLevel]);
 
   // Notify parent when recording state changes
   useEffect(() => {

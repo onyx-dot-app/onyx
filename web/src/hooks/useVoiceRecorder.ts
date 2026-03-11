@@ -24,6 +24,8 @@ export interface UseVoiceRecorderReturn {
   isMuted: boolean;
   error: string | null;
   liveTranscript: string;
+  /** Current microphone audio level (0-1, RMS-based) */
+  audioLevel: number;
   startRecording: () => Promise<void>;
   stopRecording: () => Promise<string | null>;
   setMuted: (muted: boolean) => void;
@@ -52,6 +54,7 @@ class VoiceRecorderSession {
   private onTranscriptChange: (text: string) => void;
   private onFinalTranscript: ((text: string) => void) | null;
   private onError: (error: string) => void;
+  private onAudioLevel: (level: number) => void;
   private onSilenceTimeout: (() => void) | null;
   private onVADStop: (() => void) | null;
   private autoStopOnSilence: boolean;
@@ -60,6 +63,7 @@ class VoiceRecorderSession {
     onTranscriptChange: (text: string) => void,
     onFinalTranscript: ((text: string) => void) | null,
     onError: (error: string) => void,
+    onAudioLevel: (level: number) => void,
     onSilenceTimeout?: () => void,
     autoStopOnSilence?: boolean,
     onVADStop?: () => void
@@ -67,6 +71,7 @@ class VoiceRecorderSession {
     this.onTranscriptChange = onTranscriptChange;
     this.onFinalTranscript = onFinalTranscript;
     this.onError = onError;
+    this.onAudioLevel = onAudioLevel;
     this.onSilenceTimeout = onSilenceTimeout || null;
     this.autoStopOnSilence = autoStopOnSilence ?? false;
     this.onVADStop = onVADStop || null;
@@ -132,6 +137,15 @@ class VoiceRecorderSession {
     this.scriptNode.onaudioprocess = (event) => {
       const inputData = event.inputBuffer.getChannelData(0);
       this.audioBuffer.push(new Float32Array(inputData));
+
+      // Compute RMS audio level (0-1) for waveform visualization
+      let sum = 0;
+      for (let i = 0; i < inputData.length; i++) {
+        sum += inputData[i]! * inputData[i]!;
+      }
+      const rms = Math.sqrt(sum / inputData.length);
+      // Scale RMS to a more visible range (raw RMS is usually very small)
+      this.onAudioLevel(Math.min(1, rms * 5));
     };
 
     this.sourceNode.connect(this.scriptNode);
@@ -377,6 +391,7 @@ export function useVoiceRecorder(
   const [isMuted, setIsMutedState] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [liveTranscript, setLiveTranscript] = useState("");
+  const [audioLevel, setAudioLevel] = useState(0);
 
   const sessionRef = useRef<VoiceRecorderSession | null>(null);
   const onFinalTranscriptRef = useRef(options?.onFinalTranscript);
@@ -412,6 +427,7 @@ export function useVoiceRecorder(
       setLiveTranscript,
       (text) => onFinalTranscriptRef.current?.(text),
       setError,
+      setAudioLevel,
       undefined, // onSilenceTimeout
       autoStopOnSilenceRef.current,
       () => {
@@ -475,6 +491,7 @@ export function useVoiceRecorder(
     isMuted,
     error,
     liveTranscript,
+    audioLevel,
     startRecording,
     stopRecording,
     setMuted,

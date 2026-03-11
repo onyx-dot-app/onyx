@@ -57,8 +57,7 @@ import { useQueryController } from "@/providers/QueryControllerProvider";
 import { Section } from "@/layouts/general-layouts";
 import Spacer from "@/refresh-components/Spacer";
 import MicrophoneButton from "@/sections/input/MicrophoneButton";
-import RecordingWaveform from "@/sections/input/RecordingWaveform";
-import SpeakingWaveform from "@/sections/input/SpeakingWaveform";
+import Waveform from "@/components/voice/Waveform";
 import { useVoiceMode } from "@/providers/VoiceModeProvider";
 import { useVoiceStatus } from "@/hooks/useVoiceStatus";
 
@@ -122,6 +121,7 @@ const AppInputBar = React.memo(
     const [isRecording, setIsRecording] = useState(false);
     const [recordingCycleCount, setRecordingCycleCount] = useState(0);
     const [isMuted, setIsMuted] = useState(false);
+    const [audioLevel, setAudioLevel] = useState(0);
     const stopRecordingRef = useRef<(() => Promise<string | null>) | null>(
       null
     );
@@ -626,6 +626,7 @@ const AppInputBar = React.memo(
               }}
               onMuteChange={setIsMuted}
               setMutedRef={setMutedRef}
+              onAudioLevel={setAudioLevel}
             />
           )}
 
@@ -839,8 +840,9 @@ const AppInputBar = React.memo(
           {/* Voice waveform - always shown in a consistent top slot */}
           {isTTSActuallySpeaking ? (
             <div className="absolute left-0 right-0 -top-12 flex justify-start px-1">
-              <SpeakingWaveform
-                isSpeaking={isTTSActuallySpeaking}
+              <Waveform
+                variant="speaking"
+                isActive={isTTSActuallySpeaking}
                 isMuted={isTTSMuted}
                 onMuteToggle={toggleTTSMute}
               />
@@ -849,9 +851,11 @@ const AppInputBar = React.memo(
             !isVoicePlaybackActive &&
             !shouldShowRecordingWaveformBelow ? (
             <div className="absolute left-0 right-0 -top-12 px-1">
-              <RecordingWaveform
-                isRecording={isRecording}
+              <Waveform
+                variant="recording"
+                isActive={isRecording}
                 isMuted={isMuted}
+                audioLevel={audioLevel}
                 onMuteToggle={() => {
                   setMutedRef.current?.(!isMuted);
                 }}
@@ -862,9 +866,11 @@ const AppInputBar = React.memo(
           {/* First recording cycle appears below input bar */}
           {shouldShowRecordingWaveformBelow && (
             <div className="absolute left-0 right-0 -bottom-12 px-1">
-              <RecordingWaveform
-                isRecording={isRecording}
+              <Waveform
+                variant="recording"
+                isActive={isRecording}
                 isMuted={isMuted}
+                audioLevel={audioLevel}
                 onMuteToggle={() => {
                   setMutedRef.current?.(!isMuted);
                 }}
