@@ -52,7 +52,6 @@ type CardProps = {
   ref?: React.Ref<HTMLDivElement>;
 
   children?: React.ReactNode;
-  className?: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -79,7 +78,6 @@ function Card({
   borderVariant = "none",
   ref,
   children,
-  className,
 }: CardProps) {
   const { padding } = sizeVariants[sizeVariant];
   const rounding = roundingForSize[sizeVariant];
@@ -87,7 +85,7 @@ function Card({
   return (
     <div
       ref={ref}
-      className={cn("opal-card", padding, rounding, className)}
+      className={cn("opal-card", padding, rounding)}
       data-background={backgroundVariant}
       data-border={borderVariant}
     >

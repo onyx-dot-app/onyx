@@ -11,7 +11,6 @@ A pre-configured Card for empty states. Renders a transparent card with a dashed
 | `icon`        | `IconFunctionComponent`    | `SvgEmpty` | Icon displayed alongside the title               |
 | `title`       | `string`                   | —          | Primary message text (required)                  |
 | `sizeVariant` | `SizeVariant`              | `"lg"`     | Size preset controlling padding and rounding     |
-| `className`   | `string`                   | —          | Additional CSS classes forwarded to the root Card |
 | `ref`         | `React.Ref<HTMLDivElement>` | —          | Ref forwarded to the root div                    |
 
 ## Usage
