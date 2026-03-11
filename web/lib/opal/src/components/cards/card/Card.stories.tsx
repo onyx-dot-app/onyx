@@ -58,18 +58,30 @@ export const SizeVariants: Story = {
   ),
 };
 
-export const Combined: Story = {
+export const AllCombinations: Story = {
   render: () => (
-    <div className="flex flex-col gap-4 w-96">
-      <Card backgroundVariant="heavy" borderVariant="solid" sizeVariant="sm">
-        <p>Heavy background, solid border, sm size</p>
-      </Card>
-      <Card backgroundVariant="none" borderVariant="dashed" sizeVariant="lg">
-        <p>No background, dashed border, lg size</p>
-      </Card>
-      <Card backgroundVariant="light" borderVariant="none" sizeVariant="xs">
-        <p>Light background, no border, xs size</p>
-      </Card>
+    <div className="flex flex-col gap-8">
+      {SIZE_VARIANTS.map((size) => (
+        <div key={size}>
+          <p className="font-bold pb-2">sizeVariant: {size}</p>
+          <div className="grid grid-cols-3 gap-4">
+            {BACKGROUND_VARIANTS.map((bg) =>
+              BORDER_VARIANTS.map((border) => (
+                <Card
+                  key={`${size}-${bg}-${border}`}
+                  sizeVariant={size}
+                  backgroundVariant={bg}
+                  borderVariant={border}
+                >
+                  <p className="text-xs">
+                    bg: {bg}, border: {border}
+                  </p>
+                </Card>
+              ))
+            )}
+          </div>
+        </div>
+      ))}
     </div>
   ),
 };

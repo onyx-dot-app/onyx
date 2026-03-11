@@ -7,6 +7,7 @@ export enum LLMProviderName {
   OPENROUTER = "openrouter",
   VERTEX_AI = "vertex_ai",
   BEDROCK = "bedrock",
+  LITELLM_PROXY = "litellm_proxy",
   CUSTOM = "custom",
 }
 
@@ -144,6 +145,18 @@ export interface OpenRouterFetchParams {
   provider_name?: string;
 }
 
+export interface LiteLLMProxyFetchParams {
+  api_base?: string;
+  api_key?: string;
+  provider_name?: string;
+  signal?: AbortSignal;
+}
+
+export interface LiteLLMProxyModelResponse {
+  provider_name: string;
+  model_name: string;
+}
+
 export interface VertexAIFetchParams {
   model_configurations?: ModelConfiguration[];
 }
@@ -160,5 +173,6 @@ export type FetchModelsParams =
   | BedrockFetchParams
   | OllamaFetchParams
   | OpenRouterFetchParams
+  | LiteLLMProxyFetchParams
   | VertexAIFetchParams
   | LMStudioFetchParams;

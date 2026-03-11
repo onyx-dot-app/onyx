@@ -13,6 +13,7 @@ import { VertexAIModal } from "@/sections/modals/llmConfig/VertexAIModal";
 import { OpenRouterModal } from "@/sections/modals/llmConfig/OpenRouterModal";
 import { CustomModal } from "@/sections/modals/llmConfig/CustomModal";
 import { LMStudioForm } from "@/sections/modals/llmConfig/LMStudioForm";
+import { LiteLLMProxyModal } from "@/sections/modals/llmConfig/LiteLLMProxyModal";
 
 // Display info for LLM provider cards - title is the product name, displayName is the company/platform
 const PROVIDER_DISPLAY_INFO: Record<
@@ -37,6 +38,14 @@ const PROVIDER_DISPLAY_INFO: Record<
   [LLMProviderName.OPENROUTER]: {
     title: "OpenRouter",
     displayName: "OpenRouter",
+  },
+  [LLMProviderName.LM_STUDIO]: {
+    title: "LM Studio",
+    displayName: "LM Studio",
+  },
+  [LLMProviderName.LITELLM_PROXY]: {
+    title: "LiteLLM Proxy",
+    displayName: "LiteLLM Proxy",
   },
 };
 
@@ -111,6 +120,9 @@ export function getOnboardingForm({
 
     case LLMProviderName.LM_STUDIO:
       return <LMStudioForm {...providerProps} />;
+
+    case LLMProviderName.LITELLM_PROXY:
+      return <LiteLLMProxyModal {...providerProps} />;
 
     default:
       return <CustomModal {...sharedProps} />;
