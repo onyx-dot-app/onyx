@@ -290,13 +290,14 @@ def _rewrite_asset_paths(content: bytes, session_id: str) -> bytes:
         text,
     )
     for hmr_path in hmr_paths:
+        escaped_hmr_path = hmr_path.replace("/", r"\/")
         text = text.replace(
             f"{webapp_base_path}{hmr_path}",
             hmr_path,
         )
         text = text.replace(
-            f"{escaped_webapp_base_path}{hmr_path.replace('/', r'\/')}",
-            hmr_path.replace("/", r"\/"),
+            f"{escaped_webapp_base_path}{escaped_hmr_path}",
+            escaped_hmr_path,
         )
     text = re.sub(
         r'"(/(?:[a-zA-Z0-9_-]+/)*[a-zA-Z0-9_-]+\.json)"',
