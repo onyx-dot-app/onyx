@@ -2,6 +2,7 @@ import json
 from typing import Any
 
 from mcp.client.auth import OAuthClientProvider
+
 from onyx.chat.emitter import Emitter
 from onyx.db.enums import MCPAuthenticationType
 from onyx.db.enums import MCPTransport
@@ -219,6 +220,9 @@ class MCPTool(Tool[None]):
                     from onyx.server.features.mcp.api import UNUSED_RETURN_PATH
                     from onyx.server.features.mcp.api import make_oauth_provider
 
+                    # user_id is the requesting user's UUID; safe here because
+                    # UNUSED_RETURN_PATH ensures redirect_handler raises immediately
+                    # and user_id is never consulted for Redis state lookups.
                     auth = make_oauth_provider(
                         self.mcp_server,
                         self._user_id,
