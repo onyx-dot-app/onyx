@@ -450,6 +450,7 @@ export function useVoiceRecorder(
         setIsRecording(true);
       }
     } catch (err) {
+      currentSession.cleanup();
       setError(
         err instanceof Error ? err.message : "Failed to start recording"
       );

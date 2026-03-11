@@ -237,7 +237,8 @@ function areRendererPropsEqual(
     prev.stopPacketSeen === next.stopPacketSeen &&
     prev.stopReason === next.stopReason &&
     prev.animate === next.animate &&
-    prev.chatState.agent?.id === next.chatState.agent?.id
+    prev.chatState.agent?.id === next.chatState.agent?.id &&
+    prev.messageNodeId === next.messageNodeId
     // Skip: onComplete, children (function refs), chatState (memoized upstream)
   );
 }

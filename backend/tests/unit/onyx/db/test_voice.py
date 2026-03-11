@@ -272,13 +272,13 @@ class TestUpsertVoiceProvider:
 class TestDeleteVoiceProvider:
     """Tests for delete_voice_provider."""
 
-    def test_deletes_provider_when_found(self, mock_db_session: MagicMock) -> None:
+    def test_soft_deletes_provider_when_found(self, mock_db_session: MagicMock) -> None:
         provider = _make_voice_provider(id=1)
         mock_db_session.scalar.return_value = provider
 
         delete_voice_provider(mock_db_session, 1)
 
-        mock_db_session.delete.assert_called_once_with(provider)
+        assert provider.deleted is True
         mock_db_session.flush.assert_called_once()
 
     def test_does_nothing_when_provider_not_found(
@@ -288,7 +288,6 @@ class TestDeleteVoiceProvider:
 
         delete_voice_provider(mock_db_session, 999)
 
-        mock_db_session.delete.assert_not_called()
         mock_db_session.flush.assert_not_called()
 
 
@@ -441,10 +440,9 @@ class TestUpdateUserVoiceSettings:
         update_user_voice_settings(mock_db_session, user_id, playback_speed=0.1)
 
         mock_db_session.execute.assert_called_once()
-        # Verify the clamped value was used
-        call_args = mock_db_session.execute.call_args
-        # The update statement includes the clamped value
-        assert call_args is not None
+        stmt = mock_db_session.execute.call_args[0][0]
+        compiled = stmt.compile(compile_kwargs={"literal_binds": True})
+        assert str(MIN_VOICE_PLAYBACK_SPEED) in str(compiled)
 
     def test_clamps_playback_speed_to_max(self, mock_db_session: MagicMock) -> None:
         user_id = uuid4()
@@ -452,6 +450,9 @@ class TestUpdateUserVoiceSettings:
         update_user_voice_settings(mock_db_session, user_id, playback_speed=5.0)
 
         mock_db_session.execute.assert_called_once()
+        stmt = mock_db_session.execute.call_args[0][0]
+        compiled = stmt.compile(compile_kwargs={"literal_binds": True})
+        assert str(MAX_VOICE_PLAYBACK_SPEED) in str(compiled)
 
     def test_updates_multiple_settings(self, mock_db_session: MagicMock) -> None:
         user_id = uuid4()

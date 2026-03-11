@@ -257,11 +257,12 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
             except Exception as e:
                 self._logger.debug(f"Error sending commit (may be expected): {e}")
 
-            # Wait for transcription to arrive (up to 5 seconds)
+            # Wait for *new* transcription to arrive (up to 5 seconds)
             self._logger.info("Waiting for transcription to complete...")
+            transcript_before_commit = self._accumulated_transcript
             for _ in range(50):  # 50 * 100ms = 5 seconds max
                 await asyncio.sleep(0.1)
-                if self._accumulated_transcript:
+                if self._accumulated_transcript != transcript_before_commit:
                     self._logger.info(
                         f"Got final transcript: {self._accumulated_transcript[:50]}..."
                     )
@@ -451,6 +452,11 @@ class OpenAIStreamingSynthesizer(StreamingSynthesizerProtocol):
                 await asyncio.wait_for(self._synthesis_task, timeout=60.0)
             except asyncio.TimeoutError:
                 self._logger.warning("OpenAIStreamingSynthesizer: flush timeout")
+                self._synthesis_task.cancel()
+                try:
+                    await self._synthesis_task
+                except asyncio.CancelledError:
+                    pass
             except asyncio.CancelledError:
                 pass
 

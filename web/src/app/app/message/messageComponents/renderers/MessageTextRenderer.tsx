@@ -228,7 +228,6 @@ export const MessageTextRenderer: MessageRenderer<
     }
 
     if (!shouldUseAutoPlaybackSync) {
-      lastStableSyncedContentRef.current = "";
       return computedContent;
     }
 
@@ -238,7 +237,6 @@ export const MessageTextRenderer: MessageRenderer<
 
     const last = lastStableSyncedContentRef.current;
     if (computedContent.startsWith(last)) {
-      lastStableSyncedContentRef.current = computedContent;
       return computedContent;
     }
 
@@ -249,9 +247,20 @@ export const MessageTextRenderer: MessageRenderer<
     }
 
     // For normal completed responses, allow final full content.
-    lastStableSyncedContentRef.current = computedContent;
     return computedContent;
   }, [computedContent, shouldUseAutoPlaybackSync, stopPacketSeen, stopReason]);
+
+  // Sync the stable ref outside of useMemo to avoid side effects during render.
+  useEffect(() => {
+    if (stopReason === StopReason.USER_CANCELLED) {
+      return;
+    }
+    if (!shouldUseAutoPlaybackSync) {
+      lastStableSyncedContentRef.current = "";
+    } else if (content.length > 0) {
+      lastStableSyncedContentRef.current = content;
+    }
+  }, [content, shouldUseAutoPlaybackSync, stopReason]);
 
   // Track last actually rendered content so cancel can freeze without dumping buffered text.
   useEffect(() => {
