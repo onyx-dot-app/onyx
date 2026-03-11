@@ -7,6 +7,7 @@ import pytest
 
 from onyx.db.llm import sync_model_configurations
 from onyx.llm.constants import LlmProviderNames
+from onyx.server.manage.llm.models import SyncModelEntry
 
 
 class TestSyncModelConfigurations:
@@ -25,18 +26,18 @@ class TestSyncModelConfigurations:
             "onyx.db.llm.fetch_existing_llm_provider", return_value=mock_provider
         ):
             models = [
-                {
-                    "name": "gpt-4",
-                    "display_name": "GPT-4",
-                    "max_input_tokens": 128000,
-                    "supports_image_input": True,
-                },
-                {
-                    "name": "gpt-4o",
-                    "display_name": "GPT-4o",
-                    "max_input_tokens": 128000,
-                    "supports_image_input": True,
-                },
+                SyncModelEntry(
+                    name="gpt-4",
+                    display_name="GPT-4",
+                    max_input_tokens=128000,
+                    supports_image_input=True,
+                ),
+                SyncModelEntry(
+                    name="gpt-4o",
+                    display_name="GPT-4o",
+                    max_input_tokens=128000,
+                    supports_image_input=True,
+                ),
             ]
 
             result = sync_model_configurations(
@@ -67,18 +68,18 @@ class TestSyncModelConfigurations:
             "onyx.db.llm.fetch_existing_llm_provider", return_value=mock_provider
         ):
             models = [
-                {
-                    "name": "gpt-4",  # Existing - should be skipped
-                    "display_name": "GPT-4",
-                    "max_input_tokens": 128000,
-                    "supports_image_input": True,
-                },
-                {
-                    "name": "gpt-4o",  # New - should be inserted
-                    "display_name": "GPT-4o",
-                    "max_input_tokens": 128000,
-                    "supports_image_input": True,
-                },
+                SyncModelEntry(
+                    name="gpt-4",  # Existing - should be skipped
+                    display_name="GPT-4",
+                    max_input_tokens=128000,
+                    supports_image_input=True,
+                ),
+                SyncModelEntry(
+                    name="gpt-4o",  # New - should be inserted
+                    display_name="GPT-4o",
+                    max_input_tokens=128000,
+                    supports_image_input=True,
+                ),
             ]
 
             result = sync_model_configurations(
@@ -105,12 +106,12 @@ class TestSyncModelConfigurations:
             "onyx.db.llm.fetch_existing_llm_provider", return_value=mock_provider
         ):
             models = [
-                {
-                    "name": "gpt-4",  # Already exists
-                    "display_name": "GPT-4",
-                    "max_input_tokens": 128000,
-                    "supports_image_input": True,
-                },
+                SyncModelEntry(
+                    name="gpt-4",  # Already exists
+                    display_name="GPT-4",
+                    max_input_tokens=128000,
+                    supports_image_input=True,
+                ),
             ]
 
             result = sync_model_configurations(
@@ -131,7 +132,7 @@ class TestSyncModelConfigurations:
                 sync_model_configurations(
                     db_session=mock_session,
                     provider_name="nonexistent",
-                    models=[{"name": "model", "display_name": "Model"}],
+                    models=[SyncModelEntry(name="model", display_name="Model")],
                 )
 
     def test_handles_missing_optional_fields(self) -> None:
@@ -145,12 +146,12 @@ class TestSyncModelConfigurations:
         with patch(
             "onyx.db.llm.fetch_existing_llm_provider", return_value=mock_provider
         ):
-            # Model with only required fields
+            # Model with only required fields (max_input_tokens and supports_image_input default)
             models = [
-                {
-                    "name": "model-1",
-                    # No display_name, max_input_tokens, or supports_image_input
-                },
+                SyncModelEntry(
+                    name="model-1",
+                    display_name="Model 1",
+                ),
             ]
 
             result = sync_model_configurations(

@@ -204,6 +204,12 @@ JWT_PUBLIC_KEY_URL: str | None = os.getenv("JWT_PUBLIC_KEY_URL", None)
 
 USER_AUTH_SECRET = os.environ.get("USER_AUTH_SECRET", "")
 
+if AUTH_TYPE == AuthType.BASIC and not USER_AUTH_SECRET:
+    logger.warning(
+        "USER_AUTH_SECRET is not set. This is required for secure password reset "
+        "and email verification tokens. Please set USER_AUTH_SECRET in production."
+    )
+
 # Duration (in seconds) for which the FastAPI Users JWT token remains valid in the user's browser.
 # By default, this is set to match the Redis expiry time for consistency.
 AUTH_COOKIE_EXPIRE_TIME_SECONDS = int(
@@ -304,6 +310,12 @@ ENABLE_OPENSEARCH_RETRIEVAL_FOR_ONYX = (
 VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT = (
     os.environ.get("VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT", "true").lower()
     == "true"
+)
+OPENSEARCH_MIGRATION_GET_VESPA_CHUNKS_PAGE_SIZE = int(
+    os.environ.get("OPENSEARCH_MIGRATION_GET_VESPA_CHUNKS_PAGE_SIZE") or 500
+)
+OPENSEARCH_OVERRIDE_DEFAULT_NUM_HYBRID_SEARCH_CANDIDATES = int(
+    os.environ.get("OPENSEARCH_DEFAULT_NUM_HYBRID_SEARCH_CANDIDATES") or 0
 )
 
 VESPA_HOST = os.environ.get("VESPA_HOST") or "localhost"

@@ -12,6 +12,7 @@ import { AzureOnboardingForm } from "./AzureOnboardingForm";
 import { BedrockOnboardingForm } from "./BedrockOnboardingForm";
 import { VertexAIOnboardingForm } from "./VertexAIOnboardingForm";
 import { OpenRouterOnboardingForm } from "./OpenRouterOnboardingForm";
+import { LiteLLMProxyOnboardingForm } from "./LiteLLMProxyOnboardingForm";
 import { CustomOnboardingForm } from "./CustomOnboardingForm";
 
 // Display info for LLM provider cards - title is the product name, displayName is the company/platform
@@ -41,6 +42,10 @@ const PROVIDER_DISPLAY_INFO: Record<
   [LLMProviderName.LM_STUDIO]: {
     title: "LM Studio",
     displayName: "LM Studio",
+  },
+  [LLMProviderName.LITELLM_PROXY]: {
+    title: "LiteLLM Proxy",
+    displayName: "LiteLLM Proxy",
   },
 };
 
@@ -167,6 +172,17 @@ export function getOnboardingForm({
     case LLMProviderName.OPENROUTER:
       return (
         <OpenRouterOnboardingForm
+          llmDescriptor={llmDescriptor}
+          onboardingState={onboardingState}
+          onboardingActions={onboardingActions}
+          open={open}
+          onOpenChange={onOpenChange}
+        />
+      );
+
+    case LLMProviderName.LITELLM_PROXY:
+      return (
+        <LiteLLMProxyOnboardingForm
           llmDescriptor={llmDescriptor}
           onboardingState={onboardingState}
           onboardingActions={onboardingActions}

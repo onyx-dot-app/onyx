@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import { OpenButton } from "@opal/components";
+import { Disabled as DisabledProvider } from "@opal/core";
 import { SvgSettings } from "@opal/icons";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 
@@ -32,16 +33,9 @@ export const WithIcon: Story = {
   },
 };
 
-export const Selected: Story = {
-  args: {
-    selected: true,
-    children: "Selected",
-  },
-};
-
 export const Open: Story = {
   args: {
-    transient: true,
+    interaction: "hover",
     children: "Open state",
   },
 };
@@ -53,18 +47,27 @@ export const Disabled: Story = {
   },
 };
 
-export const LightProminence: Story = {
+export const Foldable: Story = {
   args: {
-    prominence: "light",
-    children: "Light prominence",
+    foldable: true,
+    icon: SvgSettings,
+    children: "Settings",
   },
 };
 
-export const HeavyProminence: Story = {
+export const FoldableDisabled: Story = {
   args: {
-    prominence: "heavy",
-    children: "Heavy prominence",
+    foldable: true,
+    icon: SvgSettings,
+    children: "Settings",
   },
+  decorators: [
+    (Story) => (
+      <DisabledProvider disabled>
+        <Story />
+      </DisabledProvider>
+    ),
+  ],
 };
 
 export const Sizes: Story = {
@@ -77,4 +80,13 @@ export const Sizes: Story = {
       ))}
     </div>
   ),
+};
+
+export const WithTooltip: Story = {
+  args: {
+    icon: SvgSettings,
+    children: "Settings",
+    tooltip: "Open settings",
+    tooltipSide: "bottom",
+  },
 };

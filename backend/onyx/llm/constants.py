@@ -43,6 +43,7 @@ WELL_KNOWN_PROVIDER_NAMES = [
     LlmProviderNames.AZURE,
     LlmProviderNames.OLLAMA_CHAT,
     LlmProviderNames.LM_STUDIO,
+    LlmProviderNames.LITELLM_PROXY,
 ]
 
 
@@ -59,6 +60,7 @@ PROVIDER_DISPLAY_NAMES: dict[str, str] = {
     "ollama": "Ollama",
     LlmProviderNames.OLLAMA_CHAT: "Ollama",
     LlmProviderNames.LM_STUDIO: "LM Studio",
+    LlmProviderNames.LITELLM_PROXY: "LiteLLM Proxy",
     "groq": "Groq",
     "anyscale": "Anyscale",
     "deepseek": "DeepSeek",
@@ -109,6 +111,7 @@ AGGREGATOR_PROVIDERS: set[str] = {
     LlmProviderNames.LM_STUDIO,
     LlmProviderNames.VERTEX_AI,
     LlmProviderNames.AZURE,
+    LlmProviderNames.LITELLM_PROXY,
 }
 
 # Model family name mappings for display name generation
