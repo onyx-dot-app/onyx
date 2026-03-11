@@ -506,7 +506,8 @@ fi
 
 if [ "$RESOURCE_WARNING" = true ]; then
     echo ""
-    print_warning "Onyx recommends at least ${EXPECTED_DOCKER_RAM_GB}GB RAM and ${EXPECTED_DISK_GB}GB disk space for optimal performance."
+    print_warning "Onyx recommends at least ${EXPECTED_DOCKER_RAM_GB}GB RAM and ${EXPECTED_DISK_GB}GB disk space for optimal performance in standard mode."
+    print_warning "Lite mode requires less resources, but does not include a vector database."
     echo ""
     prompt_yn_or_default "Do you want to continue anyway? (Y/n): " "y"
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
@@ -764,6 +765,13 @@ if [ -f "$ENV_FILE" ]; then
         print_info "Keeping existing configuration..."
         print_success "Will restart with current settings"
     fi
+
+    # Ensure COMPOSE_PROFILES is cleared when running in lite mode on an
+    # existing .env (the template ships with s3-filestore enabled).
+    if [[ "$LITE_MODE" = true ]] && grep -q "^COMPOSE_PROFILES=.*s3-filestore" "$ENV_FILE" 2>/dev/null; then
+        sed -i.bak 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=/' "$ENV_FILE" 2>/dev/null || true
+        print_success "Cleared COMPOSE_PROFILES for lite mode"
+    fi
 else
     print_info "No existing .env file found. Setting up new deployment..."
     echo ""
@@ -883,6 +891,13 @@ else
     print_info "Setting IMAGE_TAG to $VERSION..."
     sed -i.bak "s/^IMAGE_TAG=.*/IMAGE_TAG=$VERSION/" "$ENV_FILE"
     print_success "IMAGE_TAG set to $VERSION"
+
+    # In lite mode, clear COMPOSE_PROFILES so profiled services (MinIO, etc.)
+    # stay disabled — the template ships with s3-filestore enabled by default.
+    if [[ "$LITE_MODE" = true ]]; then
+        sed -i.bak 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=/' "$ENV_FILE" 2>/dev/null || true
+        print_success "Cleared COMPOSE_PROFILES for lite mode"
+    fi
 
     # Configure basic authentication (default)
     sed -i.bak 's/^AUTH_TYPE=.*/AUTH_TYPE=basic/' "$ENV_FILE" 2>/dev/null || true

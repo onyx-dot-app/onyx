@@ -15,8 +15,9 @@
 #                  -f docker-compose.dev.yml up -d --wait
 #
 # This overlay:
-#   - Moves Vespa (index), both model servers, code-interpreter, Redis (cache),
-#     and the background worker to profiles so they do not start by default
+#   - Moves Vespa (index), both model servers, code-interpreter, OpenSearch,
+#     MinIO, Redis (cache), and the background worker to profiles so they do
+#     not start by default
 #   - Makes depends_on references to removed services optional
 #   - Sets DISABLE_VECTOR_DB=true on the api_server
 #   - Uses PostgreSQL for caching and auth instead of Redis
@@ -27,6 +28,8 @@
 #   --profile inference         Inference model server
 #   --profile background        Background worker (Celery) — also needs redis
 #   --profile redis             Redis cache
+#   --profile opensearch        OpenSearch
+#   --profile s3-filestore      MinIO (S3-compatible file store)
 #   --profile code-interpreter  Code interpreter
 # =============================================================================
 
@@ -36,6 +39,9 @@ services:
   api_server:
     depends_on:
       index:
+        condition: service_started
+        required: false
+      opensearch:
         condition: service_started
         required: false
       cache:
@@ -84,4 +90,13 @@ services:
   inference_model_server:
     profiles: ["inference"]
 
-  code-interpreter: {}
+  # OpenSearch is not needed in lite mode (no indexing).
+  opensearch:
+    profiles: ["opensearch"]
+
+  # MinIO is not needed in lite mode (Postgres handles file storage).
+  minio:
+    profiles: ["s3-filestore"]
+
+  code-interpreter:
+    profiles: ["code-interpreter"]
