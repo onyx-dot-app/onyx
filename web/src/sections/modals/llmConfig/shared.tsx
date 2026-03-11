@@ -32,7 +32,7 @@ import {
   SvgX,
 } from "@opal/icons";
 import { Card, NameCard } from "@/refresh-components/cards";
-import EmptyMessage from "@/refresh-components/EmptyMessage";
+import { EmptyMessageCard } from "@opal/components";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import useUsers from "@/hooks/useUsers";
 import { UserRole } from "@/lib/types";
@@ -486,11 +486,20 @@ export function ModelsField<T extends BaseLLMFormValues>({
     );
   }
 
-  function handleSelectAll() {
-    const allNames = modelConfigurations.map((m) => m.name);
-    formikProps.setFieldValue("selected_model_names", allNames);
-    if (!formikProps.values.default_model_name && allNames.length > 0) {
-      formikProps.setFieldValue("default_model_name", allNames[0]);
+  const allSelected =
+    modelConfigurations.length > 0 &&
+    modelConfigurations.every((m) => selectedModels.includes(m.name));
+
+  function handleToggleSelectAll() {
+    if (allSelected) {
+      formikProps.setFieldValue("selected_model_names", []);
+      formikProps.setFieldValue("default_model_name", null);
+    } else {
+      const allNames = modelConfigurations.map((m) => m.name);
+      formikProps.setFieldValue("selected_model_names", allNames);
+      if (!formikProps.values.default_model_name && allNames.length > 0) {
+        formikProps.setFieldValue("default_model_name", allNames[0]);
+      }
     }
   }
 
@@ -506,13 +515,13 @@ export function ModelsField<T extends BaseLLMFormValues>({
           center
         >
           <Section flexDirection="row" gap={0}>
-            <Disabled disabled={isAutoMode}>
+            <Disabled disabled={isAutoMode || modelConfigurations.length === 0}>
               <OpalButton
                 prominence="tertiary"
                 size="md"
-                onClick={handleSelectAll}
+                onClick={handleToggleSelectAll}
               >
-                Select All
+                {allSelected ? "Unselect All" : "Select All"}
               </OpalButton>
             </Disabled>
             {onRefetch && (
@@ -526,7 +535,7 @@ export function ModelsField<T extends BaseLLMFormValues>({
         </InputLayouts.Horizontal>
 
         {modelConfigurations.length === 0 ? (
-          <EmptyMessage title="No models available." />
+          <EmptyMessageCard title="No models available." />
         ) : (
           <Section gap={0.25}>
             {isAutoMode
