@@ -48,7 +48,7 @@ Interactive.Stateful           <- variant="select-heavy", interaction, state, di
 | `interaction` | `"rest" \| "hover" \| "active"` | auto | JS-controlled interaction override. Falls back to Radix `data-state="open"` when omitted. |
 | `icon` | `IconFunctionComponent` | — | Left icon component |
 | `children` | `string` | — | Content between icon and chevron |
-| `foldable` | `boolean` | `false` | When `true`, label + chevron collapse when not hovered |
+| `foldable` | `boolean` | `false` | When `true`, requires both `icon` and `children`; the left icon stays visible while the label + chevron collapse when not hovered. If `tooltip` is omitted on a disabled foldable button, the label text is used as the tooltip. |
 | `size` | `SizeVariant` | `"lg"` | Size preset controlling height, rounding, and padding |
 | `width` | `WidthVariant` | — | Width preset |
 | `tooltip` | `string` | — | Tooltip text shown on hover |

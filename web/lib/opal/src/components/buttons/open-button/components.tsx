@@ -139,7 +139,7 @@ function OpenButton({
           ) : (
             <>
               {labelEl}
-              {iconWrapper(ChevronIcon, size, false)}
+              {iconWrapper(ChevronIcon, size, !!children)}
             </>
           )}
         </div>
