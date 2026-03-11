@@ -185,7 +185,7 @@ def get_all_accepted_users(
     where_clause = _get_accepted_user_where_clause(
         include_external=include_external,
     )
-    stmt = stmt.where(*where_clause)
+    stmt = stmt.where(*where_clause).order_by(User.email)
     return db_session.scalars(stmt).unique().all()
 
 
