@@ -1073,6 +1073,62 @@ export class OnyxApiClient {
     );
   }
 
+  // === User Management Methods ===
+
+  async deactivateUser(email: string): Promise<void> {
+    const response = await this.request.patch(
+      `${this.baseUrl}/manage/admin/deactivate-user`,
+      { data: { user_email: email } }
+    );
+    await this.handleResponse(response, `Failed to deactivate user ${email}`);
+    this.log(`Deactivated user: ${email}`);
+  }
+
+  async activateUser(email: string): Promise<void> {
+    const response = await this.request.patch(
+      `${this.baseUrl}/manage/admin/activate-user`,
+      { data: { user_email: email } }
+    );
+    await this.handleResponse(response, `Failed to activate user ${email}`);
+    this.log(`Activated user: ${email}`);
+  }
+
+  async deleteUser(email: string): Promise<void> {
+    const response = await this.request.delete(
+      `${this.baseUrl}/manage/admin/delete-user`,
+      { data: { user_email: email } }
+    );
+    await this.handleResponse(response, `Failed to delete user ${email}`);
+    this.log(`Deleted user: ${email}`);
+  }
+
+  async cancelInvite(email: string): Promise<void> {
+    const response = await this.request.patch(
+      `${this.baseUrl}/manage/admin/remove-invited-user`,
+      { data: { user_email: email } }
+    );
+    await this.handleResponse(response, `Failed to cancel invite for ${email}`);
+    this.log(`Cancelled invite for: ${email}`);
+  }
+
+  async inviteUsers(emails: string[]): Promise<void> {
+    const response = await this.put("/manage/admin/users", { emails });
+    await this.handleResponse(response, `Failed to invite users`);
+    this.log(`Invited users: ${emails.join(", ")}`);
+  }
+
+  async setPersonalName(name: string): Promise<void> {
+    const response = await this.request.patch(
+      `${this.baseUrl}/user/personalization`,
+      { data: { name } }
+    );
+    await this.handleResponse(
+      response,
+      `Failed to set personal name to ${name}`
+    );
+    this.log(`Set personal name: ${name}`);
+  }
+
   // === Chat Session Methods ===
 
   /**
