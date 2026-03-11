@@ -100,6 +100,7 @@ import { useVectorDbEnabled } from "@/providers/SettingsProvider";
 import { useUser } from "@/providers/UserProvider";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { InputPrompt } from "@/app/app/interfaces";
 
 interface AgentIconEditorProps {
   existingAgent?: FullPersona | null;
@@ -574,6 +575,17 @@ export default function AgentEditorPage({
   >([]);
   const [initialPromptShortcutsEnabled, setInitialPromptShortcutsEnabled] =
     useState(true);
+  const [createdAgentId, setCreatedAgentId] = useState<number | null>(null);
+
+  async function getApiErrorDetail(
+    response: Response,
+    fallback: string
+  ): Promise<string> {
+    const errorData = (await response.json().catch(() => ({}))) as {
+      detail?: string;
+    };
+    return errorData.detail || fallback;
+  }
 
   useEffect(() => {
     async function loadPromptShortcuts() {
@@ -595,7 +607,7 @@ export default function AgentEditorPage({
 
       const shortcuts = await response.json();
       const mapped: LocalPromptShortcut[] = shortcuts
-        .map((shortcut: any) => ({
+        .map((shortcut: InputPrompt) => ({
           id: shortcut.id,
           key: shortcut.id,
           prompt: shortcut.prompt,
@@ -648,7 +660,11 @@ export default function AgentEditorPage({
     });
 
     if (!syncResponse.ok) {
-      throw new Error("Failed to sync prompt shortcuts");
+      const detail = await getApiErrorDetail(
+        syncResponse,
+        "Failed to sync prompt shortcuts"
+      );
+      throw new Error(`Failed to sync prompt shortcuts: ${detail}`);
     }
 
     const syncedShortcuts = await syncResponse.json();
@@ -1039,9 +1055,11 @@ export default function AgentEditorPage({
       };
 
       // Call API
+      const isUpdateOperation = !!existingAgent || createdAgentId !== null;
+      const targetAgentId = existingAgent?.id ?? createdAgentId;
       let personaResponse;
-      if (!!existingAgent) {
-        personaResponse = await updatePersona(existingAgent.id, submissionData);
+      if (isUpdateOperation && targetAgentId !== null) {
+        personaResponse = await updatePersona(targetAgentId, submissionData);
       } else {
         personaResponse = await createPersona(submissionData);
       }
@@ -1049,20 +1067,25 @@ export default function AgentEditorPage({
       // Handle response
       if (!personaResponse || !personaResponse.ok) {
         const error = personaResponse
-          ? await personaResponse.text()
+          ? await getApiErrorDetail(personaResponse, "Unknown server error")
           : "No response received";
         toast.error(
-          `Failed to ${existingAgent ? "update" : "create"} agent - ${error}`
+          `Failed to ${
+            isUpdateOperation ? "update" : "create"
+          } agent - ${error}`
         );
         return;
       }
 
       // Success
       const agent = await personaResponse.json();
+      if (!isUpdateOperation) {
+        setCreatedAgentId(agent.id);
+      }
       await syncPromptShortcuts(agent.id);
       toast.success(
         `Agent "${agent.name}" ${
-          existingAgent ? "updated" : "created"
+          isUpdateOperation ? "updated" : "created"
         } successfully`
       );
 
@@ -1076,7 +1099,9 @@ export default function AgentEditorPage({
       appRouter({ agentId: agent.id });
     } catch (error) {
       console.error("Submit error:", error);
-      toast.error(`An error occurred: ${error}`);
+      toast.error(
+        error instanceof Error ? error.message : `An error occurred: ${error}`
+      );
     }
   }
 

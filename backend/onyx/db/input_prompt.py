@@ -15,6 +15,8 @@ from onyx.db.models import InputPrompt
 from onyx.db.models import InputPrompt__User
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.input_prompt.models import InputPromptSnapshot
 from onyx.server.features.input_prompt.models import SyncPersonaInputPromptItem
 from onyx.server.manage.models import UserInfo
@@ -30,6 +32,7 @@ def insert_input_prompt(
     user: User | None,
     persona_id: int | None,
     db_session: Session,
+    active: bool = True,
 ) -> InputPrompt:
     user_id = user.id if user else None
 
@@ -38,7 +41,7 @@ def insert_input_prompt(
     stmt = pg_insert(InputPrompt).values(
         prompt=prompt,
         content=content,
-        active=True,
+        active=active,
         is_public=is_public,
         user_id=user_id,
         persona_id=persona_id,
@@ -313,10 +316,8 @@ def insert_input_prompt_for_persona(
         user=None,
         persona_id=persona_id,
         db_session=db_session,
+        active=active,
     )
-    if not active:
-        input_prompt.active = False
-        db_session.commit()
     return input_prompt
 
 
@@ -357,9 +358,9 @@ def sync_input_prompts_for_persona(
 
             existing_prompt = existing_by_id.get(prompt.id)
             if existing_prompt is None:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Prompt id {prompt.id} does not belong to persona {persona_id}",
+                raise OnyxError(
+                    OnyxErrorCode.INVALID_INPUT,
+                    f"Prompt id {prompt.id} does not belong to persona {persona_id}",
                 )
             incoming_ids.add(prompt.id)
             existing_prompt.prompt = prompt.prompt
@@ -373,9 +374,9 @@ def sync_input_prompts_for_persona(
         db_session.commit()
     except IntegrityError:
         db_session.rollback()
-        raise HTTPException(
-            status_code=409,
-            detail="One or more prompt shortcut names already exist for this assistant",
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "One or more prompt shortcut names already exist for this assistant",
         )
 
     return fetch_input_prompts_by_persona(
@@ -413,9 +414,9 @@ def update_input_prompt_for_persona(
         db_session.commit()
     except IntegrityError:
         db_session.rollback()
-        raise HTTPException(
-            status_code=409,
-            detail=f"A prompt shortcut with the name '{prompt}' already exists",
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            f"A prompt shortcut with the name '{prompt}' already exists",
         )
 
     return input_prompt
@@ -454,4 +455,4 @@ def _validate_persona_access(
             is_for_edit=is_for_edit,
         )
     except ValueError as e:
-        raise HTTPException(status_code=403, detail=str(e))
+        raise OnyxError(OnyxErrorCode.UNAUTHORIZED, str(e))

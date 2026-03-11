@@ -61,6 +61,11 @@ def downgrade() -> None:
     op.drop_constraint("ck_inputprompt_public_has_no_owner", "inputprompt")
     op.drop_constraint("ck_inputprompt_only_one_owner", "inputprompt")
 
+    # Persona-scoped prompts are not representable in the pre-migration schema.
+    # Remove them before restoring legacy uniqueness on prompt where user_id IS NULL,
+    # otherwise rollback can fail when different personas share shortcut names.
+    op.execute("DELETE FROM inputprompt WHERE persona_id IS NOT NULL")
+
     op.drop_index("uq_inputprompt_prompt_public", table_name="inputprompt")
     op.create_index(
         "uq_inputprompt_prompt_public",
