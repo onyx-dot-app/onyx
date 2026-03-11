@@ -455,7 +455,6 @@ def get_webapp(
             sandbox_is_asleep = sandbox is None or sandbox.status in (
                 SandboxStatus.SLEEPING,
                 SandboxStatus.TERMINATED,
-                SandboxStatus.PROVISIONING,
             )
             return _offline_html_response(auto_refresh=sandbox_is_asleep)
         raise
