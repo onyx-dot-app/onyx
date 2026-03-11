@@ -1,5 +1,4 @@
 import contextlib
-from collections import defaultdict
 from collections.abc import Generator
 
 from sqlalchemy.engine.util import TransactionalContext
@@ -123,7 +122,9 @@ class DocumentIndexingBatchAdapter:
             )
         }
 
-        doc_id_to_new_chunk_cnt: dict[str, int] = defaultdict(int)
+        doc_id_to_new_chunk_cnt: dict[str, int] = {
+            doc_id: 0 for doc_id in updatable_ids
+        }
         for chunk in chunks_with_embeddings:
             doc_id_to_new_chunk_cnt[chunk.source_document.id] += 1
 
