@@ -72,8 +72,8 @@ Set secret name
 Create env vars from secrets
 */}}
 {{- define "onyx.envSecrets" -}}
-    {{- $secretFilesEnabled := .Values.secretsAsFiles.enabled | default false }}
-    {{- $secretFilesMountPath := .Values.secretsAsFiles.mountPath | default "/etc/onyx-secrets" }}
+    {{- $secretFilesEnabled := include "onyx.secretsAsFiles.enabled" . }}
+    {{- $secretFilesMountPath := dig "secretsAsFiles" "mountPath" "/etc/onyx-secrets" .Values }}
     {{- range $secretSuffix, $secretContent := .Values.auth }}
     {{- if and (kindIs "map" $secretContent) (ne $secretContent.enabled false) ($secretContent.secretKeys) }}
     {{- range $name, $key := $secretContent.secretKeys }}

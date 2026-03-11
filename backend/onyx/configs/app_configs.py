@@ -392,9 +392,11 @@ MAX_DRIVE_WORKERS = int(os.environ.get("MAX_DRIVE_WORKERS", 4))
 POSTGRES_USER = get_secret_env("POSTGRES_USER", default="postgres") or "postgres"
 _POSTGRES_PASSWORD = get_secret_env("POSTGRES_PASSWORD")
 if _POSTGRES_PASSWORD is None and os.getenv("USE_IAM_AUTH", "False").lower() != "true":
-    raise RuntimeError(
-        "POSTGRES_PASSWORD or POSTGRES_PASSWORD_FILE must be set when USE_IAM_AUTH is false."
+    logger.warning(
+        "POSTGRES_PASSWORD is not set. Falling back to legacy default password. "
+        "Set POSTGRES_PASSWORD or POSTGRES_PASSWORD_FILE in production."
     )
+    _POSTGRES_PASSWORD = "password"
 # URL-encode the password for asyncpg to avoid issues with special characters on some machines.
 POSTGRES_PASSWORD = urllib.parse.quote_plus(_POSTGRES_PASSWORD or "")
 POSTGRES_HOST = os.environ.get("POSTGRES_HOST") or "127.0.0.1"
@@ -1141,7 +1143,7 @@ DB_READONLY_USER: str = (
     get_secret_env("DB_READONLY_USER", default="db_readonly_user") or "db_readonly_user"
 )
 DB_READONLY_PASSWORD: str = urllib.parse.quote_plus(
-    get_secret_env("DB_READONLY_PASSWORD") or ""
+    get_secret_env("DB_READONLY_PASSWORD", default="password") or "password"
 )
 
 # File Store Configuration
