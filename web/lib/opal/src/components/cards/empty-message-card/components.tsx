@@ -16,10 +16,13 @@ type EmptyMessageCardProps = {
   title: string;
 
   /** Size preset controlling padding and rounding of the card. */
-  size?: SizeVariant;
+  sizeVariant?: SizeVariant;
 
   /** Ref forwarded to the root Card div. */
   ref?: React.Ref<HTMLDivElement>;
+
+  /** Additional CSS classes forwarded to the root Card div. */
+  className?: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -29,15 +32,17 @@ type EmptyMessageCardProps = {
 function EmptyMessageCard({
   icon = SvgEmpty,
   title,
-  size = "lg",
+  sizeVariant = "lg",
   ref,
+  className,
 }: EmptyMessageCardProps) {
   return (
     <Card
       ref={ref}
       backgroundVariant="none"
       borderVariant="dashed"
-      sizeVariant={size}
+      sizeVariant={sizeVariant}
+      className={className}
     >
       <Content
         icon={icon}
