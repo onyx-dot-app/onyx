@@ -121,6 +121,11 @@ Secret file mounting helpers.
 - name: {{ printf "auth-secret-%s" ($secretSuffix | lower | replace "_" "-") }}
   secret:
     secretName: {{ include "onyx.secretName" $secretContent }}
+    items:
+    {{- range $name, $key := $secretContent.secretKeys }}
+      - key: {{ default $name $key }}
+        path: {{ default $name $key }}
+    {{- end }}
 {{- end }}
 {{- end }}
 {{- end }}

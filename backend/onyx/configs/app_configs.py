@@ -312,13 +312,8 @@ DEFAULT_OPENSEARCH_CLIENT_TIMEOUT_S = int(
 DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S = int(
     os.environ.get("DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S") or 50
 )
-OPENSEARCH_ADMIN_USERNAME = (
-    get_secret_env("OPENSEARCH_ADMIN_USERNAME", default="admin") or "admin"
-)
-OPENSEARCH_ADMIN_PASSWORD = (
-    get_secret_env("OPENSEARCH_ADMIN_PASSWORD", default="StrongPassword123!")
-    or "StrongPassword123!"
-)
+OPENSEARCH_ADMIN_USERNAME = get_secret_env("OPENSEARCH_ADMIN_USERNAME") or ""
+OPENSEARCH_ADMIN_PASSWORD = get_secret_env("OPENSEARCH_ADMIN_PASSWORD") or ""
 USING_AWS_MANAGED_OPENSEARCH = (
     os.environ.get("USING_AWS_MANAGED_OPENSEARCH", "").lower() == "true"
 )
@@ -395,10 +390,13 @@ MAX_DRIVE_WORKERS = int(os.environ.get("MAX_DRIVE_WORKERS", 4))
 # Below are intended to match the env variables names used by the official postgres docker image
 # https://hub.docker.com/_/postgres
 POSTGRES_USER = get_secret_env("POSTGRES_USER", default="postgres") or "postgres"
+_POSTGRES_PASSWORD = get_secret_env("POSTGRES_PASSWORD")
+if _POSTGRES_PASSWORD is None and os.getenv("USE_IAM_AUTH", "False").lower() != "true":
+    raise RuntimeError(
+        "POSTGRES_PASSWORD or POSTGRES_PASSWORD_FILE must be set when USE_IAM_AUTH is false."
+    )
 # URL-encode the password for asyncpg to avoid issues with special characters on some machines.
-POSTGRES_PASSWORD = urllib.parse.quote_plus(
-    get_secret_env("POSTGRES_PASSWORD", default="password") or "password"
-)
+POSTGRES_PASSWORD = urllib.parse.quote_plus(_POSTGRES_PASSWORD or "")
 POSTGRES_HOST = os.environ.get("POSTGRES_HOST") or "127.0.0.1"
 POSTGRES_PORT = os.environ.get("POSTGRES_PORT") or "5432"
 POSTGRES_DB = os.environ.get("POSTGRES_DB") or "postgres"
@@ -1143,7 +1141,7 @@ DB_READONLY_USER: str = (
     get_secret_env("DB_READONLY_USER", default="db_readonly_user") or "db_readonly_user"
 )
 DB_READONLY_PASSWORD: str = urllib.parse.quote_plus(
-    get_secret_env("DB_READONLY_PASSWORD", default="password") or "password"
+    get_secret_env("DB_READONLY_PASSWORD") or ""
 )
 
 # File Store Configuration
