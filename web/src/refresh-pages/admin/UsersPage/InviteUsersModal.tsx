@@ -49,7 +49,7 @@ export default function InviteUsersModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   function addEmail(value: string) {
-    // Support comma-separated input
+    // Split on commas so pasted lists like "a@b.com, c@d.com" still work
     const entries = value
       .split(",")
       .map((e) => e.trim().toLowerCase())
@@ -59,7 +59,11 @@ export default function InviteUsersModal({
     for (const email of entries) {
       const alreadyAdded = chips.some((c) => c.label === email);
       if (!alreadyAdded) {
-        newChips.push({ id: email, label: email });
+        newChips.push({
+          id: email,
+          label: email,
+          error: !EMAIL_REGEX.test(email),
+        });
       }
     }
 
@@ -109,8 +113,6 @@ export default function InviteUsersModal({
     }
   }
 
-  const hasInvalidEmails = chips.some((c) => !EMAIL_REGEX.test(c.label));
-
   return (
     <Modal open={open} onOpenChange={onOpenChange}>
       <Modal.Content width="sm" height="fit">
@@ -126,22 +128,9 @@ export default function InviteUsersModal({
             onRemoveChip={removeChip}
             onAdd={addEmail}
             value={inputValue}
-            onChange={(val) => {
-              // Auto-add on comma
-              if (val.includes(",")) {
-                addEmail(val);
-              } else {
-                setInputValue(val);
-              }
-            }}
+            onChange={setInputValue}
             placeholder="Add emails to invite, comma separated"
           />
-
-          {hasInvalidEmails && (
-            <Text as="p" secondaryBody className="text-status-error-text">
-              Some entries are not valid email addresses and will be skipped.
-            </Text>
-          )}
 
           <div className="flex items-start justify-between w-full gap-4">
             <div className="flex flex-col gap-0.5">
