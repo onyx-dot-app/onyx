@@ -123,7 +123,14 @@ jobs:
           # Determine if this tag should get the "latest" Docker tag.
           # Only the highest semver stable tag (vX.Y.Z exactly) gets "latest".
           if [[ "$IS_STABLE" == "true" ]]; then
-            HIGHEST_STABLE=$(uv run --no-sync --with onyx-devtools ods latest-stable-tag)
+            HIGHEST_STABLE=$(uv run --no-sync --with onyx-devtools ods latest-stable-tag) || {
+              echo "::error::Failed to determine highest stable tag via 'ods latest-stable-tag'"
+              exit 1
+            }
+            if [[ -z "$HIGHEST_STABLE" ]]; then
+              echo "::error::'ods latest-stable-tag' returned an empty string"
+              exit 1
+            fi
             if [[ "$TAG" == "$HIGHEST_STABLE" ]]; then
               IS_LATEST=true
             fi
