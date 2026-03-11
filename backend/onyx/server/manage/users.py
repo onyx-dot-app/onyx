@@ -407,7 +407,7 @@ def bulk_invite_users(
         current_invited = len(already_invited)
         if current_invited + len(emails_needing_seats) > NUM_FREE_TRIAL_USER_INVITES:
             raise OnyxError(
-                OnyxErrorCode.UNAUTHORIZED,
+                OnyxErrorCode.SEAT_LIMIT_EXCEEDED,
                 "You have hit your invite limit. "
                 "Please upgrade for unlimited invites.",
             )
