@@ -19,16 +19,15 @@ receive the "latest" tag on Docker Hub. Only the highest vX.Y.Z tag
 qualifies. Tags with pre-release suffixes (e.g. v1.2.3-beta,
 v1.2.3-cloud.1) are excluded.`,
 		Args: cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-		tag, err := git.GetLatestStableSemverTag("")
-		if err != nil {
-			return err
-		}
-		if tag == "" {
-			return fmt.Errorf("no stable semver tag found in repository")
-		}
-		fmt.Println(tag)
-		return nil
+		RunE: func(c *cobra.Command, _ []string) error {
+			tag, err := git.GetLatestStableSemverTag("")
+			if err != nil {
+				return fmt.Errorf("get latest stable semver tag: %w", err)
+			}
+			if tag == "" {
+				return fmt.Errorf("no stable semver tag found in repository")
+			}
+			fmt.Println(tag)
 			return nil
 		},
 	}
