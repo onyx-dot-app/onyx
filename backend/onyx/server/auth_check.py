@@ -64,6 +64,13 @@ PUBLIC_ENDPOINT_SPECS = [
     ("/build/sessions/{session_id}/webapp/{path:path}", {"GET"}),
 ]
 
+# WebSocket routes have no `methods` attribute so they can't go in PUBLIC_ENDPOINT_SPECS.
+# These paths are access-controlled inside their handlers via _check_webapp_access.
+PUBLIC_WEBSOCKET_PATHS = {
+    "/build/sessions/{session_id}/webapp/_next/webpack-hmr",
+    "/build/sessions/{session_id}/webapp/_next/hmr",
+}
+
 
 def is_route_in_spec_list(
     route: BaseRoute, public_endpoint_specs: list[tuple[str, set[str]]]
@@ -113,6 +120,21 @@ def check_router_auth(
         # explicitly marked as public
         if is_route_in_spec_list(route, public_endpoint_specs):
             continue
+
+        # WebSocket routes have no methods; check against the explicit WebSocket allowlist
+        if not hasattr(route, "methods") and hasattr(route, "path"):
+            if route.path in PUBLIC_WEBSOCKET_PATHS:
+                continue
+            # Strip global prefix for comparison
+            processed_global_prefix = (
+                f"/{APP_API_PREFIX.strip('/')}" if APP_API_PREFIX else ""
+            )
+            if processed_global_prefix and route.path.startswith(
+                processed_global_prefix
+            ):
+                stripped = route.path[len(processed_global_prefix) :]
+                if stripped in PUBLIC_WEBSOCKET_PATHS:
+                    continue
 
         # check for auth
         found_auth = False
