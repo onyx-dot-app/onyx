@@ -98,7 +98,7 @@ export default function ArtifactsTab({
   const handleWebappDownload = () => {
     if (!sessionId) return;
     const link = document.createElement("a");
-    link.href = `/api/build/sessions/${sessionId}/webapp/download`;
+    link.href = `/api/build/sessions/${sessionId}/webapp-download`;
     link.download = "";
     document.body.appendChild(link);
     link.click();

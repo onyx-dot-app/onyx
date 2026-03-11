@@ -96,11 +96,11 @@ class OnyxErrorCode(Enum):
         """Build a structured error detail dict.
 
         Returns a dict like:
-            {"error_code": "UNAUTHENTICATED", "message": "Token expired"}
+            {"error_code": "UNAUTHENTICATED", "detail": "Token expired"}
 
-        If no message is supplied, the error code itself is used as the message.
+        If no message is supplied, the error code itself is used as the detail.
         """
         return {
             "error_code": self.code,
-            "message": message or self.code,
+            "detail": message or self.code,
         }

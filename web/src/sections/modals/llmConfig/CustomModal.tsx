@@ -261,7 +261,7 @@ export function CustomModal({
                                     <ErrorMessage
                                       name={`custom_config_list[${index}][0]`}
                                       component="div"
-                                      className="text-error text-sm mt-1"
+                                      className="text-status-text-error-05 text-sm mt-1"
                                     />
                                   </div>
                                   <div className="mt-3">
@@ -276,7 +276,7 @@ export function CustomModal({
                                     <ErrorMessage
                                       name={`custom_config_list[${index}][1]`}
                                       component="div"
-                                      className="text-error text-sm mt-1"
+                                      className="text-status-text-error-05 text-sm mt-1"
                                     />
                                   </div>
                                 </div>

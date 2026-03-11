@@ -72,7 +72,7 @@ class TestGetStripePublishableKey:
 
         assert exc_info.value.status_code == 500
         assert exc_info.value.error_code is OnyxErrorCode.INTERNAL_ERROR
-        assert exc_info.value.message == "Invalid Stripe publishable key format"
+        assert exc_info.value.detail == "Invalid Stripe publishable key format"
 
     @pytest.mark.asyncio
     @patch("ee.onyx.server.tenants.billing_api.STRIPE_PUBLISHABLE_KEY_OVERRIDE", None)
@@ -97,7 +97,7 @@ class TestGetStripePublishableKey:
 
         assert exc_info.value.status_code == 500
         assert exc_info.value.error_code is OnyxErrorCode.INTERNAL_ERROR
-        assert exc_info.value.message == "Invalid Stripe publishable key format"
+        assert exc_info.value.detail == "Invalid Stripe publishable key format"
 
     @pytest.mark.asyncio
     @patch("ee.onyx.server.tenants.billing_api.STRIPE_PUBLISHABLE_KEY_OVERRIDE", None)
@@ -118,7 +118,7 @@ class TestGetStripePublishableKey:
 
         assert exc_info.value.status_code == 500
         assert exc_info.value.error_code is OnyxErrorCode.INTERNAL_ERROR
-        assert exc_info.value.message == "Failed to fetch Stripe publishable key"
+        assert exc_info.value.detail == "Failed to fetch Stripe publishable key"
 
     @pytest.mark.asyncio
     @patch("ee.onyx.server.tenants.billing_api.STRIPE_PUBLISHABLE_KEY_OVERRIDE", None)
@@ -132,7 +132,7 @@ class TestGetStripePublishableKey:
 
         assert exc_info.value.status_code == 500
         assert exc_info.value.error_code is OnyxErrorCode.INTERNAL_ERROR
-        assert "not configured" in exc_info.value.message
+        assert "not configured" in exc_info.value.detail
 
     @pytest.mark.asyncio
     @patch(

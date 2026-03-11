@@ -69,6 +69,7 @@ export const DeepResearchPlanRenderer: MessageRenderer<
       icon: SvgCircle,
       status: statusText,
       content: planContent,
+      noPaddingRight: true,
     },
   ]);
 };

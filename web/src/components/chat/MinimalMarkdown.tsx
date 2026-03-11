@@ -4,7 +4,7 @@ import {
   MemoizedLink,
   MemoizedParagraph,
 } from "@/app/app/message/MemoizedTextComponents";
-import React, { useMemo, CSSProperties } from "react";
+import { useMemo, CSSProperties } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
@@ -19,6 +19,7 @@ interface MinimalMarkdownProps {
   content: string;
   className?: string;
   style?: CSSProperties;
+  showHeader?: boolean;
   /**
    * Override specific markdown renderers.
    * Any renderer not provided will fall back to this component's defaults.
@@ -30,6 +31,7 @@ export default function MinimalMarkdown({
   content,
   className = "",
   style,
+  showHeader = true,
   components,
 }: MinimalMarkdownProps) {
   const markdownComponents = useMemo(() => {
@@ -43,7 +45,11 @@ export default function MinimalMarkdown({
       code: ({ node, inline, className, children, ...props }: any) => {
         const codeText = extractCodeText(node, content, children);
         return (
-          <CodeBlock className={className} codeText={codeText}>
+          <CodeBlock
+            className={className}
+            codeText={codeText}
+            showHeader={showHeader}
+          >
             {children}
           </CodeBlock>
         );
@@ -54,7 +60,7 @@ export default function MinimalMarkdown({
       ...defaults,
       ...(components ?? {}),
     } satisfies Components;
-  }, [content, components]);
+  }, [content, components, showHeader]);
 
   return (
     <div style={style || {}} className={`${className}`}>

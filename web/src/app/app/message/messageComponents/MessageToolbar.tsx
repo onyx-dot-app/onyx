@@ -265,6 +265,7 @@ export default function MessageToolbar({
             <SelectButton
               icon={SvgThumbsUp}
               onClick={() => handleFeedbackClick("like")}
+              variant="select-light"
               state={isFeedbackTransient("like") ? "selected" : "empty"}
               tooltip={
                 currentFeedback === "like" ? "Remove Like" : "Good Response"
@@ -274,6 +275,7 @@ export default function MessageToolbar({
             <SelectButton
               icon={SvgThumbsDown}
               onClick={() => handleFeedbackClick("dislike")}
+              variant="select-light"
               state={isFeedbackTransient("dislike") ? "selected" : "empty"}
               tooltip={
                 currentFeedback === "dislike"
@@ -306,7 +308,7 @@ export default function MessageToolbar({
                       });
                       regenerator(llmDescriptor);
                     }}
-                    folded
+                    foldable
                   />
                 </div>
               )}

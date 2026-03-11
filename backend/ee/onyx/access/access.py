@@ -9,12 +9,15 @@ from onyx.access.access import (
     _get_access_for_documents as get_access_for_documents_without_groups,
 )
 from onyx.access.access import _get_acl_for_user as get_acl_for_user_without_groups
+from onyx.access.access import collect_user_file_access
 from onyx.access.models import DocumentAccess
 from onyx.access.utils import prefix_external_group
 from onyx.access.utils import prefix_user_group
 from onyx.db.document import get_document_sources
 from onyx.db.document import get_documents_by_ids
 from onyx.db.models import User
+from onyx.db.models import UserFile
+from onyx.db.user_file import fetch_user_files_with_access_relationships
 from onyx.utils.logger import setup_logger
 
 
@@ -114,6 +117,68 @@ def _get_access_for_documents(
             external_user_group_ids=list(ext_u_groups),
         )
     return access_map
+
+
+def _collect_user_file_group_names(user_file: UserFile) -> set[str]:
+    """Extract user-group names from the already-loaded Persona.groups
+    relationships on a UserFile (skipping deleted personas)."""
+    groups: set[str] = set()
+    for persona in user_file.assistants:
+        if persona.deleted:
+            continue
+        for group in persona.groups:
+            groups.add(group.name)
+    return groups
+
+
+def get_access_for_user_files_impl(
+    user_file_ids: list[str],
+    db_session: Session,
+) -> dict[str, DocumentAccess]:
+    """EE version: extends the MIT user file ACL with user group names
+    from personas shared via user groups.
+
+    Uses a single DB query (via fetch_user_files_with_access_relationships)
+    that eagerly loads both the MIT-needed and EE-needed relationships.
+
+    NOTE: is imported in onyx.access.access by `fetch_versioned_implementation`
+    DO NOT REMOVE."""
+    user_files = fetch_user_files_with_access_relationships(
+        user_file_ids, db_session, eager_load_groups=True
+    )
+    return build_access_for_user_files_impl(user_files)
+
+
+def build_access_for_user_files_impl(
+    user_files: list[UserFile],
+) -> dict[str, DocumentAccess]:
+    """EE version: works on pre-loaded UserFile objects.
+    Expects Persona.groups to be eagerly loaded.
+
+    NOTE: is imported in onyx.access.access by `fetch_versioned_implementation`
+    DO NOT REMOVE."""
+    result: dict[str, DocumentAccess] = {}
+    for user_file in user_files:
+        if user_file.user is None:
+            result[str(user_file.id)] = DocumentAccess.build(
+                user_emails=[],
+                user_groups=[],
+                is_public=True,
+                external_user_emails=[],
+                external_user_group_ids=[],
+            )
+            continue
+
+        emails, is_public = collect_user_file_access(user_file)
+        group_names = _collect_user_file_group_names(user_file)
+        result[str(user_file.id)] = DocumentAccess.build(
+            user_emails=list(emails),
+            user_groups=list(group_names),
+            is_public=is_public,
+            external_user_emails=[],
+            external_user_group_ids=[],
+        )
+    return result
 
 
 def _get_acl_for_user(user: User, db_session: Session) -> set[str]:

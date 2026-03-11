@@ -160,14 +160,14 @@ const collections = (
               sidebarItem(ADMIN_PATHS.TOKEN_RATE_LIMITS),
             ],
           },
-          ...(enableEnterprise
-            ? [
-                {
-                  name: "Permissions",
-                  items: [sidebarItem(ADMIN_PATHS.SCIM)],
-                },
-              ]
-            : []),
+          {
+            name: "Permissions",
+            items: [
+              // TODO (nikolas): Uncommented in switchover PR once Users v2 is ready
+              // sidebarItem(ADMIN_PATHS.USERS_V2),
+              ...(enableEnterprise ? [sidebarItem(ADMIN_PATHS.SCIM)] : []),
+            ],
+          },
           ...(enableEnterprise
             ? [
                 {
