@@ -209,16 +209,23 @@ class MCPTool(Tool[None]):
                 and self.connection_config is not None
                 and self._user_id
             ):
-                from onyx.server.features.mcp.api import UNUSED_RETURN_PATH
-                from onyx.server.features.mcp.api import make_oauth_provider
+                if self.mcp_server.transport == MCPTransport.SSE:
+                    logger.warning(
+                        f"MCP tool '{self._name}': OAuth token refresh is not supported "
+                        f"for SSE transport — auth provider will be ignored. "
+                        f"Re-authentication may be required after token expiry."
+                    )
+                else:
+                    from onyx.server.features.mcp.api import UNUSED_RETURN_PATH
+                    from onyx.server.features.mcp.api import make_oauth_provider
 
-                auth = make_oauth_provider(
-                    self.mcp_server,
-                    self._user_id,
-                    UNUSED_RETURN_PATH,
-                    self.connection_config.id,
-                    None,
-                )
+                    auth = make_oauth_provider(
+                        self.mcp_server,
+                        self._user_id,
+                        UNUSED_RETURN_PATH,
+                        self.connection_config.id,
+                        None,
+                    )
 
             tool_result = call_mcp_tool(
                 self.mcp_server.server_url,
@@ -271,7 +278,7 @@ class MCPTool(Tool[None]):
                 "invalid token",
                 "invalid api key",
                 "invalid credentials",
-                "reconnect",
+                "please reconnect to the server",
             ]
 
             is_auth_error = any(
