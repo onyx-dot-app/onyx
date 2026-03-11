@@ -5,6 +5,7 @@
 //
 // This is useful in determining what `SidebarTab` should be active, for example.
 
+import { useMemo } from "react";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { usePathname, useSearchParams } from "next/navigation";
 
@@ -66,31 +67,25 @@ export default function useAppFocus(): AppFocus {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  // Check if we're viewing a shared chat
-  if (pathname.startsWith("/app/shared/")) {
-    return new AppFocus("shared-chat");
-  }
-
-  // Check if we're on the user settings page
-  if (pathname.startsWith("/app/settings")) {
-    return new AppFocus("user-settings");
-  }
-
-  // Check if we're on the agents page
-  if (pathname.startsWith("/app/agents")) {
-    return new AppFocus("more-agents");
-  }
-
-  // Check search params for chat, agent, or project
   const chatId = searchParams.get(SEARCH_PARAM_NAMES.CHAT_ID);
-  if (chatId) return new AppFocus({ type: "chat", id: chatId });
-
   const agentId = searchParams.get(SEARCH_PARAM_NAMES.PERSONA_ID);
-  if (agentId) return new AppFocus({ type: "agent", id: agentId });
-
   const projectId = searchParams.get(SEARCH_PARAM_NAMES.PROJECT_ID);
-  if (projectId) return new AppFocus({ type: "project", id: projectId });
 
-  // No search params means we're on a new session
-  return new AppFocus("new-session");
+  // Memoize on the values that determine which AppFocus is constructed.
+  // AppFocus is immutable, so same inputs → same instance.
+  return useMemo(() => {
+    if (pathname.startsWith("/app/shared/")) {
+      return new AppFocus("shared-chat");
+    }
+    if (pathname.startsWith("/app/settings")) {
+      return new AppFocus("user-settings");
+    }
+    if (pathname.startsWith("/app/agents")) {
+      return new AppFocus("more-agents");
+    }
+    if (chatId) return new AppFocus({ type: "chat", id: chatId });
+    if (agentId) return new AppFocus({ type: "agent", id: agentId });
+    if (projectId) return new AppFocus({ type: "project", id: projectId });
+    return new AppFocus("new-session");
+  }, [pathname, chatId, agentId, projectId]);
 }

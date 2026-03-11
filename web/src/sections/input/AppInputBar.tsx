@@ -19,7 +19,6 @@ import useCCPairs from "@/hooks/useCCPairs";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { ChatState } from "@/app/app/interfaces";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
-import { useAppMode } from "@/providers/AppModeProvider";
 import useAppFocus from "@/hooks/useAppFocus";
 import { cn, isImageFile } from "@/lib/utils";
 import { Disabled } from "@opal/core";
@@ -120,7 +119,10 @@ const AppInputBar = React.memo(
     const filesContentRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const { user } = useUser();
-    const { isClassifying, classification } = useQueryController();
+    const { state } = useQueryController();
+    const isClassifying = state.phase === "classifying";
+    const isSearchActive =
+      state.phase === "searching" || state.phase === "search-results";
 
     // Expose reset and focus methods to parent via ref
     React.useImperativeHandle(ref, () => ({
@@ -140,12 +142,10 @@ const AppInputBar = React.memo(
         setMessage(initialMessage);
       }
     }, [initialMessage]);
-
-    const { appMode } = useAppMode();
     const appFocus = useAppFocus();
+    const appMode = state.phase === "idle" ? state.appMode : undefined;
     const isSearchMode =
-      (appFocus.isNewSession() && appMode === "search") ||
-      classification === "search";
+      (appFocus.isNewSession() && appMode === "search") || isSearchActive;
 
     const { forcedToolIds, setForcedToolIds } = useForcedTools();
     const { currentMessageFiles, setCurrentMessageFiles, currentProjectId } =
