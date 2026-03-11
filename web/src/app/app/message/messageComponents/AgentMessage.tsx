@@ -2,9 +2,11 @@
 
 import React, { useRef, RefObject, useMemo } from "react";
 import { Packet, StopReason } from "@/app/app/services/streamingModels";
+import CustomToolAuthCard from "@/app/app/message/messageComponents/CustomToolAuthCard";
 import { FullChatState } from "@/app/app/message/messageComponents/interfaces";
 import { FeedbackType } from "@/app/app/interfaces";
 import { handleCopy } from "@/app/app/message/copyingUtils";
+import { useAuthErrors } from "@/app/app/message/messageComponents/hooks/useAuthErrors";
 import { useMessageSwitching } from "@/app/app/message/messageComponents/hooks/useMessageSwitching";
 import { RendererComponent } from "@/app/app/message/messageComponents/renderMessageComponent";
 import { usePacketProcessor } from "@/app/app/message/messageComponents/timeline/hooks/usePacketProcessor";
@@ -36,7 +38,7 @@ export interface AgentMessageProps {
   onRegenerate?: RegenerationFactory;
   // Parent message needed to construct regeneration request
   parentMessage?: Message | null;
-  // Duration in seconds for processing this message (assistant messages only)
+  // Duration in seconds for processing this message (agent messages only)
   processingDurationSeconds?: number;
 }
 
@@ -55,7 +57,7 @@ function arePropsEqual(
     // Compare packetCount (primitive) instead of rawPackets.length
     // The array is mutated in place, so reading .length from prev and next would return same value
     prev.packetCount === next.packetCount &&
-    prev.chatState.assistant?.id === next.chatState.assistant?.id &&
+    prev.chatState.agent?.id === next.chatState.agent?.id &&
     prev.chatState.docs === next.chatState.docs &&
     prev.chatState.citations === next.chatState.citations &&
     prev.chatState.overriddenModel === next.chatState.overriddenModel &&
@@ -137,7 +139,7 @@ const AgentMessage = React.memo(function AgentMessage({
       citations: mergedCitations,
     }),
     [
-      chatState.assistant,
+      chatState.agent,
       chatState.docs,
       chatState.setPresentingDocument,
       chatState.overriddenModel,
@@ -145,6 +147,8 @@ const AgentMessage = React.memo(function AgentMessage({
       mergedCitations,
     ]
   );
+
+  const authErrors = useAuthErrors(rawPackets);
 
   // Message switching logic
   const {
@@ -160,7 +164,7 @@ const AgentMessage = React.memo(function AgentMessage({
 
   return (
     <div
-      className="pb-5 md:pt-5 flex flex-col gap-3 pr-1"
+      className="flex flex-col gap-3"
       data-testid={isComplete ? "onyx-ai-message" : undefined}
     >
       {/* Row 1: Two-column layout for tool steps */}
@@ -189,7 +193,16 @@ const AgentMessage = React.memo(function AgentMessage({
         }}
       >
         {pacedDisplayGroups.length > 0 && (
-          <div ref={finalAnswerRef}>
+          <div ref={finalAnswerRef} className="flex flex-col gap-3">
+            {authErrors.map((authError, i) => (
+              <CustomToolAuthCard
+                key={`auth-error-${i}`}
+                toolName={authError.toolName}
+                toolId={authError.toolId}
+                tools={effectiveChatState.agent.tools}
+                agentId={effectiveChatState.agent.id}
+              />
+            ))}
             {pacedDisplayGroups.map((displayGroup, index) => (
               <RendererComponent
                 key={`${displayGroup.turn_index}-${displayGroup.tab_index}`}

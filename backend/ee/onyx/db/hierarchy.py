@@ -18,7 +18,7 @@ from onyx.db.models import HierarchyNode
 
 
 def _build_hierarchy_access_filter(
-    user_email: str | None,
+    user_email: str,
     external_group_ids: list[str],
 ) -> ColumnElement[bool]:
     """Build SQLAlchemy filter for hierarchy node access.
@@ -43,7 +43,7 @@ def _build_hierarchy_access_filter(
 def _get_accessible_hierarchy_nodes_for_source(
     db_session: Session,
     source: DocumentSource,
-    user_email: str | None,
+    user_email: str,
     external_group_ids: list[str],
 ) -> list[HierarchyNode]:
     """

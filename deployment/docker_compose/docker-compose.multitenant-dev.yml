@@ -61,6 +61,9 @@ services:
       - POSTGRES_HOST=relational_db
       - POSTGRES_DEFAULT_SCHEMA=${POSTGRES_DEFAULT_SCHEMA:-}
       - VESPA_HOST=index
+      - OPENSEARCH_HOST=${OPENSEARCH_HOST:-opensearch}
+      - OPENSEARCH_ADMIN_PASSWORD=${OPENSEARCH_ADMIN_PASSWORD:-StrongPassword123!}
+      - ENABLE_OPENSEARCH_INDEXING_FOR_ONYX=${OPENSEARCH_FOR_ONYX_ENABLED:-true}
       - REDIS_HOST=cache
       - WEB_DOMAIN=${WEB_DOMAIN:-}
       # MinIO configuration
@@ -77,6 +80,7 @@ services:
       - DISABLE_RERANK_FOR_STREAMING=${DISABLE_RERANK_FOR_STREAMING:-}
       - MODEL_SERVER_HOST=${MODEL_SERVER_HOST:-inference_model_server}
       - MODEL_SERVER_PORT=${MODEL_SERVER_PORT:-}
+      - CODE_INTERPRETER_BASE_URL=${CODE_INTERPRETER_BASE_URL:-http://code-interpreter:8000}
       - LOG_ONYX_MODEL_INTERACTIONS=${LOG_ONYX_MODEL_INTERACTIONS:-}
       - LOG_VESPA_TIMING_INFORMATION=${LOG_VESPA_TIMING_INFORMATION:-}
       - LOG_ENDPOINT_LATENCY=${LOG_ENDPOINT_LATENCY:-}
@@ -138,7 +142,6 @@ services:
       - indexing_model_server
     restart: unless-stopped
     environment:
-      - USE_LIGHTWEIGHT_BACKGROUND_WORKER=${USE_LIGHTWEIGHT_BACKGROUND_WORKER:-true}
       - ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
       - MULTI_TENANT=true
       - LOG_LEVEL=DEBUG
@@ -169,6 +172,9 @@ services:
       - POSTGRES_DB=${POSTGRES_DB:-}
       - POSTGRES_DEFAULT_SCHEMA=${POSTGRES_DEFAULT_SCHEMA:-}
       - VESPA_HOST=index
+      - OPENSEARCH_HOST=${OPENSEARCH_HOST:-opensearch}
+      - OPENSEARCH_ADMIN_PASSWORD=${OPENSEARCH_ADMIN_PASSWORD:-StrongPassword123!}
+      - ENABLE_OPENSEARCH_INDEXING_FOR_ONYX=${OPENSEARCH_FOR_ONYX_ENABLED:-true}
       - REDIS_HOST=cache
       - WEB_DOMAIN=${WEB_DOMAIN:-}
       # MinIO configuration
@@ -425,6 +431,50 @@ services:
         max-size: "50m"
         max-file: "6"
 
+  opensearch:
+    image: opensearchproject/opensearch:3.4.0
+    restart: unless-stopped
+    # Controls whether this service runs. In order to enable it, add
+    # opensearch-enabled to COMPOSE_PROFILES in the environment for this
+    # docker-compose.
+    # NOTE: Now enabled on by default. To explicitly disable this service,
+    # uncomment this profile and ensure COMPOSE_PROFILES in your env does not
+    # list the profile, or when running docker compose, include all desired
+    # service names but this one. Additionally set
+    # OPENSEARCH_FOR_ONYX_ENABLED=false in your env.
+    # profiles: ["opensearch-enabled"]
+    environment:
+      # We need discovery.type=single-node so that OpenSearch doesn't try
+      # forming a cluster and waiting for other nodes to become live.
+      - discovery.type=single-node
+      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=${OPENSEARCH_ADMIN_PASSWORD:-StrongPassword123!}
+      # This and the JVM config below come from the example in https://docs.opensearch.org/latest/install-and-configure/install-opensearch/docker/
+      # We do this to avoid unstable performance from page swaps.
+      - bootstrap.memory_lock=true # Disable JVM heap memory swapping.
+      # Java heap should be ~50% of memory limit. For now we assume a limit of
+      # 4g although in practice the container can request more than this.
+      # See https://opster.com/guides/opensearch/opensearch-basics/opensearch-heap-size-usage-and-jvm-garbage-collection/
+      # Xms is the starting size, Xmx is the maximum size. These should be the
+      # same.
+      - "OPENSEARCH_JAVA_OPTS=-Xms2g -Xmx2g"
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+    # These come from the example in https://docs.opensearch.org/latest/install-and-configure/install-opensearch/docker/
+    ulimits:
+      # Similarly to bootstrap.memory_lock, we don't want to impose limits on
+      # how much memory a process can lock from being swapped.
+      memlock:
+        soft: -1 # Set memlock to unlimited (no soft or hard limit).
+        hard: -1
+      nofile:
+        soft: 65536 # Maximum number of open files for the opensearch user - set to at least 65536.
+        hard: 65536
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "6"
+
   nginx:
     image: nginx:1.25.5-alpine
     restart: unless-stopped
@@ -468,7 +518,7 @@ services:
       - minio_data:/data
     command: server /data --console-address ":9001"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: ["CMD", "mc", "ready", "local"]
       interval: 30s
       timeout: 20s
       retries: 3
@@ -487,16 +537,7 @@ services:
 
   code-interpreter:
     image: onyxdotapp/code-interpreter:${CODE_INTERPRETER_IMAGE_TAG:-latest}
-    entrypoint: ["/bin/bash", "-c"]
-    command: >
-      "
-      if [ \"$${CODE_INTERPRETER_BETA_ENABLED}\" = \"True\" ] || [ \"$${CODE_INTERPRETER_BETA_ENABLED}\" = \"true\" ]; then
-        exec bash ./entrypoint.sh code-interpreter-api;
-      else
-        echo 'Skipping code interpreter';
-        exec tail -f /dev/null;
-      fi
-      "
+    command: ["bash", "./entrypoint.sh", "code-interpreter-api"]
     restart: unless-stopped
     env_file:
       - path: .env
@@ -518,3 +559,5 @@ volumes:
   model_cache_huggingface:
   indexing_huggingface_model_cache:
   # mcp_server_logs:
+  # Persistent data for OpenSearch.
+  opensearch-data:

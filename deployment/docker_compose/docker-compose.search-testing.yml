@@ -21,7 +21,7 @@ services:
     env_file:
       - .env_eval
     environment:
-      - AUTH_TYPE=disabled
+      - AUTH_TYPE=basic
       - POSTGRES_HOST=relational_db
       - VESPA_HOST=index
       - REDIS_HOST=cache
@@ -58,8 +58,7 @@ services:
     env_file:
       - .env_eval
     environment:
-      - USE_LIGHTWEIGHT_BACKGROUND_WORKER=${USE_LIGHTWEIGHT_BACKGROUND_WORKER:-true}
-      - AUTH_TYPE=disabled
+      - AUTH_TYPE=basic
       - POSTGRES_HOST=relational_db
       - VESPA_HOST=index
       - REDIS_HOST=cache
@@ -232,7 +231,7 @@ services:
       - minio_data:/data
     command: server /data --console-address ":9001"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: ["CMD", "mc", "ready", "local"]
       interval: 30s
       timeout: 20s
       retries: 3

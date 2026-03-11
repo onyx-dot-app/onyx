@@ -48,7 +48,7 @@ import {
   CollapsibleTrigger,
 } from "@/refresh-components/Collapsible";
 import { Button } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
+import { Content } from "@opal/layouts";
 import { SvgFold, SvgExpand } from "@opal/icons";
 import { WithoutStyles } from "@/types";
 
@@ -198,21 +198,19 @@ const Header = React.forwardRef<HTMLDivElement, SimpleCollapsibleHeaderProps>(
           className="flex flex-row items-center justify-between gap-4 cursor-pointer select-none"
           {...props}
         >
-          <div ref={boundingRef} className="flex flex-col w-full">
-            <Text as="p" mainContentEmphasis>
-              {title}
-            </Text>
-            {description && (
-              <Text as="p" secondaryBody text03>
-                {description}
-              </Text>
-            )}
+          <div ref={boundingRef} className="w-full">
+            <Content
+              title={title}
+              description={description}
+              sizePreset="main-content"
+              variant="section"
+            />
           </div>
           <Button
             icon={open ? SvgFold : SvgExpand}
             prominence="tertiary"
             size="sm"
-            transient={inside}
+            interaction={inside ? "hover" : "rest"}
             tooltip={open ? "Fold" : "Expand"}
           />
         </div>
@@ -237,7 +235,7 @@ Header.displayName = "SimpleCollapsible.Header";
  * </SimpleCollapsible>
  * ```
  */
-const Content = React.forwardRef<
+const ContentPanel = React.forwardRef<
   HTMLDivElement,
   WithoutStyles<React.HTMLAttributes<HTMLDivElement>>
 >(({ children, ...props }, ref) => {
@@ -249,9 +247,9 @@ const Content = React.forwardRef<
     </CollapsibleContent>
   );
 });
-Content.displayName = "SimpleCollapsible.Content";
+ContentPanel.displayName = "SimpleCollapsible.Content";
 
 export default Object.assign(Root, {
   Header,
-  Content,
+  Content: ContentPanel,
 });

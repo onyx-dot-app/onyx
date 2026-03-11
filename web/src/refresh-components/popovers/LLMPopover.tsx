@@ -3,12 +3,12 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
-import { structureValue } from "@/lib/llm/utils";
+import { structureValue } from "@/lib/llmConfig/utils";
 import {
   getProviderIcon,
   AGGREGATOR_PROVIDERS,
 } from "@/app/admin/configuration/llm/utils";
-import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
+import { LLMProviderDescriptor } from "@/interfaces/llm";
 import { Slider } from "@/components/ui/slider";
 import { useUser } from "@/providers/UserProvider";
 import LineItem from "@/refresh-components/buttons/LineItem";
@@ -29,12 +29,13 @@ import {
 } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import { OpenButton } from "@opal/components";
+import { Disabled } from "@opal/core";
 import { LLMOption, LLMOptionGroup } from "./interfaces";
 
 export interface LLMPopoverProps {
   llmManager: LlmManager;
-  requiresImageGeneration?: boolean;
-  folded?: boolean;
+  requiresImageInput?: boolean;
+  foldable?: boolean;
   onSelect?: (value: string) => void;
   currentModelName?: string;
   disabled?: boolean;
@@ -140,7 +141,8 @@ export function groupLlmOptions(
 
 export default function LLMPopover({
   llmManager,
-  folded,
+  requiresImageInput,
+  foldable,
   onSelect,
   currentModelName,
   disabled = false,
@@ -186,19 +188,23 @@ export default function LLMPopover({
     [llmProviders, currentModelName]
   );
 
-  // Filter options by search query
+  // Filter options by vision capability (when images are uploaded) and search query
   const filteredOptions = useMemo(() => {
-    if (!searchQuery.trim()) {
-      return llmOptions;
+    let result = llmOptions;
+    if (requiresImageInput) {
+      result = result.filter((opt) => opt.supportsImageInput);
     }
-    const query = searchQuery.toLowerCase();
-    return llmOptions.filter(
-      (opt) =>
-        opt.displayName.toLowerCase().includes(query) ||
-        opt.modelName.toLowerCase().includes(query) ||
-        (opt.vendor && opt.vendor.toLowerCase().includes(query))
-    );
-  }, [llmOptions, searchQuery]);
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      result = result.filter(
+        (opt) =>
+          opt.displayName.toLowerCase().includes(query) ||
+          opt.modelName.toLowerCase().includes(query) ||
+          (opt.vendor && opt.vendor.toLowerCase().includes(query))
+      );
+    }
+    return result;
+  }, [llmOptions, searchQuery, requiresImageInput]);
 
   // Group options by provider using backend-provided display names and ordering
   // For aggregator providers (bedrock, openrouter, vertex_ai), flatten to "Provider/Vendor" format
@@ -350,20 +356,21 @@ export default function LLMPopover({
     <Popover open={open} onOpenChange={setOpen}>
       <div data-testid="llm-popover-trigger">
         <Popover.Trigger asChild disabled={disabled}>
-          <OpenButton
-            icon={
-              folded
-                ? SvgRefreshCw
-                : getProviderIcon(
-                    llmManager.currentLlm.provider,
-                    llmManager.currentLlm.modelName
-                  )
-            }
-            foldable={folded}
-            disabled={disabled}
-          >
-            {currentLlmDisplayName}
-          </OpenButton>
+          <Disabled disabled={disabled}>
+            <OpenButton
+              icon={
+                foldable
+                  ? SvgRefreshCw
+                  : getProviderIcon(
+                      llmManager.currentLlm.provider,
+                      llmManager.currentLlm.modelName
+                    )
+              }
+              foldable={foldable}
+            >
+              {currentLlmDisplayName}
+            </OpenButton>
+          </Disabled>
         </Popover.Trigger>
       </div>
 

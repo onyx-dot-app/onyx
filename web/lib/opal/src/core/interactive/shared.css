@@ -1,0 +1,48 @@
+/* Interactive — shared base classes for stateless + stateful primitives */
+
+/* Register --interactive-foreground as a <color> so the browser can
+   interpolate it directly on the parent. Children just read the variable
+   with no independent transitions — guaranteeing perfect sync. */
+@property --interactive-foreground {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: transparent;
+}
+
+@property --interactive-foreground-icon {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: transparent;
+}
+
+/* Base interactive surface */
+.interactive {
+  @apply cursor-pointer select-none;
+  transition:
+    background-color 150ms ease-in-out,
+    --interactive-foreground 150ms ease-in-out,
+    --interactive-foreground-icon 150ms ease-in-out;
+}
+.interactive[data-disabled] {
+  @apply cursor-not-allowed;
+}
+
+/* Container — structural box */
+.interactive-container {
+  @apply flex items-center justify-center overflow-clip;
+}
+.interactive-container[data-border="true"] {
+  @apply border;
+}
+
+/* Utility classes — descendants opt in to parent-controlled foreground color.
+   No transition here — the parent interpolates the variables directly. */
+.interactive-foreground {
+  color: var(--interactive-foreground);
+}
+
+/* Icon foreground — reads from --interactive-foreground-icon, which defaults
+   to --interactive-foreground via the variant CSS rules. */
+.interactive-foreground-icon {
+  color: var(--interactive-foreground-icon);
+}

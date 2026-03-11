@@ -18,6 +18,7 @@ from onyx.context.search.models import SearchDoc
 from onyx.context.search.models import SearchDocsResponse
 from onyx.db.memory import UserMemoryContext
 from onyx.server.query_and_chat.placement import Placement
+from onyx.server.query_and_chat.streaming_models import CustomToolErrorInfo
 from onyx.server.query_and_chat.streaming_models import GeneratedImage
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 from onyx.tools.tool_implementations.memory.models import MemoryToolResponse
@@ -61,6 +62,7 @@ class CustomToolCallSummary(BaseModel):
     tool_name: str
     response_type: str  # e.g., 'json', 'image', 'csv', 'graph'
     tool_result: Any  # The response data
+    error: CustomToolErrorInfo | None = None
 
 
 class ToolCallKickoff(BaseModel):
@@ -93,6 +95,8 @@ class ToolResponse(BaseModel):
         # | WebContentResponse
         # This comes from custom tools, tool result needs to be saved
         | CustomToolCallSummary
+        # This comes from code interpreter, carries generated files
+        | PythonToolRichResponse
         # If the rich response is a string, this is what's saved to the tool call in the DB
         | str
         | None  # If nothing needs to be persisted outside of the string value passed to the LLM
@@ -193,10 +197,22 @@ class ChatFile(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
+class PythonToolRichResponse(BaseModel):
+    """Rich response from the Python tool carrying generated files."""
+
+    generated_files: list[PythonExecutionFile] = []
+
+
 class PythonToolOverrideKwargs(BaseModel):
     """Override kwargs for the Python/Code Interpreter tool."""
 
     chat_files: list[ChatFile] = []
+
+
+class ImageGenerationToolOverrideKwargs(BaseModel):
+    """Override kwargs for image generation tool calls."""
+
+    recent_generated_image_file_ids: list[str] = []
 
 
 class SearchToolRunContext(BaseModel):
@@ -239,6 +255,7 @@ class ToolCallInfo(BaseModel):
     tool_call_response: str
     search_docs: list[SearchDoc] | None = None
     generated_images: list[GeneratedImage] | None = None
+    generated_files: list[PythonExecutionFile] | None = None
 
 
 CHAT_SESSION_ID_PLACEHOLDER = "CHAT_SESSION_ID"

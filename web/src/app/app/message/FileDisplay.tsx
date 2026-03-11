@@ -1,21 +1,37 @@
 "use client";
 
-import { useState } from "react";
+import { ReactNode, useState } from "react";
+import { cn } from "@/lib/utils";
 import { ChatFileType, FileDescriptor } from "@/app/app/interfaces";
 import Attachment from "@/refresh-components/Attachment";
 import { InMessageImage } from "@/app/app/components/files/images/InMessageImage";
 import CsvContent from "@/components/tools/CSVContent";
-import TextViewModal from "@/sections/modals/TextViewModal";
+import PreviewModal from "@/sections/modals/PreviewModal";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
-import { cn } from "@/lib/utils";
 import ExpandableContentWrapper from "@/components/tools/ExpandableContentWrapper";
+
+interface FileContainerProps {
+  children: ReactNode;
+  className?: string;
+  id?: string;
+}
 
 interface FileDisplayProps {
   files: FileDescriptor[];
-  alignBubble?: boolean;
 }
 
-export default function FileDisplay({ files, alignBubble }: FileDisplayProps) {
+function FileContainer({ children, className, id }: FileContainerProps) {
+  return (
+    <div
+      id={id}
+      className={cn("flex w-full flex-col items-end gap-2 py-2", className)}
+    >
+      {children}
+    </div>
+  );
+}
+
+export default function FileDisplay({ files }: FileDisplayProps) {
   const [close, setClose] = useState(true);
   const [previewingFile, setPreviewingFile] = useState<FileDescriptor | null>(
     null
@@ -36,67 +52,51 @@ export default function FileDisplay({ files, alignBubble }: FileDisplayProps) {
   return (
     <>
       {previewingFile && (
-        <TextViewModal
+        <PreviewModal
           presentingDocument={presentingDocument}
           onClose={() => setPreviewingFile(null)}
         />
       )}
 
       {textFiles.length > 0 && (
-        <div
-          id="onyx-file"
-          className={cn("m-2 auto", alignBubble && "ml-auto")}
-        >
-          <div className="flex flex-col items-end gap-2">
-            {textFiles.map((file) => (
-              <Attachment
-                key={file.id}
-                fileName={file.name || file.id}
-                open={() => setPreviewingFile(file)}
-              />
-            ))}
-          </div>
-        </div>
+        <FileContainer id="onyx-file">
+          {textFiles.map((file) => (
+            <Attachment
+              key={file.id}
+              fileName={file.name || file.id}
+              open={() => setPreviewingFile(file)}
+            />
+          ))}
+        </FileContainer>
       )}
 
       {imageFiles.length > 0 && (
-        <div
-          id="onyx-image"
-          className={cn("m-2 auto", alignBubble && "ml-auto")}
-        >
-          <div className="flex flex-col items-end gap-2">
-            {imageFiles.map((file) => (
-              <InMessageImage key={file.id} fileId={file.id} />
-            ))}
-          </div>
-        </div>
+        <FileContainer id="onyx-image">
+          {imageFiles.map((file) => (
+            <InMessageImage key={file.id} fileId={file.id} />
+          ))}
+        </FileContainer>
       )}
 
       {csvFiles.length > 0 && (
-        <div className={cn("m-2 auto", alignBubble && "ml-auto")}>
-          <div className="flex flex-col items-end gap-2">
-            {csvFiles.map((file) => {
-              return (
-                <div key={file.id} className="w-fit">
-                  {close ? (
-                    <>
-                      <ExpandableContentWrapper
-                        fileDescriptor={file}
-                        close={() => setClose(false)}
-                        ContentComponent={CsvContent}
-                      />
-                    </>
-                  ) : (
-                    <Attachment
-                      open={() => setClose(true)}
-                      fileName={file.name || file.id}
-                    />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        <FileContainer className="overflow-auto">
+          {csvFiles.map((file) =>
+            close ? (
+              <ExpandableContentWrapper
+                key={file.id}
+                fileDescriptor={file}
+                close={() => setClose(false)}
+                ContentComponent={CsvContent}
+              />
+            ) : (
+              <Attachment
+                key={file.id}
+                open={() => setClose(true)}
+                fileName={file.name || file.id}
+              />
+            )
+          )}
+        </FileContainer>
       )}
     </>
   );

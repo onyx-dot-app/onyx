@@ -28,7 +28,9 @@ postgresql:
 # -- Master toggle for vector database support. When false:
 #   - Sets DISABLE_VECTOR_DB=true on all backend pods
 #   - Skips the indexing model server deployment (embeddings not needed)
-#   - Skips docprocessing and docfetching celery workers
+#   - Skips ALL celery worker deployments (beat, primary, light, heavy,
+#     monitoring, user-file-processing, docprocessing, docfetching) — the
+#     API server handles background work via FastAPI BackgroundTasks
 #   - You should also set vespa.enabled=false and opensearch.enabled=false
 #     to prevent those subcharts from deploying
 vectorDB:
@@ -74,7 +76,10 @@ vespa:
       memory: 32000Mi
 
 opensearch:
-  enabled: false
+  # Enabled by default. Override to false and set the appropriate env vars in
+  # the instance-specific values yaml if using AWS-managed OpenSearch, or simply
+  # override to false to entirely disable.
+  enabled: true
   # These values are passed to the opensearch subchart.
   # See https://github.com/opensearch-project/helm-charts/blob/main/charts/opensearch/values.yaml
 
@@ -184,6 +189,7 @@ inferenceCapability:
   #   rollingUpdate:
   #     maxSurge: 0
   #     maxUnavailable: 1
+
 
 indexCapability:
   service:
@@ -956,7 +962,7 @@ minio:
 
 # Code Interpreter - Python code execution service (beta feature)
 codeInterpreter:
-  enabled: false  # Disabled by default (beta feature)
+  enabled: true
 
   replicaCount: 1
 
@@ -1155,8 +1161,10 @@ auth:
   opensearch:
     # Enable or disable this secret entirely. Will remove from env var
     # configurations and remove any created secrets.
-    # Set to true when opensearch.enabled is true.
-    enabled: false
+    # Enabled by default. Override to false and set the appropriate env vars in
+    # the instance-specific values yaml if using AWS-managed OpenSearch, or
+    # simply override to false to entirely disable.
+    enabled: true
     # Overwrite the default secret name, ignored if existingSecret is defined.
     secretName: 'onyx-opensearch'
     # Use a secret specified elsewhere.
@@ -1274,3 +1282,5 @@ configMap:
   SKIP_USERFILE_THRESHOLD: ""
   # For multi-tenant: comma-separated list of tenant IDs to skip threshold
   SKIP_USERFILE_THRESHOLD_TENANT_IDS: ""
+  # Maximum user upload file size in MB for chat/projects uploads
+  USER_FILE_MAX_UPLOAD_SIZE_MB: ""

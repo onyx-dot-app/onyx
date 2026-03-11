@@ -1,13 +1,13 @@
-import { AdminPageTitle } from "@/components/admin/Title";
 import { StandardAnswerCreationForm } from "@/app/ee/admin/standard-answer/StandardAnswerCreationForm";
 import { fetchSS } from "@/lib/utilsSS";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import BackButton from "@/refresh-components/buttons/BackButton";
-import { ClipboardIcon } from "@/components/icons/icons";
+import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
 import { StandardAnswer, StandardAnswerCategory } from "@/lib/types";
 
-async function Page(props: { params: Promise<{ id: string }> }) {
-  const params = await props.params;
+const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.STANDARD_ANSWERS]!;
+
+async function Main({ id }: { id: string }) {
   const tasks = [
     fetchSS("/manage/admin/standard-answer"),
     fetchSS(`/manage/admin/standard-answer/category`),
@@ -35,14 +35,14 @@ async function Page(props: { params: Promise<{ id: string }> }) {
   const allStandardAnswers =
     (await standardAnswersResponse.json()) as StandardAnswer[];
   const standardAnswer = allStandardAnswers.find(
-    (answer) => answer.id.toString() === params.id
+    (answer) => answer.id.toString() === id
   );
 
   if (!standardAnswer) {
     return (
       <ErrorCallout
         errorTitle="Something went wrong :("
-        errorMsg={`Did not find standard answer with ID: ${params.id}`}
+        errorMsg={`Did not find standard answer with ID: ${id}`}
       />
     );
   }
@@ -67,20 +67,29 @@ async function Page(props: { params: Promise<{ id: string }> }) {
 
   const standardAnswerCategories =
     (await standardAnswerCategoriesResponse.json()) as StandardAnswerCategory[];
-  return (
-    <>
-      <BackButton />
-      <AdminPageTitle
-        title="Edit Standard Answer"
-        icon={<ClipboardIcon size={32} />}
-      />
 
-      <StandardAnswerCreationForm
-        standardAnswerCategories={standardAnswerCategories}
-        existingStandardAnswer={standardAnswer}
-      />
-    </>
+  return (
+    <StandardAnswerCreationForm
+      standardAnswerCategories={standardAnswerCategories}
+      existingStandardAnswer={standardAnswer}
+    />
   );
 }
 
-export default Page;
+export default async function Page(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+
+  return (
+    <SettingsLayouts.Root>
+      <SettingsLayouts.Header
+        icon={route.icon}
+        title="Edit Standard Answer"
+        backButton
+        separator
+      />
+      <SettingsLayouts.Body>
+        <Main id={params.id} />
+      </SettingsLayouts.Body>
+    </SettingsLayouts.Root>
+  );
+}

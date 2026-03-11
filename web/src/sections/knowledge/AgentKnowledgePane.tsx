@@ -9,11 +9,11 @@ import React, {
   useEffect,
 } from "react";
 import * as GeneralLayouts from "@/layouts/general-layouts";
+import { Content } from "@opal/layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
 import * as InputLayouts from "@/layouts/input-layouts";
 import { Card } from "@/refresh-components/cards";
-import Button from "@/refresh-components/buttons/Button";
-import { Button as OpalButton } from "@opal/components";
+import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import Separator from "@/refresh-components/Separator";
@@ -35,10 +35,10 @@ import { ProjectFile } from "@/app/app/projects/projectsService";
 import {
   AttachedDocumentSnapshot,
   HierarchyNodeSnapshot,
-} from "@/app/admin/assistants/interfaces";
+} from "@/app/admin/agents/interfaces";
 import { timeAgo } from "@/lib/time";
 import Spacer from "@/refresh-components/Spacer";
-import { Disabled } from "@/refresh-components/Disabled";
+import { Disabled } from "@opal/core";
 import SourceHierarchyBrowser from "./SourceHierarchyBrowser";
 
 // Knowledge pane view states
@@ -318,10 +318,11 @@ function DocumentSetsTableContent({
       header: "Name",
       sortable: true,
       render: (ds) => (
-        <GeneralLayouts.LineItemLayout
+        <Content
           icon={SvgFolder}
           title={ds.name}
-          variant="secondary"
+          sizePreset="main-ui"
+          variant="section"
         />
       ),
     },
@@ -443,10 +444,11 @@ function RecentFilesTableContent({
       header: "Name",
       sortable: true,
       render: (file) => (
-        <GeneralLayouts.LineItemLayout
+        <Content
           icon={SvgFiles}
           title={file.name}
-          variant="secondary"
+          sizePreset="main-ui"
+          variant="section"
         />
       ),
     },
@@ -486,8 +488,8 @@ function RecentFilesTableContent({
         ariaLabelPrefix="user-file-row"
         headerActions={
           <Button
-            internal
-            leftIcon={SvgPlusCircle}
+            prominence="internal"
+            icon={SvgPlusCircle}
             onClick={() => fileInputRef.current?.click()}
           >
             Add File
@@ -783,7 +785,7 @@ const KnowledgeMainContent = memo(function KnowledgeMainContent({
         <Text text03 secondaryBody>
           Add documents or connected sources to use for this agent.
         </Text>
-        <OpalButton
+        <Button
           icon={SvgPlusCircle}
           onClick={onAddKnowledge}
           prominence="tertiary"
@@ -813,8 +815,8 @@ const KnowledgeMainContent = memo(function KnowledgeMainContent({
         selected
       </Text>
       <Button
-        internal
-        leftIcon={SvgArrowUpRight}
+        prominence="internal"
+        icon={SvgArrowUpRight}
         onClick={onViewEdit}
         aria-label="knowledge-view-edit"
       >
@@ -889,7 +891,7 @@ export default function AgentKnowledgePane({
   }, [enableKnowledge]);
 
   // Get connected sources from CC pairs
-  const { ccPairs } = useCCPairs();
+  const { ccPairs } = useCCPairs(vectorDbEnabled);
   const connectedSources: ConnectedSource[] = useMemo(() => {
     if (!ccPairs || ccPairs.length === 0) return [];
     const sourceSet = new Set<ValidSources>();
@@ -1135,9 +1137,11 @@ export default function AgentKnowledgePane({
 
   return (
     <GeneralLayouts.Section gap={0.5} alignItems="stretch" height="auto">
-      <InputLayouts.Title
+      <Content
         title="Knowledge"
         description="Add specific connectors and documents for this agent to use to inform its responses."
+        sizePreset="main-content"
+        variant="section"
       />
 
       <Card>

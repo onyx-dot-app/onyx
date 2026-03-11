@@ -186,6 +186,7 @@ class EmbeddingPrecision(str, PyEnum):
 
 class UserFileStatus(str, PyEnum):
     PROCESSING = "PROCESSING"
+    INDEXING = "INDEXING"
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
     CANCELED = "CANCELED"
@@ -230,6 +231,12 @@ class OpenSearchTenantMigrationStatus(str, PyEnum):
 class BuildSessionStatus(str, PyEnum):
     ACTIVE = "active"
     IDLE = "idle"
+
+
+class SharingScope(str, PyEnum):
+    PRIVATE = "private"
+    PUBLIC_ORG = "public_org"
+    PUBLIC_GLOBAL = "public_global"
 
 
 class SandboxStatus(str, PyEnum):

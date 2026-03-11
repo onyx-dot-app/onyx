@@ -1,10 +1,10 @@
 import React, { FunctionComponent } from "react";
 import { cn } from "@/lib/utils";
-import { SvgFold, SvgExpand } from "@opal/icons";
+import { SvgFold, SvgExpand, SvgXOctagon } from "@opal/icons";
 import { IconProps } from "@opal/types";
-import Button from "@/refresh-components/buttons/Button";
-import { Button as OpalButton } from "@opal/components";
+import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
+import { TimelineSurfaceBackground } from "@/app/app/message/messageComponents/timeline/primitives/TimelineSurface";
 
 export interface TimelineStepContentProps {
   children?: React.ReactNode;
@@ -17,6 +17,7 @@ export interface TimelineStepContentProps {
   hideHeader?: boolean;
   collapsedIcon?: FunctionComponent<IconProps>;
   noPaddingRight?: boolean;
+  surfaceBackground?: TimelineSurfaceBackground;
 }
 
 /**
@@ -34,6 +35,7 @@ export function TimelineStepContent({
   hideHeader = false,
   collapsedIcon: CollapsedIconComponent,
   noPaddingRight = false,
+  surfaceBackground,
 }: TimelineStepContentProps) {
   const showCollapseControls = collapsible && supportsCollapsible && onToggle;
 
@@ -48,11 +50,11 @@ export function TimelineStepContent({
           </div>
 
           <div className="h-full w-[var(--timeline-step-header-right-section-width)] flex items-center justify-end">
-            {showCollapseControls &&
-              (buttonTitle ? (
+            {showCollapseControls ? (
+              buttonTitle ? (
                 <Button
+                  prominence="tertiary"
                   size="md"
-                  tertiary
                   onClick={onToggle}
                   rightIcon={
                     isExpanded ? SvgFold : CollapsedIconComponent || SvgExpand
@@ -61,7 +63,7 @@ export function TimelineStepContent({
                   {buttonTitle}
                 </Button>
               ) : (
-                <OpalButton
+                <Button
                   prominence="tertiary"
                   size="md"
                   onClick={onToggle}
@@ -69,7 +71,12 @@ export function TimelineStepContent({
                     isExpanded ? SvgFold : CollapsedIconComponent || SvgExpand
                   }
                 />
-              ))}
+              )
+            ) : surfaceBackground === "error" ? (
+              <div className="p-1.5">
+                <SvgXOctagon className="h-4 w-4 text-status-error-05" />
+              </div>
+            ) : null}
           </div>
         </div>
       )}

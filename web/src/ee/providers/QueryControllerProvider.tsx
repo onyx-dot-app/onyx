@@ -8,13 +8,15 @@ import {
   SearchFullResponse,
 } from "@/lib/search/interfaces";
 import { classifyQuery, searchDocuments } from "@/ee/lib/search/svc";
-import { useAppMode } from "@/providers/AppModeProvider";
 import useAppFocus from "@/hooks/useAppFocus";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useUser } from "@/providers/UserProvider";
 import {
   QueryControllerContext,
-  QueryClassification,
   QueryControllerValue,
+  QueryState,
+  AppMode,
 } from "@/providers/QueryControllerProvider";
 
 interface QueryControllerProviderProps {
@@ -24,17 +26,53 @@ interface QueryControllerProviderProps {
 export function QueryControllerProvider({
   children,
 }: QueryControllerProviderProps) {
-  const { appMode, setAppMode } = useAppMode();
   const appFocus = useAppFocus();
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
+  const settings = useSettingsContext();
+  const { isSearchModeAvailable: searchUiEnabled } = settings;
+  const { user } = useUser();
 
-  // Query state
+  // ── Merged query state (discriminated union) ──────────────────────────
+  const [state, setState] = useState<QueryState>({
+    phase: "idle",
+    appMode: "chat",
+  });
+
+  // Persistent app-mode preference — survives phase transitions and is
+  // used to restore the correct mode when resetting back to idle.
+  const appModeRef = useRef<AppMode>("chat");
+
+  // ── App mode sync from user preferences ───────────────────────────────
+  const persistedMode = user?.preferences?.default_app_mode;
+
+  useEffect(() => {
+    let mode: AppMode = "chat";
+    if (isPaidEnterpriseFeaturesEnabled && searchUiEnabled && persistedMode) {
+      const lower = persistedMode.toLowerCase();
+      mode = (["auto", "search", "chat"] as const).includes(lower as AppMode)
+        ? (lower as AppMode)
+        : "chat";
+    }
+    appModeRef.current = mode;
+    setState((prev) =>
+      prev.phase === "idle" ? { phase: "idle", appMode: mode } : prev
+    );
+  }, [isPaidEnterpriseFeaturesEnabled, searchUiEnabled, persistedMode]);
+
+  const setAppMode = useCallback(
+    (mode: AppMode) => {
+      if (!isPaidEnterpriseFeaturesEnabled || !searchUiEnabled) return;
+      setState((prev) => {
+        if (prev.phase !== "idle") return prev;
+        appModeRef.current = mode;
+        return { phase: "idle", appMode: mode };
+      });
+    },
+    [isPaidEnterpriseFeaturesEnabled, searchUiEnabled]
+  );
+
+  // ── Ancillary state ───────────────────────────────────────────────────
   const [query, setQuery] = useState<string | null>(null);
-  const [classification, setClassification] =
-    useState<QueryClassification>(null);
-  const [isClassifying, setIsClassifying] = useState(false);
-
-  // Search state
   const [searchResults, setSearchResults] = useState<SearchDocWithContent[]>(
     []
   );
@@ -48,7 +86,7 @@ export function QueryControllerProvider({
   const searchAbortRef = useRef<AbortController | null>(null);
 
   /**
-   * Perform document search
+   * Perform document search (pure data-fetching, no phase side effects)
    */
   const performSearch = useCallback(
     async (searchQuery: string, filters?: BaseFilters): Promise<void> => {
@@ -64,7 +102,7 @@ export function QueryControllerProvider({
           searchQuery,
           {
             filters,
-            numHits: 50,
+            numHits: 30,
             includeContent: false,
             signal: controller.signal,
           }
@@ -82,19 +120,15 @@ export function QueryControllerProvider({
         setLlmSelectedDocIds(response.llm_selected_doc_ids ?? null);
       } catch (err) {
         if (err instanceof Error && err.name === "AbortError") {
-          return;
+          throw err;
         }
 
         setError("Document search failed. Please try again.");
         setSearchResults([]);
         setLlmSelectedDocIds(null);
-      } finally {
-        // After we've performed a search, we automatically switch to "search" mode.
-        // This is a "sticky" implementation; on purpose.
-        setAppMode("search");
       }
     },
-    [setAppMode]
+    []
   );
 
   /**
@@ -108,8 +142,6 @@ export function QueryControllerProvider({
 
       const controller = new AbortController();
       classifyAbortRef.current = controller;
-
-      setIsClassifying(true);
 
       try {
         const response: SearchFlowClassificationResponse = await classifyQuery(
@@ -126,8 +158,6 @@ export function QueryControllerProvider({
 
         setError("Query classification failed. Falling back to chat.");
         return "chat";
-      } finally {
-        setIsClassifying(false);
       }
     },
     []
@@ -145,58 +175,51 @@ export function QueryControllerProvider({
       setQuery(submitQuery);
       setError(null);
 
-      // 1.
-      // We always route through chat if we're not Enterprise Enabled.
-      //
-      // 2.
-      // We only go down the classification route if we're in the "New Session" tab.
-      // Everywhere else, we always use the chat-flow.
-      //
-      // 3.
-      // If we're in the "New Session" tab and the app-mode is "Chat", we continue with the chat-flow anyways.
+      const currentAppMode = appModeRef.current;
+
+      // Always route through chat if:
+      // 1. Not Enterprise Enabled
+      // 2. Admin has disabled the Search UI
+      // 3. Not in the "New Session" tab
+      // 4. In "New Session" tab but app-mode is "Chat"
       if (
         !isPaidEnterpriseFeaturesEnabled ||
+        !searchUiEnabled ||
         !appFocus.isNewSession() ||
-        appMode === "chat"
+        currentAppMode === "chat"
       ) {
-        setClassification("chat");
+        setState({ phase: "chat" });
         setSearchResults([]);
         setLlmSelectedDocIds(null);
         onChat(submitQuery);
         return;
       }
 
-      if (appMode === "search") {
-        await performSearch(submitQuery, filters);
-        setClassification("search");
+      // Search mode: immediately show SearchUI with loading state
+      if (currentAppMode === "search") {
+        setState({ phase: "searching" });
+        try {
+          await performSearch(submitQuery, filters);
+        } catch (err) {
+          if (err instanceof Error && err.name === "AbortError") return;
+          throw err;
+        }
+        setState({ phase: "search-results" });
         return;
       }
 
-      // # Note (@raunakab)
-      //
-      // Interestingly enough, for search, we do:
-      // 1. setClassification("search")
-      // 2. performSearch
-      //
-      // But for chat, we do:
-      // 1. performChat
-      // 2. setClassification("chat")
-      //
-      // The ChatUI has a nice loading UI, so it's fine for us to prematurely set the
-      // classification-state before the chat has finished loading.
-      //
-      // However, the SearchUI does not. Prematurely setting the classification-state
-      // will lead to a slightly ugly UI.
-
       // Auto mode: classify first, then route
+      setState({ phase: "classifying" });
       try {
         const result = await performClassification(submitQuery);
 
         if (result === "search") {
+          setState({ phase: "searching" });
           await performSearch(submitQuery, filters);
-          setClassification("search");
+          setState({ phase: "search-results" });
+          appModeRef.current = "search";
         } else {
-          setClassification("chat");
+          setState({ phase: "chat" });
           setSearchResults([]);
           setLlmSelectedDocIds(null);
           onChat(submitQuery);
@@ -206,18 +229,18 @@ export function QueryControllerProvider({
           return;
         }
 
-        setClassification("chat");
+        setState({ phase: "chat" });
         setSearchResults([]);
         setLlmSelectedDocIds(null);
         onChat(submitQuery);
       }
     },
     [
-      appMode,
       appFocus,
       performClassification,
       performSearch,
       isPaidEnterpriseFeaturesEnabled,
+      searchUiEnabled,
     ]
   );
 
@@ -227,7 +250,14 @@ export function QueryControllerProvider({
   const refineSearch = useCallback(
     async (filters: BaseFilters): Promise<void> => {
       if (!query) return;
-      await performSearch(query, filters);
+      setState({ phase: "searching" });
+      try {
+        await performSearch(query, filters);
+      } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") return;
+        throw err;
+      }
+      setState({ phase: "search-results" });
     },
     [query, performSearch]
   );
@@ -246,7 +276,7 @@ export function QueryControllerProvider({
     }
 
     setQuery(null);
-    setClassification(null);
+    setState({ phase: "idle", appMode: appModeRef.current });
     setSearchResults([]);
     setLlmSelectedDocIds(null);
     setError(null);
@@ -254,8 +284,8 @@ export function QueryControllerProvider({
 
   const value: QueryControllerValue = useMemo(
     () => ({
-      classification,
-      isClassifying,
+      state,
+      setAppMode,
       searchResults,
       llmSelectedDocIds,
       error,
@@ -264,8 +294,8 @@ export function QueryControllerProvider({
       reset,
     }),
     [
-      classification,
-      isClassifying,
+      state,
+      setAppMode,
       searchResults,
       llmSelectedDocIds,
       error,
@@ -275,7 +305,7 @@ export function QueryControllerProvider({
     ]
   );
 
-  // Sync classification state with navigation context
+  // Sync state with navigation context
   useEffect(reset, [appFocus, reset]);
 
   return (

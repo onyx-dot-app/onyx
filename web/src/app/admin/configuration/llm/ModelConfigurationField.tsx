@@ -1,13 +1,15 @@
 "use client";
 
 import { ArrayHelpers, FieldArray, FormikProps, useField } from "formik";
-import { ModelConfiguration } from "./interfaces";
+import { ModelConfiguration } from "@/interfaces/llm";
 import { ManualErrorMessage, TextFormField } from "@/components/Field";
 import { useEffect, useState } from "react";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import { SvgX } from "@opal/icons";
 import Text from "@/refresh-components/texts/Text";
+
 function ModelConfigurationRow({
   name,
   index,
@@ -54,17 +56,20 @@ function ModelConfigurationRow({
         />
       </div>
       <div className="flex flex-col justify-center">
-        <Button
+        <Disabled
           disabled={formikProps.values.model_configurations.length <= 1}
-          onClick={() => {
-            if (formikProps.values.model_configurations.length > 1) {
-              setError(null);
-              arrayHelpers.remove(index);
-            }
-          }}
-          icon={SvgX}
-          prominence="secondary"
-        />
+        >
+          <Button
+            onClick={() => {
+              if (formikProps.values.model_configurations.length > 1) {
+                setError(null);
+                arrayHelpers.remove(index);
+              }
+            }}
+            icon={SvgX}
+            prominence="secondary"
+          />
+        </Disabled>
       </div>
     </div>
   );

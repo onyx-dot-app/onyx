@@ -27,8 +27,12 @@ export enum PacketType {
   FETCH_TOOL_URLS = "open_url_urls",
   FETCH_TOOL_DOCUMENTS = "open_url_documents",
 
+  // Tool call argument delta (streams tool args before tool executes)
+  TOOL_CALL_ARGUMENT_DELTA = "tool_call_argument_delta",
+
   // Custom tool packets
   CUSTOM_TOOL_START = "custom_tool_start",
+  CUSTOM_TOOL_ARGS = "custom_tool_args",
   CUSTOM_TOOL_DELTA = "custom_tool_delta",
 
   // File reader tool packets
@@ -58,6 +62,10 @@ export enum PacketType {
   INTERMEDIATE_REPORT_DELTA = "intermediate_report_delta",
   INTERMEDIATE_REPORT_CITED_DOCS = "intermediate_report_cited_docs",
 }
+
+export const CODE_INTERPRETER_TOOL_TYPES = {
+  PYTHON: "python",
+} as const;
 
 // Basic Message Packets
 export interface MessageStart extends BaseObj {
@@ -149,6 +157,13 @@ export interface PythonToolDelta extends BaseObj {
   file_ids: string[];
 }
 
+export interface ToolCallArgumentDelta extends BaseObj {
+  type: "tool_call_argument_delta";
+  tool_type: string;
+  tool_id: string;
+  argument_deltas: Record<string, unknown>;
+}
+
 export interface FetchToolStart extends BaseObj {
   type: "open_url_start";
 }
@@ -164,17 +179,32 @@ export interface FetchToolDocuments extends BaseObj {
 }
 
 // Custom Tool Packets
+export interface CustomToolErrorInfo {
+  is_auth_error: boolean;
+  status_code: number;
+  message: string;
+}
+
 export interface CustomToolStart extends BaseObj {
   type: "custom_tool_start";
   tool_name: string;
+  tool_id?: number | null;
+}
+
+export interface CustomToolArgs extends BaseObj {
+  type: "custom_tool_args";
+  tool_name: string;
+  tool_args: Record<string, any>;
 }
 
 export interface CustomToolDelta extends BaseObj {
   type: "custom_tool_delta";
   tool_name: string;
+  tool_id?: number | null;
   response_type: string;
   data?: any;
   file_ids?: string[] | null;
+  error?: CustomToolErrorInfo | null;
 }
 
 // File Reader Packets
@@ -294,6 +324,7 @@ export type ImageGenerationToolObj =
 export type PythonToolObj =
   | PythonToolStart
   | PythonToolDelta
+  | ToolCallArgumentDelta
   | SectionEnd
   | PacketError;
 export type FetchToolObj =
@@ -304,6 +335,7 @@ export type FetchToolObj =
   | PacketError;
 export type CustomToolObj =
   | CustomToolStart
+  | CustomToolArgs
   | CustomToolDelta
   | SectionEnd
   | PacketError;

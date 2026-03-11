@@ -3,11 +3,12 @@
 import { Label, SubLabel } from "@/components/Field";
 import { toast } from "@/hooks/useToast";
 import { SettingsContext } from "@/providers/SettingsProvider";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { Callout } from "@/components/ui/callout";
 import Text from "@/components/ui/text";
 import { useContext, useState } from "react";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
+import Spacer from "@/refresh-components/Spacer";
 
 export function CustomAnalyticsUpdateForm() {
   const settings = useContext(SettingsContext);
@@ -94,10 +95,8 @@ export function CustomAnalyticsUpdateForm() {
           value={secretKey}
           onChange={(e) => setSecretKey(e.target.value)}
         />
-
-        <Button className="mt-4" type="submit">
-          Update
-        </Button>
+        <Spacer rem={1} />
+        <Button type="submit">Update</Button>
       </form>
     </div>
   );

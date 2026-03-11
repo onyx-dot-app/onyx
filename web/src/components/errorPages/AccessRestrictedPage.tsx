@@ -3,16 +3,19 @@
 import { useState } from "react";
 import Link from "next/link";
 import ErrorPageLayout from "@/components/errorPages/ErrorPageLayout";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import InlineExternalLink from "@/refresh-components/InlineExternalLink";
 import { logout } from "@/lib/user";
 import { loadStripe } from "@stripe/stripe-js";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { useLicense } from "@/hooks/useLicense";
+import { useSettingsContext } from "@/providers/SettingsProvider";
+import { ApplicationStatus } from "@/interfaces/settings";
 import Text from "@/refresh-components/texts/Text";
 import { SvgLock } from "@opal/icons";
 
-const linkClassName = "text-action-link-05 hover:text-action-link-06";
+const linkClassName = "text-action-link-05 hover:text-action-link-06 underline";
 
 const fetchStripePublishableKey = async (): Promise<string> => {
   const response = await fetch("/api/tenants/stripe-publishable-key");
@@ -40,9 +43,30 @@ export default function AccessRestricted() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { data: license } = useLicense();
+  const settings = useSettingsContext();
 
-  // Distinguish between "never had a license" vs "license lapsed"
-  const hasLicenseLapsed = license?.has_license === true;
+  const isSeatLimitExceeded =
+    settings.settings.application_status ===
+    ApplicationStatus.SEAT_LIMIT_EXCEEDED;
+  const hadPreviousLicense = license?.has_license === true;
+  const showRenewalMessage = NEXT_PUBLIC_CLOUD_ENABLED || hadPreviousLicense;
+
+  function getSeatLimitMessage() {
+    const { used_seats, seat_count } = settings.settings;
+    const counts =
+      used_seats != null && seat_count != null
+        ? ` (${used_seats} users / ${seat_count} seats)`
+        : "";
+    return `Your organization has exceeded its licensed seat count${counts}. Access is restricted until the number of users is reduced or your license is upgraded.`;
+  }
+
+  const initialModalMessage = isSeatLimitExceeded
+    ? getSeatLimitMessage()
+    : showRenewalMessage
+      ? NEXT_PUBLIC_CLOUD_ENABLED
+        ? "Your access to Onyx has been temporarily suspended due to a lapse in your subscription."
+        : "Your access to Onyx has been temporarily suspended due to a lapse in your license."
+      : "An Enterprise license is required to use Onyx. Your data is protected and will be available once a license is activated.";
 
   const handleResubscribe = async () => {
     setIsLoading(true);
@@ -72,13 +96,34 @@ export default function AccessRestricted() {
         <SvgLock className="stroke-status-error-05 w-[1.5rem] h-[1.5rem]" />
       </div>
 
-      <Text text03>
-        {hasLicenseLapsed
-          ? "Your access to Onyx has been temporarily suspended due to a lapse in your subscription."
-          : "An Enterprise license is required to use Onyx. Your data is protected and will be available once a license is activated."}
-      </Text>
+      <Text text03>{initialModalMessage}</Text>
 
-      {NEXT_PUBLIC_CLOUD_ENABLED ? (
+      {isSeatLimitExceeded ? (
+        <>
+          <Text text03>
+            If you are an administrator, you can manage users on the{" "}
+            <Link className={linkClassName} href="/admin/users">
+              User Management
+            </Link>{" "}
+            page or upgrade your license on the{" "}
+            <Link className={linkClassName} href="/admin/billing">
+              Admin Billing
+            </Link>{" "}
+            page.
+          </Text>
+
+          <div className="flex flex-row gap-2">
+            <Button
+              onClick={async () => {
+                await logout();
+                window.location.reload();
+              }}
+            >
+              Log out
+            </Button>
+          </div>
+        </>
+      ) : NEXT_PUBLIC_CLOUD_ENABLED ? (
         <>
           <Text text03>
             To reinstate your access and continue benefiting from Onyx&apos;s
@@ -92,11 +137,13 @@ export default function AccessRestricted() {
           </Text>
 
           <div className="flex flex-row gap-2">
-            <Button onClick={handleResubscribe} disabled={isLoading}>
-              {isLoading ? "Loading..." : "Resubscribe"}
-            </Button>
+            <Disabled disabled={isLoading}>
+              <Button onClick={handleResubscribe}>
+                {isLoading ? "Loading..." : "Resubscribe"}
+              </Button>
+            </Disabled>
             <Button
-              secondary
+              prominence="secondary"
               onClick={async () => {
                 await logout();
                 window.location.reload();
@@ -111,7 +158,7 @@ export default function AccessRestricted() {
       ) : (
         <>
           <Text text03>
-            {hasLicenseLapsed
+            {hadPreviousLicense
               ? "To reinstate your access and continue using Onyx, please contact your system administrator to renew your license."
               : "To get started, please contact your system administrator to obtain an Enterprise license."}
           </Text>
@@ -121,11 +168,11 @@ export default function AccessRestricted() {
             <Link className={linkClassName} href="/admin/billing">
               Admin Billing
             </Link>{" "}
-            page to {hasLicenseLapsed ? "renew" : "activate"} your license, sign
-            up through Stripe or reach out to{" "}
+            page to {hadPreviousLicense ? "renew" : "activate"} your license,
+            sign up through Stripe or reach out to{" "}
             <a className={linkClassName} href="mailto:support@onyx.app">
               support@onyx.app
-            </a>
+            </a>{" "}
             for billing assistance.
           </Text>
 

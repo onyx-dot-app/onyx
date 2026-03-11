@@ -98,7 +98,10 @@ type LlmProviderBasics = {
 async function listUserLlmProviders(page: Page): Promise<LlmProviderBasics[]> {
   const response = await page.request.get("/api/llm/provider");
   expect(response.ok()).toBeTruthy();
-  return (await response.json()) as LlmProviderBasics[];
+  const data = (await response.json()) as {
+    providers: LlmProviderBasics[];
+  };
+  return data.providers;
 }
 
 async function waitForModelOnProvider(
@@ -127,18 +130,18 @@ async function waitForModelOnProvider(
 
 function buildMockStreamResponse(turn: number): string {
   const userMessageId = turn * 100 + 1;
-  const assistantMessageId = turn * 100 + 2;
+  const agentMessageId = turn * 100 + 2;
 
   const packets = [
     {
       user_message_id: userMessageId,
-      reserved_assistant_message_id: assistantMessageId,
+      reserved_assistant_message_id: agentMessageId,
     },
     {
       placement: { turn_index: 0, tab_index: 0 },
       obj: {
         type: "message_start",
-        id: `mock-${assistantMessageId}`,
+        id: `mock-${agentMessageId}`,
         content: "Mock response for provider collision assertion.",
         final_documents: null,
       },
@@ -148,7 +151,7 @@ function buildMockStreamResponse(turn: number): string {
       obj: { type: "stop", stop_reason: "finished" },
     },
     {
-      message_id: assistantMessageId,
+      message_id: agentMessageId,
       citations: {},
       files: [],
     },
@@ -297,13 +300,11 @@ test.describe("LLM Runtime Selection", () => {
 
     const regenerateDialog = page.locator('[role="dialog"]');
     const alternateModelOption = regenerateDialog
-      .locator('button[data-selected="false"]')
+      .locator('[data-selected="false"]')
       .first();
 
     test.skip(
-      (await regenerateDialog
-        .locator('button[data-selected="false"]')
-        .count()) === 0,
+      (await regenerateDialog.locator('[data-selected="false"]').count()) === 0,
       "Regenerate model picker requires at least two runtime model options"
     );
 
@@ -407,11 +408,11 @@ test.describe("LLM Runtime Selection", () => {
     const dialog = page.locator('[role="dialog"]');
     await dialog.getByPlaceholder("Search models...").fill(sharedModelName);
 
-    const sharedModelOptions = dialog.locator("button[data-selected]");
+    const sharedModelOptions = dialog.locator("[data-selected]");
     await expect(sharedModelOptions).toHaveCount(2);
     const openAiModelOption = dialog
       .getByRole("region", { name: /openai/i })
-      .locator("button[data-selected]")
+      .locator("[data-selected]")
       .first();
     await expect(openAiModelOption).toBeVisible();
     await openAiModelOption.click();
@@ -432,13 +433,11 @@ test.describe("LLM Runtime Selection", () => {
       .getByPlaceholder("Search models...")
       .fill(sharedModelName);
 
-    const secondSharedModelOptions = secondDialog.locator(
-      "button[data-selected]"
-    );
+    const secondSharedModelOptions = secondDialog.locator("[data-selected]");
     await expect(secondSharedModelOptions).toHaveCount(2);
     const anthropicModelOption = secondDialog
       .getByRole("region", { name: /anthropic/i })
-      .locator("button[data-selected]")
+      .locator("[data-selected]")
       .first();
     await expect(anthropicModelOption).toBeVisible();
     await anthropicModelOption.click();
@@ -449,7 +448,7 @@ test.describe("LLM Runtime Selection", () => {
     const verifyDialog = page.locator('[role="dialog"]');
     const selectedAnthropicOption = verifyDialog
       .getByRole("region", { name: /anthropic/i })
-      .locator('button[data-selected="true"]');
+      .locator('[data-selected="true"]');
     await expect(selectedAnthropicOption).toHaveCount(1);
     await page.keyboard.press("Escape");
     await page.waitForSelector('[role="dialog"]', { state: "hidden" });
@@ -516,7 +515,7 @@ test.describe("LLM Runtime Selection", () => {
     await dialog.getByPlaceholder("Search models...").fill(restrictedModelName);
 
     const restrictedModelOption = dialog
-      .locator("button[data-selected]")
+      .locator("[data-selected]")
       .filter({ hasText: restrictedModelName });
 
     await expect(restrictedModelOption).toHaveCount(0);

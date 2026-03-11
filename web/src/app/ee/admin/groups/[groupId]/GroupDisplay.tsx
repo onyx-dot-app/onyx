@@ -26,7 +26,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import { DeleteButton } from "@/components/DeleteButton";
 import { Bubble } from "@/components/Bubble";
 import { BookmarkIcon, RobotIcon } from "@/components/icons/icons";
@@ -34,6 +35,7 @@ import { AddTokenRateLimitForm } from "./AddTokenRateLimitForm";
 import { GenericTokenRateLimitTable } from "@/app/admin/token-rate-limits/TokenRateLimitTables";
 import { useUser } from "@/providers/UserProvider";
 import GenericConfirmModal from "@/components/modals/GenericConfirmModal";
+import Spacer from "@/refresh-components/Spacer";
 
 interface GroupDisplayProps {
   users: User[];
@@ -277,16 +279,17 @@ export const GroupDisplay = ({
         tooltip="Cannot update group while sync is occurring"
         disabled={userGroup.is_up_to_date}
       >
-        <Button
-          disabled={!userGroup.is_up_to_date}
-          onClick={() => {
-            if (userGroup.is_up_to_date) {
-              setAddMemberFormVisible(true);
-            }
-          }}
-        >
-          Add Users
-        </Button>
+        <Disabled disabled={!userGroup.is_up_to_date}>
+          <Button
+            onClick={() => {
+              if (userGroup.is_up_to_date) {
+                setAddMemberFormVisible(true);
+              }
+            }}
+          >
+            Add Users
+          </Button>
+        </Disabled>
       </SimpleTooltip>
       {addMemberFormVisible && (
         <AddMemberForm
@@ -377,16 +380,17 @@ export const GroupDisplay = ({
         tooltip="Cannot update group while sync is occurring"
         disabled={userGroup.is_up_to_date}
       >
-        <Button
-          disabled={!userGroup.is_up_to_date}
-          onClick={() => {
-            if (userGroup.is_up_to_date) {
-              setAddConnectorFormVisible(true);
-            }
-          }}
-        >
-          Add Connectors
-        </Button>
+        <Disabled disabled={!userGroup.is_up_to_date}>
+          <Button
+            onClick={() => {
+              if (userGroup.is_up_to_date) {
+                setAddConnectorFormVisible(true);
+              }
+            }}
+          >
+            Add Connectors
+          </Button>
+        </Disabled>
       </SimpleTooltip>
 
       {addConnectorFormVisible && (
@@ -427,7 +431,7 @@ export const GroupDisplay = ({
 
       <Separator />
 
-      <h2 className="text-xl font-bold mt-8 mb-2">Assistants</h2>
+      <h2 className="text-xl font-bold mt-8 mb-2">Agents</h2>
 
       <div>
         {userGroup.document_sets.length > 0 ? (
@@ -445,7 +449,7 @@ export const GroupDisplay = ({
           </div>
         ) : (
           <>
-            <Text>No Assistants in this group...</Text>
+            <Text>No Agents in this group...</Text>
           </>
         )}
       </div>
@@ -467,12 +471,12 @@ export const GroupDisplay = ({
       />
 
       {isAdmin && (
-        <Button
-          className="mt-3"
-          onClick={() => setAddRateLimitFormVisible(true)}
-        >
-          Create a Token Rate Limit
-        </Button>
+        <>
+          <Spacer rem={0.75} />
+          <Button onClick={() => setAddRateLimitFormVisible(true)}>
+            Create a Token Rate Limit
+          </Button>
+        </>
       )}
     </div>
   );

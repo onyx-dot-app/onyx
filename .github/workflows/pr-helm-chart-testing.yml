@@ -71,7 +71,7 @@ jobs:
 
       - name: Create kind cluster
         if: steps.list-changed.outputs.changed == 'true'
-        uses: helm/kind-action@92086f6be054225fa813e0a4b13787fc9088faab # ratchet:helm/kind-action@v1.13.0
+        uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # ratchet:helm/kind-action@v1.14.0
 
       - name: Pre-install cluster status check
         if: steps.list-changed.outputs.changed == 'true'
@@ -91,7 +91,7 @@ jobs:
           helm repo add cloudnative-pg https://cloudnative-pg.github.io/charts
           helm repo add ot-container-kit https://ot-container-kit.github.io/helm-charts
           helm repo add minio https://charts.min.io/
-          helm repo add code-interpreter https://onyx-dot-app.github.io/code-interpreter/
+          helm repo add code-interpreter https://onyx-dot-app.github.io/python-sandbox/
           helm repo update
 
       - name: Install Redis operator

@@ -13,7 +13,7 @@ import CredentialStep from "@/app/craft/v1/configure/components/CredentialStep";
 import ConnectorConfigStep from "@/app/craft/v1/configure/components/ConnectorConfigStep";
 import { OAUTH_STATE_KEY } from "@/app/craft/v1/constants";
 import { connectorConfigs } from "@/lib/connectors/connectors";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 
 type ModalStep = "credential" | "configure";
@@ -163,11 +163,11 @@ export default function ConfigureConnectorModal({
               <Section flexDirection="row" justifyContent="end" width="full">
                 <div className="pr-10">
                   <Button
+                    variant="action"
+                    prominence="tertiary"
                     rightIcon={SvgExternalLink}
                     href={getSourceDocLink(connectorType)!}
                     target="_blank"
-                    tertiary
-                    action
                   >
                     View setup documentation
                   </Button>

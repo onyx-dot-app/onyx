@@ -23,7 +23,6 @@
 import { cn, ensureHrefProtocol, noProp } from "@/lib/utils";
 import type { Components } from "react-markdown";
 import Text from "@/refresh-components/texts/Text";
-import Button from "@/refresh-components/buttons/Button";
 import { useCallback, useMemo, useState, useEffect } from "react";
 import { useAppBackground } from "@/providers/AppBackgroundProvider";
 import { useTheme } from "next-themes";
@@ -47,8 +46,7 @@ import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";
 import SimplePopover from "@/refresh-components/SimplePopover";
 import { Interactive } from "@opal/core";
-import { OpenButton } from "@opal/components";
-import { LineItemLayout } from "@/layouts/general-layouts";
+import { Button, OpenButton } from "@opal/components";
 import { useAppSidebarContext } from "@/providers/AppSidebarProvider";
 import useScreenSize from "@/hooks/useScreenSize";
 import {
@@ -62,10 +60,11 @@ import {
 } from "@opal/icons";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import { useSettingsContext } from "@/providers/SettingsProvider";
-import { AppMode, useAppMode } from "@/providers/AppModeProvider";
+import type { AppMode } from "@/providers/QueryControllerProvider";
 import useAppFocus from "@/hooks/useAppFocus";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import useBrowserInfo from "@/hooks/useBrowserInfo";
 
 /**
  * App Header Component
@@ -83,7 +82,7 @@ import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidE
  */
 function Header() {
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
-  const { appMode, setAppMode } = useAppMode();
+  const { state, setAppMode } = useQueryController();
   const settings = useSettingsContext();
   const { isMobile } = useScreenSize();
   const { setFolded } = useAppSidebarContext();
@@ -105,15 +104,20 @@ function Header() {
     refreshCurrentProjectDetails,
     currentProjectId,
   } = useProjectsContext();
-  const { currentChatSession, refreshChatSessions } = useChatSessions();
+  const { currentChatSession, refreshChatSessions, removeSession } =
+    useChatSessions();
   const router = useRouter();
   const appFocus = useAppFocus();
-  const { classification } = useQueryController();
 
   const customHeaderContent =
     settings?.enterpriseSettings?.custom_header_content;
+  // Some pages don't want the custom header content, namely every page except Chat, Search, and
+  // NewSession. The header provides features such as the open sidebar button on mobile which pages
+  // without this content still use.
+  const pageWithHeaderContent = appFocus.isChat() || appFocus.isNewSession();
 
-  const effectiveMode: AppMode = appFocus.isNewSession() ? appMode : "chat";
+  const effectiveMode: AppMode =
+    appFocus.isNewSession() && state.phase === "idle" ? state.appMode : "chat";
 
   const availableProjects = useMemo(() => {
     if (!projects) return [];
@@ -183,6 +187,7 @@ function Header() {
       if (!response.ok) {
         throw new Error("Failed to delete chat session");
       }
+      removeSession(currentChatSession.id);
       await Promise.all([refreshChatSessions(), fetchProjects()]);
       router.replace("/app");
       setDeleteModalOpen(false);
@@ -190,7 +195,13 @@ function Header() {
       console.error("Failed to delete chat:", error);
       showErrorNotification("Failed to delete chat. Please try again.");
     }
-  }, [currentChatSession, refreshChatSessions, fetchProjects, router]);
+  }, [
+    currentChatSession,
+    refreshChatSessions,
+    removeSession,
+    fetchProjects,
+    router,
+  ]);
 
   const setDeleteConfirmationModalOpen = useCallback((open: boolean) => {
     setDeleteModalOpen(open);
@@ -276,7 +287,7 @@ function Header() {
           icon={SvgTrash}
           onClose={() => setDeleteModalOpen(false)}
           submit={
-            <Button danger onClick={handleDeleteChat}>
+            <Button variant="danger" onClick={handleDeleteChat}>
               Delete
             </Button>
           }
@@ -288,7 +299,7 @@ function Header() {
 
       <div
         className={cn(
-          "w-full flex flex-row justify-center items-center px-4 h-[3.3rem]",
+          "w-full flex flex-row flex-wrap justify-center items-center px-4",
           // # Note (@raunakab):
           //
           // We add an additional top margin to align this header with the `LogoSection` inside of the App-Sidebar.
@@ -301,20 +312,22 @@ function Header() {
           - (mobile) sidebar toggle
           - app-mode (for Unified S+C [EE gated])
         */}
-        <div className="flex-1 flex flex-row items-center gap-2">
+        <div className="flex-1 flex flex-row items-center gap-2 h-[3.3rem]">
           {isMobile && (
-            <IconButton
+            <Button
+              prominence="internal"
               icon={SvgSidebar}
               onClick={() => setFolded(false)}
-              internal
             />
           )}
           {isPaidEnterpriseFeaturesEnabled &&
+            settings.isSearchModeAvailable &&
             appFocus.isNewSession() &&
-            !classification && (
+            state.phase === "idle" && (
               <Popover open={modePopoverOpen} onOpenChange={setModePopoverOpen}>
                 <Popover.Trigger asChild>
                   <OpenButton
+                    aria-label="Change app mode"
                     icon={
                       effectiveMode === "search" ? SvgSearchMenu : SvgBubbleText
                     }
@@ -355,10 +368,18 @@ function Header() {
         {/*
           Center:
           - custom-header-content
+          - Wraps to its own row below left/right on mobile when content is present
         */}
-        <div className="flex-1 flex flex-col items-center overflow-hidden">
+        <div
+          className={cn(
+            "flex flex-col items-center overflow-hidden",
+            pageWithHeaderContent && customHeaderContent
+              ? "order-last basis-full py-2 sm:py-0 sm:order-none sm:basis-auto sm:flex-1"
+              : "flex-1"
+          )}
+        >
           <Text text03 className="text-center w-full">
-            {customHeaderContent}
+            {pageWithHeaderContent && customHeaderContent}
           </Text>
         </div>
 
@@ -367,20 +388,22 @@ function Header() {
           - share button
           - more-options buttons
         */}
-        <div className="flex flex-1 justify-end">
+        <div className="flex flex-1 justify-end items-center h-[3.3rem]">
           {appFocus.isChat() && currentChatSession && (
             <FrostedDiv className="flex shrink flex-row items-center">
               <Button
-                leftIcon={SvgShare}
-                transient={showShareModal}
-                tertiary
+                icon={SvgShare}
+                prominence="tertiary"
+                interaction={showShareModal ? "hover" : "rest"}
+                responsiveHideText
                 onClick={() => setShowShareModal(true)}
                 aria-label="share-chat-button"
               >
-                Share Chat
+                Share
               </Button>
               <SimplePopover
                 trigger={
+                  /* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */
                   <IconButton
                     icon={SvgMoreHorizontal}
                     className="ml-2"
@@ -505,8 +528,16 @@ function Root({ children, enableBackground }: AppRootProps) {
   const { hasBackground, appBackgroundUrl } = useAppBackground();
   const { resolvedTheme } = useTheme();
   const appFocus = useAppFocus();
+  const { isSafari } = useBrowserInfo();
   const isLightMode = resolvedTheme === "light";
   const showBackground = hasBackground && enableBackground;
+  const horizontalBlurMask = `linear-gradient(
+    to right,
+    transparent 0%,
+    black max(0%, calc(50% - 25rem)),
+    black min(100%, calc(50% + 25rem)),
+    transparent 100%
+  )`;
 
   return (
     /* NOTE: Some elements, markdown tables in particular, refer to this `@container` in order to
@@ -546,25 +577,25 @@ function Root({ children, enableBackground }: AppRootProps) {
       {showBackground && appFocus.isChat() && (
         <>
           <div className="absolute inset-0 backdrop-blur-[1px] pointer-events-none" />
-          <div
-            className="absolute z-0 inset-0 backdrop-blur-md transition-all duration-600 pointer-events-none"
-            style={{
-              maskImage: `linear-gradient(
-                to right,
-                transparent 0%,
-                black max(0%, calc(50% - 25rem)),
-                black min(100%, calc(50% + 25rem)),
-                transparent 100%
-              )`,
-              WebkitMaskImage: `linear-gradient(
-                to right,
-                transparent 0%,
-                black max(0%, calc(50% - 25rem)),
-                black min(100%, calc(50% + 25rem)),
-                transparent 100%
-              )`,
-            }}
-          />
+          {isSafari ? (
+            <div
+              className="absolute z-0 inset-0 bg-cover bg-center bg-fixed pointer-events-none"
+              style={{
+                backgroundImage: `url(${appBackgroundUrl})`,
+                filter: "blur(16px)",
+                maskImage: horizontalBlurMask,
+                WebkitMaskImage: horizontalBlurMask,
+              }}
+            />
+          ) : (
+            <div
+              className="absolute z-0 inset-0 backdrop-blur-md transition-all duration-600 pointer-events-none"
+              style={{
+                maskImage: horizontalBlurMask,
+                WebkitMaskImage: horizontalBlurMask,
+              }}
+            />
+          )}
         </>
       )}
 

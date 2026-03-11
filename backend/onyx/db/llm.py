@@ -25,7 +25,11 @@ from onyx.server.manage.embedding.models import CloudEmbeddingProvider
 from onyx.server.manage.embedding.models import CloudEmbeddingProviderCreationRequest
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import LLMProviderView
+from onyx.server.manage.llm.models import SyncModelEntry
+from onyx.utils.logger import setup_logger
 from shared_configs.enums import EmbeddingProvider
+
+logger = setup_logger()
 
 
 def update_group_llm_provider_relationships__no_commit(
@@ -109,45 +113,38 @@ def can_user_access_llm_provider(
         is_admin: If True, bypass user group restrictions but still respect persona restrictions
 
     Access logic:
-    1. If is_public=True → everyone has access (public override)
-    2. If is_public=False:
-       - Both groups AND personas set → must satisfy BOTH (AND logic, admins bypass group check)
-       - Only groups set → must be in one of the groups (OR across groups, admins bypass)
-       - Only personas set → must use one of the personas (OR across personas, applies to admins)
-       - Neither set → NOBODY has access unless admin (locked, admin-only)
+    - is_public controls USER access (group bypass): when True, all users can access
+      regardless of group membership. When False, user must be in a whitelisted group
+      (or be admin).
+    - Persona restrictions are ALWAYS enforced when set, regardless of is_public.
+      This allows admins to make a provider available to all users while still
+      restricting which personas (assistants) can use it.
+
+    Decision matrix:
+    1. is_public=True, no personas set → everyone has access
+    2. is_public=True, personas set → all users, but only whitelisted personas
+    3. is_public=False, groups+personas set → must satisfy BOTH (admins bypass groups)
+    4. is_public=False, only groups set → must be in group (admins bypass)
+    5. is_public=False, only personas set → must use whitelisted persona
+    6. is_public=False, neither set → admin-only (locked)
     """
-    # Public override - everyone has access
-    if provider.is_public:
-        return True
-
-    # Extract IDs once to avoid multiple iterations
-    provider_group_ids = (
-        {group.id for group in provider.groups} if provider.groups else set()
-    )
-    provider_persona_ids = (
-        {p.id for p in provider.personas} if provider.personas else set()
-    )
-
+    provider_group_ids = {g.id for g in (provider.groups or [])}
+    provider_persona_ids = {p.id for p in (provider.personas or [])}
     has_groups = bool(provider_group_ids)
     has_personas = bool(provider_persona_ids)
 
-    # Both groups AND personas set → AND logic (must satisfy both)
-    if has_groups and has_personas:
-        # Admins bypass group check but still must satisfy persona restrictions
-        user_in_group = is_admin or bool(user_group_ids & provider_group_ids)
-        persona_allowed = persona.id in provider_persona_ids if persona else False
-        return user_in_group and persona_allowed
+    # Persona restrictions are always enforced when set, regardless of is_public
+    if has_personas and not (persona and persona.id in provider_persona_ids):
+        return False
 
-    # Only groups set → user must be in one of the groups (admins bypass)
+    if provider.is_public:
+        return True
+
     if has_groups:
         return is_admin or bool(user_group_ids & provider_group_ids)
 
-    # Only personas set → persona must be in allowed list (applies to admins too)
-    if has_personas:
-        return persona.id in provider_persona_ids if persona else False
-
-    # Neither groups nor personas set, and not public → admins can access
-    return is_admin
+    # No groups: either persona-whitelisted (already passed) or admin-only if locked
+    return has_personas or is_admin
 
 
 def validate_persona_ids_exist(
@@ -213,11 +210,29 @@ def upsert_llm_provider(
     llm_provider_upsert_request: LLMProviderUpsertRequest,
     db_session: Session,
 ) -> LLMProviderView:
-    existing_llm_provider = fetch_existing_llm_provider(
-        name=llm_provider_upsert_request.name, db_session=db_session
-    )
+    existing_llm_provider: LLMProviderModel | None = None
+    if llm_provider_upsert_request.id:
+        existing_llm_provider = fetch_existing_llm_provider_by_id(
+            id=llm_provider_upsert_request.id, db_session=db_session
+        )
+        if not existing_llm_provider:
+            raise ValueError(
+                f"LLM provider with id {llm_provider_upsert_request.id} not found"
+            )
 
-    if not existing_llm_provider:
+        if existing_llm_provider.name != llm_provider_upsert_request.name:
+            raise ValueError(
+                f"LLM provider with id {llm_provider_upsert_request.id} name change not allowed"
+            )
+    else:
+        existing_llm_provider = fetch_existing_llm_provider(
+            name=llm_provider_upsert_request.name, db_session=db_session
+        )
+        if existing_llm_provider:
+            raise ValueError(
+                f"LLM provider with name '{llm_provider_upsert_request.name}'"
+                " already exists"
+            )
         existing_llm_provider = LLMProviderModel(name=llm_provider_upsert_request.name)
         db_session.add(existing_llm_provider)
 
@@ -238,11 +253,7 @@ def upsert_llm_provider(
     existing_llm_provider.api_base = api_base
     existing_llm_provider.api_version = llm_provider_upsert_request.api_version
     existing_llm_provider.custom_config = custom_config
-    # TODO: Remove default model name on api change
-    # Needed due to /provider/{id}/default endpoint not disclosing the default model name
-    existing_llm_provider.default_model_name = (
-        llm_provider_upsert_request.default_model_name
-    )
+
     existing_llm_provider.is_public = llm_provider_upsert_request.is_public
     existing_llm_provider.is_auto_mode = llm_provider_upsert_request.is_auto_mode
     existing_llm_provider.deployment_name = llm_provider_upsert_request.deployment_name
@@ -260,10 +271,35 @@ def upsert_llm_provider(
         mc.name for mc in llm_provider_upsert_request.model_configurations
     }
 
+    # Build a lookup of requested visibility by model name
+    requested_visibility = {
+        mc.name: mc.is_visible
+        for mc in llm_provider_upsert_request.model_configurations
+    }
+
     # Delete removed models
     removed_ids = [
         mc.id for name, mc in existing_by_name.items() if name not in models_to_exist
     ]
+
+    default_model = fetch_default_llm_model(db_session)
+
+    # Prevent removing and hiding the default model
+    if default_model:
+        for name, mc in existing_by_name.items():
+            if mc.id == default_model.id:
+                if default_model.id in removed_ids:
+                    raise ValueError(
+                        f"Cannot remove the default model '{name}'. "
+                        "Please change the default model before removing."
+                    )
+                if not requested_visibility.get(name, True):
+                    raise ValueError(
+                        f"Cannot hide the default model '{name}'. "
+                        "Please change the default model before hiding."
+                    )
+                break
+
     if removed_ids:
         db_session.query(ModelConfiguration).filter(
             ModelConfiguration.id.in_(removed_ids)
@@ -306,15 +342,6 @@ def upsert_llm_provider(
                 display_name=model_config.display_name,
             )
 
-    default_model = fetch_default_model(db_session, LLMModelFlowType.CHAT)
-    if default_model and default_model.llm_provider_id == existing_llm_provider.id:
-        _update_default_model(
-            db_session=db_session,
-            provider_id=existing_llm_provider.id,
-            model=existing_llm_provider.default_model_name,
-            flow_type=LLMModelFlowType.CHAT,
-        )
-
     # Make sure the relationship table stays up to date
     update_group_llm_provider_relationships__no_commit(
         llm_provider_id=existing_llm_provider.id,
@@ -343,9 +370,9 @@ def upsert_llm_provider(
 def sync_model_configurations(
     db_session: Session,
     provider_name: str,
-    models: list[dict],
+    models: list[SyncModelEntry],
 ) -> int:
-    """Sync model configurations for a dynamic provider (OpenRouter, Bedrock, Ollama).
+    """Sync model configurations for a dynamic provider (OpenRouter, Bedrock, Ollama, etc.).
 
     This inserts NEW models from the source API without overwriting existing ones.
     User preferences (is_visible, max_input_tokens) are preserved for existing models.
@@ -353,7 +380,7 @@ def sync_model_configurations(
     Args:
         db_session: Database session
         provider_name: Name of the LLM provider
-        models: List of model dicts with keys: name, display_name, max_input_tokens, supports_image_input
+        models: List of SyncModelEntry objects describing the fetched models
 
     Returns:
         Number of new models added
@@ -367,21 +394,20 @@ def sync_model_configurations(
 
     new_count = 0
     for model in models:
-        model_name = model["name"]
-        if model_name not in existing_names:
+        if model.name not in existing_names:
             # Insert new model with is_visible=False (user must explicitly enable)
             supported_flows = [LLMModelFlowType.CHAT]
-            if model.get("supports_image_input", False):
+            if model.supports_image_input:
                 supported_flows.append(LLMModelFlowType.VISION)
 
             insert_new_model_configuration__no_commit(
                 db_session=db_session,
                 llm_provider_id=provider.id,
-                model_name=model_name,
+                model_name=model.name,
                 supported_flows=supported_flows,
                 is_visible=False,
-                max_input_tokens=model.get("max_input_tokens"),
-                display_name=model.get("display_name"),
+                max_input_tokens=model.max_input_tokens,
+                display_name=model.display_name,
             )
             new_count += 1
 
@@ -430,7 +456,7 @@ def fetch_existing_models(
 
 def fetch_existing_llm_providers(
     db_session: Session,
-    flow_types: list[LLMModelFlowType],
+    flow_type_filter: list[LLMModelFlowType],
     only_public: bool = False,
     exclude_image_generation_providers: bool = True,
 ) -> list[LLMProviderModel]:
@@ -438,30 +464,27 @@ def fetch_existing_llm_providers(
 
     Args:
         db_session: Database session
-        flow_types: List of flow types to filter by
+        flow_type_filter: List of flow types to filter by, empty list for no filter
         only_public: If True, only return public providers
         exclude_image_generation_providers: If True, exclude providers that are
             used for image generation configs
     """
-    providers_with_flows = (
-        select(ModelConfiguration.llm_provider_id)
-        .join(LLMModelFlow)
-        .where(LLMModelFlow.llm_model_flow_type.in_(flow_types))
-        .distinct()
-    )
+    stmt = select(LLMProviderModel)
+
+    if flow_type_filter:
+        providers_with_flows = (
+            select(ModelConfiguration.llm_provider_id)
+            .join(LLMModelFlow)
+            .where(LLMModelFlow.llm_model_flow_type.in_(flow_type_filter))
+            .distinct()
+        )
+        stmt = stmt.where(LLMProviderModel.id.in_(providers_with_flows))
 
     if exclude_image_generation_providers:
-        stmt = select(LLMProviderModel).where(
-            LLMProviderModel.id.in_(providers_with_flows)
-        )
-    else:
         image_gen_provider_ids = select(ModelConfiguration.llm_provider_id).join(
             ImageGenerationConfig
         )
-        stmt = select(LLMProviderModel).where(
-            LLMProviderModel.id.in_(providers_with_flows)
-            | LLMProviderModel.id.in_(image_gen_provider_ids)
-        )
+        stmt = stmt.where(~LLMProviderModel.id.in_(image_gen_provider_ids))
 
     stmt = stmt.options(
         selectinload(LLMProviderModel.model_configurations),
@@ -481,6 +504,22 @@ def fetch_existing_llm_provider(
     provider_model = db_session.scalar(
         select(LLMProviderModel)
         .where(LLMProviderModel.name == name)
+        .options(
+            selectinload(LLMProviderModel.model_configurations),
+            selectinload(LLMProviderModel.groups),
+            selectinload(LLMProviderModel.personas),
+        )
+    )
+
+    return provider_model
+
+
+def fetch_existing_llm_provider_by_id(
+    id: int, db_session: Session
+) -> LLMProviderModel | None:
+    provider_model = db_session.scalar(
+        select(LLMProviderModel)
+        .where(LLMProviderModel.id == id)
         .options(
             selectinload(LLMProviderModel.model_configurations),
             selectinload(LLMProviderModel.groups),
@@ -521,9 +560,9 @@ def fetch_default_model(
 ) -> ModelConfiguration | None:
     model_config = db_session.scalar(
         select(ModelConfiguration)
+        .options(selectinload(ModelConfiguration.llm_provider))
         .join(LLMModelFlow)
         .where(
-            ModelConfiguration.is_visible == True,  # noqa: E712
             LLMModelFlow.llm_model_flow_type == flow_type,
             LLMModelFlow.is_default == True,  # noqa: E712
         )
@@ -607,22 +646,13 @@ def remove_llm_provider__no_commit(db_session: Session, provider_id: int) -> Non
     db_session.flush()
 
 
-def update_default_provider(provider_id: int, db_session: Session) -> None:
-    # Attempt to get the default_model_name from the provider first
-    # TODO: Remove default_model_name check
-    provider = db_session.scalar(
-        select(LLMProviderModel).where(
-            LLMProviderModel.id == provider_id,
-        )
-    )
-
-    if provider is None:
-        raise ValueError(f"LLM Provider with id={provider_id} does not exist")
-
+def update_default_provider(
+    provider_id: int, model_name: str, db_session: Session
+) -> None:
     _update_default_model(
         db_session,
         provider_id,
-        provider.default_model_name,
+        model_name,
         LLMModelFlowType.CHAT,
     )
 
@@ -808,11 +838,28 @@ def sync_auto_mode_models(
             )
             changes += 1
 
-    # In Auto mode, default model is always set from GitHub config
-    default_model = llm_recommendations.get_default_model(provider.provider)
-    if default_model and provider.default_model_name != default_model.name:
-        provider.default_model_name = default_model.name
-        changes += 1
+    # Update the default if this provider currently holds the global CHAT default.
+    # We flush (but don't commit) so that _update_default_model can see the new
+    # model rows, then commit everything atomically to avoid a window where the
+    # old default is invisible but still pointed-to.
+    db_session.flush()
+
+    recommended_default = llm_recommendations.get_default_model(provider.provider)
+    if recommended_default:
+        current_default = fetch_default_llm_model(db_session)
+
+        if (
+            current_default
+            and current_default.llm_provider_id == provider.id
+            and current_default.name != recommended_default.name
+        ):
+            _update_default_model__no_commit(
+                db_session=db_session,
+                provider_id=provider.id,
+                model=recommended_default.name,
+                flow_type=LLMModelFlowType.CHAT,
+            )
+            changes += 1
 
     db_session.commit()
     return changes
@@ -945,7 +992,7 @@ def update_model_configuration__no_commit(
     db_session.flush()
 
 
-def _update_default_model(
+def _update_default_model__no_commit(
     db_session: Session,
     provider_id: int,
     model: str,
@@ -983,6 +1030,14 @@ def _update_default_model(
     new_default.is_default = True
     model_config.is_visible = True
 
+
+def _update_default_model(
+    db_session: Session,
+    provider_id: int,
+    model: str,
+    flow_type: LLMModelFlowType,
+) -> None:
+    _update_default_model__no_commit(db_session, provider_id, model, flow_type)
     db_session.commit()
 
 

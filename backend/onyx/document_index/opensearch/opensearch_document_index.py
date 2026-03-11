@@ -6,7 +6,7 @@ import httpx
 from opensearchpy import NotFoundError
 
 from onyx.access.models import DocumentAccess
-from onyx.configs.app_configs import USING_AWS_MANAGED_OPENSEARCH
+from onyx.configs.app_configs import VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT
 from onyx.configs.chat_configs import NUM_RETURNED_HITS
 from onyx.configs.chat_configs import TITLE_CONTENT_RATIO
 from onyx.configs.constants import PUBLIC_DOC_PAT
@@ -40,6 +40,7 @@ from onyx.document_index.interfaces_new import IndexingMetadata
 from onyx.document_index.interfaces_new import MetadataUpdateRequest
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.client import OpenSearchClient
+from onyx.document_index.opensearch.client import OpenSearchIndexClient
 from onyx.document_index.opensearch.client import SearchHit
 from onyx.document_index.opensearch.cluster_settings import OPENSEARCH_CLUSTER_SETTINGS
 from onyx.document_index.opensearch.schema import ACCESS_CONTROL_LIST_FIELD_NAME
@@ -50,6 +51,7 @@ from onyx.document_index.opensearch.schema import DocumentSchema
 from onyx.document_index.opensearch.schema import get_opensearch_doc_chunk_id
 from onyx.document_index.opensearch.schema import GLOBAL_BOOST_FIELD_NAME
 from onyx.document_index.opensearch.schema import HIDDEN_FIELD_NAME
+from onyx.document_index.opensearch.schema import PERSONAS_FIELD_NAME
 from onyx.document_index.opensearch.schema import USER_PROJECTS_FIELD_NAME
 from onyx.document_index.opensearch.search import DocumentQuery
 from onyx.document_index.opensearch.search import (
@@ -90,6 +92,25 @@ def generate_opensearch_filtered_access_control_list(
     access_control_list = access.to_acl()
     access_control_list.discard(PUBLIC_DOC_PAT)
     return list(access_control_list)
+
+
+def set_cluster_state(client: OpenSearchClient) -> None:
+    if not client.put_cluster_settings(settings=OPENSEARCH_CLUSTER_SETTINGS):
+        logger.error(
+            "Failed to put cluster settings. If the settings have never been set before, "
+            "this may cause unexpected index creation when indexing documents into an "
+            "index that does not exist, or may cause expected logs to not appear. If this "
+            "is not the first time running Onyx against this instance of OpenSearch, these "
+            "settings have likely already been set. Not taking any further action..."
+        )
+    client.create_search_pipeline(
+        pipeline_id=MIN_MAX_NORMALIZATION_PIPELINE_NAME,
+        pipeline_body=MIN_MAX_NORMALIZATION_PIPELINE_CONFIG,
+    )
+    client.create_search_pipeline(
+        pipeline_id=ZSCORE_NORMALIZATION_PIPELINE_NAME,
+        pipeline_body=ZSCORE_NORMALIZATION_PIPELINE_CONFIG,
+    )
 
 
 def _convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
@@ -215,6 +236,7 @@ def _convert_onyx_chunk_to_opensearch_document(
         # OpenSearch and it will not store any data at all for this field, which
         # is different from supplying an empty list.
         user_projects=chunk.user_project or None,
+        personas=chunk.personas or None,
         primary_owners=get_experts_stores_representations(
             chunk.source_document.primary_owners
         ),
@@ -246,7 +268,12 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
     def __init__(
         self,
         index_name: str,
+        embedding_dim: int,
+        embedding_precision: EmbeddingPrecision,
         secondary_index_name: str | None,
+        secondary_embedding_dim: int | None,
+        secondary_embedding_precision: EmbeddingPrecision | None,
+        # NOTE: We do not support large chunks right now.
         large_chunks_enabled: bool,  # noqa: ARG002
         secondary_large_chunks_enabled: bool | None,  # noqa: ARG002
         multitenant: bool = False,
@@ -256,20 +283,31 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
             index_name=index_name,
             secondary_index_name=secondary_index_name,
         )
-        if multitenant:
-            raise ValueError(
-                "Bug: OpenSearch is not yet ready for multitenant environments but something tried to use it."
-            )
         if multitenant != MULTI_TENANT:
             raise ValueError(
                 "Bug: Multitenant mismatch when initializing an OpenSearchDocumentIndex. "
                 f"Expected {MULTI_TENANT}, got {multitenant}."
             )
         tenant_id = get_current_tenant_id()
+        tenant_state = TenantState(tenant_id=tenant_id, multitenant=multitenant)
         self._real_index = OpenSearchDocumentIndex(
+            tenant_state=tenant_state,
             index_name=index_name,
-            tenant_state=TenantState(tenant_id=tenant_id, multitenant=multitenant),
+            embedding_dim=embedding_dim,
+            embedding_precision=embedding_precision,
         )
+        self._secondary_real_index: OpenSearchDocumentIndex | None = None
+        if self.secondary_index_name:
+            if secondary_embedding_dim is None or secondary_embedding_precision is None:
+                raise ValueError(
+                    "Bug: Secondary index embedding dimension and precision are not set."
+                )
+            self._secondary_real_index = OpenSearchDocumentIndex(
+                tenant_state=tenant_state,
+                index_name=self.secondary_index_name,
+                embedding_dim=secondary_embedding_dim,
+                embedding_precision=secondary_embedding_precision,
+            )
 
     @staticmethod
     def register_multitenant_indices(
@@ -277,28 +315,46 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
         embedding_dims: list[int],
         embedding_precisions: list[EmbeddingPrecision],
     ) -> None:
-        # TODO(andrei): Implement.
         raise NotImplementedError(
-            "Multitenant index registration is not yet implemented for OpenSearch."
+            "Bug: Multitenant index registration is not supported for OpenSearch."
         )
 
     def ensure_indices_exist(
         self,
         primary_embedding_dim: int,
         primary_embedding_precision: EmbeddingPrecision,
-        secondary_index_embedding_dim: int | None,  # noqa: ARG002
-        secondary_index_embedding_precision: EmbeddingPrecision | None,  # noqa: ARG002
+        secondary_index_embedding_dim: int | None,
+        secondary_index_embedding_precision: EmbeddingPrecision | None,
     ) -> None:
-        # Only handle primary index for now, ignore secondary.
-        return self._real_index.verify_and_create_index_if_necessary(
+        self._real_index.verify_and_create_index_if_necessary(
             primary_embedding_dim, primary_embedding_precision
         )
+        if self.secondary_index_name:
+            if (
+                secondary_index_embedding_dim is None
+                or secondary_index_embedding_precision is None
+            ):
+                raise ValueError(
+                    "Bug: Secondary index embedding dimension and precision are not set."
+                )
+            assert (
+                self._secondary_real_index is not None
+            ), "Bug: Secondary index is not initialized."
+            self._secondary_real_index.verify_and_create_index_if_necessary(
+                secondary_index_embedding_dim, secondary_index_embedding_precision
+            )
 
     def index(
         self,
         chunks: list[DocMetadataAwareIndexChunk],
         index_batch_params: IndexBatchParams,
     ) -> set[OldDocumentInsertionRecord]:
+        """
+        NOTE: Do NOT consider the secondary index here. A separate indexing
+        pipeline will be responsible for indexing to the secondary index. This
+        design is not ideal and we should reconsider this when revamping index
+        swapping.
+        """
         # Convert IndexBatchParams to IndexingMetadata.
         chunk_counts: dict[str, IndexingMetadata.ChunkCounts] = {}
         for doc_id in index_batch_params.doc_id_to_new_chunk_cnt:
@@ -330,7 +386,20 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
         tenant_id: str,  # noqa: ARG002
         chunk_count: int | None,
     ) -> int:
-        return self._real_index.delete(doc_id, chunk_count)
+        """
+        NOTE: Remember to handle the secondary index here. There is no separate
+        pipeline for deleting chunks in the secondary index. This design is not
+        ideal and we should reconsider this when revamping index swapping.
+        """
+        total_chunks_deleted = self._real_index.delete(doc_id, chunk_count)
+        if self.secondary_index_name:
+            assert (
+                self._secondary_real_index is not None
+            ), "Bug: Secondary index is not initialized."
+            total_chunks_deleted += self._secondary_real_index.delete(
+                doc_id, chunk_count
+            )
+        return total_chunks_deleted
 
     def update_single(
         self,
@@ -341,6 +410,11 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
         fields: VespaDocumentFields | None,
         user_fields: VespaDocumentUserFields | None,
     ) -> None:
+        """
+        NOTE: Remember to handle the secondary index here. There is no separate
+        pipeline for updating chunks in the secondary index. This design is not
+        ideal and we should reconsider this when revamping index swapping.
+        """
         if fields is None and user_fields is None:
             logger.warning(
                 f"Tried to update document {doc_id} with no updated fields or user fields."
@@ -359,13 +433,27 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
             hidden=fields.hidden if fields else None,
             project_ids=(
                 set(user_fields.user_projects)
-                if user_fields and user_fields.user_projects
+                # NOTE: Empty user_projects is semantically different from None
+                # user_projects.
+                if user_fields and user_fields.user_projects is not None
+                else None
+            ),
+            persona_ids=(
+                set(user_fields.personas)
+                # NOTE: Empty personas is semantically different from None
+                # personas.
+                if user_fields and user_fields.personas is not None
                 else None
             ),
         )
 
         try:
             self._real_index.update([update_request])
+            if self.secondary_index_name:
+                assert (
+                    self._secondary_real_index is not None
+                ), "Bug: Secondary index is not initialized."
+                self._secondary_real_index.update([update_request])
         except NotFoundError:
             logger.exception(
                 f"Tried to update document {doc_id} but at least one of its chunks was not found in OpenSearch. "
@@ -464,19 +552,37 @@ class OpenSearchDocumentIndex(DocumentIndex):
     for an OpenSearch search engine instance. It handles the complete lifecycle
     of document chunks within a specific OpenSearch index/schema.
 
-    Although not yet used in this way in the codebase, each kind of embedding
-    used should correspond to a different instance of this class, and therefore
-    a different index in OpenSearch.
+    Each kind of embedding used should correspond to a different instance of
+    this class, and therefore a different index in OpenSearch.
+
+    If in a multitenant environment and
+    VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT, will verify and create the index
+    if necessary on initialization. This is because there is no logic which runs
+    on cluster restart which scans through all search settings over all tenants
+    and creates the relevant indices.
+
+    Args:
+        tenant_state: The tenant state of the caller.
+        index_name: The name of the index to interact with.
+        embedding_dim: The dimensionality of the embeddings used for the index.
+        embedding_precision: The precision of the embeddings used for the index.
     """
 
     def __init__(
         self,
-        index_name: str,
         tenant_state: TenantState,
+        index_name: str,
+        embedding_dim: int,
+        embedding_precision: EmbeddingPrecision,
     ) -> None:
         self._index_name: str = index_name
         self._tenant_state: TenantState = tenant_state
-        self._os_client = OpenSearchClient(index_name=self._index_name)
+        self._client = OpenSearchIndexClient(index_name=self._index_name)
+
+        if self._tenant_state.multitenant and VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT:
+            self.verify_and_create_index_if_necessary(
+                embedding_dim=embedding_dim, embedding_precision=embedding_precision
+            )
 
     def verify_and_create_index_if_necessary(
         self,
@@ -485,10 +591,15 @@ class OpenSearchDocumentIndex(DocumentIndex):
     ) -> None:
         """Verifies and creates the index if necessary.
 
-        Also puts the desired cluster settings.
+        Also puts the desired cluster settings if not in a multitenant
+        environment.
 
-        Also puts the desired search pipeline state, creating the pipelines if
-        they do not exist and updating them otherwise.
+        Also puts the desired search pipeline state if not in a multitenant
+        environment, creating the pipelines if they do not exist and updating
+        them otherwise.
+
+        In a multitenant environment, the above steps happen explicitly on
+        setup.
 
         Args:
             embedding_dim: Vector dimensionality for the vector similarity part
@@ -501,47 +612,33 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 search pipelines.
         """
         logger.debug(
-            f"[OpenSearchDocumentIndex] Verifying and creating index {self._index_name} if necessary, "
-            f"with embedding dimension {embedding_dim}."
+            f"[OpenSearchDocumentIndex] Verifying and creating index {self._index_name} if "
+            f"necessary, with embedding dimension {embedding_dim}."
         )
+
+        if not self._tenant_state.multitenant:
+            set_cluster_state(self._client)
+
         expected_mappings = DocumentSchema.get_document_schema(
             embedding_dim, self._tenant_state.multitenant
         )
-        if not self._os_client.put_cluster_settings(
-            settings=OPENSEARCH_CLUSTER_SETTINGS
-        ):
-            logger.error(
-                f"Failed to put cluster settings for index {self._index_name}. If the settings have never been set before this "
-                "may cause unexpected index creation when indexing documents into an index that does not exist, or may cause "
-                "expected logs to not appear. If this is not the first time running Onyx against this instance of OpenSearch, "
-                "these settings have likely already been set. Not taking any further action..."
-            )
-        if not self._os_client.index_exists():
-            if USING_AWS_MANAGED_OPENSEARCH:
-                index_settings = (
-                    DocumentSchema.get_index_settings_for_aws_managed_opensearch()
-                )
-            else:
-                index_settings = DocumentSchema.get_index_settings()
-            self._os_client.create_index(
+
+        if not self._client.index_exists():
+            index_settings = DocumentSchema.get_index_settings_based_on_environment()
+            self._client.create_index(
                 mappings=expected_mappings,
                 settings=index_settings,
             )
-        if not self._os_client.validate_index(
-            expected_mappings=expected_mappings,
-        ):
-            raise RuntimeError(
-                f"The index {self._index_name} is not valid. The expected mappings do not match the actual mappings."
-            )
-
-        self._os_client.create_search_pipeline(
-            pipeline_id=MIN_MAX_NORMALIZATION_PIPELINE_NAME,
-            pipeline_body=MIN_MAX_NORMALIZATION_PIPELINE_CONFIG,
-        )
-        self._os_client.create_search_pipeline(
-            pipeline_id=ZSCORE_NORMALIZATION_PIPELINE_NAME,
-            pipeline_body=ZSCORE_NORMALIZATION_PIPELINE_CONFIG,
-        )
+        else:
+            # Ensure schema is up to date by applying the current mappings.
+            try:
+                self._client.put_mapping(expected_mappings)
+            except Exception as e:
+                logger.error(
+                    f"Failed to update mappings for index {self._index_name}. This likely means a "
+                    f"field type was changed which requires reindexing. Error: {e}"
+                )
+                raise
 
     def index(
         self,
@@ -613,7 +710,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             )
             # Now index. This will raise if a chunk of the same ID exists, which
             # we do not expect because we should have deleted all chunks.
-            self._os_client.bulk_index_documents(
+            self._client.bulk_index_documents(
                 documents=chunk_batch,
                 tenant_state=self._tenant_state,
             )
@@ -646,14 +743,15 @@ class OpenSearchDocumentIndex(DocumentIndex):
             The number of chunks successfully deleted.
         """
         logger.debug(
-            f"[OpenSearchDocumentIndex] Deleting document {document_id} from index {self._index_name}."
+            f"[OpenSearchDocumentIndex] Deleting document {document_id} from index "
+            f"{self._index_name}."
         )
         query_body = DocumentQuery.delete_from_document_id_query(
             document_id=document_id,
             tenant_state=self._tenant_state,
         )
 
-        return self._os_client.delete_by_query(query_body)
+        return self._client.delete_by_query(query_body)
 
     def update(
         self,
@@ -682,7 +780,8 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 specified documents.
         """
         logger.debug(
-            f"[OpenSearchDocumentIndex] Updating {len(update_requests)} chunks for index {self._index_name}."
+            f"[OpenSearchDocumentIndex] Updating {len(update_requests)} chunks for index "
+            f"{self._index_name}."
         )
         for update_request in update_requests:
             properties_to_update: dict[str, Any] = dict()
@@ -709,6 +808,10 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 properties_to_update[USER_PROJECTS_FIELD_NAME] = list(
                     update_request.project_ids
                 )
+            if update_request.persona_ids is not None:
+                properties_to_update[PERSONAS_FIELD_NAME] = list(
+                    update_request.persona_ids
+                )
 
             if not properties_to_update:
                 if len(update_request.document_ids) > 1:
@@ -734,9 +837,11 @@ class OpenSearchDocumentIndex(DocumentIndex):
                     # here.
                     # TODO(andrei): Fix the aforementioned race condition.
                     raise ChunkCountNotFoundError(
-                        f"Tried to update document {doc_id} but its chunk count is not known. Older versions of the "
-                        "application used to permit this but is not a supported state for a document when using OpenSearch. "
-                        "The document was likely just added to the indexing pipeline and the chunk count will be updated shortly."
+                        f"Tried to update document {doc_id} but its chunk count is not known. "
+                        "Older versions of the application used to permit this but is not a "
+                        "supported state for a document when using OpenSearch. The document was "
+                        "likely just added to the indexing pipeline and the chunk count will be "
+                        "updated shortly."
                     )
                 if doc_chunk_count == 0:
                     raise ValueError(
@@ -749,7 +854,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
                         document_id=doc_id,
                         chunk_index=chunk_index,
                     )
-                    self._os_client.update_document(
+                    self._client.update_document(
                         document_chunk_id=document_chunk_id,
                         properties_to_update=properties_to_update,
                     )
@@ -768,7 +873,8 @@ class OpenSearchDocumentIndex(DocumentIndex):
         chunk IDs vs querying for matching document chunks.
         """
         logger.debug(
-            f"[OpenSearchDocumentIndex] Retrieving {len(chunk_requests)} chunks for index {self._index_name}."
+            f"[OpenSearchDocumentIndex] Retrieving {len(chunk_requests)} chunks for index "
+            f"{self._index_name}."
         )
         results: list[InferenceChunk] = []
         for chunk_request in chunk_requests:
@@ -788,7 +894,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 min_chunk_index=chunk_request.min_chunk_ind,
                 max_chunk_index=chunk_request.max_chunk_ind,
             )
-            search_hits = self._os_client.search(
+            search_hits = self._client.search(
                 body=query_body,
                 search_pipeline_id=None,
             )
@@ -815,7 +921,8 @@ class OpenSearchDocumentIndex(DocumentIndex):
         num_to_retrieve: int,
     ) -> list[InferenceChunk]:
         logger.debug(
-            f"[OpenSearchDocumentIndex] Hybrid retrieving {num_to_retrieve} chunks for index {self._index_name}."
+            f"[OpenSearchDocumentIndex] Hybrid retrieving {num_to_retrieve} chunks for index "
+            f"{self._index_name}."
         )
         # TODO(andrei): This could be better, the caller should just make this
         # decision when passing in the query param. See the above comment in the
@@ -835,13 +942,17 @@ class OpenSearchDocumentIndex(DocumentIndex):
             index_filters=filters,
             include_hidden=False,
         )
-        # NOTE: Using z-score normalization here because it's better for hybrid search from a theoretical standpoint.
-        # Empirically on a small dataset of up to 10K docs, it's not very different. Likely more impactful at scale.
+        # NOTE: Using z-score normalization here because it's better for hybrid
+        # search from a theoretical standpoint. Empirically on a small dataset
+        # of up to 10K docs, it's not very different. Likely more impactful at
+        # scale.
         # https://opensearch.org/blog/introducing-the-z-score-normalization-technique-for-hybrid-search/
-        search_hits: list[SearchHit[DocumentChunk]] = self._os_client.search(
+        search_hits: list[SearchHit[DocumentChunk]] = self._client.search(
             body=query_body,
             search_pipeline_id=ZSCORE_NORMALIZATION_PIPELINE_NAME,
         )
+
+        # Good place for a breakpoint to inspect the search hits if you have "explain" enabled.
         inference_chunks_uncleaned: list[InferenceChunkUncleaned] = [
             _convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
                 search_hit.document_chunk, search_hit.score, search_hit.match_highlights
@@ -861,14 +972,15 @@ class OpenSearchDocumentIndex(DocumentIndex):
         dirty: bool | None = None,  # noqa: ARG002
     ) -> list[InferenceChunk]:
         logger.debug(
-            f"[OpenSearchDocumentIndex] Randomly retrieving {num_to_retrieve} chunks for index {self._index_name}."
+            f"[OpenSearchDocumentIndex] Randomly retrieving {num_to_retrieve} chunks for index "
+            f"{self._index_name}."
         )
         query_body = DocumentQuery.get_random_search_query(
             tenant_state=self._tenant_state,
             index_filters=filters,
             num_to_retrieve=num_to_retrieve,
         )
-        search_hits: list[SearchHit[DocumentChunk]] = self._os_client.search(
+        search_hits: list[SearchHit[DocumentChunk]] = self._client.search(
             body=query_body,
             search_pipeline_id=None,
         )
@@ -891,11 +1003,12 @@ class OpenSearchDocumentIndex(DocumentIndex):
         complete.
         """
         logger.debug(
-            f"[OpenSearchDocumentIndex] Indexing {len(chunks)} raw chunks for index {self._index_name}."
+            f"[OpenSearchDocumentIndex] Indexing {len(chunks)} raw chunks for index "
+            f"{self._index_name}."
         )
         # Do not raise if the document already exists, just update. This is
         # because the document may already have been indexed during the
         # OpenSearch transition period.
-        self._os_client.bulk_index_documents(
+        self._client.bulk_index_documents(
             documents=chunks, tenant_state=self._tenant_state, update_if_exists=True
         )

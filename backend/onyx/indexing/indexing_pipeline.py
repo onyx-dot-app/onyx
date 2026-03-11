@@ -64,6 +64,7 @@ from onyx.prompts.contextual_retrieval import CONTEXTUAL_RAG_PROMPT1
 from onyx.prompts.contextual_retrieval import CONTEXTUAL_RAG_PROMPT2
 from onyx.prompts.contextual_retrieval import DOCUMENT_SUMMARY_PROMPT
 from onyx.utils.logger import setup_logger
+from onyx.utils.postgres_sanitization import sanitize_documents_for_postgres
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from onyx.utils.timing import log_function_time
 
@@ -228,6 +229,8 @@ def index_doc_batch_prepare(
 ) -> DocumentBatchPrepareContext | None:
     """Sets up the documents in the relational DB (source of truth) for permissions, metadata, etc.
     This preceeds indexing it into the actual document index."""
+    documents = sanitize_documents_for_postgres(documents)
+
     # Create a trimmed list of docs that don't have a newer updated at
     # Shortcuts the time-consuming flow on connector index retries
     document_ids: list[str] = [document.id for document in documents]

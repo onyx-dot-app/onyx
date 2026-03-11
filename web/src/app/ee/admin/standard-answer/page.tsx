@@ -1,7 +1,6 @@
 "use client";
 
-import { AdminPageTitle } from "@/components/admin/Title";
-import { ClipboardIcon, EditIcon } from "@/components/icons/icons";
+import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { toast } from "@/hooks/useToast";
 import { useStandardAnswers, useStandardAnswerCategories } from "./hooks";
 import { ThreeDotsLoader } from "@/components/Loading";
@@ -29,9 +28,12 @@ import { PageSelector } from "@/components/PageSelector";
 import Text from "@/components/ui/text";
 import { TableHeader } from "@/components/ui/table";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
-import { SvgTrash } from "@opal/icons";
+import { SvgEdit, SvgTrash } from "@opal/icons";
 import { Button } from "@opal/components";
+import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
 const NUM_RESULTS_PER_PAGE = 10;
+
+const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.STANDARD_ANSWERS]!;
 
 type Displayable = JSX.Element | string;
 
@@ -113,7 +115,7 @@ const StandardAnswersTableRow = ({
           key={`edit-${standardAnswer.id}`}
           href={`/ee/admin/standard-answer/${standardAnswer.id}` as Route}
         >
-          <EditIcon />
+          <SvgEdit size={16} />
         </Link>,
         <div key={`categories-${standardAnswer.id}`}>
           {standardAnswer.categories.map((category) => (
@@ -344,7 +346,7 @@ const StandardAnswersTable = ({
   );
 };
 
-const Main = () => {
+function Main() {
   const {
     data: standardAnswers,
     error: standardAnswersError,
@@ -366,8 +368,8 @@ const Main = () => {
       <ErrorCallout
         errorTitle="Error loading standard answers"
         errorMsg={
-          standardAnswersError.info?.message ||
-          standardAnswersError.message.info?.detail
+          standardAnswersError.info?.detail ||
+          standardAnswersError.info?.message
         }
       />
     );
@@ -378,8 +380,8 @@ const Main = () => {
       <ErrorCallout
         errorTitle="Error loading standard answer categories"
         errorMsg={
-          standardAnswerCategoriesError.info?.message ||
-          standardAnswerCategoriesError.message.info?.detail
+          standardAnswerCategoriesError.info?.detail ||
+          standardAnswerCategoriesError.info?.message
         }
       />
     );
@@ -413,18 +415,15 @@ const Main = () => {
       </div>
     </div>
   );
-};
+}
 
-const Page = () => {
+export default function Page() {
   return (
-    <>
-      <AdminPageTitle
-        icon={<ClipboardIcon size={32} />}
-        title="Standard Answers"
-      />
-      <Main />
-    </>
+    <SettingsLayouts.Root>
+      <SettingsLayouts.Header icon={route.icon} title={route.title} separator />
+      <SettingsLayouts.Body>
+        <Main />
+      </SettingsLayouts.Body>
+    </SettingsLayouts.Root>
   );
-};
-
-export default Page;
+}

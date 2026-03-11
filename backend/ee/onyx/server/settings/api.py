@@ -6,6 +6,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from ee.onyx.configs.app_configs import LICENSE_ENFORCEMENT_ENABLED
 from ee.onyx.db.license import get_cached_license_metadata
 from ee.onyx.db.license import refresh_license_cache
+from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
 from onyx.configs.app_configs import ENTERPRISE_EDITION_ENABLED
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.server.settings.models import ApplicationStatus
@@ -109,6 +110,12 @@ def apply_license_status_to_settings(settings: Settings) -> Settings:
             if metadata.status == _BLOCKING_STATUS:
                 settings.application_status = metadata.status
                 settings.ee_features_enabled = False
+            elif metadata.used_seats > metadata.seats:
+                # License is valid but seat limit exceeded
+                settings.application_status = ApplicationStatus.SEAT_LIMIT_EXCEEDED
+                settings.seat_count = metadata.seats
+                settings.used_seats = metadata.used_seats
+                settings.ee_features_enabled = True
             else:
                 # Has a valid license (GRACE_PERIOD/PAYMENT_REMINDER still allow EE features)
                 settings.ee_features_enabled = True
@@ -119,7 +126,7 @@ def apply_license_status_to_settings(settings: Settings) -> Settings:
                 # syncing) means indexed data may need protection.
                 settings.application_status = _BLOCKING_STATUS
             settings.ee_features_enabled = False
-    except RedisError as e:
+    except CACHE_TRANSIENT_ERRORS as e:
         logger.warning(f"Failed to check license metadata for settings: {e}")
         # Fail closed - disable EE features if we can't verify license
         settings.ee_features_enabled = False

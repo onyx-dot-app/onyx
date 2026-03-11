@@ -19,6 +19,7 @@ function CalendarDayButton({
   }, [modifiers.focused]);
 
   return (
+    // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
     <Button
       ref={ref}
       tertiary

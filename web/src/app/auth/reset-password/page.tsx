@@ -5,7 +5,8 @@ import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import Title from "@/components/ui/title";
 import Text from "@/components/ui/text";
 import Link from "next/link";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import { Form, Formik } from "formik";
 import * as Yup from "yup";
 import { TextFormField } from "@/components/Field";
@@ -99,13 +100,11 @@ const ResetPasswordPage: React.FC = () => {
               />
 
               <div className="flex">
-                <Button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="mx-auto w-full"
-                >
-                  Reset Password
-                </Button>
+                <Disabled disabled={isSubmitting}>
+                  <Button type="submit" width="full">
+                    Reset Password
+                  </Button>
+                </Disabled>
               </div>
             </Form>
           )}

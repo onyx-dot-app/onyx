@@ -10,7 +10,6 @@ from pydantic import Field
 from onyx.auth.schemas import UserRole
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import QAFeedbackType
-from onyx.context.search.enums import RecencyBiasSetting
 from onyx.context.search.models import SavedSearchDoc
 from onyx.context.search.models import SearchDoc
 from onyx.db.enums import AccessType
@@ -39,6 +38,18 @@ class DATestPAT(BaseModel):
     token_display: str
     created_at: str
     expires_at: str | None = None
+    last_used_at: str | None = None
+
+
+class DATestScimToken(BaseModel):
+    """SCIM bearer token model for testing."""
+
+    id: int
+    name: str
+    raw_token: str | None = None  # Only present on initial creation
+    token_display: str
+    is_active: bool
+    created_at: str
     last_used_at: str | None = None
 
 
@@ -116,7 +127,7 @@ class DATestLLMProvider(BaseModel):
     name: str
     provider: str
     api_key: str
-    default_model_name: str
+    default_model_name: str | None = None
     is_public: bool
     is_auto_mode: bool = False
     groups: list[int]
@@ -150,11 +161,7 @@ class DATestPersona(BaseModel):
     id: int
     name: str
     description: str
-    num_chunks: float
-    llm_relevance_filter: bool
     is_public: bool
-    llm_filter_extraction: bool
-    recency_bias: RecencyBiasSetting
     document_set_ids: list[int]
     tool_ids: list[int]
     llm_model_provider_override: str | None
@@ -162,6 +169,7 @@ class DATestPersona(BaseModel):
     users: list[str]
     groups: list[int]
     label_ids: list[int]
+    featured: bool = False
 
     # Embedded prompt fields (no longer separate prompt_ids)
     system_prompt: str | None = None

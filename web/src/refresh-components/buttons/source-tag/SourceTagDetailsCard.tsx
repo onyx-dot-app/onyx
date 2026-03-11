@@ -2,7 +2,8 @@
 
 import React, { memo } from "react";
 import Text from "@/refresh-components/texts/Text";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import {
   SvgArrowLeft,
   SvgArrowRight,
@@ -90,22 +91,22 @@ const SourceTagDetailsCardInner = ({
       {showNavigation && (
         <div className="flex items-center justify-between p-2 bg-background-tint-01 border-b border-border-01">
           <div className="flex items-center gap-1">
-            <IconButton
-              main
-              internal
-              icon={SvgArrowLeft}
-              onClick={onPrev}
-              disabled={isFirst}
-              className="!p-0.5"
-            />
-            <IconButton
-              main
-              internal
-              icon={SvgArrowRight}
-              onClick={onNext}
-              disabled={isLast}
-              className="!p-0.5"
-            />
+            <Disabled disabled={isFirst}>
+              <Button
+                prominence="internal"
+                icon={SvgArrowLeft}
+                onClick={onPrev}
+                size="sm"
+              />
+            </Disabled>
+            <Disabled disabled={isLast}>
+              <Button
+                prominence="internal"
+                icon={SvgArrowRight}
+                onClick={onNext}
+                size="sm"
+              />
+            </Disabled>
           </div>
           <Text secondaryBody text03 className="px-1">
             {currentIndex + 1}/{sources.length}

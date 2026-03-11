@@ -615,6 +615,16 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
         onDownload={isMarkdownPreview ? handleDocxDownload : undefined}
         isDownloading={isExportingDocx}
         onRefresh={handleRefresh}
+        sessionId={
+          !isFilePreviewActive &&
+          activeOutputTab === "preview" &&
+          session?.id &&
+          displayUrl?.startsWith("http")
+            ? session.id
+            : undefined
+        }
+        sharingScope={webappInfo?.sharing_scope ?? "private"}
+        onScopeChange={mutate}
       />
 
       {/* Tab Content */}

@@ -27,7 +27,6 @@ import {
   useMarkdownComponents,
   renderMarkdown,
 } from "@/app/app/message/messageComponents/markdownUtils";
-import { isReasoningPackets } from "../../packetHelpers";
 
 interface NestedToolGroup {
   sub_turn_index: number;
@@ -169,8 +168,6 @@ export const ResearchAgentRenderer: MessageRenderer<
   );
 
   // Stable callbacks to avoid creating new functions on every render
-  const noopComplete = useCallback(() => {}, []);
-
   // renderReport renders the processed content
   // Uses pre-computed processedReportContent since ExpandableTextDisplay
   // passes the same fullReportContent that we processed above
@@ -221,7 +218,6 @@ export const ResearchAgentRenderer: MessageRenderer<
             key={latestGroup.sub_turn_index}
             packets={latestGroup.packets}
             chatState={state}
-            onComplete={noopComplete}
             animate={!stopPacketSeen && !latestGroup.isComplete}
             stopPacketSeen={stopPacketSeen}
             defaultExpanded={false}
@@ -320,14 +316,11 @@ export const ResearchAgentRenderer: MessageRenderer<
             !fullReportContent &&
             !isComplete;
 
-          const isReasoning = isReasoningPackets(group.packets);
-
           return (
             <TimelineRendererComponent
               key={group.sub_turn_index}
               packets={group.packets}
               chatState={state}
-              onComplete={noopComplete}
               animate={!stopPacketSeen && !group.isComplete}
               stopPacketSeen={stopPacketSeen}
               defaultExpanded={true}
@@ -341,7 +334,6 @@ export const ResearchAgentRenderer: MessageRenderer<
                   isFirstStep={!researchTask && index === 0}
                   isSingleStep={false}
                   collapsible={true}
-                  noPaddingRight={isReasoning}
                 />
               )}
             </TimelineRendererComponent>

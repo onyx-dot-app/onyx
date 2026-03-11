@@ -9,20 +9,26 @@ from sqlalchemy import Select
 from sqlalchemy import select
 from sqlalchemy import update
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
 from ee.onyx.server.user_group.models import SetCuratorRequest
 from ee.onyx.server.user_group.models import UserGroupCreate
 from ee.onyx.server.user_group.models import UserGroupUpdate
+from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.models import ConnectorCredentialPair
+from onyx.db.models import Credential
 from onyx.db.models import Credential__UserGroup
 from onyx.db.models import Document
 from onyx.db.models import DocumentByConnectorCredentialPair
+from onyx.db.models import DocumentSet
 from onyx.db.models import DocumentSet__UserGroup
+from onyx.db.models import FederatedConnector__DocumentSet
 from onyx.db.models import LLMProvider__UserGroup
+from onyx.db.models import Persona
 from onyx.db.models import Persona__UserGroup
 from onyx.db.models import TokenRateLimit__UserGroup
 from onyx.db.models import User
@@ -195,8 +201,60 @@ def fetch_user_group(db_session: Session, user_group_id: int) -> UserGroup | Non
     return db_session.scalar(stmt)
 
 
+def _add_user_group_snapshot_eager_loads(
+    stmt: Select,
+) -> Select:
+    """Add eager loading options needed by UserGroup.from_model snapshot creation."""
+    return stmt.options(
+        selectinload(UserGroup.users),
+        selectinload(UserGroup.user_group_relationships),
+        selectinload(UserGroup.cc_pair_relationships)
+        .selectinload(UserGroup__ConnectorCredentialPair.cc_pair)
+        .options(
+            selectinload(ConnectorCredentialPair.connector),
+            selectinload(ConnectorCredentialPair.credential).selectinload(
+                Credential.user
+            ),
+        ),
+        selectinload(UserGroup.document_sets).options(
+            selectinload(DocumentSet.connector_credential_pairs).selectinload(
+                ConnectorCredentialPair.connector
+            ),
+            selectinload(DocumentSet.users),
+            selectinload(DocumentSet.groups),
+            selectinload(DocumentSet.federated_connectors).selectinload(
+                FederatedConnector__DocumentSet.federated_connector
+            ),
+        ),
+        selectinload(UserGroup.personas).options(
+            selectinload(Persona.tools),
+            selectinload(Persona.hierarchy_nodes),
+            selectinload(Persona.attached_documents).selectinload(
+                Document.parent_hierarchy_node
+            ),
+            selectinload(Persona.labels),
+            selectinload(Persona.document_sets).options(
+                selectinload(DocumentSet.connector_credential_pairs).selectinload(
+                    ConnectorCredentialPair.connector
+                ),
+                selectinload(DocumentSet.users),
+                selectinload(DocumentSet.groups),
+                selectinload(DocumentSet.federated_connectors).selectinload(
+                    FederatedConnector__DocumentSet.federated_connector
+                ),
+            ),
+            selectinload(Persona.user),
+            selectinload(Persona.user_files),
+            selectinload(Persona.users),
+            selectinload(Persona.groups),
+        ),
+    )
+
+
 def fetch_user_groups(
-    db_session: Session, only_up_to_date: bool = True
+    db_session: Session,
+    only_up_to_date: bool = True,
+    eager_load_for_snapshot: bool = False,
 ) -> Sequence[UserGroup]:
     """
     Fetches user groups from the database.
@@ -209,6 +267,8 @@ def fetch_user_groups(
         db_session (Session): The SQLAlchemy session used to query the database.
         only_up_to_date (bool, optional): Flag to determine whether to filter the results
             to include only up to date user groups. Defaults to `True`.
+        eager_load_for_snapshot: If True, adds eager loading for all relationships
+            needed by UserGroup.from_model snapshot creation.
 
     Returns:
         Sequence[UserGroup]: A sequence of `UserGroup` objects matching the query criteria.
@@ -216,11 +276,16 @@ def fetch_user_groups(
     stmt = select(UserGroup)
     if only_up_to_date:
         stmt = stmt.where(UserGroup.is_up_to_date == True)  # noqa: E712
-    return db_session.scalars(stmt).all()
+    if eager_load_for_snapshot:
+        stmt = _add_user_group_snapshot_eager_loads(stmt)
+    return db_session.scalars(stmt).unique().all()
 
 
 def fetch_user_groups_for_user(
-    db_session: Session, user_id: UUID, only_curator_groups: bool = False
+    db_session: Session,
+    user_id: UUID,
+    only_curator_groups: bool = False,
+    eager_load_for_snapshot: bool = False,
 ) -> Sequence[UserGroup]:
     stmt = (
         select(UserGroup)
@@ -230,7 +295,9 @@ def fetch_user_groups_for_user(
     )
     if only_curator_groups:
         stmt = stmt.where(User__UserGroup.is_curator == True)  # noqa: E712
-    return db_session.scalars(stmt).all()
+    if eager_load_for_snapshot:
+        stmt = _add_user_group_snapshot_eager_loads(stmt)
+    return db_session.scalars(stmt).unique().all()
 
 
 def construct_document_id_select_by_usergroup(
@@ -405,7 +472,9 @@ def _add_user_group__cc_pair_relationships__no_commit(
 
 def insert_user_group(db_session: Session, user_group: UserGroupCreate) -> UserGroup:
     db_user_group = UserGroup(
-        name=user_group.name, time_last_modified_by_user=func.now()
+        name=user_group.name,
+        time_last_modified_by_user=func.now(),
+        is_up_to_date=DISABLE_VECTOR_DB,
     )
     db_session.add(db_user_group)
     db_session.flush()  # give the group an ID
@@ -708,8 +777,7 @@ def update_user_group(
             cc_pair_ids=user_group_update.cc_pair_ids,
         )
 
-    # only needs to sync with Vespa if the cc_pairs have been updated
-    if cc_pairs_updated:
+    if cc_pairs_updated and not DISABLE_VECTOR_DB:
         db_user_group.is_up_to_date = False
 
     removed_users = db_session.scalars(

@@ -29,6 +29,7 @@ from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import CELERY_PRUNING_LOCK_TIMEOUT
 from onyx.configs.constants import CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT
 from onyx.configs.constants import DANSWER_REDIS_FUNCTION_LOCK_PREFIX
+from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
@@ -47,8 +48,15 @@ from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import SyncStatus
 from onyx.db.enums import SyncType
+from onyx.db.hierarchy import delete_orphaned_hierarchy_nodes
+from onyx.db.hierarchy import link_hierarchy_nodes_to_documents
+from onyx.db.hierarchy import remove_stale_hierarchy_node_cc_pair_entries
+from onyx.db.hierarchy import reparent_orphaned_hierarchy_nodes
+from onyx.db.hierarchy import update_document_parent_hierarchy_nodes
+from onyx.db.hierarchy import upsert_hierarchy_node_cc_pair_entries
 from onyx.db.hierarchy import upsert_hierarchy_nodes_batch
 from onyx.db.models import ConnectorCredentialPair
+from onyx.db.models import HierarchyNode as DBHierarchyNode
 from onyx.db.sync_record import insert_sync_record
 from onyx.db.sync_record import update_sync_record_status
 from onyx.db.tag import delete_orphan_tags__no_commit
@@ -57,6 +65,9 @@ from onyx.redis.redis_connector_prune import RedisConnectorPrune
 from onyx.redis.redis_connector_prune import RedisConnectorPrunePayload
 from onyx.redis.redis_hierarchy import cache_hierarchy_nodes_batch
 from onyx.redis.redis_hierarchy import ensure_source_node_exists
+from onyx.redis.redis_hierarchy import evict_hierarchy_nodes_from_cache
+from onyx.redis.redis_hierarchy import get_node_id_from_raw_id
+from onyx.redis.redis_hierarchy import get_source_node_id_from_cache
 from onyx.redis.redis_hierarchy import HierarchyNodeCacheEntry
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import get_redis_replica_client
@@ -111,6 +122,38 @@ class PruneCallback(IndexingCallbackBase):
     def progress(self, tag: str, amount: int) -> None:
         self.redis_connector.prune.set_active()
         super().progress(tag, amount)
+
+
+def _resolve_and_update_document_parents(
+    db_session: Session,
+    redis_client: Redis,
+    source: DocumentSource,
+    raw_id_to_parent: dict[str, str | None],
+) -> None:
+    """Resolve parent_hierarchy_raw_node_id → parent_hierarchy_node_id for
+    each document and bulk-update the DB. Mirrors the resolution logic in
+    run_docfetching.py."""
+    source_node_id = get_source_node_id_from_cache(redis_client, db_session, source)
+
+    resolved: dict[str, int | None] = {}
+    for doc_id, raw_parent_id in raw_id_to_parent.items():
+        if raw_parent_id is None:
+            continue
+        node_id, found = get_node_id_from_raw_id(redis_client, source, raw_parent_id)
+        resolved[doc_id] = node_id if found else source_node_id
+
+    if not resolved:
+        return
+
+    update_document_parent_hierarchy_nodes(
+        db_session=db_session,
+        doc_parent_map=resolved,
+        commit=True,
+    )
+    task_logger.info(
+        f"Pruning: resolved and updated parent hierarchy for "
+        f"{len(resolved)} documents (source={source.value})"
+    )
 
 
 """Jobs / utils for kicking off pruning tasks."""
@@ -535,24 +578,33 @@ def connector_pruning_generator_task(
             extraction_result = extract_ids_from_runnable_connector(
                 runnable_connector, callback
             )
-            all_connector_doc_ids = extraction_result.doc_ids
+            all_connector_doc_ids = extraction_result.raw_id_to_parent
 
             # Process hierarchy nodes (same as docfetching):
             # upsert to Postgres and cache in Redis
+            source = cc_pair.connector.source
+            redis_client = get_redis_client(tenant_id=tenant_id)
+
+            ensure_source_node_exists(redis_client, db_session, source)
+
+            upserted_nodes: list[DBHierarchyNode] = []
             if extraction_result.hierarchy_nodes:
                 is_connector_public = cc_pair.access_type == AccessType.PUBLIC
-
-                redis_client = get_redis_client(tenant_id=tenant_id)
-                ensure_source_node_exists(
-                    redis_client, db_session, cc_pair.connector.source
-                )
 
                 upserted_nodes = upsert_hierarchy_nodes_batch(
                     db_session=db_session,
                     nodes=extraction_result.hierarchy_nodes,
-                    source=cc_pair.connector.source,
+                    source=source,
                     commit=True,
                     is_connector_public=is_connector_public,
+                )
+
+                upsert_hierarchy_node_cc_pair_entries(
+                    db_session=db_session,
+                    hierarchy_node_ids=[n.id for n in upserted_nodes],
+                    connector_id=connector_id,
+                    credential_id=credential_id,
+                    commit=True,
                 )
 
                 cache_entries = [
@@ -561,7 +613,7 @@ def connector_pruning_generator_task(
                 ]
                 cache_hierarchy_nodes_batch(
                     redis_client=redis_client,
-                    source=cc_pair.connector.source,
+                    source=source,
                     entries=cache_entries,
                 )
 
@@ -569,6 +621,25 @@ def connector_pruning_generator_task(
                     f"Pruning: persisted and cached {len(extraction_result.hierarchy_nodes)} "
                     f"hierarchy nodes for cc_pair={cc_pair_id}"
                 )
+
+            # Resolve parent_hierarchy_raw_node_id → parent_hierarchy_node_id
+            # and bulk-update documents, mirroring the docfetching resolution
+            _resolve_and_update_document_parents(
+                db_session=db_session,
+                redis_client=redis_client,
+                source=source,
+                raw_id_to_parent=all_connector_doc_ids,
+            )
+
+            # Link hierarchy nodes to documents for sources where pages can be
+            # both hierarchy nodes AND documents (e.g. Notion, Confluence)
+            all_doc_id_list = list(all_connector_doc_ids.keys())
+            link_hierarchy_nodes_to_documents(
+                db_session=db_session,
+                document_ids=all_doc_id_list,
+                source=source,
+                commit=True,
+            )
 
             # a list of docs in our local index
             all_indexed_document_ids = {
@@ -581,7 +652,9 @@ def connector_pruning_generator_task(
             }
 
             # generate list of docs to remove (no longer in the source)
-            doc_ids_to_remove = list(all_indexed_document_ids - all_connector_doc_ids)
+            doc_ids_to_remove = list(
+                all_indexed_document_ids - all_connector_doc_ids.keys()
+            )
 
             task_logger.info(
                 "Pruning set collected: "
@@ -605,6 +678,43 @@ def connector_pruning_generator_task(
             )
 
             redis_connector.prune.generator_complete = tasks_generated
+
+            # --- Hierarchy node pruning ---
+            live_node_ids = {n.id for n in upserted_nodes}
+            stale_removed = remove_stale_hierarchy_node_cc_pair_entries(
+                db_session=db_session,
+                connector_id=connector_id,
+                credential_id=credential_id,
+                live_hierarchy_node_ids=live_node_ids,
+                commit=True,
+            )
+            deleted_raw_ids = delete_orphaned_hierarchy_nodes(
+                db_session=db_session,
+                source=source,
+                commit=True,
+            )
+            reparented_nodes = reparent_orphaned_hierarchy_nodes(
+                db_session=db_session,
+                source=source,
+                commit=True,
+            )
+            if deleted_raw_ids:
+                evict_hierarchy_nodes_from_cache(redis_client, source, deleted_raw_ids)
+            if reparented_nodes:
+                reparented_cache_entries = [
+                    HierarchyNodeCacheEntry.from_db_model(node)
+                    for node in reparented_nodes
+                ]
+                cache_hierarchy_nodes_batch(
+                    redis_client, source, reparented_cache_entries
+                )
+            if stale_removed or deleted_raw_ids or reparented_nodes:
+                task_logger.info(
+                    f"Hierarchy node pruning: cc_pair={cc_pair_id} "
+                    f"stale_entries_removed={stale_removed} "
+                    f"nodes_deleted={len(deleted_raw_ids)} "
+                    f"nodes_reparented={len(reparented_nodes)}"
+                )
     except Exception as e:
         task_logger.exception(
             f"Pruning exceptioned: cc_pair={cc_pair_id} "

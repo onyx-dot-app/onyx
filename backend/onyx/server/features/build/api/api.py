@@ -1,4 +1,5 @@
 from collections.abc import Iterator
+from pathlib import Path
 from uuid import UUID
 
 import httpx
@@ -7,16 +8,19 @@ from fastapi import Depends
 from fastapi import HTTPException
 from fastapi import Request
 from fastapi import Response
+from fastapi.responses import RedirectResponse
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_user
+from onyx.auth.users import optional_user
 from onyx.configs.constants import DocumentSource
 from onyx.db.connector_credential_pair import get_connector_credential_pairs_for_user
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import IndexingStatus
 from onyx.db.enums import ProcessingMode
+from onyx.db.enums import SharingScope
 from onyx.db.index_attempt import get_latest_index_attempt_for_cc_pair_id
 from onyx.db.models import BuildSession
 from onyx.db.models import User
@@ -217,12 +221,15 @@ def get_build_connectors(
     return BuildConnectorListResponse(connectors=connectors)
 
 
-# Headers to skip when proxying (hop-by-hop headers)
+# Headers to skip when proxying.
+# Hop-by-hop headers must not be forwarded, and set-cookie is stripped to
+# prevent LLM-generated apps from setting cookies on the parent Onyx domain.
 EXCLUDED_HEADERS = {
     "content-encoding",
     "content-length",
     "transfer-encoding",
     "connection",
+    "set-cookie",
 }
 
 
@@ -280,7 +287,7 @@ def _get_sandbox_url(session_id: UUID, db_session: Session) -> str:
         db_session: Database session
 
     Returns:
-        The internal URL to proxy requests to
+        Internal URL to proxy requests to
 
     Raises:
         HTTPException: If session not found, port not allocated, or sandbox not found
@@ -294,12 +301,10 @@ def _get_sandbox_url(session_id: UUID, db_session: Session) -> str:
     if session.user_id is None:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Get the user's sandbox to get the sandbox_id
     sandbox = get_sandbox_by_user_id(db_session, session.user_id)
     if sandbox is None:
         raise HTTPException(status_code=404, detail="Sandbox not found")
 
-    # Use sandbox manager to get the correct internal URL
     sandbox_manager = get_sandbox_manager()
     return sandbox_manager.get_webapp_url(sandbox.id, session.nextjs_port)
 
@@ -365,71 +370,73 @@ def _proxy_request(
         raise HTTPException(status_code=502, detail="Bad gateway")
 
 
-@router.get("/sessions/{session_id}/webapp", response_model=None)
-def get_webapp_root(
+def _check_webapp_access(
+    session_id: UUID, user: User | None, db_session: Session
+) -> BuildSession:
+    """Check if user can access a session's webapp.
+
+    - public_global: accessible by anyone (no auth required)
+    - public_org: accessible by any authenticated user
+    - private: only accessible by the session owner
+    """
+    session = db_session.get(BuildSession, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.sharing_scope == SharingScope.PUBLIC_GLOBAL:
+        return session
+    if user is None:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    if session.sharing_scope == SharingScope.PRIVATE and session.user_id != user.id:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return session
+
+
+_OFFLINE_HTML_PATH = Path(__file__).parent / "templates" / "webapp_offline.html"
+
+
+def _offline_html_response() -> Response:
+    """Return a branded Craft HTML page when the sandbox is not reachable.
+
+    Design mirrors the default Craft web template (outputs/web/app/page.tsx):
+    terminal window aesthetic with Minecraft-themed typing animation.
+    """
+    html = _OFFLINE_HTML_PATH.read_text()
+    return Response(content=html, status_code=503, media_type="text/html")
+
+
+# Public router for webapp proxy — no authentication required
+# (access controlled per-session via sharing_scope)
+public_build_router = APIRouter(prefix="/build")
+
+
+@public_build_router.get("/sessions/{session_id}/webapp", response_model=None)
+@public_build_router.get(
+    "/sessions/{session_id}/webapp/{path:path}", response_model=None
+)
+def get_webapp(
     session_id: UUID,
     request: Request,
-    _: User = Depends(current_user),
+    path: str = "",
+    user: User | None = Depends(optional_user),
     db_session: Session = Depends(get_session),
 ) -> StreamingResponse | Response:
-    """Proxy the root path of the webapp for a specific session."""
-    return _proxy_request("", request, session_id, db_session)
+    """Proxy the webapp for a specific session (root and subpaths).
 
-
-@router.get("/sessions/{session_id}/webapp/{path:path}", response_model=None)
-def get_webapp_path(
-    session_id: UUID,
-    path: str,
-    request: Request,
-    _: User = Depends(current_user),
-    db_session: Session = Depends(get_session),
-) -> StreamingResponse | Response:
-    """Proxy any subpath of the webapp (static assets, etc.) for a specific session."""
-    return _proxy_request(path, request, session_id, db_session)
-
-
-# Separate router for Next.js static assets at /_next/*
-# This is needed because Next.js apps may reference assets with root-relative paths
-# that don't get rewritten. The session_id is extracted from the Referer header.
-nextjs_assets_router = APIRouter()
-
-
-def _extract_session_from_referer(request: Request) -> UUID | None:
-    """Extract session_id from the Referer header.
-
-    Expects Referer to contain /api/build/sessions/{session_id}/webapp
+    Accessible without authentication when sharing_scope is public_global.
+    Returns a friendly offline page when the sandbox is not running.
     """
-    import re
-
-    referer = request.headers.get("referer", "")
-    match = re.search(r"/api/build/sessions/([a-f0-9-]+)/webapp", referer)
-    if match:
-        try:
-            return UUID(match.group(1))
-        except ValueError:
-            return None
-    return None
-
-
-@nextjs_assets_router.get("/_next/{path:path}", response_model=None)
-def get_nextjs_assets(
-    path: str,
-    request: Request,
-    _: User = Depends(current_user),
-    db_session: Session = Depends(get_session),
-) -> StreamingResponse | Response:
-    """Proxy Next.js static assets requested at root /_next/ path.
-
-    The session_id is extracted from the Referer header since these requests
-    come from within the iframe context.
-    """
-    session_id = _extract_session_from_referer(request)
-    if not session_id:
-        raise HTTPException(
-            status_code=400,
-            detail="Could not determine session from request context",
-        )
-    return _proxy_request(f"_next/{path}", request, session_id, db_session)
+    try:
+        _check_webapp_access(session_id, user, db_session)
+    except HTTPException as e:
+        if e.status_code == 401:
+            return RedirectResponse(url="/auth/login", status_code=302)
+        raise
+    try:
+        return _proxy_request(path, request, session_id, db_session)
+    except HTTPException as e:
+        if e.status_code in (502, 503, 504):
+            return _offline_html_response()
+        raise
 
 
 # =============================================================================

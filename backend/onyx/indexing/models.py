@@ -112,6 +112,7 @@ class DocMetadataAwareIndexChunk(IndexChunk):
     access: "DocumentAccess"
     document_sets: set[str]
     user_project: list[int]
+    personas: list[int]
     boost: int
     aggregated_chunk_boost_factor: float
     # Full ancestor path from root hierarchy node to document's parent.
@@ -126,6 +127,7 @@ class DocMetadataAwareIndexChunk(IndexChunk):
         access: "DocumentAccess",
         document_sets: set[str],
         user_project: list[int],
+        personas: list[int],
         boost: int,
         aggregated_chunk_boost_factor: float,
         tenant_id: str,
@@ -137,6 +139,7 @@ class DocMetadataAwareIndexChunk(IndexChunk):
             access=access,
             document_sets=document_sets,
             user_project=user_project,
+            personas=personas,
             boost=boost,
             aggregated_chunk_boost_factor=aggregated_chunk_boost_factor,
             tenant_id=tenant_id,

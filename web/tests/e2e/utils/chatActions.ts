@@ -1,30 +1,30 @@
 import { Page } from "@playwright/test";
 import { expect } from "@playwright/test";
 
-export async function verifyDefaultAssistantIsChosen(page: Page) {
+export async function verifyDefaultAgentIsChosen(page: Page) {
   await expect(page.getByTestId("onyx-logo")).toBeVisible({ timeout: 5000 });
 }
 
-export async function verifyAssistantIsChosen(
+export async function verifyAgentIsChosen(
   page: Page,
-  assistantName: string,
+  agentName: string,
   timeout: number = 5000
 ) {
   await expect(
-    page.getByTestId("assistant-name-display").getByText(assistantName)
+    page.getByTestId("agent-name-display").getByText(agentName)
   ).toBeVisible({ timeout });
 }
 
-export async function navigateToAssistantInHistorySidebar(
+export async function navigateToAgentInHistorySidebar(
   page: Page,
   testId: string,
-  assistantName: string
+  agentName: string
 ) {
   await page.getByTestId(`assistant-${testId}`).click();
   try {
-    await verifyAssistantIsChosen(page, assistantName);
+    await verifyAgentIsChosen(page, agentName);
   } catch (error) {
-    console.error("Error in navigateToAssistantInHistorySidebar:", error);
+    console.error("Error in navigateToAgentInHistorySidebar:", error);
     const pageText = await page.textContent("body");
     console.log("Page text:", pageText);
     throw error;
@@ -82,8 +82,8 @@ export async function selectModelFromInputPopover(
 
   for (const modelName of preferredModels) {
     await searchInput.fill(modelName);
-    const modelOptions = dialog.locator("button[data-selected]");
-    const nonSelectedOptions = dialog.locator('button[data-selected="false"]');
+    const modelOptions = dialog.locator("[data-selected]");
+    const nonSelectedOptions = dialog.locator('[data-selected="false"]');
 
     if ((await modelOptions.count()) > 0) {
       const candidate =
@@ -111,7 +111,7 @@ export async function selectModelFromInputPopover(
   // Reset search so fallback sees all available models.
   await searchInput.fill("");
 
-  const nonSelectedOptions = dialog.locator('button[data-selected="false"]');
+  const nonSelectedOptions = dialog.locator('[data-selected="false"]');
   if ((await nonSelectedOptions.count()) > 0) {
     const fallback = nonSelectedOptions.first();
     await expect(fallback).toBeVisible();
@@ -146,11 +146,9 @@ export async function switchModel(page: Page, modelName: string) {
   // Wait for the popover to open
   await page.waitForSelector('[role="dialog"]', { state: "visible" });
 
-  // LineItem is a <button> element inside the popover
-  // Find the button that contains the model name
   const modelButton = page
     .locator('[role="dialog"]')
-    .locator("button")
+    .locator('[role="button"]')
     .filter({ hasText: modelName })
     .first();
 

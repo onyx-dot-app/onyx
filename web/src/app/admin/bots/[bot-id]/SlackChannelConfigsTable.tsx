@@ -17,9 +17,8 @@ import type { Route } from "next";
 import { useState } from "react";
 import { deleteSlackChannelConfig, isPersonaASlackBotPersona } from "./lib";
 import { Card } from "@/components/ui/card";
-import Button from "@/refresh-components/buttons/Button";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
-import { Button as OpalButton } from "@opal/components";
+import { Button } from "@opal/components";
 import { SvgSettings, SvgTrash } from "@opal/icons";
 const numToDisplay = 50;
 
@@ -45,11 +44,11 @@ export default function SlackChannelConfigsTable({
     <div className="space-y-8">
       <div className="flex justify-between items-center mb-6">
         <Button
+          prominence="secondary"
           onClick={() => {
             window.location.href = `/admin/bots/${slackBotId}/channels/${defaultConfig?.id}`;
           }}
-          secondary
-          leftIcon={SvgSettings}
+          icon={SvgSettings}
         >
           Edit Default Configuration
         </Button>
@@ -121,7 +120,7 @@ export default function SlackChannelConfigsTable({
                         </div>
                       </TableCell>
                       <TableCell onClick={(e) => e.stopPropagation()}>
-                        <OpalButton
+                        <Button
                           onClick={async (e) => {
                             e.stopPropagation();
                             const response = await deleteSlackChannelConfig(

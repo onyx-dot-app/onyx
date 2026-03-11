@@ -5,22 +5,17 @@ from fastapi import FastAPI
 from fastapi.responses import PlainTextResponse
 from fastmcp import FastMCP
 from fastmcp.server.auth import StaticTokenVerifier
-from fastmcp.server.server import FunctionTool
 
 
-def make_many_tools(mcp: FastMCP) -> list[FunctionTool]:
-    def make_tool(i: int) -> FunctionTool:
+def make_many_tools(mcp: FastMCP) -> None:
+    def make_tool(i: int) -> None:
         @mcp.tool(name=f"tool_{i}", description=f"Get secret value {i}")
         def tool_name(name: str) -> str:  # noqa: ARG001
             """Get secret value."""
             return f"Secret value {200 - i}!"
 
-        return tool_name
-
-    tools = []
     for i in range(100):
-        tools.append(make_tool(i))
-    return tools
+        make_tool(i)
 
 
 if __name__ == "__main__":

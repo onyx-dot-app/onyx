@@ -2,10 +2,13 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Section, LineItemLayout } from "@/layouts/general-layouts";
+import { Section } from "@/layouts/general-layouts";
+import { Content } from "@opal/layouts";
 import * as InputLayouts from "@/layouts/input-layouts";
 import Card from "@/refresh-components/cards/Card";
 import Button from "@/refresh-components/buttons/Button";
+import { Button as OpalButton } from "@opal/components";
+import { Disabled } from "@opal/core";
 import Text from "@/refresh-components/texts/Text";
 import Message from "@/refresh-components/messages/Message";
 import InfoBlock from "@/refresh-components/messages/InfoBlock";
@@ -17,6 +20,7 @@ import {
   SvgPlus,
   SvgWallet,
   SvgFileText,
+  SvgOrganization,
 } from "@opal/icons";
 import { BillingInformation, LicenseStatus } from "@/lib/billing/interfaces";
 import {
@@ -143,17 +147,20 @@ function SubscriptionCard({
   license,
   onViewPlans,
   disabled,
+  isManualLicenseOnly,
   onReconnect,
 }: {
   billing?: BillingInformation;
   license?: LicenseStatus;
   onViewPlans: () => void;
   disabled?: boolean;
+  isManualLicenseOnly?: boolean;
   onReconnect?: () => Promise<void>;
 }) {
   const [isReconnecting, setIsReconnecting] = useState(false);
 
-  const planName = "Business Plan";
+  const planName = isManualLicenseOnly ? "Enterprise Plan" : "Business Plan";
+  const PlanIcon = isManualLicenseOnly ? SvgOrganization : SvgUsers;
   const expirationDate = billing?.current_period_end ?? license?.expires_at;
   const formattedDate = formatDateShort(expirationDate);
 
@@ -211,7 +218,7 @@ function SubscriptionCard({
         height="auto"
       >
         <Section gap={0.25} alignItems="start" height="auto" width="auto">
-          <SvgUsers className="w-5 h-5 stroke-text-03" />
+          <PlanIcon className="w-5 h-5" />
           <Text headingH3Muted text04>
             {planName}
           </Text>
@@ -226,26 +233,34 @@ function SubscriptionCard({
           height="auto"
           width="fit"
         >
-          {disabled ? (
-            <Button
-              main
-              secondary
-              onClick={handleReconnect}
-              rightIcon={SvgArrowRight}
-              disabled={isReconnecting}
-            >
-              {isReconnecting ? "Connecting..." : "Connect to Stripe"}
-            </Button>
+          {isManualLicenseOnly ? (
+            <Text secondaryBody text03 className="text-right">
+              Your plan is managed through sales.
+              <br />
+              <a
+                href="mailto:support@onyx.app?subject=Billing%20change%20request"
+                className="underline"
+              >
+                Contact billing
+              </a>{" "}
+              to make changes.
+            </Text>
+          ) : disabled ? (
+            <Disabled disabled={isReconnecting}>
+              <OpalButton
+                prominence="secondary"
+                onClick={handleReconnect}
+                rightIcon={SvgArrowRight}
+              >
+                {isReconnecting ? "Connecting..." : "Connect to Stripe"}
+              </OpalButton>
+            </Disabled>
           ) : (
-            <Button
-              main
-              primary
-              onClick={handleManagePlan}
-              rightIcon={SvgExternalLink}
-            >
+            <OpalButton onClick={handleManagePlan} rightIcon={SvgExternalLink}>
               Manage Plan
-            </Button>
+            </OpalButton>
           )}
+          {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
           <Button tertiary onClick={onViewPlans} className="billing-text-link">
             <Text secondaryBody text03>
               View Plan Details
@@ -266,11 +281,13 @@ function SeatsCard({
   license,
   onRefresh,
   disabled,
+  hideUpdateSeats,
 }: {
   billing?: BillingInformation;
   license?: LicenseStatus;
   onRefresh?: () => Promise<void>;
   disabled?: boolean;
+  hideUpdateSeats?: boolean;
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -354,13 +371,17 @@ function SeatsCard({
           padding={1}
           height="auto"
         >
-          <LineItemLayout
+          <Content
             title="Update Seats"
             description="Add or remove seats to reflect your team size."
+            sizePreset="main-content"
+            variant="section"
           />
-          <Button main secondary onClick={handleCancel} disabled={isSubmitting}>
-            Cancel
-          </Button>
+          <Disabled disabled={isSubmitting}>
+            <OpalButton prominence="secondary" onClick={handleCancel}>
+              Cancel
+            </OpalButton>
+          </Disabled>
         </Section>
 
         <div className="billing-content-area">
@@ -442,16 +463,15 @@ function SeatsCard({
               No changes to your billing.
             </Text>
           )}
-          <Button
-            main
-            primary
-            onClick={handleConfirm}
+          <Disabled
             disabled={
               isSubmitting || newSeatCount === totalSeats || isBelowMinimum
             }
           >
-            {isSubmitting ? "Saving..." : "Confirm Change"}
-          </Button>
+            <OpalButton onClick={handleConfirm}>
+              {isSubmitting ? "Saving..." : "Confirm Change"}
+            </OpalButton>
+          </Disabled>
         </Section>
       </Card>
     );
@@ -481,18 +501,24 @@ function SeatsCard({
           height="auto"
           width="auto"
         >
-          <Button main tertiary href="/admin/users" leftIcon={SvgExternalLink}>
-            View Users
-          </Button>
-          <Button
-            main
-            secondary
-            onClick={handleStartEdit}
-            leftIcon={SvgPlus}
-            disabled={isLoadingUsers || disabled || !billing}
+          <OpalButton
+            prominence="tertiary"
+            href="/admin/users"
+            icon={SvgExternalLink}
           >
-            Update Seats
-          </Button>
+            View Users
+          </OpalButton>
+          {!hideUpdateSeats && (
+            <Disabled disabled={isLoadingUsers || disabled || !billing}>
+              <OpalButton
+                prominence="secondary"
+                onClick={handleStartEdit}
+                icon={SvgPlus}
+              >
+                Update Seats
+              </OpalButton>
+            </Disabled>
+          )}
         </Section>
       </Section>
     </Card>
@@ -543,14 +569,13 @@ function PaymentSection({ billing }: { billing: BillingInformation }) {
                 title="Visa ending in 1234"
                 description="Payment method"
               />
-              <Button
-                main
-                tertiary
+              <OpalButton
+                prominence="tertiary"
                 onClick={handleOpenPortal}
                 rightIcon={SvgExternalLink}
               >
                 Update
-              </Button>
+              </OpalButton>
             </Section>
           </Card>
           {lastPaymentDate && (
@@ -566,14 +591,13 @@ function PaymentSection({ billing }: { billing: BillingInformation }) {
                   title={lastPaymentDate}
                   description="Last payment"
                 />
-                <Button
-                  main
-                  tertiary
+                <OpalButton
+                  prominence="tertiary"
                   onClick={handleOpenPortal}
                   rightIcon={SvgExternalLink}
                 >
                   View Invoice
-                </Button>
+                </OpalButton>
               </Section>
             </Card>
           )}
@@ -593,7 +617,9 @@ interface BillingDetailsViewProps {
   onViewPlans: () => void;
   onRefresh?: () => Promise<void>;
   isAirGapped?: boolean;
+  isManualLicenseOnly?: boolean;
   hasStripeError?: boolean;
+  licenseCard?: React.ReactNode;
 }
 
 export default function BillingDetailsView({
@@ -602,10 +628,13 @@ export default function BillingDetailsView({
   onViewPlans,
   onRefresh,
   isAirGapped,
+  isManualLicenseOnly,
   hasStripeError,
+  licenseCard,
 }: BillingDetailsViewProps) {
   const expirationState = billing ? getExpirationState(billing, license) : null;
-  const disableBillingActions = isAirGapped || hasStripeError;
+  const disableBillingActions =
+    isAirGapped || hasStripeError || isManualLicenseOnly;
 
   return (
     <Section gap={1} height="auto" width="full">
@@ -622,7 +651,7 @@ export default function BillingDetailsView({
       )}
 
       {/* Air-gapped mode info banner */}
-      {isAirGapped && !hasStripeError && (
+      {isAirGapped && !hasStripeError && !isManualLicenseOnly && (
         <Message
           static
           info
@@ -665,9 +694,13 @@ export default function BillingDetailsView({
           license={license}
           onViewPlans={onViewPlans}
           disabled={disableBillingActions}
+          isManualLicenseOnly={isManualLicenseOnly}
           onReconnect={onRefresh}
         />
       )}
+
+      {/* License card (inline for manual license users) */}
+      {licenseCard}
 
       {/* Seats card */}
       <SeatsCard
@@ -675,6 +708,7 @@ export default function BillingDetailsView({
         license={license}
         onRefresh={onRefresh}
         disabled={disableBillingActions}
+        hideUpdateSeats={isManualLicenseOnly}
       />
 
       {/* Payment section */}

@@ -4,7 +4,7 @@ import { useCallback, memo, useMemo, useState, useEffect, useRef } from "react";
 import useSWR from "swr";
 import { useRouter } from "next/navigation";
 import { useSettingsContext } from "@/providers/SettingsProvider";
-import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
+import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
 import Text from "@/refresh-components/texts/Text";
 import ChatButton from "@/sections/sidebar/ChatButton";
 import AgentButton from "@/sections/sidebar/AgentButton";
@@ -67,19 +67,16 @@ import {
   SvgSearchMenu,
   SvgSettings,
 } from "@opal/icons";
+import SidebarTabSkeleton from "@/refresh-components/skeletons/SidebarTabSkeleton";
 import BuildModeIntroBackground from "@/app/craft/components/IntroBackground";
 import BuildModeIntroContent from "@/app/craft/components/IntroContent";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
 import { usePostHog } from "posthog-js/react";
 import { motion, AnimatePresence } from "motion/react";
-import {
-  Notification,
-  NotificationType,
-} from "@/app/admin/settings/interfaces";
+import { Notification, NotificationType } from "@/interfaces/settings";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import UserAvatarPopover from "@/sections/sidebar/UserAvatarPopover";
 import ChatSearchCommandMenu from "@/sections/sidebar/ChatSearchCommandMenu";
-import { useAppMode } from "@/providers/AppModeProvider";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
@@ -102,17 +99,58 @@ function buildVisibleAgents(
   return [visibleAgents, currentAgentIsPinned];
 }
 
-interface RecentsSectionProps {
-  chatSessions: ChatSession[];
+const SKELETON_WIDTHS_BASE = ["w-4/5", "w-4/5", "w-3/5"];
+
+function shuffleWidths(): string[] {
+  return [...SKELETON_WIDTHS_BASE].sort(() => Math.random() - 0.5);
 }
 
-function RecentsSection({ chatSessions }: RecentsSectionProps) {
+interface RecentsSectionProps {
+  chatSessions: ChatSession[];
+  hasMore: boolean;
+  isLoadingMore: boolean;
+  onLoadMore: () => void;
+}
+
+function RecentsSection({
+  chatSessions,
+  hasMore,
+  isLoadingMore,
+  onLoadMore,
+}: RecentsSectionProps) {
   const { setNodeRef, isOver } = useDroppable({
     id: DRAG_TYPES.RECENTS,
     data: {
       type: DRAG_TYPES.RECENTS,
     },
   });
+
+  // Re-shuffle skeleton widths each time loaded session count changes
+  const skeletonWidths = useMemo(shuffleWidths, [chatSessions.length]);
+
+  // Sentinel ref for IntersectionObserver-based infinite scroll
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const onLoadMoreRef = useRef(onLoadMore);
+  onLoadMoreRef.current = onLoadMore;
+
+  useEffect(() => {
+    if (!hasMore || isLoadingMore) return;
+
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          onLoadMoreRef.current();
+        }
+      },
+      { threshold: 0 }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMore, isLoadingMore]);
 
   return (
     <div
@@ -128,13 +166,28 @@ function RecentsSection({ chatSessions }: RecentsSectionProps) {
             Try sending a message! Your chat history will appear here.
           </Text>
         ) : (
-          chatSessions.map((chatSession) => (
-            <ChatButton
-              key={chatSession.id}
-              chatSession={chatSession}
-              draggable
-            />
-          ))
+          <>
+            {chatSessions.map((chatSession) => (
+              <ChatButton
+                key={chatSession.id}
+                chatSession={chatSession}
+                draggable
+              />
+            ))}
+            {hasMore &&
+              skeletonWidths.map((width, i) => (
+                <div
+                  key={i}
+                  ref={i === 0 ? sentinelRef : undefined}
+                  className={cn(
+                    "transition-opacity duration-300",
+                    isLoadingMore ? "opacity-100" : "opacity-40"
+                  )}
+                >
+                  <SidebarTabSkeleton textWidth={width} />
+                </div>
+              ))}
+          </>
         )}
       </SidebarSection>
     </div>
@@ -152,14 +205,16 @@ const MemoizedAppSidebarInner = memo(
     const combinedSettings = useSettingsContext();
     const posthog = usePostHog();
     const { newTenantInfo, invitationInfo } = useModalContext();
-    const { setAppMode } = useAppMode();
-    const { reset } = useQueryController();
+    const { setAppMode, reset } = useQueryController();
 
     // Use SWR hooks for data fetching
     const {
       chatSessions,
       refreshChatSessions,
       isLoading: isLoadingChatSessions,
+      hasMore,
+      isLoadingMore,
+      loadMore,
     } = useChatSessions();
     const {
       projects,
@@ -381,10 +436,10 @@ const MemoizedAppSidebarInner = memo(
               LOCAL_STORAGE_KEYS.HIDE_MOVE_CUSTOM_AGENT_MODAL
             ) === "true";
 
-          const isChatUsingDefaultAssistant =
+          const isChatUsingDefaultAgent =
             chatSession.persona_id === DEFAULT_PERSONA_ID;
 
-          if (!isChatUsingDefaultAssistant && !hideModal) {
+          if (!isChatUsingDefaultAgent && !hideModal) {
             setPendingMoveChatSession(chatSession);
             setPendingMoveProjectId(targetProject.id);
             setShowMoveCustomAgentModal(true);
@@ -438,15 +493,15 @@ const MemoizedAppSidebarInner = memo(
     const newSessionButton = useMemo(() => {
       const href =
         combinedSettings?.settings?.disable_default_assistant && currentAgent
-          ? `/app?assistantId=${currentAgent.id}`
+          ? `/app?agentId=${currentAgent.id}`
           : "/app";
       return (
         <div data-testid="AppSidebar/new-session">
           <SidebarTab
-            leftIcon={SvgEditBig}
+            icon={SvgEditBig}
             folded={folded}
             href={href}
-            transient={activeSidebarTab.isNewSession()}
+            selected={activeSidebarTab.isNewSession()}
             onClick={() => {
               if (!activeSidebarTab.isNewSession()) return;
               setAppMode(defaultAppMode);
@@ -469,7 +524,7 @@ const MemoizedAppSidebarInner = memo(
       () => (
         <div data-testid="AppSidebar/build">
           <SidebarTab
-            leftIcon={SvgDevKit}
+            icon={SvgDevKit}
             folded={folded}
             href={CRAFT_PATH}
             onClick={() => posthog?.capture("clicked_craft_in_sidebar")}
@@ -485,7 +540,18 @@ const MemoizedAppSidebarInner = memo(
       () => (
         <ChatSearchCommandMenu
           trigger={
-            <SidebarTab leftIcon={SvgSearchMenu} folded={folded}>
+            <SidebarTab
+              icon={SvgSearchMenu}
+              folded={folded}
+              // TODO (@raunakab)
+              //
+              // The internals of `SidebarTab` (`Interactive.Base`) was designed such that providing an `onClick` or `href` would trigger rendering a `cursor-pointer`.
+              // However, since instance is wired up as a "trigger", it doesn't have either of those explicitly specified.
+              // Therefore, the default cursor would be rendered.
+              //
+              // Specifying a dummy `onClick` handler solves that.
+              onClick={() => undefined}
+            >
               Search Chats
             </SidebarTab>
           }
@@ -497,14 +563,14 @@ const MemoizedAppSidebarInner = memo(
       () => (
         <div data-testid="AppSidebar/more-agents">
           <SidebarTab
-            leftIcon={
+            icon={
               folded || visibleAgents.length === 0
                 ? SvgOnyxOctagon
                 : SvgMoreHorizontal
             }
             href="/app/agents"
             folded={folded}
-            transient={activeSidebarTab.isMoreAgents()}
+            selected={activeSidebarTab.isMoreAgents()}
             lowlight={!folded}
           >
             {visibleAgents.length === 0 ? "Explore Agents" : "More Agents"}
@@ -516,9 +582,9 @@ const MemoizedAppSidebarInner = memo(
     const newProjectButton = useMemo(
       () => (
         <SidebarTab
-          leftIcon={SvgFolderPlus}
+          icon={SvgFolderPlus}
           onClick={() => createProjectModal.toggle(true)}
-          transient={createProjectModal.isOpen}
+          selected={createProjectModal.isOpen}
           folded={folded}
           lowlight={!folded}
         >
@@ -535,7 +601,7 @@ const MemoizedAppSidebarInner = memo(
       combinedSettings?.settings?.vector_db_enabled !== false;
     const adminDefaultHref = vectorDbEnabled
       ? "/admin/indexing/status"
-      : "/admin/assistants";
+      : "/admin/agents";
 
     const settingsButton = useMemo(
       () => (
@@ -543,7 +609,7 @@ const MemoizedAppSidebarInner = memo(
           {(isAdmin || isCurator) && (
             <SidebarTab
               href={adminDefaultHref}
-              leftIcon={SvgSettings}
+              icon={SvgSettings}
               folded={folded}
             >
               {isAdmin ? "Admin Panel" : "Curator Panel"}
@@ -636,7 +702,7 @@ const MemoizedAppSidebarInner = memo(
             scrollKey="app-sidebar"
             footer={settingsButton}
             actionButtons={
-              <div className="flex flex-col gap-0.5">
+              <div className="flex flex-col">
                 {newSessionButton}
                 {searchChatsButton}
                 {isOnyxCraftEnabled && buildButton}
@@ -703,7 +769,12 @@ const MemoizedAppSidebarInner = memo(
                   </SidebarSection>
 
                   {/* Recents */}
-                  <RecentsSection chatSessions={chatSessions} />
+                  <RecentsSection
+                    chatSessions={chatSessions}
+                    hasMore={hasMore}
+                    isLoadingMore={isLoadingMore}
+                    onLoadMore={loadMore}
+                  />
                 </DndContext>
               </>
             )}

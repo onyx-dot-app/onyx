@@ -22,6 +22,7 @@ from onyx.document_index.vespa_constants import HIDDEN
 from onyx.document_index.vespa_constants import IMAGE_FILE_NAME
 from onyx.document_index.vespa_constants import METADATA_LIST
 from onyx.document_index.vespa_constants import METADATA_SUFFIX
+from onyx.document_index.vespa_constants import PERSONAS
 from onyx.document_index.vespa_constants import PRIMARY_OWNERS
 from onyx.document_index.vespa_constants import SECONDARY_OWNERS
 from onyx.document_index.vespa_constants import SEMANTIC_IDENTIFIER
@@ -35,6 +36,36 @@ from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger(__name__)
+
+
+FIELDS_NEEDED_FOR_TRANSFORMATION: list[str] = [
+    DOCUMENT_ID,
+    CHUNK_ID,
+    TITLE,
+    TITLE_EMBEDDING,
+    CONTENT,
+    EMBEDDINGS,
+    SOURCE_TYPE,
+    METADATA_LIST,
+    DOC_UPDATED_AT,
+    HIDDEN,
+    BOOST,
+    SEMANTIC_IDENTIFIER,
+    IMAGE_FILE_NAME,
+    SOURCE_LINKS,
+    BLURB,
+    DOC_SUMMARY,
+    CHUNK_CONTEXT,
+    METADATA_SUFFIX,
+    DOCUMENT_SETS,
+    USER_PROJECT,
+    PERSONAS,
+    PRIMARY_OWNERS,
+    SECONDARY_OWNERS,
+    ACCESS_CONTROL_LIST,
+]
+if MULTI_TENANT:
+    FIELDS_NEEDED_FOR_TRANSFORMATION.append(TENANT_ID)
 
 
 def _extract_content_vector(embeddings: Any) -> list[float]:
@@ -247,6 +278,7 @@ def transform_vespa_chunks_to_opensearch_chunks(
                 )
             )
             user_projects: list[int] | None = vespa_chunk.get(USER_PROJECT)
+            personas: list[int] | None = vespa_chunk.get(PERSONAS)
             primary_owners: list[str] | None = vespa_chunk.get(PRIMARY_OWNERS)
             secondary_owners: list[str] | None = vespa_chunk.get(SECONDARY_OWNERS)
 
@@ -296,6 +328,7 @@ def transform_vespa_chunks_to_opensearch_chunks(
                 metadata_suffix=metadata_suffix,
                 document_sets=document_sets,
                 user_projects=user_projects,
+                personas=personas,
                 primary_owners=primary_owners,
                 secondary_owners=secondary_owners,
                 tenant_id=tenant_state,

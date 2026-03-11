@@ -1,5 +1,5 @@
 import Modal from "@/refresh-components/Modal";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { CloudEmbeddingModel } from "@/components/embedding/interfaces";
 import { SvgServer } from "@opal/icons";
@@ -32,7 +32,7 @@ export default function SelectModelModal({
         </Modal.Body>
         <Modal.Footer>
           <Button onClick={onConfirm}>Confirm</Button>
-          <Button secondary onClick={onCancel}>
+          <Button prominence="secondary" onClick={onCancel}>
             Cancel
           </Button>
         </Modal.Footer>

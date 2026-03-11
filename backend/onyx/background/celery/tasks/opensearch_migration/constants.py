@@ -11,6 +11,9 @@
 # lock after its cleanup which happens at most after its soft timeout.
 
 # Constants corresponding to migrate_documents_from_vespa_to_opensearch_task.
+from onyx.configs.app_configs import OPENSEARCH_MIGRATION_GET_VESPA_CHUNKS_PAGE_SIZE
+
+
 MIGRATION_TASK_SOFT_TIME_LIMIT_S = 60 * 5  # 5 minutes.
 MIGRATION_TASK_TIME_LIMIT_S = 60 * 6  # 6 minutes.
 # The maximum time the lock can be held for. Will automatically be released
@@ -41,3 +44,14 @@ assert (
 CHECK_FOR_DOCUMENTS_TASK_LOCK_BLOCKING_TIMEOUT_S = 30  # 30 seconds.
 
 TOTAL_ALLOWABLE_DOC_MIGRATION_ATTEMPTS_BEFORE_PERMANENT_FAILURE = 15
+
+# WARNING: Do not change these values without knowing what changes also need to
+# be made to OpenSearchTenantMigrationRecord.
+GET_VESPA_CHUNKS_PAGE_SIZE = OPENSEARCH_MIGRATION_GET_VESPA_CHUNKS_PAGE_SIZE
+GET_VESPA_CHUNKS_SLICE_COUNT = 4
+
+# String used to indicate in the vespa_visit_continuation_token mapping that the
+# slice has finished and there is nothing left to visit.
+FINISHED_VISITING_SLICE_CONTINUATION_TOKEN = (
+    "FINISHED_VISITING_SLICE_CONTINUATION_TOKEN"
+)

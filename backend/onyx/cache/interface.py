@@ -1,0 +1,115 @@
+import abc
+from enum import Enum
+
+from redis.exceptions import RedisError
+from sqlalchemy.exc import SQLAlchemyError
+
+TTL_KEY_NOT_FOUND = -2
+TTL_NO_EXPIRY = -1
+
+CACHE_TRANSIENT_ERRORS: tuple[type[Exception], ...] = (RedisError, SQLAlchemyError)
+"""Exception types that represent transient cache connectivity / operational
+failures.  Callers that want to fail-open (or fail-closed) on cache errors
+should catch this tuple instead of bare ``Exception``.
+
+When adding a new ``CacheBackend`` implementation, add its transient error
+base class(es) here so all call-sites pick it up automatically."""
+
+
+class CacheBackendType(str, Enum):
+    REDIS = "redis"
+    POSTGRES = "postgres"
+
+
+class CacheLock(abc.ABC):
+    """Abstract distributed lock returned by CacheBackend.lock()."""
+
+    @abc.abstractmethod
+    def acquire(
+        self,
+        blocking: bool = True,
+        blocking_timeout: float | None = None,
+    ) -> bool:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def release(self) -> None:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def owned(self) -> bool:
+        raise NotImplementedError
+
+    def __enter__(self) -> "CacheLock":
+        if not self.acquire():
+            raise RuntimeError("Failed to acquire lock")
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        self.release()
+
+
+class CacheBackend(abc.ABC):
+    """Thin abstraction over a key-value cache with TTL, locks, and blocking lists.
+
+    Covers the subset of Redis operations used outside of Celery. When
+    CACHE_BACKEND=postgres, a PostgreSQL-backed implementation is used instead.
+    """
+
+    # -- basic key/value ---------------------------------------------------
+
+    @abc.abstractmethod
+    def get(self, key: str) -> bytes | None:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def set(
+        self,
+        key: str,
+        value: str | bytes | int | float,
+        ex: int | None = None,
+    ) -> None:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def delete(self, key: str) -> None:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def exists(self, key: str) -> bool:
+        raise NotImplementedError
+
+    # -- TTL ---------------------------------------------------------------
+
+    @abc.abstractmethod
+    def expire(self, key: str, seconds: int) -> None:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def ttl(self, key: str) -> int:
+        """Return remaining TTL in seconds.
+
+        Returns ``TTL_NO_EXPIRY`` (-1) if key exists without expiry,
+        ``TTL_KEY_NOT_FOUND`` (-2) if key is missing or expired.
+        """
+        raise NotImplementedError
+
+    # -- distributed lock --------------------------------------------------
+
+    @abc.abstractmethod
+    def lock(self, name: str, timeout: float | None = None) -> CacheLock:
+        raise NotImplementedError
+
+    # -- blocking list (used by MCP OAuth BLPOP pattern) -------------------
+
+    @abc.abstractmethod
+    def rpush(self, key: str, value: str | bytes) -> None:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def blpop(self, keys: list[str], timeout: int = 0) -> tuple[bytes, bytes] | None:
+        """Block until a value is available on one of *keys*, or *timeout* expires.
+
+        Returns ``(key, value)`` or ``None`` on timeout.
+        """
+        raise NotImplementedError

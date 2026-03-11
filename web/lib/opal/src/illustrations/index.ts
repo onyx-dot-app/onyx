@@ -1,0 +1,16 @@
+export { default as SvgBrokenKey } from "@opal/illustrations/broken-key";
+export { default as SvgConnect } from "@opal/illustrations/connect";
+export { default as SvgConnected } from "@opal/illustrations/connected";
+export { default as SvgDisconnected } from "@opal/illustrations/disconnected";
+export { default as SvgEmpty } from "@opal/illustrations/empty";
+export { default as SvgEndOfLine } from "@opal/illustrations/end-of-line";
+export { default as SvgLimitAlert } from "@opal/illustrations/limit-alert";
+export { default as SvgLongWait } from "@opal/illustrations/long-wait";
+export { default as SvgNoAccess } from "@opal/illustrations/no-access";
+export { default as SvgNoResult } from "@opal/illustrations/no-result";
+export { default as SvgNotFound } from "@opal/illustrations/not-found";
+export { default as SvgOverflow } from "@opal/illustrations/overflow";
+export { default as SvgPlugBroken } from "@opal/illustrations/plug-broken";
+export { default as SvgTimeout } from "@opal/illustrations/timeout";
+export { default as SvgUnPlugged } from "@opal/illustrations/un-plugged";
+export { default as SvgUsageAlert } from "@opal/illustrations/usage-alert";

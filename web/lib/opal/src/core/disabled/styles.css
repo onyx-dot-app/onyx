@@ -1,0 +1,30 @@
+/* Disabled — baseline disabled visuals via Radix Slot (no extra DOM node).
+ *
+ * [data-opal-disabled]                   → cursor + pointer-events for all
+ * [data-opal-disabled]:not(.interactive) → opacity for non-Interactive elements
+ * [data-opal-disabled][data-allow-click] → re-enables clicks
+ *
+ * Interactive elements (.interactive) handle their own disabled colors via
+ * variant CSS — no blanket opacity is applied to them. Pointer-events are
+ * re-enabled so the JS layer can suppress onClick.
+ */
+
+[data-opal-disabled] {
+  @apply cursor-not-allowed select-none;
+  pointer-events: none;
+}
+
+/* Only apply blanket opacity to non-Interactive elements.
+   Interactive variants define their own disabled backgrounds/foregrounds. */
+[data-opal-disabled]:not(.interactive) {
+  @apply opacity-50;
+}
+
+/* Re-enable pointer-events so the Interactive JS layer can suppress onClick. */
+[data-opal-disabled].interactive {
+  pointer-events: auto;
+}
+
+[data-opal-disabled][data-allow-click] {
+  pointer-events: auto;
+}

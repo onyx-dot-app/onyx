@@ -2,54 +2,67 @@
 
 from typing import Any
 
+import pytest
+
 from onyx.chat.llm_step import _extract_tool_call_kickoffs
+from onyx.chat.llm_step import _increment_turns
 from onyx.chat.llm_step import _parse_tool_args_to_dict
-from onyx.chat.llm_step import _sanitize_llm_output
+from onyx.chat.llm_step import _resolve_tool_arguments
 from onyx.chat.llm_step import _XmlToolCallContentFilter
 from onyx.chat.llm_step import extract_tool_calls_from_response_text
+from onyx.chat.llm_step import translate_history_to_llm_format
+from onyx.chat.models import ChatMessageSimple
+from onyx.chat.models import ToolCallSimple
+from onyx.configs.constants import MessageType
+from onyx.llm.constants import LlmProviderNames
+from onyx.llm.interfaces import LLMConfig
+from onyx.llm.models import AssistantMessage
+from onyx.llm.models import ToolMessage
+from onyx.llm.models import UserMessage
 from onyx.server.query_and_chat.placement import Placement
+from onyx.utils.postgres_sanitization import sanitize_string
 
 
 class TestSanitizeLlmOutput:
-    """Tests for the _sanitize_llm_output function."""
+    """Tests for the sanitize_string function."""
 
     def test_removes_null_bytes(self) -> None:
         """Test that NULL bytes are removed from strings."""
-        assert _sanitize_llm_output("hello\x00world") == "helloworld"
-        assert _sanitize_llm_output("\x00start") == "start"
-        assert _sanitize_llm_output("end\x00") == "end"
-        assert _sanitize_llm_output("\x00\x00\x00") == ""
+        assert sanitize_string("hello\x00world") == "helloworld"
+        assert sanitize_string("\x00start") == "start"
+        assert sanitize_string("end\x00") == "end"
+        assert sanitize_string("\x00\x00\x00") == ""
 
     def test_removes_surrogates(self) -> None:
         """Test that UTF-16 surrogates are removed from strings."""
         # Low surrogate
-        assert _sanitize_llm_output("hello\ud800world") == "helloworld"
+        assert sanitize_string("hello\ud800world") == "helloworld"
         # High surrogate
-        assert _sanitize_llm_output("hello\udfffworld") == "helloworld"
+        assert sanitize_string("hello\udfffworld") == "helloworld"
         # Middle of surrogate range
-        assert _sanitize_llm_output("test\uda00value") == "testvalue"
+        assert sanitize_string("test\uda00value") == "testvalue"
 
     def test_removes_mixed_bad_characters(self) -> None:
         """Test removal of both NULL bytes and surrogates together."""
-        assert _sanitize_llm_output("a\x00b\ud800c\udfffd") == "abcd"
+        assert sanitize_string("a\x00b\ud800c\udfffd") == "abcd"
 
     def test_preserves_valid_unicode(self) -> None:
         """Test that valid Unicode characters are preserved."""
         # Emojis
-        assert _sanitize_llm_output("hello 👋 world") == "hello 👋 world"
+        assert sanitize_string("hello 👋 world") == "hello 👋 world"
         # Chinese characters
-        assert _sanitize_llm_output("你好世界") == "你好世界"
+        assert sanitize_string("你好世界") == "你好世界"
         # Mixed scripts
-        assert _sanitize_llm_output("Hello мир 世界") == "Hello мир 世界"
+        assert sanitize_string("Hello мир 世界") == "Hello мир 世界"
 
     def test_empty_string(self) -> None:
         """Test that empty strings are handled correctly."""
-        assert _sanitize_llm_output("") == ""
+        assert sanitize_string("") == ""
 
     def test_normal_ascii(self) -> None:
         """Test that normal ASCII strings pass through unchanged."""
-        assert _sanitize_llm_output("hello world") == "hello world"
-        assert _sanitize_llm_output('{"key": "value"}') == '{"key": "value"}'
+        assert sanitize_string("hello world") == "hello world"
+        assert sanitize_string('{"key": "value"}') == '{"key": "value"}'
 
 
 class TestParseToolArgsToDict:
@@ -363,3 +376,174 @@ class TestXmlToolCallContentFilter:
         assert (
             output == "A <function_calls_v2><invoke>noop</invoke></function_calls_v2> B"
         )
+
+
+class TestIncrementTurns:
+    """Tests for the _increment_turns helper used by _close_reasoning_if_active."""
+
+    def test_increments_turn_index_when_no_sub_turn(self) -> None:
+        turn, sub = _increment_turns(0, None)
+        assert turn == 1
+        assert sub is None
+
+    def test_increments_sub_turn_when_present(self) -> None:
+        turn, sub = _increment_turns(3, 0)
+        assert turn == 3
+        assert sub == 1
+
+    def test_increments_sub_turn_from_nonzero(self) -> None:
+        turn, sub = _increment_turns(5, 2)
+        assert turn == 5
+        assert sub == 3
+
+
+class TestResolveToolArguments:
+    """Tests for the _resolve_tool_arguments helper."""
+
+    def test_dict_arguments(self) -> None:
+        obj = {"arguments": {"queries": ["test"]}}
+        assert _resolve_tool_arguments(obj) == {"queries": ["test"]}
+
+    def test_dict_parameters(self) -> None:
+        """Falls back to 'parameters' key when 'arguments' is missing."""
+        obj = {"parameters": {"queries": ["test"]}}
+        assert _resolve_tool_arguments(obj) == {"queries": ["test"]}
+
+    def test_arguments_takes_precedence_over_parameters(self) -> None:
+        obj = {"arguments": {"a": 1}, "parameters": {"b": 2}}
+        assert _resolve_tool_arguments(obj) == {"a": 1}
+
+    def test_json_string_arguments(self) -> None:
+        obj = {"arguments": '{"queries": ["test"]}'}
+        assert _resolve_tool_arguments(obj) == {"queries": ["test"]}
+
+    def test_invalid_json_string_returns_empty_dict(self) -> None:
+        obj = {"arguments": "not valid json"}
+        assert _resolve_tool_arguments(obj) == {}
+
+    def test_no_arguments_or_parameters_returns_empty_dict(self) -> None:
+        obj = {"name": "some_tool"}
+        assert _resolve_tool_arguments(obj) == {}
+
+    def test_non_dict_non_string_arguments_returns_none(self) -> None:
+        """When arguments resolves to a list or int, returns None."""
+        assert _resolve_tool_arguments({"arguments": [1, 2, 3]}) is None
+        assert _resolve_tool_arguments({"arguments": 42}) is None
+
+
+class TestTranslateHistoryToLlmFormat:
+    @staticmethod
+    def _llm_config(provider: str) -> LLMConfig:
+        return LLMConfig(
+            model_provider=provider,
+            model_name="test-model",
+            temperature=0,
+            max_input_tokens=8192,
+        )
+
+    @staticmethod
+    def _tool_history() -> list[ChatMessageSimple]:
+        return [
+            ChatMessageSimple(
+                message="",
+                token_count=5,
+                message_type=MessageType.ASSISTANT,
+                tool_calls=[
+                    ToolCallSimple(
+                        tool_call_id="51381e0b0",
+                        tool_name="internal_search",
+                        tool_arguments={"queries": ["alpha"]},
+                    )
+                ],
+            ),
+            ChatMessageSimple(
+                message="tool result body",
+                token_count=5,
+                message_type=MessageType.TOOL_CALL_RESPONSE,
+                tool_call_id="51381e0b0",
+            ),
+        ]
+
+    def test_preserves_structured_tool_history_for_non_ollama(self) -> None:
+        translated = translate_history_to_llm_format(
+            history=self._tool_history(),
+            llm_config=self._llm_config(LlmProviderNames.OPENAI),
+        )
+        assert isinstance(translated, list)
+
+        assert isinstance(translated[0], AssistantMessage)
+        assert translated[0].tool_calls is not None
+        assert translated[0].tool_calls[0].id == "51381e0b0"
+        assert isinstance(translated[1], ToolMessage)
+        assert translated[1].tool_call_id == "51381e0b0"
+
+    def test_flattens_tool_history_for_ollama(self) -> None:
+        translated = translate_history_to_llm_format(
+            history=self._tool_history(),
+            llm_config=self._llm_config(LlmProviderNames.OLLAMA_CHAT),
+        )
+        assert isinstance(translated, list)
+
+        assert isinstance(translated[0], AssistantMessage)
+        assert translated[0].tool_calls is None
+        assert translated[0].content is not None
+        assert "51381e0b0" in translated[0].content
+
+        assert isinstance(translated[1], UserMessage)
+        assert "51381e0b0" in translated[1].content
+        assert "tool result body" in translated[1].content
+
+    def test_flattens_multiple_assistant_tool_calls_for_ollama(self) -> None:
+        history = [
+            ChatMessageSimple(
+                message="I will use tools now.",
+                token_count=5,
+                message_type=MessageType.ASSISTANT,
+                tool_calls=[
+                    ToolCallSimple(
+                        tool_call_id="call-a",
+                        tool_name="internal_search",
+                        tool_arguments={"queries": ["alpha"]},
+                    ),
+                    ToolCallSimple(
+                        tool_call_id="call-b",
+                        tool_name="internal_search",
+                        tool_arguments={"queries": ["beta"]},
+                    ),
+                ],
+            )
+        ]
+        translated = translate_history_to_llm_format(
+            history=history,
+            llm_config=self._llm_config(LlmProviderNames.OLLAMA_CHAT),
+        )
+
+        assert isinstance(translated, list)
+        assert isinstance(translated[0], AssistantMessage)
+        assert translated[0].tool_calls is None
+        assert translated[0].content == (
+            "I will use tools now.\n"
+            '[Tool Call] name=internal_search id=call-a args={"queries": ["alpha"]}\n'
+            '[Tool Call] name=internal_search id=call-b args={"queries": ["beta"]}'
+        )
+
+    @pytest.mark.parametrize(
+        "provider",
+        [
+            LlmProviderNames.OPENAI,
+            LlmProviderNames.OLLAMA_CHAT,
+        ],
+    )
+    def test_tool_call_response_requires_tool_call_id(self, provider: str) -> None:
+        with pytest.raises(ValueError, match="tool_call_id is not available"):
+            translate_history_to_llm_format(
+                history=[
+                    ChatMessageSimple(
+                        message="tool result body",
+                        token_count=5,
+                        message_type=MessageType.TOOL_CALL_RESPONSE,
+                        tool_call_id=None,
+                    )
+                ],
+                llm_config=self._llm_config(provider),
+            )

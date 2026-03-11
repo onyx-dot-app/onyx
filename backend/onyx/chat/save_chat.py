@@ -1,4 +1,5 @@
 import json
+import mimetypes
 
 from sqlalchemy.orm import Session
 
@@ -12,12 +13,40 @@ from onyx.db.chat import create_db_search_doc
 from onyx.db.models import ChatMessage
 from onyx.db.models import ToolCall
 from onyx.db.tools import create_tool_call_no_commit
+from onyx.file_store.models import FileDescriptor
 from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.natural_language_processing.utils import get_tokenizer
+from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
 from onyx.tools.models import ToolCallInfo
 from onyx.utils.logger import setup_logger
+from onyx.utils.postgres_sanitization import sanitize_string
 
 logger = setup_logger()
+
+
+def _extract_referenced_file_descriptors(
+    tool_calls: list[ToolCallInfo],
+    message_text: str,
+) -> list[FileDescriptor]:
+    """Extract FileDescriptors for code interpreter files referenced in the message text."""
+    descriptors: list[FileDescriptor] = []
+    for tool_call_info in tool_calls:
+        if not tool_call_info.generated_files:
+            continue
+        for gen_file in tool_call_info.generated_files:
+            file_id = (
+                gen_file.file_link.rsplit("/", 1)[-1] if gen_file.file_link else ""
+            )
+            if file_id and file_id in message_text:
+                mime_type, _ = mimetypes.guess_type(gen_file.filename)
+                descriptors.append(
+                    FileDescriptor(
+                        id=file_id,
+                        type=mime_type_to_chat_file_type(mime_type),
+                        name=gen_file.filename,
+                    )
+                )
+    return descriptors
 
 
 def _create_and_link_tool_calls(
@@ -173,8 +202,13 @@ def save_chat_turn(
         pre_answer_processing_time: Duration of processing before answer starts (in seconds)
     """
     # 1. Update ChatMessage with message content, reasoning tokens, and token count
-    assistant_message.message = message_text
-    assistant_message.reasoning_tokens = reasoning_tokens
+    sanitized_message_text = (
+        sanitize_string(message_text) if message_text else message_text
+    )
+    assistant_message.message = sanitized_message_text
+    assistant_message.reasoning_tokens = (
+        sanitize_string(reasoning_tokens) if reasoning_tokens else reasoning_tokens
+    )
     assistant_message.is_clarification = is_clarification
 
     # Use pre-answer processing time (captured when MESSAGE_START was emitted)
@@ -184,8 +218,10 @@ def save_chat_turn(
     # Calculate token count using default tokenizer, when storing, this should not use the LLM
     # specific one so we use a system default tokenizer here.
     default_tokenizer = get_tokenizer(None, None)
-    if message_text:
-        assistant_message.token_count = len(default_tokenizer.encode(message_text))
+    if sanitized_message_text:
+        assistant_message.token_count = len(
+            default_tokenizer.encode(sanitized_message_text)
+        )
     else:
         assistant_message.token_count = 0
 
@@ -296,6 +332,17 @@ def save_chat_turn(
     assistant_message.citations = (
         citation_number_to_search_doc_id if citation_number_to_search_doc_id else None
     )
+
+    # 8. Attach code interpreter generated files that the assistant actually
+    # referenced in its response, so they are available via load_all_chat_files
+    # on subsequent turns. Files not mentioned are intermediate artifacts.
+    if sanitized_message_text:
+        referenced = _extract_referenced_file_descriptors(
+            tool_calls, sanitized_message_text
+        )
+        if referenced:
+            existing_files = assistant_message.files or []
+            assistant_message.files = existing_files + referenced
 
     # Finally save the messages, tool calls, and docs
     db_session.commit()

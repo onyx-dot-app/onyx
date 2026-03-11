@@ -15,11 +15,13 @@ from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.emitter import Emitter
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import LlmStepResult
+from onyx.chat.tool_call_args_streaming import maybe_emit_argument_delta
 from onyx.configs.app_configs import LOG_ONYX_MODEL_INTERACTIONS
 from onyx.configs.app_configs import PROMPT_CACHE_CHAT_HISTORY
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.file_store.models import ChatFileType
+from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LanguageModelInput
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
@@ -53,7 +55,9 @@ from onyx.server.query_and_chat.streaming_models import ReasoningStart
 from onyx.tools.models import ToolCallKickoff
 from onyx.tracing.framework.create import generation_span
 from onyx.utils.b64 import get_image_type_from_bytes
+from onyx.utils.jsonriver import Parser
 from onyx.utils.logger import setup_logger
+from onyx.utils.postgres_sanitization import sanitize_string
 from onyx.utils.text_processing import find_all_json_objects
 
 logger = setup_logger()
@@ -165,15 +169,6 @@ def _find_function_calls_open_marker(text_lower: str) -> int:
         search_from = idx + 1
 
 
-def _sanitize_llm_output(value: str) -> str:
-    """Remove characters that PostgreSQL's text/JSONB types cannot store.
-
-    - NULL bytes (\x00): Not allowed in PostgreSQL text types
-    - UTF-16 surrogates (\ud800-\udfff): Invalid in UTF-8 encoding
-    """
-    return "".join(c for c in value if c != "\x00" and not ("\ud800" <= c <= "\udfff"))
-
-
 def _try_parse_json_string(value: Any) -> Any:
     """Attempt to parse a JSON string value into its Python equivalent.
 
@@ -221,9 +216,7 @@ def _parse_tool_args_to_dict(raw_args: Any) -> dict[str, Any]:
     if isinstance(raw_args, dict):
         # Parse any string values that look like JSON arrays/objects
         return {
-            k: _try_parse_json_string(
-                _sanitize_llm_output(v) if isinstance(v, str) else v
-            )
+            k: _try_parse_json_string(sanitize_string(v) if isinstance(v, str) else v)
             for k, v in raw_args.items()
         }
 
@@ -231,7 +224,7 @@ def _parse_tool_args_to_dict(raw_args: Any) -> dict[str, Any]:
         return {}
 
     # Sanitize before parsing to remove NULL bytes and surrogates
-    raw_args = _sanitize_llm_output(raw_args)
+    raw_args = sanitize_string(raw_args)
 
     try:
         parsed1: Any = json.loads(raw_args)
@@ -544,12 +537,12 @@ def _extract_xml_attribute(attrs: str, attr_name: str) -> str | None:
     )
     if not attr_match:
         return None
-    return _sanitize_llm_output(unescape(attr_match.group(2).strip()))
+    return sanitize_string(unescape(attr_match.group(2).strip()))
 
 
 def _parse_xml_parameter_value(raw_value: str, string_attr: str | None) -> Any:
     """Parse a parameter value from XML-style tool call payloads."""
-    value = _sanitize_llm_output(unescape(raw_value).strip())
+    value = sanitize_string(unescape(raw_value).strip())
 
     if string_attr and string_attr.lower() == "true":
         return value
@@ -558,6 +551,24 @@ def _parse_xml_parameter_value(raw_value: str, string_attr: str | None) -> Any:
         return json.loads(value)
     except json.JSONDecodeError:
         return value
+
+
+def _resolve_tool_arguments(obj: dict[str, Any]) -> dict[str, Any] | None:
+    """Extract and parse an arguments/parameters value from a tool-call-like object.
+
+    Looks for "arguments" or "parameters" keys, handles JSON-string values,
+    and returns a dict if successful, or None otherwise.
+    """
+    arguments = obj.get("arguments", obj.get("parameters", {}))
+    if isinstance(arguments, str):
+        arguments = sanitize_string(arguments)
+        try:
+            arguments = json.loads(arguments)
+        except json.JSONDecodeError:
+            arguments = {}
+    if isinstance(arguments, dict):
+        return arguments
+    return None
 
 
 def _try_match_json_to_tool(
@@ -582,13 +593,8 @@ def _try_match_json_to_tool(
     # Format 1: Direct tool call format {"name": "...", "arguments": {...}}
     if "name" in json_obj and json_obj["name"] in tool_name_to_def:
         tool_name = json_obj["name"]
-        arguments = json_obj.get("arguments", json_obj.get("parameters", {}))
-        if isinstance(arguments, str):
-            try:
-                arguments = json.loads(arguments)
-            except json.JSONDecodeError:
-                arguments = {}
-        if isinstance(arguments, dict):
+        arguments = _resolve_tool_arguments(json_obj)
+        if arguments is not None:
             return (tool_name, arguments)
 
     # Format 2: Function call format {"function": {"name": "...", "arguments": {...}}}
@@ -596,13 +602,8 @@ def _try_match_json_to_tool(
         func_obj = json_obj["function"]
         if "name" in func_obj and func_obj["name"] in tool_name_to_def:
             tool_name = func_obj["name"]
-            arguments = func_obj.get("arguments", func_obj.get("parameters", {}))
-            if isinstance(arguments, str):
-                try:
-                    arguments = json.loads(arguments)
-                except json.JSONDecodeError:
-                    arguments = {}
-            if isinstance(arguments, dict):
+            arguments = _resolve_tool_arguments(func_obj)
+            if arguments is not None:
                 return (tool_name, arguments)
 
     # Format 3: Tool name as key {"tool_name": {...arguments...}}
@@ -669,6 +670,107 @@ def _extract_nested_arguments_obj(
     return None
 
 
+def _build_structured_assistant_message(msg: ChatMessageSimple) -> AssistantMessage:
+    tool_calls_list: list[ToolCall] | None = None
+    if msg.tool_calls:
+        tool_calls_list = [
+            ToolCall(
+                id=tc.tool_call_id,
+                type="function",
+                function=FunctionCall(
+                    name=tc.tool_name,
+                    arguments=json.dumps(tc.tool_arguments),
+                ),
+            )
+            for tc in msg.tool_calls
+        ]
+
+    return AssistantMessage(
+        role="assistant",
+        content=msg.message or None,
+        tool_calls=tool_calls_list,
+    )
+
+
+def _build_structured_tool_response_message(msg: ChatMessageSimple) -> ToolMessage:
+    if not msg.tool_call_id:
+        raise ValueError(
+            "Tool call response message encountered but tool_call_id is not available. "
+            f"Message: {msg}"
+        )
+
+    return ToolMessage(
+        role="tool",
+        content=msg.message,
+        tool_call_id=msg.tool_call_id,
+    )
+
+
+class _HistoryMessageFormatter:
+    def format_assistant_message(self, msg: ChatMessageSimple) -> AssistantMessage:
+        raise NotImplementedError
+
+    def format_tool_response_message(
+        self, msg: ChatMessageSimple
+    ) -> ToolMessage | UserMessage:
+        raise NotImplementedError
+
+
+class _DefaultHistoryMessageFormatter(_HistoryMessageFormatter):
+    def format_assistant_message(self, msg: ChatMessageSimple) -> AssistantMessage:
+        return _build_structured_assistant_message(msg)
+
+    def format_tool_response_message(self, msg: ChatMessageSimple) -> ToolMessage:
+        return _build_structured_tool_response_message(msg)
+
+
+class _OllamaHistoryMessageFormatter(_HistoryMessageFormatter):
+    def format_assistant_message(self, msg: ChatMessageSimple) -> AssistantMessage:
+        if not msg.tool_calls:
+            return _build_structured_assistant_message(msg)
+
+        tool_call_lines = [
+            (
+                f"[Tool Call] name={tc.tool_name} "
+                f"id={tc.tool_call_id} args={json.dumps(tc.tool_arguments)}"
+            )
+            for tc in msg.tool_calls
+        ]
+        assistant_content = (
+            "\n".join([msg.message, *tool_call_lines])
+            if msg.message
+            else "\n".join(tool_call_lines)
+        )
+        return AssistantMessage(
+            role="assistant",
+            content=assistant_content,
+            tool_calls=None,
+        )
+
+    def format_tool_response_message(self, msg: ChatMessageSimple) -> UserMessage:
+        if not msg.tool_call_id:
+            raise ValueError(
+                "Tool call response message encountered but tool_call_id is not available. "
+                f"Message: {msg}"
+            )
+
+        return UserMessage(
+            role="user",
+            content=f"[Tool Result] id={msg.tool_call_id}\n{msg.message}",
+        )
+
+
+_DEFAULT_HISTORY_MESSAGE_FORMATTER = _DefaultHistoryMessageFormatter()
+_OLLAMA_HISTORY_MESSAGE_FORMATTER = _OllamaHistoryMessageFormatter()
+
+
+def _get_history_message_formatter(llm_config: LLMConfig) -> _HistoryMessageFormatter:
+    if llm_config.model_provider == LlmProviderNames.OLLAMA_CHAT:
+        return _OLLAMA_HISTORY_MESSAGE_FORMATTER
+
+    return _DEFAULT_HISTORY_MESSAGE_FORMATTER
+
+
 def translate_history_to_llm_format(
     history: list[ChatMessageSimple],
     llm_config: LLMConfig,
@@ -679,6 +781,10 @@ def translate_history_to_llm_format(
     handling different message types and image files for multimodal support.
     """
     messages: list[ChatCompletionMessage] = []
+    history_message_formatter = _get_history_message_formatter(llm_config)
+    # Note: cacheability is computed from pre-translation ChatMessageSimple types.
+    # Some providers flatten tool history into plain assistant/user text, so this split
+    # may be less semantically meaningful, but it remains safe and order-preserving.
     last_cacheable_msg_idx = -1
     all_previous_msgs_cacheable = True
 
@@ -760,39 +866,10 @@ def translate_history_to_llm_format(
             messages.append(reminder_msg)
 
         elif msg.message_type == MessageType.ASSISTANT:
-            tool_calls_list: list[ToolCall] | None = None
-            if msg.tool_calls:
-                tool_calls_list = [
-                    ToolCall(
-                        id=tc.tool_call_id,
-                        type="function",
-                        function=FunctionCall(
-                            name=tc.tool_name,
-                            arguments=json.dumps(tc.tool_arguments),
-                        ),
-                    )
-                    for tc in msg.tool_calls
-                ]
-
-            assistant_msg = AssistantMessage(
-                role="assistant",
-                content=msg.message or None,
-                tool_calls=tool_calls_list,
-            )
-            messages.append(assistant_msg)
+            messages.append(history_message_formatter.format_assistant_message(msg))
 
         elif msg.message_type == MessageType.TOOL_CALL_RESPONSE:
-            if not msg.tool_call_id:
-                raise ValueError(
-                    f"Tool call response message encountered but tool_call_id is not available. Message: {msg}"
-                )
-
-            tool_msg = ToolMessage(
-                role="tool",
-                content=msg.message,
-                tool_call_id=msg.tool_call_id,
-            )
-            messages.append(tool_msg)
+            messages.append(history_message_formatter.format_tool_response_message(msg))
 
         else:
             logger.warning(
@@ -918,8 +995,15 @@ def run_llm_step_pkt_generator(
     tab_index = placement.tab_index
     sub_turn_index = placement.sub_turn_index
 
+    def _current_placement() -> Placement:
+        return Placement(
+            turn_index=turn_index,
+            tab_index=tab_index,
+            sub_turn_index=sub_turn_index,
+        )
+
     llm_msg_history = translate_history_to_llm_format(history, llm.config)
-    has_reasoned = 0
+    has_reasoned = False
 
     if LOG_ONYX_MODEL_INTERACTIONS:
         logger.debug(
@@ -927,6 +1011,7 @@ def run_llm_step_pkt_generator(
         )
 
     id_to_tool_call_map: dict[int, dict[str, Any]] = {}
+    arg_parsers: dict[int, Parser] = {}
     reasoning_start = False
     answer_start = False
     accumulated_reasoning = ""
@@ -949,12 +1034,56 @@ def run_llm_step_pkt_generator(
         stream_start_time = time.monotonic()
         first_action_recorded = False
 
+        def _emit_citation_results(
+            results: Generator[str | CitationInfo, None, None],
+        ) -> Generator[Packet, None, None]:
+            """Yield packets for citation processor results (str or CitationInfo)."""
+            nonlocal accumulated_answer
+
+            for result in results:
+                if isinstance(result, str):
+                    accumulated_answer += result
+                    if state_container:
+                        state_container.set_answer_tokens(accumulated_answer)
+                    yield Packet(
+                        placement=_current_placement(),
+                        obj=AgentResponseDelta(content=result),
+                    )
+                elif isinstance(result, CitationInfo):
+                    yield Packet(
+                        placement=_current_placement(),
+                        obj=result,
+                    )
+                    if state_container:
+                        state_container.add_emitted_citation(result.citation_number)
+
+        def _close_reasoning_if_active() -> Generator[Packet, None, None]:
+            """Emit ReasoningDone and increment turns if reasoning is in progress."""
+            nonlocal reasoning_start
+            nonlocal has_reasoned
+            nonlocal turn_index
+            nonlocal sub_turn_index
+
+            if reasoning_start:
+                yield Packet(
+                    placement=Placement(
+                        turn_index=turn_index,
+                        tab_index=tab_index,
+                        sub_turn_index=sub_turn_index,
+                    ),
+                    obj=ReasoningDone(),
+                )
+                has_reasoned = True
+                turn_index, sub_turn_index = _increment_turns(
+                    turn_index, sub_turn_index
+                )
+                reasoning_start = False
+
         def _emit_content_chunk(content_chunk: str) -> Generator[Packet, None, None]:
             nonlocal accumulated_answer
             nonlocal accumulated_reasoning
             nonlocal answer_start
             nonlocal reasoning_start
-            nonlocal has_reasoned
             nonlocal turn_index
             nonlocal sub_turn_index
 
@@ -967,39 +1096,18 @@ def run_llm_step_pkt_generator(
                     state_container.set_reasoning_tokens(accumulated_reasoning)
                 if not reasoning_start:
                     yield Packet(
-                        placement=Placement(
-                            turn_index=turn_index,
-                            tab_index=tab_index,
-                            sub_turn_index=sub_turn_index,
-                        ),
+                        placement=_current_placement(),
                         obj=ReasoningStart(),
                     )
                 yield Packet(
-                    placement=Placement(
-                        turn_index=turn_index,
-                        tab_index=tab_index,
-                        sub_turn_index=sub_turn_index,
-                    ),
+                    placement=_current_placement(),
                     obj=ReasoningDelta(reasoning=content_chunk),
                 )
                 reasoning_start = True
                 return
 
             # Normal flow for AUTO or NONE tool choice
-            if reasoning_start:
-                yield Packet(
-                    placement=Placement(
-                        turn_index=turn_index,
-                        tab_index=tab_index,
-                        sub_turn_index=sub_turn_index,
-                    ),
-                    obj=ReasoningDone(),
-                )
-                has_reasoned = 1
-                turn_index, sub_turn_index = _increment_turns(
-                    turn_index, sub_turn_index
-                )
-                reasoning_start = False
+            yield from _close_reasoning_if_active()
 
             if not answer_start:
                 # Store pre-answer processing time in state container for save_chat
@@ -1009,11 +1117,7 @@ def run_llm_step_pkt_generator(
                     )
 
                 yield Packet(
-                    placement=Placement(
-                        turn_index=turn_index,
-                        tab_index=tab_index,
-                        sub_turn_index=sub_turn_index,
-                    ),
+                    placement=_current_placement(),
                     obj=AgentResponseStart(
                         final_documents=final_documents,
                         pre_answer_processing_seconds=pre_answer_processing_time,
@@ -1022,43 +1126,16 @@ def run_llm_step_pkt_generator(
                 answer_start = True
 
             if citation_processor:
-                for result in citation_processor.process_token(content_chunk):
-                    if isinstance(result, str):
-                        accumulated_answer += result
-                        # Save answer incrementally to state container
-                        if state_container:
-                            state_container.set_answer_tokens(accumulated_answer)
-                        yield Packet(
-                            placement=Placement(
-                                turn_index=turn_index,
-                                tab_index=tab_index,
-                                sub_turn_index=sub_turn_index,
-                            ),
-                            obj=AgentResponseDelta(content=result),
-                        )
-                    elif isinstance(result, CitationInfo):
-                        yield Packet(
-                            placement=Placement(
-                                turn_index=turn_index,
-                                tab_index=tab_index,
-                                sub_turn_index=sub_turn_index,
-                            ),
-                            obj=result,
-                        )
-                        # Track emitted citation for saving
-                        if state_container:
-                            state_container.add_emitted_citation(result.citation_number)
+                yield from _emit_citation_results(
+                    citation_processor.process_token(content_chunk)
+                )
             else:
                 accumulated_answer += content_chunk
                 # Save answer incrementally to state container
                 if state_container:
                     state_container.set_answer_tokens(accumulated_answer)
                 yield Packet(
-                    placement=Placement(
-                        turn_index=turn_index,
-                        tab_index=tab_index,
-                        sub_turn_index=sub_turn_index,
-                    ),
+                    placement=_current_placement(),
                     obj=AgentResponseDelta(content=content_chunk),
                 )
 
@@ -1120,19 +1197,11 @@ def run_llm_step_pkt_generator(
                     state_container.set_reasoning_tokens(accumulated_reasoning)
                 if not reasoning_start:
                     yield Packet(
-                        placement=Placement(
-                            turn_index=turn_index,
-                            tab_index=tab_index,
-                            sub_turn_index=sub_turn_index,
-                        ),
+                        placement=_current_placement(),
                         obj=ReasoningStart(),
                     )
                 yield Packet(
-                    placement=Placement(
-                        turn_index=turn_index,
-                        tab_index=tab_index,
-                        sub_turn_index=sub_turn_index,
-                    ),
+                    placement=_current_placement(),
                     obj=ReasoningDelta(reasoning=delta.reasoning_content),
                 )
                 reasoning_start = True
@@ -1146,23 +1215,17 @@ def run_llm_step_pkt_generator(
                     yield from _emit_content_chunk(filtered_content)
 
             if delta.tool_calls:
-                if reasoning_start:
-                    yield Packet(
-                        placement=Placement(
-                            turn_index=turn_index,
-                            tab_index=tab_index,
-                            sub_turn_index=sub_turn_index,
-                        ),
-                        obj=ReasoningDone(),
-                    )
-                    has_reasoned = 1
-                    turn_index, sub_turn_index = _increment_turns(
-                        turn_index, sub_turn_index
-                    )
-                    reasoning_start = False
+                yield from _close_reasoning_if_active()
 
                 for tool_call_delta in delta.tool_calls:
+                    # maybe_emit depends and update being called first and attaching the delta
                     _update_tool_call_with_delta(id_to_tool_call_map, tool_call_delta)
+                    yield from maybe_emit_argument_delta(
+                        tool_calls_in_progress=id_to_tool_call_map,
+                        tool_call_delta=tool_call_delta,
+                        placement=_current_placement(),
+                        parsers=arg_parsers,
+                    )
 
         # Flush any tail text buffered while checking for split "<function_calls" markers.
         filtered_content_tail = xml_tool_call_content_filter.flush()
@@ -1224,50 +1287,14 @@ def run_llm_step_pkt_generator(
 
     # This may happen if the custom token processor is used to modify other packets into reasoning
     # Then there won't necessarily be anything else to come after the reasoning tokens
-    if reasoning_start:
-        yield Packet(
-            placement=Placement(
-                turn_index=turn_index,
-                tab_index=tab_index,
-                sub_turn_index=sub_turn_index,
-            ),
-            obj=ReasoningDone(),
-        )
-        has_reasoned = 1
-        turn_index, sub_turn_index = _increment_turns(turn_index, sub_turn_index)
-        reasoning_start = False
+    yield from _close_reasoning_if_active()
 
     # Flush any remaining content from citation processor
     # Reasoning is always first so this should use the post-incremented value of turn_index
     # Note that this doesn't need to handle any sub-turns as those docs will not have citations
     # as clickable items and will be stripped out instead.
     if citation_processor:
-        for result in citation_processor.process_token(None):
-            if isinstance(result, str):
-                accumulated_answer += result
-                # Save answer incrementally to state container
-                if state_container:
-                    state_container.set_answer_tokens(accumulated_answer)
-                yield Packet(
-                    placement=Placement(
-                        turn_index=turn_index,
-                        tab_index=tab_index,
-                        sub_turn_index=sub_turn_index,
-                    ),
-                    obj=AgentResponseDelta(content=result),
-                )
-            elif isinstance(result, CitationInfo):
-                yield Packet(
-                    placement=Placement(
-                        turn_index=turn_index,
-                        tab_index=tab_index,
-                        sub_turn_index=sub_turn_index,
-                    ),
-                    obj=result,
-                )
-                # Track emitted citation for saving
-                if state_container:
-                    state_container.add_emitted_citation(result.citation_number)
+        yield from _emit_citation_results(citation_processor.process_token(None))
 
     # Note: Content (AgentResponseDelta) doesn't need an explicit end packet - OverallStop handles it
     # Tool calls are handled by tool execution code and emit their own packets (e.g., SectionEnd)
@@ -1291,7 +1318,7 @@ def run_llm_step_pkt_generator(
             tool_calls=tool_calls if tool_calls else None,
             raw_answer=accumulated_raw_answer if accumulated_raw_answer else None,
         ),
-        bool(has_reasoned),
+        has_reasoned,
     )
 
 
@@ -1346,4 +1373,4 @@ def run_llm_step(
             emitter.emit(packet)
         except StopIteration as e:
             llm_step_result, has_reasoned = e.value
-            return llm_step_result, bool(has_reasoned)
+            return llm_step_result, has_reasoned

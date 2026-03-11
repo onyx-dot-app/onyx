@@ -56,7 +56,7 @@
 import React, { HtmlHTMLAttributes } from "react";
 import type { IconProps } from "@opal/types";
 import { WithoutStyles } from "@/types";
-import { LineItemLayout } from "@/layouts/general-layouts";
+import { ContentAction } from "@opal/layouts";
 import * as ExpandableCard from "@/layouts/expandable-card-layouts";
 import { Card } from "@/refresh-components/cards";
 import Label from "@/refresh-components/form/Label";
@@ -119,11 +119,14 @@ function ActionsHeader({
       <div className="flex flex-col gap-2 pt-4 pb-2">
         <div className="px-4">
           <Label name={name}>
-            <LineItemLayout
+            <ContentAction
               icon={Icon}
               title={title}
               description={description}
+              sizePreset="section"
+              variant="section"
               rightChildren={rightChildren}
+              paddingVariant="fit"
             />
           </Label>
         </div>
@@ -237,12 +240,14 @@ function ActionsTool({
   return (
     <Card padding={0.75} variant={disabled ? "disabled" : undefined}>
       <Label name={name} disabled={disabled}>
-        <LineItemLayout
+        <ContentAction
           icon={icon}
           title={title}
           description={description}
+          sizePreset="main-ui"
+          variant="section"
           rightChildren={rightChildren}
-          variant="secondary"
+          paddingVariant="fit"
         />
       </Label>
     </Card>

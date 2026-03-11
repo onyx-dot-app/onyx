@@ -16,14 +16,16 @@ from ee.onyx.server.scim.api import patch_group
 from ee.onyx.server.scim.api import replace_group
 from ee.onyx.server.scim.models import ScimGroupMember
 from ee.onyx.server.scim.models import ScimGroupResource
-from ee.onyx.server.scim.models import ScimListResponse
 from ee.onyx.server.scim.models import ScimPatchOperation
 from ee.onyx.server.scim.models import ScimPatchOperationType
 from ee.onyx.server.scim.models import ScimPatchRequest
 from ee.onyx.server.scim.patch import ScimPatchError
+from ee.onyx.server.scim.providers.base import ScimProvider
 from tests.unit.onyx.server.scim.conftest import assert_scim_error
 from tests.unit.onyx.server.scim.conftest import make_db_group
 from tests.unit.onyx.server.scim.conftest import make_scim_group
+from tests.unit.onyx.server.scim.conftest import parse_scim_group
+from tests.unit.onyx.server.scim.conftest import parse_scim_list
 
 
 class TestListGroups:
@@ -34,6 +36,7 @@ class TestListGroups:
         mock_db_session: MagicMock,
         mock_token: MagicMock,
         mock_dal: MagicMock,
+        provider: ScimProvider,
     ) -> None:
         mock_dal.list_groups.return_value = ([], 0)
 
@@ -42,18 +45,20 @@ class TestListGroups:
             startIndex=1,
             count=100,
             _token=mock_token,
+            provider=provider,
             db_session=mock_db_session,
         )
 
-        assert isinstance(result, ScimListResponse)
-        assert result.totalResults == 0
-        assert result.Resources == []
+        parsed = parse_scim_list(result)
+        assert parsed.totalResults == 0
+        assert parsed.Resources == []
 
     def test_unsupported_filter_returns_400(
         self,
         mock_db_session: MagicMock,
         mock_token: MagicMock,
         mock_dal: MagicMock,
+        provider: ScimProvider,
     ) -> None:
         mock_dal.list_groups.side_effect = ValueError(
             "Unsupported filter attribute: userName"
@@ -64,6 +69,7 @@ class TestListGroups:
             startIndex=1,
             count=100,
             _token=mock_token,
+            provider=provider,
             db_session=mock_db_session,
         )
 
@@ -74,6 +80,7 @@ class TestListGroups:
         mock_db_session: MagicMock,
         mock_token: MagicMock,
         mock_dal: MagicMock,
+        provider: ScimProvider,
     ) -> None:
         group = make_db_group(id=5, name="Engineering")
         uid = uuid4()
@@ -85,12 +92,13 @@ class TestListGroups:
             startIndex=1,
             count=100,
             _token=mock_token,
+            provider=provider,
             db_session=mock_db_session,
         )
 
-        assert isinstance(result, ScimListResponse)
-        assert result.totalResults == 1
-        resource = result.Resources[0]
+        parsed = parse_scim_list(result)
+        assert parsed.totalResults == 1
+        resource = parsed.Resources[0]
         assert isinstance(resource, ScimGroupResource)
         assert resource.displayName == "Engineering"
         assert resource.externalId == "ext-g-1"
@@ -106,6 +114,7 @@ class TestGetGroup:
         mock_db_session: MagicMock,
         mock_token: MagicMock,
         mock_dal: MagicMock,
+        provider: ScimProvider,
     ) -> None:
         group = make_db_group(id=5, name="Engineering")
         mock_dal.get_group.return_value = group
@@ -114,22 +123,25 @@ class TestGetGroup:
         result = get_group(
             group_id="5",
             _token=mock_token,
+            provider=provider,
             db_session=mock_db_session,
         )
 
-        assert isinstance(result, ScimGroupResource)
-        assert result.displayName == "Engineering"
-        assert result.id == "5"
+        resource = parse_scim_group(result)
+        assert resource.displayName == "Engineering"
+        assert resource.id == "5"
 
     def test_non_integer_id_returns_404(
         self,
         mock_db_session: MagicMock,
         mock_token: MagicMock,
         mock_dal: MagicMock,  # noqa: ARG002
+        provider: ScimProvider,
     ) -> None:
         result = get_group(
             group_id="not-a-number",
             _token=mock_token,
+            provider=provider,
             db_session=mock_db_session,
         )
 
@@ -140,12 +152,14 @@ class TestGetGroup:
         mock_db_session: MagicMock,
         mock_token: MagicMock,
         mock_dal: MagicMock,
+        provider: ScimProvider,
     ) -> None:
         mock_dal.get_group.return_value = None
 
         result = get_group(
             group_id="999",
             _token=mock_token,
+            provider=provider,
             db_session=mock_db_session,
         )
 
@@ -162,6 +176,7 @@ class TestCreateGroup:
         mock_db_session: MagicMock,
         mock_token: MagicMock,
         mock_dal: MagicMock,
+        provider: ScimProvider,
     ) -> None:
         mock_dal.get_group_by_name.return_value = None
         mock_validate.return_value = ([], None)
@@ -172,11 +187,12 @@ class TestCreateGroup:
         result = create_group(
             group_resource=resource,
             _token=mock_token,
+            provider=provider,
             db_session=mock_db_session,
         )
 
-        assert isinstance(result, ScimGroupResource)
-        assert result.displayName == "New Group"
+        resource = parse_scim_group(result, status=201)
+        assert resource.displayName == "New Group"
         mock_dal.add_group.assert_called_once()
         mock_dal.commit.assert_called_once()
 
@@ -185,6 +201,7 @@ class TestCreateGroup:
         mock_db_session: MagicMock,
         mock_token: MagicMock,
         mock_dal: MagicMock,
+        provider: ScimProvider,
     ) -> None:
         mock_dal.get_group_by_name.return_value = make_db_group()
         resource = make_scim_group()
@@ -192,6 +209,7 @@ class TestCreateGroup:
         result = create_group(
             group_resource=resource,
             _token=mock_token,
+            provider=provider,
             db_session=mock_db_session,
         )
 
@@ -204,6 +222,7 @@ class TestCreateGroup:
         mock_db_session: MagicMock,
         mock_token: MagicMock,
         mock_dal: MagicMock,
+        provider: ScimProvider,
     ) -> None:
         mock_dal.get_group_by_name.return_value = None
         mock_validate.return_value = ([], "Invalid member ID: bad-uuid")
@@ -213,6 +232,7 @@ class TestCreateGroup:
         result = create_group(
             group_resource=resource,
             _token=mock_token,
+            provider=provider,
             db_session=mock_db_session,
         )
 
@@ -225,6 +245,7 @@ class TestCreateGroup:
         mock_db_session: MagicMock,
         mock_token: MagicMock,
         mock_dal: MagicMock,
+        provider: ScimProvider,
     ) -> None:
         mock_dal.get_group_by_name.return_value = None
         uid = uuid4()
@@ -235,6 +256,7 @@ class TestCreateGroup:
         result = create_group(
             group_resource=resource,
             _token=mock_token,
+            provider=provider,
             db_session=mock_db_session,
         )
 
@@ -247,6 +269,7 @@ class TestCreateGroup:
         mock_db_session: MagicMock,
         mock_token: MagicMock,
         mock_dal: MagicMock,
+        provider: ScimProvider,
     ) -> None:
         mock_dal.get_group_by_name.return_value = None
         mock_validate.return_value = ([], None)
@@ -257,10 +280,11 @@ class TestCreateGroup:
         result = create_group(
             group_resource=resource,
             _token=mock_token,
+            provider=provider,
             db_session=mock_db_session,
         )
 
-        assert isinstance(result, ScimGroupResource)
+        parse_scim_group(result, status=201)
         mock_dal.create_group_mapping.assert_called_once()
 
 
@@ -274,6 +298,7 @@ class TestReplaceGroup:
         mock_db_session: MagicMock,
         mock_token: MagicMock,
         mock_dal: MagicMock,
+        provider: ScimProvider,
     ) -> None:
         group = make_db_group(id=5, name="Old Name")
         mock_dal.get_group.return_value = group
@@ -286,10 +311,11 @@ class TestReplaceGroup:
             group_id="5",
             group_resource=resource,
             _token=mock_token,
+            provider=provider,
             db_session=mock_db_session,
         )
 
-        assert isinstance(result, ScimGroupResource)
+        parse_scim_group(result)
         mock_dal.update_group.assert_called_once_with(group, name="New Name")
         mock_dal.replace_group_members.assert_called_once()
         mock_dal.commit.assert_called_once()
@@ -299,6 +325,7 @@ class TestReplaceGroup:
         mock_db_session: MagicMock,
         mock_token: MagicMock,
         mock_dal: MagicMock,
+        provider: ScimProvider,
     ) -> None:
         mock_dal.get_group.return_value = None
 
@@ -306,6 +333,7 @@ class TestReplaceGroup:
             group_id="999",
             group_resource=make_scim_group(),
             _token=mock_token,
+            provider=provider,
             db_session=mock_db_session,
         )
 
@@ -318,6 +346,7 @@ class TestReplaceGroup:
         mock_db_session: MagicMock,
         mock_token: MagicMock,
         mock_dal: MagicMock,
+        provider: ScimProvider,
     ) -> None:
         group = make_db_group(id=5)
         mock_dal.get_group.return_value = group
@@ -329,6 +358,7 @@ class TestReplaceGroup:
             group_id="5",
             group_resource=resource,
             _token=mock_token,
+            provider=provider,
             db_session=mock_db_session,
         )
 
@@ -341,6 +371,7 @@ class TestReplaceGroup:
         mock_db_session: MagicMock,
         mock_token: MagicMock,
         mock_dal: MagicMock,
+        provider: ScimProvider,
     ) -> None:
         group = make_db_group(id=5)
         mock_dal.get_group.return_value = group
@@ -353,6 +384,7 @@ class TestReplaceGroup:
             group_id="5",
             group_resource=resource,
             _token=mock_token,
+            provider=provider,
             db_session=mock_db_session,
         )
 
@@ -369,6 +401,7 @@ class TestPatchGroup:
         mock_db_session: MagicMock,
         mock_token: MagicMock,
         mock_dal: MagicMock,
+        provider: ScimProvider,
     ) -> None:
         group = make_db_group(id=5, name="Old Name")
         mock_dal.get_group.return_value = group
@@ -391,10 +424,11 @@ class TestPatchGroup:
             group_id="5",
             patch_request=patch_req,
             _token=mock_token,
+            provider=provider,
             db_session=mock_db_session,
         )
 
-        assert isinstance(result, ScimGroupResource)
+        parse_scim_group(result)
         mock_dal.update_group.assert_called_once_with(group, name="New Name")
 
     def test_not_found_returns_404(
@@ -402,6 +436,7 @@ class TestPatchGroup:
         mock_db_session: MagicMock,
         mock_token: MagicMock,
         mock_dal: MagicMock,
+        provider: ScimProvider,
     ) -> None:
         mock_dal.get_group.return_value = None
 
@@ -419,6 +454,7 @@ class TestPatchGroup:
             group_id="999",
             patch_request=patch_req,
             _token=mock_token,
+            provider=provider,
             db_session=mock_db_session,
         )
 
@@ -431,6 +467,7 @@ class TestPatchGroup:
         mock_db_session: MagicMock,
         mock_token: MagicMock,
         mock_dal: MagicMock,
+        provider: ScimProvider,
     ) -> None:
         group = make_db_group(id=5)
         mock_dal.get_group.return_value = group
@@ -452,6 +489,7 @@ class TestPatchGroup:
             group_id="5",
             patch_request=patch_req,
             _token=mock_token,
+            provider=provider,
             db_session=mock_db_session,
         )
 
@@ -464,6 +502,7 @@ class TestPatchGroup:
         mock_db_session: MagicMock,
         mock_token: MagicMock,
         mock_dal: MagicMock,
+        provider: ScimProvider,
     ) -> None:
         group = make_db_group(id=5)
         mock_dal.get_group.return_value = group
@@ -483,7 +522,7 @@ class TestPatchGroup:
                 ScimPatchOperation(
                     op=ScimPatchOperationType.ADD,
                     path="members",
-                    value=[{"value": uid}],
+                    value=[ScimGroupMember(value=uid)],
                 )
             ]
         )
@@ -492,10 +531,11 @@ class TestPatchGroup:
             group_id="5",
             patch_request=patch_req,
             _token=mock_token,
+            provider=provider,
             db_session=mock_db_session,
         )
 
-        assert isinstance(result, ScimGroupResource)
+        parse_scim_group(result)
         mock_dal.validate_member_ids.assert_called_once()
         mock_dal.upsert_group_members.assert_called_once()
 
@@ -506,6 +546,7 @@ class TestPatchGroup:
         mock_db_session: MagicMock,
         mock_token: MagicMock,
         mock_dal: MagicMock,
+        provider: ScimProvider,
     ) -> None:
         group = make_db_group(id=5)
         mock_dal.get_group.return_value = group
@@ -525,7 +566,7 @@ class TestPatchGroup:
                 ScimPatchOperation(
                     op=ScimPatchOperationType.ADD,
                     path="members",
-                    value=[{"value": str(uid)}],
+                    value=[ScimGroupMember(value=str(uid))],
                 )
             ]
         )
@@ -534,6 +575,7 @@ class TestPatchGroup:
             group_id="5",
             patch_request=patch_req,
             _token=mock_token,
+            provider=provider,
             db_session=mock_db_session,
         )
 
@@ -546,6 +588,7 @@ class TestPatchGroup:
         mock_db_session: MagicMock,
         mock_token: MagicMock,
         mock_dal: MagicMock,
+        provider: ScimProvider,
     ) -> None:
         group = make_db_group(id=5)
         mock_dal.get_group.return_value = group
@@ -568,10 +611,11 @@ class TestPatchGroup:
             group_id="5",
             patch_request=patch_req,
             _token=mock_token,
+            provider=provider,
             db_session=mock_db_session,
         )
 
-        assert isinstance(result, ScimGroupResource)
+        parse_scim_group(result)
         mock_dal.remove_group_members.assert_called_once()
 
 

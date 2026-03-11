@@ -19,7 +19,7 @@ import {
 import { createGuildConfig } from "@/app/admin/discord-bot/lib";
 import { DiscordGuildsTable } from "@/app/admin/discord-bot/DiscordGuildsTable";
 import { BotConfigCard } from "@/app/admin/discord-bot/BotConfigCard";
-import { SvgDiscordMono } from "@opal/icons";
+import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
 
 function DiscordBotContent() {
   const { data: guilds, isLoading, error, refreshGuilds } = useDiscordGuilds();
@@ -118,11 +118,13 @@ function DiscordBotContent() {
 }
 
 export default function Page() {
+  const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.DISCORD_BOTS]!;
+
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
-        icon={SvgDiscordMono}
-        title="Discord Bots"
+        icon={route.icon}
+        title={route.title}
         description="Connect Onyx to your Discord servers. Users can ask questions directly in Discord channels."
       />
       <SettingsLayouts.Body>

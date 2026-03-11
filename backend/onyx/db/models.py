@@ -25,6 +25,7 @@ from sqlalchemy import desc
 from sqlalchemy import Enum
 from sqlalchemy import Float
 from sqlalchemy import ForeignKey
+from sqlalchemy import ForeignKeyConstraint
 from sqlalchemy import func
 from sqlalchemy import Index
 from sqlalchemy import Integer
@@ -36,9 +37,11 @@ from sqlalchemy import Text
 from sqlalchemy import text
 from sqlalchemy import UniqueConstraint
 from sqlalchemy.dialects import postgresql
+from sqlalchemy import event
 from sqlalchemy.engine.interfaces import Dialect
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.orm import Mapped
+from sqlalchemy.orm import Mapper
 from sqlalchemy.orm import mapped_column
 from sqlalchemy.orm import relationship
 from sqlalchemy.types import LargeBinary
@@ -77,6 +80,7 @@ from onyx.db.enums import (
     ThemePreference,
     DefaultAppMode,
     SwitchoverType,
+    SharingScope,
 )
 from onyx.configs.constants import NotificationType
 from onyx.configs.constants import SearchFeedbackType
@@ -102,7 +106,6 @@ from onyx.utils.encryption import encrypt_string_to_bytes
 from onyx.utils.sensitive import SensitiveValue
 from onyx.utils.headers import HeaderItemDict
 from shared_configs.enums import EmbeddingProvider
-from onyx.context.search.enums import RecencyBiasSetting
 
 # TODO: After anonymous user migration has been deployed, make user_id columns NOT NULL
 # and update Mapped[User | None] relationships to Mapped[User] where needed.
@@ -117,10 +120,52 @@ class Base(DeclarativeBase):
     __abstract__ = True
 
 
-class EncryptedString(TypeDecorator):
+class _EncryptedBase(TypeDecorator):
+    """Base for encrypted column types that wrap values in SensitiveValue."""
+
     impl = LargeBinary
-    # This type's behavior is fully deterministic and doesn't depend on any external factors.
     cache_ok = True
+    _is_json: bool = False
+
+    def wrap_raw(self, value: Any) -> SensitiveValue:
+        """Encrypt a raw value and wrap it in SensitiveValue.
+
+        Called by the attribute set event so the Python-side type is always
+        SensitiveValue, regardless of whether the value was loaded from the DB
+        or assigned in application code.
+        """
+        if self._is_json:
+            if not isinstance(value, dict):
+                raise TypeError(
+                    f"EncryptedJson column expected dict, got {type(value).__name__}"
+                )
+            raw_str = json.dumps(value)
+        else:
+            if not isinstance(value, str):
+                raise TypeError(
+                    f"EncryptedString column expected str, got {type(value).__name__}"
+                )
+            raw_str = value
+        return SensitiveValue(
+            encrypted_bytes=encrypt_string_to_bytes(raw_str),
+            decrypt_fn=decrypt_bytes_to_string,
+            is_json=self._is_json,
+        )
+
+    def compare_values(self, x: Any, y: Any) -> bool:
+        if x is None or y is None:
+            return x == y
+        if isinstance(x, SensitiveValue):
+            x = x.get_value(apply_mask=False)
+        if isinstance(y, SensitiveValue):
+            y = y.get_value(apply_mask=False)
+        return x == y
+
+
+class EncryptedString(_EncryptedBase):
+    # Must redeclare cache_ok in this child class since we explicitly redeclare _is_json
+    cache_ok = True
+    _is_json: bool = False
 
     def process_bind_param(
         self, value: str | SensitiveValue[str] | None, dialect: Dialect  # noqa: ARG002
@@ -144,20 +189,10 @@ class EncryptedString(TypeDecorator):
             )
         return None
 
-    def compare_values(self, x: Any, y: Any) -> bool:
-        if x is None or y is None:
-            return x == y
-        if isinstance(x, SensitiveValue):
-            x = x.get_value(apply_mask=False)
-        if isinstance(y, SensitiveValue):
-            y = y.get_value(apply_mask=False)
-        return x == y
 
-
-class EncryptedJson(TypeDecorator):
-    impl = LargeBinary
-    # This type's behavior is fully deterministic and doesn't depend on any external factors.
+class EncryptedJson(_EncryptedBase):
     cache_ok = True
+    _is_json: bool = True
 
     def process_bind_param(
         self,
@@ -165,9 +200,7 @@ class EncryptedJson(TypeDecorator):
         dialect: Dialect,  # noqa: ARG002
     ) -> bytes | None:
         if value is not None:
-            # Handle both raw dicts and SensitiveValue wrappers
             if isinstance(value, SensitiveValue):
-                # Get raw value for storage
                 value = value.get_value(apply_mask=False)
             json_str = json.dumps(value)
             return encrypt_string_to_bytes(json_str)
@@ -184,14 +217,40 @@ class EncryptedJson(TypeDecorator):
             )
         return None
 
-    def compare_values(self, x: Any, y: Any) -> bool:
-        if x is None or y is None:
-            return x == y
-        if isinstance(x, SensitiveValue):
-            x = x.get_value(apply_mask=False)
-        if isinstance(y, SensitiveValue):
-            y = y.get_value(apply_mask=False)
-        return x == y
+
+_REGISTERED_ATTRS: set[str] = set()
+
+
+@event.listens_for(Mapper, "mapper_configured")
+def _register_sensitive_value_set_events(
+    mapper: Mapper,
+    class_: type,
+) -> None:
+    """Auto-wrap raw values in SensitiveValue when assigned to encrypted columns."""
+    for prop in mapper.column_attrs:
+        for col in prop.columns:
+            if isinstance(col.type, _EncryptedBase):
+                col_type = col.type
+                attr = getattr(class_, prop.key)
+
+                # Guard against double-registration (e.g. if mapper is
+                # re-configured in test setups)
+                attr_key = f"{class_.__qualname__}.{prop.key}"
+                if attr_key in _REGISTERED_ATTRS:
+                    continue
+                _REGISTERED_ATTRS.add(attr_key)
+
+                @event.listens_for(attr, "set", retval=True)
+                def _wrap_value(
+                    target: Any,  # noqa: ARG001
+                    value: Any,
+                    oldvalue: Any,  # noqa: ARG001
+                    initiator: Any,  # noqa: ARG001
+                    _col_type: _EncryptedBase = col_type,
+                ) -> Any:
+                    if value is not None and not isinstance(value, SensitiveValue):
+                        return _col_type.wrap_raw(value)
+                    return value
 
 
 class NullFilteredString(TypeDecorator):
@@ -286,7 +345,7 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
 
     # relationships
     credentials: Mapped[list["Credential"]] = relationship(
-        "Credential", back_populates="user", lazy="joined"
+        "Credential", back_populates="user"
     )
     chat_sessions: Mapped[list["ChatSession"]] = relationship(
         "ChatSession", back_populates="user"
@@ -320,7 +379,6 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         "Memory",
         back_populates="user",
         cascade="all, delete-orphan",
-        lazy="selectin",
         order_by="desc(Memory.id)",
     )
     oauth_user_tokens: Mapped[list["OAuthUserToken"]] = relationship(
@@ -1040,7 +1098,9 @@ class OpenSearchTenantMigrationRecord(Base):
         nullable=False,
     )
     # Opaque continuation token from Vespa's Visit API.
-    # NULL means "not started" or "visit completed".
+    # NULL means "not started".
+    # Otherwise contains a serialized mapping between slice ID and continuation
+    # token for that slice.
     vespa_visit_continuation_token: Mapped[str | None] = mapped_column(
         Text, nullable=True
     )
@@ -1063,6 +1123,9 @@ class OpenSearchTenantMigrationRecord(Base):
     )
     enable_opensearch_retrieval: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
+    )
+    approx_chunk_count_in_vespa: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
     )
 
 
@@ -2366,6 +2429,38 @@ class SyncRecord(Base):
     )
 
 
+class HierarchyNodeByConnectorCredentialPair(Base):
+    """Tracks which cc_pairs reference each hierarchy node.
+
+    During pruning, stale entries are removed for the current cc_pair.
+    Hierarchy nodes with zero remaining entries are then deleted.
+    """
+
+    __tablename__ = "hierarchy_node_by_connector_credential_pair"
+
+    hierarchy_node_id: Mapped[int] = mapped_column(
+        ForeignKey("hierarchy_node.id", ondelete="CASCADE"), primary_key=True
+    )
+    connector_id: Mapped[int] = mapped_column(primary_key=True)
+    credential_id: Mapped[int] = mapped_column(primary_key=True)
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["connector_id", "credential_id"],
+            [
+                "connector_credential_pair.connector_id",
+                "connector_credential_pair.credential_id",
+            ],
+            ondelete="CASCADE",
+        ),
+        Index(
+            "ix_hierarchy_node_cc_pair_connector_credential",
+            "connector_id",
+            "credential_id",
+        ),
+    )
+
+
 class DocumentByConnectorCredentialPair(Base):
     """Represents an indexing of a document by a specific connector / credential pair"""
 
@@ -2817,13 +2912,17 @@ class LLMProvider(Base):
     custom_config: Mapped[dict[str, str] | None] = mapped_column(
         postgresql.JSONB(), nullable=True
     )
-    default_model_name: Mapped[str] = mapped_column(String)
+
+    # Deprecated: use LLMModelFlow with CHAT flow type instead
+    default_model_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
     deployment_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
-    # should only be set for a single provider
-    is_default_provider: Mapped[bool | None] = mapped_column(Boolean, unique=True)
+    # Deprecated: use LLMModelFlow.is_default with CHAT flow type instead
+    is_default_provider: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    # Deprecated: use LLMModelFlow.is_default with VISION flow type instead
     is_default_vision_provider: Mapped[bool | None] = mapped_column(Boolean)
+    # Deprecated: use LLMModelFlow with VISION flow type instead
     default_vision_model: Mapped[str | None] = mapped_column(String, nullable=True)
     # EE only
     is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
@@ -2874,6 +2973,7 @@ class ModelConfiguration(Base):
     # - The end-user is configuring a model and chooses not to set a max-input-tokens limit.
     max_input_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
+    # Deprecated: use LLMModelFlow with VISION flow type instead
     supports_image_input: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
     # Human-readable display name for the model.
@@ -3255,19 +3355,6 @@ class Persona(Base):
     )
     name: Mapped[str] = mapped_column(String)
     description: Mapped[str] = mapped_column(String)
-    # Number of chunks to pass to the LLM for generation.
-    num_chunks: Mapped[float | None] = mapped_column(Float, nullable=True)
-    chunks_above: Mapped[int] = mapped_column(Integer)
-    chunks_below: Mapped[int] = mapped_column(Integer)
-    # Pass every chunk through LLM for evaluation, fairly expensive
-    # Can be turned off globally by admin, in which case, this setting is ignored
-    llm_relevance_filter: Mapped[bool] = mapped_column(Boolean)
-    # Enables using LLM to extract time and source type filters
-    # Can also be admin disabled globally
-    llm_filter_extraction: Mapped[bool] = mapped_column(Boolean)
-    recency_bias: Mapped[RecencyBiasSetting] = mapped_column(
-        Enum(RecencyBiasSetting, native_enum=False)
-    )
 
     # Allows the persona to specify a specific default LLM model
     # NOTE: only is applied on the actual response generation - is not used for things like
@@ -3294,11 +3381,8 @@ class Persona(Base):
     # Treated specially (cannot be user edited etc.)
     builtin_persona: Mapped[bool] = mapped_column(Boolean, default=False)
 
-    # Default personas are personas created by admins and are automatically added
-    # to all users' assistants list.
-    is_default_persona: Mapped[bool] = mapped_column(
-        Boolean, default=False, nullable=False
-    )
+    # Featured personas are highlighted in the UI
+    featured: Mapped[bool] = mapped_column(Boolean, default=False)
     # controls whether the persona is available to be selected by users
     is_visible: Mapped[bool] = mapped_column(Boolean, default=True)
     # controls the ordering of personas in the UI
@@ -4265,6 +4349,9 @@ class UserFile(Base):
     needs_project_sync: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
     )
+    needs_persona_sync: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
     last_project_sync_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -4712,6 +4799,12 @@ class BuildSession(Base):
     demo_data_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("true")
     )
+    sharing_scope: Mapped[SharingScope] = mapped_column(
+        String,
+        nullable=False,
+        default=SharingScope.PRIVATE,
+        server_default="private",
+    )
 
     # Relationships
     user: Mapped[User | None] = relationship("User", foreign_keys=[user_id])
@@ -4924,10 +5017,18 @@ class ScimUserMapping(Base):
     __tablename__ = "scim_user_mapping"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    external_id: Mapped[str] = mapped_column(String, unique=True, index=True)
+    external_id: Mapped[str | None] = mapped_column(
+        String, unique=True, index=True, nullable=True
+    )
     user_id: Mapped[UUID] = mapped_column(
         ForeignKey("user.id", ondelete="CASCADE"), unique=True, nullable=False
     )
+    scim_username: Mapped[str | None] = mapped_column(String, nullable=True)
+    department: Mapped[str | None] = mapped_column(String, nullable=True)
+    manager: Mapped[str | None] = mapped_column(String, nullable=True)
+    given_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    family_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    scim_emails_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -4965,4 +5066,35 @@ class ScimGroupMapping(Base):
 
     user_group: Mapped[UserGroup] = relationship(
         "UserGroup", foreign_keys=[user_group_id]
+    )
+
+
+class CodeInterpreterServer(Base):
+    """Details about the code interpreter server"""
+
+    __tablename__ = "code_interpreter_server"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    server_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+
+class CacheStore(Base):
+    """Key-value cache table used by ``PostgresCacheBackend``.
+
+    Replaces Redis for simple KV caching, locks, and list operations
+    when ``CACHE_BACKEND=postgres`` (NO_VECTOR_DB deployments).
+
+    Intentionally separate from ``KVStore``:
+    - Stores raw bytes (LargeBinary) vs JSONB, matching Redis semantics.
+    - Has ``expires_at`` for TTL; rows are periodically garbage-collected.
+    - Holds ephemeral data (tokens, stop signals, lock state) not
+      persistent application config, so cleanup can be aggressive.
+    """
+
+    __tablename__ = "cache_store"
+
+    key: Mapped[str] = mapped_column(String, primary_key=True)
+    value: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    expires_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )

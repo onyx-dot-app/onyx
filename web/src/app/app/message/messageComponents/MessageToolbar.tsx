@@ -18,7 +18,7 @@ import SourceTag from "@/refresh-components/buttons/source-tag/SourceTag";
 import { citationsToSourceInfoArray } from "@/refresh-components/buttons/source-tag/sourceTagUtils";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import LLMPopover from "@/refresh-components/popovers/LLMPopover";
-import { parseLlmDescriptor } from "@/lib/llm/utils";
+import { parseLlmDescriptor } from "@/lib/llmConfig/utils";
 import { LlmManager } from "@/lib/hooks";
 import { Message } from "@/app/app/interfaces";
 import { SvgThumbsDown, SvgThumbsUp } from "@opal/icons";
@@ -28,7 +28,7 @@ import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import FeedbackModal, {
   FeedbackModalProps,
 } from "@/sections/modals/FeedbackModal";
-import { Button } from "@opal/components";
+import { Button, SelectButton } from "@opal/components";
 
 // Wrapper component for SourceTag in toolbar to handle memoization
 const SourcesTagWrapper = React.memo(function SourcesTagWrapper({
@@ -75,6 +75,7 @@ const SourcesTagWrapper = React.memo(function SourcesTagWrapper({
 
   return (
     <SourceTag
+      variant="button"
       displayName="Sources"
       sources={sources}
       onSourceClick={handleSourceClick}
@@ -245,21 +246,21 @@ export default function MessageToolbar({
               getHtmlContent={() => finalAnswerRef.current?.innerHTML || ""}
               data-testid="AgentMessage/copy-button"
             />
-            <Button
+            <SelectButton
               icon={SvgThumbsUp}
               onClick={() => handleFeedbackClick("like")}
-              variant="select"
-              selected={isFeedbackTransient("like")}
+              variant="select-light"
+              state={isFeedbackTransient("like") ? "selected" : "empty"}
               tooltip={
                 currentFeedback === "like" ? "Remove Like" : "Good Response"
               }
               data-testid="AgentMessage/like-button"
             />
-            <Button
+            <SelectButton
               icon={SvgThumbsDown}
               onClick={() => handleFeedbackClick("dislike")}
-              variant="select"
-              selected={isFeedbackTransient("dislike")}
+              variant="select-light"
+              state={isFeedbackTransient("dislike") ? "selected" : "empty"}
               tooltip={
                 currentFeedback === "dislike"
                   ? "Remove Dislike"
@@ -284,7 +285,7 @@ export default function MessageToolbar({
                       });
                       regenerator(llmDescriptor);
                     }}
-                    folded
+                    foldable
                   />
                 </div>
               )}

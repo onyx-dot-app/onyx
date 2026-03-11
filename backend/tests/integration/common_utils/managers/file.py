@@ -10,7 +10,6 @@ import requests
 from onyx.file_store.models import FileDescriptor
 from onyx.server.documents.models import FileUploadResponse
 from tests.integration.common_utils.constants import API_SERVER_URL
-from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.test_models import DATestUser
 
 
@@ -18,13 +17,9 @@ class FileManager:
     @staticmethod
     def upload_files(
         files: List[Tuple[str, IO]],
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> Tuple[List[FileDescriptor], str]:
-        headers = (
-            user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS
-        )
+        headers = user_performing_action.headers
         headers.pop("Content-Type", None)
 
         files_param = []
@@ -67,15 +62,11 @@ class FileManager:
     @staticmethod
     def fetch_uploaded_file(
         file_id: str,
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> bytes:
         response = requests.get(
             f"{API_SERVER_URL}/chat/file/{file_id}",
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         response.raise_for_status()
         return response.content

@@ -121,6 +121,7 @@ class VespaDocumentUserFields:
     """
 
     user_projects: list[int] | None = None
+    personas: list[int] | None = None
 
 
 @dataclass

@@ -3,7 +3,6 @@ import requests
 from ee.onyx.server.query_and_chat.models import SearchFullResponse
 from ee.onyx.server.query_and_chat.models import SendSearchQueryRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
-from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.test_models import DATestUser
 
 
@@ -11,7 +10,7 @@ class DocumentSearchManager:
     @staticmethod
     def search_documents(
         query: str,
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> list[str]:
         """
         Search for documents using the EE search API.
@@ -31,11 +30,7 @@ class DocumentSearchManager:
         result = requests.post(
             url=f"{API_SERVER_URL}/search/send-search-message",
             json=search_request.model_dump(),
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         result.raise_for_status()
         result_json = result.json()

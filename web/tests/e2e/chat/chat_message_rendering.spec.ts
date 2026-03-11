@@ -6,6 +6,9 @@ import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
 
 const SHORT_USER_MESSAGE = "What is Onyx?";
 
+const LONG_WORD_USER_MESSAGE =
+  "Please look into this issue: __________________________________________ and also this token: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA and this URL: https://example.com/a/very/long/path/that/keeps/going/and/going/and/going/without/any/breaks/whatsoever/to/test/overflow";
+
 const LONG_USER_MESSAGE = `I've been evaluating several enterprise search and AI platforms for our organization, and I have a number of detailed questions about Onyx that I'd like to understand before we make a decision.
 
 First, can you explain how Onyx handles document indexing across multiple data sources? We currently use Confluence, Google Drive, Slack, and GitHub, and we need to ensure that all of these can be indexed simultaneously without performance degradation.
@@ -116,18 +119,18 @@ let turnCounter = 0;
 function buildMockStream(content: string): string {
   turnCounter += 1;
   const userMessageId = turnCounter * 100 + 1;
-  const assistantMessageId = turnCounter * 100 + 2;
+  const agentMessageId = turnCounter * 100 + 2;
 
   const packets = [
     {
       user_message_id: userMessageId,
-      reserved_assistant_message_id: assistantMessageId,
+      reserved_assistant_message_id: agentMessageId,
     },
     {
       placement: { turn_index: 0, tab_index: 0 },
       obj: {
         type: "message_start",
-        id: `mock-${assistantMessageId}`,
+        id: `mock-${agentMessageId}`,
         content,
         final_documents: null,
       },
@@ -137,7 +140,7 @@ function buildMockStream(content: string): string {
       obj: { type: "stop", stop_reason: "finished" },
     },
     {
-      message_id: assistantMessageId,
+      message_id: agentMessageId,
       citations: {},
       files: [],
     },
@@ -149,7 +152,7 @@ function buildMockStream(content: string): string {
 function buildMockSearchStream(options: SearchMockOptions): string {
   turnCounter += 1;
   const userMessageId = turnCounter * 100 + 1;
-  const assistantMessageId = turnCounter * 100 + 2;
+  const agentMessageId = turnCounter * 100 + 2;
 
   const fullDocs = options.documents.map((doc) => ({
     ...doc,
@@ -167,7 +170,7 @@ function buildMockSearchStream(options: SearchMockOptions): string {
   const packets: Record<string, unknown>[] = [
     {
       user_message_id: userMessageId,
-      reserved_assistant_message_id: assistantMessageId,
+      reserved_assistant_message_id: agentMessageId,
     },
     {
       placement: { turn_index: 0, tab_index: 0 },
@@ -194,7 +197,7 @@ function buildMockSearchStream(options: SearchMockOptions): string {
       placement: { turn_index: 1, tab_index: 0 },
       obj: {
         type: "message_start",
-        id: `mock-${assistantMessageId}`,
+        id: `mock-${agentMessageId}`,
         content: options.content,
         final_documents: fullDocs,
       },
@@ -212,7 +215,7 @@ function buildMockSearchStream(options: SearchMockOptions): string {
       obj: { type: "stop", stop_reason: "finished" },
     },
     {
-      message_id: assistantMessageId,
+      message_id: agentMessageId,
       citations: options.citations,
       files: [],
     },
@@ -258,12 +261,24 @@ async function mockChatEndpointSequence(
   });
 }
 
+async function scrollChatTo(
+  page: Page,
+  position: "top" | "bottom"
+): Promise<void> {
+  const scrollContainer = page.getByTestId("chat-scroll-container");
+  await scrollContainer.evaluate(async (el, pos) => {
+    el.scrollTo({ top: pos === "top" ? 0 : el.scrollHeight });
+    await new Promise<void>((r) => requestAnimationFrame(() => r()));
+  }, position);
+}
+
 async function screenshotChatContainer(
   page: Page,
   name: string
 ): Promise<void> {
   const container = page.locator("[data-main-container]");
   await expect(container).toBeVisible();
+  await scrollChatTo(page, "bottom");
   await expectElementScreenshot(container, { name });
 }
 
@@ -279,12 +294,11 @@ async function screenshotChatContainerTopAndBottom(
 ): Promise<void> {
   const container = page.locator("[data-main-container]");
   await expect(container).toBeVisible();
-  const scrollContainer = page.getByTestId("chat-scroll-container");
 
-  await scrollContainer.evaluate((el) => el.scrollTo({ top: 0 }));
+  await scrollChatTo(page, "top");
   await expectElementScreenshot(container, { name: `${name}-top` });
 
-  await scrollContainer.evaluate((el) => el.scrollTo({ top: el.scrollHeight }));
+  await scrollChatTo(page, "bottom");
   await expectElementScreenshot(container, { name: `${name}-bottom` });
 }
 
@@ -356,6 +370,36 @@ for (const theme of THEMES) {
           page,
           `chat-short-message-long-response-${theme}`
         );
+      });
+
+      test("user message with very long words wraps without overflowing", async ({
+        page,
+      }) => {
+        await openChat(page);
+        await mockChatEndpoint(page, SHORT_AI_RESPONSE);
+
+        await sendMessage(page, LONG_WORD_USER_MESSAGE);
+
+        const userMessage = page.locator("#onyx-human-message").first();
+        await expect(userMessage).toContainText("__________");
+
+        await screenshotChatContainer(
+          page,
+          `chat-long-word-user-message-${theme}`
+        );
+
+        // Assert the message bubble does not overflow horizontally.
+        const overflows = await userMessage.evaluate((el) => {
+          const bubble = el.querySelector<HTMLElement>(
+            ".whitespace-break-spaces"
+          );
+          if (!bubble)
+            throw new Error(
+              "Expected human message bubble (.whitespace-break-spaces) to exist"
+            );
+          return bubble.scrollWidth > bubble.offsetWidth;
+        });
+        expect(overflows).toBe(false);
       });
 
       test("long user message with long AI response renders correctly", async ({
@@ -478,6 +522,11 @@ for (const theme of THEMES) {
         const aiMessage = page.getByTestId("onyx-ai-message").first();
         const toolbar = aiMessage.getByTestId("AgentMessage/toolbar");
         await expect(toolbar).toBeVisible({ timeout: 10000 });
+
+        await toolbar.scrollIntoViewIfNeeded();
+        await page.evaluate(
+          () => new Promise<void>((r) => requestAnimationFrame(() => r()))
+        );
 
         for (const buttonTestId of TOOLBAR_BUTTONS) {
           const button = aiMessage.getByTestId(buttonTestId);
@@ -655,6 +704,58 @@ The platform architecture document provides additional context on how these impr
         );
 
         await screenshotToolbarButtonHoverStates(page, "chat-internal-search");
+      });
+    });
+
+    test.describe("Header Levels", () => {
+      const HEADINGS_RESPONSE = `# Getting Started
+
+This is the introductory paragraph.
+
+## Installing the \`onyx-sdk\`
+
+Follow these steps to install the SDK.
+
+### Configuration Options
+
+Some details about configuration.
+
+#### The \`max_results\` Parameter
+
+Set \`max_results\` to limit the number of returned documents.`;
+
+      test("h1 through h4 headings with inline code render correctly", async ({
+        page,
+      }) => {
+        await openChat(page);
+        await mockChatEndpoint(page, HEADINGS_RESPONSE);
+
+        await sendMessage(page, "Show me all heading levels");
+
+        const aiMessage = page.getByTestId("onyx-ai-message").first();
+
+        await expect(aiMessage.locator("h1")).toContainText("Getting Started");
+        await expect(aiMessage.locator("h2")).toContainText("Installing the");
+        await expect(
+          aiMessage.locator("h2").locator('[data-testid="code-block"]')
+        ).toContainText("onyx-sdk");
+        await expect(aiMessage.locator("h3")).toContainText(
+          "Configuration Options"
+        );
+        await expect(aiMessage.locator("h4")).toContainText("Parameter");
+        await expect(
+          aiMessage.locator("h4").locator('[data-testid="code-block"]')
+        ).toContainText("max_results");
+
+        await expect(aiMessage.locator("h1")).toHaveCount(1);
+        await expect(aiMessage.locator("h2")).toHaveCount(1);
+        await expect(aiMessage.locator("h3")).toHaveCount(1);
+        await expect(aiMessage.locator("h4")).toHaveCount(1);
+
+        await screenshotChatContainer(
+          page,
+          `chat-heading-levels-h1-h4-${theme}`
+        );
       });
     });
 

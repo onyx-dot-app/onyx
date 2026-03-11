@@ -7,6 +7,9 @@
 
 
 AUTH_TYPE=basic
+# Recommended for basic auth - used for signing password reset and verification tokens
+# Generate a secure value with: openssl rand -hex 32
+USER_AUTH_SECRET=""
 DEV_MODE=true
 
 

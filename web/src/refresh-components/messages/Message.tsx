@@ -3,8 +3,7 @@
 import React, { useMemo } from "react";
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
-import IconButton from "@/refresh-components/buttons/IconButton";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import {
   SvgAlertCircle,
   SvgAlertTriangle,
@@ -12,6 +11,8 @@ import {
   SvgX,
   SvgXOctagon,
 } from "@opal/icons";
+import type { IconFunctionComponent } from "@opal/types";
+
 const containerClasses = {
   flash: {
     default: {
@@ -218,8 +219,13 @@ export interface MessageProps extends React.HTMLAttributes<HTMLDivElement> {
 
   // Features:
   icon?: boolean;
+  iconComponent?: IconFunctionComponent;
   actions?: boolean | string;
   close?: boolean;
+
+  // Action button customization:
+  actionIcon?: IconFunctionComponent;
+  actionPrimary?: boolean;
 
   // Callbacks:
   onClose?: () => void;
@@ -244,8 +250,12 @@ function MessageInner(
     description,
 
     icon = true,
+    iconComponent,
     actions,
     close = true,
+
+    actionIcon,
+    actionPrimary,
 
     onClose,
     onAction,
@@ -279,8 +289,9 @@ function MessageInner(
   const textClass = useMemo(() => textClasses[type].text, [type]);
   const descriptionClass = useMemo(() => textClasses[type].description, [type]);
 
-  const IconComponent =
-    level === "success"
+  const IconComponent = iconComponent
+    ? iconComponent
+    : level === "success"
       ? SvgCheckCircle
       : level === "warning"
         ? SvgAlertTriangle
@@ -333,9 +344,10 @@ function MessageInner(
       {actions && (
         <div className="flex items-center justify-end shrink-0 self-center pr-2">
           <Button
-            secondary
+            prominence={actionPrimary ? "primary" : "secondary"}
+            icon={actionIcon}
             onClick={onAction}
-            className={size === "large" ? "p-2" : "p-1"}
+            size={size === "large" ? "lg" : "md"}
           >
             {typeof actions === "string" ? actions : "Cancel"}
           </Button>
@@ -346,12 +358,12 @@ function MessageInner(
       {close && (
         <div className="flex items-center justify-center shrink-0">
           <div className={cn("flex items-start", closeButtonSize)}>
-            <IconButton
-              internal
+            <Button
+              prominence="internal"
               icon={SvgX}
               onClick={onClose}
               aria-label="Close"
-              className={size === "large" ? "p-2 rounded-12" : "p-1 rounded-08"}
+              size={size === "large" ? "lg" : "sm"}
             />
           </div>
         </div>

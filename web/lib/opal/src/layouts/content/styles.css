@@ -1,0 +1,433 @@
+/* ===========================================================================
+   Content — ContentXl
+
+   Icon row on top (flex-col). Icon row contains main icon + optional
+   moreIcon1 / moreIcon2 in a flex-row.
+
+   Sizing (icon size, gap, padding, font, line-height) is driven by the
+   sizePreset prop via inline styles + Tailwind classes in the component.
+   =========================================================================== */
+
+/* ---------------------------------------------------------------------------
+   Layout — flex-col (icon row above body)
+   --------------------------------------------------------------------------- */
+
+.opal-content-xl {
+  @apply flex flex-col items-start;
+}
+
+/* ---------------------------------------------------------------------------
+   Icon row — flex-row containing main icon + more icons
+   --------------------------------------------------------------------------- */
+
+.opal-content-xl-icon-row {
+  @apply flex flex-row items-center;
+  gap: 0.25rem;
+}
+
+/* ---------------------------------------------------------------------------
+   Icons
+   --------------------------------------------------------------------------- */
+
+.opal-content-xl-icon-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.opal-content-xl-more-icon-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.opal-content-xl-icon {
+  color: var(--text-04);
+}
+
+/* ---------------------------------------------------------------------------
+   Body column
+   --------------------------------------------------------------------------- */
+
+.opal-content-xl-body {
+  @apply flex flex-1 flex-col items-start;
+  min-width: 0.0625rem;
+}
+
+/* ---------------------------------------------------------------------------
+   Title row — title (or input) + edit button
+   --------------------------------------------------------------------------- */
+
+.opal-content-xl-title-row {
+  @apply flex items-center w-full;
+  gap: 0.25rem;
+}
+
+.opal-content-xl-title {
+  @apply text-left overflow-hidden text-text-04;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  padding: 0 0.125rem;
+  min-width: 0.0625rem;
+}
+
+.opal-content-xl-input-sizer {
+  display: inline-grid;
+  align-items: stretch;
+}
+
+.opal-content-xl-input-sizer > * {
+  grid-area: 1 / 1;
+  padding: 0 0.125rem;
+  min-width: 0.0625rem;
+}
+
+.opal-content-xl-input-mirror {
+  visibility: hidden;
+  white-space: pre;
+}
+
+.opal-content-xl-input {
+  @apply bg-transparent outline-none border-none;
+}
+
+/* ---------------------------------------------------------------------------
+   Edit button — visible only on hover of the outer container
+   --------------------------------------------------------------------------- */
+
+.opal-content-xl-edit-button {
+  @apply opacity-0 transition-opacity shrink-0;
+}
+
+.opal-content-xl:hover .opal-content-xl-edit-button {
+  @apply opacity-100;
+}
+
+/* ---------------------------------------------------------------------------
+   Description
+   --------------------------------------------------------------------------- */
+
+.opal-content-xl-description {
+  @apply text-left w-full;
+  padding: 0 0.125rem;
+}
+
+/* ===========================================================================
+   Content — ContentLg
+
+   Always inline (flex-row) — icon beside content.
+
+   Sizing (icon size, gap, padding, font, line-height) is driven by the
+   sizePreset prop via inline styles + Tailwind classes in the component.
+   =========================================================================== */
+
+/* ---------------------------------------------------------------------------
+   Layout
+   --------------------------------------------------------------------------- */
+
+.opal-content-lg {
+  @apply flex flex-row items-start;
+}
+
+/* ---------------------------------------------------------------------------
+   Icon
+   --------------------------------------------------------------------------- */
+
+.opal-content-lg-icon-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.opal-content-lg-icon {
+  color: var(--text-04);
+}
+
+/* ---------------------------------------------------------------------------
+   Body column
+   --------------------------------------------------------------------------- */
+
+.opal-content-lg-body {
+  @apply flex flex-1 flex-col items-start;
+  min-width: 0.0625rem;
+}
+
+/* ---------------------------------------------------------------------------
+   Title row — title (or input) + edit button
+   --------------------------------------------------------------------------- */
+
+.opal-content-lg-title-row {
+  @apply flex items-center w-full;
+  gap: 0.25rem;
+}
+
+.opal-content-lg-title {
+  @apply text-left overflow-hidden text-text-04;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  padding: 0 0.125rem;
+  min-width: 0.0625rem;
+}
+
+.opal-content-lg-input-sizer {
+  display: inline-grid;
+  align-items: stretch;
+}
+
+.opal-content-lg-input-sizer > * {
+  grid-area: 1 / 1;
+  padding: 0 0.125rem;
+  min-width: 0.0625rem;
+}
+
+.opal-content-lg-input-mirror {
+  visibility: hidden;
+  white-space: pre;
+}
+
+.opal-content-lg-input {
+  @apply bg-transparent outline-none border-none;
+}
+
+/* ---------------------------------------------------------------------------
+   Edit button — visible only on hover of the outer container
+   --------------------------------------------------------------------------- */
+
+.opal-content-lg-edit-button {
+  @apply opacity-0 transition-opacity shrink-0;
+}
+
+.opal-content-lg:hover .opal-content-lg-edit-button {
+  @apply opacity-100;
+}
+
+/* ---------------------------------------------------------------------------
+   Description
+   --------------------------------------------------------------------------- */
+
+.opal-content-lg-description {
+  @apply text-left w-full;
+  padding: 0 0.125rem;
+}
+
+/* ===========================================================================
+   Content — ContentMd
+
+   Always inline (flex-row). Icon color varies per sizePreset and is applied
+   via Tailwind class from the component.
+   =========================================================================== */
+
+/* ---------------------------------------------------------------------------
+   Layout
+   --------------------------------------------------------------------------- */
+
+.opal-content-md {
+  @apply flex flex-row items-start;
+}
+
+/* ---------------------------------------------------------------------------
+   Icon
+   --------------------------------------------------------------------------- */
+
+.opal-content-md-icon-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ---------------------------------------------------------------------------
+   Body column
+   --------------------------------------------------------------------------- */
+
+.opal-content-md-body {
+  @apply flex flex-1 flex-col items-start;
+  min-width: 0.0625rem;
+}
+
+/* ---------------------------------------------------------------------------
+   Title row — title (or input) + edit button
+   --------------------------------------------------------------------------- */
+
+.opal-content-md-title-row {
+  @apply flex items-center w-full;
+  gap: 0.25rem;
+}
+
+.opal-content-md-title {
+  @apply text-left overflow-hidden text-text-04;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  padding: 0 0.125rem;
+  min-width: 0.0625rem;
+}
+
+.opal-content-md-input-sizer {
+  display: inline-grid;
+  align-items: stretch;
+}
+
+.opal-content-md-input-sizer > * {
+  grid-area: 1 / 1;
+  padding: 0 0.125rem;
+  min-width: 0.0625rem;
+}
+
+.opal-content-md-input-mirror {
+  visibility: hidden;
+  white-space: pre;
+}
+
+.opal-content-md-input {
+  @apply bg-transparent outline-none border-none;
+}
+
+/* ---------------------------------------------------------------------------
+   Aux icon
+   --------------------------------------------------------------------------- */
+
+.opal-content-md-aux-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ---------------------------------------------------------------------------
+   Edit button — visible only on hover of the outer container
+   --------------------------------------------------------------------------- */
+
+.opal-content-md-edit-button {
+  @apply opacity-0 transition-opacity shrink-0;
+}
+
+.opal-content-md:hover .opal-content-md-edit-button {
+  @apply opacity-100;
+}
+
+/* ---------------------------------------------------------------------------
+   Description
+   --------------------------------------------------------------------------- */
+
+.opal-content-md-description {
+  @apply text-left w-full;
+  padding: 0 0.125rem;
+}
+
+/* ===========================================================================
+   Content — ContentSm
+
+   Three orientation modes (driven by orientation prop):
+     inline  : flex-row         — icon left, title right
+     vertical: flex-col         — icon top, title below
+     reverse : flex-row-reverse — title left, icon right
+
+   Icon color is always text-03. Title color varies by prominence
+   (text-04 default, text-03 muted, text-02 muted-2x) via data-prominence.
+   =========================================================================== */
+
+/* ---------------------------------------------------------------------------
+   Layout — orientation
+   --------------------------------------------------------------------------- */
+
+.opal-content-sm {
+  /* since `ContentSm` doesn't have a description, it's possible to center-align the icon and text */
+  @apply flex items-center;
+}
+
+.opal-content-sm[data-orientation="inline"] {
+  @apply flex-row;
+}
+
+.opal-content-sm[data-orientation="vertical"] {
+  @apply flex-col;
+}
+
+.opal-content-sm[data-orientation="reverse"] {
+  @apply flex-row-reverse;
+}
+
+/* ---------------------------------------------------------------------------
+   Icon
+   --------------------------------------------------------------------------- */
+
+.opal-content-sm-icon-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.opal-content-sm-icon {
+  @apply text-text-03;
+}
+
+.opal-content-sm[data-prominence="muted"] .opal-content-sm-icon {
+  @apply text-text-02;
+}
+
+.opal-content-sm[data-prominence="muted-2x"] .opal-content-sm-icon {
+  @apply text-text-02;
+}
+
+/* ---------------------------------------------------------------------------
+   Title
+   --------------------------------------------------------------------------- */
+
+.opal-content-sm-title {
+  @apply text-left overflow-hidden text-text-04 truncate;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  padding: 0 0.125rem;
+  min-width: 0.0625rem;
+}
+
+.opal-content-sm[data-prominence="muted"] .opal-content-sm-title {
+  @apply text-text-03;
+}
+
+.opal-content-sm[data-prominence="muted-2x"] .opal-content-sm-title {
+  @apply text-text-02;
+}
+
+/* ===========================================================================
+   Interactive-foreground opt-in
+
+   When a Content variant is nested inside an Interactive and
+   `withInteractive` is set, the title and icon delegate their color to the
+   `--interactive-foreground` / `--interactive-foreground-icon` CSS variables
+   controlled by the ancestor Interactive variant.
+   =========================================================================== */
+
+.opal-content-xl[data-interactive] .opal-content-xl-title {
+  color: var(--interactive-foreground);
+}
+
+.opal-content-xl[data-interactive] .opal-content-xl-icon {
+  color: var(--interactive-foreground-icon);
+}
+
+.opal-content-lg[data-interactive] .opal-content-lg-title {
+  color: var(--interactive-foreground);
+}
+
+.opal-content-lg[data-interactive] .opal-content-lg-icon {
+  color: var(--interactive-foreground-icon);
+}
+
+.opal-content-md[data-interactive] .opal-content-md-title {
+  color: var(--interactive-foreground);
+}
+
+.opal-content-md[data-interactive] .opal-content-md-icon {
+  color: var(--interactive-foreground-icon);
+}
+
+.opal-content-sm[data-interactive] .opal-content-sm-title {
+  color: var(--interactive-foreground);
+}
+
+.opal-content-sm[data-interactive] .opal-content-sm-icon {
+  color: var(--interactive-foreground-icon);
+}

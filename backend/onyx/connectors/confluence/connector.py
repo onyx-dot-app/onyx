@@ -943,6 +943,9 @@ class ConfluenceConnector(
                         if include_permissions
                         else None
                     ),
+                    parent_hierarchy_raw_node_id=self._get_parent_hierarchy_raw_id(
+                        page
+                    ),
                 )
             )
 
@@ -992,6 +995,7 @@ class ConfluenceConnector(
                             if include_permissions
                             else None
                         ),
+                        parent_hierarchy_raw_node_id=page_id,
                     )
                 )
 
