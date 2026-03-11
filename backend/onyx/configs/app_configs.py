@@ -50,6 +50,11 @@ def get_secret_env(
             )
             if file_value:
                 return file_value
+            logger.warning(
+                "Secret file at '%s' (from %s) is empty; falling back to next source.",
+                file_path,
+                file_env_var,
+            )
 
     return default
 
