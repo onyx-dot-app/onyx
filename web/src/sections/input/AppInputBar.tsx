@@ -131,7 +131,10 @@ const AppInputBar = React.memo(
     const filesContentRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const { user } = useUser();
-    const { isClassifying, classification } = useQueryController();
+    const { state } = useQueryController();
+    const isClassifying = state.phase === "classifying";
+    const isSearchActive =
+      state.phase === "searching" || state.phase === "search-results";
     const {
       stopTTS,
       isTTSPlaying,
@@ -164,10 +167,6 @@ const AppInputBar = React.memo(
       },
       [stopTTS, onSubmit]
     );
-    const { state } = useQueryController();
-    const isClassifying = state.phase === "classifying";
-    const isSearchActive =
-      state.phase === "searching" || state.phase === "search-results";
 
     // Expose reset and focus methods to parent via ref
     React.useImperativeHandle(ref, () => ({
@@ -189,15 +188,13 @@ const AppInputBar = React.memo(
     }, [initialMessage]);
     const appFocus = useAppFocus();
     const isNewSession = appFocus.isNewSession();
+    const appMode = state.phase === "idle" ? state.appMode : undefined;
     const isSearchMode =
-      (isNewSession && appMode === "search") || classification === "search";
+      (isNewSession && appMode === "search") || isSearchActive;
     const shouldShowRecordingWaveformBelow =
       isRecording &&
       !isVoicePlaybackActive &&
       (isNewSession || recordingCycleCount === 1);
-    const appMode = state.phase === "idle" ? state.appMode : undefined;
-    const isSearchMode =
-      (appFocus.isNewSession() && appMode === "search") || isSearchActive;
 
     const { forcedToolIds, setForcedToolIds } = useForcedTools();
     const { currentMessageFiles, setCurrentMessageFiles, currentProjectId } =
