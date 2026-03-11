@@ -16,6 +16,7 @@ from onyx.indexing.models import DocAwareChunk
 from onyx.indexing.models import IndexChunk
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.utils.logger import setup_logger
+from onyx.utils.pydantic_util import shallow_model_dump
 from onyx.utils.timing import log_function_time
 from shared_configs.configs import INDEXING_MODEL_SERVER_HOST
 from shared_configs.configs import INDEXING_MODEL_SERVER_PORT
@@ -211,10 +212,7 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
                     title_embed_dict[title] = title_embedding
 
             new_embedded_chunk = IndexChunk.model_construct(
-                **{
-                    field_name: getattr(chunk, field_name)
-                    for field_name in DocAwareChunk.model_fields
-                },
+                **shallow_model_dump(chunk),
                 embeddings=ChunkEmbedding(
                     full_embedding=chunk_embeddings[0],
                     mini_chunk_embeddings=chunk_embeddings[1:],
