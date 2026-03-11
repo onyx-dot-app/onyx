@@ -107,13 +107,18 @@ export default function EmailPasswordForm({
             if (!response.ok) {
               setIsWorking(false);
 
-              const errorDetail: any = (await response.json()).detail;
+              const errorData: any = await response.json();
+              const errorDetail: any = errorData.detail;
               let errorMsg: string = "Unknown error";
               if (typeof errorDetail === "object" && errorDetail.reason) {
                 errorMsg = errorDetail.reason;
               } else if (errorDetail === "REGISTER_USER_ALREADY_EXISTS") {
                 errorMsg =
                   "An account already exists with the specified email.";
+              } else if (typeof errorDetail === "string") {
+                errorMsg = errorDetail;
+              } else if (errorData.message) {
+                errorMsg = errorData.message;
               }
               if (response.status === 429) {
                 errorMsg = "Too many requests. Please try again later.";

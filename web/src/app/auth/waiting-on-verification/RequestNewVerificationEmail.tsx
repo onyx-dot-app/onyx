@@ -26,7 +26,9 @@ export function RequestNewVerificationEmail({
         if (response.ok) {
           toast.success("A new verification email has been sent!");
         } else {
-          const errorDetail = (await response.json()).detail;
+          const errorData = await response.json();
+          const errorDetail =
+            errorData.detail || errorData.message || "Unknown error";
           toast.error(
             `Failed to send a new verification email - ${errorDetail}`
           );

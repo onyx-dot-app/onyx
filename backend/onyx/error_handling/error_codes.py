@@ -95,7 +95,9 @@ class OnyxErrorCode(Enum):
 
         If no message is supplied, the error code itself is used as the message.
         """
+        msg = message or self.code
         return {
             "error_code": self.code,
-            "message": message or self.code,
+            "message": msg,
+            "detail": msg,
         }

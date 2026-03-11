@@ -46,7 +46,8 @@ export default function Verify({ user }: VerifyProps) {
     } else {
       let errorDetail = "unknown error";
       try {
-        errorDetail = (await response.json()).detail;
+        const errorData = await response.json();
+        errorDetail = errorData.detail || errorData.message || "unknown error";
       } catch (e) {
         console.error("Failed to parse verification error response:", e);
       }

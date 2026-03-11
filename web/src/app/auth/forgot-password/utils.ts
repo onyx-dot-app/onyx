@@ -10,7 +10,9 @@ export const forgotPassword = async (email: string): Promise<void> => {
   if (!response.ok) {
     const error = await response.json();
     const errorMessage =
-      error?.detail || "An error occurred during password reset.";
+      error?.detail ||
+      error?.message ||
+      "An error occurred during password reset.";
     throw new Error(errorMessage);
   }
 };
@@ -33,7 +35,9 @@ export const resetPassword = async (
       throw new Error(error.detail.reason || "Invalid password");
     }
     const errorMessage =
-      error?.detail || "An error occurred during password reset.";
+      error?.detail ||
+      error?.message ||
+      "An error occurred during password reset.";
     throw new Error(errorMessage);
   }
 };
