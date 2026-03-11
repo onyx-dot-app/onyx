@@ -17,7 +17,9 @@ Interactive.Stateful → Interactive.Container → content row (icon + label + t
 - OpenButton hardcodes `variant="select-heavy"` (SelectButton exposes `variant`)
 - OpenButton adds a built-in chevron with CSS-driven rotation (SelectButton has no chevron)
 - OpenButton auto-detects Radix `data-state="open"` to derive `interaction` (SelectButton has no Radix awareness)
-- OpenButton does not support `foldable` or `rightIcon` (SelectButton does)
+- OpenButton does not support `rightIcon` (SelectButton does)
+
+Both components support `foldable` using the same pattern: `interactive-foldable-host` class + `Interactive.Foldable` wrapper around the label and trailing icon. When foldable, the left icon stays visible while the rest collapses. If you change the foldable implementation in one, update the other to match.
 
 Use SelectButton for general-purpose stateful toggles. Use `OpenButton` for popover/dropdown triggers with a chevron.
 

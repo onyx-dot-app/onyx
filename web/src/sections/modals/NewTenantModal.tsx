@@ -49,7 +49,11 @@ export default function NewTenantModal({
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.message || "Failed to accept invitation");
+          throw new Error(
+            errorData.detail ||
+              errorData.message ||
+              "Failed to accept invitation"
+          );
         }
 
         toast.success("You have accepted the invitation.");
@@ -93,7 +97,11 @@ export default function NewTenantModal({
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || "Failed to decline invitation");
+        throw new Error(
+          errorData.detail ||
+            errorData.message ||
+            "Failed to decline invitation"
+        );
       }
 
       toast.info("You have declined the invitation.");

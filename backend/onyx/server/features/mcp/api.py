@@ -1013,7 +1013,7 @@ def get_mcp_servers_for_assistant(
 @router.get("/servers", response_model=MCPServersResponse)
 def get_mcp_servers_for_user(
     db: Session = Depends(get_session),
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
 ) -> MCPServersResponse:
     """List all MCP servers for use in agent configuration and chat UI.
 

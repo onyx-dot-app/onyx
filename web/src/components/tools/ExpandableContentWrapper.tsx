@@ -6,7 +6,7 @@ import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { FileDescriptor } from "@/app/app/interfaces";
 import { cn } from "@/lib/utils";
-import TextViewModal from "@/sections/modals/TextViewModal";
+import PreviewModal from "@/sections/modals/PreviewModal";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 
 export interface ExpandableContentWrapperProps {
@@ -40,12 +40,7 @@ export default function ExpandableContentWrapper({
   };
 
   const Content = (
-    <div
-      className={cn(
-        !expanded ? "w-message-default" : "w-full",
-        "!rounded !rounded-lg overflow-y-hidden h-full"
-      )}
-    >
+    <div className="w-message-default max-w-full !rounded-lg overflow-y-hidden h-full">
       <CardHeader className="w-full bg-background-tint-02 top-0 p-3">
         <div className="flex justify-between items-center">
           <Text className="text-ellipsis line-clamp-1" text03 mainUiAction>
@@ -83,12 +78,10 @@ export default function ExpandableContentWrapper({
         )}
       >
         <CardContent className="p-0">
-          {!expanded && (
-            <ContentComponent
-              fileDescriptor={fileDescriptor}
-              expanded={expanded}
-            />
-          )}
+          <ContentComponent
+            fileDescriptor={fileDescriptor}
+            expanded={expanded}
+          />
         </CardContent>
       </Card>
     </div>
@@ -102,7 +95,7 @@ export default function ExpandableContentWrapper({
   return (
     <>
       {expanded && (
-        <TextViewModal
+        <PreviewModal
           presentingDocument={presentingDocument}
           onClose={() => setExpanded(false)}
         />

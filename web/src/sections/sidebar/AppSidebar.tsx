@@ -77,7 +77,6 @@ import { Notification, NotificationType } from "@/interfaces/settings";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import UserAvatarPopover from "@/sections/sidebar/UserAvatarPopover";
 import ChatSearchCommandMenu from "@/sections/sidebar/ChatSearchCommandMenu";
-import { useAppMode } from "@/providers/AppModeProvider";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
@@ -206,8 +205,7 @@ const MemoizedAppSidebarInner = memo(
     const combinedSettings = useSettingsContext();
     const posthog = usePostHog();
     const { newTenantInfo, invitationInfo } = useModalContext();
-    const { setAppMode } = useAppMode();
-    const { reset } = useQueryController();
+    const { setAppMode, reset } = useQueryController();
 
     // Use SWR hooks for data fetching
     const {

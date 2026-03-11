@@ -316,6 +316,7 @@ jobs:
           # Base config shared by both editions
           cat <<EOF > deployment/docker_compose/.env
           COMPOSE_PROFILES=s3-filestore
+          OPENSEARCH_FOR_ONYX_ENABLED=false
           AUTH_TYPE=basic
           POSTGRES_POOL_PRE_PING=true
           POSTGRES_USE_NULL_POOL=true
@@ -418,6 +419,7 @@ jobs:
               -e POSTGRES_POOL_PRE_PING=true \
               -e POSTGRES_USE_NULL_POOL=true \
               -e VESPA_HOST=index \
+              -e ENABLE_OPENSEARCH_INDEXING_FOR_ONYX=false \
               -e REDIS_HOST=cache \
               -e API_SERVER_HOST=api_server \
               -e OPENAI_API_KEY=${OPENAI_API_KEY} \
@@ -637,6 +639,7 @@ jobs:
           ONYX_BACKEND_IMAGE=${ECR_CACHE}:integration-test-backend-test-${RUN_ID} \
           ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:integration-test-model-server-test-${RUN_ID} \
           DEV_MODE=true \
+          OPENSEARCH_FOR_ONYX_ENABLED=false \
           docker compose -f docker-compose.multitenant-dev.yml up \
             relational_db \
             index \
@@ -691,6 +694,7 @@ jobs:
             -e POSTGRES_DB=postgres \
             -e POSTGRES_USE_NULL_POOL=true \
             -e VESPA_HOST=index \
+            -e ENABLE_OPENSEARCH_INDEXING_FOR_ONYX=false \
             -e REDIS_HOST=cache \
             -e API_SERVER_HOST=api_server \
             -e OPENAI_API_KEY=${OPENAI_API_KEY} \

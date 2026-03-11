@@ -544,6 +544,8 @@ To run them:
 npx playwright test <TEST_NAME>
 ```
 
+For shared fixtures, best practices, and detailed guidance, see `backend/tests/README.md`.
+
 ## Logs
 
 When (1) writing integration tests or (2) doing live tests (e.g. curl / playwright) you can get access
@@ -596,7 +598,7 @@ Before writing your plan, make sure to do research. Explore the relevant section
 Never hardcode status codes or use `starlette.status` / `fastapi.status` constants directly.**
 
 A global FastAPI exception handler converts `OnyxError` into a JSON response with the standard
-`{"error_code": "...", "message": "..."}` shape. This eliminates boilerplate and keeps error
+`{"error_code": "...", "detail": "..."}` shape. This eliminates boilerplate and keeps error
 handling consistent across the entire backend.
 
 ```python

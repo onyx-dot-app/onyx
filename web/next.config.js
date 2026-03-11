@@ -8,7 +8,8 @@ const cspHeader = `
     base-uri 'self';
     form-action 'self';
     ${
-      process.env.NEXT_PUBLIC_CLOUD_ENABLED === "true"
+      process.env.NEXT_PUBLIC_CLOUD_ENABLED === "true" &&
+      process.env.NODE_ENV !== "development"
         ? "upgrade-insecure-requests;"
         : ""
     }

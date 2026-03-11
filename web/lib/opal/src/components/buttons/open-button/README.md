@@ -17,7 +17,9 @@ OpenButton is a **tighter, specialized use-case** of SelectButton:
 - It hardcodes `variant="select-heavy"` (SelectButton exposes `variant`)
 - It adds a built-in chevron with CSS-driven rotation (SelectButton has no chevron)
 - It auto-detects Radix `data-state="open"` to derive `interaction` (SelectButton has no Radix awareness)
-- It does not support `foldable` or `rightIcon` (SelectButton does)
+- It does not support `rightIcon` (SelectButton does)
+
+Both components support `foldable` using the same pattern: `interactive-foldable-host` class + `Interactive.Foldable` wrapper around the label and trailing icon. When foldable, the left icon stays visible while the rest collapses. If you change the foldable implementation in one, update the other to match.
 
 If you need a general-purpose stateful toggle, use `SelectButton`. If you need a popover/dropdown trigger with a chevron, use `OpenButton`.
 
@@ -26,10 +28,12 @@ If you need a general-purpose stateful toggle, use `SelectButton`. If you need a
 ```
 Interactive.Stateful           <- variant="select-heavy", interaction, state, disabled, onClick
   └─ Interactive.Container     <- height, rounding, padding (from `size`)
-       └─ div.opal-button.interactive-foreground
+       └─ div.opal-button.interactive-foreground [.interactive-foldable-host]
             ├─ div > Icon?                 (interactive-foreground-icon)
-            ├─ <span>?                     .opal-button-label
-            └─ div > ChevronIcon           .opal-open-button-chevron (interactive-foreground-icon)
+            ├─ [Foldable]?                 (wraps label + chevron when foldable)
+            │    ├─ <span>?                .opal-button-label
+            │    └─ div > ChevronIcon      .opal-open-button-chevron
+            └─ <span>? / ChevronIcon       (non-foldable)
 ```
 
 - **`interaction` controls both the chevron and the hover visual state.** When `interaction` is `"hover"` (explicitly or via Radix `data-state="open"`), the chevron rotates 180° and the hover background activates.
@@ -44,6 +48,7 @@ Interactive.Stateful           <- variant="select-heavy", interaction, state, di
 | `interaction` | `"rest" \| "hover" \| "active"` | auto | JS-controlled interaction override. Falls back to Radix `data-state="open"` when omitted. |
 | `icon` | `IconFunctionComponent` | — | Left icon component |
 | `children` | `string` | — | Content between icon and chevron |
+| `foldable` | `boolean` | `false` | When `true`, requires both `icon` and `children`; the left icon stays visible while the label + chevron collapse when not hovered. If `tooltip` is omitted on a disabled foldable button, the label text is used as the tooltip. |
 | `size` | `SizeVariant` | `"lg"` | Size preset controlling height, rounding, and padding |
 | `width` | `WidthVariant` | — | Width preset |
 | `tooltip` | `string` | — | Tooltip text shown on hover |

@@ -2,6 +2,7 @@ import "@opal/core/animations/styles.css";
 import React, { createContext, useContext, useState, useCallback } from "react";
 import { cn } from "@opal/utils";
 import type { WithoutStyles } from "@opal/types";
+import { widthVariants, type WidthVariant } from "@opal/shared";
 
 // ---------------------------------------------------------------------------
 // Context-per-group registry
@@ -38,6 +39,10 @@ interface HoverableRootProps
   extends WithoutStyles<React.HTMLAttributes<HTMLDivElement>> {
   children: React.ReactNode;
   group: string;
+  /** Width preset. @default "auto" */
+  widthVariant?: WidthVariant;
+  /** Ref forwarded to the root `<div>`. */
+  ref?: React.Ref<HTMLDivElement>;
 }
 
 type HoverableItemVariant = "opacity-on-hover";
@@ -47,6 +52,8 @@ interface HoverableItemProps
   children: React.ReactNode;
   group?: string;
   variant?: HoverableItemVariant;
+  /** Ref forwarded to the item `<div>`. */
+  ref?: React.Ref<HTMLDivElement>;
 }
 
 // ---------------------------------------------------------------------------
@@ -77,6 +84,8 @@ interface HoverableItemProps
 function HoverableRoot({
   group,
   children,
+  widthVariant = "auto",
+  ref,
   onMouseEnter: consumerMouseEnter,
   onMouseLeave: consumerMouseLeave,
   ...props
@@ -103,7 +112,13 @@ function HoverableRoot({
 
   return (
     <GroupContext.Provider value={hovered}>
-      <div {...props} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
+      <div
+        {...props}
+        ref={ref}
+        className={cn(widthVariants[widthVariant])}
+        onMouseEnter={onMouseEnter}
+        onMouseLeave={onMouseLeave}
+      >
         {children}
       </div>
     </GroupContext.Provider>
@@ -147,6 +162,7 @@ function HoverableItem({
   group,
   variant = "opacity-on-hover",
   children,
+  ref,
   ...props
 }: HoverableItemProps) {
   const contextValue = useContext(
@@ -165,6 +181,7 @@ function HoverableItem({
   return (
     <div
       {...props}
+      ref={ref}
       className={cn("hoverable-item")}
       data-hoverable-variant={variant}
       data-hoverable-active={

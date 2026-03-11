@@ -25,6 +25,7 @@ from sqlalchemy import desc
 from sqlalchemy import Enum
 from sqlalchemy import Float
 from sqlalchemy import ForeignKey
+from sqlalchemy import ForeignKeyConstraint
 from sqlalchemy import func
 from sqlalchemy import Index
 from sqlalchemy import Integer
@@ -36,9 +37,11 @@ from sqlalchemy import Text
 from sqlalchemy import text
 from sqlalchemy import UniqueConstraint
 from sqlalchemy.dialects import postgresql
+from sqlalchemy import event
 from sqlalchemy.engine.interfaces import Dialect
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.orm import Mapped
+from sqlalchemy.orm import Mapper
 from sqlalchemy.orm import mapped_column
 from sqlalchemy.orm import relationship
 from sqlalchemy.types import LargeBinary
@@ -117,10 +120,52 @@ class Base(DeclarativeBase):
     __abstract__ = True
 
 
-class EncryptedString(TypeDecorator):
+class _EncryptedBase(TypeDecorator):
+    """Base for encrypted column types that wrap values in SensitiveValue."""
+
     impl = LargeBinary
-    # This type's behavior is fully deterministic and doesn't depend on any external factors.
     cache_ok = True
+    _is_json: bool = False
+
+    def wrap_raw(self, value: Any) -> SensitiveValue:
+        """Encrypt a raw value and wrap it in SensitiveValue.
+
+        Called by the attribute set event so the Python-side type is always
+        SensitiveValue, regardless of whether the value was loaded from the DB
+        or assigned in application code.
+        """
+        if self._is_json:
+            if not isinstance(value, dict):
+                raise TypeError(
+                    f"EncryptedJson column expected dict, got {type(value).__name__}"
+                )
+            raw_str = json.dumps(value)
+        else:
+            if not isinstance(value, str):
+                raise TypeError(
+                    f"EncryptedString column expected str, got {type(value).__name__}"
+                )
+            raw_str = value
+        return SensitiveValue(
+            encrypted_bytes=encrypt_string_to_bytes(raw_str),
+            decrypt_fn=decrypt_bytes_to_string,
+            is_json=self._is_json,
+        )
+
+    def compare_values(self, x: Any, y: Any) -> bool:
+        if x is None or y is None:
+            return x == y
+        if isinstance(x, SensitiveValue):
+            x = x.get_value(apply_mask=False)
+        if isinstance(y, SensitiveValue):
+            y = y.get_value(apply_mask=False)
+        return x == y
+
+
+class EncryptedString(_EncryptedBase):
+    # Must redeclare cache_ok in this child class since we explicitly redeclare _is_json
+    cache_ok = True
+    _is_json: bool = False
 
     def process_bind_param(
         self, value: str | SensitiveValue[str] | None, dialect: Dialect  # noqa: ARG002
@@ -144,20 +189,10 @@ class EncryptedString(TypeDecorator):
             )
         return None
 
-    def compare_values(self, x: Any, y: Any) -> bool:
-        if x is None or y is None:
-            return x == y
-        if isinstance(x, SensitiveValue):
-            x = x.get_value(apply_mask=False)
-        if isinstance(y, SensitiveValue):
-            y = y.get_value(apply_mask=False)
-        return x == y
 
-
-class EncryptedJson(TypeDecorator):
-    impl = LargeBinary
-    # This type's behavior is fully deterministic and doesn't depend on any external factors.
+class EncryptedJson(_EncryptedBase):
     cache_ok = True
+    _is_json: bool = True
 
     def process_bind_param(
         self,
@@ -165,9 +200,7 @@ class EncryptedJson(TypeDecorator):
         dialect: Dialect,  # noqa: ARG002
     ) -> bytes | None:
         if value is not None:
-            # Handle both raw dicts and SensitiveValue wrappers
             if isinstance(value, SensitiveValue):
-                # Get raw value for storage
                 value = value.get_value(apply_mask=False)
             json_str = json.dumps(value)
             return encrypt_string_to_bytes(json_str)
@@ -184,14 +217,40 @@ class EncryptedJson(TypeDecorator):
             )
         return None
 
-    def compare_values(self, x: Any, y: Any) -> bool:
-        if x is None or y is None:
-            return x == y
-        if isinstance(x, SensitiveValue):
-            x = x.get_value(apply_mask=False)
-        if isinstance(y, SensitiveValue):
-            y = y.get_value(apply_mask=False)
-        return x == y
+
+_REGISTERED_ATTRS: set[str] = set()
+
+
+@event.listens_for(Mapper, "mapper_configured")
+def _register_sensitive_value_set_events(
+    mapper: Mapper,
+    class_: type,
+) -> None:
+    """Auto-wrap raw values in SensitiveValue when assigned to encrypted columns."""
+    for prop in mapper.column_attrs:
+        for col in prop.columns:
+            if isinstance(col.type, _EncryptedBase):
+                col_type = col.type
+                attr = getattr(class_, prop.key)
+
+                # Guard against double-registration (e.g. if mapper is
+                # re-configured in test setups)
+                attr_key = f"{class_.__qualname__}.{prop.key}"
+                if attr_key in _REGISTERED_ATTRS:
+                    continue
+                _REGISTERED_ATTRS.add(attr_key)
+
+                @event.listens_for(attr, "set", retval=True)
+                def _wrap_value(
+                    target: Any,  # noqa: ARG001
+                    value: Any,
+                    oldvalue: Any,  # noqa: ARG001
+                    initiator: Any,  # noqa: ARG001
+                    _col_type: _EncryptedBase = col_type,
+                ) -> Any:
+                    if value is not None and not isinstance(value, SensitiveValue):
+                        return _col_type.wrap_raw(value)
+                    return value
 
 
 class NullFilteredString(TypeDecorator):
@@ -2366,6 +2425,38 @@ class SyncRecord(Base):
             "entity_id",
             "sync_type",
             "sync_status",
+        ),
+    )
+
+
+class HierarchyNodeByConnectorCredentialPair(Base):
+    """Tracks which cc_pairs reference each hierarchy node.
+
+    During pruning, stale entries are removed for the current cc_pair.
+    Hierarchy nodes with zero remaining entries are then deleted.
+    """
+
+    __tablename__ = "hierarchy_node_by_connector_credential_pair"
+
+    hierarchy_node_id: Mapped[int] = mapped_column(
+        ForeignKey("hierarchy_node.id", ondelete="CASCADE"), primary_key=True
+    )
+    connector_id: Mapped[int] = mapped_column(primary_key=True)
+    credential_id: Mapped[int] = mapped_column(primary_key=True)
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["connector_id", "credential_id"],
+            [
+                "connector_credential_pair.connector_id",
+                "connector_credential_pair.credential_id",
+            ],
+            ondelete="CASCADE",
+        ),
+        Index(
+            "ix_hierarchy_node_cc_pair_connector_credential",
+            "connector_id",
+            "credential_id",
         ),
     )
 

@@ -115,8 +115,6 @@ def _extract_from_batch(
     for item in doc_list:
         if isinstance(item, HierarchyNode):
             hierarchy_nodes.append(item)
-            if item.raw_node_id not in ids:
-                ids[item.raw_node_id] = None
         elif isinstance(item, ConnectorFailure):
             failed_id = _get_failure_id(item)
             if failed_id:
@@ -125,8 +123,7 @@ def _extract_from_batch(
                 f"Failed to retrieve document {failed_id}: " f"{item.failure_message}"
             )
         else:
-            parent_raw = getattr(item, "parent_hierarchy_raw_node_id", None)
-            ids[item.id] = parent_raw
+            ids[item.id] = item.parent_hierarchy_raw_node_id
     return BatchResult(raw_id_to_parent=ids, hierarchy_nodes=hierarchy_nodes)
 
 
@@ -192,9 +189,7 @@ def extract_ids_from_runnable_connector(
         batch_ids = batch_result.raw_id_to_parent
         batch_nodes = batch_result.hierarchy_nodes
         doc_batch_processing_func(batch_ids)
-        for k, v in batch_ids.items():
-            if v is not None or k not in all_raw_id_to_parent:
-                all_raw_id_to_parent[k] = v
+        all_raw_id_to_parent.update(batch_ids)
         all_hierarchy_nodes.extend(batch_nodes)
 
         if callback:

@@ -7,6 +7,8 @@ Verifies that:
 3. Upserting is idempotent (running twice doesn't duplicate nodes)
 4. Document-to-hierarchy-node linkage is updated during pruning
 5. link_hierarchy_nodes_to_documents links nodes that are also documents
+6. HierarchyNodeByConnectorCredentialPair join table population and pruning
+7. Orphaned hierarchy node deletion and re-parenting
 
 Uses a mock SlimConnectorWithPermSync that yields known hierarchy nodes and slim documents,
 combined with a real PostgreSQL database for verifying persistence.
@@ -24,16 +26,27 @@ from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnectorWithPermSync
 from onyx.connectors.models import HierarchyNode as PydanticHierarchyNode
+from onyx.connectors.models import InputType
 from onyx.connectors.models import SlimDocument
+from onyx.db.enums import AccessType
+from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import HierarchyNodeType
+from onyx.db.hierarchy import delete_orphaned_hierarchy_nodes
 from onyx.db.hierarchy import ensure_source_node_exists
 from onyx.db.hierarchy import get_all_hierarchy_nodes_for_source
 from onyx.db.hierarchy import get_hierarchy_node_by_raw_id
 from onyx.db.hierarchy import link_hierarchy_nodes_to_documents
+from onyx.db.hierarchy import remove_stale_hierarchy_node_cc_pair_entries
+from onyx.db.hierarchy import reparent_orphaned_hierarchy_nodes
 from onyx.db.hierarchy import update_document_parent_hierarchy_nodes
+from onyx.db.hierarchy import upsert_hierarchy_node_cc_pair_entries
 from onyx.db.hierarchy import upsert_hierarchy_nodes_batch
+from onyx.db.models import Connector
+from onyx.db.models import ConnectorCredentialPair
+from onyx.db.models import Credential
 from onyx.db.models import Document as DbDocument
 from onyx.db.models import HierarchyNode as DBHierarchyNode
+from onyx.db.models import HierarchyNodeByConnectorCredentialPair
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.kg.models import KGStage
 
@@ -142,13 +155,80 @@ class MockSlimConnectorWithPermSync(SlimConnectorWithPermSync):
 # ---------------------------------------------------------------------------
 
 
+def _create_cc_pair(
+    db_session: Session,
+    source: DocumentSource = TEST_SOURCE,
+) -> ConnectorCredentialPair:
+    """Create a real Connector + Credential + ConnectorCredentialPair for testing."""
+    connector = Connector(
+        name=f"Test {source.value} Connector",
+        source=source,
+        input_type=InputType.LOAD_STATE,
+        connector_specific_config={},
+    )
+    db_session.add(connector)
+    db_session.flush()
+
+    credential = Credential(
+        source=source,
+        credential_json={},
+        admin_public=True,
+    )
+    db_session.add(credential)
+    db_session.flush()
+    db_session.expire(credential)
+
+    cc_pair = ConnectorCredentialPair(
+        connector_id=connector.id,
+        credential_id=credential.id,
+        name=f"Test {source.value} CC Pair",
+        status=ConnectorCredentialPairStatus.ACTIVE,
+        access_type=AccessType.PUBLIC,
+    )
+    db_session.add(cc_pair)
+    db_session.commit()
+    db_session.refresh(cc_pair)
+    return cc_pair
+
+
 def _cleanup_test_data(db_session: Session) -> None:
     """Remove all test hierarchy nodes and documents to isolate tests."""
     for doc_id in SLIM_DOC_IDS:
         db_session.query(DbDocument).filter(DbDocument.id == doc_id).delete()
+
+    test_connector_ids_q = db_session.query(Connector.id).filter(
+        Connector.source == TEST_SOURCE,
+        Connector.name.like("Test %"),
+    )
+
+    db_session.query(HierarchyNodeByConnectorCredentialPair).filter(
+        HierarchyNodeByConnectorCredentialPair.connector_id.in_(test_connector_ids_q)
+    ).delete(synchronize_session="fetch")
     db_session.query(DBHierarchyNode).filter(
         DBHierarchyNode.source == TEST_SOURCE
     ).delete()
+    db_session.flush()
+
+    # Collect credential IDs before deleting cc_pairs (bulk query.delete()
+    # bypasses ORM-level cascade, so credentials won't be auto-removed).
+    credential_ids = [
+        row[0]
+        for row in db_session.query(ConnectorCredentialPair.credential_id)
+        .filter(ConnectorCredentialPair.connector_id.in_(test_connector_ids_q))
+        .all()
+    ]
+
+    db_session.query(ConnectorCredentialPair).filter(
+        ConnectorCredentialPair.connector_id.in_(test_connector_ids_q)
+    ).delete(synchronize_session="fetch")
+    db_session.query(Connector).filter(
+        Connector.source == TEST_SOURCE,
+        Connector.name.like("Test %"),
+    ).delete(synchronize_session="fetch")
+    if credential_ids:
+        db_session.query(Credential).filter(Credential.id.in_(credential_ids)).delete(
+            synchronize_session="fetch"
+        )
     db_session.commit()
 
 
@@ -179,15 +259,8 @@ def test_pruning_extracts_hierarchy_nodes(db_session: Session) -> None:  # noqa:
 
     result = extract_ids_from_runnable_connector(connector, callback=None)
 
-    # Doc IDs should include both slim doc IDs and hierarchy node raw_node_ids
-    # (hierarchy node IDs are added to raw_id_to_parent so they aren't pruned)
-    expected_ids = {
-        CHANNEL_A_ID,
-        CHANNEL_B_ID,
-        CHANNEL_C_ID,
-        *SLIM_DOC_IDS,
-    }
-    assert result.raw_id_to_parent.keys() == expected_ids
+    # raw_id_to_parent should contain ONLY document IDs, not hierarchy node IDs
+    assert result.raw_id_to_parent.keys() == set(SLIM_DOC_IDS)
 
     # Hierarchy nodes should be the 3 channels
     assert len(result.hierarchy_nodes) == 3
@@ -395,9 +468,9 @@ def test_extraction_preserves_parent_hierarchy_raw_node_id(
             result.raw_id_to_parent[doc_id] == expected_parent
         ), f"raw_id_to_parent[{doc_id}] should be {expected_parent}"
 
-    # Hierarchy node entries have None parent (they aren't documents)
+    # Hierarchy node IDs should NOT be in raw_id_to_parent
     for channel_id in [CHANNEL_A_ID, CHANNEL_B_ID, CHANNEL_C_ID]:
-        assert result.raw_id_to_parent[channel_id] is None
+        assert channel_id not in result.raw_id_to_parent
 
 
 def test_update_document_parent_hierarchy_nodes(db_session: Session) -> None:
@@ -565,3 +638,241 @@ def test_link_hierarchy_nodes_skips_non_hierarchy_sources(
         commit=False,
     )
     assert linked == 0
+
+
+# ---------------------------------------------------------------------------
+# Join table + pruning tests
+# ---------------------------------------------------------------------------
+
+
+def test_upsert_hierarchy_node_cc_pair_entries(db_session: Session) -> None:
+    """upsert_hierarchy_node_cc_pair_entries should insert rows and be idempotent."""
+    _cleanup_test_data(db_session)
+    ensure_source_node_exists(db_session, TEST_SOURCE, commit=True)
+    cc_pair = _create_cc_pair(db_session)
+
+    upserted = upsert_hierarchy_nodes_batch(
+        db_session=db_session,
+        nodes=_make_hierarchy_nodes(),
+        source=TEST_SOURCE,
+        commit=True,
+        is_connector_public=False,
+    )
+    node_ids = [n.id for n in upserted]
+
+    # First call — should insert rows
+    upsert_hierarchy_node_cc_pair_entries(
+        db_session=db_session,
+        hierarchy_node_ids=node_ids,
+        connector_id=cc_pair.connector_id,
+        credential_id=cc_pair.credential_id,
+        commit=True,
+    )
+
+    rows = (
+        db_session.query(HierarchyNodeByConnectorCredentialPair)
+        .filter(
+            HierarchyNodeByConnectorCredentialPair.connector_id == cc_pair.connector_id,
+            HierarchyNodeByConnectorCredentialPair.credential_id
+            == cc_pair.credential_id,
+        )
+        .all()
+    )
+    assert len(rows) == 3
+
+    # Second call — idempotent, same count
+    upsert_hierarchy_node_cc_pair_entries(
+        db_session=db_session,
+        hierarchy_node_ids=node_ids,
+        connector_id=cc_pair.connector_id,
+        credential_id=cc_pair.credential_id,
+        commit=True,
+    )
+    rows_after = (
+        db_session.query(HierarchyNodeByConnectorCredentialPair)
+        .filter(
+            HierarchyNodeByConnectorCredentialPair.connector_id == cc_pair.connector_id,
+            HierarchyNodeByConnectorCredentialPair.credential_id
+            == cc_pair.credential_id,
+        )
+        .all()
+    )
+    assert len(rows_after) == 3
+
+
+def test_remove_stale_entries_and_delete_orphans(db_session: Session) -> None:
+    """After removing stale join-table entries, orphaned hierarchy nodes should
+    be deleted and the SOURCE node should survive."""
+    _cleanup_test_data(db_session)
+    source_node = ensure_source_node_exists(db_session, TEST_SOURCE, commit=True)
+    cc_pair = _create_cc_pair(db_session)
+
+    upserted = upsert_hierarchy_nodes_batch(
+        db_session=db_session,
+        nodes=_make_hierarchy_nodes(),
+        source=TEST_SOURCE,
+        commit=True,
+        is_connector_public=False,
+    )
+    all_ids = [n.id for n in upserted]
+    upsert_hierarchy_node_cc_pair_entries(
+        db_session=db_session,
+        hierarchy_node_ids=all_ids,
+        connector_id=cc_pair.connector_id,
+        credential_id=cc_pair.credential_id,
+        commit=True,
+    )
+
+    # Now simulate a pruning run where only channel A survived
+    channel_a = get_hierarchy_node_by_raw_id(db_session, CHANNEL_A_ID, TEST_SOURCE)
+    assert channel_a is not None
+    live_ids = {channel_a.id}
+
+    stale_removed = remove_stale_hierarchy_node_cc_pair_entries(
+        db_session=db_session,
+        connector_id=cc_pair.connector_id,
+        credential_id=cc_pair.credential_id,
+        live_hierarchy_node_ids=live_ids,
+        commit=True,
+    )
+    assert stale_removed == 2
+
+    # Delete orphaned nodes
+    deleted_raw_ids = delete_orphaned_hierarchy_nodes(
+        db_session=db_session,
+        source=TEST_SOURCE,
+        commit=True,
+    )
+    assert set(deleted_raw_ids) == {CHANNEL_B_ID, CHANNEL_C_ID}
+
+    # Verify only channel A + SOURCE remain
+    remaining = get_all_hierarchy_nodes_for_source(db_session, TEST_SOURCE)
+    remaining_raw = {n.raw_node_id for n in remaining}
+    assert remaining_raw == {CHANNEL_A_ID, source_node.raw_node_id}
+
+
+def test_multi_cc_pair_prevents_premature_deletion(db_session: Session) -> None:
+    """A hierarchy node shared by two cc_pairs should NOT be deleted when only
+    one cc_pair removes its association."""
+    _cleanup_test_data(db_session)
+    ensure_source_node_exists(db_session, TEST_SOURCE, commit=True)
+    cc_pair_1 = _create_cc_pair(db_session)
+    cc_pair_2 = _create_cc_pair(db_session)
+
+    upserted = upsert_hierarchy_nodes_batch(
+        db_session=db_session,
+        nodes=_make_hierarchy_nodes(),
+        source=TEST_SOURCE,
+        commit=True,
+        is_connector_public=False,
+    )
+    all_ids = [n.id for n in upserted]
+
+    # cc_pair 1 owns all 3
+    upsert_hierarchy_node_cc_pair_entries(
+        db_session=db_session,
+        hierarchy_node_ids=all_ids,
+        connector_id=cc_pair_1.connector_id,
+        credential_id=cc_pair_1.credential_id,
+        commit=True,
+    )
+    # cc_pair 2 also owns all 3
+    upsert_hierarchy_node_cc_pair_entries(
+        db_session=db_session,
+        hierarchy_node_ids=all_ids,
+        connector_id=cc_pair_2.connector_id,
+        credential_id=cc_pair_2.credential_id,
+        commit=True,
+    )
+
+    # cc_pair 1 prunes — keeps none
+    remove_stale_hierarchy_node_cc_pair_entries(
+        db_session=db_session,
+        connector_id=cc_pair_1.connector_id,
+        credential_id=cc_pair_1.credential_id,
+        live_hierarchy_node_ids=set(),
+        commit=True,
+    )
+
+    # Orphan deletion should find nothing because cc_pair 2 still references them
+    deleted = delete_orphaned_hierarchy_nodes(
+        db_session=db_session,
+        source=TEST_SOURCE,
+        commit=True,
+    )
+    assert deleted == []
+
+    # All 3 nodes + SOURCE should still exist
+    remaining = get_all_hierarchy_nodes_for_source(db_session, TEST_SOURCE)
+    assert len(remaining) == 4
+
+
+def test_reparent_orphaned_children(db_session: Session) -> None:
+    """After deleting a parent hierarchy node, its children should be
+    re-parented to the SOURCE node."""
+    _cleanup_test_data(db_session)
+    source_node = ensure_source_node_exists(db_session, TEST_SOURCE, commit=True)
+    cc_pair = _create_cc_pair(db_session)
+
+    # Create a parent node and a child node
+    parent_node = PydanticHierarchyNode(
+        raw_node_id="PARENT",
+        raw_parent_id=None,
+        display_name="Parent",
+        node_type=HierarchyNodeType.CHANNEL,
+    )
+    child_node = PydanticHierarchyNode(
+        raw_node_id="CHILD",
+        raw_parent_id="PARENT",
+        display_name="Child",
+        node_type=HierarchyNodeType.CHANNEL,
+    )
+    upserted = upsert_hierarchy_nodes_batch(
+        db_session=db_session,
+        nodes=[parent_node, child_node],
+        source=TEST_SOURCE,
+        commit=True,
+        is_connector_public=False,
+    )
+    assert len(upserted) == 2
+
+    parent_db = get_hierarchy_node_by_raw_id(db_session, "PARENT", TEST_SOURCE)
+    child_db = get_hierarchy_node_by_raw_id(db_session, "CHILD", TEST_SOURCE)
+    assert parent_db is not None and child_db is not None
+    assert child_db.parent_id == parent_db.id
+
+    # Associate only the child with a cc_pair (parent is orphaned)
+    upsert_hierarchy_node_cc_pair_entries(
+        db_session=db_session,
+        hierarchy_node_ids=[child_db.id],
+        connector_id=cc_pair.connector_id,
+        credential_id=cc_pair.credential_id,
+        commit=True,
+    )
+
+    # Delete orphaned nodes (parent has no cc_pair entry)
+    deleted = delete_orphaned_hierarchy_nodes(
+        db_session=db_session,
+        source=TEST_SOURCE,
+        commit=True,
+    )
+    assert "PARENT" in deleted
+
+    # Child should now have parent_id=NULL (SET NULL cascade)
+    db_session.expire_all()
+    child_db = get_hierarchy_node_by_raw_id(db_session, "CHILD", TEST_SOURCE)
+    assert child_db is not None
+    assert child_db.parent_id is None
+
+    # Re-parent orphans to SOURCE
+    reparented = reparent_orphaned_hierarchy_nodes(
+        db_session=db_session,
+        source=TEST_SOURCE,
+        commit=True,
+    )
+    assert len(reparented) == 1
+
+    db_session.expire_all()
+    child_db = get_hierarchy_node_by_raw_id(db_session, "CHILD", TEST_SOURCE)
+    assert child_db is not None
+    assert child_db.parent_id == source_node.id

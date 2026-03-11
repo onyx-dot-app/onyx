@@ -1,13 +1,11 @@
 import os
 import time
-from collections.abc import Generator
 
 import pytest
 
 from onyx.access.models import ExternalAccess
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.teams.connector import TeamsConnector
-from onyx.utils.variable_functionality import global_version
 from tests.daily.connectors.teams.models import TeamsThread
 from tests.daily.connectors.utils import load_all_from_connector
 
@@ -168,18 +166,9 @@ def test_slim_docs_retrieval_from_teams_connector(
         _assert_is_valid_external_access(external_access=slim_doc.external_access)
 
 
-@pytest.fixture(autouse=False)
-def set_ee_on() -> Generator[None, None, None]:
-    """Need EE to be enabled for perm sync tests to work since
-    perm syncing is an EE-only feature."""
-    global_version.set_ee()
-    yield
-    global_version._is_ee = False
-
-
 def test_load_from_checkpoint_with_perm_sync(
     teams_connector: TeamsConnector,
-    set_ee_on: None,  # noqa: ARG001
+    enable_ee: None,  # noqa: ARG001
 ) -> None:
     """Test that load_from_checkpoint_with_perm_sync returns documents with external_access.
 

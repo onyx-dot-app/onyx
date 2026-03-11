@@ -58,6 +58,9 @@ from onyx.llm.well_known_providers.llm_provider_options import (
 from onyx.server.manage.llm.models import BedrockFinalModelResponse
 from onyx.server.manage.llm.models import BedrockModelsRequest
 from onyx.server.manage.llm.models import DefaultModel
+from onyx.server.manage.llm.models import LitellmFinalModelResponse
+from onyx.server.manage.llm.models import LitellmModelDetails
+from onyx.server.manage.llm.models import LitellmModelsRequest
 from onyx.server.manage.llm.models import LLMCost
 from onyx.server.manage.llm.models import LLMProviderDescriptor
 from onyx.server.manage.llm.models import LLMProviderResponse
@@ -65,12 +68,14 @@ from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.server.manage.llm.models import LMStudioFinalModelResponse
 from onyx.server.manage.llm.models import LMStudioModelsRequest
+from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from onyx.server.manage.llm.models import OllamaFinalModelResponse
 from onyx.server.manage.llm.models import OllamaModelDetails
 from onyx.server.manage.llm.models import OllamaModelsRequest
 from onyx.server.manage.llm.models import OpenRouterFinalModelResponse
 from onyx.server.manage.llm.models import OpenRouterModelDetails
 from onyx.server.manage.llm.models import OpenRouterModelsRequest
+from onyx.server.manage.llm.models import SyncModelEntry
 from onyx.server.manage.llm.models import TestLLMRequest
 from onyx.server.manage.llm.models import VisionProviderResponse
 from onyx.server.manage.llm.utils import generate_bedrock_display_name
@@ -95,6 +100,34 @@ def _mask_string(value: str) -> str:
     if len(value) <= 8:
         return "****"
     return value[:4] + "****" + value[-4:]
+
+
+def _sync_fetched_models(
+    db_session: Session,
+    provider_name: str,
+    models: list[SyncModelEntry],
+    source_label: str,
+) -> None:
+    """Sync fetched models to DB for the given provider.
+
+    Args:
+        db_session: Database session
+        provider_name: Name of the LLM provider
+        models: List of SyncModelEntry objects describing the fetched models
+        source_label: Human-readable label for log messages (e.g. "Bedrock", "LiteLLM")
+    """
+    try:
+        new_count = sync_model_configurations(
+            db_session=db_session,
+            provider_name=provider_name,
+            models=models,
+        )
+        if new_count > 0:
+            logger.info(
+                f"Added {new_count} new {source_label} models to provider '{provider_name}'"
+            )
+    except ValueError as e:
+        logger.warning(f"Failed to sync {source_label} models to DB: {e}")
 
 
 # Keys in custom_config that contain sensitive credentials
@@ -445,16 +478,17 @@ def put_llm_provider(
         not existing_provider or not existing_provider.is_auto_mode
     )
 
-    # Before the upsert, check if this provider currently owns the global
-    # CHAT default. The upsert may cascade-delete model_configurations
-    # (and their flow mappings), so we need to remember this beforehand.
-    was_default_provider = False
-    if existing_provider and transitioning_to_auto_mode:
-        current_default = fetch_default_llm_model(db_session)
-        was_default_provider = (
-            current_default is not None
-            and current_default.llm_provider_id == existing_provider.id
-        )
+    # When transitioning to auto mode, preserve existing model configurations
+    # so the upsert doesn't try to delete them (which would trip the default
+    # model protection guard). sync_auto_mode_models will handle the model
+    # lifecycle afterward — adding new models, hiding removed ones, and
+    # updating the default. This is safe even if sync fails: the provider
+    # keeps its old models and default rather than losing them.
+    if transitioning_to_auto_mode and existing_provider:
+        llm_provider_upsert_request.model_configurations = [
+            ModelConfigurationUpsertRequest.from_model(mc)
+            for mc in existing_provider.model_configurations
+        ]
 
     try:
         result = upsert_llm_provider(
@@ -468,7 +502,6 @@ def put_llm_provider(
 
             config = fetch_llm_recommendations_from_github()
             if config and llm_provider_upsert_request.provider in config.providers:
-                # Refetch the provider to get the updated model
                 updated_provider = fetch_existing_llm_provider_by_id(
                     id=result.id, db_session=db_session
                 )
@@ -478,20 +511,6 @@ def put_llm_provider(
                         updated_provider,
                         config,
                     )
-
-                    # If this provider was the default before the transition,
-                    # restore the default using the recommended model.
-                    if was_default_provider:
-                        recommended = config.get_default_model(
-                            llm_provider_upsert_request.provider
-                        )
-                        if recommended:
-                            update_default_provider(
-                                provider_id=updated_provider.id,
-                                model_name=recommended.name,
-                                db_session=db_session,
-                            )
-
                     # Refresh result with synced models
                     result = LLMProviderView.from_model(updated_provider)
 
@@ -976,27 +995,20 @@ def get_bedrock_available_models(
 
         # Sync new models to DB if provider_name is specified
         if request.provider_name:
-            try:
-                models_to_sync = [
-                    {
-                        "name": r.name,
-                        "display_name": r.display_name,
-                        "max_input_tokens": r.max_input_tokens,
-                        "supports_image_input": r.supports_image_input,
-                    }
-                    for r in results
-                ]
-                new_count = sync_model_configurations(
-                    db_session=db_session,
-                    provider_name=request.provider_name,
-                    models=models_to_sync,
-                )
-                if new_count > 0:
-                    logger.info(
-                        f"Added {new_count} new Bedrock models to provider '{request.provider_name}'"
+            _sync_fetched_models(
+                db_session=db_session,
+                provider_name=request.provider_name,
+                models=[
+                    SyncModelEntry(
+                        name=r.name,
+                        display_name=r.display_name,
+                        max_input_tokens=r.max_input_tokens,
+                        supports_image_input=r.supports_image_input,
                     )
-            except ValueError as e:
-                logger.warning(f"Failed to sync Bedrock models to DB: {e}")
+                    for r in results
+                ],
+                source_label="Bedrock",
+            )
 
         return results
 
@@ -1114,27 +1126,20 @@ def get_ollama_available_models(
 
     # Sync new models to DB if provider_name is specified
     if request.provider_name:
-        try:
-            models_to_sync = [
-                {
-                    "name": r.name,
-                    "display_name": r.display_name,
-                    "max_input_tokens": r.max_input_tokens,
-                    "supports_image_input": r.supports_image_input,
-                }
-                for r in sorted_results
-            ]
-            new_count = sync_model_configurations(
-                db_session=db_session,
-                provider_name=request.provider_name,
-                models=models_to_sync,
-            )
-            if new_count > 0:
-                logger.info(
-                    f"Added {new_count} new Ollama models to provider '{request.provider_name}'"
+        _sync_fetched_models(
+            db_session=db_session,
+            provider_name=request.provider_name,
+            models=[
+                SyncModelEntry(
+                    name=r.name,
+                    display_name=r.display_name,
+                    max_input_tokens=r.max_input_tokens,
+                    supports_image_input=r.supports_image_input,
                 )
-        except ValueError as e:
-            logger.warning(f"Failed to sync Ollama models to DB: {e}")
+                for r in sorted_results
+            ],
+            source_label="Ollama",
+        )
 
     return sorted_results
 
@@ -1223,27 +1228,20 @@ def get_openrouter_available_models(
 
     # Sync new models to DB if provider_name is specified
     if request.provider_name:
-        try:
-            models_to_sync = [
-                {
-                    "name": r.name,
-                    "display_name": r.display_name,
-                    "max_input_tokens": r.max_input_tokens,
-                    "supports_image_input": r.supports_image_input,
-                }
-                for r in sorted_results
-            ]
-            new_count = sync_model_configurations(
-                db_session=db_session,
-                provider_name=request.provider_name,
-                models=models_to_sync,
-            )
-            if new_count > 0:
-                logger.info(
-                    f"Added {new_count} new OpenRouter models to provider '{request.provider_name}'"
+        _sync_fetched_models(
+            db_session=db_session,
+            provider_name=request.provider_name,
+            models=[
+                SyncModelEntry(
+                    name=r.name,
+                    display_name=r.display_name,
+                    max_input_tokens=r.max_input_tokens,
+                    supports_image_input=r.supports_image_input,
                 )
-        except ValueError as e:
-            logger.warning(f"Failed to sync OpenRouter models to DB: {e}")
+                for r in sorted_results
+            ],
+            source_label="OpenRouter",
+        )
 
     return sorted_results
 
@@ -1337,26 +1335,119 @@ def get_lm_studio_available_models(
 
     # Sync new models to DB if provider_name is specified
     if request.provider_name:
-        try:
-            models_to_sync = [
-                {
-                    "name": r.name,
-                    "display_name": r.display_name,
-                    "max_input_tokens": r.max_input_tokens,
-                    "supports_image_input": r.supports_image_input,
-                }
-                for r in sorted_results
-            ]
-            new_count = sync_model_configurations(
-                db_session=db_session,
-                provider_name=request.provider_name,
-                models=models_to_sync,
-            )
-            if new_count > 0:
-                logger.info(
-                    f"Added {new_count} new LM Studio models to provider '{request.provider_name}'"
+        _sync_fetched_models(
+            db_session=db_session,
+            provider_name=request.provider_name,
+            models=[
+                SyncModelEntry(
+                    name=r.name,
+                    display_name=r.display_name,
+                    max_input_tokens=r.max_input_tokens,
+                    supports_image_input=r.supports_image_input,
                 )
-        except ValueError as e:
-            logger.warning(f"Failed to sync LM Studio models to DB: {e}")
+                for r in sorted_results
+            ],
+            source_label="LM Studio",
+        )
 
     return sorted_results
+
+
+@admin_router.post("/litellm/available-models")
+def get_litellm_available_models(
+    request: LitellmModelsRequest,
+    _: User = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
+) -> list[LitellmFinalModelResponse]:
+    """Fetch available models from Litellm proxy /v1/models endpoint."""
+    response_json = _get_litellm_models_response(
+        api_key=request.api_key, api_base=request.api_base
+    )
+
+    models = response_json.get("data", [])
+    if not isinstance(models, list) or len(models) == 0:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "No models found from your Litellm endpoint",
+        )
+
+    results: list[LitellmFinalModelResponse] = []
+    for model in models:
+        try:
+            model_details = LitellmModelDetails.model_validate(model)
+
+            results.append(
+                LitellmFinalModelResponse(
+                    provider_name=model_details.owned_by,
+                    model_name=model_details.id,
+                )
+            )
+        except Exception as e:
+            logger.warning(
+                "Failed to parse Litellm model entry",
+                extra={"error": str(e), "item": str(model)[:1000]},
+            )
+
+    if not results:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "No compatible models found from Litellm",
+        )
+
+    sorted_results = sorted(results, key=lambda m: m.model_name.lower())
+
+    # Sync new models to DB if provider_name is specified
+    if request.provider_name:
+        _sync_fetched_models(
+            db_session=db_session,
+            provider_name=request.provider_name,
+            models=[
+                SyncModelEntry(
+                    name=r.model_name,
+                    display_name=r.model_name,
+                )
+                for r in sorted_results
+            ],
+            source_label="LiteLLM",
+        )
+
+    return sorted_results
+
+
+def _get_litellm_models_response(api_key: str, api_base: str) -> dict:
+    """Perform GET to Litellm proxy /api/v1/models and return parsed JSON."""
+    cleaned_api_base = api_base.strip().rstrip("/")
+    url = f"{cleaned_api_base}/v1/models"
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "HTTP-Referer": "https://onyx.app",
+        "X-Title": "Onyx",
+    }
+
+    try:
+        response = httpx.get(url, headers=headers, timeout=10.0)
+        response.raise_for_status()
+        return response.json()
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 401:
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR,
+                "Authentication failed: invalid or missing API key for LiteLLM proxy.",
+            )
+        elif e.response.status_code == 404:
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR,
+                f"LiteLLM models endpoint not found at {url}. "
+                "Please verify the API base URL.",
+            )
+        else:
+            raise OnyxError(
+                OnyxErrorCode.BAD_GATEWAY,
+                f"Failed to fetch LiteLLM models: {e}",
+            )
+    except Exception as e:
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY,
+            f"Failed to fetch LiteLLM models: {e}",
+        )
