@@ -496,10 +496,6 @@ export function ModelsField<T extends BaseLLMFormValues>({
 
   const visibleModels = modelConfigurations.filter((m) => m.is_visible);
 
-  if (modelConfigurations.length === 0) {
-    return <EmptyMessage title="No models available." />;
-  }
-
   return (
     <Card variant="borderless" padding={0.5}>
       <Section gap={0.5}>
@@ -529,89 +525,93 @@ export function ModelsField<T extends BaseLLMFormValues>({
           </Section>
         </InputLayouts.Horizontal>
 
-        <Section gap={0.25}>
-          {isAutoMode
-            ? // Auto mode: read-only display
-              visibleModels.map((model) => (
-                <Hoverable.Root
-                  key={model.name}
-                  group="asdf"
-                  widthVariant="full"
-                >
-                  <LineItemButton
-                    variant="section"
-                    sizePreset="main-ui"
-                    selectVariant="select-heavy"
-                    state="selected"
-                    icon={() => <Checkbox checked />}
-                    title={model.display_name || model.name}
-                    rightChildren={
-                      model.name === defaultModel ? (
-                        <Section>
-                          <Tag title="Default Model" color="blue" />
-                        </Section>
-                      ) : undefined
-                    }
-                  />
-                </Hoverable.Root>
-              ))
-            : // Manual mode: checkbox selection
-              modelConfigurations.map((modelConfiguration) => {
-                const isSelected = selectedModels.includes(
-                  modelConfiguration.name
-                );
-                const isDefault = defaultModel === modelConfiguration.name;
-
-                return (
+        {modelConfigurations.length === 0 ? (
+          <EmptyMessage title="No models available." />
+        ) : (
+          <Section gap={0.25}>
+            {isAutoMode
+              ? // Auto mode: read-only display
+                visibleModels.map((model) => (
                   <Hoverable.Root
-                    group="LLMConfigurationButton"
+                    key={model.name}
+                    group="asdf"
                     widthVariant="full"
                   >
                     <LineItemButton
-                      key={modelConfiguration.name}
                       variant="section"
                       sizePreset="main-ui"
                       selectVariant="select-heavy"
-                      state={isSelected ? "selected" : "empty"}
-                      icon={() => <Checkbox checked={isSelected} />}
-                      title={modelConfiguration.name}
-                      onClick={() =>
-                        handleCheckboxChange(
-                          modelConfiguration.name,
-                          !isSelected
-                        )
-                      }
+                      state="selected"
+                      icon={() => <Checkbox checked />}
+                      title={model.display_name || model.name}
                       rightChildren={
-                        isSelected ? (
-                          isDefault ? (
-                            <Section>
-                              <Tag color="blue" title="Default Model" />
-                            </Section>
-                          ) : (
-                            <Hoverable.Item
-                              group="LLMConfigurationButton"
-                              variant="opacity-on-hover"
-                            >
-                              <OpalButton
-                                size="sm"
-                                prominence="internal"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleSetDefault(modelConfiguration.name);
-                                }}
-                                type="button"
-                              >
-                                Set as default
-                              </OpalButton>
-                            </Hoverable.Item>
-                          )
+                        model.name === defaultModel ? (
+                          <Section>
+                            <Tag title="Default Model" color="blue" />
+                          </Section>
                         ) : undefined
                       }
                     />
                   </Hoverable.Root>
-                );
-              })}
-        </Section>
+                ))
+              : // Manual mode: checkbox selection
+                modelConfigurations.map((modelConfiguration) => {
+                  const isSelected = selectedModels.includes(
+                    modelConfiguration.name
+                  );
+                  const isDefault = defaultModel === modelConfiguration.name;
+
+                  return (
+                    <Hoverable.Root
+                      group="LLMConfigurationButton"
+                      widthVariant="full"
+                    >
+                      <LineItemButton
+                        key={modelConfiguration.name}
+                        variant="section"
+                        sizePreset="main-ui"
+                        selectVariant="select-heavy"
+                        state={isSelected ? "selected" : "empty"}
+                        icon={() => <Checkbox checked={isSelected} />}
+                        title={modelConfiguration.name}
+                        onClick={() =>
+                          handleCheckboxChange(
+                            modelConfiguration.name,
+                            !isSelected
+                          )
+                        }
+                        rightChildren={
+                          isSelected ? (
+                            isDefault ? (
+                              <Section>
+                                <Tag color="blue" title="Default Model" />
+                              </Section>
+                            ) : (
+                              <Hoverable.Item
+                                group="LLMConfigurationButton"
+                                variant="opacity-on-hover"
+                              >
+                                <OpalButton
+                                  size="sm"
+                                  prominence="internal"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleSetDefault(modelConfiguration.name);
+                                  }}
+                                  type="button"
+                                >
+                                  Set as default
+                                </OpalButton>
+                              </Hoverable.Item>
+                            )
+                          ) : undefined
+                        }
+                      />
+                    </Hoverable.Root>
+                  );
+                })}
+          </Section>
+        )}
 
         {shouldShowAutoUpdateToggle && (
           <InputLayouts.Horizontal
