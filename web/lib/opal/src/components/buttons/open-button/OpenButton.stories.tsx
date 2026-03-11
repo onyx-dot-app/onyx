@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import { OpenButton } from "@opal/components";
-import { Disabled } from "@opal/core";
+import { Disabled as DisabledProvider } from "@opal/core";
 import { SvgSettings } from "@opal/icons";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 
@@ -63,9 +63,9 @@ export const FoldableDisabled: Story = {
   },
   decorators: [
     (Story) => (
-      <Disabled disabled>
+      <DisabledProvider disabled>
         <Story />
-      </Disabled>
+      </DisabledProvider>
     ),
   ],
 };
