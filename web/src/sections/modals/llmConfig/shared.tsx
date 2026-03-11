@@ -32,6 +32,7 @@ import {
   SvgX,
 } from "@opal/icons";
 import { Card, NameCard } from "@/refresh-components/cards";
+import EmptyMessage from "@/refresh-components/EmptyMessage";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import useUsers from "@/hooks/useUsers";
 import { UserRole } from "@/lib/types";
@@ -419,9 +420,9 @@ export function FetchModelsButton({
   );
 }
 
-// ─── DisplayModelsField ─────────────────────────────────────────────────────
+// ─── ModelsField ─────────────────────────────────────────────────────
 
-export interface DisplayModelsFieldProps<T> {
+export interface ModelsFieldProps<T> {
   formikProps: FormikProps<T>;
   modelConfigurations: ModelConfiguration[];
   noModelConfigurationsMessage?: string;
@@ -432,7 +433,7 @@ export interface DisplayModelsFieldProps<T> {
   onRefetch?: () => void;
 }
 
-export function DisplayModelsField<T extends BaseLLMFormValues>({
+export function ModelsField<T extends BaseLLMFormValues>({
   formikProps,
   modelConfigurations,
   noModelConfigurationsMessage,
@@ -440,7 +441,7 @@ export function DisplayModelsField<T extends BaseLLMFormValues>({
   recommendedDefaultModel,
   shouldShowAutoUpdateToggle,
   onRefetch,
-}: DisplayModelsFieldProps<T>) {
+}: ModelsFieldProps<T>) {
   const isAutoMode = formikProps.values.is_auto_mode;
   const selectedModels = formikProps.values.selected_model_names ?? [];
   const defaultModel = formikProps.values.default_model_name;
@@ -494,6 +495,10 @@ export function DisplayModelsField<T extends BaseLLMFormValues>({
   }
 
   const visibleModels = modelConfigurations.filter((m) => m.is_visible);
+
+  if (modelConfigurations.length === 0) {
+    return <EmptyMessage title="No models available." />;
+  }
 
   return (
     <Card variant="borderless" padding={0.5}>

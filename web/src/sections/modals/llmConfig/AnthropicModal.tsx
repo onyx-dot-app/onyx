@@ -17,7 +17,7 @@ import {
 } from "./formUtils";
 import {
   APIKeyField,
-  DisplayModelsField,
+  ModelsField,
   DisplayNameField,
   ModelsAccessField,
   FieldSeparator,
@@ -143,7 +143,7 @@ export function AnthropicModal({
           {isOnboarding ? (
             <SingleDefaultModelField placeholder="E.g. claude-sonnet-4-5" />
           ) : (
-            <DisplayModelsField
+            <ModelsField
               modelConfigurations={modelConfigurations}
               formikProps={formikProps}
               recommendedDefaultModel={

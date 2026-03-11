@@ -25,7 +25,7 @@ import {
   BaseLLMFormValues,
 } from "./formUtils";
 import {
-  DisplayModelsField,
+  ModelsField,
   DisplayNameField,
   ModelsAccessField,
   SingleDefaultModelField,
@@ -167,7 +167,7 @@ function LMStudioFormContent({
       {isOnboarding ? (
         <SingleDefaultModelField placeholder="E.g. llama3.1" />
       ) : (
-        <DisplayModelsField
+        <ModelsField
           modelConfigurations={currentModels}
           formikProps={formikProps}
           noModelConfigurationsMessage={

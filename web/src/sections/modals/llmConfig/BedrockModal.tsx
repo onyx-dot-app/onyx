@@ -26,7 +26,7 @@ import {
   BaseLLMFormValues,
 } from "./formUtils";
 import {
-  DisplayModelsField,
+  ModelsField,
   DisplayNameField,
   FieldSeparator,
   ModelsAccessField,
@@ -257,7 +257,7 @@ function BedrockModalInternals({
       {isOnboarding ? (
         <SingleDefaultModelField placeholder="E.g. us.anthropic.claude-sonnet-4-5-v1" />
       ) : (
-        <DisplayModelsField
+        <ModelsField
           modelConfigurations={currentModels}
           formikProps={formikProps}
           noModelConfigurationsMessage={

@@ -24,7 +24,7 @@ import {
   BaseLLMFormValues,
 } from "./formUtils";
 import {
-  DisplayModelsField,
+  ModelsField,
   DisplayNameField,
   ModelsAccessField,
   SingleDefaultModelField,
@@ -149,7 +149,7 @@ function OllamaModalContent({
       {isOnboarding ? (
         <SingleDefaultModelField placeholder="E.g. llama3.1" />
       ) : (
-        <DisplayModelsField
+        <ModelsField
           modelConfigurations={currentModels}
           formikProps={formikProps}
           noModelConfigurationsMessage="No models found. Please provide a valid API base URL."

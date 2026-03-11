@@ -20,7 +20,7 @@ import {
   BaseLLMFormValues,
 } from "./formUtils";
 import {
-  DisplayModelsField,
+  ModelsField,
   DisplayNameField,
   FieldSeparator,
   FieldWrapper,
@@ -217,7 +217,7 @@ export function VertexAIModal({
           {isOnboarding ? (
             <SingleDefaultModelField placeholder="E.g. gemini-2.5-pro" />
           ) : (
-            <DisplayModelsField
+            <ModelsField
               modelConfigurations={modelConfigurations}
               formikProps={formikProps}
               recommendedDefaultModel={
