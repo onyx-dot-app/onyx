@@ -52,6 +52,19 @@ By default, some onyx containers run as root. If you'd like to explicitly run th
       runAsUser: 1000
     ```
 
+## Mount secrets as files
+By default, this chart injects configured auth secrets as env vars.
+
+To mount those secrets as files and pass only `*_FILE` env vars instead:
+
+```yaml
+secretsAsFiles:
+  enabled: true
+  mountPath: /etc/onyx-secrets # optional, defaults to this path
+```
+
+When enabled, Onyx will read secret-backed config values from `VAR_FILE` paths (while preserving existing `VAR` env support for backwards compatibility).
+
 ## Resourcing
 In the helm charts, we have resource suggestions for all Onyx-owned components. 
 These are simply initial suggestions, and may need to be tuned for your specific use case.

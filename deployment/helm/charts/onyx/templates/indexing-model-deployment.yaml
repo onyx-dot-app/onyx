@@ -68,6 +68,10 @@ spec:
           - name: INDEXING_ONLY
             value: "{{ default "True" .Values.indexCapability.indexingOnly }}"
           {{- include "onyx.envSecrets" . | nindent 10}}
+        {{- $indexVolumeMounts := include "onyx.renderVolumeMounts" (dict "ctx" . "volumeMounts" .Values.indexCapability.volumeMounts) }}
+        {{- if $indexVolumeMounts }}
+        {{- $indexVolumeMounts | nindent 8 }}
+        {{- end }}
         {{- if .Values.indexCapability.securityContext }}
         securityContext:
           {{- toYaml .Values.indexCapability.securityContext | nindent 10 }}
@@ -88,4 +92,8 @@ spec:
         livenessProbe:
           {{- toYaml . | nindent 10 }}
         {{- end }}
+      {{- $indexVolumes := include "onyx.renderVolumes" (dict "ctx" . "volumes" .Values.indexCapability.volumes) }}
+      {{- if $indexVolumes }}
+      {{- $indexVolumes | nindent 6 }}
+      {{- end }}
 {{- end }}

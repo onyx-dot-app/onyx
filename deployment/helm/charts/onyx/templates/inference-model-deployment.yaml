@@ -57,6 +57,10 @@ spec:
             name: {{ .Values.config.envConfigMapName }}
         env:
           {{- include "onyx.envSecrets" . | nindent 12}}
+        {{- $inferenceVolumeMounts := include "onyx.renderVolumeMounts" (dict "ctx" . "volumeMounts" .Values.inferenceCapability.volumeMounts) }}
+        {{- if $inferenceVolumeMounts }}
+        {{- $inferenceVolumeMounts | nindent 8 }}
+        {{- end }}
         {{- if .Values.inferenceCapability.securityContext }}
         securityContext:
           {{- toYaml .Values.inferenceCapability.securityContext | nindent 10 }}
@@ -77,4 +81,8 @@ spec:
         livenessProbe:
           {{- toYaml . | nindent 10 }}
         {{- end }}
+      {{- $inferenceVolumes := include "onyx.renderVolumes" (dict "ctx" . "volumes" .Values.inferenceCapability.volumes) }}
+      {{- if $inferenceVolumes }}
+      {{- $inferenceVolumes | nindent 6 }}
+      {{- end }}
 {{- end }}

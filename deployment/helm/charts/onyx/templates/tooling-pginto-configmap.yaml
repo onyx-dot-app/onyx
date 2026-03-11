@@ -12,7 +12,16 @@ data:
 
     HOST="${POSTGRES_HOST:-localhost}"
     PORT="${POSTGRES_PORT:-5432}"
-    USER="${POSTGRES_USER:-postgres}"
+    POSTGRES_USER_VALUE="${POSTGRES_USER:-}"
+    if [ -z "${POSTGRES_USER_VALUE}" ] && [ -n "${POSTGRES_USER_FILE:-}" ]; then
+      if [ -r "${POSTGRES_USER_FILE}" ]; then
+        POSTGRES_USER_VALUE="$(cat "${POSTGRES_USER_FILE}")"
+      else
+        echo "POSTGRES_USER_FILE is set but not readable: ${POSTGRES_USER_FILE}" >&2
+        exit 1
+      fi
+    fi
+    USER="${POSTGRES_USER_VALUE:-postgres}"
     DB="${POSTGRES_DB:-postgres}"
     PSQL_BIN="${PGINTO_PSQL_BIN:-{{ default "psql" .Values.tooling.pgInto.psqlBinary }}}"
     USE_IAM="$(printf '%s' "${USE_IAM_AUTH:-false}" | tr '[:upper:]' '[:lower:]')"
@@ -48,6 +57,16 @@ data:
     else
       if [ -z "${PGPASSWORD:-}" ] && [ -n "${POSTGRES_PASSWORD:-}" ]; then
         export PGPASSWORD="${POSTGRES_PASSWORD}"
+      fi
+
+      if [ -z "${PGPASSWORD:-}" ] && [ -n "${POSTGRES_PASSWORD_FILE:-}" ]; then
+        if [ -r "${POSTGRES_PASSWORD_FILE}" ]; then
+          PGPASSWORD="$(cat "${POSTGRES_PASSWORD_FILE}")"
+          export PGPASSWORD
+        else
+          echo "POSTGRES_PASSWORD_FILE is set but not readable: ${POSTGRES_PASSWORD_FILE}" >&2
+          exit 1
+        fi
       fi
 
       if [ -z "${PGPASSWORD:-}" ]; then
