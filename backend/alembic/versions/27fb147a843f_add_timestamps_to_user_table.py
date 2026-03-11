@@ -1,7 +1,7 @@
 """add timestamps to user table
 
 Revision ID: 27fb147a843f
-Revises: a3b8d9e2f1c4
+Revises: b5c4d7e8f9a1
 Create Date: 2026-03-08 17:18:40.828644
 
 """
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "27fb147a843f"
-down_revision = "a3b8d9e2f1c4"
+down_revision = "b5c4d7e8f9a1"
 branch_labels = None
 depends_on = None
 
