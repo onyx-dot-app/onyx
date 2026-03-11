@@ -1,6 +1,7 @@
 import json
 from typing import Any
 
+from mcp.client.auth import OAuthClientProvider
 from onyx.chat.emitter import Emitter
 from onyx.db.enums import MCPAuthenticationType
 from onyx.db.enums import MCPTransport
@@ -202,7 +203,7 @@ class MCPTool(Tool[None]):
 
             # For OAuth servers, construct OAuthClientProvider so the MCP SDK
             # can refresh expired tokens automatically
-            auth = None
+            auth: OAuthClientProvider | None = None
             if (
                 self.mcp_server.auth_type == MCPAuthenticationType.OAUTH
                 and self.connection_config is not None
