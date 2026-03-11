@@ -240,70 +240,6 @@ def _stream_response(response: httpx.Response) -> Iterator[bytes]:
         yield chunk
 
 
-def _inject_asset_fixer(content: bytes, session_id: str) -> bytes:
-    """Inject a script that rewrites root-scoped Next assets at runtime.
-
-    next/font in dev mode injects @font-face declarations via React client-side,
-    bypassing server-side proxy rewriting. The dev runtime can also construct
-    HMR websocket URLs relative to the top-level origin instead of the session
-    proxy path. Patching DOM insertion and WebSocket construction keeps those
-    URLs under /api/build/sessions/<id>/webapp.
-    """
-    base = f"/api/build/sessions/{session_id}/webapp"
-    script = (
-        f"<script>(function(){{var B='{base}';"
-        "function h(u){if(!u)return false;"
-        "try{var x=new URL(String(u),window.location.href);"
-        "return x.pathname.indexOf('/_next/webpack-hmr')===0||x.pathname.indexOf('/_next/hmr')===0;"
-        "}catch(e){}"
-        "if(typeof u==='string')return u.indexOf('/_next/webpack-hmr')===0||u.indexOf('/_next/hmr')===0;"
-        "return false;}"
-        "function r(u){if(!u)return u;"
-        "try{var x=new URL(String(u),window.location.href);"
-        "if(x.pathname.indexOf('/_next/')===0)return B+x.pathname+x.search+x.hash;"
-        "}catch(e){}"
-        "if(typeof u==='string'&&u.indexOf('/_next/')===0)return B+u;"
-        "return u;}"
-        "function e(t){return typeof Event==='function'?new Event(t):{type:t};}"
-        "function H(u){this.url=String(u);this.readyState=1;this.bufferedAmount=0;this.extensions='';this.protocol='';"
-        "this.binaryType='blob';this.onopen=null;this.onmessage=null;this.onerror=null;this.onclose=null;this._l={};"
-        "var s=this;setTimeout(function(){s._d('open',e('open'));},0);}"
-        "H.CONNECTING=0;H.OPEN=1;H.CLOSING=2;H.CLOSED=3;"
-        "H.prototype.addEventListener=function(t,c){(this._l[t]||(this._l[t]=[])).push(c);};"
-        "H.prototype.removeEventListener=function(t,c){var a=this._l[t]||[];this._l[t]=a.filter(function(f){return f!==c;});};"
-        "H.prototype._d=function(t,v){var a=this._l[t]||[];for(var i=0;i<a.length;i++)a[i].call(this,v);"
-        "var n=this['on'+t];if(typeof n==='function')n.call(this,v);};"
-        "H.prototype.send=function(){};"
-        "H.prototype.close=function(c,r){if(this.readyState>=2)return;this.readyState=3;"
-        "var v=e('close');v.code=c===undefined?1000:c;v.reason=r||'';v.wasClean=true;this._d('close',v);};"
-        "function f(n){if(!n||n.nodeType!==1)return;"
-        "if(n.tagName==='STYLE'&&n.textContent)"
-        "n.textContent=n.textContent.replace(/(url\\s*\\(\\s*['\"]?)\\/_next\\//g,'$1'+B+'/_next/');"
-        "else if(n.tagName==='LINK'){var h=n.getAttribute('href')||'';var y=r(h);if(y!==h)n.setAttribute('href',y);}"
-        "else if(n.tagName==='SCRIPT'){var s=n.getAttribute('src')||'';var z=r(s);if(z!==s)n.setAttribute('src',z);}}"
-        "function w(m){var o=Element.prototype[m];"
-        "Element.prototype[m]=function(n){f(n);return o.apply(this,arguments);}}"
-        "w('appendChild');w('insertBefore');"
-        "document.querySelectorAll('link[href],script[src],style').forEach(f);"
-        "if(window.WebSocket){var O=window.WebSocket;"
-        "window.WebSocket=function(u,p){if(h(u))return new H(r(u));var v=r(u);return p===undefined?new O(v):new O(v,p);};"
-        "window.WebSocket.prototype=O.prototype;"
-        "Object.setPrototypeOf(window.WebSocket,O);"
-        "['CONNECTING','OPEN','CLOSING','CLOSED'].forEach(function(k){window.WebSocket[k]=O[k];});}"
-        "})()</script>"
-    )
-    text = content.decode("utf-8")
-    # Inject immediately after <head> so it runs before React initialises
-    text = re.sub(
-        r"(<head\b[^>]*>)",
-        lambda m: m.group(0) + script,
-        text,
-        count=1,
-        flags=re.IGNORECASE,
-    )
-    return text.encode("utf-8")
-
-
 def _rewrite_asset_paths(content: bytes, session_id: str) -> bytes:
     """Rewrite Next.js asset paths to go through the proxy."""
     webapp_base_path = f"/api/build/sessions/{session_id}/webapp"
@@ -452,9 +388,6 @@ def _proxy_request(
             # For HTML/CSS/JS responses, rewrite asset paths
             if any(ct in content_type for ct in REWRITABLE_CONTENT_TYPES):
                 content = _rewrite_asset_paths(response.content, str(session_id))
-                # Disabled to validate whether path/header rewriting alone is sufficient.
-                # if "text/html" in content_type:
-                #     content = _inject_asset_fixer(content, str(session_id))
                 return Response(
                     content=content,
                     status_code=response.status_code,

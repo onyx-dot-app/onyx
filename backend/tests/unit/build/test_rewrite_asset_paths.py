@@ -1,6 +1,5 @@
 """Unit tests for webapp proxy path rewriting/injection."""
 
-from onyx.server.features.build.api.api import _inject_asset_fixer
 from onyx.server.features.build.api.api import _rewrite_asset_paths
 from onyx.server.features.build.api.api import _rewrite_proxy_response_headers
 
@@ -10,10 +9,6 @@ BASE = f"/api/build/sessions/{SESSION_ID}/webapp"
 
 def rewrite(html: str) -> str:
     return _rewrite_asset_paths(html.encode(), SESSION_ID).decode()
-
-
-def inject(html: str) -> str:
-    return _inject_asset_fixer(html.encode(), SESSION_ID).decode()
 
 
 class TestNextjsPathRewriting:
@@ -96,27 +91,6 @@ class TestNextjsPathRewriting:
         assert (
             r'{"href":"\/api\/build\/sessions\/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee\/webapp\/_next\/static\/media\/font.woff2"}'
             in result
-        )
-
-
-class TestRuntimeFixerInjection:
-    def test_injects_websocket_rewrite_shim(self):
-        html = "<html><head></head><body></body></html>"
-        result = inject(html)
-        assert "window.WebSocket=function" in result
-        assert f"var B='{BASE}'" in result
-
-    def test_injects_hmr_websocket_stub(self):
-        html = "<html><head></head><body></body></html>"
-        result = inject(html)
-        assert "function H(u)" in result
-        assert "if(h(u))return new H(r(u));" in result
-
-    def test_injects_before_head_contents(self):
-        html = "<html><head><title>x</title></head><body></body></html>"
-        result = inject(html)
-        assert result.index("window.WebSocket=function") < result.index(
-            "<title>x</title>"
         )
 
 
