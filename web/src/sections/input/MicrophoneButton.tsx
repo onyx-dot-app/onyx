@@ -73,7 +73,8 @@ function MicrophoneButton({
   const autoListenCooldownTimerRef = useRef<NodeJS.Timeout | null>(null);
   const hasManualRecordStartRef = useRef(false);
 
-  // Handler for VAD-triggered auto-send (when server detects silence)
+  // Handler for VAD (Voice Activity Detection) triggered auto-send.
+  // VAD runs server-side in the STT provider and detects when the user stops speaking.
   const handleFinalTranscript = useCallback(
     (text: string) => {
       onTranscription(text);
@@ -161,7 +162,8 @@ function MicrophoneButton({
         await startRecording();
         // Arm auto-listen only after first manual mic start in this session.
         hasManualRecordStartRef.current = true;
-      } catch {
+      } catch (err) {
+        console.error("Microphone access failed:", err);
         toast.error("Could not access microphone");
       }
     }
@@ -213,7 +215,8 @@ function MicrophoneButton({
         ) {
           return;
         }
-        startRecording().catch(() => {
+        startRecording().catch((err) => {
+          console.error("Auto-start microphone failed:", err);
           toast.error("Could not auto-start microphone");
         });
       }, 400);
@@ -260,6 +263,7 @@ function MicrophoneButton({
 
   useEffect(() => {
     if (error) {
+      console.error("Voice recorder error:", error);
       toast.error(error);
     }
   }, [error]);

@@ -38,7 +38,8 @@ function TTSButton({ text, voice, speed }: TTSButtonProps) {
         // Ensure no voice-mode stream is active before starting manual playback.
         stopTTS();
         await play(text, voice, speed);
-      } catch {
+      } catch (err) {
+        console.error("TTS playback failed:", err);
         toast.error("Could not play audio");
       }
     }
@@ -55,8 +56,10 @@ function TTSButton({ text, voice, speed }: TTSButtonProps) {
     stopTTS,
   ]);
 
+  // Surface streaming voice playback errors to the user via toast
   useEffect(() => {
     if (error) {
+      console.error("Voice playback error:", error);
       toast.error(error);
     }
   }, [error]);

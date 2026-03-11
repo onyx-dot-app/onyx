@@ -1,7 +1,21 @@
+"""ElevenLabs voice provider for STT and TTS.
+
+ElevenLabs supports:
+- **STT**: Scribe API (batch via REST, streaming via WebSocket with Scribe v2 Realtime).
+  The streaming endpoint sends base64-encoded PCM16 audio chunks and receives JSON
+  transcript messages (partial_transcript, committed_transcript, utterance_end).
+- **TTS**: Text-to-speech via REST streaming and WebSocket stream-input.
+  The WebSocket variant accepts incremental text chunks and returns audio in order,
+  enabling low-latency playback before the full text is available.
+
+See https://elevenlabs.io/docs for API reference.
+"""
+
 import asyncio
 import base64
 import json
 from collections.abc import AsyncIterator
+from enum import StrEnum
 from typing import Any
 
 import aiohttp
@@ -13,6 +27,44 @@ from onyx.voice.interface import VoiceProviderInterface
 
 # Default ElevenLabs API base URL
 DEFAULT_ELEVENLABS_API_BASE = "https://api.elevenlabs.io"
+
+# Default sample rates for STT streaming
+DEFAULT_INPUT_SAMPLE_RATE = 24000  # What the browser frontend sends
+DEFAULT_TARGET_SAMPLE_RATE = 16000  # What ElevenLabs Scribe expects
+
+# Default streaming TTS output format
+DEFAULT_TTS_OUTPUT_FORMAT = "mp3_44100_64"
+
+# Default TTS voice settings
+DEFAULT_VOICE_STABILITY = 0.5
+DEFAULT_VOICE_SIMILARITY_BOOST = 0.75
+
+# Chunk length schedule for streaming TTS (optimized for real-time playback)
+DEFAULT_CHUNK_LENGTH_SCHEDULE = [120, 160, 250, 290]
+
+# Default STT streaming VAD configuration
+DEFAULT_VAD_SILENCE_THRESHOLD_SECS = 1.0
+DEFAULT_VAD_THRESHOLD = 0.4
+DEFAULT_MIN_SPEECH_DURATION_MS = 100
+DEFAULT_MIN_SILENCE_DURATION_MS = 300
+
+
+class ElevenLabsSTTMessageType(StrEnum):
+    """Message types from ElevenLabs Scribe Realtime STT API."""
+
+    SESSION_STARTED = "session_started"
+    PARTIAL_TRANSCRIPT = "partial_transcript"
+    COMMITTED_TRANSCRIPT = "committed_transcript"
+    UTTERANCE_END = "utterance_end"
+    SESSION_ENDED = "session_ended"
+    ERROR = "error"
+
+
+class ElevenLabsTTSMessageType(StrEnum):
+    """Message types from ElevenLabs stream-input TTS API."""
+
+    AUDIO = "audio"
+    ERROR = "error"
 
 
 def _http_to_ws_url(http_url: str) -> str:
@@ -45,8 +97,8 @@ class ElevenLabsStreamingTranscriber(StreamingTranscriberProtocol):
         self,
         api_key: str,
         model: str = "scribe_v2_realtime",
-        input_sample_rate: int = 24000,  # What frontend sends
-        target_sample_rate: int = 16000,  # What ElevenLabs expects
+        input_sample_rate: int = DEFAULT_INPUT_SAMPLE_RATE,
+        target_sample_rate: int = DEFAULT_TARGET_SAMPLE_RATE,
         language_code: str = "en",
         api_base: str | None = None,
     ):
@@ -78,8 +130,10 @@ class ElevenLabsStreamingTranscriber(StreamingTranscriberProtocol):
         )
         self._session = aiohttp.ClientSession()
 
-        # VAD is configured via query parameters
-        # commit_strategy=vad enables automatic transcript commit on silence detection
+        # VAD is configured via query parameters.
+        # commit_strategy=vad enables automatic transcript commit on silence detection.
+        # These params are part of the ElevenLabs Scribe Realtime API contract:
+        # https://elevenlabs.io/docs/api-reference/speech-to-text/realtime
         ws_base = _http_to_ws_url(self.api_base.rstrip("/"))
         url = (
             f"{ws_base}/v1/speech-to-text/realtime"
@@ -87,10 +141,10 @@ class ElevenLabsStreamingTranscriber(StreamingTranscriberProtocol):
             f"&sample_rate={self.target_sample_rate}"
             f"&language_code={self.language_code}"
             f"&commit_strategy=vad"
-            f"&vad_silence_threshold_secs=1.0"
-            f"&vad_threshold=0.4"
-            f"&min_speech_duration_ms=100"
-            f"&min_silence_duration_ms=300"
+            f"&vad_silence_threshold_secs={DEFAULT_VAD_SILENCE_THRESHOLD_SECS}"
+            f"&vad_threshold={DEFAULT_VAD_THRESHOLD}"
+            f"&min_speech_duration_ms={DEFAULT_MIN_SPEECH_DURATION_MS}"
+            f"&min_silence_duration_ms={DEFAULT_MIN_SILENCE_DURATION_MS}"
         )
         self._logger.info(
             f"ElevenLabsStreamingTranscriber: connecting to {url} "
@@ -159,22 +213,22 @@ class ElevenLabsStreamingTranscriber(StreamingTranscriberProtocol):
                         f"ElevenLabsStreamingTranscriber: received message_type: '{msg_type}', data keys: {list(data.keys())}"
                     )
                     # Check for error in various formats
-                    if "error" in data or msg_type == "error":
+                    if "error" in data or msg_type == ElevenLabsSTTMessageType.ERROR:
                         error_msg = data.get("error", data.get("message", data))
                         self._logger.error(
                             f"ElevenLabsStreamingTranscriber: API error: {error_msg}"
                         )
                         continue
 
-                    # Handle different message types from ElevenLabs Scribe API
-                    if msg_type == "session_started":
-                        # Session started successfully
+                    # Handle message types from ElevenLabs Scribe Realtime API.
+                    # See https://elevenlabs.io/docs/api-reference/speech-to-text/realtime
+                    if msg_type == ElevenLabsSTTMessageType.SESSION_STARTED:
                         self._logger.info(
                             f"ElevenLabsStreamingTranscriber: session started, "
                             f"id={data.get('session_id')}, config={data.get('config')}"
                         )
-                    elif msg_type == "partial_transcript":
-                        # Partial transcript (interim result)
+                    elif msg_type == ElevenLabsSTTMessageType.PARTIAL_TRANSCRIPT:
+                        # Interim result — updated as more audio is processed
                         text = data.get("text", "")
                         if text:
                             self._logger.info(
@@ -184,8 +238,8 @@ class ElevenLabsStreamingTranscriber(StreamingTranscriberProtocol):
                             await self._transcript_queue.put(
                                 TranscriptResult(text=text, is_vad_end=False)
                             )
-                    elif msg_type == "committed_transcript":
-                        # Final/committed transcript (VAD detected end of utterance)
+                    elif msg_type == ElevenLabsSTTMessageType.COMMITTED_TRANSCRIPT:
+                        # Final transcript for the current utterance (VAD detected end)
                         text = data.get("text", "")
                         if text:
                             self._logger.info(
@@ -195,8 +249,8 @@ class ElevenLabsStreamingTranscriber(StreamingTranscriberProtocol):
                             await self._transcript_queue.put(
                                 TranscriptResult(text=text, is_vad_end=True)
                             )
-                    elif msg_type == "utterance_end":
-                        # VAD detected end of speech
+                    elif msg_type == ElevenLabsSTTMessageType.UTTERANCE_END:
+                        # VAD detected end of speech (may carry text or be empty)
                         text = data.get("text", "") or self._final_transcript
                         if text:
                             self._logger.info(
@@ -206,7 +260,7 @@ class ElevenLabsStreamingTranscriber(StreamingTranscriberProtocol):
                             await self._transcript_queue.put(
                                 TranscriptResult(text=text, is_vad_end=True)
                             )
-                    elif msg_type == "session_ended":
+                    elif msg_type == ElevenLabsSTTMessageType.SESSION_ENDED:
                         self._logger.info(
                             "ElevenLabsStreamingTranscriber: session ended"
                         )
@@ -397,24 +451,20 @@ class ElevenLabsStreamingSynthesizer(StreamingSynthesizerProtocol):
             headers={"xi-api-key": self.api_key},
         )
 
-        # Send initial configuration with generation settings optimized for streaming
-        # Note: API key is sent via header only (not in body to avoid log exposure)
+        # Send initial configuration with generation settings optimized for streaming.
+        # Note: API key is sent via header only (not in body to avoid log exposure).
+        # See https://elevenlabs.io/docs/api-reference/text-to-speech/stream-input
         await self._ws.send_str(
             json.dumps(
                 {
                     "text": " ",  # Initial space to start the stream
                     "voice_settings": {
-                        "stability": 0.5,
-                        "similarity_boost": 0.75,
+                        "stability": DEFAULT_VOICE_STABILITY,
+                        "similarity_boost": DEFAULT_VOICE_SIMILARITY_BOOST,
                         "speed": self.speed,
                     },
                     "generation_config": {
-                        "chunk_length_schedule": [
-                            120,
-                            160,
-                            250,
-                            290,
-                        ],  # Optimized chunk sizes for streaming
+                        "chunk_length_schedule": DEFAULT_CHUNK_LENGTH_SCHEDULE,
                     },
                 }
             )
@@ -580,7 +630,7 @@ class ElevenLabsVoiceProvider(VoiceProviderInterface):
         default_voice: str | None = None,
     ):
         self.api_key = api_key
-        self.api_base = api_base or "https://api.elevenlabs.io"
+        self.api_base = api_base or DEFAULT_ELEVENLABS_API_BASE
         # Validate and default models - use valid ElevenLabs model IDs
         self.stt_model = (
             stt_model if stt_model in ELEVENLABS_STT_MODELS else "scribe_v1"
@@ -697,8 +747,8 @@ class ElevenLabsVoiceProvider(VoiceProviderInterface):
             "text": text,
             "model_id": self.tts_model,
             "voice_settings": {
-                "stability": 0.5,
-                "similarity_boost": 0.75,
+                "stability": DEFAULT_VOICE_STABILITY,
+                "similarity_boost": DEFAULT_VOICE_SIMILARITY_BOOST,
                 "speed": speed,
             },
         }
@@ -726,6 +776,22 @@ class ElevenLabsVoiceProvider(VoiceProviderInterface):
                     f"ElevenLabs TTS: streaming complete, {chunk_count} chunks, "
                     f"{total_bytes} total bytes"
                 )
+
+    async def validate_credentials(self) -> None:
+        """Validate ElevenLabs API key by fetching user info."""
+        if not self.api_key:
+            raise ValueError("ElevenLabs API key required")
+
+        headers = {"xi-api-key": self.api_key}
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                f"{self.api_base}/v1/user", headers=headers
+            ) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    raise RuntimeError(
+                        f"ElevenLabs credential validation failed: {error_text}"
+                    )
 
     def get_available_voices(self) -> list[dict[str, str]]:
         """Return common ElevenLabs voices."""
@@ -758,14 +824,15 @@ class ElevenLabsVoiceProvider(VoiceProviderInterface):
         """Create a streaming transcription session."""
         if not self.api_key:
             raise ValueError("API key required for streaming transcription")
-        # ElevenLabs realtime STT requires scribe_v2_realtime model
-        # Frontend sends PCM16 at 24kHz, but ElevenLabs expects 16kHz
-        # The transcriber will resample automatically
+        # ElevenLabs realtime STT requires scribe_v2_realtime model.
+        # Frontend sends PCM16 at DEFAULT_INPUT_SAMPLE_RATE (24kHz),
+        # but ElevenLabs expects DEFAULT_TARGET_SAMPLE_RATE (16kHz).
+        # The transcriber resamples automatically.
         transcriber = ElevenLabsStreamingTranscriber(
             api_key=self.api_key,
             model="scribe_v2_realtime",
-            input_sample_rate=24000,  # What frontend sends
-            target_sample_rate=16000,  # What ElevenLabs expects
+            input_sample_rate=DEFAULT_INPUT_SAMPLE_RATE,
+            target_sample_rate=DEFAULT_TARGET_SAMPLE_RATE,
             language_code="en",
             api_base=self.api_base,
         )
@@ -783,8 +850,7 @@ class ElevenLabsVoiceProvider(VoiceProviderInterface):
             api_key=self.api_key,
             voice_id=voice_id,
             model_id=self.tts_model,
-            # Use mp3_44100_64 for streaming - good balance of quality and chunk size
-            output_format="mp3_44100_64",
+            output_format=DEFAULT_TTS_OUTPUT_FORMAT,
             api_base=self.api_base,
             speed=speed,
         )

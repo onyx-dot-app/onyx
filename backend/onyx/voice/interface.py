@@ -105,6 +105,13 @@ class VoiceProviderInterface(ABC):
         """
 
     @abstractmethod
+    async def validate_credentials(self) -> None:
+        """
+        Validate that the provider credentials are correct by making a
+        lightweight API call. Raises on failure.
+        """
+
+    @abstractmethod
     def get_available_voices(self) -> list[dict[str, str]]:
         """
         Get list of available voices for this provider.

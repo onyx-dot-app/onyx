@@ -68,6 +68,7 @@ export function useVoicePlayback(): UseVoicePlaybackReturn {
             if (suppressPlayerErrorsRef.current) {
               return;
             }
+            console.error("Voice playback error:", playbackError);
             setManualTTSPlaying(false);
             setError(playbackError);
             setIsLoading(false);

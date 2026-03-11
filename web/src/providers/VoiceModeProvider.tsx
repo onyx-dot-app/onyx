@@ -415,12 +415,17 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
     }
     const { token } = await tokenResponse.json();
 
+    // In development, the Next.js dev server (port 3000) does not proxy
+    // WebSocket connections, so we connect directly to the backend (port 8080).
+    // In production, the reverse proxy handles the /api prefix routing.
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const isDev = window.location.port === "3000";
     const host = isDev ? "localhost:8080" : window.location.host;
     const path = isDev
       ? "/voice/synthesize/stream"
       : "/api/voice/synthesize/stream";
+    // Auth: the token query param is validated server-side by
+    // current_user_from_websocket (single-use, 60s TTL, same checks as HTTP auth).
     return `${protocol}//${host}${path}?token=${encodeURIComponent(token)}`;
   }, []);
 
@@ -658,7 +663,10 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
         .slice(committedPositionRef.current)
         .trim();
 
-      // Fast start: if we haven't spoken yet and have 20+ chars, send after 200ms
+      // Fast start: send the first TTS chunk as soon as we have enough text (20+ chars)
+      // without waiting for a full sentence boundary. This reduces perceived latency —
+      // the user hears audio begin within ~200ms of the first text arriving, rather than
+      // waiting for the LLM to produce a complete sentence.
       if (
         !hasSpokenFirstChunkRef.current &&
         currentUncommitted.length >= 20 &&
@@ -928,8 +936,9 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
       if (wsRef.current) {
         try {
           wsRef.current.close();
-        } catch {
-          // Ignore
+        } catch (err) {
+          // WebSocket may already be closed or in CLOSING state — non-critical
+          console.warn("Failed to close TTS WebSocket during cleanup:", err);
         }
       }
       if (audioElementRef.current) {

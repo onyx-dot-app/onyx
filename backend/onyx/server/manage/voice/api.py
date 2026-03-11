@@ -78,7 +78,7 @@ def list_voice_providers(
 
 
 @admin_router.post("/providers")
-def upsert_voice_provider_endpoint(
+async def upsert_voice_provider_endpoint(
     request: VoiceProviderUpsertRequest,
     _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
@@ -123,6 +123,18 @@ def upsert_voice_provider_endpoint(
         activate_stt=request.activate_stt,
         activate_tts=request.activate_tts,
     )
+
+    # Validate credentials before committing - rollback on failure
+    try:
+        voice_provider = get_voice_provider(provider)
+        await voice_provider.validate_credentials()
+    except Exception as e:
+        db_session.rollback()
+        logger.error(f"Voice provider credential validation failed on save: {e}")
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Connection test failed. Please verify your API key and settings.",
+        ) from e
 
     db_session.commit()
 
@@ -195,12 +207,12 @@ def deactivate_tts_provider_endpoint(
 
 
 @admin_router.post("/providers/test")
-def test_voice_provider(
+async def test_voice_provider(
     request: VoiceProviderTestRequest,
     _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> VoiceProviderUpdateSuccess:
-    """Test a voice provider connection."""
+    """Test a voice provider connection by making a real API call."""
     api_key = request.api_key
 
     if request.use_stored_key:
@@ -239,14 +251,9 @@ def test_voice_provider(
     except ValueError as exc:
         raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(exc)) from exc
 
-    # Test the provider by getting available voices (lightweight check)
+    # Validate credentials with a real API call
     try:
-        voices = provider.get_available_voices()
-        if not voices:
-            raise OnyxError(
-                OnyxErrorCode.VALIDATION_ERROR,
-                "Provider returned no available voices.",
-            )
+        await provider.validate_credentials()
     except OnyxError:
         raise
     except Exception as e:

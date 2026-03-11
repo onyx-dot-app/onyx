@@ -1,8 +1,22 @@
+"""OpenAI voice provider for STT and TTS.
+
+OpenAI supports:
+- **STT**: Whisper (batch transcription via REST) and Realtime API (streaming
+  transcription via WebSocket with server-side VAD). Audio is sent as base64-encoded
+  PCM16 at 24kHz mono. The Realtime API returns transcript deltas and completed
+  transcription events per VAD-detected utterance.
+- **TTS**: HTTP streaming endpoint that returns audio chunks progressively.
+  Supported models: tts-1 (standard) and tts-1-hd (high quality).
+
+See https://platform.openai.com/docs for API reference.
+"""
+
 import asyncio
 import base64
 import io
 import json
 from collections.abc import AsyncIterator
+from enum import StrEnum
 from typing import TYPE_CHECKING
 
 import aiohttp
@@ -17,6 +31,20 @@ if TYPE_CHECKING:
 
 # Default OpenAI API base URL
 DEFAULT_OPENAI_API_BASE = "https://api.openai.com"
+
+
+class OpenAIRealtimeMessageType(StrEnum):
+    """Message types from OpenAI Realtime transcription API."""
+
+    ERROR = "error"
+    SPEECH_STARTED = "input_audio_buffer.speech_started"
+    SPEECH_STOPPED = "input_audio_buffer.speech_stopped"
+    BUFFER_COMMITTED = "input_audio_buffer.committed"
+    TRANSCRIPTION_DELTA = "conversation.item.input_audio_transcription.delta"
+    TRANSCRIPTION_COMPLETED = "conversation.item.input_audio_transcription.completed"
+    SESSION_CREATED = "transcription_session.created"
+    SESSION_UPDATED = "transcription_session.updated"
+    ITEM_CREATED = "conversation.item.created"
 
 
 def _http_to_ws_url(http_url: str) -> str:
@@ -111,28 +139,28 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
                     self._logger.debug(f"Received message type: {msg_type}")
 
                     # Handle errors
-                    if msg_type == "error":
+                    if msg_type == OpenAIRealtimeMessageType.ERROR:
                         error = data.get("error", {})
                         self._logger.error(f"OpenAI error: {error}")
                         continue
 
                     # Handle VAD events
-                    if msg_type == "input_audio_buffer.speech_started":
+                    if msg_type == OpenAIRealtimeMessageType.SPEECH_STARTED:
                         self._logger.info("OpenAI: Speech started")
                         # Reset current turn transcript for new speech
                         self._current_turn_transcript = ""
                         continue
-                    elif msg_type == "input_audio_buffer.speech_stopped":
+                    elif msg_type == OpenAIRealtimeMessageType.SPEECH_STOPPED:
                         self._logger.info(
                             "OpenAI: Speech stopped (VAD detected silence)"
                         )
                         continue
-                    elif msg_type == "input_audio_buffer.committed":
+                    elif msg_type == OpenAIRealtimeMessageType.BUFFER_COMMITTED:
                         self._logger.info("OpenAI: Audio buffer committed")
                         continue
 
                     # Handle transcription events
-                    if msg_type == "conversation.item.input_audio_transcription.delta":
+                    if msg_type == OpenAIRealtimeMessageType.TRANSCRIPTION_DELTA:
                         delta = data.get("delta", "")
                         if delta:
                             self._logger.info(f"OpenAI: Transcription delta: {delta}")
@@ -145,10 +173,7 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
                             await self._transcript_queue.put(
                                 TranscriptResult(text=full_transcript, is_vad_end=False)
                             )
-                    elif (
-                        msg_type
-                        == "conversation.item.input_audio_transcription.completed"
-                    ):
+                    elif msg_type == OpenAIRealtimeMessageType.TRANSCRIPTION_COMPLETED:
                         transcript = data.get("transcript", "")
                         if transcript:
                             self._logger.info(
@@ -169,9 +194,9 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
                                 )
                             )
                     elif msg_type not in (
-                        "transcription_session.created",
-                        "transcription_session.updated",
-                        "conversation.item.created",
+                        OpenAIRealtimeMessageType.SESSION_CREATED,
+                        OpenAIRealtimeMessageType.SESSION_UPDATED,
+                        OpenAIRealtimeMessageType.ITEM_CREATED,
                     ):
                         # Log any other message types we might be missing
                         self._logger.info(
@@ -538,6 +563,11 @@ class OpenAIVoiceProvider(VoiceProviderInterface):
         ) as response:
             async for chunk in response.iter_bytes(chunk_size=8192):
                 yield chunk
+
+    async def validate_credentials(self) -> None:
+        """Validate OpenAI API key by listing models."""
+        client = self._get_client()
+        await client.models.list()
 
     def get_available_voices(self) -> list[dict[str, str]]:
         """Get available OpenAI TTS voices."""

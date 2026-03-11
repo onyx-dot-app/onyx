@@ -1,3 +1,26 @@
+"""Azure Speech Services voice provider for STT and TTS.
+
+Azure supports:
+- **STT**: Batch transcription via REST API (audio/wav POST) and real-time
+  streaming via the Azure Speech SDK (push audio stream with continuous
+  recognition). The SDK handles VAD natively through its recognizing/recognized
+  events.
+- **TTS**: SSML-based synthesis via REST API (streaming response) and real-time
+  synthesis via the Speech SDK. Text is escaped with ``xml.sax.saxutils.escape``
+  and attributes with ``quoteattr`` to prevent SSML injection.
+
+Both modes support Azure cloud endpoints (region-based URLs) and self-hosted
+Speech containers (custom endpoint URLs). The ``speech_region`` is validated to
+contain only ``[a-z0-9-]`` to prevent URL injection.
+
+The Azure Speech SDK (``azure-cognitiveservices-speech``) is an optional C
+extension dependency — it is imported lazily inside streaming methods so the
+provider can still be instantiated and used for REST-based operations without it.
+
+See https://learn.microsoft.com/en-us/azure/cognitive-services/speech-service/
+for API reference.
+"""
+
 import asyncio
 import io
 import re
@@ -16,6 +39,10 @@ from onyx.voice.interface import StreamingSynthesizerProtocol
 from onyx.voice.interface import StreamingTranscriberProtocol
 from onyx.voice.interface import TranscriptResult
 from onyx.voice.interface import VoiceProviderInterface
+
+# SSML namespace — W3C standard for Speech Synthesis Markup Language.
+# This is a fixed W3C specification and will not change.
+SSML_NAMESPACE = "http://www.w3.org/2001/10/synthesis"
 
 # Common Azure Neural voices
 AZURE_VOICES = [
@@ -261,7 +288,7 @@ class AzureStreamingSynthesizer(StreamingSynthesizerProtocol):
             # Build SSML with prosody for speed control
             rate = f"{int((self.speed - 1) * 100):+d}%"
             escaped_text = escape(text)
-            ssml = f"""<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='en-US'>
+            ssml = f"""<speak version='1.0' xmlns='{SSML_NAMESPACE}' xml:lang='en-US'>
                 <voice name={quoteattr(self.voice)}>
                     <prosody rate='{rate}'>{escaped_text}</prosody>
                 </voice>
@@ -486,7 +513,7 @@ class AzureVoiceProvider(VoiceProviderInterface):
 
         # Build SSML with escaped text and quoted attributes to prevent injection
         escaped_text = escape(text)
-        ssml = f"""<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='en-US'>
+        ssml = f"""<speak version='1.0' xmlns='{SSML_NAMESPACE}' xml:lang='en-US'>
             <voice name={quoteattr(voice_name)}>
                 <prosody rate='{rate}'>{escaped_text}</prosody>
             </voice>
@@ -511,6 +538,26 @@ class AzureVoiceProvider(VoiceProviderInterface):
                 async for chunk in response.content.iter_chunked(8192):
                     if chunk:
                         yield chunk
+
+    async def validate_credentials(self) -> None:
+        """Validate Azure credentials by listing available voices."""
+        if not self.api_key:
+            raise ValueError("Azure API key required")
+        if not self._is_self_hosted() and not self.speech_region:
+            raise ValueError("Azure speech region required (cloud mode)")
+
+        url = f"https://{self.speech_region}.tts.speech.microsoft.com/cognitiveservices/voices/list"
+        if self._is_self_hosted():
+            url = f"{(self.api_base or '').rstrip('/')}/cognitiveservices/voices/list"
+
+        headers = {"Ocp-Apim-Subscription-Key": self.api_key}
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    raise RuntimeError(
+                        f"Azure credential validation failed: {error_text}"
+                    )
 
     def get_available_voices(self) -> list[dict[str, str]]:
         """Return common Azure Neural voices."""

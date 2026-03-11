@@ -7,6 +7,8 @@ from sqlalchemy.orm import Session
 
 from onyx.db.models import User
 from onyx.db.models import VoiceProvider
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 
 MIN_VOICE_PLAYBACK_SPEED = 0.5
 MAX_VOICE_PLAYBACK_SPEED = 2.0
@@ -73,7 +75,10 @@ def upsert_voice_provider(
     if provider_id is not None:
         provider = fetch_voice_provider_by_id(db_session, provider_id)
         if provider is None:
-            raise ValueError(f"No voice provider with id {provider_id} exists.")
+            raise OnyxError(
+                OnyxErrorCode.NOT_FOUND,
+                f"No voice provider with id {provider_id} exists.",
+            )
     else:
         provider = VoiceProvider()
         db_session.add(provider)
@@ -114,7 +119,10 @@ def set_default_stt_provider(*, db_session: Session, provider_id: int) -> VoiceP
     """Set a voice provider as the default STT provider."""
     provider = fetch_voice_provider_by_id(db_session, provider_id)
     if provider is None:
-        raise ValueError(f"No voice provider with id {provider_id} exists.")
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            f"No voice provider with id {provider_id} exists.",
+        )
 
     # Deactivate all other STT providers
     db_session.execute(
@@ -140,7 +148,10 @@ def set_default_tts_provider(
     """Set a voice provider as the default TTS provider."""
     provider = fetch_voice_provider_by_id(db_session, provider_id)
     if provider is None:
-        raise ValueError(f"No voice provider with id {provider_id} exists.")
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            f"No voice provider with id {provider_id} exists.",
+        )
 
     # Deactivate all other TTS providers
     db_session.execute(
@@ -168,7 +179,10 @@ def deactivate_stt_provider(*, db_session: Session, provider_id: int) -> VoicePr
     """Remove the default STT status from a voice provider."""
     provider = fetch_voice_provider_by_id(db_session, provider_id)
     if provider is None:
-        raise ValueError(f"No voice provider with id {provider_id} exists.")
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            f"No voice provider with id {provider_id} exists.",
+        )
 
     provider.is_default_stt = False
 
@@ -181,7 +195,10 @@ def deactivate_tts_provider(*, db_session: Session, provider_id: int) -> VoicePr
     """Remove the default TTS status from a voice provider."""
     provider = fetch_voice_provider_by_id(db_session, provider_id)
     if provider is None:
-        raise ValueError(f"No voice provider with id {provider_id} exists.")
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            f"No voice provider with id {provider_id} exists.",
+        )
 
     provider.is_default_tts = False
 
