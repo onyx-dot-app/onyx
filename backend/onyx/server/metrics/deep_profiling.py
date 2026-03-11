@@ -191,6 +191,9 @@ class DeepProfilingCollector(Collector):
         return families
 
     def describe(self) -> list[Any]:
+        # Return empty to mark this as an "unchecked" collector.
+        # Prometheus checks describe() vs collect() for consistency;
+        # returning empty opts out since our metrics are dynamic.
         return []
 
 
@@ -204,7 +207,7 @@ def start_deep_profiling() -> None:
     """
     global _snapshot_task, _collector
 
-    if _snapshot_task is not None:
+    if _snapshot_task is not None and not _snapshot_task.done():
         return
 
     if not tracemalloc.is_tracing():
@@ -219,14 +222,17 @@ def start_deep_profiling() -> None:
 
     if _collector is None:
         collector = DeepProfilingCollector()
-        REGISTRY.register(collector)
+        try:
+            REGISTRY.register(collector)
+        except ValueError:
+            logger.debug("Deep profiling collector already registered, skipping")
         _collector = collector
     logger.info("Deep profiling collector registered")
 
 
 async def stop_deep_profiling() -> None:
     """Stop tracemalloc and cancel the snapshot task."""
-    global _snapshot_task
+    global _snapshot_task, _previous_snapshot
 
     if _snapshot_task is not None:
         _snapshot_task.cancel()
@@ -235,6 +241,10 @@ async def stop_deep_profiling() -> None:
         except asyncio.CancelledError:
             pass
         _snapshot_task = None
+
+    # Clear stale snapshot so a restart computes a fresh baseline
+    # instead of diffing against data from before the stop.
+    _previous_snapshot = None
 
     if tracemalloc.is_tracing():
         tracemalloc.stop()
