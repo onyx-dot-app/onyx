@@ -1,4 +1,5 @@
 import asyncio
+import re
 from collections.abc import Iterator
 from pathlib import Path
 from uuid import UUID
@@ -243,11 +244,35 @@ def _stream_response(response: httpx.Response) -> Iterator[bytes]:
         yield chunk
 
 
+def _inject_asset_fixer(content: bytes, session_id: str) -> bytes:
+    """Inject a script that rewrites /_next/ in dynamically inserted <style> tags.
+
+    next/font in dev mode injects @font-face declarations via React client-side,
+    bypassing server-side proxy rewriting. Patching appendChild/insertBefore
+    intercepts these before the browser parses the font URL.
+    """
+    base = f"/api/build/sessions/{session_id}/webapp"
+    script = (
+        f"<script>(function(){{var B='{base}';"
+        "function f(n){if(!n||n.nodeType!==1)return;"
+        "if(n.tagName==='STYLE'&&n.textContent)"
+        "n.textContent=n.textContent.replace(/(url\\s*\\(\\s*['\"]?)\\/_next\\//g,'$1'+B+'/_next/');"
+        "else if(n.tagName==='LINK'){var h=n.getAttribute('href')||'';"
+        "if(h.indexOf('/_next/')===0)n.setAttribute('href',B+h);}}"
+        "function w(m){var o=Element.prototype[m];"
+        "Element.prototype[m]=function(n){f(n);return o.apply(this,arguments);}}"
+        "w('appendChild');w('insertBefore');})()</script>"
+    )
+    text = content.decode("utf-8")
+    # Inject immediately after <head> so it runs before React initialises
+    text = re.sub(
+        r"(<head\b[^>]*>)", rf"\1{script}", text, count=1, flags=re.IGNORECASE
+    )
+    return text.encode("utf-8")
+
+
 def _rewrite_asset_paths(content: bytes, session_id: str) -> bytes:
     """Rewrite Next.js asset paths to go through the proxy."""
-    import re
-
-    # Base path includes session_id for routing
     webapp_base_path = f"/api/build/sessions/{session_id}/webapp"
 
     text = content.decode("utf-8")
@@ -350,6 +375,8 @@ def _proxy_request(
             # For HTML/CSS/JS responses, rewrite asset paths
             if any(ct in content_type for ct in REWRITABLE_CONTENT_TYPES):
                 content = _rewrite_asset_paths(response.content, str(session_id))
+                if "text/html" in content_type:
+                    content = _inject_asset_fixer(content, str(session_id))
                 return Response(
                     content=content,
                     status_code=response.status_code,
