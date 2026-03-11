@@ -118,7 +118,6 @@ RESOURCE_DELETION_POLL_INTERVAL_SECONDS = 0.5
 def _build_nextjs_start_script(
     session_path: str,
     nextjs_port: int,
-    session_id: UUID,
     check_node_modules: bool = False,
 ) -> str:
     """Build shell script to start the NextJS dev server.
@@ -147,7 +146,6 @@ cd {session_path}/outputs/web
 {npm_install_check}
 # Start npm run dev in background
 echo "Starting Next.js dev server on port {nextjs_port}..."
-export CRAFT_ASSET_PREFIX=/api/build/sessions/{session_id}/webapp
 nohup npm run dev -- -p {nextjs_port} > {session_path}/nextjs.log 2>&1 &
 NEXTJS_PID=$!
 echo "Next.js server started with PID $NEXTJS_PID"
@@ -1331,7 +1329,7 @@ fi
 
         # Build NextJS startup script (npm install already done in outputs_setup)
         nextjs_start_script = _build_nextjs_start_script(
-            session_path, nextjs_port, session_id=session_id, check_node_modules=False
+            session_path, nextjs_port, check_node_modules=False
         )
 
         setup_script = f"""
@@ -1707,7 +1705,6 @@ echo "SNAPSHOT_RESTORED"
             start_script = _build_nextjs_start_script(
                 safe_session_path,
                 nextjs_port,
-                session_id=session_id,
                 check_node_modules=True,
             )
             k8s_stream(

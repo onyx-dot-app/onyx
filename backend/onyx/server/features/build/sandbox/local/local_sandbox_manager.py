@@ -526,7 +526,7 @@ class LocalSandboxManager(SandboxManager):
             logger.info(f"Starting Next.js server at {web_dir} on port {nextjs_port}")
 
             nextjs_process = self._process_manager.start_nextjs_server(
-                web_dir, nextjs_port, session_id=session_id
+                web_dir, nextjs_port
             )
             # Store process for clean shutdown on session delete
             with self._nextjs_lock:
@@ -843,7 +843,7 @@ class LocalSandboxManager(SandboxManager):
                     )
                     return
                 process = self._process_manager.start_nextjs_server(
-                    web_dir, nextjs_port, session_id=session_id
+                    web_dir, nextjs_port
                 )
                 with self._nextjs_lock:
                     self._nextjs_processes[process_key] = process

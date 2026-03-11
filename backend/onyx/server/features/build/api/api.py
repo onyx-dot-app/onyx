@@ -1,4 +1,3 @@
-import asyncio
 import re
 from collections.abc import Iterator
 from pathlib import Path
@@ -10,8 +9,6 @@ from fastapi import Depends
 from fastapi import HTTPException
 from fastapi import Request
 from fastapi import Response
-from fastapi import WebSocket
-from fastapi import WebSocketDisconnect
 from fastapi.responses import RedirectResponse
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -24,7 +21,6 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import IndexingStatus
 from onyx.db.enums import ProcessingMode
-from onyx.db.enums import SandboxStatus
 from onyx.db.enums import SharingScope
 from onyx.db.index_attempt import get_latest_index_attempt_for_cc_pair_id
 from onyx.db.models import BuildSession
@@ -504,22 +500,14 @@ def _check_webapp_access(
 _OFFLINE_HTML_PATH = Path(__file__).parent / "templates" / "webapp_offline.html"
 
 
-def _offline_html_response(auto_refresh: bool) -> Response:
+def _offline_html_response() -> Response:
     """Return a branded Craft HTML page when the sandbox is not reachable.
 
     Design mirrors the default Craft web template (outputs/web/app/page.tsx):
     terminal window aesthetic with Minecraft-themed typing animation.
 
-    Args:
-        auto_refresh: When True, inject a meta refresh tag so the page polls
-            for the sandbox to wake up. Should only be True when the sandbox is
-            genuinely asleep (SLEEPING/TERMINATED), not when it is RUNNING but
-            Next.js is momentarily restarting — that case causes jarring
-            periodic iframe reloads and the frontend's own polling handles it.
     """
     html = _OFFLINE_HTML_PATH.read_text()
-    meta_tag = '<meta http-equiv="refresh" content="15" />' if auto_refresh else ""
-    html = html.replace("{auto_refresh_meta}", meta_tag)
     return Response(content=html, status_code=503, media_type="text/html")
 
 
@@ -554,74 +542,8 @@ def get_webapp(
         return _proxy_request(path, request, session_id, db_session)
     except HTTPException as e:
         if e.status_code in (502, 503, 504):
-            session = db_session.get(BuildSession, session_id)
-            sandbox = (
-                get_sandbox_by_user_id(db_session, session.user_id)
-                if session and session.user_id
-                else None
-            )
-            sandbox_is_asleep = sandbox is None or sandbox.status in (
-                SandboxStatus.SLEEPING,
-                SandboxStatus.TERMINATED,
-            )
-            return _offline_html_response(auto_refresh=sandbox_is_asleep)
+            return _offline_html_response()
         raise
-
-
-async def _hmr_websocket_sink(
-    websocket: WebSocket,
-    session_id: UUID,
-    user: User | None,
-    db_session: Session,
-) -> None:
-    """Accept the HMR WebSocket and drain client frames.
-
-    Next's dev client can keep sending frames on the HMR socket even when we are
-    intentionally black-holing server-side updates. If we accept the socket and
-    then never read from it, intermediaries or the client can tear the
-    connection down later, which surfaces as periodic reconnect/reload churn in
-    the iframe preview.
-    """
-    try:
-        _check_webapp_access(session_id, user, db_session)
-    except Exception:
-        await websocket.close(code=4003)
-        return
-
-    await websocket.accept()
-    try:
-        while True:
-            try:
-                receive = getattr(websocket, "receive", None)
-                if receive is not None:
-                    await asyncio.wait_for(receive(), timeout=30)
-                else:
-                    await asyncio.wait_for(websocket.receive_text(), timeout=30)
-            except asyncio.TimeoutError:
-                # No client traffic is fine; keep the socket open.
-                continue
-    except WebSocketDisconnect:
-        pass
-
-
-@public_build_router.websocket("/sessions/{session_id}/webapp/_next/webpack-hmr")
-async def webapp_hmr_sink_webpack(
-    websocket: WebSocket,
-    session_id: UUID,
-    user: User | None = Depends(optional_user),
-    db_session: Session = Depends(get_session),
-) -> None:
-    await _hmr_websocket_sink(websocket, session_id, user, db_session)
-
-
-@public_build_router.websocket("/sessions/{session_id}/webapp/_next/hmr")
-async def webapp_hmr_sink_turbopack(
-    websocket: WebSocket,
-    session_id: UUID,
-    user: User | None = Depends(optional_user),
-    db_session: Session = Depends(get_session),
-) -> None:
-    await _hmr_websocket_sink(websocket, session_id, user, db_session)
 
 
 # =============================================================================
