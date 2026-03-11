@@ -31,8 +31,8 @@ import {
   SvgUsers,
   SvgX,
 } from "@opal/icons";
-import { Card, NameCard } from "@/refresh-components/cards";
-import { EmptyMessageCard } from "@opal/components";
+import { NameCard } from "@/refresh-components/cards";
+import { Card, EmptyMessageCard } from "@opal/components";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import useUsers from "@/hooks/useUsers";
 import { UserRole } from "@/lib/types";
@@ -245,7 +245,7 @@ export function ModelsAccessField<T extends BaseLLMFormValues>({
       </FieldWrapper>
 
       {!isPublic && (
-        <Card variant="borderless" padding={0.5}>
+        <Card backgroundVariant="light" borderVariant="none" sizeVariant="lg">
           <Section gap={0.5}>
             <InputComboBox
               placeholder="Add groups and agents"
@@ -506,7 +506,7 @@ export function ModelsField<T extends BaseLLMFormValues>({
   const visibleModels = modelConfigurations.filter((m) => m.is_visible);
 
   return (
-    <Card variant="borderless" padding={0.5}>
+    <Card backgroundVariant="light" borderVariant="none" sizeVariant="lg">
       <Section gap={0.5}>
         <InputLayouts.Horizontal
           title="Models"
