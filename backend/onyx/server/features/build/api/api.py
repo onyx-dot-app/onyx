@@ -452,8 +452,9 @@ def _proxy_request(
             # For HTML/CSS/JS responses, rewrite asset paths
             if any(ct in content_type for ct in REWRITABLE_CONTENT_TYPES):
                 content = _rewrite_asset_paths(response.content, str(session_id))
-                if "text/html" in content_type:
-                    content = _inject_asset_fixer(content, str(session_id))
+                # Disabled to validate whether path/header rewriting alone is sufficient.
+                # if "text/html" in content_type:
+                #     content = _inject_asset_fixer(content, str(session_id))
                 return Response(
                     content=content,
                     status_code=response.status_code,
