@@ -1,0 +1,29 @@
+.opal-card {
+  @apply w-full overflow-clip;
+}
+
+/* Background variants */
+.opal-card[data-background="none"] {
+  @apply bg-transparent;
+}
+
+.opal-card[data-background="light"] {
+  @apply bg-background-tint-00;
+}
+
+.opal-card[data-background="heavy"] {
+  @apply bg-background-tint-01;
+}
+
+/* Border variants */
+.opal-card[data-border="none"] {
+  border: none;
+}
+
+.opal-card[data-border="dashed"] {
+  @apply border border-dashed;
+}
+
+.opal-card[data-border="solid"] {
+  @apply border;
+}
