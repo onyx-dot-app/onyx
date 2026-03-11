@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import { OpenButton } from "@opal/components";
+import { Disabled } from "@opal/core";
 import { SvgSettings } from "@opal/icons";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 
@@ -52,6 +53,21 @@ export const Foldable: Story = {
     icon: SvgSettings,
     children: "Settings",
   },
+};
+
+export const FoldableDisabled: Story = {
+  args: {
+    foldable: true,
+    icon: SvgSettings,
+    children: "Settings",
+  },
+  decorators: [
+    (Story) => (
+      <Disabled disabled>
+        <Story />
+      </Disabled>
+    ),
+  ],
 };
 
 export const Sizes: Story = {
