@@ -251,13 +251,9 @@ def _rewrite_asset_paths(content: bytes, session_id: str) -> bytes:
     webapp_base_path = f"/api/build/sessions/{session_id}/webapp"
 
     text = content.decode("utf-8")
-    # Rewrite /_next/ only when it starts a URL (after a quote or paren delimiter).
-    # With assetPrefix set, Next.js already emits the full proxy-prefixed URL in the
-    # HTML, so a bare text.replace would double-prefix those.
+    # Anchor on delimiter so already-prefixed URLs (from assetPrefix) aren't double-rewritten.
     for delim in ('"', "'", "("):
         text = text.replace(f"{delim}/_next/", f"{delim}{webapp_base_path}/_next/")
-    # Rewrite JSON data file fetch paths (e.g., /data.json, /data/tickets.json)
-    # Matches paths like "/filename.json" or "/path/to/file.json"
     text = re.sub(
         r'"(/(?:[a-zA-Z0-9_-]+/)*[a-zA-Z0-9_-]+\.json)"',
         f'"{webapp_base_path}\\1"',
@@ -268,7 +264,6 @@ def _rewrite_asset_paths(content: bytes, session_id: str) -> bytes:
         f"'{webapp_base_path}\\1'",
         text,
     )
-    # Rewrite favicon
     text = text.replace('"/favicon.ico', f'"{webapp_base_path}/favicon.ico')
     return text.encode("utf-8")
 
@@ -451,11 +446,6 @@ def get_webapp(
         return _proxy_request(path, request, session_id, db_session)
     except HTTPException as e:
         if e.status_code in (502, 503, 504):
-            # Only auto-refresh when the sandbox is genuinely asleep.
-            # If the sandbox is RUNNING, the Next.js dev server may be
-            # momentarily restarting (e.g. after a hot-reload file change).
-            # Embedding a meta-refresh in that case causes jarring periodic
-            # iframe reloads; the frontend's SWR polling handles reconnection.
             session = db_session.get(BuildSession, session_id)
             sandbox = (
                 get_sandbox_by_user_id(db_session, session.user_id)
@@ -477,14 +467,7 @@ async def _hmr_websocket_sink(
     user: User | None,
     db_session: Session,
 ) -> None:
-    """Accept the Next.js HMR WebSocket but act as a silent sink.
-
-    The sandbox webapp runs next dev with HMR enabled. Without a handler the
-    HMR client retries its WebSocket with exponential backoff (~63 s total)
-    then calls location.reload(), causing periodic iframe refreshes. Accepting
-    and keeping the connection alive prevents that retry cycle. The Craft UI
-    handles preview refreshes explicitly via its own mechanism.
-    """
+    """Accept the HMR WebSocket silently to prevent the retry/reload cycle."""
     try:
         _check_webapp_access(session_id, user, db_session)
     except Exception:
