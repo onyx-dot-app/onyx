@@ -9,6 +9,7 @@ import React, {
   useEffect,
 } from "react";
 import { useUser } from "@/providers/UserProvider";
+import { useVoiceStatus } from "@/hooks/useVoiceStatus";
 
 interface VoiceModeContextType {
   /** Whether TTS audio is currently playing */
@@ -112,7 +113,9 @@ function findChunkBoundary(text: string): number {
 
 export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
   const { user } = useUser();
-  const autoPlayback = user?.preferences?.voice_auto_playback ?? false;
+  const { ttsEnabled } = useVoiceStatus();
+  const autoPlayback =
+    (user?.preferences?.voice_auto_playback ?? false) && ttsEnabled;
   const playbackSpeed = user?.preferences?.voice_playback_speed ?? 1.0;
 
   const [isTTSPlaying, setIsTTSPlaying] = useState(false);

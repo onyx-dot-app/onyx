@@ -31,6 +31,7 @@ import FeedbackModal, {
 import { Button, SelectButton } from "@opal/components";
 import TTSButton from "./TTSButton";
 import { useVoiceMode } from "@/providers/VoiceModeProvider";
+import { useVoiceStatus } from "@/hooks/useVoiceStatus";
 
 // Wrapper component for SourceTag in toolbar to handle memoization
 const SourcesTagWrapper = React.memo(function SourcesTagWrapper({
@@ -149,6 +150,7 @@ export default function MessageToolbar({
   // Voice mode - hide toolbar during TTS playback for this message
   const { isTTSPlaying, activeMessageNodeId, isAwaitingAutoPlaybackStart } =
     useVoiceMode();
+  const { ttsEnabled } = useVoiceStatus();
   const isTTSActiveForThisMessage =
     (isTTSPlaying || isAwaitingAutoPlaybackStart) &&
     activeMessageNodeId === nodeId;
@@ -280,9 +282,13 @@ export default function MessageToolbar({
               }
               data-testid="AgentMessage/dislike-button"
             />
-            <TTSButton
-              text={removeThinkingTokens(getTextContent(rawPackets)) as string}
-            />
+            {ttsEnabled && (
+              <TTSButton
+                text={
+                  removeThinkingTokens(getTextContent(rawPackets)) as string
+                }
+              />
+            )}
 
             {onRegenerate &&
               messageId !== undefined &&

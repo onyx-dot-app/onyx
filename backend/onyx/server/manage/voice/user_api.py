@@ -35,6 +35,25 @@ MAX_AUDIO_SIZE = 25 * 1024 * 1024
 UPLOAD_READ_CHUNK_SIZE = 8192
 
 
+class VoiceStatusResponse(BaseModel):
+    stt_enabled: bool
+    tts_enabled: bool
+
+
+@router.get("/status")
+def get_voice_status(
+    _: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> VoiceStatusResponse:
+    """Check whether STT and TTS providers are configured and ready."""
+    stt_provider = fetch_default_stt_provider(db_session)
+    tts_provider = fetch_default_tts_provider(db_session)
+    return VoiceStatusResponse(
+        stt_enabled=stt_provider is not None and stt_provider.api_key is not None,
+        tts_enabled=tts_provider is not None and tts_provider.api_key is not None,
+    )
+
+
 @router.post("/transcribe")
 async def transcribe_audio(
     audio: UploadFile = File(...),

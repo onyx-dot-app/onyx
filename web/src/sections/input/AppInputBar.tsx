@@ -60,6 +60,7 @@ import MicrophoneButton from "@/sections/input/MicrophoneButton";
 import RecordingWaveform from "@/sections/input/RecordingWaveform";
 import SpeakingWaveform from "@/sections/input/SpeakingWaveform";
 import { useVoiceMode } from "@/providers/VoiceModeProvider";
+import { useVoiceStatus } from "@/hooks/useVoiceStatus";
 
 const MIN_INPUT_HEIGHT = 44;
 const MAX_INPUT_HEIGHT = 200;
@@ -141,6 +142,7 @@ const AppInputBar = React.memo(
       isTTSMuted,
       toggleTTSMute,
     } = useVoiceMode();
+    const { sttEnabled } = useVoiceStatus();
     const isVoicePlaybackActive =
       isTTSPlaying || isTTSLoading || isAwaitingAutoPlaybackStart;
     const isVoicePlaybackControllable = isVoicePlaybackActive && !isRecording;
@@ -604,25 +606,28 @@ const AppInputBar = React.memo(
               disabled={disabled}
             />
           </div>
-          <MicrophoneButton
-            onTranscription={(text) => setMessage(text)}
-            disabled={disabled || chatState === "streaming"}
-            autoSend={user?.preferences?.voice_auto_send ?? false}
-            autoListen={user?.preferences?.voice_auto_playback ?? false}
-            isNewSession={isNewSession}
-            chatState={chatState}
-            onRecordingChange={handleRecordingChange}
-            stopRecordingRef={stopRecordingRef}
-            onRecordingStart={() => setMessage("")}
-            onAutoSend={(text) => {
-              // Guard against empty transcription
-              if (text.trim()) {
-                handleSubmit(text);
-              }
-            }}
-            onMuteChange={setIsMuted}
-            setMutedRef={setMutedRef}
-          />
+          {sttEnabled && (
+            <MicrophoneButton
+              onTranscription={(text) => setMessage(text)}
+              disabled={disabled || chatState === "streaming"}
+              autoSend={user?.preferences?.voice_auto_send ?? false}
+              autoListen={user?.preferences?.voice_auto_playback ?? false}
+              isNewSession={isNewSession}
+              chatState={chatState}
+              onRecordingChange={handleRecordingChange}
+              stopRecordingRef={stopRecordingRef}
+              onRecordingStart={() => setMessage("")}
+              onAutoSend={(text) => {
+                // Guard against empty transcription
+                if (text.trim()) {
+                  handleSubmit(text);
+                  setMessage("");
+                }
+              }}
+              onMuteChange={setIsMuted}
+              setMutedRef={setMutedRef}
+            />
+          )}
 
           <Disabled
             disabled={

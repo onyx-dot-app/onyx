@@ -77,6 +77,7 @@ function TTSButton({ text, voice, speed }: TTSButtonProps) {
     <Button
       icon={icon}
       onClick={handleClick}
+      prominence="tertiary"
       tooltip={tooltip}
       data-testid="AgentMessage/tts-button"
     />
