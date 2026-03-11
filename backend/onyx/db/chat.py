@@ -5,7 +5,6 @@ from datetime import timezone
 from typing import Tuple
 from uuid import UUID
 
-from fastapi import HTTPException
 from sqlalchemy import delete
 from sqlalchemy import desc
 from sqlalchemy import exists
@@ -32,6 +31,8 @@ from onyx.db.models import SearchDoc as DBSearchDoc
 from onyx.db.models import ToolCall
 from onyx.db.models import User
 from onyx.db.persona import get_best_persona_id_for_user
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import FileDescriptor
 from onyx.llm.override_models import LLMOverride
@@ -228,7 +229,9 @@ def duplicate_chat_session_for_user_from_slack(
         db_session=db_session,
     )
     if not chat_session:
-        raise HTTPException(status_code=400, detail="Invalid Chat Session ID provided")
+        raise OnyxError(
+            OnyxErrorCode.SESSION_NOT_FOUND, "Invalid Chat Session ID provided"
+        )
 
     # This enforces permissions and sets a default
     new_persona_id = get_best_persona_id_for_user(

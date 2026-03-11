@@ -2,7 +2,6 @@ from collections.abc import Sequence
 from operator import and_
 from uuid import UUID
 
-from fastapi import HTTPException
 from sqlalchemy import delete
 from sqlalchemy import func
 from sqlalchemy import Select
@@ -37,6 +36,8 @@ from onyx.db.models import UserGroup
 from onyx.db.models import UserGroup__ConnectorCredentialPair
 from onyx.db.models import UserRole
 from onyx.db.users import fetch_user_by_id
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -166,18 +167,12 @@ def validate_object_creation_for_user(
     if object_is_public and user.role == UserRole.BASIC:
         detail = "User does not have permission to create public objects"
         logger.error(detail)
-        raise HTTPException(
-            status_code=400,
-            detail=detail,
-        )
+        raise OnyxError(OnyxErrorCode.INSUFFICIENT_PERMISSIONS, detail)
 
     if not target_group_ids:
         detail = "Curators must specify 1+ groups"
         logger.error(detail)
-        raise HTTPException(
-            status_code=400,
-            detail=detail,
-        )
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, detail)
 
     user_curated_groups = fetch_user_groups_for_user(
         db_session=db_session,
@@ -190,10 +185,7 @@ def validate_object_creation_for_user(
     if not target_group_ids_set.issubset(user_curated_group_ids):
         detail = "Curators cannot control groups they don't curate"
         logger.error(detail)
-        raise HTTPException(
-            status_code=400,
-            detail=detail,
-        )
+        raise OnyxError(OnyxErrorCode.INSUFFICIENT_PERMISSIONS, detail)
 
 
 def fetch_user_group(db_session: Session, user_group_id: int) -> UserGroup | None:

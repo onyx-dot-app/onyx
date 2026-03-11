@@ -6,7 +6,6 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from typing import Any
 
-from fastapi import HTTPException
 from sqlalchemy import event
 from sqlalchemy import pool
 from sqlalchemy.engine import create_engine
@@ -27,6 +26,8 @@ from onyx.configs.app_configs import POSTGRES_USE_NULL_POOL
 from onyx.configs.app_configs import POSTGRES_USER
 from onyx.configs.constants import POSTGRES_UNKNOWN_APP_NAME
 from onyx.db.engine.iam_auth import provide_iam_token
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
@@ -344,7 +345,7 @@ def get_session_with_tenant(*, tenant_id: str) -> Generator[Session, None, None]
     engine = get_sqlalchemy_engine()
 
     if not is_valid_schema_name(tenant_id):
-        raise HTTPException(status_code=400, detail="Invalid tenant ID")
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, "Invalid tenant ID")
 
     # no need to use the schema translation map for self-hosted + default schema
     if not MULTI_TENANT and tenant_id == POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE:
@@ -371,7 +372,7 @@ def get_session() -> Generator[Session, None, None]:
         raise BasicAuthenticationError(detail="User must authenticate")
 
     if not is_valid_schema_name(tenant_id):
-        raise HTTPException(status_code=400, detail="Invalid tenant ID")
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, "Invalid tenant ID")
 
     with get_session_with_current_tenant() as db_session:
         yield db_session
@@ -390,7 +391,7 @@ def get_db_readonly_user_session_with_current_tenant() -> (
     readonly_engine = get_readonly_sqlalchemy_engine()
 
     if not is_valid_schema_name(tenant_id):
-        raise HTTPException(status_code=400, detail="Invalid tenant ID")
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, "Invalid tenant ID")
 
     # no need to use the schema translation map for self-hosted + default schema
     if not MULTI_TENANT and tenant_id == POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE:
