@@ -7,11 +7,7 @@ import { Content } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { IllustrationContent } from "@opal/layouts";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
-import {
-  UserRole,
-  UserStatus,
-  USER_STATUS_LABELS,
-} from "@/lib/types";
+import { UserRole, UserStatus, USER_STATUS_LABELS } from "@/lib/types";
 import { timeAgo } from "@/lib/time";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
