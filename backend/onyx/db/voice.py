@@ -17,30 +17,39 @@ MAX_VOICE_PLAYBACK_SPEED = 2.0
 def fetch_voice_providers(db_session: Session) -> list[VoiceProvider]:
     """Fetch all voice providers."""
     return list(
-        db_session.scalars(select(VoiceProvider).order_by(VoiceProvider.name)).all()
+        db_session.scalars(
+            select(VoiceProvider)
+            .where(VoiceProvider.deleted.is_(False))
+            .order_by(VoiceProvider.name)
+        ).all()
     )
 
 
 def fetch_voice_provider_by_id(
-    db_session: Session, provider_id: int
+    db_session: Session, provider_id: int, include_deleted: bool = False
 ) -> VoiceProvider | None:
     """Fetch a voice provider by ID."""
-    return db_session.scalar(
-        select(VoiceProvider).where(VoiceProvider.id == provider_id)
-    )
+    stmt = select(VoiceProvider).where(VoiceProvider.id == provider_id)
+    if not include_deleted:
+        stmt = stmt.where(VoiceProvider.deleted.is_(False))
+    return db_session.scalar(stmt)
 
 
 def fetch_default_stt_provider(db_session: Session) -> VoiceProvider | None:
     """Fetch the default STT provider."""
     return db_session.scalar(
-        select(VoiceProvider).where(VoiceProvider.is_default_stt.is_(True))
+        select(VoiceProvider)
+        .where(VoiceProvider.is_default_stt.is_(True))
+        .where(VoiceProvider.deleted.is_(False))
     )
 
 
 def fetch_default_tts_provider(db_session: Session) -> VoiceProvider | None:
     """Fetch the default TTS provider."""
     return db_session.scalar(
-        select(VoiceProvider).where(VoiceProvider.is_default_tts.is_(True))
+        select(VoiceProvider)
+        .where(VoiceProvider.is_default_tts.is_(True))
+        .where(VoiceProvider.deleted.is_(False))
     )
 
 
@@ -49,7 +58,9 @@ def fetch_voice_provider_by_type(
 ) -> VoiceProvider | None:
     """Fetch a voice provider by type."""
     return db_session.scalar(
-        select(VoiceProvider).where(VoiceProvider.provider_type == provider_type)
+        select(VoiceProvider)
+        .where(VoiceProvider.provider_type == provider_type)
+        .where(VoiceProvider.deleted.is_(False))
     )
 
 
@@ -108,10 +119,10 @@ def upsert_voice_provider(
 
 
 def delete_voice_provider(db_session: Session, provider_id: int) -> None:
-    """Delete a voice provider by ID."""
+    """Soft-delete a voice provider by ID."""
     provider = fetch_voice_provider_by_id(db_session, provider_id)
     if provider:
-        db_session.delete(provider)
+        provider.deleted = True
         db_session.flush()
 
 

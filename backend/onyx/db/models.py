@@ -3057,6 +3057,8 @@ class VoiceProvider(Base):
     is_default_stt: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_default_tts: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
+    deleted: Mapped[bool] = mapped_column(Boolean, default=False)
+
     time_created: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

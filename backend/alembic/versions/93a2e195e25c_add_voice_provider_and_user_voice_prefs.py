@@ -39,6 +39,7 @@ def upgrade() -> None:
         sa.Column(
             "is_default_tts", sa.Boolean(), nullable=False, server_default="false"
         ),
+        sa.Column("deleted", sa.Boolean(), nullable=False, server_default="false"),
         sa.Column(
             "time_created",
             sa.DateTime(timezone=True),

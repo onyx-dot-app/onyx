@@ -11,6 +11,57 @@ import React, {
 import { useUser } from "@/providers/UserProvider";
 import { useVoiceStatus } from "@/hooks/useVoiceStatus";
 
+// --- TTS Configuration Constants ---
+
+/** Dev server port - used to detect Next.js dev environment */
+const DEV_PORT = "3000";
+
+/** Backend port for direct WebSocket connection in development */
+const BACKEND_PORT = "8080";
+
+/** WebSocket path for TTS streaming (backend-direct, used in dev) */
+const TTS_WS_PATH = "/voice/synthesize/stream";
+
+/** WebSocket path for TTS streaming (proxied, used in production) */
+const TTS_WS_PATH_PROXIED = "/api/voice/synthesize/stream";
+
+/** API endpoint to fetch a short-lived WebSocket auth token */
+const WS_TOKEN_ENDPOINT = "/api/voice/ws-token";
+
+/** Delay before starting audio playback to buffer initial chunks (ms) */
+const AUDIO_START_DELAY_MS = 100;
+
+/** Interval for checking if audio playback has ended (ms) */
+const END_CHECK_INTERVAL_MS = 200;
+
+/** Delay before retrying WebSocket end signal (ms) */
+const WS_END_RETRY_DELAY_MS = 100;
+
+/** Delay before checking finalizeStream readiness (ms) */
+const FINALIZE_RETRY_DELAY_MS = 50;
+
+/** Fast-start timer: how long to wait before sending first TTS chunk (ms) */
+const FAST_START_DELAY_MS = 200;
+
+/** Flush timer: how long to wait after punctuation before flushing (ms) */
+const FLUSH_DELAY_MS = 250;
+
+/** Safety timeout for TTS loading — resets state if generation stalls (ms) */
+const TTS_LOADING_TIMEOUT_MS = 60_000;
+
+/** Hard safety timeout for entire TTS playback session (ms).
+ *  Prevents stuck audio from blocking the UI indefinitely. */
+const TTS_SESSION_TIMEOUT_MS = 5 * 60 * 1000;
+
+/** Characters revealed per second when audio duration is unknown */
+const BASE_CHARS_PER_SECOND = 15;
+
+/** How far ahead (in seconds) text reveal leads audio playback */
+const REVEAL_LEAD_SECONDS = 0.28;
+
+/** Max characters to reveal per animation frame (smooths catch-up) */
+const MAX_CATCHUP_CHARS_PER_FRAME = 8;
+
 interface VoiceModeContextType {
   /** Whether TTS audio is currently playing */
   isTTSPlaying: boolean;
@@ -165,6 +216,7 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
   const fastStartTimerRef = useRef<NodeJS.Timeout | null>(null);
   const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const endCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const sessionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hasSpokenFirstChunkRef = useRef(false);
   const hasSignaledEndRef = useRef(false);
   const streamEndedRef = useRef(false);
@@ -199,7 +251,7 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
   // Finalize the media stream when done
   const finalizeStream = useCallback(() => {
     if (pendingChunksRef.current.length > 0 || isAppendingRef.current) {
-      setTimeout(() => finalizeStream(), 50);
+      setTimeout(() => finalizeStream(), FINALIZE_RETRY_DELAY_MS);
       return;
     }
 
@@ -257,7 +309,7 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
           endCheckIntervalRef.current = null;
         }
       }
-    }, 200);
+    }, END_CHECK_INTERVAL_MS);
 
     // No fixed timeout fallback here.
     // Long responses can legitimately continue playing well past 10s after stream end.
@@ -397,7 +449,7 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
             .catch(() => {
               // Keep hasStartedPlaybackRef as false so we retry on next audio chunk.
             });
-        }, 100);
+        }, AUDIO_START_DELAY_MS);
       }
     },
     [processNextChunk]
@@ -406,7 +458,7 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
   // Get WebSocket URL for TTS with authentication token
   const getWebSocketUrl = useCallback(async () => {
     // Fetch short-lived WS token
-    const tokenResponse = await fetch("/api/voice/ws-token", {
+    const tokenResponse = await fetch(WS_TOKEN_ENDPOINT, {
       method: "POST",
       credentials: "include",
     });
@@ -419,11 +471,9 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
     // WebSocket connections, so we connect directly to the backend (port 8080).
     // In production, the reverse proxy handles the /api prefix routing.
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const isDev = window.location.port === "3000";
-    const host = isDev ? "localhost:8080" : window.location.host;
-    const path = isDev
-      ? "/voice/synthesize/stream"
-      : "/api/voice/synthesize/stream";
+    const isDev = window.location.port === DEV_PORT;
+    const host = isDev ? "localhost:" + BACKEND_PORT : window.location.host;
+    const path = isDev ? TTS_WS_PATH : TTS_WS_PATH_PROXIED;
     // Auth: the token query param is validated server-side by
     // current_user_from_websocket (single-use, 60s TTL, same checks as HTTP auth).
     return `${protocol}//${host}${path}?token=${encodeURIComponent(token)}`;
@@ -520,205 +570,6 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
     finalizeStream,
   ]);
 
-  // Send text to TTS via WebSocket
-  const sendTextToTTS = useCallback(
-    (text: string) => {
-      if (!text.trim()) return;
-
-      setIsTTSLoading(true);
-      setIsAwaitingAutoPlaybackStart(true);
-      setSpokenText((prev) => (prev ? prev + " " + text : text));
-
-      // Track character count for progressive text reveal
-      // Note: text is already cleaned (from cleanTextForTTS) when called from streamTTS
-      setTotalSpokenCharCount((prev) => prev + text.length);
-
-      // Set a timeout to reset loading state if TTS doesn't complete
-      if (loadingTimeoutRef.current) {
-        clearTimeout(loadingTimeoutRef.current);
-      }
-      loadingTimeoutRef.current = setTimeout(() => {
-        setIsTTSLoading(false);
-        setIsTTSPlaying(false);
-      }, 60000);
-
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ type: "synthesize", text }));
-      } else {
-        pendingTextRef.current.push(text);
-        connectWebSocket();
-      }
-    },
-    [connectWebSocket]
-  );
-
-  const streamTTS = useCallback(
-    (text: string, isComplete: boolean = false, messageNodeId?: number) => {
-      if (!autoPlayback) {
-        return;
-      }
-
-      if (typeof messageNodeId === "number") {
-        setActiveMessageNodeId((prev) =>
-          prev === messageNodeId ? prev : messageNodeId
-        );
-      }
-
-      // Skip if text hasn't changed
-      if (text === lastRawTextRef.current && !isComplete) return;
-      lastRawTextRef.current = text;
-
-      // Clear pending timers
-      if (flushTimerRef.current) {
-        clearTimeout(flushTimerRef.current);
-        flushTimerRef.current = null;
-      }
-      if (fastStartTimerRef.current) {
-        clearTimeout(fastStartTimerRef.current);
-        fastStartTimerRef.current = null;
-      }
-
-      // Clean the full text
-      const cleanedText = cleanTextForTTS(text);
-      const uncommittedText = cleanedText.slice(committedPositionRef.current);
-
-      // On completion, we must still signal "end" even if there's no new text.
-      // Otherwise ElevenLabs waits for more input and eventually times out.
-      if (uncommittedText.length === 0) {
-        if (isComplete && !hasSignaledEndRef.current) {
-          hasSignaledEndRef.current = true;
-
-          if (wsRef.current?.readyState === WebSocket.OPEN) {
-            wsRef.current.send(JSON.stringify({ type: "end" }));
-          } else {
-            const sendEnd = () => {
-              if (wsRef.current?.readyState === WebSocket.OPEN) {
-                if (pendingTextRef.current.length === 0) {
-                  wsRef.current.send(JSON.stringify({ type: "end" }));
-                } else {
-                  setTimeout(sendEnd, 100);
-                }
-              } else if (wsRef.current?.readyState === WebSocket.CONNECTING) {
-                setTimeout(sendEnd, 100);
-              }
-            };
-            setTimeout(sendEnd, 100);
-          }
-        }
-        return;
-      }
-
-      // Find chunk boundaries and send immediately
-      let remaining = uncommittedText;
-      let offset = 0;
-
-      while (remaining.length > 0) {
-        const boundaryIndex = findChunkBoundary(remaining);
-
-        if (boundaryIndex > 0) {
-          const chunkText = remaining.slice(0, boundaryIndex).trim();
-          if (chunkText.length > 0) {
-            sendTextToTTS(chunkText);
-            hasSpokenFirstChunkRef.current = true;
-          }
-          offset += boundaryIndex;
-          remaining = remaining.slice(boundaryIndex).trim();
-        } else {
-          break;
-        }
-      }
-
-      committedPositionRef.current += offset;
-
-      // Handle remaining text when stream is complete
-      if (isComplete && remaining.trim().length > 0) {
-        sendTextToTTS(remaining.trim());
-        committedPositionRef.current = cleanedText.length;
-        hasSpokenFirstChunkRef.current = true;
-      }
-
-      // When streaming is complete, signal end to flush remaining audio
-      if (isComplete && !hasSignaledEndRef.current) {
-        hasSignaledEndRef.current = true;
-
-        if (wsRef.current?.readyState === WebSocket.OPEN) {
-          wsRef.current.send(JSON.stringify({ type: "end" }));
-        } else {
-          const sendEnd = () => {
-            if (wsRef.current?.readyState === WebSocket.OPEN) {
-              if (pendingTextRef.current.length === 0) {
-                wsRef.current.send(JSON.stringify({ type: "end" }));
-              } else {
-                setTimeout(sendEnd, 100);
-              }
-            } else if (wsRef.current?.readyState === WebSocket.CONNECTING) {
-              setTimeout(sendEnd, 100);
-            }
-          };
-          setTimeout(sendEnd, 100);
-        }
-      }
-
-      const currentUncommitted = cleanedText
-        .slice(committedPositionRef.current)
-        .trim();
-
-      // Fast start: send the first TTS chunk as soon as we have enough text (20+ chars)
-      // without waiting for a full sentence boundary. This reduces perceived latency —
-      // the user hears audio begin within ~200ms of the first text arriving, rather than
-      // waiting for the LLM to produce a complete sentence.
-      if (
-        !hasSpokenFirstChunkRef.current &&
-        currentUncommitted.length >= 20 &&
-        !isComplete
-      ) {
-        fastStartTimerRef.current = setTimeout(() => {
-          if (hasSpokenFirstChunkRef.current) return;
-
-          const nowCleaned = cleanTextForTTS(lastRawTextRef.current);
-          const nowUncommitted = nowCleaned
-            .slice(committedPositionRef.current)
-            .trim();
-
-          if (nowUncommitted.length >= 20) {
-            // Find a reasonable break point
-            let breakPoint = nowUncommitted.length;
-            const spaceIdx = nowUncommitted.lastIndexOf(" ", 50);
-            if (spaceIdx >= 15) breakPoint = spaceIdx;
-
-            const chunk = nowUncommitted.slice(0, breakPoint).trim();
-            if (chunk.length > 0) {
-              sendTextToTTS(chunk);
-              committedPositionRef.current += breakPoint;
-              hasSpokenFirstChunkRef.current = true;
-            }
-          }
-        }, 200);
-      }
-
-      // Flush timer for text ending with punctuation
-      if (
-        currentUncommitted.length > 0 &&
-        !isComplete &&
-        /[.!?]$/.test(currentUncommitted)
-      ) {
-        flushTimerRef.current = setTimeout(() => {
-          const nowCleaned = cleanTextForTTS(lastRawTextRef.current);
-          const nowUncommitted = nowCleaned
-            .slice(committedPositionRef.current)
-            .trim();
-
-          if (nowUncommitted.length > 0) {
-            sendTextToTTS(nowUncommitted);
-            committedPositionRef.current = nowCleaned.length;
-            hasSpokenFirstChunkRef.current = true;
-          }
-        }, 250);
-      }
-    },
-    [autoPlayback, sendTextToTTS]
-  );
-
   const stopTTS = useCallback((options?: { manual?: boolean }) => {
     // Clear timers
     if (flushTimerRef.current) {
@@ -736,6 +587,10 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
     if (endCheckIntervalRef.current) {
       clearInterval(endCheckIntervalRef.current);
       endCheckIntervalRef.current = null;
+    }
+    if (sessionTimeoutRef.current) {
+      clearTimeout(sessionTimeoutRef.current);
+      sessionTimeoutRef.current = null;
     }
 
     // Revoke blob URL to prevent memory leak
@@ -796,8 +651,220 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // Send text to TTS via WebSocket
+  const sendTextToTTS = useCallback(
+    (text: string) => {
+      if (!text.trim()) return;
+
+      setIsTTSLoading(true);
+      setIsAwaitingAutoPlaybackStart(true);
+      setSpokenText((prev) => (prev ? prev + " " + text : text));
+
+      // Track character count for progressive text reveal
+      // Note: text is already cleaned (from cleanTextForTTS) when called from streamTTS
+      setTotalSpokenCharCount((prev) => prev + text.length);
+
+      // Set a timeout to reset loading state if TTS doesn't complete
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+      }
+      loadingTimeoutRef.current = setTimeout(() => {
+        setIsTTSLoading(false);
+        setIsTTSPlaying(false);
+      }, TTS_LOADING_TIMEOUT_MS);
+
+      // Hard safety timeout: if the entire TTS session hasn't finished in 5 minutes,
+      // force cleanup to prevent the UI from being stuck indefinitely.
+      if (!sessionTimeoutRef.current) {
+        sessionTimeoutRef.current = setTimeout(() => {
+          sessionTimeoutRef.current = null;
+          stopTTS();
+        }, TTS_SESSION_TIMEOUT_MS);
+      }
+
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: "synthesize", text }));
+      } else {
+        pendingTextRef.current.push(text);
+        connectWebSocket();
+      }
+    },
+    [connectWebSocket, stopTTS]
+  );
+
+  const streamTTS = useCallback(
+    (text: string, isComplete: boolean = false, messageNodeId?: number) => {
+      if (!autoPlayback) {
+        return;
+      }
+
+      if (typeof messageNodeId === "number") {
+        setActiveMessageNodeId((prev) =>
+          prev === messageNodeId ? prev : messageNodeId
+        );
+      }
+
+      // Skip if text hasn't changed
+      if (text === lastRawTextRef.current && !isComplete) return;
+      lastRawTextRef.current = text;
+
+      // Clear pending timers
+      if (flushTimerRef.current) {
+        clearTimeout(flushTimerRef.current);
+        flushTimerRef.current = null;
+      }
+      if (fastStartTimerRef.current) {
+        clearTimeout(fastStartTimerRef.current);
+        fastStartTimerRef.current = null;
+      }
+
+      // Clean the full text
+      const cleanedText = cleanTextForTTS(text);
+      const uncommittedText = cleanedText.slice(committedPositionRef.current);
+
+      // On completion, we must still signal "end" even if there's no new text.
+      // Otherwise ElevenLabs waits for more input and eventually times out.
+      if (uncommittedText.length === 0) {
+        if (isComplete && !hasSignaledEndRef.current) {
+          hasSignaledEndRef.current = true;
+
+          if (wsRef.current?.readyState === WebSocket.OPEN) {
+            wsRef.current.send(JSON.stringify({ type: "end" }));
+          } else {
+            const sendEnd = () => {
+              if (wsRef.current?.readyState === WebSocket.OPEN) {
+                if (pendingTextRef.current.length === 0) {
+                  wsRef.current.send(JSON.stringify({ type: "end" }));
+                } else {
+                  setTimeout(sendEnd, WS_END_RETRY_DELAY_MS);
+                }
+              } else if (wsRef.current?.readyState === WebSocket.CONNECTING) {
+                setTimeout(sendEnd, WS_END_RETRY_DELAY_MS);
+              }
+            };
+            setTimeout(sendEnd, WS_END_RETRY_DELAY_MS);
+          }
+        }
+        return;
+      }
+
+      // Find chunk boundaries and send immediately
+      let remaining = uncommittedText;
+      let offset = 0;
+
+      while (remaining.length > 0) {
+        const boundaryIndex = findChunkBoundary(remaining);
+
+        if (boundaryIndex > 0) {
+          const chunkText = remaining.slice(0, boundaryIndex).trim();
+          if (chunkText.length > 0) {
+            sendTextToTTS(chunkText);
+            hasSpokenFirstChunkRef.current = true;
+          }
+          offset += boundaryIndex;
+          remaining = remaining.slice(boundaryIndex).trim();
+        } else {
+          break;
+        }
+      }
+
+      committedPositionRef.current += offset;
+
+      // Handle remaining text when stream is complete
+      if (isComplete && remaining.trim().length > 0) {
+        sendTextToTTS(remaining.trim());
+        committedPositionRef.current = cleanedText.length;
+        hasSpokenFirstChunkRef.current = true;
+      }
+
+      // When streaming is complete, signal end to flush remaining audio
+      if (isComplete && !hasSignaledEndRef.current) {
+        hasSignaledEndRef.current = true;
+
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+          wsRef.current.send(JSON.stringify({ type: "end" }));
+        } else {
+          const sendEnd = () => {
+            if (wsRef.current?.readyState === WebSocket.OPEN) {
+              if (pendingTextRef.current.length === 0) {
+                wsRef.current.send(JSON.stringify({ type: "end" }));
+              } else {
+                setTimeout(sendEnd, WS_END_RETRY_DELAY_MS);
+              }
+            } else if (wsRef.current?.readyState === WebSocket.CONNECTING) {
+              setTimeout(sendEnd, WS_END_RETRY_DELAY_MS);
+            }
+          };
+          setTimeout(sendEnd, WS_END_RETRY_DELAY_MS);
+        }
+      }
+
+      const currentUncommitted = cleanedText
+        .slice(committedPositionRef.current)
+        .trim();
+
+      // Fast start: send the first TTS chunk as soon as we have enough text (20+ chars)
+      // without waiting for a full sentence boundary. This reduces perceived latency —
+      // the user hears audio begin within ~200ms of the first text arriving, rather than
+      // waiting for the LLM to produce a complete sentence.
+      if (
+        !hasSpokenFirstChunkRef.current &&
+        currentUncommitted.length >= 20 &&
+        !isComplete
+      ) {
+        fastStartTimerRef.current = setTimeout(() => {
+          if (hasSpokenFirstChunkRef.current) return;
+
+          const nowCleaned = cleanTextForTTS(lastRawTextRef.current);
+          const nowUncommitted = nowCleaned
+            .slice(committedPositionRef.current)
+            .trim();
+
+          if (nowUncommitted.length >= 20) {
+            // Find a reasonable break point
+            let breakPoint = nowUncommitted.length;
+            const spaceIdx = nowUncommitted.lastIndexOf(" ", 50);
+            if (spaceIdx >= 15) breakPoint = spaceIdx;
+
+            const chunk = nowUncommitted.slice(0, breakPoint).trim();
+            if (chunk.length > 0) {
+              sendTextToTTS(chunk);
+              committedPositionRef.current += breakPoint;
+              hasSpokenFirstChunkRef.current = true;
+            }
+          }
+        }, FAST_START_DELAY_MS);
+      }
+
+      // Flush timer for text ending with punctuation
+      if (
+        currentUncommitted.length > 0 &&
+        !isComplete &&
+        /[.!?]$/.test(currentUncommitted)
+      ) {
+        flushTimerRef.current = setTimeout(() => {
+          const nowCleaned = cleanTextForTTS(lastRawTextRef.current);
+          const nowUncommitted = nowCleaned
+            .slice(committedPositionRef.current)
+            .trim();
+
+          if (nowUncommitted.length > 0) {
+            sendTextToTTS(nowUncommitted);
+            committedPositionRef.current = nowCleaned.length;
+            hasSpokenFirstChunkRef.current = true;
+          }
+        }, FLUSH_DELAY_MS);
+      }
+    },
+    [autoPlayback, sendTextToTTS]
+  );
+
   const resetTTS = useCallback(() => {
     stopTTS();
+    if (sessionTimeoutRef.current) {
+      clearTimeout(sessionTimeoutRef.current);
+      sessionTimeoutRef.current = null;
+    }
     committedPositionRef.current = 0;
     lastRawTextRef.current = "";
     hasSpokenFirstChunkRef.current = false;
@@ -849,12 +916,6 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
     if (!isTTSPlaying || !audioElementRef.current) {
       return;
     }
-
-    // Calibration constants for text/audio sync.
-    // Keep a slight lead so text feels aligned or slightly ahead.
-    const BASE_CHARS_PER_SECOND = 15;
-    const REVEAL_LEAD_SECONDS = 0.28;
-    const MAX_CATCHUP_CHARS_PER_FRAME = 8;
 
     const updateProgress = () => {
       const audio = audioElementRef.current;
@@ -930,6 +991,7 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
         clearInterval(endCheckIntervalRef.current);
       if (animationFrameRef.current)
         cancelAnimationFrame(animationFrameRef.current);
+      if (sessionTimeoutRef.current) clearTimeout(sessionTimeoutRef.current);
       if (audioUrlRef.current) {
         URL.revokeObjectURL(audioUrlRef.current);
       }

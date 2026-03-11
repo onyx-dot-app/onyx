@@ -17,6 +17,13 @@ import { toast } from "@/hooks/useToast";
 import { Section } from "@/layouts/general-layouts";
 import { SvgArrowExchange, SvgOnyxLogo } from "@opal/icons";
 import type { IconProps } from "@opal/types";
+import { VoiceProviderView } from "@/hooks/useVoiceProviders";
+import {
+  testVoiceProvider,
+  upsertVoiceProvider,
+  fetchVoicesByType,
+  fetchLLMProviders,
+} from "@/lib/admin/voice/svc";
 
 interface VoiceOption {
   value: string;
@@ -35,19 +42,6 @@ interface ApiKeyOption {
   value: string;
   label: string;
   description?: string;
-}
-
-interface VoiceProviderView {
-  id: number;
-  name: string;
-  provider_type: string;
-  is_default_stt: boolean;
-  is_default_tts: boolean;
-  stt_model: string | null;
-  tts_model: string | null;
-  default_voice: string | null;
-  has_api_key: boolean;
-  target_uri: string | null;
 }
 
 interface VoiceProviderSetupModalProps {
@@ -160,7 +154,7 @@ export default function VoiceProviderSetupModal({
   useEffect(() => {
     if (providerType !== "openai") return;
 
-    fetch("/api/admin/llm/provider")
+    fetchLLMProviders()
       .then((res) => res.json())
       .then((data: LLMProviderView[]) => {
         const openaiProviders = data.filter(
@@ -190,7 +184,7 @@ export default function VoiceProviderSetupModal({
   // Fetch voices on mount (works without API key for ElevenLabs/OpenAI)
   useEffect(() => {
     setIsLoadingVoices(true);
-    fetch(`/api/admin/voice/voices?provider_type=${providerType}`)
+    fetchVoicesByType(providerType)
       .then((res) => res.json())
       .then((data: Array<{ id: string; name: string }>) => {
         const options = data.map((v) => ({
@@ -272,15 +266,11 @@ export default function VoiceProviderSetupModal({
     try {
       // Test the connection first (skip if reusing LLM provider key - it's already validated)
       if (!selectedLlmProviderId) {
-        const testResponse = await fetch("/api/admin/voice/providers/test", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            provider_type: providerType,
-            api_key: apiKeyChanged ? apiKey : undefined,
-            target_uri: targetUri || undefined,
-            use_stored_key: isEditing && !apiKeyChanged,
-          }),
+        const testResponse = await testVoiceProvider({
+          provider_type: providerType,
+          api_key: apiKeyChanged ? apiKey : undefined,
+          target_uri: targetUri || undefined,
+          use_stored_key: isEditing && !apiKeyChanged,
         });
 
         if (!testResponse.ok) {
@@ -292,27 +282,23 @@ export default function VoiceProviderSetupModal({
       }
 
       // Save the provider
-      const response = await fetch("/api/admin/voice/providers", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: existingProvider?.id,
-          name: label,
-          provider_type: providerType,
-          api_key: selectedLlmProviderId
-            ? undefined
-            : apiKeyChanged
-              ? apiKey
-              : undefined,
-          api_key_changed: selectedLlmProviderId ? false : apiKeyChanged,
-          target_uri: targetUri || undefined,
-          llm_provider_id: selectedLlmProviderId,
-          stt_model: sttModel,
-          tts_model: ttsModel,
-          default_voice: defaultVoice,
-          activate_stt: mode === "stt",
-          activate_tts: mode === "tts",
-        }),
+      const response = await upsertVoiceProvider({
+        id: existingProvider?.id,
+        name: label,
+        provider_type: providerType,
+        api_key: selectedLlmProviderId
+          ? undefined
+          : apiKeyChanged
+            ? apiKey
+            : undefined,
+        api_key_changed: selectedLlmProviderId ? false : apiKeyChanged,
+        target_uri: targetUri || undefined,
+        llm_provider_id: selectedLlmProviderId,
+        stt_model: sttModel,
+        tts_model: ttsModel,
+        default_voice: defaultVoice,
+        activate_stt: mode === "stt",
+        activate_tts: mode === "tts",
       });
 
       if (response.ok) {

@@ -11,8 +11,15 @@ import {
 } from "@/components/icons/icons";
 import Text from "@/refresh-components/texts/Text";
 import Separator from "@/refresh-components/Separator";
-import useSWR from "swr";
-import { errorHandlingFetcher, FetchError } from "@/lib/fetcher";
+import { FetchError } from "@/lib/fetcher";
+import {
+  useVoiceProviders,
+  VoiceProviderView,
+} from "@/hooks/useVoiceProviders";
+import {
+  activateVoiceProvider,
+  deactivateVoiceProvider,
+} from "@/lib/admin/voice/svc";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { Callout } from "@/components/ui/callout";
 import Button from "@/refresh-components/buttons/Button";
@@ -28,21 +35,6 @@ import {
   SvgX,
 } from "@opal/icons";
 import VoiceProviderSetupModal from "./VoiceProviderSetupModal";
-
-const VOICE_PROVIDERS_URL = "/api/admin/voice/providers";
-
-interface VoiceProviderView {
-  id: number;
-  name: string;
-  provider_type: string;
-  is_default_stt: boolean;
-  is_default_tts: boolean;
-  stt_model: string | null;
-  tts_model: string | null;
-  default_voice: string | null;
-  has_api_key: boolean;
-  target_uri: string | null;
-}
 
 interface ModelDetails {
   id: string;
@@ -177,12 +169,7 @@ export default function VoiceConfigurationPage() {
   );
   const [hoveredButtonKey, setHoveredButtonKey] = useState<string | null>(null);
 
-  const {
-    data: providers,
-    error,
-    isLoading,
-    mutate,
-  } = useSWR<VoiceProviderView[]>(VOICE_PROVIDERS_URL, errorHandlingFetcher);
+  const { providers, error, isLoading, refresh: mutate } = useVoiceProviders();
 
   const handleConnect = (
     providerType: string,
@@ -219,14 +206,7 @@ export default function VoiceConfigurationPage() {
       mode === "stt" ? setSTTActivationError : setTTSActivationError;
     setError(null);
     try {
-      const url = new URL(
-        `${VOICE_PROVIDERS_URL}/${providerId}/activate-${mode}`,
-        window.location.origin
-      );
-      if (mode === "tts" && modelId) {
-        url.searchParams.set("tts_model", modelId);
-      }
-      const response = await fetch(url.toString(), { method: "POST" });
+      const response = await activateVoiceProvider(providerId, mode, modelId);
       if (!response.ok) {
         const errorBody = await response.json().catch(() => ({}));
         throw new Error(
@@ -248,10 +228,7 @@ export default function VoiceConfigurationPage() {
       mode === "stt" ? setSTTActivationError : setTTSActivationError;
     setError(null);
     try {
-      const response = await fetch(
-        `${VOICE_PROVIDERS_URL}/${providerId}/deactivate-${mode}`,
-        { method: "POST" }
-      );
+      const response = await deactivateVoiceProvider(providerId, mode);
       if (!response.ok) {
         const errorBody = await response.json().catch(() => ({}));
         throw new Error(
