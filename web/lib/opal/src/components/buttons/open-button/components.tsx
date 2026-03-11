@@ -55,7 +55,7 @@ type OpenButtonContentProps =
       children?: string;
     };
 
-type OpenButtonProps = Omit<InteractiveStatefulProps, "variant"> &
+type OpenButtonProps = InteractiveStatefulProps &
   OpenButtonContentProps & {
     /**
      * Size preset — controls gap, text size, and Container height/rounding.
@@ -93,6 +93,7 @@ function OpenButton({
   tooltip,
   tooltipSide = "top",
   interaction,
+  variant = "select-heavy",
   ...statefulProps
 }: OpenButtonProps) {
   const { isDisabled } = useDisabled();
@@ -119,7 +120,7 @@ function OpenButton({
 
   const button = (
     <Interactive.Stateful
-      variant="select-heavy"
+      variant={variant}
       interaction={resolvedInteraction}
       {...statefulProps}
     >
@@ -134,9 +135,7 @@ function OpenButton({
         <div
           className={cn(
             "opal-button interactive-foreground flex flex-row items-center",
-            justifyContent === "between"
-              ? "w-full justify-between"
-              : "gap-1",
+            justifyContent === "between" ? "w-full justify-between" : "gap-1",
             foldable && "interactive-foldable-host"
           )}
         >

@@ -211,6 +211,22 @@
   --interactive-foreground-icon: var(--action-link-03);
 }
 
+/* Select-Tinted — Select-Heavy with tinted rest background */
+.interactive[data-interactive-variant="select-tinted"] {
+  @apply bg-background-tint-01;
+  --interactive-foreground: var(--text-04);
+  --interactive-foreground-icon: var(--text-03);
+}
+.interactive[data-interactive-variant="select-tinted"]:hover:not(
+    [data-disabled]
+  ),
+.interactive[data-interactive-variant="select-tinted"][data-interaction="hover"]:not(
+    [data-disabled]
+  ) {
+  @apply bg-background-tint-02;
+  --interactive-foreground-icon: var(--text-04);
+}
+
 /* ===========================================================================
    Sidebar
    =========================================================================== */

@@ -109,10 +109,10 @@ export default function UserRoleCell({ user, onMutate }: UserRoleCellProps) {
         <Popover.Trigger asChild>
           <OpenButton
             icon={currentIcon}
+            variant="select-tinted"
             width="full"
             justifyContent="between"
             disabled={isUpdating}
-            className="border border-border-01 rounded-08"
           >
             {USER_ROLE_LABELS[user.role]}
           </OpenButton>
