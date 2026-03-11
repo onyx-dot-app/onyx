@@ -131,6 +131,7 @@ export function LiteLLMProxyModal({
                       fetchLiteLLMProxyModels({
                         api_base: formikProps.values.api_base,
                         api_key: formikProps.values.api_key,
+                        provider_name: existingLlmProvider?.name,
                       })
                     }
                     isDisabled={isFetchDisabled}
