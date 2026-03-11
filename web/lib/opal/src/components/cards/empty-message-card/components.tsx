@@ -20,9 +20,6 @@ type EmptyMessageCardProps = {
 
   /** Ref forwarded to the root Card div. */
   ref?: React.Ref<HTMLDivElement>;
-
-  /** Additional CSS classes forwarded to the root Card div. */
-  className?: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -34,7 +31,6 @@ function EmptyMessageCard({
   title,
   sizeVariant = "lg",
   ref,
-  className,
 }: EmptyMessageCardProps) {
   return (
     <Card
@@ -42,7 +38,6 @@ function EmptyMessageCard({
       backgroundVariant="none"
       borderVariant="dashed"
       sizeVariant={sizeVariant}
-      className={className}
     >
       <Content
         icon={icon}
