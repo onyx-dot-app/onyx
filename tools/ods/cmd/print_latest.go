@@ -20,11 +20,15 @@ qualifies. Tags with pre-release suffixes (e.g. v1.2.3-beta,
 v1.2.3-cloud.1) are excluded.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			tag, err := git.GetLatestStableSemverTag("")
-			if err != nil {
-				return err
-			}
-			fmt.Println(tag)
+		tag, err := git.GetLatestStableSemverTag("")
+		if err != nil {
+			return err
+		}
+		if tag == "" {
+			return fmt.Errorf("no stable semver tag found in repository")
+		}
+		fmt.Println(tag)
+		return nil
 			return nil
 		},
 	}
