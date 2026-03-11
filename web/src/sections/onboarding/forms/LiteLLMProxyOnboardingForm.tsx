@@ -12,7 +12,10 @@ import { Button } from "@opal/components";
 import { Disabled } from "@opal/core";
 import { cn, noProp } from "@/lib/utils";
 import { SvgRefreshCw } from "@opal/icons";
-import { WellKnownLLMProviderDescriptor } from "@/interfaces/llm";
+import {
+  WellKnownLLMProviderDescriptor,
+  ModelConfiguration,
+} from "@/interfaces/llm";
 import {
   OnboardingFormWrapper,
   OnboardingFormChildProps,
@@ -41,7 +44,7 @@ interface LiteLLMProxyFormValues {
   api_base: string;
   api_key_changed: boolean;
   default_model_name: string;
-  model_configurations: any[];
+  model_configurations: ModelConfiguration[];
   groups: number[];
   is_public: boolean;
 }
@@ -81,6 +84,10 @@ function LiteLLMProxyFormFields(
                 {...field}
                 placeholder="http://localhost:4000"
                 variant={disabled ? "disabled" : undefined}
+                onBlur={(e: React.FocusEvent<HTMLInputElement>) => {
+                  field.onBlur(e);
+                  handleApiKeyInteraction();
+                }}
               />
             </FormField.Control>
             <FormField.Message
@@ -220,11 +227,17 @@ export function LiteLLMProxyOnboardingForm({
     [llmDescriptor.name]
   );
 
-  const validationSchema = Yup.object().shape({
-    [FIELD_API_KEY]: Yup.string().required("API Key is required"),
-    [FIELD_API_BASE]: Yup.string().required("API Base URL is required"),
-    [FIELD_DEFAULT_MODEL_NAME]: Yup.string().required("Model name is required"),
-  });
+  const validationSchema = useMemo(
+    () =>
+      Yup.object().shape({
+        [FIELD_API_KEY]: Yup.string().required("API Key is required"),
+        [FIELD_API_BASE]: Yup.string().required("API Base URL is required"),
+        [FIELD_DEFAULT_MODEL_NAME]: Yup.string().required(
+          "Model name is required"
+        ),
+      }),
+    []
+  );
 
   const icon = () => (
     <ConnectionProviderIcon

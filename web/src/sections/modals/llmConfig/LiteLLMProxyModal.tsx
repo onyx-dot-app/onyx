@@ -4,9 +4,9 @@ import { TextFormField } from "@/components/Field";
 import {
   LLMProviderFormProps,
   LLMProviderName,
-  LiteLLMProxyModelResponse,
   ModelConfiguration,
 } from "@/interfaces/llm";
+import { fetchLiteLLMProxyModels } from "@/app/admin/configuration/llm/utils";
 import * as Yup from "yup";
 import {
   ProviderFormEntrypointWrapper,
@@ -30,65 +30,10 @@ import { useState } from "react";
 
 const LITELLM_PROXY_DISPLAY_NAME = "LiteLLM Proxy";
 const DEFAULT_API_BASE = "http://localhost:4000";
-const LITELLM_MODELS_API_URL = "/api/admin/llm/litellm/available-models";
 
 interface LiteLLMProxyModalValues extends BaseLLMFormValues {
   api_key: string;
   api_base: string;
-}
-
-async function fetchLiteLLMModels(params: {
-  apiBase: string;
-  apiKey: string;
-  providerName?: string;
-}): Promise<{ models: ModelConfiguration[]; error?: string }> {
-  if (!params.apiBase || !params.apiKey) {
-    return {
-      models: [],
-      error: "API Base and API Key are required to fetch models",
-    };
-  }
-
-  try {
-    const response = await fetch(LITELLM_MODELS_API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        api_base: params.apiBase,
-        api_key: params.apiKey,
-        provider_name: params.providerName,
-      }),
-    });
-
-    if (!response.ok) {
-      let errorMessage = "Failed to fetch models";
-      try {
-        const errorData = await response.json();
-        errorMessage = errorData.detail || errorMessage;
-      } catch {
-        // ignore JSON parsing errors
-      }
-      return { models: [], error: errorMessage };
-    }
-
-    const data: LiteLLMProxyModelResponse[] = await response.json();
-    const models: ModelConfiguration[] = data.map((modelData) => ({
-      name: modelData.model_name,
-      display_name: modelData.model_name,
-      is_visible: true,
-      max_input_tokens: null,
-      supports_image_input: false,
-      supports_reasoning: false,
-    }));
-
-    return { models };
-  } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : "Unknown error";
-    return { models: [], error: errorMessage };
-  }
 }
 
 export function LiteLLMProxyModal({
@@ -183,10 +128,9 @@ export function LiteLLMProxyModal({
 
                   <FetchModelsButton
                     onFetch={() =>
-                      fetchLiteLLMModels({
-                        apiBase: formikProps.values.api_base,
-                        apiKey: formikProps.values.api_key,
-                        providerName: existingLlmProvider?.name,
+                      fetchLiteLLMProxyModels({
+                        api_base: formikProps.values.api_base,
+                        api_key: formikProps.values.api_key,
                       })
                     }
                     isDisabled={isFetchDisabled}
