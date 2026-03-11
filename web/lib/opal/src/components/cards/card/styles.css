@@ -17,7 +17,7 @@
 
 /* Border variants */
 .opal-card[data-border="none"] {
-  @apply border-0;
+  border: none;
 }
 
 .opal-card[data-border="dashed"] {
