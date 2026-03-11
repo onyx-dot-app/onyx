@@ -26,7 +26,6 @@ The `sizeVariant` controls both padding and border-radius, mirroring the same ma
 | `borderVariant` | `"none" \| "dashed" \| "solid"` | `"none"` | Border style |
 | `ref` | `React.Ref<HTMLDivElement>` | — | Ref forwarded to the root div |
 | `children` | `React.ReactNode` | — | Card content |
-| `className` | `string` | — | Additional CSS classes |
 
 ## Background Variants
 
