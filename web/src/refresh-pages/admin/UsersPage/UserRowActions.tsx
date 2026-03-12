@@ -61,6 +61,12 @@ export default function UserRowActions({
     return null;
   }
 
+  // SCIM-managed users cannot be modified from the UI — changes would be
+  // overwritten on the next IdP sync.
+  if (user.is_scim_synced) {
+    return null;
+  }
+
   return (
     <>
       <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
