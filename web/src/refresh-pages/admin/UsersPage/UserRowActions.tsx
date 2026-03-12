@@ -185,9 +185,7 @@ export default function UserRowActions({
           <Button prominence="tertiary" icon={SvgMoreHorizontal} />
         </Popover.Trigger>
         <Popover.Content align="end">
-          <div className="flex flex-col gap-0.5 p-1">
-            {actionButtons}
-          </div>
+          <div className="flex flex-col gap-0.5 p-1">{actionButtons}</div>
         </Popover.Content>
       </Popover>
 
