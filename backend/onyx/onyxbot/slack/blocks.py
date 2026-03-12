@@ -115,13 +115,17 @@ def _extract_code_snippets(
     if not matches:
         return text, []
 
-    # Pass 2: decide which blocks to extract, accounting for cumulative removal
+    # Pass 2: decide which blocks to extract, accounting for cumulative removal.
+    # Only extract if the text is still over the limit OR the block is very large.
     extract_indices: set[int] = set()
     removed_chars = 0
     for i, match in enumerate(matches):
         full_block = match.group(0)
-        text_len_without = len(text) - removed_chars - len(full_block)
-        if text_len_without <= limit or len(full_block) > limit // 2:
+        current_len = len(text) - removed_chars
+        if current_len > limit and current_len - len(full_block) <= limit:
+            extract_indices.add(i)
+            removed_chars += len(full_block)
+        elif len(full_block) > limit // 2:
             extract_indices.add(i)
             removed_chars += len(full_block)
 

@@ -163,6 +163,8 @@ def _upload_code_snippets(
     thread_ts: str,
     snippets: list[CodeSnippet],
     logger: OnyxLoggingAdapter,
+    receiver_ids: list[str] | None = None,
+    send_as_ephemeral: bool | None = None,
 ) -> None:
     """Upload extracted code blocks as Slack file snippets in the thread."""
     for snippet in snippets:
@@ -180,12 +182,15 @@ def _upload_code_snippets(
                 f"Failed to upload code snippet {snippet.filename}, "
                 "falling back to inline code block"
             )
-            # Fall back to posting as a regular message with code fences
+            # Fall back to posting as a regular message with code fences,
+            # preserving the same visibility as the primary response.
             respond_in_thread_or_channel(
                 client=client,
                 channel=channel,
+                receiver_ids=receiver_ids,
                 text=f"```{snippet.language}\n{snippet.code}\n```",
                 thread_ts=thread_ts,
+                send_as_ephemeral=send_as_ephemeral,
             )
 
 
@@ -471,13 +476,16 @@ def handle_regular_answer(
 
         # Upload extracted code blocks as Slack file snippets so they
         # render as collapsible, syntax-highlighted blocks in the thread.
-        if code_snippets and target_thread_ts:
+        snippet_thread_ts = target_thread_ts or message_ts_to_respond_to
+        if code_snippets and snippet_thread_ts:
             _upload_code_snippets(
                 client=client,
                 channel=channel,
-                thread_ts=target_thread_ts,
+                thread_ts=snippet_thread_ts,
                 snippets=code_snippets,
                 logger=logger,
+                receiver_ids=target_receiver_ids,
+                send_as_ephemeral=send_as_ephemeral,
             )
 
         # For DM (ephemeral message), we need to create a thread via a normal message so the user can see

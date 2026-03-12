@@ -165,18 +165,26 @@ class TestExtractCodeSnippets:
 
     def test_multiple_blocks_cumulative_removal(self) -> None:
         """When multiple code blocks exist, extraction decisions should
-        account for previously extracted blocks (two-pass logic)."""
-        block_a = "a = 1\n" * 60  # ~360 chars
-        block_b = "b = 2\n" * 60  # ~360 chars
-        # Total text is ~760 chars. With limit=400, removing block_a alone
-        # brings us to ~400 chars, so block_b should NOT be extracted.
-        text = f"Intro\n```python\n{block_a}```\nMiddle\n```python\n{block_b}```\nEnd"
-        cleaned, snippets = _extract_code_snippets(text, limit=400)
+        account for previously extracted blocks (two-pass logic).
+        Blocks must be smaller than limit//2 so the 'very large block'
+        override doesn't trigger — we're testing the cumulative logic only."""
+        # Each fenced block is ~103 chars (```python\n + 15*6 + ```)
+        block_a = "a = 1\n" * 15  # 90 chars of code
+        block_b = "b = 2\n" * 15  # 90 chars of code
+        prose = "x" * 200
+        # Total: ~200 + 103 + 103 + overhead ≈ 420 chars
+        # limit=300, limit//2=150. Each block (~103) < 150, so only
+        # the cumulative check applies. Removing block_a (~103 chars)
+        # brings us to ~317 > 300, so block_b should also be extracted.
+        # But with limit=350: removing block_a → ~317 ≤ 350, stop.
+        text = f"{prose}\n```python\n{block_a}```\n```python\n{block_b}```\nEnd"
+        cleaned, snippets = _extract_code_snippets(text, limit=350)
 
-        # At least one block extracted
-        assert len(snippets) >= 1
-        # Snippet filenames should be numbered sequentially from 1
+        # After extracting block_a the text is ≤ 350, so block_b stays.
+        assert len(snippets) == 1
         assert snippets[0].filename == "code_1.python"
+        # block_b should still be in the cleaned text
+        assert "b = 2" in cleaned
 
 
 # ---------------------------------------------------------------------------
