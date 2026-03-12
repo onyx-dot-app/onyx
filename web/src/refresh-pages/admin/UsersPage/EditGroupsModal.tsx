@@ -62,7 +62,9 @@ export default function EditGroupsModal({
       }
     }, 0);
   }, []);
-  const [selectedRole, setSelectedRole] = useState<string>(user.role ?? "");
+  const [selectedRole, setSelectedRole] = useState<UserRole | "">(
+    user.role ?? ""
+  );
 
   const initialMemberGroupIds = useMemo(
     () => new Set(user.groups.map((g) => g.id)),
@@ -93,7 +95,8 @@ export default function EditGroupsModal({
     );
   }, [memberGroupIds, initialMemberGroupIds]);
 
-  const hasRoleChange = user.role !== null && selectedRole !== user.role;
+  const hasRoleChange =
+    user.role !== null && selectedRole !== "" && selectedRole !== user.role;
   const hasChanges = hasGroupChanges || hasRoleChange;
 
   const toggleGroup = (groupId: number) => {
@@ -135,7 +138,11 @@ export default function EditGroupsModal({
         }
       }
 
-      if (hasRoleChange) {
+      if (
+        user.role !== null &&
+        selectedRole !== "" &&
+        selectedRole !== user.role
+      ) {
         promises.push(setUserRole(user.email, selectedRole));
       }
 
@@ -237,7 +244,7 @@ export default function EditGroupsModal({
                     description={`${displayName} is not in any groups.`}
                     muted
                   >
-                    No groups found
+                    No groups joined
                   </LineItem>
                 ) : (
                   <ShadowDiv className="flex flex-col gap-1 max-h-[200px]">
@@ -278,7 +285,7 @@ export default function EditGroupsModal({
                   rightChildren={
                     <InputSelect
                       value={selectedRole}
-                      onValueChange={setSelectedRole}
+                      onValueChange={(v) => setSelectedRole(v as UserRole)}
                     >
                       <InputSelect.Trigger />
                       <InputSelect.Content>

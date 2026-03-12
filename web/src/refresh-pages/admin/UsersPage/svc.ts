@@ -69,8 +69,7 @@ export async function addUserToGroup(
     body: JSON.stringify({ user_ids: [userId] }),
   });
   if (!res.ok) {
-    const detail = (await res.json()).detail;
-    throw new Error(detail ?? "Failed to add user to group");
+    throw new Error(await parseErrorDetail(res, "Failed to add user to group"));
   }
 }
 
@@ -84,12 +83,12 @@ export async function removeUserFromGroup(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       user_ids: currentUserIds.filter((id) => id !== userIdToRemove),
-      cc_pair_ids: [],
     }),
   });
   if (!res.ok) {
-    const detail = (await res.json()).detail;
-    throw new Error(detail ?? "Failed to remove user from group");
+    throw new Error(
+      await parseErrorDetail(res, "Failed to remove user from group")
+    );
   }
 }
 
@@ -100,8 +99,7 @@ export async function cancelInvite(email: string): Promise<void> {
     body: JSON.stringify({ user_email: email }),
   });
   if (!res.ok) {
-    const detail = (await res.json()).detail;
-    throw new Error(detail ?? "Failed to cancel invite");
+    throw new Error(await parseErrorDetail(res, "Failed to cancel invite"));
   }
 }
 
@@ -112,8 +110,7 @@ export async function approveRequest(email: string): Promise<void> {
     body: JSON.stringify({ email }),
   });
   if (!res.ok) {
-    const detail = (await res.json()).detail;
-    throw new Error(detail ?? "Failed to approve request");
+    throw new Error(await parseErrorDetail(res, "Failed to approve request"));
   }
 }
 

@@ -175,9 +175,9 @@ export default function GroupsCell({
           />
         )}
       </div>
-      {showModal && user.id && (
+      {showModal && user.id != null && (
         <EditGroupsModal
-          user={user}
+          user={{ ...user, id: user.id }}
           onClose={() => setShowModal(false)}
           onMutate={onMutate}
         />
