@@ -50,7 +50,7 @@ _process_pid: int | None = None
 
 
 def set_start_time() -> None:
-    """Capture server startup time. Called from lifespan()."""
+    """Capture server startup time. Called from start_observability()."""
     global _start_time
     if _start_time is None:
         _start_time = time.monotonic()
@@ -140,8 +140,8 @@ def get_pool_state() -> dict[str, Any]:
                     exc_info=True,
                 )
                 result["redis"][label] = {"error": "unable to read pool internals"}
-    except ImportError:
-        logger.warning("Failed to import redis pool classes", exc_info=True)
+    except (ImportError, RuntimeError, AttributeError):
+        logger.warning("Failed to read redis pool state", exc_info=True)
         result["redis"]["error"] = "unable to read pool state"
 
     return result
