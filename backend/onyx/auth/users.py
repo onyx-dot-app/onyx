@@ -387,7 +387,10 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             verify_email_domain(user_create.email)
         except OnyxError as e:
             # Log blocked disposable email attempts
-            if e.status_code == 400 and "Disposable email" in str(e.message):
+            if (
+                e.error_code == OnyxErrorCode.VALIDATION_ERROR
+                and "Disposable email" in str(e.message)
+            ):
                 domain = (
                     user_create.email.split("@")[-1]
                     if "@" in user_create.email
@@ -1312,7 +1315,7 @@ class FastAPIUserWithLogoutRouter(FastAPIUsers[models.UP, models.ID]):
             except Exception as e:
                 logger.error(f"Unexpected error in refresh endpoint: {str(e)}")
                 raise OnyxError(
-                    OnyxErrorCode.VALIDATION_ERROR,
+                    OnyxErrorCode.INVALID_TOKEN,
                     f"Token refresh failed: {str(e)}",
                 )
 

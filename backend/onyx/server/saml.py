@@ -7,10 +7,8 @@ from urllib.parse import urlparse
 
 from fastapi import APIRouter
 from fastapi import Depends
-from fastapi import HTTPException
 from fastapi import Request
 from fastapi import Response
-from fastapi import status
 from fastapi_users import exceptions
 from fastapi_users.authentication import Strategy
 from onelogin.saml2.auth import OneLogin_Saml2_Auth  # type: ignore
@@ -29,6 +27,8 @@ from onyx.db.auth import get_user_count
 from onyx.db.auth import get_user_db
 from onyx.db.engine.async_sql_engine import get_async_session_context_manager
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
 
 
@@ -233,17 +233,17 @@ async def _process_saml_callback(
             "Error when processing SAML Response: %s %s"
             % (", ".join(errors), auth.get_last_error_reason())
         )
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied. Failed to parse SAML Response.",
+        raise OnyxError(
+            OnyxErrorCode.UNAUTHENTICATED,
+            "Access denied. Failed to parse SAML Response.",
         )
 
     if not auth.is_authenticated():
         detail = "Access denied. User was not authenticated"
         logger.error(detail)
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=detail,
+        raise OnyxError(
+            OnyxErrorCode.UNAUTHENTICATED,
+            detail,
         )
 
     user_email: str | None = None
@@ -273,9 +273,9 @@ async def _process_saml_callback(
                 "Received SAML attributes without email: %s",
                 list(attributes.keys()),
             )
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=detail,
+            raise OnyxError(
+                OnyxErrorCode.UNAUTHENTICATED,
+                detail,
             )
 
     user = await upsert_saml_user(email=user_email)
