@@ -102,36 +102,54 @@ def _extract_code_snippets(
     Returns (cleaned_text, snippets) where *cleaned_text* has large code
     blocks replaced with a placeholder and *snippets* contains the extracted
     code to be uploaded as Slack file snippets.
+
+    Uses a two-pass approach: first collect all matches, then decide which
+    to extract based on cumulative removal so each decision accounts for
+    previously extracted blocks.
     """
     if len(text) <= limit:
         return text, []
 
-    snippets: list[CodeSnippet] = []
-    counter = 0
+    # Pass 1: collect all code-fence matches
+    matches = list(_CODE_FENCE_RE.finditer(text))
+    if not matches:
+        return text, []
 
-    def _replace_if_needed(match: re.Match[str]) -> str:
-        nonlocal counter
+    # Pass 2: decide which blocks to extract, accounting for cumulative removal
+    extract_indices: set[int] = set()
+    removed_chars = 0
+    for i, match in enumerate(matches):
+        full_block = match.group(0)
+        text_len_without = len(text) - removed_chars - len(full_block)
+        if text_len_without <= limit or len(full_block) > limit // 2:
+            extract_indices.add(i)
+            removed_chars += len(full_block)
+
+    if not extract_indices:
+        return text, []
+
+    # Build cleaned text and snippets by processing matches in reverse
+    # so character offsets remain valid.
+    snippets: list[CodeSnippet] = []
+    cleaned = text
+    for i in sorted(extract_indices, reverse=True):
+        match = matches[i]
         lang = match.group(1) or ""
         code = match.group(2)
-        full_block = match.group(0)
-
-        # Only extract if removing this block would help us stay under limit
-        text_without = text[: match.start()] + text[match.end() :]
-        if len(text_without) <= limit or len(full_block) > limit // 2:
-            counter += 1
-            ext = lang if lang else "txt"
-            snippets.append(
-                CodeSnippet(
-                    code=code.strip(),
-                    language=lang or "text",
-                    filename=f"code_{counter}.{ext}",
-                )
+        ext = lang if lang else "txt"
+        snippets.append(
+            CodeSnippet(
+                code=code.strip(),
+                language=lang or "text",
+                filename=f"code_{len(extract_indices) - len(snippets)}.{ext}",
             )
-            return ""
-        return full_block
+        )
+        cleaned = cleaned[: match.start()] + cleaned[match.end() :]
 
-    cleaned = _CODE_FENCE_RE.sub(_replace_if_needed, text)
-    # Clean up any double blank lines left by extraction
+    # Snippets were appended in reverse order — flip to match document order
+    snippets.reverse()
+
+    # Clean up any triple+ blank lines left by extraction
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
     return cleaned, snippets
 

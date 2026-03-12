@@ -135,6 +135,28 @@ def build_slack_context_str(
     return slack_context_str + "\n\n".join(message_strs)
 
 
+# Normalize common LLM language aliases to Slack's expected snippet_type values.
+# Slack silently falls back to plain text for unrecognized types, so this map
+# only needs to cover the most common mismatches.
+_SNIPPET_TYPE_MAP: dict[str, str] = {
+    "py": "python",
+    "js": "javascript",
+    "ts": "typescript",
+    "tsx": "typescript",
+    "jsx": "javascript",
+    "sh": "shell",
+    "bash": "shell",
+    "zsh": "shell",
+    "yml": "yaml",
+    "rb": "ruby",
+    "rs": "rust",
+    "cs": "csharp",
+    "md": "markdown",
+    "txt": "text",
+    "text": "plain_text",
+}
+
+
 def _upload_code_snippets(
     client: WebClient,
     channel: str,
@@ -145,12 +167,13 @@ def _upload_code_snippets(
     """Upload extracted code blocks as Slack file snippets in the thread."""
     for snippet in snippets:
         try:
+            snippet_type = _SNIPPET_TYPE_MAP.get(snippet.language, snippet.language)
             client.files_upload_v2(
                 channel=channel,
                 thread_ts=thread_ts,
                 content=snippet.code,
                 filename=snippet.filename,
-                snippet_type=snippet.language,
+                snippet_type=snippet_type,
             )
         except Exception:
             logger.warning(

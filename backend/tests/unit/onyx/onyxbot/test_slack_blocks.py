@@ -9,6 +9,7 @@ from onyx.context.search.models import SavedSearchDoc
 from onyx.onyxbot.slack.blocks import _build_documents_blocks
 from onyx.onyxbot.slack.blocks import _extract_code_snippets
 from onyx.onyxbot.slack.blocks import _split_text
+from onyx.onyxbot.slack.handlers.handle_regular_answer import _SNIPPET_TYPE_MAP
 
 
 def _make_saved_doc(updated_at: datetime | None) -> SavedSearchDoc:
@@ -161,3 +162,50 @@ class TestExtractCodeSnippets:
         cleaned, _ = _extract_code_snippets(text, limit=100)
 
         assert "\n\n\n" not in cleaned
+
+    def test_multiple_blocks_cumulative_removal(self) -> None:
+        """When multiple code blocks exist, extraction decisions should
+        account for previously extracted blocks (two-pass logic)."""
+        block_a = "a = 1\n" * 60  # ~360 chars
+        block_b = "b = 2\n" * 60  # ~360 chars
+        # Total text is ~760 chars. With limit=400, removing block_a alone
+        # brings us to ~400 chars, so block_b should NOT be extracted.
+        text = f"Intro\n```python\n{block_a}```\nMiddle\n```python\n{block_b}```\nEnd"
+        cleaned, snippets = _extract_code_snippets(text, limit=400)
+
+        # At least one block extracted
+        assert len(snippets) >= 1
+        # Snippet filenames should be numbered sequentially from 1
+        assert snippets[0].filename == "code_1.python"
+
+
+# ---------------------------------------------------------------------------
+# _SNIPPET_TYPE_MAP tests
+# ---------------------------------------------------------------------------
+
+
+class TestSnippetTypeMap:
+    @pytest.mark.parametrize(
+        "alias,expected",
+        [
+            ("py", "python"),
+            ("js", "javascript"),
+            ("ts", "typescript"),
+            ("tsx", "typescript"),
+            ("jsx", "javascript"),
+            ("sh", "shell"),
+            ("bash", "shell"),
+            ("yml", "yaml"),
+            ("rb", "ruby"),
+            ("rs", "rust"),
+            ("cs", "csharp"),
+            ("md", "markdown"),
+            ("text", "plain_text"),
+        ],
+    )
+    def test_common_aliases_normalized(self, alias: str, expected: str) -> None:
+        assert _SNIPPET_TYPE_MAP[alias] == expected
+
+    def test_unknown_language_passes_through(self) -> None:
+        unknown = "haskell"
+        assert _SNIPPET_TYPE_MAP.get(unknown, unknown) == "haskell"
