@@ -3,6 +3,7 @@ from unittest.mock import Mock
 import pytest
 
 from onyx.chat import process_message
+from onyx.chat.models import AnswerStream
 from onyx.chat.models import StreamingError
 from onyx.configs import app_configs
 from onyx.server.query_and_chat.models import MessageResponseIDInfo
@@ -40,7 +41,7 @@ def test_mock_llm_response_requires_integration_mode() -> None:
 
 
 def test_gather_stream_returns_empty_answer_when_streaming_error_only() -> None:
-    packets = iter(
+    packets: AnswerStream = iter(
         [
             StreamingError(
                 error="The selected model returned an empty response",

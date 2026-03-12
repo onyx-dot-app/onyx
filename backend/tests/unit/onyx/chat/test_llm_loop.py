@@ -943,48 +943,8 @@ class TestForgottenFileMetadata:
             assert "moby_dick.txt" in forgotten.message
 
 
-class TestFallbackToolExtraction:
-    def _tool_defs(self) -> list[dict]:
-        return [
-            {
-                "type": "function",
-                "function": {
-                    "name": "internal_search",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "queries": {
-                                "type": "array",
-                                "items": {"type": "string"},
-                            }
-                        },
-                        "required": ["queries"],
-                    },
-                },
-            }
-        ]
-
-    def test_noop_if_fallback_was_already_attempted(self) -> None:
-        llm_step_result = LlmStepResult(
-            reasoning=None,
-            answer='{"name":"internal_search","arguments":{"queries":["alpha"]}}',
-            tool_calls=None,
-        )
-
-        result, attempted = _try_fallback_tool_extraction(
-            llm_step_result=llm_step_result,
-            tool_choice=ToolChoiceOptions.REQUIRED,
-            fallback_extraction_attempted=True,
-            tool_defs=self._tool_defs(),
-            turn_index=0,
-        )
-
-        assert result is llm_step_result
-        assert attempted is False
-
-    def test_raises_empty_llm_response_error_for_empty_stream_result(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+class TestRunLlmLoopErrors:
+    def _setup_common_mocks(self, monkeypatch: pytest.MonkeyPatch) -> None:
         @contextmanager
         def _dummy_db_session() -> Iterator[Mock]:
             yield Mock()
@@ -1001,6 +961,11 @@ class TestFallbackToolExtraction:
             "onyx.chat.llm_loop.get_default_base_system_prompt",
             lambda _db_session: "",
         )
+
+    def test_raises_empty_llm_response_error_for_empty_stream_result(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._setup_common_mocks(monkeypatch)
         monkeypatch.setattr(
             "onyx.chat.llm_loop.run_llm_step",
             Mock(
@@ -1042,6 +1007,92 @@ class TestFallbackToolExtraction:
         assert exc_info.value.provider == "openai"
         assert exc_info.value.model == "gpt-5.2"
         assert exc_info.value.tool_choice == ToolChoiceOptions.AUTO.value
+
+    def test_raises_empty_llm_response_error_for_reasoning_only_result(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._setup_common_mocks(monkeypatch)
+        monkeypatch.setattr(
+            "onyx.chat.llm_loop.run_llm_step",
+            Mock(
+                return_value=(
+                    LlmStepResult(
+                        reasoning="thinking only",
+                        answer=None,
+                        tool_calls=None,
+                        raw_answer=None,
+                    ),
+                    False,
+                )
+            ),
+        )
+
+        llm = Mock()
+        llm.config = SimpleNamespace(
+            max_input_tokens=1024,
+            model_provider="openai",
+            model_name="gpt-5.2",
+        )
+
+        with pytest.raises(EmptyLLMResponseError) as exc_info:
+            run_llm_loop(
+                emitter=get_default_emitter(),
+                state_container=ChatStateContainer(),
+                simple_chat_history=[create_message("Hey", MessageType.USER, 1)],
+                tools=[],
+                custom_agent_prompt=None,
+                context_files=create_context_files(),
+                persona=None,
+                user_memory_context=None,
+                llm=llm,
+                token_counter=lambda text: max(1, len(text) // 4),
+                db_session=Mock(),
+                chat_session_id="test-chat-session",
+            )
+
+        assert exc_info.value.provider == "openai"
+        assert exc_info.value.model == "gpt-5.2"
+        assert exc_info.value.tool_choice == ToolChoiceOptions.AUTO.value
+
+
+class TestFallbackToolExtraction:
+    def _tool_defs(self) -> list[dict]:
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": "internal_search",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "queries": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                            }
+                        },
+                        "required": ["queries"],
+                    },
+                },
+            }
+        ]
+
+    def test_noop_if_fallback_was_already_attempted(self) -> None:
+        llm_step_result = LlmStepResult(
+            reasoning=None,
+            answer='{"name":"internal_search","arguments":{"queries":["alpha"]}}',
+            tool_calls=None,
+        )
+
+        result, attempted = _try_fallback_tool_extraction(
+            llm_step_result=llm_step_result,
+            tool_choice=ToolChoiceOptions.REQUIRED,
+            fallback_extraction_attempted=True,
+            tool_defs=self._tool_defs(),
+            turn_index=0,
+        )
+
+        assert result is llm_step_result
+        assert attempted is False
 
     def test_extracts_from_answer_when_required_and_no_tool_calls(self) -> None:
         llm_step_result = LlmStepResult(

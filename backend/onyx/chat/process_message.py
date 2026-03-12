@@ -935,10 +935,6 @@ def handle_stream_message_objects(
                 "LLM returned an empty response "
                 f"(provider={e.provider}, model={e.model}, tool_choice={e.tool_choice})"
             )
-            if llm and llm.config.api_key and len(llm.config.api_key) > 2:
-                stack_trace = stack_trace.replace(
-                    llm.config.api_key, "[REDACTED_API_KEY]"
-                )
 
             yield StreamingError(
                 error=(

@@ -1108,11 +1108,7 @@ def run_llm_loop(
                 tool_choice=tool_choice,
             )
 
-        if (
-            not llm_step_result.answer
-            and not llm_step_result.reasoning
-            and not llm_step_result.tool_calls
-        ):
+        if not llm_step_result.answer and not llm_step_result.tool_calls:
             raise EmptyLLMResponseError(
                 provider=llm.config.model_provider,
                 model=llm.config.model_name,
@@ -1121,10 +1117,9 @@ def run_llm_loop(
 
         if not llm_step_result.answer:
             raise RuntimeError(
-                "The LLM did not return an answer. "
-                "Typically this is an issue with LLMs that do not support tool calling natively, "
-                "or the model serving API is not configured correctly. "
-                "This may also happen with models that are lower quality outputting invalid tool calls."
+                "The LLM did not return a final answer after tool execution. "
+                "Typically this indicates invalid tool-call output, a model/provider mismatch, "
+                "or serving API misconfiguration."
             )
 
         emitter.emit(
