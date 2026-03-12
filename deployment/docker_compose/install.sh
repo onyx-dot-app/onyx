@@ -11,6 +11,7 @@ SHUTDOWN_MODE=false
 DELETE_DATA_MODE=false
 INCLUDE_CRAFT=false  # Disabled by default, use --include-craft to enable
 LITE_MODE=false       # Disabled by default, use --lite to enable
+USE_LOCAL_FILES=false # Disabled by default, use --local to skip downloading config files
 NO_PROMPT=false
 DRY_RUN=false
 VERBOSE=false
@@ -33,6 +34,10 @@ while [[ $# -gt 0 ]]; do
             LITE_MODE=true
             shift
             ;;
+        --local)
+            USE_LOCAL_FILES=true
+            shift
+            ;;
         --no-prompt)
             NO_PROMPT=true
             shift
@@ -53,6 +58,7 @@ while [[ $# -gt 0 ]]; do
             echo "Options:"
             echo "  --include-craft  Enable Onyx Craft (AI-powered web app building)"
             echo "  --lite           Deploy Onyx Lite (no Vespa, Redis, or model servers)"
+            echo "  --local          Use existing config files instead of downloading from GitHub"
             echo "  --shutdown       Stop (pause) Onyx containers"
             echo "  --delete-data    Remove all Onyx data (containers, volumes, and files)"
             echo "  --no-prompt      Run non-interactively with defaults (for CI/automation)"
@@ -66,6 +72,7 @@ while [[ $# -gt 0 ]]; do
             echo "  $0 --include-craft    # Install Onyx with Craft enabled"
             echo "  $0 --shutdown         # Pause Onyx services"
             echo "  $0 --delete-data      # Completely remove Onyx and all data"
+            echo "  $0 --local            # Re-run using existing config files on disk"
             echo "  $0 --no-prompt        # Non-interactive install with defaults"
             exit 0
             ;;
@@ -139,6 +146,33 @@ download_file() {
     else
         wget -q --tries=3 --timeout=20 -O "$output" "$url"
     fi
+}
+
+# Ensures a required file is present. With --local, verifies the file exists on
+# disk. Otherwise, downloads it from the given URL. Returns 0 on success, 1 on
+# failure (caller should handle the exit).
+ensure_file() {
+    local path="$1"
+    local url="$2"
+    local desc="$3"
+
+    if [[ "$USE_LOCAL_FILES" = true ]]; then
+        if [[ -f "$path" ]]; then
+            print_success "Using existing ${desc}"
+            return 0
+        fi
+        print_error "Required file missing: ${desc} (${path})"
+        return 1
+    fi
+
+    print_info "Downloading ${desc}..."
+    if download_file "$url" "$path" 2>/dev/null; then
+        print_success "${desc} downloaded"
+        return 0
+    fi
+    print_error "Failed to download ${desc}"
+    print_info "Please ensure you have internet connection and try again"
+    return 1
 }
 
 # --- Interactive prompt helpers ---
@@ -311,6 +345,98 @@ if [ "$DELETE_DATA_MODE" = true ]; then
     exit 0
 fi
 
+# --- Auto-install Docker (Linux only) ---
+# Runs before the banner so a group-based re-exec doesn't repeat it.
+install_docker_linux() {
+    local distro_id=""
+    if [[ -f /etc/os-release ]]; then
+        distro_id="$(. /etc/os-release && echo "${ID:-}")"
+    fi
+
+    case "$distro_id" in
+        amzn)
+            print_info "Detected Amazon Linux — installing Docker via package manager..."
+            if command -v dnf &> /dev/null; then
+                sudo dnf install -y docker
+            else
+                sudo yum install -y docker
+            fi
+            ;;
+        *)
+            print_info "Installing Docker via get.docker.com..."
+            download_file "https://get.docker.com" /tmp/get-docker.sh
+            sudo sh /tmp/get-docker.sh
+            rm -f /tmp/get-docker.sh
+            ;;
+    esac
+
+    sudo systemctl start docker 2>/dev/null || sudo service docker start 2>/dev/null || true
+    sudo systemctl enable docker 2>/dev/null || true
+}
+
+if ! command -v docker &> /dev/null; then
+    if [[ "$OSTYPE" == "linux-gnu"* ]] || [[ -n "${WSL_DISTRO_NAME:-}" ]]; then
+        install_docker_linux
+        if ! command -v docker &> /dev/null; then
+            print_error "Docker installation failed."
+            echo "  Visit: https://docs.docker.com/get-docker/"
+            exit 1
+        fi
+        print_success "Docker installed successfully"
+    fi
+fi
+
+# --- Auto-install Docker Compose plugin (Linux only) ---
+if command -v docker &> /dev/null \
+    && ! docker compose version &> /dev/null \
+    && ! command -v docker-compose &> /dev/null \
+    && { [[ "$OSTYPE" == "linux-gnu"* ]] || [[ -n "${WSL_DISTRO_NAME:-}" ]]; }; then
+
+    print_info "Docker Compose not found — installing plugin..."
+    COMPOSE_ARCH="$(uname -m)"
+    COMPOSE_URL="https://github.com/docker/compose/releases/latest/download/docker-compose-linux-${COMPOSE_ARCH}"
+    COMPOSE_DIR="/usr/local/lib/docker/cli-plugins"
+    COMPOSE_TMP="$(mktemp)"
+    sudo mkdir -p "$COMPOSE_DIR"
+    if download_file "$COMPOSE_URL" "$COMPOSE_TMP"; then
+        sudo mv "$COMPOSE_TMP" "$COMPOSE_DIR/docker-compose"
+        sudo chmod +x "$COMPOSE_DIR/docker-compose"
+        if docker compose version &> /dev/null; then
+            print_success "Docker Compose plugin installed"
+        else
+            print_error "Docker Compose plugin installed but not detected."
+            echo "  Visit: https://docs.docker.com/compose/install/"
+            exit 1
+        fi
+    else
+        rm -f "$COMPOSE_TMP"
+        print_error "Failed to download Docker Compose plugin."
+        echo "  Visit: https://docs.docker.com/compose/install/"
+        exit 1
+    fi
+fi
+
+# On Linux, ensure the current user can talk to the Docker daemon without
+# sudo.  If necessary, add them to the "docker" group and re-exec the
+# script under that group so the rest of the install proceeds normally.
+if command -v docker &> /dev/null \
+    && { [[ "$OSTYPE" == "linux-gnu"* ]] || [[ -n "${WSL_DISTRO_NAME:-}" ]]; } \
+    && [[ "$(id -u)" -ne 0 ]] \
+    && ! docker info &> /dev/null; then
+    if [[ "${_ONYX_REEXEC:-}" = "1" ]]; then
+        print_error "Cannot connect to Docker after group re-exec."
+        print_info "Log out and back in, then run the script again."
+        exit 1
+    fi
+    if ! getent group docker &> /dev/null; then
+        sudo groupadd docker
+    fi
+    print_info "Adding $USER to the docker group..."
+    sudo usermod -aG docker "$USER"
+    print_info "Re-launching with docker group active..."
+    exec sg docker -c "_ONYX_REEXEC=1 bash $(printf '%q ' "$0" "$@")"
+fi
+
 # ASCII Art Banner
 echo ""
 echo -e "${BLUE}${BOLD}"
@@ -473,10 +599,20 @@ fi
 
 # Convert to GB for display
 if [ "$MEMORY_MB" -gt 0 ]; then
-    MEMORY_GB=$((MEMORY_MB / 1024))
-    print_info "Docker memory allocation: ~${MEMORY_GB}GB"
+    MEMORY_GB=$(awk "BEGIN {printf \"%.1f\", $MEMORY_MB / 1024}")
+    if [ "$(awk "BEGIN {print ($MEMORY_MB >= 1024)}")" = "1" ]; then
+        MEMORY_DISPLAY="~${MEMORY_GB}GB"
+    else
+        MEMORY_DISPLAY="${MEMORY_MB}MB"
+    fi
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        print_info "Docker memory allocation: ${MEMORY_DISPLAY}"
+    else
+        print_info "System memory: ${MEMORY_DISPLAY} (Docker uses host memory directly)"
+    fi
 else
-    print_warning "Could not determine Docker memory allocation"
+    print_warning "Could not determine memory allocation"
+    MEMORY_DISPLAY="unknown"
     MEMORY_MB=0
 fi
 
@@ -495,7 +631,7 @@ RESOURCE_WARNING=false
 EXPECTED_RAM_MB=$((EXPECTED_DOCKER_RAM_GB * 1024))
 
 if [ "$MEMORY_MB" -gt 0 ] && [ "$MEMORY_MB" -lt "$EXPECTED_RAM_MB" ]; then
-    print_warning "Docker has less than ${EXPECTED_DOCKER_RAM_GB}GB RAM allocated (found: ~${MEMORY_GB}GB)"
+    print_warning "Less than ${EXPECTED_DOCKER_RAM_GB}GB RAM available (found: ${MEMORY_DISPLAY})"
     RESOURCE_WARNING=true
 fi
 
@@ -507,7 +643,7 @@ fi
 if [ "$RESOURCE_WARNING" = true ]; then
     echo ""
     print_warning "Onyx recommends at least ${EXPECTED_DOCKER_RAM_GB}GB RAM and ${EXPECTED_DISK_GB}GB disk space for optimal performance in standard mode."
-    print_warning "Lite mode requires less resources, but does not include a vector database."
+    print_warning "Lite mode requires less resources (1-4GB RAM, 8-16GB disk depending on usage), but does not include a vector database."
     echo ""
     prompt_yn_or_default "Do you want to continue anyway? (Y/n): " "y"
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
@@ -522,81 +658,57 @@ print_step "Creating directory structure"
 if [ -d "${INSTALL_ROOT}" ]; then
     print_info "Directory structure already exists"
     print_success "Using existing ${INSTALL_ROOT} directory"
+fi
+mkdir -p "${INSTALL_ROOT}/deployment"
+mkdir -p "${INSTALL_ROOT}/data/nginx/local"
+print_success "Directory structure created"
+
+# Ensure all required configuration files are present
+NGINX_BASE_URL="https://raw.githubusercontent.com/onyx-dot-app/onyx/main/deployment/data/nginx"
+
+if [[ "$USE_LOCAL_FILES" = true ]]; then
+    print_step "Verifying existing configuration files"
 else
-    mkdir -p "${INSTALL_ROOT}/deployment"
-    mkdir -p "${INSTALL_ROOT}/data/nginx/local"
-    print_success "Directory structure created"
+    print_step "Downloading Onyx configuration files"
+    print_info "This step downloads all necessary configuration files from GitHub..."
 fi
 
-# Download all required files
-print_step "Downloading Onyx configuration files"
-print_info "This step downloads all necessary configuration files from GitHub..."
-echo ""
-print_info "Downloading the following files:"
-echo "  • docker-compose.yml - Main Docker Compose configuration"
-if [[ "$LITE_MODE" = true ]]; then
-    echo "  • ${LITE_COMPOSE_FILE} - Lite mode overlay"
-fi
-echo "  • env.template - Environment variables template"
-echo "  • nginx/app.conf.template - Nginx web server configuration"
-echo "  • nginx/run-nginx.sh - Nginx startup script"
-echo "  • README.md - Documentation and setup instructions"
-echo ""
+ensure_file "${INSTALL_ROOT}/deployment/docker-compose.yml" \
+    "${GITHUB_RAW_URL}/docker-compose.yml" "docker-compose.yml" || exit 1
 
-# Download Docker Compose file
-COMPOSE_FILE="${INSTALL_ROOT}/deployment/docker-compose.yml"
-print_info "Downloading docker-compose.yml..."
-if download_file "${GITHUB_RAW_URL}/docker-compose.yml" "$COMPOSE_FILE" 2>/dev/null; then
-    print_success "Docker Compose file downloaded successfully"
-
-    # Check if Docker Compose version is older than 2.24.0 and show warning
-    # Skip check for dev builds (assume they're recent enough)
-    if [ "$COMPOSE_VERSION" != "dev" ] && version_compare "$COMPOSE_VERSION" "2.24.0"; then
-        print_warning "Docker Compose version $COMPOSE_VERSION is older than 2.24.0"
-        echo ""
-        print_warning "The docker-compose.yml file uses the newer env_file format that requires Docker Compose 2.24.0 or later."
-        echo ""
-        print_info "To use this configuration with your current Docker Compose version, you have two options:"
-        echo ""
-        echo "1. Upgrade Docker Compose to version 2.24.0 or later (recommended)"
-        echo "   Visit: https://docs.docker.com/compose/install/"
-        echo ""
-        echo "2. Manually replace all env_file sections in docker-compose.yml"
-        echo "   Change from:"
-        echo "     env_file:"
-        echo "       - path: .env"
-        echo "         required: false"
-        echo "   To:"
-        echo "     env_file: .env"
-        echo ""
-        print_warning "The installation will continue, but may fail if Docker Compose cannot parse the file."
-        echo ""
-        prompt_yn_or_default "Do you want to continue anyway? (Y/n): " "y"
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            print_info "Installation cancelled. Please upgrade Docker Compose or manually edit the docker-compose.yml file."
-            exit 1
-        fi
-        print_info "Proceeding with installation despite Docker Compose version compatibility issues..."
-    fi
-else
-    print_error "Failed to download Docker Compose file"
-    print_info "Please ensure you have internet connection and try again"
-    exit 1
-fi
-
-# Download lite overlay if --lite was requested, otherwise remove any stale
-# overlay from a previous lite install so shutdown/delete-data auto-detection
-# doesn't mistakenly include it later.
-if [[ "$LITE_MODE" = true ]]; then
-    LITE_FILE="${INSTALL_ROOT}/deployment/${LITE_COMPOSE_FILE}"
-    print_info "Downloading ${LITE_COMPOSE_FILE} (lite overlay)..."
-    if download_file "${GITHUB_RAW_URL}/${LITE_COMPOSE_FILE}" "$LITE_FILE" 2>/dev/null; then
-        print_success "Lite overlay downloaded successfully"
-    else
-        print_error "Failed to download lite overlay"
-        print_info "Please ensure you have internet connection and try again"
+# Check Docker Compose version compatibility after obtaining docker-compose.yml
+if [ "$COMPOSE_VERSION" != "dev" ] && version_compare "$COMPOSE_VERSION" "2.24.0"; then
+    print_warning "Docker Compose version $COMPOSE_VERSION is older than 2.24.0"
+    echo ""
+    print_warning "The docker-compose.yml file uses the newer env_file format that requires Docker Compose 2.24.0 or later."
+    echo ""
+    print_info "To use this configuration with your current Docker Compose version, you have two options:"
+    echo ""
+    echo "1. Upgrade Docker Compose to version 2.24.0 or later (recommended)"
+    echo "   Visit: https://docs.docker.com/compose/install/"
+    echo ""
+    echo "2. Manually replace all env_file sections in docker-compose.yml"
+    echo "   Change from:"
+    echo "     env_file:"
+    echo "       - path: .env"
+    echo "         required: false"
+    echo "   To:"
+    echo "     env_file: .env"
+    echo ""
+    print_warning "The installation will continue, but may fail if Docker Compose cannot parse the file."
+    echo ""
+    prompt_yn_or_default "Do you want to continue anyway? (Y/n): " "y"
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        print_info "Installation cancelled. Please upgrade Docker Compose or manually edit the docker-compose.yml file."
         exit 1
     fi
+    print_info "Proceeding with installation despite Docker Compose version compatibility issues..."
+fi
+
+# Handle lite overlay: ensure it if --lite, clean up stale copies otherwise
+if [[ "$LITE_MODE" = true ]]; then
+    ensure_file "${INSTALL_ROOT}/deployment/${LITE_COMPOSE_FILE}" \
+        "${GITHUB_RAW_URL}/${LITE_COMPOSE_FILE}" "${LITE_COMPOSE_FILE}" || exit 1
 elif [[ -f "${INSTALL_ROOT}/deployment/${LITE_COMPOSE_FILE}" ]]; then
     if [[ -f "${INSTALL_ROOT}/deployment/.env" ]]; then
         print_warning "Existing lite overlay found but --lite was not passed."
@@ -614,57 +726,21 @@ elif [[ -f "${INSTALL_ROOT}/deployment/${LITE_COMPOSE_FILE}" ]]; then
     fi
 fi
 
-# Download env.template file
-ENV_TEMPLATE="${INSTALL_ROOT}/deployment/env.template"
-print_info "Downloading env.template..."
-if download_file "${GITHUB_RAW_URL}/env.template" "$ENV_TEMPLATE" 2>/dev/null; then
-    print_success "Environment template downloaded successfully"
-else
-    print_error "Failed to download env.template"
-    print_info "Please ensure you have internet connection and try again"
-    exit 1
-fi
+ensure_file "${INSTALL_ROOT}/deployment/env.template" \
+    "${GITHUB_RAW_URL}/env.template" "env.template" || exit 1
 
-# Download nginx config files
-NGINX_BASE_URL="https://raw.githubusercontent.com/onyx-dot-app/onyx/main/deployment/data/nginx"
+ensure_file "${INSTALL_ROOT}/data/nginx/app.conf.template" \
+    "$NGINX_BASE_URL/app.conf.template" "nginx/app.conf.template" || exit 1
 
-# Download app.conf.template
-NGINX_CONFIG="${INSTALL_ROOT}/data/nginx/app.conf.template"
-print_info "Downloading nginx configuration template..."
-if download_file "$NGINX_BASE_URL/app.conf.template" "$NGINX_CONFIG" 2>/dev/null; then
-    print_success "Nginx configuration template downloaded"
-else
-    print_error "Failed to download nginx configuration template"
-    print_info "Please ensure you have internet connection and try again"
-    exit 1
-fi
+ensure_file "${INSTALL_ROOT}/data/nginx/run-nginx.sh" \
+    "$NGINX_BASE_URL/run-nginx.sh" "nginx/run-nginx.sh" || exit 1
+chmod +x "${INSTALL_ROOT}/data/nginx/run-nginx.sh"
 
-# Download run-nginx.sh script
-NGINX_RUN_SCRIPT="${INSTALL_ROOT}/data/nginx/run-nginx.sh"
-print_info "Downloading nginx startup script..."
-if download_file "$NGINX_BASE_URL/run-nginx.sh" "$NGINX_RUN_SCRIPT" 2>/dev/null; then
-    chmod +x "$NGINX_RUN_SCRIPT"
-    print_success "Nginx startup script downloaded and made executable"
-else
-    print_error "Failed to download nginx startup script"
-    print_info "Please ensure you have internet connection and try again"
-    exit 1
-fi
+ensure_file "${INSTALL_ROOT}/README.md" \
+    "${GITHUB_RAW_URL}/README.md" "README.md" || exit 1
 
-# Download README file
-README_FILE="${INSTALL_ROOT}/README.md"
-print_info "Downloading README.md..."
-if download_file "${GITHUB_RAW_URL}/README.md" "$README_FILE" 2>/dev/null; then
-    print_success "README.md downloaded successfully"
-else
-    print_error "Failed to download README.md"
-    print_info "Please ensure you have internet connection and try again"
-    exit 1
-fi
-
-# Create empty local directory marker (if needed)
 touch "${INSTALL_ROOT}/data/nginx/local/.gitkeep"
-print_success "All configuration files downloaded successfully"
+print_success "All configuration files ready"
 
 # Set up deployment configuration
 print_step "Setting up deployment configs"
@@ -791,14 +867,8 @@ else
             2)
                 LITE_MODE=true
                 print_info "Selected: Lite mode"
-                LITE_FILE="${INSTALL_ROOT}/deployment/${LITE_COMPOSE_FILE}"
-                print_info "Downloading ${LITE_COMPOSE_FILE} (lite overlay)..."
-                if download_file "${GITHUB_RAW_URL}/${LITE_COMPOSE_FILE}" "$LITE_FILE"; then
-                    print_success "Lite overlay downloaded successfully"
-                else
-                    print_error "Failed to download lite overlay"
-                    exit 1
-                fi
+                ensure_file "${INSTALL_ROOT}/deployment/${LITE_COMPOSE_FILE}" \
+                    "${GITHUB_RAW_URL}/${LITE_COMPOSE_FILE}" "${LITE_COMPOSE_FILE}" || exit 1
                 ;;
             *)
                 print_info "Selected: Standard mode"
