@@ -125,6 +125,7 @@ from onyx.db.models import User
 from onyx.db.pat import fetch_user_for_pat
 from onyx.db.users import get_user_by_email
 from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import log_onyx_error
 from onyx.error_handling.exceptions import onyx_error_to_json_response
 from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_async_redis_connection
@@ -1897,8 +1898,13 @@ def get_oauth_router(
             exc: OnyxError | HTTPException,
         ) -> JSONResponse:
             if isinstance(exc, OnyxError):
+                log_onyx_error(exc)
                 error_response = onyx_error_to_json_response(exc)
             else:
+                if exc.status_code >= 500:
+                    logger.error(f"HTTPException {exc.status_code}: {exc.detail}")
+                elif exc.status_code >= 400:
+                    logger.warning(f"HTTPException {exc.status_code}: {exc.detail}")
                 error_response = JSONResponse(
                     status_code=exc.status_code,
                     content={"detail": exc.detail},

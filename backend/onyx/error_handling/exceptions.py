@@ -65,6 +65,15 @@ def _get_onyx_error_detail(exc: OnyxError) -> str:
     return str(detail or exc.error_code.code)
 
 
+def log_onyx_error(exc: OnyxError) -> None:
+    detail = _get_onyx_error_detail(exc)
+    status_code = exc.status_code
+    if status_code >= 500:
+        logger.error(f"OnyxError {exc.error_code.code}: {detail}")
+    elif status_code >= 400:
+        logger.warning(f"OnyxError {exc.error_code.code}: {detail}")
+
+
 def onyx_error_to_json_response(exc: OnyxError) -> JSONResponse:
     return JSONResponse(
         status_code=exc.status_code,
@@ -84,11 +93,5 @@ def register_onyx_exception_handlers(app: FastAPI) -> None:
         request: Request,  # noqa: ARG001
         exc: OnyxError,
     ) -> JSONResponse:
-        status_code = exc.status_code
-        detail = _get_onyx_error_detail(exc)
-        if status_code >= 500:
-            logger.error(f"OnyxError {exc.error_code.code}: {detail}")
-        elif status_code >= 400:
-            logger.warning(f"OnyxError {exc.error_code.code}: {detail}")
-
+        log_onyx_error(exc)
         return onyx_error_to_json_response(exc)
