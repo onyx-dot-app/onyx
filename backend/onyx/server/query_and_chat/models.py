@@ -41,6 +41,16 @@ class MessageResponseIDInfo(BaseModel):
     reserved_assistant_message_id: int
 
 
+class MultiModelMessageResponseIDInfo(BaseModel):
+    """Sent at the start of a multi-model streaming response.
+    Contains the user message ID and the reserved assistant message IDs
+    for each model being run in parallel."""
+
+    user_message_id: int | None
+    reserved_assistant_message_ids: list[int]
+    model_names: list[str]
+
+
 class SourceTag(Tag):
     source: DocumentSource
 
@@ -86,6 +96,10 @@ class SendMessageRequest(BaseModel):
     message: str
 
     llm_override: LLMOverride | None = None
+    # For multi-model mode: up to 3 LLM overrides to run in parallel.
+    # When provided with >1 entry, triggers multi-model streaming.
+    # Backward-compat: if only `llm_override` is set, single-model path is used.
+    llm_overrides: list[LLMOverride] | None = None
     # Test-only override for deterministic LiteLLM mock responses.
     mock_llm_response: str | None = None
 
@@ -211,6 +225,10 @@ class ChatMessageDetail(BaseModel):
     error: str | None = None
     current_feedback: str | None = None  # "like" | "dislike" | null
     processing_duration_seconds: float | None = None
+    # For multi-model turns: the preferred assistant response ID (set on user messages only)
+    preferred_response_id: int | None = None
+    # The display name of the model that generated this message (e.g. "GPT-4", "Claude Opus")
+    model_display_name: str | None = None
 
     def model_dump(self, *args: list, **kwargs: dict[str, Any]) -> dict[str, Any]:  # type: ignore
         initial_dict = super().model_dump(mode="json", *args, **kwargs)  # type: ignore

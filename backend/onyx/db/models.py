@@ -2622,6 +2622,18 @@ class ChatMessage(Base):
         ForeignKey("chat_message.id"), nullable=True
     )
 
+    # For multi-model turns: the user message points to which assistant response
+    # was selected as the preferred one to continue the conversation with.
+    # Only set on user messages that triggered a multi-model generation.
+    preferred_response_id: Mapped[int | None] = mapped_column(
+        ForeignKey("chat_message.id"), nullable=True
+    )
+
+    # The display name of the model that generated this assistant message
+    # (e.g. "GPT-4", "Claude Opus"). Used on session reload to label
+    # multi-model response panels and <> navigation arrows.
+    model_display_name: Mapped[str | None] = mapped_column(String, nullable=True)
+
     # Only set on summary messages - the ID of the last message included in this summary
     # Used for chat history compression
     last_summarized_message_id: Mapped[int | None] = mapped_column(
@@ -2693,6 +2705,12 @@ class ChatMessage(Base):
     latest_child_message: Mapped["ChatMessage | None"] = relationship(
         "ChatMessage",
         foreign_keys=[latest_child_message_id],
+        remote_side="ChatMessage.id",
+    )
+
+    preferred_response: Mapped["ChatMessage | None"] = relationship(
+        "ChatMessage",
+        foreign_keys=[preferred_response_id],
         remote_side="ChatMessage.id",
     )
 

@@ -8,3 +8,6 @@ class Placement(BaseModel):
     tab_index: int = 0
     # Used for tools/agents that call other tools, this currently doesn't support nested agents but can be added later
     sub_turn_index: int | None = None
+    # For multi-model streaming: identifies which model (0, 1, 2) this packet belongs to.
+    # None for single-model (default) responses.
+    model_index: int | None = None
