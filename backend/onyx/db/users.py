@@ -353,13 +353,19 @@ def batch_add_ext_perm_user_if_not_exists(
     lower_emails = [email.lower() for email in emails]
     found_users, missing_lower_emails = _get_users_by_emails(db_session, lower_emails)
 
+    # Use savepoints (begin_nested) so that a failed insert only rolls back
+    # that single user, not the entire transaction. A plain rollback() would
+    # discard all previously flushed users in the same transaction.
+    # We also avoid add_all() because SQLAlchemy 2.0's insertmanyvalues
+    # batch path hits a UUID sentinel mismatch with server_default columns.
     for email in missing_lower_emails:
         user = _generate_ext_permissioned_user(email=email)
         try:
+            savepoint = db_session.begin_nested()
             db_session.add(user)
-            db_session.flush()
+            savepoint.commit()
         except IntegrityError:
-            db_session.rollback()
+            savepoint.rollback()
             if not continue_on_error:
                 raise
 
