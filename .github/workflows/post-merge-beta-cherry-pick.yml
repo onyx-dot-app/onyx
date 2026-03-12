@@ -75,9 +75,9 @@ jobs:
 
           member_state="$(cat "${member_state_file}")"
           if [ "${member_state}" != "active" ]; then
-            echo "should_cherrypick=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::${MERGED_BY} is not an active member of team ${ALLOWED_TEAM}. Skipping cherry-pick."
-            exit 0
+            echo "gate_error=not-team-member" >> "$GITHUB_OUTPUT"
+            echo "::error::${MERGED_BY} is not an active member of team ${ALLOWED_TEAM} (state: ${member_state}). Failing cherry-pick gate."
+            exit 1
           fi
 
           exit 0
@@ -130,7 +130,10 @@ jobs:
           tee_exit="${pipe_statuses[1]:-0}"
           set -e
           if [ "${tee_exit}" -ne 0 ]; then
-            echo "::warning::tee failed to write to output_file; cherry-pick reason/excerpt may be incomplete."
+            echo "status=failure" >> "$GITHUB_OUTPUT"
+            echo "reason=output-capture-failed" >> "$GITHUB_OUTPUT"
+            echo "::error::tee failed to capture cherry-pick output (exit ${tee_exit}); cannot classify result."
+            exit 1
           fi
 
           if [ "${exit_code}" -eq 0 ]; then
@@ -198,6 +201,10 @@ jobs:
             reason_text="requested cherry-pick but merge commit SHA was missing"
           elif [ "${GATE_ERROR}" = "team-api-error" ]; then
             reason_text="team membership lookup failed while validating cherry-pick permissions"
+          elif [ "${GATE_ERROR}" = "not-team-member" ]; then
+            reason_text="merger is not an active member of the allowed team"
+          elif [ "${CHERRY_PICK_REASON}" = "output-capture-failed" ]; then
+            reason_text="failed to capture cherry-pick output for classification"
           elif [ "${CHERRY_PICK_REASON}" = "merge-conflict" ]; then
             reason_text="merge conflict during cherry-pick"
           fi
