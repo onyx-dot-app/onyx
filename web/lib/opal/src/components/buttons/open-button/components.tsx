@@ -55,8 +55,11 @@ type OpenButtonContentProps =
       children?: string;
     };
 
-type OpenButtonProps = InteractiveStatefulProps &
-  OpenButtonContentProps & {
+type OpenButtonVariant = "select-light" | "select-heavy" | "select-tinted";
+
+type OpenButtonProps = Omit<InteractiveStatefulProps, "variant"> & {
+  variant?: OpenButtonVariant;
+} & OpenButtonContentProps & {
     /**
      * Size preset — controls gap, text size, and Container height/rounding.
      */
@@ -136,7 +139,9 @@ function OpenButton({
           className={cn(
             "opal-button interactive-foreground flex flex-row items-center",
             justifyContent === "between" ? "w-full justify-between" : "gap-1",
-            foldable && "interactive-foldable-host"
+            foldable &&
+              justifyContent !== "between" &&
+              "interactive-foldable-host"
           )}
         >
           {justifyContent === "between" ? (

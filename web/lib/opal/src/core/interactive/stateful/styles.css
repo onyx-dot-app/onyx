@@ -226,6 +226,21 @@
   @apply bg-background-tint-02;
   --interactive-foreground-icon: var(--text-04);
 }
+.interactive[data-interactive-variant="select-tinted"]:active:not(
+    [data-disabled]
+  ),
+.interactive[data-interactive-variant="select-tinted"][data-interaction="active"]:not(
+    [data-disabled]
+  ) {
+  @apply bg-background-neutral-00;
+  --interactive-foreground: var(--text-05);
+  --interactive-foreground-icon: var(--text-05);
+}
+.interactive[data-interactive-variant="select-tinted"][data-disabled] {
+  @apply bg-transparent;
+  --interactive-foreground: var(--text-01);
+  --interactive-foreground-icon: var(--text-01);
+}
 
 /* ===========================================================================
    Sidebar

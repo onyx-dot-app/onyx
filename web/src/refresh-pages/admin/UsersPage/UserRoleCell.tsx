@@ -1,11 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { UserRole, USER_ROLE_LABELS } from "@/lib/types";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { OpenButton } from "@opal/components";
 import { Disabled } from "@opal/core";
-import GenericConfirmModal from "@/components/modals/GenericConfirmModal";
 import {
   SvgCheck,
   SvgGlobe,
@@ -21,7 +20,7 @@ import { toast } from "@/hooks/useToast";
 import { setUserRole } from "./svc";
 import type { UserRow } from "./interfaces";
 
-const ROLE_ICONS: Record<string, IconFunctionComponent> = {
+const ROLE_ICONS: Partial<Record<UserRole, IconFunctionComponent>> = {
   [UserRole.ADMIN]: SvgUserManage,
   [UserRole.GLOBAL_CURATOR]: SvgGlobe,
   [UserRole.SLACK_USER]: SvgSlack,
@@ -40,8 +39,6 @@ interface UserRoleCellProps {
 
 export default function UserRoleCell({ user, onMutate }: UserRoleCellProps) {
   const [isUpdating, setIsUpdating] = useState(false);
-  const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [pendingRole, setPendingRole] = useState<UserRole | null>(null);
   const [open, setOpen] = useState(false);
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
 
@@ -63,16 +60,22 @@ export default function UserRoleCell({ user, onMutate }: UserRoleCellProps) {
     );
   }
 
+  const isUpdatingRef = useRef(false);
+
   const applyRole = async (newRole: UserRole) => {
+    if (isUpdatingRef.current) return;
+    isUpdatingRef.current = true;
     setIsUpdating(true);
     try {
       await setUserRole(user.email, newRole);
+      toast.success("Role updated");
       onMutate();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to update role");
       onMutate();
     } finally {
       setIsUpdating(false);
+      isUpdatingRef.current = false;
     }
   };
 
@@ -82,84 +85,50 @@ export default function UserRoleCell({ user, onMutate }: UserRoleCellProps) {
       return;
     }
     setOpen(false);
-    if (user.role === UserRole.CURATOR) {
-      setPendingRole(role);
-      setShowConfirmModal(true);
-    } else {
-      void applyRole(role);
-    }
-  };
-
-  const handleConfirm = () => {
-    if (pendingRole) {
-      void applyRole(pendingRole);
-    }
-    setShowConfirmModal(false);
-    setPendingRole(null);
+    void applyRole(role);
   };
 
   const currentIcon = ROLE_ICONS[user.role] ?? SvgUser;
 
   return (
-    <>
-      {showConfirmModal && (
-        <GenericConfirmModal
-          title="Change Curator Role"
-          message={`Warning: Switching roles from Curator to ${
-            USER_ROLE_LABELS[pendingRole as UserRole] ??
-            USER_ROLE_LABELS[user.role]
-          } will remove their status as individual curators from all groups.`}
-          confirmText={`Switch Role to ${
-            USER_ROLE_LABELS[pendingRole as UserRole] ??
-            USER_ROLE_LABELS[user.role]
-          }`}
-          onClose={() => {
-            setShowConfirmModal(false);
-            setPendingRole(null);
-          }}
-          onConfirm={handleConfirm}
-        />
-      )}
-
-      <Disabled disabled={isUpdating}>
-        <Popover open={open} onOpenChange={setOpen}>
-          <Popover.Trigger asChild>
-            <OpenButton
-              icon={currentIcon}
-              variant="select-tinted"
-              width="full"
-              justifyContent="between"
-            >
-              {USER_ROLE_LABELS[user.role]}
-            </OpenButton>
-          </Popover.Trigger>
-          <Popover.Content align="start">
-            <div className="flex flex-col gap-1 p-1 min-w-[160px]">
-              {SELECTABLE_ROLES.map((role) => {
-                if (
-                  role === UserRole.GLOBAL_CURATOR &&
-                  !isPaidEnterpriseFeaturesEnabled
-                ) {
-                  return null;
-                }
-                const isSelected = user.role === role;
-                const icon = ROLE_ICONS[role] ?? SvgUser;
-                return (
-                  <LineItem
-                    key={role}
-                    icon={isSelected ? SvgCheck : icon}
-                    selected={isSelected}
-                    emphasized={isSelected}
-                    onClick={() => handleSelect(role)}
-                  >
-                    {USER_ROLE_LABELS[role]}
-                  </LineItem>
-                );
-              })}
-            </div>
-          </Popover.Content>
-        </Popover>
-      </Disabled>
-    </>
+    <Disabled disabled={isUpdating}>
+      <Popover open={open} onOpenChange={setOpen}>
+        <Popover.Trigger asChild>
+          <OpenButton
+            icon={currentIcon}
+            variant="select-tinted"
+            width="full"
+            justifyContent="between"
+          >
+            {USER_ROLE_LABELS[user.role]}
+          </OpenButton>
+        </Popover.Trigger>
+        <Popover.Content align="start">
+          <div className="flex flex-col gap-1 p-1 min-w-[160px]">
+            {SELECTABLE_ROLES.map((role) => {
+              if (
+                role === UserRole.GLOBAL_CURATOR &&
+                !isPaidEnterpriseFeaturesEnabled
+              ) {
+                return null;
+              }
+              const isSelected = user.role === role;
+              const icon = ROLE_ICONS[role] ?? SvgUser;
+              return (
+                <LineItem
+                  key={role}
+                  icon={isSelected ? SvgCheck : icon}
+                  selected={isSelected}
+                  emphasized={isSelected}
+                  onClick={() => handleSelect(role)}
+                >
+                  {USER_ROLE_LABELS[role]}
+                </LineItem>
+              );
+            })}
+          </div>
+        </Popover.Content>
+      </Popover>
+    </Disabled>
   );
 }
