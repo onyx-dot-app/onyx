@@ -31,3 +31,17 @@ export {
   type TagProps,
   type TagColor,
 } from "@opal/components/tag/components";
+
+/* Card */
+export {
+  Card,
+  type CardProps,
+  type BackgroundVariant,
+  type BorderVariant,
+} from "@opal/components/cards/card/components";
+
+/* EmptyMessageCard */
+export {
+  EmptyMessageCard,
+  type EmptyMessageCardProps,
+} from "@opal/components/cards/empty-message-card/components";
