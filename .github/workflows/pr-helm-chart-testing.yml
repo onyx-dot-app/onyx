@@ -232,8 +232,8 @@ jobs:
         run: |
           echo "=== Post-install verification ==="
           if ! kubectl cluster-info >/dev/null 2>&1; then
-            echo "Skipping post-install verification: Kubernetes cluster is not reachable"
-            exit 0
+            echo "ERROR: Kubernetes cluster is not reachable after install"
+            exit 1
           fi
           kubectl get pods --all-namespaces
           kubectl get services --all-namespaces
