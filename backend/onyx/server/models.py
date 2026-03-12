@@ -47,12 +47,14 @@ class FullUserSnapshot(BaseModel):
     created_at: datetime.datetime
     updated_at: datetime.datetime
     groups: list[UserGroupInfo]
+    is_scim_synced: bool
 
     @classmethod
     def from_user_model(
         cls,
         user: User,
         groups: list[UserGroupInfo] | None = None,
+        is_scim_synced: bool = False,
     ) -> "FullUserSnapshot":
         return cls(
             id=user.id,
@@ -64,6 +66,7 @@ class FullUserSnapshot(BaseModel):
             created_at=user.created_at,
             updated_at=user.updated_at,
             groups=groups or [],
+            is_scim_synced=is_scim_synced,
         )
 
 

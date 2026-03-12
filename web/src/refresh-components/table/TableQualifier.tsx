@@ -114,11 +114,16 @@ function TableQualifier({
         return (
           <div
             className={cn(
-              "flex items-center justify-center rounded-full bg-text-05",
+              "flex items-center justify-center rounded-full bg-background-neutral-inverted-00",
               resolvedSize === "regular" ? "h-7 w-7" : "h-6 w-6"
             )}
           >
-            <Text secondaryAction textLight05 className="select-none uppercase">
+            <Text
+              inverted
+              secondaryAction
+              text05
+              className="select-none uppercase"
+            >
               {initials}
             </Text>
           </div>

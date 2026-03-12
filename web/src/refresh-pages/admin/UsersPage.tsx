@@ -8,6 +8,7 @@ import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidE
 import useUserCounts from "@/hooks/useUserCounts";
 
 import UsersSummary from "./UsersPage/UsersSummary";
+import UsersTable from "./UsersPage/UsersTable";
 
 // ---------------------------------------------------------------------------
 // Users page content
@@ -30,7 +31,7 @@ function UsersContent() {
         showScim={showScim}
       />
 
-      {/* Table and filters will be added in subsequent PRs */}
+      <UsersTable />
     </>
   );
 }
