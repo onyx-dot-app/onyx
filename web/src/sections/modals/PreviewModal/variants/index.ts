@@ -17,8 +17,8 @@ const PREVIEW_VARIANTS: PreviewVariant[] = [
   csvVariant,
   markdownVariant,
   docxVariant,
-  dataVariant,
   textVariant,
+  dataVariant,
 ];
 
 export function resolveVariant(
