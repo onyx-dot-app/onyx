@@ -18,7 +18,25 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
         with:
           fetch-depth: 0
-          persist-credentials: false
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create gh-pages branch if it does not exist
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if ! git ls-remote --exit-code --heads origin gh-pages; then
+            echo "gh-pages branch not found — creating it now..."
+            git config user.name "${{ github.actor }}"
+            git config user.email "${{ github.actor }}@users.noreply.github.com"
+            git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git
+            git checkout --orphan gh-pages
+            git rm -rf .
+            git commit --allow-empty -m "Initialize gh-pages branch"
+            git push origin gh-pages
+            git checkout ${{ github.ref_name }}
+          else
+            echo "gh-pages branch already exists — skipping creation."
+          fi
 
       - name: Install Helm CLI
         uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # ratchet:azure/setup-helm@v4
