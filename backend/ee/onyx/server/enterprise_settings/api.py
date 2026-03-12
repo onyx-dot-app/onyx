@@ -1,3 +1,4 @@
+import hashlib
 from datetime import datetime
 from datetime import timezone
 from typing import Any
@@ -6,6 +7,7 @@ import httpx
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
+from fastapi import Request
 from fastapi import Response
 from fastapi import status
 from fastapi import UploadFile
@@ -144,23 +146,37 @@ def put_logo(
     upload_logo(file=file, is_logotype=is_logotype)
 
 
-def fetch_logo_helper(db_session: Session) -> Response:  # noqa: ARG001
+def fetch_logo_helper(request: Request) -> Response:
     try:
         file_store = get_default_file_store()
         onyx_file = file_store.get_file_with_mime_type(get_logo_filename())
         if not onyx_file:
             raise ValueError("get_onyx_file returned None!")
     except Exception:
-        logger.exception("Faield to fetch logo file")
+        logger.exception("Failed to fetch logo file")
         raise HTTPException(
             status_code=404,
             detail="No logo file found",
         )
-    else:
-        return Response(content=onyx_file.data, media_type=onyx_file.mime_type)
+
+    etag_value = f'"{hashlib.md5(onyx_file.data).hexdigest()}"'
+    if request.headers.get("if-none-match") == etag_value:
+        return Response(
+            status_code=304,
+            headers={"ETag": etag_value},
+        )
+
+    return Response(
+        content=onyx_file.data,
+        media_type=onyx_file.mime_type,
+        headers={
+            "ETag": etag_value,
+            "Cache-Control": "public, max-age=3600, must-revalidate",
+        },
+    )
 
 
-def fetch_logotype_helper(db_session: Session) -> Response:  # noqa: ARG001
+def fetch_logotype_helper(request: Request) -> Response:
     try:
         file_store = get_default_file_store()
         onyx_file = file_store.get_file_with_mime_type(get_logotype_filename())
@@ -171,23 +187,38 @@ def fetch_logotype_helper(db_session: Session) -> Response:  # noqa: ARG001
             status_code=404,
             detail="No logotype file found",
         )
-    else:
-        return Response(content=onyx_file.data, media_type=onyx_file.mime_type)
+
+    etag_value = f'"{hashlib.md5(onyx_file.data).hexdigest()}"'
+    if request.headers.get("if-none-match") == etag_value:
+        return Response(
+            status_code=304,
+            headers={"ETag": etag_value},
+        )
+
+    return Response(
+        content=onyx_file.data,
+        media_type=onyx_file.mime_type,
+        headers={
+            "ETag": etag_value,
+            "Cache-Control": "public, max-age=3600, must-revalidate",
+        },
+    )
 
 
 @basic_router.get("/logotype")
-def fetch_logotype(db_session: Session = Depends(get_session)) -> Response:
-    return fetch_logotype_helper(db_session)
+def fetch_logotype(request: Request) -> Response:
+    return fetch_logotype_helper(request)
 
 
 @basic_router.get("/logo")
 def fetch_logo(
-    is_logotype: bool = False, db_session: Session = Depends(get_session)
+    request: Request,
+    is_logotype: bool = False,
 ) -> Response:
     if is_logotype:
-        return fetch_logotype_helper(db_session)
+        return fetch_logotype_helper(request)
 
-    return fetch_logo_helper(db_session)
+    return fetch_logo_helper(request)
 
 
 @admin_router.put("/custom-analytics-script")
