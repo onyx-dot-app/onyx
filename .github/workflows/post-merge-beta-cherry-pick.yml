@@ -163,7 +163,12 @@ jobs:
           fi
 
           details_excerpt="$(printf '%s' "${CHERRY_PICK_DETAILS}" | tail -n 8 | tr '\n' ' ' | sed "s/[[:space:]]\\+/ /g" | sed "s/\"/'/g" | cut -c1-350)"
-          failed_jobs="• cherry-pick-to-latest-release\\n• source PR: ${source_pr_url}\\n• reason: ${reason_text}"
+          if [ -n "${GATE_ERROR}" ]; then
+            failed_job_label="resolve-cherry-pick-request"
+          else
+            failed_job_label="cherry-pick-to-latest-release"
+          fi
+          failed_jobs="• ${failed_job_label}\\n• source PR: ${source_pr_url}\\n• reason: ${reason_text}"
           if [ -n "${MERGE_COMMIT_SHA}" ]; then
             failed_jobs="${failed_jobs}\\n• merge SHA: ${MERGE_COMMIT_SHA}"
           fi
