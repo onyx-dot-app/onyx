@@ -220,7 +220,7 @@ export default function UsersTable({
 
   const { users, isLoading, error, refresh } = useAdminUsers();
 
-  const columns = useMemo(() => buildColumns(() => refresh()), [refresh]);
+  const columns = useMemo(() => buildColumns(refresh), [refresh]);
 
   // Client-side filtering
   const filteredUsers = useMemo(() => {

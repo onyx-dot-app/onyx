@@ -2,17 +2,12 @@
 
 import { useState } from "react";
 import { Button } from "@opal/components";
-import {
-  SvgMoreHorizontal,
-  SvgKey,
-  SvgXCircle,
-  SvgTrash,
-  SvgCheck,
-} from "@opal/icons";
+import { SvgMoreHorizontal, SvgXCircle, SvgTrash, SvgCheck } from "@opal/icons";
 import { Disabled } from "@opal/core";
 import Popover from "@/refresh-components/Popover";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import Text from "@/refresh-components/texts/Text";
+import { UserStatus } from "@/lib/types";
 import { toast } from "@/hooks/useToast";
 import { deactivateUser, activateUser, deleteUser } from "./svc";
 import type { UserRow } from "./interfaces";
@@ -57,6 +52,15 @@ export default function UserRowActions({
     }
   }
 
+  // Only show actions for accepted users (active or inactive).
+  // Invited/requested users have no row actions in this PR.
+  if (
+    user.status !== UserStatus.ACTIVE &&
+    user.status !== UserStatus.INACTIVE
+  ) {
+    return null;
+  }
+
   return (
     <>
       <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
@@ -65,7 +69,7 @@ export default function UserRowActions({
         </Popover.Trigger>
         <Popover.Content align="end">
           <div className="flex flex-col gap-0.5 p-1">
-            {user.is_active ? (
+            {user.status === UserStatus.ACTIVE ? (
               <Button
                 prominence="tertiary"
                 icon={SvgXCircle}
@@ -109,13 +113,13 @@ export default function UserRowActions({
         <ConfirmationModalLayout
           icon={SvgXCircle}
           title="Deactivate User"
-          onClose={() => setModal(null)}
+          onClose={isSubmitting ? undefined : () => setModal(null)}
           submit={
             <Disabled disabled={isSubmitting}>
               <Button
                 variant="danger"
-                onClick={() => {
-                  handleAction(
+                onClick={async () => {
+                  await handleAction(
                     () => deactivateUser(user.email),
                     "User deactivated"
                   );
@@ -140,12 +144,12 @@ export default function UserRowActions({
         <ConfirmationModalLayout
           icon={SvgCheck}
           title="Activate User"
-          onClose={() => setModal(null)}
+          onClose={isSubmitting ? undefined : () => setModal(null)}
           submit={
             <Disabled disabled={isSubmitting}>
               <Button
-                onClick={() => {
-                  handleAction(
+                onClick={async () => {
+                  await handleAction(
                     () => activateUser(user.email),
                     "User activated"
                   );
@@ -169,13 +173,16 @@ export default function UserRowActions({
         <ConfirmationModalLayout
           icon={SvgTrash}
           title="Delete User"
-          onClose={() => setModal(null)}
+          onClose={isSubmitting ? undefined : () => setModal(null)}
           submit={
             <Disabled disabled={isSubmitting}>
               <Button
                 variant="danger"
-                onClick={() => {
-                  handleAction(() => deleteUser(user.email), "User deleted");
+                onClick={async () => {
+                  await handleAction(
+                    () => deleteUser(user.email),
+                    "User deleted"
+                  );
                 }}
               >
                 Delete

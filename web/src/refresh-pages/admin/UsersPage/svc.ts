@@ -1,3 +1,15 @@
+async function parseErrorDetail(
+  res: Response,
+  fallback: string
+): Promise<string> {
+  try {
+    const body = await res.json();
+    return body?.detail ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export async function deactivateUser(email: string): Promise<void> {
   const res = await fetch("/api/manage/admin/deactivate-user", {
     method: "PATCH",
@@ -5,8 +17,7 @@ export async function deactivateUser(email: string): Promise<void> {
     body: JSON.stringify({ user_email: email }),
   });
   if (!res.ok) {
-    const detail = (await res.json()).detail;
-    throw new Error(detail ?? "Failed to deactivate user");
+    throw new Error(await parseErrorDetail(res, "Failed to deactivate user"));
   }
 }
 
@@ -17,8 +28,7 @@ export async function activateUser(email: string): Promise<void> {
     body: JSON.stringify({ user_email: email }),
   });
   if (!res.ok) {
-    const detail = (await res.json()).detail;
-    throw new Error(detail ?? "Failed to activate user");
+    throw new Error(await parseErrorDetail(res, "Failed to activate user"));
   }
 }
 
@@ -29,7 +39,6 @@ export async function deleteUser(email: string): Promise<void> {
     body: JSON.stringify({ user_email: email }),
   });
   if (!res.ok) {
-    const detail = (await res.json()).detail;
-    throw new Error(detail ?? "Failed to delete user");
+    throw new Error(await parseErrorDetail(res, "Failed to delete user"));
   }
 }
