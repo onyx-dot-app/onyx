@@ -21,6 +21,7 @@ import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import useAdminUsers from "@/hooks/useAdminUsers";
 import useGroups from "@/hooks/useGroups";
 import UserFilters from "./UserFilters";
+import UserRowActions from "./UserRowActions";
 import type {
   UserRow,
   UserGroupInfo,
@@ -133,50 +134,54 @@ function renderLastUpdatedColumn(value: string | null) {
 }
 
 // ---------------------------------------------------------------------------
-// Columns (stable reference — defined at module scope)
+// Columns
 // ---------------------------------------------------------------------------
 
 const tc = createTableColumns<UserRow>();
 
-const columns = [
-  tc.qualifier({
-    content: "avatar-user",
-    getInitials: (row) => getInitials(row.personal_name, row.email),
-    selectable: false,
-  }),
-  tc.column("email", {
-    header: "Name",
-    weight: 22,
-    minWidth: 140,
-    cell: renderNameColumn,
-  }),
-  tc.column("groups", {
-    header: "Groups",
-    weight: 24,
-    minWidth: 200,
-    enableSorting: false,
-    cell: renderGroupsColumn,
-  }),
-  tc.column("role", {
-    header: "Account Type",
-    weight: 16,
-    minWidth: 180,
-    cell: renderRoleColumn,
-  }),
-  tc.column("status", {
-    header: "Status",
-    weight: 14,
-    minWidth: 100,
-    cell: renderStatusColumn,
-  }),
-  tc.column("updated_at", {
-    header: "Last Updated",
-    weight: 14,
-    minWidth: 100,
-    cell: renderLastUpdatedColumn,
-  }),
-  tc.actions(),
-];
+function buildColumns(onMutate: () => void) {
+  return [
+    tc.qualifier({
+      content: "avatar-user",
+      getInitials: (row) => getInitials(row.personal_name, row.email),
+      selectable: false,
+    }),
+    tc.column("email", {
+      header: "Name",
+      weight: 22,
+      minWidth: 140,
+      cell: renderNameColumn,
+    }),
+    tc.column("groups", {
+      header: "Groups",
+      weight: 24,
+      minWidth: 200,
+      enableSorting: false,
+      cell: renderGroupsColumn,
+    }),
+    tc.column("role", {
+      header: "Account Type",
+      weight: 16,
+      minWidth: 180,
+      cell: renderRoleColumn,
+    }),
+    tc.column("status", {
+      header: "Status",
+      weight: 14,
+      minWidth: 100,
+      cell: renderStatusColumn,
+    }),
+    tc.column("updated_at", {
+      header: "Last Updated",
+      weight: 14,
+      minWidth: 100,
+      cell: renderLastUpdatedColumn,
+    }),
+    tc.actions({
+      cell: (row) => <UserRowActions user={row} onMutate={onMutate} />,
+    }),
+  ];
+}
 
 // ---------------------------------------------------------------------------
 // Component
@@ -213,7 +218,9 @@ export default function UsersTable({
     [allGroups]
   );
 
-  const { users, isLoading, error } = useAdminUsers();
+  const { users, isLoading, error, refresh } = useAdminUsers();
+
+  const columns = useMemo(() => buildColumns(refresh), [refresh]);
 
   // Client-side filtering
   const filteredUsers = useMemo(() => {

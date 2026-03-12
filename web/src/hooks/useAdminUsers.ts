@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback } from "react";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
@@ -112,11 +113,11 @@ export default function useAdminUsers() {
   const isLoading = acceptedLoading || invitedLoading || requestedLoading;
   const error = acceptedError ?? invitedError ?? requestedError;
 
-  function refresh() {
+  const refresh = useCallback(() => {
     acceptedMutate();
     invitedMutate();
     requestedMutate();
-  }
+  }, [acceptedMutate, invitedMutate, requestedMutate]);
 
   return { users, isLoading, error, refresh };
 }
