@@ -1,4 +1,4 @@
-import { SvgArrowUpRight, SvgUserSync } from "@opal/icons";
+import { SvgArrowUpRight, SvgFilter, SvgUserSync } from "@opal/icons";
 import { ContentAction } from "@opal/layouts";
 import { Button } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
@@ -14,19 +14,33 @@ import { ADMIN_PATHS } from "@/lib/admin-routes";
 type StatCellProps = {
   value: number | null;
   label: string;
+  onFilter?: () => void;
 };
 
-function StatCell({ value, label }: StatCellProps) {
+function StatCell({ value, label, onFilter }: StatCellProps) {
   const display = value === null ? "\u2014" : value.toLocaleString();
 
   return (
-    <div className="flex flex-col items-start gap-0.5 w-full p-2">
+    <div
+      className={`group/stat relative flex flex-col items-start gap-0.5 w-full p-2 rounded-08 transition-colors ${
+        onFilter ? "cursor-pointer hover:bg-background-tint-02" : ""
+      }`}
+      onClick={onFilter}
+    >
       <Text as="span" mainUiAction text04>
         {display}
       </Text>
       <Text as="span" secondaryBody text03>
         {label}
       </Text>
+      {onFilter && (
+        <div className="absolute right-2 top-2 flex items-center gap-1 opacity-0 group-hover/stat:opacity-100 transition-opacity">
+          <Text as="span" secondaryBody text03>
+            Filter
+          </Text>
+          <SvgFilter size={16} className="text-text-03" />
+        </div>
+      )}
     </div>
   );
 }
@@ -66,6 +80,9 @@ type UsersSummaryProps = {
   pendingInvites: number | null;
   requests: number | null;
   showScim: boolean;
+  onFilterActive?: () => void;
+  onFilterInvites?: () => void;
+  onFilterRequests?: () => void;
 };
 
 export default function UsersSummary({
@@ -73,8 +90,35 @@ export default function UsersSummary({
   pendingInvites,
   requests,
   showScim,
+  onFilterActive,
+  onFilterInvites,
+  onFilterRequests,
 }: UsersSummaryProps) {
   const showRequests = requests !== null && requests > 0;
+
+  const statsCard = (
+    <Card padding={0.5}>
+      <Section flexDirection="row" gap={0}>
+        <StatCell
+          value={activeUsers}
+          label="active users"
+          onFilter={onFilterActive}
+        />
+        <StatCell
+          value={pendingInvites}
+          label="pending invites"
+          onFilter={onFilterInvites}
+        />
+        {showRequests && (
+          <StatCell
+            value={requests}
+            label="requests to join"
+            onFilter={onFilterRequests}
+          />
+        )}
+      </Section>
+    </Card>
+  );
 
   if (showScim) {
     return (
@@ -84,15 +128,7 @@ export default function UsersSummary({
         alignItems="stretch"
         gap={0.5}
       >
-        <Card padding={0.5}>
-          <Section flexDirection="row" gap={0}>
-            <StatCell value={activeUsers} label="active users" />
-            <StatCell value={pendingInvites} label="pending invites" />
-            {showRequests && (
-              <StatCell value={requests} label="requests to join" />
-            )}
-          </Section>
-        </Card>
+        {statsCard}
         <ScimCard />
       </Section>
     );
@@ -102,14 +138,26 @@ export default function UsersSummary({
   return (
     <Section flexDirection="row" gap={0.5}>
       <Card padding={0.5}>
-        <StatCell value={activeUsers} label="active users" />
+        <StatCell
+          value={activeUsers}
+          label="active users"
+          onFilter={onFilterActive}
+        />
       </Card>
       <Card padding={0.5}>
-        <StatCell value={pendingInvites} label="pending invites" />
+        <StatCell
+          value={pendingInvites}
+          label="pending invites"
+          onFilter={onFilterInvites}
+        />
       </Card>
       {showRequests && (
         <Card padding={0.5}>
-          <StatCell value={requests} label="requests to join" />
+          <StatCell
+            value={requests}
+            label="requests to join"
+            onFilter={onFilterRequests}
+          />
         </Card>
       )}
     </Section>
