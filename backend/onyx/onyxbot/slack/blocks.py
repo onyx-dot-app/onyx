@@ -1,3 +1,4 @@
+import logging
 import re
 from dataclasses import dataclass
 from datetime import datetime
@@ -48,6 +49,8 @@ from onyx.onyxbot.slack.utils import remove_slack_text_interactions
 from onyx.onyxbot.slack.utils import translate_vespa_highlight_to_slack
 from onyx.utils.text_processing import decode_escapes
 
+logger = logging.getLogger(__name__)
+
 _MAX_BLURB_LEN = 45
 
 
@@ -87,15 +90,21 @@ class CodeSnippet:
     filename: str
 
 
+_SECTION_BLOCK_LIMIT = 3000
+
 # Matches fenced code blocks: ```lang\n...\n```
+# The opening fence must start at the beginning of a line (^), may have an
+# optional language specifier (\w*), followed by a newline. The closing fence
+# is ``` at the beginning of a line. We also handle an optional trailing
+# newline on the closing fence line to be robust against different formatting.
 _CODE_FENCE_RE = re.compile(
-    r"^```(\w*)\n(.*?)^```",
+    r"^```(\w*)\n(.*?)^```\s*$",
     re.MULTILINE | re.DOTALL,
 )
 
 
 def _extract_code_snippets(
-    text: str, limit: int = 3000
+    text: str, limit: int = _SECTION_BLOCK_LIMIT
 ) -> tuple[str, list[CodeSnippet]]:
     """Extract code blocks that would push the text over *limit*.
 
@@ -106,8 +115,10 @@ def _extract_code_snippets(
     Uses a two-pass approach: first collect all matches, then decide which
     to extract based on cumulative removal so each decision accounts for
     previously extracted blocks.
+
+    Pass *limit=0* to force-extract ALL code blocks unconditionally.
     """
-    if len(text) <= limit:
+    if limit > 0 and len(text) <= limit:
         return text, []
 
     # Pass 1: collect all code-fence matches
@@ -117,17 +128,22 @@ def _extract_code_snippets(
 
     # Pass 2: decide which blocks to extract, accounting for cumulative removal.
     # Only extract if the text is still over the limit OR the block is very large.
+    # With limit=0, extract everything unconditionally.
     extract_indices: set[int] = set()
     removed_chars = 0
     for i, match in enumerate(matches):
         full_block = match.group(0)
-        current_len = len(text) - removed_chars
-        if current_len > limit and current_len - len(full_block) <= limit:
+        if limit == 0:
             extract_indices.add(i)
             removed_chars += len(full_block)
-        elif len(full_block) > limit // 2:
-            extract_indices.add(i)
-            removed_chars += len(full_block)
+        else:
+            current_len = len(text) - removed_chars
+            if current_len > limit and current_len - len(full_block) <= limit:
+                extract_indices.add(i)
+                removed_chars += len(full_block)
+            elif len(full_block) > limit // 2:
+                extract_indices.add(i)
+                removed_chars += len(full_block)
 
     if not extract_indices:
         return text, []
@@ -534,7 +550,39 @@ def _build_main_response_blocks(
     # Extract large code blocks as snippets to upload separately,
     # avoiding broken code fences when splitting across SectionBlocks.
     cleaned_text, code_snippets = _extract_code_snippets(answer_processed)
-    answer_blocks = [SectionBlock(text=text) for text in _split_text(cleaned_text)]
+    logger.info(
+        "Code extraction: input=%d chars, cleaned=%d chars, snippets=%d",
+        len(answer_processed),
+        len(cleaned_text),
+        len(code_snippets),
+    )
+
+    if len(cleaned_text) <= _SECTION_BLOCK_LIMIT:
+        answer_blocks = [SectionBlock(text=cleaned_text)]
+    elif "```" not in cleaned_text:
+        # No code fences — safe to split at word boundaries.
+        answer_blocks = [
+            SectionBlock(text=text)
+            for text in _split_text(cleaned_text, limit=_SECTION_BLOCK_LIMIT)
+        ]
+    else:
+        # Text still has code fences after extraction and exceeds the
+        # SectionBlock limit. Splitting would break the fences, so fall
+        # back to uploading the entire remaining code as another snippet
+        # and keeping only the prose in the blocks.
+        logger.warning(
+            "Cleaned text still has code fences (%d chars); "
+            "force-extracting remaining code blocks",
+            len(cleaned_text),
+        )
+        remaining_cleaned, remaining_snippets = _extract_code_snippets(
+            cleaned_text, limit=0
+        )
+        code_snippets.extend(remaining_snippets)
+        answer_blocks = [
+            SectionBlock(text=text)
+            for text in _split_text(remaining_cleaned, limit=_SECTION_BLOCK_LIMIT)
+        ]
 
     return cast(list[Block], answer_blocks), code_snippets
 
