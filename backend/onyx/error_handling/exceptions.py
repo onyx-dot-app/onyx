@@ -59,12 +59,8 @@ class OnyxError(Exception):
         return self._status_code_override or self.error_code.status_code
 
 
-def _get_onyx_error_detail(exc: OnyxError) -> str:
-    return exc.detail
-
-
 def log_onyx_error(exc: OnyxError) -> None:
-    detail = _get_onyx_error_detail(exc)
+    detail = exc.detail
     status_code = exc.status_code
     if status_code >= 500:
         logger.error(f"OnyxError {exc.error_code.code}: {detail}")
@@ -75,7 +71,7 @@ def log_onyx_error(exc: OnyxError) -> None:
 def onyx_error_to_json_response(exc: OnyxError) -> JSONResponse:
     return JSONResponse(
         status_code=exc.status_code,
-        content=exc.error_code.detail(_get_onyx_error_detail(exc)),
+        content=exc.error_code.detail(exc.detail),
     )
 
 

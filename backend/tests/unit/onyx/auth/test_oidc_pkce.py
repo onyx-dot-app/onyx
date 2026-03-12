@@ -260,6 +260,7 @@ def test_oidc_callback_uses_code_verifier_when_pkce_enabled() -> None:
     assert response.status_code == 302
     assert oauth_client.access_token_calls[0]["code_verifier"] is not None
     user_manager.oauth_callback.assert_awaited_once()
+    assert "Max-Age=0" in response.headers.get("set-cookie", "")
 
 
 def test_oidc_callback_works_without_pkce_when_flag_disabled() -> None:
