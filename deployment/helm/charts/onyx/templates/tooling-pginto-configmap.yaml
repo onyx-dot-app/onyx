@@ -12,10 +12,13 @@ data:
 
     HOST="${POSTGRES_HOST:-localhost}"
     PORT="${POSTGRES_PORT:-5432}"
+    trim_file_secret() {
+      sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' "$1"
+    }
     POSTGRES_USER_VALUE="${POSTGRES_USER:-}"
     if [ -z "${POSTGRES_USER_VALUE}" ] && [ -n "${POSTGRES_USER_FILE:-}" ]; then
       if [ -r "${POSTGRES_USER_FILE}" ]; then
-        POSTGRES_USER_VALUE="$(cat "${POSTGRES_USER_FILE}")"
+        POSTGRES_USER_VALUE="$(trim_file_secret "${POSTGRES_USER_FILE}")"
         if [ -z "${POSTGRES_USER_VALUE}" ]; then
           echo "POSTGRES_USER_FILE is set but empty: ${POSTGRES_USER_FILE}" >&2
           exit 1
@@ -65,7 +68,7 @@ data:
 
       if [ -z "${PGPASSWORD:-}" ] && [ -n "${POSTGRES_PASSWORD_FILE:-}" ]; then
         if [ -r "${POSTGRES_PASSWORD_FILE}" ]; then
-          PGPASSWORD="$(cat "${POSTGRES_PASSWORD_FILE}")"
+          PGPASSWORD="$(trim_file_secret "${POSTGRES_PASSWORD_FILE}")"
           if [ -z "${PGPASSWORD}" ]; then
             echo "POSTGRES_PASSWORD_FILE is set but empty: ${POSTGRES_PASSWORD_FILE}" >&2
             exit 1

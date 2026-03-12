@@ -215,21 +215,15 @@ DISPOSABLE_EMAIL_DOMAINS_URL = os.environ.get(
 
 # OAuth Login Flow
 # Used for both Google OAuth2 and OIDC flows
-OAUTH_CLIENT_ID = (
-    get_secret_env(
-        "OAUTH_CLIENT_ID",
-        fallback_env_var_names=["GOOGLE_OAUTH_CLIENT_ID"],
-        default="",
-    )
-    or ""
+OAUTH_CLIENT_ID = get_secret_env(
+    "OAUTH_CLIENT_ID",
+    fallback_env_var_names=["GOOGLE_OAUTH_CLIENT_ID"],
+    default="",
 )
-OAUTH_CLIENT_SECRET = (
-    get_secret_env(
-        "OAUTH_CLIENT_SECRET",
-        fallback_env_var_names=["GOOGLE_OAUTH_CLIENT_SECRET"],
-        default="",
-    )
-    or ""
+OAUTH_CLIENT_SECRET = get_secret_env(
+    "OAUTH_CLIENT_SECRET",
+    fallback_env_var_names=["GOOGLE_OAUTH_CLIENT_SECRET"],
+    default="",
 )
 
 # Whether Google OAuth is enabled (requires both client ID and secret)
@@ -279,7 +273,7 @@ REQUIRE_EMAIL_VERIFICATION = (
 SMTP_SERVER = os.environ.get("SMTP_SERVER") or ""
 SMTP_PORT = int(os.environ.get("SMTP_PORT") or "587")
 SMTP_USER = os.environ.get("SMTP_USER") or ""
-SMTP_PASS = get_secret_env("SMTP_PASS", default="") or ""
+SMTP_PASS = get_secret_env("SMTP_PASS", default="")
 EMAIL_FROM = os.environ.get("EMAIL_FROM") or SMTP_USER
 
 SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY") or ""
