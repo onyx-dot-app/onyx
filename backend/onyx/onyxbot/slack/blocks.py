@@ -128,7 +128,12 @@ def _split_text(text: str, limit: int = 3000) -> list[str]:
             split_before = text.rfind("\n", 0, fence_start)
             if split_before > 0 and text[:split_before].strip():
                 chunk = text[:split_before]
-                text = text[split_before:].lstrip()
+                remainder = text[split_before:]
+                # Strip only the leading newline to preserve blank lines
+                # and formatting before the code fence.
+                if remainder and remainder[0] == "\n":
+                    remainder = remainder[1:]
+                text = remainder
             else:
                 # Tier 2: the code block itself exceeds the limit — split
                 # inside it. Close the fence here, reopen in the next.

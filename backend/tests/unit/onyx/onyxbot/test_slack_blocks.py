@@ -105,12 +105,10 @@ class TestSplitText:
         result = _split_text(text, limit=120)
 
         assert len(result) >= 2
-        # Every chunk must have balanced code fences (0 or 2)
+        # Every chunk must have balanced code fences
         for chunk in result:
-            fence_count = chunk.count("```")
-            assert (
-                fence_count % 2 == 0
-            ), f"Unbalanced code fences in chunk: {chunk[:80]}..."
+            is_open, _, _ = _find_unclosed_fence(chunk)
+            assert not is_open, f"Unclosed fence in chunk: {chunk[:80]}..."
         # The code block should be fully contained in one chunk
         code_chunks = [c for c in result if "```" in c]
         assert len(code_chunks) == 1, "Code block should not be split across chunks"
@@ -132,10 +130,8 @@ class TestSplitText:
 
         assert len(result) >= 2
         for chunk in result:
-            fence_count = chunk.count("```")
-            assert (
-                fence_count % 2 == 0
-            ), f"Unbalanced code fences in chunk: {chunk[:80]}..."
+            is_open, _, _ = _find_unclosed_fence(chunk)
+            assert not is_open, f"Unclosed fence in chunk: {chunk[:80]}..."
 
     def test_all_content_preserved_after_split(self) -> None:
         text = "intro paragraph and more text here\n```\nprint('hello')\n```\nconclusion here"
