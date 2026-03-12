@@ -2,6 +2,7 @@ from collections.abc import Callable
 from collections.abc import Generator
 from contextlib import contextmanager
 from typing import Any
+from unittest.mock import MagicMock
 from unittest.mock import patch
 
 from pydantic import BaseModel
@@ -12,9 +13,13 @@ from onyx.context.search.models import ChunkSearchRequest
 from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import SearchDoc
 from onyx.db.models import Persona
+from onyx.db.models import SearchSettings
 from onyx.db.models import User
 from onyx.document_index.interfaces import DocumentIndex
+from onyx.federated_connectors.federated_retrieval import FederatedRetrievalInfo
 from onyx.llm.interfaces import LLM
+from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
+from onyx.tools.tool_implementations.search.search_tool import SearchTool
 
 
 def run_functions_tuples_sequential(
@@ -135,12 +140,24 @@ def use_mock_search_pipeline(
         document_index: DocumentIndex,  # noqa: ARG001
         user: User | None,  # noqa: ARG001
         persona: Persona | None,  # noqa: ARG001
-        db_session: Session,  # noqa: ARG001
+        db_session: Session | None = None,  # noqa: ARG001
         auto_detect_filters: bool = False,  # noqa: ARG001
         llm: LLM | None = None,  # noqa: ARG001
         project_id: int | None = None,  # noqa: ARG001
+        # Pre-fetched data (used by SearchTool to avoid DB access in parallel)
+        acl_filters: list[str] | None = None,  # noqa: ARG001
+        embedding_model: EmbeddingModel | None = None,  # noqa: ARG001
+        prefetched_federated_retrieval_infos: (  # noqa: ARG001
+            list[FederatedRetrievalInfo] | None
+        ) = None,
     ) -> list[InferenceChunk]:
         return controller.get_search_results(chunk_search_request.query)
+
+    # Mock the pre-fetch session and DB queries in SearchTool.run() so
+    # tests don't need a fully initialised DB with search settings.
+    @contextmanager
+    def mock_get_session() -> Generator[MagicMock, None, None]:
+        yield MagicMock(spec=Session)
 
     with (
         patch(
@@ -182,6 +199,32 @@ def use_mock_search_pipeline(
         patch(
             "onyx.db.connector.fetch_unique_document_sources",
             new=mock_fetch_unique_document_sources,
+        ),
+        # Mock the pre-fetch phase of SearchTool.run()
+        patch(
+            "onyx.tools.tool_implementations.search.search_tool.get_session_with_current_tenant",
+            new=mock_get_session,
+        ),
+        patch(
+            "onyx.tools.tool_implementations.search.search_tool.build_access_filters_for_user",
+            return_value=[],
+        ),
+        patch(
+            "onyx.tools.tool_implementations.search.search_tool.get_current_search_settings",
+            return_value=MagicMock(spec=SearchSettings),
+        ),
+        patch(
+            "onyx.tools.tool_implementations.search.search_tool.EmbeddingModel.from_db_model",
+            return_value=MagicMock(spec=EmbeddingModel),
+        ),
+        patch(
+            "onyx.tools.tool_implementations.search.search_tool.get_federated_retrieval_functions",
+            return_value=[],
+        ),
+        patch.object(
+            SearchTool,
+            "_prefetch_slack_data",
+            return_value=(None, None, {}),
         ),
     ):
         yield controller
