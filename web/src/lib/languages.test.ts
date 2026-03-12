@@ -64,6 +64,9 @@ describe("getDataLanguage", () => {
 
   it("returns null for code files", () => {
     expect(getDataLanguage("app.py")).toBeNull();
+    expect(getDataLanguage("header.h")).toBeNull();
+    expect(getDataLanguage("view.m")).toBeNull();
+    expect(getDataLanguage("component.re")).toBeNull();
   });
 });
 

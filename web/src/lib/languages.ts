@@ -49,9 +49,11 @@ function buildLanguageMaps(
   const extensions = new Map<string, string>();
   const filenames = new Map<string, string>();
 
-  for (const [ext, lang] of Object.entries(EXTENSION_OVERRIDES)) {
-    if (excludedExtensions?.has(ext.toLowerCase())) continue;
-    extensions.set(ext, lang);
+  if (typeSet.has("programming") || typeSet.has("markup")) {
+    for (const [ext, lang] of Object.entries(EXTENSION_OVERRIDES)) {
+      if (excludedExtensions?.has(ext.toLowerCase())) continue;
+      extensions.set(ext, lang);
+    }
   }
 
   for (const lang of allLanguages) {
