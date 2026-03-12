@@ -90,12 +90,13 @@ def _find_unclosed_fence(text: str) -> tuple[bool, int, str]:
     lang = ""
     offset = 0
     for line in text.splitlines(True):  # keep line endings
-        stripped = line.lstrip()
-        if stripped.startswith("```"):
+        # Slack only treats ``` as a fence when it starts at column 0.
+        # Indented backticks (e.g. inside a heredoc) are content, not fences.
+        if line.startswith("```"):
             if not in_fence:
                 in_fence = True
                 fence_start = offset
-                lang = stripped[3:].strip()
+                lang = line[3:].strip()
             else:
                 in_fence = False
                 lang = ""
@@ -145,6 +146,8 @@ def _split_text(text: str, limit: int = 3000) -> list[str]:
                     remainder = remainder[1:]
                 text = f"```{lang}\n" + remainder
         else:
+            # No unclosed fence — plain prose split. Leading whitespace
+            # is cosmetic in Slack mrkdwn, so lstrip() is safe here.
             text = text[split_at:].lstrip()
 
         chunks.append(chunk)

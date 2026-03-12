@@ -89,6 +89,8 @@ class TestSplitText:
         assert len(result) >= 2
 
     def test_code_block_not_split_when_fits(self) -> None:
+        # Text fits within limit — exercises the early-return path,
+        # not the fence-aware splitting logic.
         text = "before ```code here``` after"
         result = _split_text(text, limit=100)
         assert result == [text]
@@ -125,6 +127,18 @@ class TestSplitText:
         # When the code block itself is bigger than the limit, we can't
         # avoid splitting inside it — verify fences are still balanced.
         code_content = "x " * 100  # ~200 chars
+        text = f"```\n{code_content}\n```"
+        result = _split_text(text, limit=80)
+
+        assert len(result) >= 2
+        for chunk in result:
+            is_open, _, _ = _find_unclosed_fence(chunk)
+            assert not is_open, f"Unclosed fence in chunk: {chunk[:80]}..."
+
+    def test_code_block_exceeding_limit_no_spaces(self) -> None:
+        # When code has no spaces, split_at is forced to limit.
+        # Fences should still be balanced.
+        code_content = "x" * 200
         text = f"```\n{code_content}\n```"
         result = _split_text(text, limit=80)
 
@@ -199,5 +213,12 @@ class TestFindUnclosedFence:
     def test_inline_backticks_not_counted(self) -> None:
         # Backticks mid-line should not toggle fence state
         text = "```bash\necho '```'\necho done\n```"
+        is_open, _, _ = _find_unclosed_fence(text)
+        assert not is_open
+
+    def test_indented_backticks_not_counted_as_fence(self) -> None:
+        # Slack only treats ``` at column 0 as a fence delimiter.
+        # Indented backticks inside a code block are content, not fences.
+        text = "```bash\ncat <<'EOF'\n    ```\nEOF\n```"
         is_open, _, _ = _find_unclosed_fence(text)
         assert not is_open
