@@ -1,5 +1,6 @@
 """Tests for llm_loop.py, specifically the construct_message_history function."""
 
+from collections.abc import Iterator
 from contextlib import contextmanager
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -981,13 +982,11 @@ class TestFallbackToolExtraction:
         assert result is llm_step_result
         assert attempted is False
 
-
-class TestRunLlmLoopErrors:
     def test_raises_empty_llm_response_error_for_empty_stream_result(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         @contextmanager
-        def _dummy_db_session() -> Mock:
+        def _dummy_db_session() -> Iterator[Mock]:
             yield Mock()
 
         monkeypatch.setattr(
