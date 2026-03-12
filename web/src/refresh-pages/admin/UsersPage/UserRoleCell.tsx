@@ -41,6 +41,7 @@ export default function UserRoleCell({ user, onMutate }: UserRoleCellProps) {
   const [isUpdating, setIsUpdating] = useState(false);
   const [open, setOpen] = useState(false);
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
+  const isUpdatingRef = useRef(false);
 
   if (!user.role) {
     return (
@@ -59,8 +60,6 @@ export default function UserRoleCell({ user, onMutate }: UserRoleCellProps) {
       </div>
     );
   }
-
-  const isUpdatingRef = useRef(false);
 
   const applyRole = async (newRole: UserRole) => {
     if (isUpdatingRef.current) return;
