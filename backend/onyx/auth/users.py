@@ -1982,9 +1982,12 @@ def get_oauth_router(
                 token = await oauth_client.get_access_token(
                     code, callback_redirect_url, code_verifier
                 )
-            except GetAccessTokenError as e:
+            except GetAccessTokenError:
                 return build_error_response(
-                    OnyxError(OnyxErrorCode.VALIDATION_ERROR, e.message)
+                    OnyxError(
+                        OnyxErrorCode.VALIDATION_ERROR,
+                        "Authorization code exchange failed",
+                    )
                 )
         else:
             if access_token_state is None:
@@ -2065,14 +2068,13 @@ def get_oauth_router(
 
             # Copy headers from auth response to redirect response, with special handling for Set-Cookie
             for header_name, header_value in response.headers.items():
-                # FastAPI can have multiple Set-Cookie headers as a list
-                if header_name.lower() == "set-cookie" and isinstance(
-                    header_value, list
-                ):
-                    for cookie_value in header_value:
-                        redirect_response.headers.append(header_name, cookie_value)
-                else:
-                    redirect_response.headers[header_name] = header_value
+                header_name_lower = header_name.lower()
+                if header_name_lower == "set-cookie":
+                    redirect_response.headers.append(header_name, header_value)
+                    continue
+                if header_name_lower in {"location", "content-length"}:
+                    continue
+                redirect_response.headers[header_name] = header_value
 
             return redirect_response
 
