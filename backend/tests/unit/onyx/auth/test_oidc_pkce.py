@@ -274,6 +274,7 @@ def test_oidc_callback_cleans_pkce_cookie_on_missing_email() -> None:
         )
 
     assert response.status_code == 400
+    assert response.json()["error_code"] == "VALIDATION_ERROR"
     assert "Max-Age=0" in response.headers.get("set-cookie", "")
 
 

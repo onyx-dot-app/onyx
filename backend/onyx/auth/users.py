@@ -1883,22 +1883,9 @@ def get_oauth_router(
                     samesite=csrf_token_cookie_samesite,
                 )
 
-        def build_error_response(
-            exc: OnyxError | HTTPException,
-        ) -> JSONResponse:
-            if isinstance(exc, OnyxError):
-                log_onyx_error(exc)
-                error_response = onyx_error_to_json_response(exc)
-            else:
-                if exc.status_code >= 500:
-                    logger.error(f"HTTPException {exc.status_code}: {exc.detail}")
-                elif exc.status_code >= 400:
-                    logger.warning(f"HTTPException {exc.status_code}: {exc.detail}")
-                error_response = JSONResponse(
-                    status_code=exc.status_code,
-                    content={"detail": exc.detail},
-                    headers=exc.headers,
-                )
+        def build_error_response(exc: OnyxError) -> JSONResponse:
+            log_onyx_error(exc)
+            error_response = onyx_error_to_json_response(exc)
             delete_pkce_cookie(error_response)
             return error_response
 
@@ -2096,7 +2083,7 @@ def get_oauth_router(
         if enable_pkce:
             try:
                 redirect_response = await complete_login_flow(token, state_data)
-            except (OnyxError, HTTPException) as e:
+            except OnyxError as e:
                 return build_error_response(e)
             delete_pkce_cookie(redirect_response)
             return redirect_response
