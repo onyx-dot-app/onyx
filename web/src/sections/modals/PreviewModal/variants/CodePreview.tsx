@@ -16,6 +16,9 @@ export function CodePreview({
   language,
   normalize,
 }: CodePreviewProps) {
+  // Wrap raw content in a fenced code block for syntax highlighting. Uses ~~~
+  // instead of ``` to avoid conflicts with backticks in the content. Any literal
+  // ~~~ sequences in the content are escaped so they don't accidentally close the fence.
   const markdownContent = normalize
     ? `~~~${language || ""}\n${content.replace(/~~~/g, "\\~\\~\\~")}\n~~~`
     : content;

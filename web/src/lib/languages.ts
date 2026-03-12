@@ -15,10 +15,19 @@ interface LanguageMaps {
   filenames: Map<string, string>;
 }
 
+// Explicit winners for extensions claimed by multiple linguist-languages entries
+// where the "most extensions" heuristic below picks the wrong language.
+const EXTENSION_OVERRIDES: Record<string, string> = {
+  ".h": "c",
+  ".inc": "php",
+  ".m": "objective-c",
+  ".re": "reason",
+};
+
 // Sort so that languages with more extensions (i.e. more general-purpose) win
 // when multiple languages claim the same extension (e.g. Ecmarkup vs HTML both
 // claim .html — HTML should win because it's the canonical language for that
-// extension).
+// extension). Known mis-rankings are patched by EXTENSION_OVERRIDES above.
 const allLanguages = (Object.values(languages) as LinguistLanguage[]).sort(
   (a, b) => (b.extensions?.length ?? 0) - (a.extensions?.length ?? 0)
 );
@@ -38,6 +47,11 @@ function buildLanguageMaps(
   const typeSet = new Set(types);
   const extensions = new Map<string, string>();
   const filenames = new Map<string, string>();
+
+  for (const [ext, lang] of Object.entries(EXTENSION_OVERRIDES)) {
+    if (excludedExtensions?.has(ext.toLowerCase())) continue;
+    extensions.set(ext, lang);
+  }
 
   for (const lang of allLanguages) {
     if (!typeSet.has(lang.type)) continue;
