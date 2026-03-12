@@ -163,10 +163,18 @@ const columns = [
 
 export default function UsersTable() {
   const [searchTerm, setSearchTerm] = useState("");
-  const { users, isLoading } = useAdminUsers();
+  const { users, isLoading, error } = useAdminUsers();
 
   if (isLoading) {
     return <ThreeDotsLoader />;
+  }
+
+  if (error) {
+    return (
+      <Text as="p" secondaryBody text03>
+        Failed to load users. Please try refreshing the page.
+      </Text>
+    );
   }
 
   return (

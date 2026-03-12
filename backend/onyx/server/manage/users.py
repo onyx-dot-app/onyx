@@ -257,6 +257,21 @@ def list_all_accepted_users(
     user_ids = [user.id for user in users]
     groups_by_user = batch_get_user_groups(db_session, user_ids)
 
+    # Batch-fetch SCIM mappings to mark synced users
+    scim_synced_ids: set[UUID] = set()
+    try:
+        from onyx.db.models import ScimUserMapping
+
+        scim_mappings = db_session.scalars(
+            select(ScimUserMapping.user_id).where(ScimUserMapping.user_id.in_(user_ids))
+        ).all()
+        scim_synced_ids = set(scim_mappings)
+    except Exception:
+        logger.warning(
+            "Failed to fetch SCIM mappings; marking all users as non-synced",
+            exc_info=True,
+        )
+
     return [
         FullUserSnapshot.from_user_model(
             user,
@@ -264,6 +279,7 @@ def list_all_accepted_users(
                 UserGroupInfo(id=gid, name=gname)
                 for gid, gname in groups_by_user.get(user.id, [])
             ],
+            is_scim_synced=user.id in scim_synced_ids,
         )
         for user in users
     ]
