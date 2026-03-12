@@ -284,21 +284,30 @@ def test_oidc_callback_cleans_pkce_cookie_on_missing_email() -> None:
     assert "Max-Age=0" in response.headers.get("set-cookie", "")
 
 
-def test_oidc_callback_cleans_pkce_cookie_on_unexpected_exception() -> None:
+def test_oidc_callback_rejects_wrong_audience_state_before_token_exchange() -> None:
     client, oauth_client, _ = _build_test_client(enable_pkce=True)
-    authorize_response = client.get("/auth/oidc/authorize")
-    state = _extract_state_from_authorize_response(authorize_response)
+    client.get("/auth/oidc/authorize")
+    csrf_token = client.cookies.get(CSRF_TOKEN_COOKIE_NAME)
+    assert csrf_token is not None
+    wrong_audience_state = generate_jwt(
+        {
+            "aud": "wrong-audience",
+            CSRF_TOKEN_KEY: csrf_token,
+        },
+        "test-secret",
+        3600,
+    )
+    client.cookies.set(get_pkce_cookie_name(wrong_audience_state), "verifier123")
 
-    with patch.object(
-        oauth_client, "get_id_email", AsyncMock(side_effect=RuntimeError("boom"))
-    ):
-        response = client.get(
-            "/auth/oidc/callback", params={"code": "abc123", "state": state}
-        )
+    response = client.get(
+        "/auth/oidc/callback",
+        params={"code": "abc123", "state": wrong_audience_state},
+    )
 
-    assert response.status_code == 500
-    assert response.json()["error_code"] == "INTERNAL_ERROR"
-    assert response.json()["detail"] == "Unexpected error during OAuth callback"
+    assert response.status_code == 400
+    assert response.json()["error_code"] == "VALIDATION_ERROR"
+    assert response.json()["detail"] == "ACCESS_TOKEN_DECODE_ERROR"
+    assert oauth_client.access_token_calls == []
     assert "Max-Age=0" in response.headers.get("set-cookie", "")
 
 

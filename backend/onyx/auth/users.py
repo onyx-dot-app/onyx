@@ -1905,6 +1905,15 @@ def get_oauth_router(
                         "ACCESS_TOKEN_ALREADY_EXPIRED",
                     ),
                 )
+            except jwt.PyJWTError:
+                raise OnyxError(
+                    OnyxErrorCode.VALIDATION_ERROR,
+                    getattr(
+                        ErrorCode,
+                        "ACCESS_TOKEN_DECODE_ERROR",
+                        "ACCESS_TOKEN_DECODE_ERROR",
+                    ),
+                )
 
             cookie_csrf_token = request.cookies.get(csrf_token_cookie_name)
             state_csrf_token = state_data.get(CSRF_TOKEN_KEY)
@@ -2078,14 +2087,6 @@ def get_oauth_router(
                 redirect_response = await complete_login_flow(token, state_data)
             except OnyxError as e:
                 return build_error_response(e)
-            except Exception:
-                logger.exception("Unexpected error during PKCE OAuth callback")
-                return build_error_response(
-                    OnyxError(
-                        OnyxErrorCode.INTERNAL_ERROR,
-                        "Unexpected error during OAuth callback",
-                    )
-                )
             delete_pkce_cookie(redirect_response)
             return redirect_response
 
