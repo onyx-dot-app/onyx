@@ -220,7 +220,7 @@ def categorize_uploaded_files(
                     )
                     results.rejected.append(
                         RejectedFile(
-                            filename=filename, reason="Unsupported file contents."
+                            filename=filename, reason="Unsupported file contents"
                         )
                     )
                     continue
