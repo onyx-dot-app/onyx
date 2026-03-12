@@ -4,6 +4,7 @@ from uuid import UUID
 
 from fastapi import HTTPException
 from fastapi_users.password import PasswordHelper
+from sqlalchemy import case
 from sqlalchemy import func
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -239,6 +240,41 @@ def get_total_filtered_users_count(
     total_count_stmt = total_count_stmt.where(*where_clause)
 
     return db_session.scalar(total_count_stmt) or 0
+
+
+def get_user_counts_by_role_and_status(
+    db_session: Session,
+) -> dict[str, dict[str, int]]:
+    """Returns user counts grouped by role and by active/inactive status.
+
+    Excludes API key users, anonymous users, and no-auth placeholder users.
+    Uses a single query with conditional aggregation.
+    """
+    base_where = _get_accepted_user_where_clause()
+    role_col = User.__table__.c.role
+    is_active_col = User.__table__.c.is_active
+
+    stmt = (
+        select(
+            role_col,
+            func.count().label("total"),
+            func.sum(case((is_active_col.is_(True), 1), else_=0)).label("active"),
+            func.sum(case((is_active_col.is_(False), 1), else_=0)).label("inactive"),
+        )
+        .where(*base_where)
+        .group_by(role_col)
+    )
+
+    role_counts: dict[str, int] = {}
+    status_counts: dict[str, int] = {"active": 0, "inactive": 0}
+
+    for role_val, total, active, inactive in db_session.execute(stmt).all():
+        key = role_val.value if hasattr(role_val, "value") else str(role_val)
+        role_counts[key] = total
+        status_counts["active"] += active or 0
+        status_counts["inactive"] += inactive or 0
+
+    return {"role_counts": role_counts, "status_counts": status_counts}
 
 
 def get_user_by_email(email: str, db_session: Session) -> User | None:
