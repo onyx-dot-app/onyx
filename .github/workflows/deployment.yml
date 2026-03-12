@@ -33,7 +33,7 @@ jobs:
       is-beta: ${{ steps.check.outputs.is-beta }}
       is-stable-standalone: ${{ steps.check.outputs.is-stable-standalone }}
       is-beta-standalone: ${{ steps.check.outputs.is-beta-standalone }}
-      is-craft-latest: ${{ steps.check.outputs.is-craft-latest }}
+      is-latest: ${{ steps.check.outputs.is-latest }}
       is-test-run: ${{ steps.check.outputs.is-test-run }}
       sanitized-tag: ${{ steps.check.outputs.sanitized-tag }}
       short-sha: ${{ steps.check.outputs.short-sha }}
@@ -43,6 +43,7 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
         run: |
+          set -eo pipefail
           TAG="${GITHUB_REF_NAME}"
           # Sanitize tag name by replacing slashes with hyphens (for Docker tag compatibility)
           SANITIZED_TAG=$(echo "$TAG" | tr '/' '-')
@@ -56,7 +57,7 @@ jobs:
           IS_BETA=false
           IS_STABLE_STANDALONE=false
           IS_BETA_STANDALONE=false
-          IS_CRAFT_LATEST=false
+          IS_LATEST=false
           IS_PROD_TAG=false
           IS_TEST_RUN=false
           BUILD_DESKTOP=false
@@ -67,9 +68,6 @@ jobs:
           BUILD_MODEL_SERVER=true
 
           # Determine tag type based on pattern matching (do regex checks once)
-          if [[ "$TAG" == craft-* ]]; then
-            IS_CRAFT_LATEST=true
-          fi
           if [[ "$TAG" == *cloud* ]]; then
             IS_CLOUD=true
           fi
@@ -97,12 +95,6 @@ jobs:
             fi
           fi
 
-          # Craft-latest builds backend with Craft enabled
-          if [[ "$IS_CRAFT_LATEST" == "true" ]]; then
-            BUILD_BACKEND_CRAFT=true
-            BUILD_BACKEND=false
-          fi
-
           # Standalone version checks (for backend/model-server - version excluding cloud tags)
           if [[ "$IS_STABLE" == "true" ]] && [[ "$IS_CLOUD" != "true" ]]; then
             IS_STABLE_STANDALONE=true
@@ -110,6 +102,24 @@ jobs:
           if [[ "$IS_BETA" == "true" ]] && [[ "$IS_CLOUD" != "true" ]]; then
             IS_BETA_STANDALONE=true
           fi
+
+          # Determine if this tag should get the "latest" Docker tag.
+          # Only the highest semver stable tag (vX.Y.Z exactly) gets "latest".
+          if [[ "$IS_STABLE" == "true" ]]; then
+            HIGHEST_STABLE=$(uv run --no-sync --with onyx-devtools ods latest-stable-tag) || {
+              echo "::error::Failed to determine highest stable tag via 'ods latest-stable-tag'"
+              exit 1
+            }
+            if [[ "$TAG" == "$HIGHEST_STABLE" ]]; then
+              IS_LATEST=true
+            fi
+          fi
+
+          # Build craft-latest backend alongside the regular latest.
+          if [[ "$IS_LATEST" == "true" ]]; then
+            BUILD_BACKEND_CRAFT=true
+          fi
+
 
           # Determine if this is a production tag
           # Production tags are: version tags (v1.2.3*) or nightly tags
@@ -133,7 +143,7 @@ jobs:
             echo "is-beta=$IS_BETA"
             echo "is-stable-standalone=$IS_STABLE_STANDALONE"
             echo "is-beta-standalone=$IS_BETA_STANDALONE"
-            echo "is-craft-latest=$IS_CRAFT_LATEST"
+            echo "is-latest=$IS_LATEST"
             echo "is-test-run=$IS_TEST_RUN"
             echo "sanitized-tag=$SANITIZED_TAG"
             echo "short-sha=$SHORT_SHA"
