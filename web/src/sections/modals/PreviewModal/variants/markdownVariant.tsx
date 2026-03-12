@@ -1,8 +1,7 @@
-import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
-import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
 import { Section } from "@/layouts/general-layouts";
 import { isMarkdownFile } from "@/lib/languages";
 import { PreviewVariant } from "@/sections/modals/PreviewModal/interfaces";
+import { CodePreview } from "@/sections/modals/PreviewModal/variants/CodePreview";
 import {
   CopyButton,
   DownloadButton,
@@ -23,15 +22,11 @@ export const markdownVariant: PreviewVariant = {
   width: "lg",
   height: "full",
   needsTextContent: true,
+  codeBackground: false,
   headerDescription: () => "",
 
   renderContent: (ctx) => (
-    <ScrollIndicatorDiv className="flex-1 min-h-0 p-4" variant="shadow">
-      <MinimalMarkdown
-        content={ctx.fileContent}
-        className="w-full pb-4 text-lg break-words"
-      />
-    </ScrollIndicatorDiv>
+    <CodePreview content={ctx.fileContent} language={ctx.language} />
   ),
 
   renderFooterLeft: () => null,
