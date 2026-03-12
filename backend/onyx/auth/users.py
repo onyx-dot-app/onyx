@@ -1786,11 +1786,15 @@ def get_oauth_router(
                 authorization_url, {"access_type": "offline", "prompt": "consent"}
             )
 
-        if redirect:
-            redirect_response = RedirectResponse(authorization_url, status_code=302)
-            redirect_response.set_cookie(
-                key=csrf_token_cookie_name,
-                value=csrf_token,
+        def set_oauth_cookie(
+            target_response: Response,
+            *,
+            key: str,
+            value: str,
+        ) -> None:
+            target_response.set_cookie(
+                key=key,
+                value=value,
                 max_age=STATE_TOKEN_LIFETIME_SECONDS,
                 path=csrf_token_cookie_path,
                 domain=csrf_token_cookie_domain,
@@ -1798,50 +1802,35 @@ def get_oauth_router(
                 httponly=csrf_token_cookie_httponly,
                 samesite=csrf_token_cookie_samesite,
             )
-            if enable_pkce:
-                if pkce_cookie_name is None or code_verifier is None:
-                    raise OnyxError(
-                        OnyxErrorCode.INTERNAL_ERROR,
-                        "PKCE state was not initialized",
-                    )
-                redirect_response.set_cookie(
-                    key=pkce_cookie_name,
-                    value=code_verifier,
-                    max_age=STATE_TOKEN_LIFETIME_SECONDS,
-                    path=csrf_token_cookie_path,
-                    domain=csrf_token_cookie_domain,
-                    secure=csrf_token_cookie_secure,
-                    httponly=csrf_token_cookie_httponly,
-                    samesite=csrf_token_cookie_samesite,
-                )
-            return redirect_response
 
-        response.set_cookie(
-            key=csrf_token_cookie_name,
-            value=csrf_token,
-            max_age=STATE_TOKEN_LIFETIME_SECONDS,
-            path=csrf_token_cookie_path,
-            domain=csrf_token_cookie_domain,
-            secure=csrf_token_cookie_secure,
-            httponly=csrf_token_cookie_httponly,
-            samesite=csrf_token_cookie_samesite,
-        )
-        if enable_pkce:
+        def set_pkce_cookie(target_response: Response) -> None:
             if pkce_cookie_name is None or code_verifier is None:
                 raise OnyxError(
                     OnyxErrorCode.INTERNAL_ERROR,
                     "PKCE state was not initialized",
                 )
-            response.set_cookie(
+            set_oauth_cookie(
+                target_response,
                 key=pkce_cookie_name,
                 value=code_verifier,
-                max_age=STATE_TOKEN_LIFETIME_SECONDS,
-                path=csrf_token_cookie_path,
-                domain=csrf_token_cookie_domain,
-                secure=csrf_token_cookie_secure,
-                httponly=csrf_token_cookie_httponly,
-                samesite=csrf_token_cookie_samesite,
             )
+
+        response_with_cookies: Response
+        if redirect:
+            response_with_cookies = RedirectResponse(authorization_url, status_code=302)
+        else:
+            response_with_cookies = response
+
+        set_oauth_cookie(
+            response_with_cookies,
+            key=csrf_token_cookie_name,
+            value=csrf_token,
+        )
+        if enable_pkce:
+            set_pkce_cookie(response_with_cookies)
+
+        if redirect:
+            return response_with_cookies
 
         return OAuth2AuthorizeResponse(authorization_url=authorization_url)
 
