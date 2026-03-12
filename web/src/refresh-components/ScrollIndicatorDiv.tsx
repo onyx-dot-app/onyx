@@ -118,12 +118,7 @@ export default function ScrollIndicatorDiv({
     // Update when descendants change (e.g. syntax highlighting mutates the
     // DOM after initial render, which changes scrollHeight without firing
     // resize or scroll events on the container).
-    const mutationObserver = new MutationObserver(updateScrollIndicators);
-    mutationObserver.observe(container, {
-      childList: true,
-      subtree: true,
-      characterData: true,
-    });
+    const mutationObserver = new MutationObserver(handleScroll);
 
     return () => {
       container.removeEventListener("scroll", handleScroll);
