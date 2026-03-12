@@ -4,6 +4,7 @@ import urllib.parse
 from datetime import datetime
 from datetime import timezone
 from typing import cast
+from typing import overload
 
 from onyx.auth.schemas import AuthBackend
 from onyx.cache.interface import CacheBackendType
@@ -27,6 +28,24 @@ def _read_secret_from_file(file_path: str, file_env_var_name: str) -> str:
         ) from e
 
 
+@overload
+def get_secret_env(
+    env_var_name: str,
+    *,
+    default: str,
+    fallback_env_var_names: list[str] | None = None,
+) -> str: ...
+
+
+@overload
+def get_secret_env(
+    env_var_name: str,
+    *,
+    default: None = None,
+    fallback_env_var_names: list[str] | None = None,
+) -> str | None: ...
+
+
 def get_secret_env(
     env_var_name: str,
     *,
@@ -44,7 +63,14 @@ def get_secret_env(
 
         file_env_var = f"{current_env_var}_FILE"
         file_path = os.environ.get(file_env_var)
-        if file_path:
+        if file_path is not None:
+            if not file_path:
+                logger.warning(
+                    "%s is set to an empty string; skipping file lookup.",
+                    file_env_var,
+                )
+                continue
+
             file_value = _read_secret_from_file(
                 file_path=file_path, file_env_var_name=file_env_var
             )
