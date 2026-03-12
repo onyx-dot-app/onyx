@@ -20,7 +20,7 @@ logger = setup_logger()
 def _read_secret_from_file(file_path: str, file_env_var_name: str) -> str:
     try:
         with open(file_path, encoding="utf-8") as file:
-            return file.read().rstrip()
+            return file.read().strip()
     except OSError as e:
         raise RuntimeError(
             f"Unable to read secret file '{file_path}' from {file_env_var_name}"

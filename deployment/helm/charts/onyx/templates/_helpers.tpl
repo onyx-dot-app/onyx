@@ -73,8 +73,8 @@ Validate path segments used for projected secret file paths.
 */}}
 {{- define "onyx.secretPathSegment" -}}
 {{- $segment := . | toString -}}
-{{- if or (contains "/" $segment) (contains "\\" $segment) (contains ".." $segment) -}}
-{{- fail (printf "Invalid secret path segment %q: must not contain '/', '\\\\', or '..'" $segment) -}}
+{{- if or (contains "/" $segment) (contains "\\" $segment) (eq $segment "..") -}}
+{{- fail (printf "Invalid secret path segment %q: must not contain '/', '\\\\', or equal '..'" $segment) -}}
 {{- end -}}
 {{- $segment -}}
 {{- end }}
