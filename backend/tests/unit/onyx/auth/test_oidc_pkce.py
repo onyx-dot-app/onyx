@@ -65,7 +65,7 @@ class _StubOAuthClient:
             "expires_at": 1730000000,
         }
 
-    async def get_id_email(self, _access_token: str) -> tuple[str, str]:
+    async def get_id_email(self, _access_token: str) -> tuple[str, str | None]:
         return ("oidc_account_id", "oidc_user@example.com")
 
 

@@ -1719,7 +1719,7 @@ def get_oauth_router(
             route_name=callback_route_name,
         )
 
-    async def null_access_token_state() -> None:
+    async def null_access_token_state() -> tuple[OAuth2Token, Optional[str]] | None:
         return None
 
     access_token_state_dependency = (
