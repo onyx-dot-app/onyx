@@ -59,10 +59,16 @@ class OnyxError(Exception):
         return self._status_code_override or self.error_code.status_code
 
 
+def _get_onyx_error_detail(exc: OnyxError) -> str:
+    # Keep this compatible with older/newer OnyxError shapes.
+    detail = getattr(exc, "detail", None) or getattr(exc, "message", None)
+    return str(detail or exc.error_code.code)
+
+
 def onyx_error_to_json_response(exc: OnyxError) -> JSONResponse:
     return JSONResponse(
         status_code=exc.status_code,
-        content=exc.error_code.detail(exc.message),
+        content=exc.error_code.detail(_get_onyx_error_detail(exc)),
     )
 
 
@@ -79,9 +85,10 @@ def register_onyx_exception_handlers(app: FastAPI) -> None:
         exc: OnyxError,
     ) -> JSONResponse:
         status_code = exc.status_code
+        detail = _get_onyx_error_detail(exc)
         if status_code >= 500:
-            logger.error(f"OnyxError {exc.error_code.code}: {exc.detail}")
+            logger.error(f"OnyxError {exc.error_code.code}: {detail}")
         elif status_code >= 400:
-            logger.warning(f"OnyxError {exc.error_code.code}: {exc.detail}")
+            logger.warning(f"OnyxError {exc.error_code.code}: {detail}")
 
         return onyx_error_to_json_response(exc)
