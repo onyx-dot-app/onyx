@@ -107,7 +107,7 @@ function InputChipField({
                   )
                 : undefined
             }
-            smallLabel={layout === "inline"}
+            smallLabel={layout === "stacked"}
           >
             {chip.label}
           </Chip>
