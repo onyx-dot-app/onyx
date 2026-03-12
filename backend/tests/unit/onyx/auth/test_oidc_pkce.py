@@ -193,6 +193,21 @@ def test_oidc_callback_get_access_token_error_is_400() -> None:
     assert "Max-Age=0" in response.headers.get("set-cookie", "")
 
 
+def test_oidc_callback_cleans_pkce_cookie_on_idp_error_with_state() -> None:
+    client, oauth_client, _ = _build_test_client(enable_pkce=True)
+    authorize_response = client.get("/auth/oidc/authorize")
+    state = _extract_state_from_authorize_response(authorize_response)
+
+    response = client.get(
+        "/auth/oidc/callback",
+        params={"error": "access_denied", "state": state},
+    )
+
+    assert response.status_code == 400
+    assert oauth_client.access_token_calls == []
+    assert "Max-Age=0" in response.headers.get("set-cookie", "")
+
+
 def test_oidc_callback_cleans_pkce_cookie_on_late_http_exception() -> None:
     client, oauth_client, _ = _build_test_client(enable_pkce=True)
     authorize_response = client.get("/auth/oidc/authorize")

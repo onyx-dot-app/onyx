@@ -125,6 +125,7 @@ from onyx.db.models import User
 from onyx.db.pat import fetch_user_for_pat
 from onyx.db.users import get_user_by_email
 from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import onyx_error_to_json_response
 from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_async_redis_connection
 from onyx.server.settings.store import load_settings
@@ -1896,10 +1897,7 @@ def get_oauth_router(
             exc: OnyxError | HTTPException,
         ) -> JSONResponse:
             if isinstance(exc, OnyxError):
-                error_response = JSONResponse(
-                    status_code=exc.status_code,
-                    content=exc.error_code.detail(exc.message),
-                )
+                error_response = onyx_error_to_json_response(exc)
             else:
                 error_response = JSONResponse(
                     status_code=exc.status_code,
@@ -1953,6 +1951,9 @@ def get_oauth_router(
         state_data: Dict[str, str]
 
         if enable_pkce:
+            if state is not None:
+                pkce_cookie_name = get_pkce_cookie_name(state)
+
             if code is None or error is not None:
                 return build_error_response(
                     OnyxError(
@@ -1969,7 +1970,6 @@ def get_oauth_router(
                 )
 
             state_value = state
-            pkce_cookie_name = get_pkce_cookie_name(state_value)
 
             if redirect_url is not None:
                 callback_redirect_url = redirect_url
