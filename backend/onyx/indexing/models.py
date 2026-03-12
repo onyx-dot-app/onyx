@@ -12,6 +12,7 @@ from onyx.connectors.models import Document
 from onyx.db.enums import EmbeddingPrecision
 from onyx.db.enums import SwitchoverType
 from onyx.utils.logger import setup_logger
+from onyx.utils.pydantic_util import shallow_model_dump
 from shared_configs.enums import EmbeddingProvider
 from shared_configs.model_server_models import Embedding
 
@@ -133,9 +134,8 @@ class DocMetadataAwareIndexChunk(IndexChunk):
         tenant_id: str,
         ancestor_hierarchy_node_ids: list[int] | None = None,
     ) -> "DocMetadataAwareIndexChunk":
-        index_chunk_data = index_chunk.model_dump()
-        return cls(
-            **index_chunk_data,
+        return cls.model_construct(
+            **shallow_model_dump(index_chunk),
             access=access,
             document_sets=document_sets,
             user_project=user_project,

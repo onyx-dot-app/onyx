@@ -1,4 +1,8 @@
+import re
 from enum import Enum
+
+# Matches Slack channel references like <#C097NBWMY8Y> or <#C097NBWMY8Y|channel-name>
+SLACK_CHANNEL_REF_PATTERN = re.compile(r"<#([A-Z0-9]+)(?:\|([^>]+))?>")
 
 LIKE_BLOCK_ACTION_ID = "feedback-like"
 DISLIKE_BLOCK_ACTION_ID = "feedback-dislike"

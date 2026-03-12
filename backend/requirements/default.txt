@@ -750,7 +750,7 @@ pypandoc-binary==1.16.2
     # via onyx
 pyparsing==3.2.5
     # via httplib2
-pypdf==6.7.5
+pypdf==6.8.0
     # via
     #   onyx
     #   unstructured-client
@@ -1020,7 +1020,7 @@ toolz==1.1.0
     #   dask
     #   distributed
     #   partd
-tornado==6.5.2
+tornado==6.5.5
     # via distributed
 tqdm==4.67.1
     # via

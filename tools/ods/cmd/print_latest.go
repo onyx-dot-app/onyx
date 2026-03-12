@@ -2,8 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"os"
-
 	"github.com/jmelahman/tag/git"
 	"github.com/spf13/cobra"
 )
@@ -20,13 +18,16 @@ receive the "latest" tag on Docker Hub. Only the highest vX.Y.Z tag
 qualifies. Tags with pre-release suffixes (e.g. v1.2.3-beta,
 v1.2.3-cloud.1) are excluded.`,
 		Args: cobra.NoArgs,
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(c *cobra.Command, _ []string) error {
 			tag, err := git.GetLatestStableSemverTag("")
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-				os.Exit(1)
+				return fmt.Errorf("get latest stable semver tag: %w", err)
+			}
+			if tag == "" {
+				return fmt.Errorf("no stable semver tag found in repository")
 			}
 			fmt.Println(tag)
+			return nil
 		},
 	}
 
