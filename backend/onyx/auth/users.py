@@ -1908,18 +1908,18 @@ def get_oauth_router(
                     state_value, state_secret, [STATE_TOKEN_AUDIENCE]
                 )
             except jwt.DecodeError:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=getattr(
+                raise OnyxError(
+                    OnyxErrorCode.VALIDATION_ERROR,
+                    getattr(
                         ErrorCode,
                         "ACCESS_TOKEN_DECODE_ERROR",
                         "ACCESS_TOKEN_DECODE_ERROR",
                     ),
                 )
             except jwt.ExpiredSignatureError:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=getattr(
+                raise OnyxError(
+                    OnyxErrorCode.VALIDATION_ERROR,
+                    getattr(
                         ErrorCode,
                         "ACCESS_TOKEN_ALREADY_EXPIRED",
                         "ACCESS_TOKEN_ALREADY_EXPIRED",
@@ -1933,11 +1933,9 @@ def get_oauth_router(
                 or not state_csrf_token
                 or not secrets.compare_digest(cookie_csrf_token, state_csrf_token)
             ):
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=getattr(
-                        ErrorCode, "OAUTH_INVALID_STATE", "OAUTH_INVALID_STATE"
-                    ),
+                raise OnyxError(
+                    OnyxErrorCode.VALIDATION_ERROR,
+                    getattr(ErrorCode, "OAUTH_INVALID_STATE", "OAUTH_INVALID_STATE"),
                 )
 
             return state_data
@@ -1987,6 +1985,10 @@ def get_oauth_router(
 
             try:
                 state_data = decode_and_validate_state(state_value)
+            except OnyxError as e:
+                return build_error_response(e)
+
+            try:
                 token = await oauth_client.get_access_token(
                     code, callback_redirect_url, code_verifier
                 )
@@ -1994,8 +1996,6 @@ def get_oauth_router(
                 return build_error_response(
                     OnyxError(OnyxErrorCode.VALIDATION_ERROR, e.message)
                 )
-            except (OnyxError, HTTPException) as e:
-                return build_error_response(e)
         else:
             if access_token_state is None:
                 raise OnyxError(
@@ -2017,9 +2017,9 @@ def get_oauth_router(
             )
 
             if account_email is None:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=ErrorCode.OAUTH_NOT_AVAILABLE_EMAIL,
+                raise OnyxError(
+                    OnyxErrorCode.VALIDATION_ERROR,
+                    ErrorCode.OAUTH_NOT_AVAILABLE_EMAIL,
                 )
 
             next_url = state_data.get("next_url", "/")
@@ -2047,15 +2047,15 @@ def get_oauth_router(
                     is_verified_by_default=is_verified_by_default,
                 )
             except UserAlreadyExists:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=ErrorCode.OAUTH_USER_ALREADY_EXISTS,
+                raise OnyxError(
+                    OnyxErrorCode.VALIDATION_ERROR,
+                    ErrorCode.OAUTH_USER_ALREADY_EXISTS,
                 )
 
             if not user.is_active:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=ErrorCode.LOGIN_BAD_CREDENTIALS,
+                raise OnyxError(
+                    OnyxErrorCode.VALIDATION_ERROR,
+                    ErrorCode.LOGIN_BAD_CREDENTIALS,
                 )
 
             # Login user

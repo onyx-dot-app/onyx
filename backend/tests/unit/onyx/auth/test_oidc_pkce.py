@@ -11,12 +11,14 @@ from fastapi import Response
 from fastapi.testclient import TestClient
 from fastapi_users.authentication import AuthenticationBackend
 from fastapi_users.authentication import CookieTransport
+from fastapi_users.jwt import generate_jwt
 from httpx_oauth.oauth2 import BaseOAuth2
 from httpx_oauth.oauth2 import GetAccessTokenError
 
 from onyx.auth.users import get_oauth_router
 from onyx.auth.users import get_pkce_cookie_name
 from onyx.auth.users import PKCE_COOKIE_NAME_PREFIX
+from onyx.auth.users import STATE_TOKEN_AUDIENCE
 
 
 class _StubOAuthClient:
@@ -171,6 +173,24 @@ def test_oidc_callback_rejects_bad_state_before_token_exchange() -> None:
     )
 
     assert response.status_code == 400
+    assert response.json()["error_code"] == "VALIDATION_ERROR"
+    assert oauth_client.access_token_calls == []
+    assert "Max-Age=0" in response.headers.get("set-cookie", "")
+
+
+def test_oidc_callback_rejects_wrongly_signed_state_before_token_exchange() -> None:
+    client, oauth_client, _ = _build_test_client(enable_pkce=True)
+    client.get("/auth/oidc/authorize")
+    tampered_state = generate_jwt({"aud": STATE_TOKEN_AUDIENCE}, "wrong-secret", 3600)
+    client.cookies.set(get_pkce_cookie_name(tampered_state), "verifier123")
+
+    response = client.get(
+        "/auth/oidc/callback",
+        params={"code": "abc123", "state": tampered_state},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error_code"] == "VALIDATION_ERROR"
     assert oauth_client.access_token_calls == []
     assert "Max-Age=0" in response.headers.get("set-cookie", "")
 
@@ -189,6 +209,7 @@ def test_oidc_callback_rejects_csrf_mismatch_in_pkce_path() -> None:
     )
 
     assert response.status_code == 400
+    assert response.json()["error_code"] == "VALIDATION_ERROR"
     assert oauth_client.access_token_calls == []
     assert "Max-Age=0" in response.headers.get("set-cookie", "")
 
