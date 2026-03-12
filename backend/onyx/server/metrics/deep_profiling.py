@@ -204,6 +204,9 @@ def start_deep_profiling() -> None:
     """Start tracemalloc and the periodic snapshot task.
 
     Idempotent — safe to call multiple times (e.g. Uvicorn hot-reload).
+    Must be called from within a running asyncio event loop (uses
+    ``asyncio.create_task``). In production this is called from
+    ``start_observability()`` inside FastAPI's async lifespan.
     """
     global _snapshot_task, _collector
 
@@ -217,17 +220,19 @@ def start_deep_profiling() -> None:
         logger.info("tracemalloc already active, reusing existing session")
 
     _snapshot_task = asyncio.create_task(
-        _snapshot_loop(DEEP_PROFILING_SNAPSHOT_INTERVAL_SECONDS)
+        _snapshot_loop(DEEP_PROFILING_SNAPSHOT_INTERVAL_SECONDS),
+        name="onyx-deep-profiling-snapshot",
     )
 
     if _collector is None:
         collector = DeepProfilingCollector()
         try:
             REGISTRY.register(collector)
+            _collector = collector
         except ValueError:
             logger.debug("Deep profiling collector already registered, skipping")
-        _collector = collector
-    logger.info("Deep profiling collector registered")
+
+    logger.info("Deep profiling started")
 
 
 async def stop_deep_profiling() -> None:
