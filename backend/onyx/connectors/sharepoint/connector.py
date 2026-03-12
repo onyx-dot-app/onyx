@@ -272,6 +272,15 @@ class SizeCapExceeded(Exception):
     """Exception raised when the size cap is exceeded."""
 
 
+def _log_and_raise_for_status(response: requests.Response) -> None:
+    """Log the response text and raise for status."""
+    try:
+        response.raise_for_status()
+    except Exception:
+        logger.error(f"Graph API request failed: {response.text}")
+        raise
+
+
 def load_certificate_from_pfx(pfx_data: bytes, password: str) -> CertificateData | None:
     """Load certificate from .pfx file for MSAL authentication"""
     try:
@@ -348,7 +357,7 @@ def _probe_remote_size(url: str, timeout: int) -> int | None:
     """Determine remote size using HEAD or a range GET probe. Returns None if unknown."""
     try:
         head_resp = requests.head(url, timeout=timeout, allow_redirects=True)
-        head_resp.raise_for_status()
+        _log_and_raise_for_status(head_resp)
         cl = head_resp.headers.get("Content-Length")
         if cl and cl.isdigit():
             return int(cl)
@@ -363,7 +372,7 @@ def _probe_remote_size(url: str, timeout: int) -> int | None:
             timeout=timeout,
             stream=True,
         ) as range_resp:
-            range_resp.raise_for_status()
+            _log_and_raise_for_status(range_resp)
             cr = range_resp.headers.get("Content-Range")  # e.g., "bytes 0-0/12345"
             if cr and "/" in cr:
                 total = cr.split("/")[-1]
@@ -388,7 +397,7 @@ def _download_with_cap(url: str, timeout: int, cap: int) -> bytes:
     - Returns the full bytes if the content fits within `cap`.
     """
     with requests.get(url, stream=True, timeout=timeout) as resp:
-        resp.raise_for_status()
+        _log_and_raise_for_status(resp)
 
         # If the server provides Content-Length, prefer an early decision.
         cl_header = resp.headers.get("Content-Length")
@@ -432,7 +441,7 @@ def _download_via_graph_api(
     with requests.get(
         url, headers=headers, stream=True, timeout=REQUEST_TIMEOUT_SECONDS
     ) as resp:
-        resp.raise_for_status()
+        _log_and_raise_for_status(resp)
         buf = io.BytesIO()
         for chunk in resp.iter_content(64 * 1024):
             if not chunk:
@@ -1313,12 +1322,7 @@ class SharepointConnector(
                         access_token = self._get_graph_access_token()
                         headers = {"Authorization": f"Bearer {access_token}"}
                         continue
-                try:
-                    response.raise_for_status()
-
-                except Exception:
-                    logger.error(f"Graph API request failed: {response.text}")
-                    raise
+                _log_and_raise_for_status(response)
                 return response.json()
             except (requests.ConnectionError, requests.Timeout):
                 if attempt < GRAPH_API_MAX_RETRIES:
