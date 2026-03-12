@@ -78,6 +78,7 @@ export default function InviteUsersModal({
     setTimeout(() => {
       setChips([]);
       setInputValue("");
+      setIsSubmitting(false);
     }, 200);
   }, [onOpenChange]);
 
@@ -85,12 +86,12 @@ export default function InviteUsersModal({
   const handleOpenChange = useCallback(
     (next: boolean) => {
       if (!next) {
-        handleClose();
+        if (!isSubmitting) handleClose();
       } else {
         onOpenChange(next);
       }
     },
-    [handleClose, onOpenChange]
+    [handleClose, isSubmitting, onOpenChange]
   );
 
   async function handleInvite() {
