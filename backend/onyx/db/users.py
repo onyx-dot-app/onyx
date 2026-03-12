@@ -197,15 +197,6 @@ def get_all_accepted_users(
     return db_session.scalars(stmt).unique().all()
 
 
-_USER_SORTABLE_COLUMNS = {
-    "email": User.__table__.c.email,
-    "role": User.__table__.c.role,
-    "is_active": User.__table__.c.is_active,
-    "created_at": User.__table__.c.created_at,
-    "updated_at": User.__table__.c.updated_at,
-}
-
-
 def get_page_of_filtered_users(
     db_session: Session,
     page_size: int,
@@ -214,8 +205,6 @@ def get_page_of_filtered_users(
     is_active_filter: bool | None = None,
     roles_filter: list[UserRole] = [],
     include_external: bool = False,
-    sort_by: str | None = None,
-    sort_dir: str | None = None,
 ) -> Sequence[User]:
     users_stmt = select(User)
 
@@ -225,18 +214,10 @@ def get_page_of_filtered_users(
         include_external=include_external,
         is_active_filter=is_active_filter,
     )
-    # Apply filtering
-    users_stmt = users_stmt.where(*where_clause)
-
-    # Apply sorting
-    col = _USER_SORTABLE_COLUMNS.get(sort_by) if sort_by else None
-    if col is not None:
-        users_stmt = users_stmt.order_by(
-            col.desc() if sort_dir == "desc" else col.asc()
-        )
-
     # Apply pagination
     users_stmt = users_stmt.offset((page_num) * page_size).limit(page_size)
+    # Apply filtering
+    users_stmt = users_stmt.where(*where_clause)
 
     return db_session.scalars(users_stmt).unique().all()
 
