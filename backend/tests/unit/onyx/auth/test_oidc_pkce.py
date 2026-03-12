@@ -162,6 +162,7 @@ def test_oidc_callback_fails_when_pkce_cookie_missing() -> None:
     )
 
     assert response.status_code == 400
+    assert response.json()["error_code"] == "VALIDATION_ERROR"
     assert oauth_client.access_token_calls == []
     assert "Max-Age=0" in response.headers.get("set-cookie", "")
 
@@ -257,6 +258,7 @@ def test_oidc_callback_cleans_pkce_cookie_on_idp_error_with_state() -> None:
     )
 
     assert response.status_code == 400
+    assert response.json()["error_code"] == "VALIDATION_ERROR"
     assert oauth_client.access_token_calls == []
     assert "Max-Age=0" in response.headers.get("set-cookie", "")
 
