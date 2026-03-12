@@ -956,7 +956,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         )
         if not verified:
             raise OnyxError(
-                OnyxErrorCode.VALIDATION_ERROR,
+                OnyxErrorCode.CREDENTIAL_INVALID,
                 "Invalid current password",
             )
 
