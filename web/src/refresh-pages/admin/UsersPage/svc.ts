@@ -76,13 +76,15 @@ export async function addUserToGroup(
 export async function removeUserFromGroup(
   groupId: number,
   currentUserIds: string[],
-  userIdToRemove: string
+  userIdToRemove: string,
+  ccPairIds: number[]
 ): Promise<void> {
   const res = await fetch(`/api/manage/admin/user-group/${groupId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       user_ids: currentUserIds.filter((id) => id !== userIdToRemove),
+      cc_pair_ids: ccPairIds,
     }),
   });
   if (!res.ok) {

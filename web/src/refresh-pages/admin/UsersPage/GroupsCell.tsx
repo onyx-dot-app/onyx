@@ -1,6 +1,12 @@
 "use client";
 
-import { useState, useRef, useLayoutEffect, useCallback } from "react";
+import {
+  useState,
+  useRef,
+  useLayoutEffect,
+  useCallback,
+  useEffect,
+} from "react";
 import { SvgEdit } from "@opal/icons";
 import { Tag } from "@opal/components";
 import IconButton from "@/refresh-components/buttons/IconButton";
@@ -78,17 +84,36 @@ export default function GroupsCell({
     computeVisibleCount();
   }, [visibleCount, computeVisibleCount]);
 
-  // Re-measure on container resize
-  useLayoutEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
+  // Re-measure on container resize.
+  // The ref moves between DOM elements depending on overflow state, so we
+  // track the observed node and re-attach when it changes.
+  const observedNodeRef = useRef<HTMLElement | null>(null);
+  const observerRef = useRef<ResizeObserver | null>(null);
 
-    const observer = new ResizeObserver(() => {
-      setVisibleCount(null);
-    });
-    observer.observe(container);
-    return () => observer.disconnect();
-  }, []);
+  useEffect(() => {
+    if (!observerRef.current) {
+      observerRef.current = new ResizeObserver(() => {
+        setVisibleCount(null);
+      });
+    }
+    const observer = observerRef.current;
+    const node = containerRef.current;
+
+    if (node !== observedNodeRef.current) {
+      if (observedNodeRef.current) {
+        observer.unobserve(observedNodeRef.current);
+      }
+      if (node) {
+        observer.observe(node);
+      }
+      observedNodeRef.current = node;
+    }
+
+    return () => {
+      observer.disconnect();
+      observedNodeRef.current = null;
+    };
+  });
 
   const isMeasuring = visibleCount === null;
   const effectiveVisible = visibleCount ?? groups.length;

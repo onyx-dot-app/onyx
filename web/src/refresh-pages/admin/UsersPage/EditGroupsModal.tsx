@@ -114,8 +114,6 @@ export default function EditGroupsModal({
   const handleSave = async () => {
     setIsSubmitting(true);
     try {
-      const promises: Promise<void>[] = [];
-
       const toAdd = Array.from(memberGroupIds).filter(
         (id) => !initialMemberGroupIds.has(id)
       );
@@ -125,14 +123,18 @@ export default function EditGroupsModal({
 
       if (user.id) {
         for (const groupId of toAdd) {
-          promises.push(addUserToGroup(groupId, user.id));
+          await addUserToGroup(groupId, user.id);
         }
         for (const groupId of toRemove) {
           const group = allGroups?.find((g) => g.id === groupId);
           if (group) {
             const currentUserIds = group.users.map((u) => u.id);
-            promises.push(
-              removeUserFromGroup(groupId, currentUserIds, user.id)
+            const ccPairIds = group.cc_pairs.map((cc) => cc.id);
+            await removeUserFromGroup(
+              groupId,
+              currentUserIds,
+              user.id,
+              ccPairIds
             );
           }
         }
@@ -143,14 +145,14 @@ export default function EditGroupsModal({
         selectedRole !== "" &&
         selectedRole !== user.role
       ) {
-        promises.push(setUserRole(user.email, selectedRole));
+        await setUserRole(user.email, selectedRole);
       }
 
-      await Promise.all(promises);
       onMutate();
       toast.success("User updated");
       onClose();
     } catch (err) {
+      onMutate(); // refresh to show partially-applied state
       toast.error(err instanceof Error ? err.message : "An error occurred");
     } finally {
       setIsSubmitting(false);
