@@ -20,6 +20,7 @@ from zipfile import BadZipFile
 
 import chardet
 import openpyxl
+from openpyxl.worksheet._read_only import ReadOnlyWorksheet
 from openpyxl.worksheet.worksheet import Worksheet
 from PIL import Image
 
@@ -354,13 +355,15 @@ def pptx_to_text(file: IO[Any], file_name: str = "") -> str:
     return presentation.markdown
 
 
-def _worksheet_to_matrix(worksheet: Worksheet) -> list[list[str]]:
+def _worksheet_to_matrix(
+    worksheet: Worksheet | ReadOnlyWorksheet,
+) -> list[list[str]]:
     """
     Converts a singular worksheet to a matrix of values
     """
     rows: list[list[str]] = []
     for worksheet_row in worksheet.iter_rows(min_row=1, values_only=True):
-        row = [str(cell or "") for cell in worksheet_row]
+        row = ["" if cell is None else str(cell) for cell in worksheet_row]
         rows.append(row)
 
     return rows
@@ -369,7 +372,7 @@ def _worksheet_to_matrix(worksheet: Worksheet) -> list[list[str]]:
 def _clean_worksheet_matrix(matrix: list[list[str]]) -> list[list[str]]:
     """
     Cleans a worksheet matrix by removing rows if there are N consecutive empty
-    rows and removing cols if there are M consectutive empty rows
+    rows and removing cols if there are M consecutive empty columns
     """
     MAX_EMPTY_ROWS = 2  # After this many empty rows, we expect a value row. Otherwise we clear all empty rows
     MAX_EMPTY_COLS = 2
@@ -403,8 +406,6 @@ def _remove_empty_runs(
             # Add the new non-empty row
             result.append(row)
             empty_buffer = []
-
-    result.extend(empty_buffer[:max_empty])
 
     return result
 
@@ -453,7 +454,7 @@ def xlsx_to_text(file: IO[Any], file_name: str = "") -> str:
     for sheet in workbook.worksheets:
         sheet_matrix = _clean_worksheet_matrix(_worksheet_to_matrix(sheet))
         buf = io.StringIO()
-        writer = csv.writer(buf)
+        writer = csv.writer(buf, lineterminator="\n")
         writer.writerows(sheet_matrix)
         text_content.append(buf.getvalue())
     return TEXT_SECTION_SEPARATOR.join(text_content)
