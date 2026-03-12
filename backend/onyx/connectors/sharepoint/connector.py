@@ -1313,7 +1313,12 @@ class SharepointConnector(
                         access_token = self._get_graph_access_token()
                         headers = {"Authorization": f"Bearer {access_token}"}
                         continue
-                response.raise_for_status()
+                try:
+                    response.raise_for_status()
+
+                except Exception:
+                    logger.error(f"Graph API request failed: {response.text}")
+                    raise
                 return response.json()
             except (requests.ConnectionError, requests.Timeout):
                 if attempt < GRAPH_API_MAX_RETRIES:
