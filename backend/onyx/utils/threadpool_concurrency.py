@@ -30,6 +30,32 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+
+_threadpool_instrumentation_enabled: bool = False
+
+
+def _get_executor_class() -> type[ThreadPoolExecutor]:
+    """Return InstrumentedThreadPoolExecutor when running in the API server.
+
+    Non-server contexts (Celery workers, CLI scripts) get vanilla
+    ThreadPoolExecutor because enable_threadpool_instrumentation() is
+    never called there. The flag lives here (not in the metrics module)
+    to avoid importing prometheus_client as a side effect of every
+    parallel operation.
+    """
+    if _threadpool_instrumentation_enabled:
+        from onyx.server.metrics.threadpool import InstrumentedThreadPoolExecutor
+
+        return InstrumentedThreadPoolExecutor
+    return ThreadPoolExecutor
+
+
+def enable_threadpool_instrumentation() -> None:
+    """Called by setup_threadpool_metrics() during API server startup."""
+    global _threadpool_instrumentation_enabled
+    _threadpool_instrumentation_enabled = True
+
+
 R = TypeVar("R")
 KT = TypeVar("KT")  # Key type
 VT = TypeVar("VT")  # Value type
@@ -323,7 +349,8 @@ def run_functions_tuples_in_parallel(
         return []
 
     results: list[tuple[int, Any]] = []
-    executor = ThreadPoolExecutor(max_workers=workers)
+    executor_cls = _get_executor_class()
+    executor = executor_cls(max_workers=workers)
 
     try:
         # The primary reason for propagating contextvars is to allow acquiring a db session
@@ -421,7 +448,8 @@ def run_functions_in_parallel(
     if len(function_calls) == 0:
         return results
 
-    with ThreadPoolExecutor(max_workers=len(function_calls)) as executor:
+    executor_cls = _get_executor_class()
+    with executor_cls(max_workers=len(function_calls)) as executor:
         future_to_id = {
             executor.submit(
                 contextvars.copy_context().run, func_call.execute
@@ -543,7 +571,8 @@ def parallel_yield(gens: list[Iterator[R]], max_workers: int = 10) -> Iterator[R
     if you are consuming all elements from the generators OR it is acceptable
     for some extra generator code to run and not have the result(s) yielded.
     """
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+    executor_cls = _get_executor_class()
+    with executor_cls(max_workers=max_workers) as executor:
         future_to_index: dict[Future[tuple[int, R | None]], int] = {
             executor.submit(_next_or_none, ind, gen): ind
             for ind, gen in enumerate(gens)
