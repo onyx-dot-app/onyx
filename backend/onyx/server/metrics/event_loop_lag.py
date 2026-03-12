@@ -77,17 +77,20 @@ def start_event_loop_lag_probe() -> None:
     Idempotent — restarts the probe if the previous task finished
     or failed (e.g. after an unhandled exception).
     """
-    global _probe_task
+    global _probe_task, _current_lag, _max_lag
     if _probe_task is not None and not _probe_task.done():
         return
 
-    # Initialize gauges so Prometheus sees 0 on first scrape
-    # instead of missing time series.
+    # Reset module state and gauges so a restart after failure
+    # computes a fresh baseline (not stale values from the old probe).
+    _current_lag = 0.0
+    _max_lag = 0.0
     _LAG.set(0.0)
     _LAG_MAX.set(0.0)
 
     _probe_task = asyncio.create_task(
-        _probe_loop(EVENT_LOOP_LAG_PROBE_INTERVAL_SECONDS)
+        _probe_loop(EVENT_LOOP_LAG_PROBE_INTERVAL_SECONDS),
+        name="onyx-event-loop-lag-probe",
     )
 
 
