@@ -24,11 +24,9 @@ from email_validator import EmailUndeliverableError
 from email_validator import validate_email
 from fastapi import APIRouter
 from fastapi import Depends
-from fastapi import HTTPException
 from fastapi import Query
 from fastapi import Request
 from fastapi import Response
-from fastapi import status
 from fastapi.responses import RedirectResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi_users import BaseUserManager
@@ -120,6 +118,8 @@ from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.db.pat import fetch_user_for_pat
 from onyx.db.users import get_user_by_email
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_async_redis_connection
 from onyx.server.settings.store import load_settings
 from onyx.server.utils import BasicAuthenticationError
@@ -137,8 +137,6 @@ from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
-
-REGISTER_INVITE_ONLY_CODE = "REGISTER_INVITE_ONLY"
 
 
 def is_user_admin(user: User) -> bool:
@@ -240,17 +238,17 @@ def verify_email_is_invited(email: str) -> None:
     whitelist = get_invited_users()
 
     if not email:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"reason": "Email must be specified"},
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Email must be specified",
         )
 
     try:
         email_info = validate_email(email, check_deliverability=False)
     except EmailUndeliverableError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"reason": "Email is not valid"},
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Email is not valid",
         )
 
     for email_whitelist in whitelist:
@@ -268,12 +266,9 @@ def verify_email_is_invited(email: str) -> None:
         if email_info.normalized.lower() == email_info_whitelist.normalized.lower():
             return
 
-    raise HTTPException(
-        status_code=status.HTTP_403_FORBIDDEN,
-        detail={
-            "code": REGISTER_INVITE_ONLY_CODE,
-            "reason": "This workspace is invite-only. Please ask your admin to invite you.",
-        },
+    raise OnyxError(
+        OnyxErrorCode.UNAUTHORIZED,
+        "This workspace is invite-only. Please ask your admin to invite you.",
     )
 
 
@@ -285,9 +280,9 @@ def verify_email_in_whitelist(email: str, tenant_id: str) -> None:
 
 def verify_email_domain(email: str) -> None:
     if email.count("@") != 1:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email is not valid",
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Email is not valid",
         )
 
     local_part, domain = email.split("@")
@@ -296,39 +291,35 @@ def verify_email_domain(email: str) -> None:
     if AUTH_TYPE == AuthType.CLOUD:
         # Normalize googlemail.com to gmail.com (they deliver to the same inbox)
         if domain == "googlemail.com":
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail={"reason": "Please use @gmail.com instead of @googlemail.com."},
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR,
+                "Please use @gmail.com instead of @googlemail.com.",
             )
 
         if "+" in local_part and domain != "onyx.app":
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail={
-                    "reason": "Email addresses with '+' are not allowed. Please use your base email address."
-                },
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR,
+                "Email addresses with '+' are not allowed. Please use your base email address.",
             )
 
     # Check if email uses a disposable/temporary domain
     if is_disposable_email(email):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "reason": "Disposable email addresses are not allowed. Please use a permanent email address."
-            },
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Disposable email addresses are not allowed. Please use a permanent email address.",
         )
 
     # Check domain whitelist if configured
     if VALID_EMAIL_DOMAINS:
         if domain not in VALID_EMAIL_DOMAINS:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Email domain is not valid",
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR,
+                "Email domain is not valid",
             )
 
 
 def enforce_seat_limit(db_session: Session, seats_needed: int = 1) -> None:
-    """Raise HTTPException(402) if adding users would exceed the seat limit.
+    """Raise OnyxError if adding users would exceed the seat limit.
 
     No-op for multi-tenant or CE deployments.
     """
@@ -340,7 +331,7 @@ def enforce_seat_limit(db_session: Session, seats_needed: int = 1) -> None:
     )(db_session, seats_needed=seats_needed)
 
     if result is not None and not result.available:
-        raise HTTPException(status_code=402, detail=result.error_message)
+        raise OnyxError(OnyxErrorCode.SEAT_LIMIT_EXCEEDED, result.error_message)
 
 
 class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
@@ -393,9 +384,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     captcha_token or "", expected_action="signup"
                 )
             except CaptchaVerificationError as e:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail={"reason": str(e)},
+                raise OnyxError(
+                    OnyxErrorCode.VALIDATION_ERROR,
+                    str(e),
                 )
 
         # We verify the password here to make sure it's valid before we proceed
@@ -407,12 +398,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         # This prevents creating tenants for throwaway email addresses
         try:
             verify_email_domain(user_create.email)
-        except HTTPException as e:
+        except OnyxError as e:
             # Log blocked disposable email attempts
-            if (
-                e.status_code == status.HTTP_400_BAD_REQUEST
-                and "Disposable email" in str(e.detail)
-            ):
+            if e.status_code == 400 and "Disposable email" in str(e.message):
                 domain = (
                     user_create.email.split("@")[-1]
                     if "@" in user_create.email
@@ -636,7 +624,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         )
 
         if not tenant_id:
-            raise HTTPException(status_code=401, detail="User not found")
+            raise OnyxError(OnyxErrorCode.UNAUTHENTICATED, "User not found")
 
         # Proceed with the tenant context
         token = None
@@ -876,8 +864,8 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             logger.error(
                 "Email is not configured. Please configure email in the admin panel"
             )
-            raise HTTPException(
-                status.HTTP_500_INTERNAL_SERVER_ERROR,
+            raise OnyxError(
+                OnyxErrorCode.INTERNAL_ERROR,
                 "Your admin has not enabled this feature.",
             )
         tenant_id = await fetch_ee_implementation_or_noop(
@@ -977,12 +965,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             old_password, user.hashed_password
         )
         if not verified:
-            # Raise some HTTPException (or your custom exception) if old password is invalid:
-            from fastapi import HTTPException, status
-
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid current password",
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR,
+                "Invalid current password",
             )
 
         # If the hash was upgraded behind the scenes, we can keep it before setting the new password:
@@ -1252,11 +1237,7 @@ class FastAPIUserWithLogoutRouter(FastAPIUsers[models.UP, models.ID]):
         )
 
         logout_responses: OpenAPIResponseType = {
-            **{
-                status.HTTP_401_UNAUTHORIZED: {
-                    "description": "Missing token or inactive user."
-                }
-            },
+            **{401: {"description": "Missing token or inactive user."}},
             **backend.transport.get_openapi_logout_responses_success(),
         }
 
@@ -1290,11 +1271,7 @@ class FastAPIUserWithLogoutRouter(FastAPIUsers[models.UP, models.ID]):
         )
 
         refresh_responses: OpenAPIResponseType = {
-            **{
-                status.HTTP_401_UNAUTHORIZED: {
-                    "description": "Missing token or inactive user."
-                }
-            },
+            **{401: {"description": "Missing token or inactive user."}},
             **backend.transport.get_openapi_login_responses_success(),
         }
 
@@ -1347,9 +1324,9 @@ class FastAPIUserWithLogoutRouter(FastAPIUsers[models.UP, models.ID]):
                 return await backend.login(strategy, user)
             except Exception as e:
                 logger.error(f"Unexpected error in refresh endpoint: {str(e)}")
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Token refresh failed: {str(e)}",
+                raise OnyxError(
+                    OnyxErrorCode.VALIDATION_ERROR,
+                    f"Token refresh failed: {str(e)}",
                 )
 
         return router
@@ -1772,7 +1749,7 @@ def get_oauth_router(
         name=callback_route_name,
         description="The response varies based on the authentication backend used.",
         responses={
-            status.HTTP_400_BAD_REQUEST: {
+            400: {
                 "model": ErrorModel,
                 "content": {
                     "application/json": {
@@ -1805,24 +1782,24 @@ def get_oauth_router(
         )
 
         if account_email is None:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=ErrorCode.OAUTH_NOT_AVAILABLE_EMAIL,
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR,
+                ErrorCode.OAUTH_NOT_AVAILABLE_EMAIL,
             )
 
         try:
             state_data = decode_jwt(state, state_secret, [STATE_TOKEN_AUDIENCE])
         except jwt.DecodeError:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=getattr(
+            raise OnyxError(
+                OnyxErrorCode.INVALID_TOKEN,
+                getattr(
                     ErrorCode, "ACCESS_TOKEN_DECODE_ERROR", "ACCESS_TOKEN_DECODE_ERROR"
                 ),
             )
         except jwt.ExpiredSignatureError:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=getattr(
+            raise OnyxError(
+                OnyxErrorCode.TOKEN_EXPIRED,
+                getattr(
                     ErrorCode,
                     "ACCESS_TOKEN_ALREADY_EXPIRED",
                     "ACCESS_TOKEN_ALREADY_EXPIRED",
@@ -1836,9 +1813,9 @@ def get_oauth_router(
             or not state_csrf_token
             or not secrets.compare_digest(cookie_csrf_token, state_csrf_token)
         ):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=getattr(ErrorCode, "OAUTH_INVALID_STATE", "OAUTH_INVALID_STATE"),
+            raise OnyxError(
+                OnyxErrorCode.CSRF_FAILURE,
+                getattr(ErrorCode, "OAUTH_INVALID_STATE", "OAUTH_INVALID_STATE"),
             )
 
         next_url = state_data.get("next_url", "/")
@@ -1866,15 +1843,15 @@ def get_oauth_router(
                 is_verified_by_default=is_verified_by_default,
             )
         except UserAlreadyExists:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=ErrorCode.OAUTH_USER_ALREADY_EXISTS,
+            raise OnyxError(
+                OnyxErrorCode.CONFLICT,
+                ErrorCode.OAUTH_USER_ALREADY_EXISTS,
             )
 
         if not user.is_active:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=ErrorCode.LOGIN_BAD_CREDENTIALS,
+            raise OnyxError(
+                OnyxErrorCode.UNAUTHENTICATED,
+                ErrorCode.LOGIN_BAD_CREDENTIALS,
             )
 
         # Login user
