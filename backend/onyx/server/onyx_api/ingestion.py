@@ -100,7 +100,7 @@ def upsert_ingestion_doc(
     )
     if cc_pair is None:
         raise OnyxError(
-            OnyxErrorCode.VALIDATION_ERROR,
+            OnyxErrorCode.NOT_FOUND,
             "Connector-Credential Pair specified does not exist",
         )
 
