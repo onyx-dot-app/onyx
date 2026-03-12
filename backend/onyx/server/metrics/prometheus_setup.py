@@ -98,8 +98,20 @@ def start_observability() -> None:
 
     Called from ``lifespan()`` after engines/pools are ready.
     """
+    from onyx.server.metrics.event_loop_lag import start_event_loop_lag_probe
     from onyx.server.metrics.redis_connection_pool import (
         setup_redis_connection_pool_metrics,
     )
 
     setup_redis_connection_pool_metrics()
+    start_event_loop_lag_probe()
+
+
+async def stop_observability() -> None:
+    """Shut down lifespan-scoped observability probes.
+
+    Called from ``lifespan()`` after yield, before engine teardown.
+    """
+    from onyx.server.metrics.event_loop_lag import stop_event_loop_lag_probe
+
+    await stop_event_loop_lag_probe()

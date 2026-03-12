@@ -200,7 +200,7 @@ topk(5, rate(onyx_api_request_rss_shrink_total[5m]))
 
 ## Redis Pool Metrics
 
-Always-on, read from `BlockingConnectionPool` internals on each `/metrics` scrape.
+Read from `BlockingConnectionPool` internals on each `/metrics` scrape.
 
 | Metric | Type | Labels | Description |
 |--------|------|--------|-------------|
@@ -214,6 +214,22 @@ Pool label values: `primary`, `replica`.
 ```promql
 # Redis pool utilization (alert if > 80%)
 onyx_redis_pool_in_use{pool="primary"} / onyx_redis_pool_max{pool="primary"}
+```
+
+## Event Loop Metrics
+
+Always-on background asyncio task. Detects blocked event loops.
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `onyx_api_event_loop_lag_seconds` | Gauge | — | Current scheduling lag |
+| `onyx_api_event_loop_lag_max_seconds` | Gauge | — | Max lag since process start |
+
+Configurable via `EVENT_LOOP_LAG_PROBE_INTERVAL_SECONDS` (default `2.0`).
+
+```promql
+# Alert if event loop is blocked > 100ms
+onyx_api_event_loop_lag_seconds > 0.1
 ```
 
 ## Example PromQL Queries

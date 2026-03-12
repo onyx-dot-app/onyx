@@ -357,6 +357,11 @@ POSTGRES_API_SERVER_READ_ONLY_POOL_OVERFLOW = int(
 # generally should only be used for
 POSTGRES_USE_NULL_POOL = os.environ.get("POSTGRES_USE_NULL_POOL", "").lower() == "true"
 
+# --- Observability ---
+EVENT_LOOP_LAG_PROBE_INTERVAL_SECONDS = float(
+    os.environ.get("EVENT_LOOP_LAG_PROBE_INTERVAL_SECONDS", "2.0")
+)
+
 # defaults to False
 POSTGRES_POOL_PRE_PING = os.environ.get("POSTGRES_POOL_PRE_PING", "").lower() == "true"
 
