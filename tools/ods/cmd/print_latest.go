@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-
 	"github.com/jmelahman/tag/git"
 	"github.com/spf13/cobra"
 )
