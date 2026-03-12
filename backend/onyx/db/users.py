@@ -360,8 +360,8 @@ def batch_add_ext_perm_user_if_not_exists(
     # batch path hits a UUID sentinel mismatch with server_default columns.
     for email in missing_lower_emails:
         user = _generate_ext_permissioned_user(email=email)
+        savepoint = db_session.begin_nested()
         try:
-            savepoint = db_session.begin_nested()
             db_session.add(user)
             savepoint.commit()
         except IntegrityError:
