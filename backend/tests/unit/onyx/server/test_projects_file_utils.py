@@ -186,3 +186,42 @@ def test_categorize_uploaded_files_checks_size_before_text_extraction(
     assert len(result.acceptable) == 0
     assert len(result.rejected) == 1
     assert result.rejected[0].reason == "Exceeds 1 MB file size limit"
+
+
+def test_categorize_uploaded_files_accepts_python_file(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_common_dependencies(monkeypatch)
+    monkeypatch.setattr(utils, "USER_FILE_MAX_UPLOAD_SIZE_BYTES", 10_000)
+    monkeypatch.setattr(utils, "USER_FILE_MAX_UPLOAD_SIZE_MB", 1)
+
+    py_source = b'def hello():\n    print("world")\n'
+    monkeypatch.setattr(
+        utils, "extract_file_text", lambda **_kwargs: py_source.decode()
+    )
+
+    upload = _make_upload("script.py", size=len(py_source), content=py_source)
+    result = utils.categorize_uploaded_files([upload], MagicMock())
+
+    assert len(result.acceptable) == 1
+    assert result.acceptable[0].filename == "script.py"
+    assert len(result.rejected) == 0
+
+
+def test_categorize_uploaded_files_rejects_binary_file(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_common_dependencies(monkeypatch)
+    monkeypatch.setattr(utils, "USER_FILE_MAX_UPLOAD_SIZE_BYTES", 10_000)
+    monkeypatch.setattr(utils, "USER_FILE_MAX_UPLOAD_SIZE_MB", 1)
+
+    monkeypatch.setattr(utils, "extract_file_text", lambda **_kwargs: "")
+
+    binary_content = bytes(range(256)) * 4
+    upload = _make_upload("data.bin", size=len(binary_content), content=binary_content)
+    result = utils.categorize_uploaded_files([upload], MagicMock())
+
+    assert len(result.acceptable) == 0
+    assert len(result.rejected) == 1
+    assert result.rejected[0].filename == "data.bin"
+    assert "Unsupported file type" in result.rejected[0].reason
