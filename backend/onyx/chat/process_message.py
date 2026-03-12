@@ -928,10 +928,13 @@ def handle_stream_message_objects(
         return
 
     except Exception as e:
-        logger.exception(f"Failed to process chat message due to {e}")
         stack_trace = traceback.format_exc()
 
         if isinstance(e, EmptyLLMResponseError):
+            logger.warning(
+                "LLM returned an empty response "
+                f"(provider={e.provider}, model={e.model}, tool_choice={e.tool_choice})"
+            )
             if llm and llm.config.api_key and len(llm.config.api_key) > 2:
                 stack_trace = stack_trace.replace(
                     llm.config.api_key, "[REDACTED_API_KEY]"
@@ -955,6 +958,8 @@ def handle_stream_message_objects(
             )
             db_session.rollback()
             return
+
+        logger.exception(f"Failed to process chat message due to {e}")
 
         if llm:
             client_error_msg, error_code, is_retryable = litellm_exception_to_error_msg(
@@ -1113,8 +1118,12 @@ def gather_stream(
         raise ValueError("Message ID is required")
 
     if answer is None:
-        # This should never be the case as these non-streamed flows do not have a stop-generation signal
-        raise RuntimeError("Answer was not generated")
+        if error_msg is not None:
+            answer = ""
+        else:
+            # This should never be the case as these non-streamed flows do not
+            # have a stop-generation signal
+            raise RuntimeError("Answer was not generated")
 
     return ChatBasicResponse(
         answer=answer,

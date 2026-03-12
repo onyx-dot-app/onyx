@@ -1004,14 +1004,16 @@ class TestRunLlmLoopErrors:
         )
         monkeypatch.setattr(
             "onyx.chat.llm_loop.run_llm_step",
-            lambda **_kwargs: (
-                LlmStepResult(
-                    reasoning=None,
-                    answer=None,
-                    tool_calls=None,
-                    raw_answer=None,
-                ),
-                False,
+            Mock(
+                return_value=(
+                    LlmStepResult(
+                        reasoning=None,
+                        answer=None,
+                        tool_calls=None,
+                        raw_answer=None,
+                    ),
+                    False,
+                )
             ),
         )
 
