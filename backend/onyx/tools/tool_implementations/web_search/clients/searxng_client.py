@@ -66,7 +66,7 @@ class SearXNGClient(WebSearchProvider):
             )
             if status_code == 429:
                 raise OnyxError(
-                    OnyxErrorCode.RATE_LIMITED,
+                    OnyxErrorCode.CONNECTOR_VALIDATION_FAILED,
                     "This SearXNG instance does not allow API requests. "
                     "Use a private instance and configure it to allow bots.",
                 ) from e
