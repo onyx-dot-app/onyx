@@ -111,5 +111,7 @@ for (const lang of allLanguages) {
  * field from linguist-languages (~297 entries). Returns null if unrecognised.
  */
 export function getLanguageByMime(mime: string): string | null {
-  return mimeToLanguage.get(mime) ?? null;
+  const base = mime.split(";")[0];
+  if (!base) return null;
+  return mimeToLanguage.get(base.trim().toLowerCase()) ?? null;
 }
