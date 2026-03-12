@@ -4,17 +4,10 @@ import { useMemo, useState } from "react";
 import DataTable from "@/refresh-components/table/DataTable";
 import { createTableColumns } from "@/refresh-components/table/columns";
 import { Content } from "@opal/layouts";
-import { SvgUser, SvgUsers, SvgSlack } from "@opal/icons";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { IllustrationContent } from "@opal/layouts";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
-import type { IconFunctionComponent } from "@opal/types";
-import {
-  UserRole,
-  UserStatus,
-  USER_ROLE_LABELS,
-  USER_STATUS_LABELS,
-} from "@/lib/types";
+import { UserRole, UserStatus, USER_STATUS_LABELS } from "@/lib/types";
 import { timeAgo } from "@/lib/time";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
@@ -22,6 +15,7 @@ import useAdminUsers from "@/hooks/useAdminUsers";
 import useGroups from "@/hooks/useGroups";
 import UserFilters from "./UserFilters";
 import UserRowActions from "./UserRowActions";
+import UserRoleCell from "./UserRoleCell";
 import type {
   UserRow,
   UserGroupInfo,
@@ -30,20 +24,6 @@ import type {
   StatusCountMap,
 } from "./interfaces";
 import { getInitials } from "./utils";
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-const ROLE_ICONS: Record<UserRole, IconFunctionComponent> = {
-  [UserRole.BASIC]: SvgUser,
-  [UserRole.ADMIN]: SvgUser,
-  [UserRole.GLOBAL_CURATOR]: SvgUsers,
-  [UserRole.CURATOR]: SvgUsers,
-  [UserRole.LIMITED]: SvgUser,
-  [UserRole.EXT_PERM_USER]: SvgUser,
-  [UserRole.SLACK_USER]: SvgSlack,
-};
 
 // ---------------------------------------------------------------------------
 // Column renderers
@@ -87,25 +67,6 @@ function renderGroupsColumn(groups: UserGroupInfo[]) {
           +{overflow}
         </Text>
       )}
-    </div>
-  );
-}
-
-function renderRoleColumn(role: UserRole | null) {
-  if (!role) {
-    return (
-      <Text as="span" secondaryBody text03>
-        —
-      </Text>
-    );
-  }
-  const Icon = ROLE_ICONS[role];
-  return (
-    <div className="flex items-center gap-1.5">
-      {Icon && <Icon size={14} className="text-text-03 shrink-0" />}
-      <Text as="span" mainUiBody text03>
-        {USER_ROLE_LABELS[role] ?? role}
-      </Text>
     </div>
   );
 }
@@ -163,7 +124,7 @@ function buildColumns(onMutate: () => void) {
       header: "Account Type",
       weight: 16,
       minWidth: 180,
-      cell: renderRoleColumn,
+      cell: (_value, row) => <UserRoleCell user={row} onMutate={onMutate} />,
     }),
     tc.column("status", {
       header: "Status",

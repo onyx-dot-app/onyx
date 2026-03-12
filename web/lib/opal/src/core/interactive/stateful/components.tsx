@@ -10,7 +10,11 @@ import type { WithoutStyles } from "@opal/types";
 // Types
 // ---------------------------------------------------------------------------
 
-type InteractiveStatefulVariant = "select-light" | "select-heavy" | "sidebar";
+type InteractiveStatefulVariant =
+  | "select-light"
+  | "select-heavy"
+  | "select-tinted"
+  | "sidebar";
 type InteractiveStatefulState = "empty" | "filled" | "selected";
 type InteractiveStatefulInteraction = "rest" | "hover" | "active";
 

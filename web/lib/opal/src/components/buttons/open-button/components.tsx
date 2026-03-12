@@ -55,8 +55,11 @@ type OpenButtonContentProps =
       children?: string;
     };
 
-type OpenButtonProps = Omit<InteractiveStatefulProps, "variant"> &
-  OpenButtonContentProps & {
+type OpenButtonVariant = "select-light" | "select-heavy" | "select-tinted";
+
+type OpenButtonProps = Omit<InteractiveStatefulProps, "variant"> & {
+  variant?: OpenButtonVariant;
+} & OpenButtonContentProps & {
     /**
      * Size preset — controls gap, text size, and Container height/rounding.
      */
@@ -64,6 +67,13 @@ type OpenButtonProps = Omit<InteractiveStatefulProps, "variant"> &
 
     /** Width preset. */
     width?: WidthVariant;
+
+    /**
+     * Content justify mode. When `"between"`, icon+label group left and
+     * chevron pushes to the right edge. Default keeps all items in a
+     * tight `gap-1` row.
+     */
+    justifyContent?: "between";
 
     /** Tooltip text shown on hover. */
     tooltip?: string;
@@ -82,9 +92,11 @@ function OpenButton({
   size = "lg",
   foldable,
   width,
+  justifyContent,
   tooltip,
   tooltipSide = "top",
   interaction,
+  variant = "select-heavy",
   ...statefulProps
 }: OpenButtonProps) {
   const { isDisabled } = useDisabled();
@@ -111,7 +123,7 @@ function OpenButton({
 
   const button = (
     <Interactive.Stateful
-      variant="select-heavy"
+      variant={variant}
       interaction={resolvedInteraction}
       {...statefulProps}
     >
@@ -125,19 +137,32 @@ function OpenButton({
       >
         <div
           className={cn(
-            "opal-button interactive-foreground flex flex-row items-center gap-1",
-            foldable && "interactive-foldable-host"
+            "opal-button interactive-foreground flex flex-row items-center",
+            justifyContent === "between" ? "w-full justify-between" : "gap-1",
+            foldable &&
+              justifyContent !== "between" &&
+              "interactive-foldable-host"
           )}
         >
-          {iconWrapper(Icon, size, !foldable && !!children)}
-
-          {foldable ? (
-            <Interactive.Foldable>
-              {labelEl}
+          {justifyContent === "between" ? (
+            <>
+              <span className="flex flex-row items-center gap-1">
+                {iconWrapper(Icon, size, !foldable && !!children)}
+                {labelEl}
+              </span>
               {iconWrapper(ChevronIcon, size, !!children)}
-            </Interactive.Foldable>
+            </>
+          ) : foldable ? (
+            <>
+              {iconWrapper(Icon, size, !foldable && !!children)}
+              <Interactive.Foldable>
+                {labelEl}
+                {iconWrapper(ChevronIcon, size, !!children)}
+              </Interactive.Foldable>
+            </>
           ) : (
             <>
+              {iconWrapper(Icon, size, !foldable && !!children)}
               {labelEl}
               {iconWrapper(ChevronIcon, size, !!children)}
             </>
