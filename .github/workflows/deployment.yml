@@ -29,15 +29,27 @@ jobs:
       build-backend-craft: ${{ steps.check.outputs.build-backend-craft }}
       build-model-server: ${{ steps.check.outputs.build-model-server }}
       is-cloud-tag: ${{ steps.check.outputs.is-cloud-tag }}
-      is-stable: ${{ steps.check.outputs.is-stable }}
       is-beta: ${{ steps.check.outputs.is-beta }}
-      is-stable-standalone: ${{ steps.check.outputs.is-stable-standalone }}
       is-beta-standalone: ${{ steps.check.outputs.is-beta-standalone }}
       is-craft-latest: ${{ steps.check.outputs.is-craft-latest }}
+      is-latest: ${{ steps.check.outputs.is-latest }}
       is-test-run: ${{ steps.check.outputs.is-test-run }}
       sanitized-tag: ${{ steps.check.outputs.sanitized-tag }}
       short-sha: ${{ steps.check.outputs.short-sha }}
     steps:
+      - name: Checkout (for git tags)
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@5a095e7a2014a4212f075830d4f7277575a9d098 # ratchet:astral-sh/setup-uv@v7
+        with:
+          version: "0.9.9"
+          enable-cache: false
+
       - name: Check which components to build and version info
         id: check
         env:
@@ -54,9 +66,9 @@ jobs:
           IS_VERSION_TAG=false
           IS_STABLE=false
           IS_BETA=false
-          IS_STABLE_STANDALONE=false
           IS_BETA_STANDALONE=false
           IS_CRAFT_LATEST=false
+          IS_LATEST=false
           IS_PROD_TAG=false
           IS_TEST_RUN=false
           BUILD_DESKTOP=false
@@ -104,11 +116,20 @@ jobs:
           fi
 
           # Standalone version checks (for backend/model-server - version excluding cloud tags)
-          if [[ "$IS_STABLE" == "true" ]] && [[ "$IS_CLOUD" != "true" ]]; then
-            IS_STABLE_STANDALONE=true
-          fi
           if [[ "$IS_BETA" == "true" ]] && [[ "$IS_CLOUD" != "true" ]]; then
             IS_BETA_STANDALONE=true
+          fi
+
+          # Determine if this tag should get the "latest" Docker tag.
+          # Only the highest semver stable tag (vX.Y.Z exactly) gets "latest".
+          if [[ "$IS_STABLE" == "true" ]]; then
+            HIGHEST_STABLE=$(uv run --no-sync --with onyx-devtools ods latest-stable-tag) || {
+              echo "::error::Failed to determine highest stable tag via 'ods latest-stable-tag'"
+              exit 1
+            }
+            if [[ "$TAG" == "$HIGHEST_STABLE" ]]; then
+              IS_LATEST=true
+            fi
           fi
 
           # Determine if this is a production tag
@@ -129,11 +150,10 @@ jobs:
             echo "build-backend-craft=$BUILD_BACKEND_CRAFT"
             echo "build-model-server=$BUILD_MODEL_SERVER"
             echo "is-cloud-tag=$IS_CLOUD"
-            echo "is-stable=$IS_STABLE"
             echo "is-beta=$IS_BETA"
-            echo "is-stable-standalone=$IS_STABLE_STANDALONE"
             echo "is-beta-standalone=$IS_BETA_STANDALONE"
             echo "is-craft-latest=$IS_CRAFT_LATEST"
+            echo "is-latest=$IS_LATEST"
             echo "is-test-run=$IS_TEST_RUN"
             echo "sanitized-tag=$SANITIZED_TAG"
             echo "short-sha=$SHORT_SHA"
@@ -600,7 +620,7 @@ jobs:
             latest=false
           tags: |
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run == 'true' && format('web-{0}', needs.determine-builds.outputs.sanitized-tag) || github.ref_name }}
-            type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-stable == 'true' && 'latest' || '' }}
+            type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-latest == 'true' && 'latest' || '' }}
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && env.EDGE_TAG == 'true' && 'edge' || '' }}
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-beta == 'true' && 'beta' || '' }}
 
@@ -1037,7 +1057,7 @@ jobs:
             latest=false
           tags: |
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run == 'true' && format('backend-{0}', needs.determine-builds.outputs.sanitized-tag) || github.ref_name }}
-            type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-stable-standalone == 'true' && 'latest' || '' }}
+            type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-latest == 'true' && 'latest' || '' }}
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && env.EDGE_TAG == 'true' && 'edge' || '' }}
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-beta-standalone == 'true' && 'beta' || '' }}
 
@@ -1473,7 +1493,7 @@ jobs:
             latest=false
           tags: |
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run == 'true' && format('model-server-{0}', needs.determine-builds.outputs.sanitized-tag) || github.ref_name }}
-            type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-stable-standalone == 'true' && 'latest' || '' }}
+            type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-latest == 'true' && 'latest' || '' }}
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && env.EDGE_TAG == 'true' && 'edge' || '' }}
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-beta-standalone == 'true' && 'beta' || '' }}
 
