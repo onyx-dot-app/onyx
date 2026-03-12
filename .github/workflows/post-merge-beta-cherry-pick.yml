@@ -96,8 +96,8 @@ jobs:
           CHERRY_PICK_ASSIGNEE: ${{ needs.resolve-cherry-pick-request.outputs.merged_by }}
           MERGE_COMMIT_SHA: ${{ needs.resolve-cherry-pick-request.outputs.merge_commit_sha }}
         run: |
-          set +e
           output_file="$(mktemp)"
+          set +e
           uv run --no-sync --with onyx-devtools ods cherry-pick "${MERGE_COMMIT_SHA}" --yes --no-verify 2>&1 | tee "$output_file"
           exit_code="${PIPESTATUS[0]}"
           set -e
