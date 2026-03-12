@@ -231,6 +231,10 @@ jobs:
         if: steps.list-changed.outputs.changed == 'true'
         run: |
           echo "=== Post-install verification ==="
+          if ! kubectl cluster-info >/dev/null 2>&1; then
+            echo "Skipping post-install verification: Kubernetes cluster is not reachable"
+            exit 0
+          fi
           kubectl get pods --all-namespaces
           kubectl get services --all-namespaces
           # Only show issues if they exist
@@ -240,6 +244,10 @@ jobs:
         if: failure() && steps.list-changed.outputs.changed == 'true'
         run: |
           echo "=== Cleanup on failure ==="
+          if ! kubectl cluster-info >/dev/null 2>&1; then
+            echo "Skipping failure cleanup: Kubernetes cluster is not reachable"
+            exit 0
+          fi
           echo "=== Final cluster state ==="
           kubectl get pods --all-namespaces
           kubectl get events --all-namespaces --sort-by=.lastTimestamp | tail -10
