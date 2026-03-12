@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import * as SelectPrimitive from "@radix-ui/react-select";
-import { cn, noProp } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import LineItem, { LineItemProps } from "@/refresh-components/buttons/LineItem";
 import Text from "@/refresh-components/texts/Text";
 import type { IconProps } from "@opal/types";
@@ -298,7 +298,10 @@ function InputSelectContent({
         )}
         sideOffset={4}
         position="popper"
-        onMouseDown={noProp()}
+        onMouseDown={(e) => {
+          e.stopPropagation();
+          e.preventDefault();
+        }}
         {...props}
       >
         <SelectPrimitive.Viewport className="flex flex-col gap-1">
