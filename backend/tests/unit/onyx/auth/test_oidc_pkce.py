@@ -319,3 +319,21 @@ def test_oidc_callback_works_without_pkce_when_flag_disabled() -> None:
     assert response.status_code == 302
     assert oauth_client.access_token_calls[0]["code_verifier"] is None
     user_manager.oauth_callback.assert_awaited_once()
+
+
+def test_oidc_callback_non_pkce_rejects_csrf_mismatch() -> None:
+    client, oauth_client, _ = _build_test_client(enable_pkce=False)
+    authorize_response = client.get("/auth/oidc/authorize")
+    state = _extract_state_from_authorize_response(authorize_response)
+
+    client.cookies.set(CSRF_TOKEN_COOKIE_NAME, "wrong-csrf-token")
+
+    response = client.get(
+        "/auth/oidc/callback",
+        params={"code": "abc123", "state": state},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error_code"] == "VALIDATION_ERROR"
+    assert response.json()["detail"] == "OAUTH_INVALID_STATE"
+    assert oauth_client.access_token_calls

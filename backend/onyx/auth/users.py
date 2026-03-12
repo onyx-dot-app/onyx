@@ -1759,12 +1759,12 @@ def get_oauth_router(
             CSRF_TOKEN_KEY: csrf_token,
         }
         state = generate_state_token(state_data, state_secret)
-        pkce_cookie_name: str | None = None
-        code_verifier: str | None = None
+        pkce_cookie: tuple[str, str] | None = None
 
         if enable_pkce:
             code_verifier, code_challenge = generate_pkce_pair()
             pkce_cookie_name = get_pkce_cookie_name(state)
+            pkce_cookie = (pkce_cookie_name, code_verifier)
             authorization_url = await oauth_client.get_authorization_url(
                 authorize_redirect_url,
                 state,
@@ -1803,12 +1803,12 @@ def get_oauth_router(
                 samesite=csrf_token_cookie_samesite,
             )
 
-        def set_pkce_cookie(target_response: Response) -> None:
-            if pkce_cookie_name is None or code_verifier is None:
-                raise OnyxError(
-                    OnyxErrorCode.INTERNAL_ERROR,
-                    "PKCE state was not initialized",
-                )
+        def set_pkce_cookie(
+            target_response: Response,
+            *,
+            pkce_cookie_name: str,
+            code_verifier: str,
+        ) -> None:
             set_oauth_cookie(
                 target_response,
                 key=pkce_cookie_name,
@@ -1826,8 +1826,13 @@ def get_oauth_router(
             key=csrf_token_cookie_name,
             value=csrf_token,
         )
-        if enable_pkce:
-            set_pkce_cookie(response_with_cookies)
+        if pkce_cookie is not None:
+            pkce_cookie_name, code_verifier = pkce_cookie
+            set_pkce_cookie(
+                response_with_cookies,
+                pkce_cookie_name=pkce_cookie_name,
+                code_verifier=code_verifier,
+            )
 
         if redirect:
             return response_with_cookies
@@ -1959,9 +1964,9 @@ def get_oauth_router(
                 callback_path = request.app.url_path_for(callback_route_name)
                 callback_redirect_url = f"{WEB_DOMAIN}{callback_path}"
 
-            # `pkce_cookie_name` is initialized when `state` is present above.
-            assert pkce_cookie_name is not None
-            code_verifier = request.cookies.get(pkce_cookie_name)
+            pkce_cookie_name_for_lookup = get_pkce_cookie_name(state_value)
+            pkce_cookie_name = pkce_cookie_name_for_lookup
+            code_verifier = request.cookies.get(pkce_cookie_name_for_lookup)
             if not code_verifier:
                 return build_error_response(
                     OnyxError(
