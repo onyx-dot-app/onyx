@@ -353,24 +353,17 @@ def batch_add_ext_perm_user_if_not_exists(
     lower_emails = [email.lower() for email in emails]
     found_users, missing_lower_emails = _get_users_by_emails(db_session, lower_emails)
 
-    new_users: list[User] = []
     for email in missing_lower_emails:
-        new_users.append(_generate_ext_permissioned_user(email=email))
+        user = _generate_ext_permissioned_user(email=email)
+        try:
+            db_session.add(user)
+            db_session.flush()
+        except IntegrityError:
+            db_session.rollback()
+            if not continue_on_error:
+                raise
 
-    try:
-        db_session.add_all(new_users)
-        db_session.commit()
-    except IntegrityError:
-        db_session.rollback()
-        if not continue_on_error:
-            raise
-        for user in new_users:
-            try:
-                db_session.add(user)
-                db_session.commit()
-            except IntegrityError:
-                db_session.rollback()
-                continue
+    db_session.commit()
     # Fetch all users again to ensure we have the most up-to-date list
     all_users, _ = _get_users_by_emails(db_session, lower_emails)
     return all_users
