@@ -374,6 +374,25 @@ install_docker_linux() {
     sudo systemctl enable docker 2>/dev/null || true
 }
 
+# Detect OS (including WSL)
+IS_WSL=false
+if [[ -n "${WSL_DISTRO_NAME:-}" ]] || grep -qi microsoft /proc/version 2>/dev/null; then
+    IS_WSL=true
+fi
+
+# Dry-run: show plan and exit
+if [[ "$DRY_RUN" = true ]]; then
+    print_info "Dry run mode — showing what would happen:"
+    echo "  • Install root: ${INSTALL_ROOT}"
+    echo "  • Lite mode: ${LITE_MODE}"
+    echo "  • Include Craft: ${INCLUDE_CRAFT}"
+    echo "  • OS type: ${OSTYPE:-unknown} (WSL: ${IS_WSL})"
+    echo "  • Downloader: ${DOWNLOADER}"
+    echo ""
+    print_success "Dry run complete (no changes made)"
+    exit 0
+fi
+
 if ! command -v docker &> /dev/null; then
     if [[ "$OSTYPE" == "linux-gnu"* ]] || [[ -n "${WSL_DISTRO_NAME:-}" ]]; then
         install_docker_linux
@@ -467,25 +486,6 @@ if is_interactive; then
 else
     echo -e "${YELLOW}${BOLD}Running in non-interactive mode - proceeding automatically...${NC}"
     echo ""
-fi
-
-# Detect OS (including WSL)
-IS_WSL=false
-if [[ -n "${WSL_DISTRO_NAME:-}" ]] || grep -qi microsoft /proc/version 2>/dev/null; then
-    IS_WSL=true
-fi
-
-# Dry-run: show plan and exit
-if [[ "$DRY_RUN" = true ]]; then
-    print_info "Dry run mode — showing what would happen:"
-    echo "  • Install root: ${INSTALL_ROOT}"
-    echo "  • Lite mode: ${LITE_MODE}"
-    echo "  • Include Craft: ${INCLUDE_CRAFT}"
-    echo "  • OS type: ${OSTYPE:-unknown} (WSL: ${IS_WSL})"
-    echo "  • Downloader: ${DOWNLOADER}"
-    echo ""
-    print_success "Dry run complete (no changes made)"
-    exit 0
 fi
 
 # GitHub repo base URL - using main branch
