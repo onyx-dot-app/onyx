@@ -1,3 +1,5 @@
+import re
+from dataclasses import dataclass
 from datetime import datetime
 from typing import cast
 
@@ -76,39 +78,69 @@ def get_feedback_reminder_blocks(thread_link: str, include_followup: bool) -> Bl
     return SectionBlock(text=text)
 
 
-def _find_unclosed_fence(text: str) -> tuple[bool, int, str]:
-    """Scan *text* line-by-line to determine code-fence state.
+@dataclass
+class CodeSnippet:
+    """A code block extracted from the answer to be uploaded as a Slack file."""
 
-    Returns (is_open, fence_line_start, lang) where:
-      - *is_open* is True when the text ends inside an unclosed code fence
-      - *fence_line_start* is the char offset of the opening fence line
-        (only meaningful when *is_open* is True)
-      - *lang* is the language specifier on the opening fence (e.g. "python")
+    code: str
+    language: str
+    filename: str
+
+
+# Matches fenced code blocks: ```lang\n...\n```
+_CODE_FENCE_RE = re.compile(
+    r"^```(\w*)\n(.*?)^```",
+    re.MULTILINE | re.DOTALL,
+)
+
+
+def _extract_code_snippets(
+    text: str, limit: int = 3000
+) -> tuple[str, list[CodeSnippet]]:
+    """Extract code blocks that would push the text over *limit*.
+
+    Returns (cleaned_text, snippets) where *cleaned_text* has large code
+    blocks replaced with a placeholder and *snippets* contains the extracted
+    code to be uploaded as Slack file snippets.
     """
-    in_fence = False
-    fence_start = 0
-    lang = ""
-    offset = 0
-    for line in text.splitlines(True):  # keep line endings
-        # Slack only treats ``` as a fence when it starts at column 0.
-        # Indented backticks (e.g. inside a heredoc) are content, not fences.
-        if line.startswith("```"):
-            if not in_fence:
-                in_fence = True
-                fence_start = offset
-                lang = line[3:].strip()
-            else:
-                in_fence = False
-                lang = ""
-        offset += len(line)
-    return in_fence, fence_start, lang
+    if len(text) <= limit:
+        return text, []
+
+    snippets: list[CodeSnippet] = []
+    counter = 0
+
+    def _replace_if_needed(match: re.Match[str]) -> str:
+        nonlocal counter
+        lang = match.group(1) or ""
+        code = match.group(2)
+        full_block = match.group(0)
+
+        # Only extract if removing this block would help us stay under limit
+        text_without = text[: match.start()] + text[match.end() :]
+        if len(text_without) <= limit or len(full_block) > limit // 2:
+            counter += 1
+            ext = lang if lang else "txt"
+            snippets.append(
+                CodeSnippet(
+                    code=code.strip(),
+                    language=lang or "text",
+                    filename=f"code_{counter}.{ext}",
+                )
+            )
+            return ""
+        return full_block
+
+    cleaned = _CODE_FENCE_RE.sub(_replace_if_needed, text)
+    # Clean up any double blank lines left by extraction
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
+    return cleaned, snippets
 
 
 def _split_text(text: str, limit: int = 3000) -> list[str]:
     if len(text) <= limit:
         return [text]
 
-    chunks: list[str] = []
+    chunks = []
     while text:
         if len(text) <= limit:
             chunks.append(text)
@@ -120,37 +152,8 @@ def _split_text(text: str, limit: int = 3000) -> list[str]:
             split_at = limit
 
         chunk = text[:split_at]
-
-        # Check whether the chunk ends inside an unclosed code fence.
-        is_open, fence_start, lang = _find_unclosed_fence(chunk)
-        if is_open:
-            # Tier 1: try to back up to before the opening fence so the
-            # entire code block stays in the next chunk.
-            split_before = text.rfind("\n", 0, fence_start)
-            if split_before > 0 and text[:split_before].strip():
-                chunk = text[:split_before]
-                remainder = text[split_before:]
-                # Strip only the leading newline to preserve blank lines
-                # and formatting before the code fence.
-                if remainder and remainder[0] == "\n":
-                    remainder = remainder[1:]
-                text = remainder
-            else:
-                # Tier 2: the code block itself exceeds the limit — split
-                # inside it. Close the fence here, reopen in the next.
-                chunk += "\n```"
-                remainder = text[split_at:]
-                # Strip only the single boundary character (space/newline)
-                # to avoid eating meaningful indentation inside code.
-                if remainder and remainder[0] in " \n":
-                    remainder = remainder[1:]
-                text = f"```{lang}\n" + remainder
-        else:
-            # No unclosed fence — plain prose split. Leading whitespace
-            # is cosmetic in Slack mrkdwn, so lstrip() is safe here.
-            text = text[split_at:].lstrip()
-
         chunks.append(chunk)
+        text = text[split_at:].lstrip()  # Remove leading spaces from the next chunk
 
     return chunks
 
@@ -474,7 +477,7 @@ def _build_citations_blocks(
 
 def _build_main_response_blocks(
     answer: ChatBasicResponse,
-) -> list[Block]:
+) -> tuple[list[Block], list[CodeSnippet]]:
     # TODO: add back in later when auto-filtering is implemented
     # if (
     #     retrieval_info.applied_time_cutoff
@@ -505,9 +508,13 @@ def _build_main_response_blocks(
     # replaces markdown links with slack format links
     formatted_answer = format_slack_message(answer.answer)
     answer_processed = decode_escapes(remove_slack_text_interactions(formatted_answer))
-    answer_blocks = [SectionBlock(text=text) for text in _split_text(answer_processed)]
 
-    return cast(list[Block], answer_blocks)
+    # Extract large code blocks as snippets to upload separately,
+    # avoiding broken code fences when splitting across SectionBlocks.
+    cleaned_text, code_snippets = _extract_code_snippets(answer_processed)
+    answer_blocks = [SectionBlock(text=text) for text in _split_text(cleaned_text)]
+
+    return cast(list[Block], answer_blocks), code_snippets
 
 
 def _build_continue_in_web_ui_block(
@@ -588,10 +595,13 @@ def build_slack_response_blocks(
     skip_ai_feedback: bool = False,
     offer_ephemeral_publication: bool = False,
     skip_restated_question: bool = False,
-) -> list[Block]:
+) -> tuple[list[Block], list[CodeSnippet]]:
     """
     This function is a top level function that builds all the blocks for the Slack response.
     It also handles combining all the blocks together.
+
+    Returns (blocks, code_snippets) where code_snippets should be uploaded
+    as Slack file snippets in the same thread.
     """
     # If called with the OnyxBot slash command, the question is lost so we have to reshow it
     if not skip_restated_question:
@@ -601,7 +611,7 @@ def build_slack_response_blocks(
     else:
         restate_question_block = []
 
-    answer_blocks = _build_main_response_blocks(answer)
+    answer_blocks, code_snippets = _build_main_response_blocks(answer)
 
     web_follow_up_block = []
     if channel_conf and channel_conf.get("show_continue_in_web_ui"):
@@ -667,4 +677,4 @@ def build_slack_response_blocks(
         + follow_up_block
     )
 
-    return all_blocks
+    return all_blocks, code_snippets

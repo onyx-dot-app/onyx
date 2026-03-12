@@ -25,6 +25,7 @@ from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
 from onyx.db.users import get_user_by_email
 from onyx.onyxbot.slack.blocks import build_slack_response_blocks
+from onyx.onyxbot.slack.blocks import CodeSnippet
 from onyx.onyxbot.slack.constants import SLACK_CHANNEL_REF_PATTERN
 from onyx.onyxbot.slack.handlers.utils import send_team_member_message
 from onyx.onyxbot.slack.models import SlackMessageInfo
@@ -132,6 +133,37 @@ def build_slack_context_str(
         message_strs.append(message_text)
 
     return slack_context_str + "\n\n".join(message_strs)
+
+
+def _upload_code_snippets(
+    client: WebClient,
+    channel: str,
+    thread_ts: str,
+    snippets: list[CodeSnippet],
+    logger: OnyxLoggingAdapter,
+) -> None:
+    """Upload extracted code blocks as Slack file snippets in the thread."""
+    for snippet in snippets:
+        try:
+            client.files_upload_v2(
+                channel=channel,
+                thread_ts=thread_ts,
+                content=snippet.code,
+                filename=snippet.filename,
+                snippet_type=snippet.language,
+            )
+        except Exception:
+            logger.warning(
+                f"Failed to upload code snippet {snippet.filename}, "
+                "falling back to inline code block"
+            )
+            # Fall back to posting as a regular message with code fences
+            respond_in_thread_or_channel(
+                client=client,
+                channel=channel,
+                text=f"```{snippet.language}\n{snippet.code}\n```",
+                thread_ts=thread_ts,
+            )
 
 
 def handle_regular_answer(
@@ -387,7 +419,7 @@ def handle_regular_answer(
         offer_ephemeral_publication = False
         skip_ai_feedback = False
 
-    all_blocks = build_slack_response_blocks(
+    all_blocks, code_snippets = build_slack_response_blocks(
         message_info=message_info,
         answer=answer,
         channel_conf=channel_conf,
@@ -413,6 +445,17 @@ def handle_regular_answer(
             unfurl=False,
             send_as_ephemeral=send_as_ephemeral,
         )
+
+        # Upload extracted code blocks as Slack file snippets so they
+        # render as collapsible, syntax-highlighted blocks in the thread.
+        if code_snippets and target_thread_ts:
+            _upload_code_snippets(
+                client=client,
+                channel=channel,
+                thread_ts=target_thread_ts,
+                snippets=code_snippets,
+                logger=logger,
+            )
 
         # For DM (ephemeral message), we need to create a thread via a normal message so the user can see
         # the ephemeral message. This also will give the user a notification which ephemeral message does not.

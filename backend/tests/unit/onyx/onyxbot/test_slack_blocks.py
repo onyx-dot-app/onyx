@@ -7,7 +7,7 @@ import timeago  # type: ignore
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SavedSearchDoc
 from onyx.onyxbot.slack.blocks import _build_documents_blocks
-from onyx.onyxbot.slack.blocks import _find_unclosed_fence
+from onyx.onyxbot.slack.blocks import _extract_code_snippets
 from onyx.onyxbot.slack.blocks import _split_text
 
 
@@ -88,137 +88,76 @@ class TestSplitText:
         result = _split_text(text, limit=8)
         assert len(result) >= 2
 
-    def test_code_block_not_split_when_fits(self) -> None:
-        # Text fits within limit — exercises the early-return path,
-        # not the fence-aware splitting logic.
-        text = "before ```code here``` after"
-        result = _split_text(text, limit=100)
-        assert result == [text]
-
-    def test_code_block_split_backs_up_before_fence(self) -> None:
-        # Build text where the split point falls inside a code block,
-        # but the code block itself fits within the limit. The split
-        # should back up to before the opening ``` so the block stays intact.
-        before = "some intro text here " * 5 + "\n"  # ~105 chars
-        code_content = "x " * 20  # ~40 chars of code
-        text = f"{before}```\n{code_content}\n```\nafter"
-        # limit=120 means the initial split lands inside the code block
-        # but the code block (~50 chars) fits in the next chunk
-        result = _split_text(text, limit=120)
-
-        assert len(result) >= 2
-        # Every chunk must have balanced code fences
-        for chunk in result:
-            is_open, _, _ = _find_unclosed_fence(chunk)
-            assert not is_open, f"Unclosed fence in chunk: {chunk[:80]}..."
-        # The code block should be fully contained in one chunk
-        code_chunks = [c for c in result if "```" in c]
-        assert len(code_chunks) == 1, "Code block should not be split across chunks"
-
     def test_no_code_fences_splits_normally(self) -> None:
         text = "word " * 100  # 500 chars
         result = _split_text(text, limit=100)
         assert len(result) >= 5
         for chunk in result:
-            fence_count = chunk.count("```")
-            assert fence_count == 0
-
-    def test_code_block_exceeding_limit_falls_back_to_close_reopen(self) -> None:
-        # When the code block itself is bigger than the limit, we can't
-        # avoid splitting inside it — verify fences are still balanced.
-        code_content = "x " * 100  # ~200 chars
-        text = f"```\n{code_content}\n```"
-        result = _split_text(text, limit=80)
-
-        assert len(result) >= 2
-        for chunk in result:
-            is_open, _, _ = _find_unclosed_fence(chunk)
-            assert not is_open, f"Unclosed fence in chunk: {chunk[:80]}..."
-
-    def test_code_block_exceeding_limit_no_spaces(self) -> None:
-        # When code has no spaces, split_at is forced to limit.
-        # Fences should still be balanced.
-        code_content = "x" * 200
-        text = f"```\n{code_content}\n```"
-        result = _split_text(text, limit=80)
-
-        assert len(result) >= 2
-        for chunk in result:
-            is_open, _, _ = _find_unclosed_fence(chunk)
-            assert not is_open, f"Unclosed fence in chunk: {chunk[:80]}..."
-
-    def test_all_content_preserved_after_split(self) -> None:
-        text = "intro paragraph and more text here\n```\nprint('hello')\n```\nconclusion here"
-        result = _split_text(text, limit=50)
-
-        # Key content should appear somewhere across the chunks
-        joined = " ".join(result)
-        assert "intro" in joined
-        assert "print('hello')" in joined
-        assert "conclusion" in joined
-
-    def test_language_specifier_preserved_on_reopen(self) -> None:
-        # When a ```python block exceeds the limit and must be split,
-        # the continuation chunk should reopen with ```python, not ```.
-        code_content = "x " * 100  # ~200 chars
-        text = f"```python\n{code_content}\n```"
-        result = _split_text(text, limit=80)
-
-        assert len(result) >= 2
-        for chunk in result[1:]:
-            stripped = chunk.lstrip()
-            if stripped.startswith("```"):
-                assert stripped.startswith(
-                    "```python"
-                ), f"Language specifier lost in continuation: {chunk[:40]}"
-
-    def test_inline_backticks_inside_code_block_ignored(self) -> None:
-        # Triple backticks appearing mid-line inside a code block should
-        # not be mistaken for fence boundaries.
-        before = "some text here " * 6 + "\n"  # ~90 chars
-        text = f"{before}```bash\necho '```'\necho done\n```\nafter"
-        result = _split_text(text, limit=110)
-
-        assert len(result) >= 2
-        for chunk in result:
-            is_open, _, _ = _find_unclosed_fence(chunk)
-            assert not is_open, f"Chunk has unclosed fence: {chunk[:80]}..."
+            assert "```" not in chunk
 
 
 # ---------------------------------------------------------------------------
-# _find_unclosed_fence tests
+# _extract_code_snippets tests
 # ---------------------------------------------------------------------------
 
 
-class TestFindUnclosedFence:
-    def test_no_fences(self) -> None:
-        is_open, _, _ = _find_unclosed_fence("just plain text")
-        assert not is_open
+class TestExtractCodeSnippets:
+    def test_short_text_no_extraction(self) -> None:
+        text = "short answer with ```python\nprint('hi')\n``` inline"
+        cleaned, snippets = _extract_code_snippets(text, limit=3000)
+        assert cleaned == text
+        assert snippets == []
 
-    def test_balanced_fences(self) -> None:
-        is_open, _, _ = _find_unclosed_fence("```\ncode\n```")
-        assert not is_open
+    def test_large_code_block_extracted(self) -> None:
+        code = "x = 1\n" * 200  # ~1200 chars of code
+        text = f"Here is the solution:\n```python\n{code}```\nHope that helps!"
+        cleaned, snippets = _extract_code_snippets(text, limit=200)
 
-    def test_unclosed_fence(self) -> None:
-        is_open, start, lang = _find_unclosed_fence("before\n```\ncode here")
-        assert is_open
-        assert start == len("before\n")
-        assert lang == ""
+        assert len(snippets) == 1
+        assert snippets[0].language == "python"
+        assert snippets[0].filename == "code_1.python"
+        assert "x = 1" in snippets[0].code
+        # Code block should be removed from cleaned text
+        assert "```" not in cleaned
+        assert "Here is the solution" in cleaned
+        assert "Hope that helps!" in cleaned
 
-    def test_unclosed_fence_with_lang(self) -> None:
-        is_open, _, lang = _find_unclosed_fence("intro\n```python\ncode")
-        assert is_open
-        assert lang == "python"
+    def test_multiple_code_blocks_only_large_ones_extracted(self) -> None:
+        small_code = "print('hi')"
+        large_code = "x = 1\n" * 300
+        text = (
+            f"First:\n```python\n{small_code}\n```\n"
+            f"Second:\n```javascript\n{large_code}\n```\n"
+            "Done!"
+        )
+        cleaned, snippets = _extract_code_snippets(text, limit=500)
 
-    def test_inline_backticks_not_counted(self) -> None:
-        # Backticks mid-line should not toggle fence state
-        text = "```bash\necho '```'\necho done\n```"
-        is_open, _, _ = _find_unclosed_fence(text)
-        assert not is_open
+        # The large block should be extracted
+        assert len(snippets) >= 1
+        langs = [s.language for s in snippets]
+        assert "javascript" in langs
 
-    def test_indented_backticks_not_counted_as_fence(self) -> None:
-        # Slack only treats ``` at column 0 as a fence delimiter.
-        # Indented backticks inside a code block are content, not fences.
-        text = "```bash\ncat <<'EOF'\n    ```\nEOF\n```"
-        is_open, _, _ = _find_unclosed_fence(text)
-        assert not is_open
+    def test_language_specifier_captured(self) -> None:
+        code = "fn main() {}\n" * 100
+        text = f"```rust\n{code}```"
+        _, snippets = _extract_code_snippets(text, limit=100)
+
+        assert len(snippets) == 1
+        assert snippets[0].language == "rust"
+        assert snippets[0].filename == "code_1.rust"
+
+    def test_no_language_defaults_to_text(self) -> None:
+        code = "some output\n" * 100
+        text = f"```\n{code}```"
+        _, snippets = _extract_code_snippets(text, limit=100)
+
+        assert len(snippets) == 1
+        assert snippets[0].language == "text"
+        assert snippets[0].filename == "code_1.txt"
+
+    def test_cleaned_text_has_no_triple_blank_lines(self) -> None:
+        code = "x = 1\n" * 200
+        text = f"Before\n\n```python\n{code}```\n\nAfter"
+        cleaned, _ = _extract_code_snippets(text, limit=100)
+
+        assert "\n\n\n" not in cleaned
