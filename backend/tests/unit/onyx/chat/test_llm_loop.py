@@ -1,9 +1,17 @@
 """Tests for llm_loop.py, specifically the construct_message_history function."""
 
+from contextlib import contextmanager
+from types import SimpleNamespace
+from unittest.mock import Mock
+
 import pytest
 
+from onyx.chat.chat_state import ChatStateContainer
+from onyx.chat.emitter import get_default_emitter
 from onyx.chat.llm_loop import _try_fallback_tool_extraction
 from onyx.chat.llm_loop import construct_message_history
+from onyx.chat.llm_loop import EmptyLLMResponseError
+from onyx.chat.llm_loop import run_llm_loop
 from onyx.chat.models import ChatLoadedFile
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import ContextFileMetadata
@@ -972,6 +980,67 @@ class TestFallbackToolExtraction:
 
         assert result is llm_step_result
         assert attempted is False
+
+
+class TestRunLlmLoopErrors:
+    def test_raises_empty_llm_response_error_for_empty_stream_result(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        @contextmanager
+        def _dummy_db_session() -> Mock:
+            yield Mock()
+
+        monkeypatch.setattr(
+            "onyx.llm.litellm_singleton.config.initialize_litellm",
+            lambda: None,
+        )
+        monkeypatch.setattr(
+            "onyx.chat.llm_loop.get_session_with_current_tenant",
+            _dummy_db_session,
+        )
+        monkeypatch.setattr(
+            "onyx.chat.llm_loop.get_default_base_system_prompt",
+            lambda _db_session: "",
+        )
+        monkeypatch.setattr(
+            "onyx.chat.llm_loop.run_llm_step",
+            lambda **_kwargs: (
+                LlmStepResult(
+                    reasoning=None,
+                    answer=None,
+                    tool_calls=None,
+                    raw_answer=None,
+                ),
+                False,
+            ),
+        )
+
+        llm = Mock()
+        llm.config = SimpleNamespace(
+            max_input_tokens=1024,
+            model_provider="openai",
+            model_name="gpt-5.2",
+        )
+
+        with pytest.raises(EmptyLLMResponseError) as exc_info:
+            run_llm_loop(
+                emitter=get_default_emitter(),
+                state_container=ChatStateContainer(),
+                simple_chat_history=[create_message("Hey", MessageType.USER, 1)],
+                tools=[],
+                custom_agent_prompt=None,
+                context_files=create_context_files(),
+                persona=None,
+                user_memory_context=None,
+                llm=llm,
+                token_counter=lambda text: max(1, len(text) // 4),
+                db_session=Mock(),
+                chat_session_id="test-chat-session",
+            )
+
+        assert exc_info.value.provider == "openai"
+        assert exc_info.value.model == "gpt-5.2"
+        assert exc_info.value.tool_choice == ToolChoiceOptions.AUTO.value
 
     def test_extracts_from_answer_when_required_and_no_tool_calls(self) -> None:
         llm_step_result = LlmStepResult(
