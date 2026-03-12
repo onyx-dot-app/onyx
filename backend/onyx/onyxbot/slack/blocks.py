@@ -92,8 +92,27 @@ def _split_text(text: str, limit: int = 3000) -> list[str]:
             split_at = limit
 
         chunk = text[:split_at]
+
+        # If splitting inside an unclosed code fence, try to back up and
+        # split before the opening ``` so the code block stays in one piece.
+        open_fences = chunk.count("```")
+        if open_fences % 2 == 1:
+            last_fence = chunk.rfind("```")
+            # Find a newline before the fence to get a clean break
+            split_before = text.rfind("\n", 0, last_fence)
+            if split_before > 0:
+                # Back up to before the code block
+                chunk = text[:split_before]
+                text = text[split_before:].lstrip()
+            else:
+                # Code block itself exceeds the limit — no choice but to
+                # split inside it. Close the fence here, reopen in the next.
+                chunk += "\n```"
+                text = "```\n" + text[split_at:].lstrip()
+        else:
+            text = text[split_at:].lstrip()
+
         chunks.append(chunk)
-        text = text[split_at:].lstrip()  # Remove leading spaces from the next chunk
 
     return chunks
 

@@ -7,6 +7,7 @@ import timeago  # type: ignore
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SavedSearchDoc
 from onyx.onyxbot.slack.blocks import _build_documents_blocks
+from onyx.onyxbot.slack.blocks import _split_text
 
 
 def _make_saved_doc(updated_at: datetime | None) -> SavedSearchDoc:
@@ -69,3 +70,78 @@ def test_build_documents_blocks_formats_naive_timestamp(
     formatted_timestamp: datetime = captured["doc"]
     expected_timestamp: datetime = naive_timestamp.replace(tzinfo=pytz.utc)
     assert formatted_timestamp == expected_timestamp
+
+
+# ---------------------------------------------------------------------------
+# _split_text tests
+# ---------------------------------------------------------------------------
+
+
+class TestSplitText:
+    def test_short_text_returns_single_chunk(self) -> None:
+        result = _split_text("hello world", limit=100)
+        assert result == ["hello world"]
+
+    def test_splits_at_space_boundary(self) -> None:
+        text = "aaa bbb ccc ddd"
+        result = _split_text(text, limit=8)
+        assert len(result) >= 2
+
+    def test_code_block_not_split_when_fits(self) -> None:
+        text = "before ```code here``` after"
+        result = _split_text(text, limit=100)
+        assert result == [text]
+
+    def test_code_block_split_backs_up_before_fence(self) -> None:
+        # Build text where the split point falls inside a code block,
+        # but the code block itself fits within the limit. The split
+        # should back up to before the opening ``` so the block stays intact.
+        before = "some intro text here " * 5 + "\n"  # ~105 chars
+        code_content = "x " * 20  # ~40 chars of code
+        text = f"{before}```\n{code_content}\n```\nafter"
+        # limit=120 means the initial split lands inside the code block
+        # but the code block (~50 chars) fits in the next chunk
+        result = _split_text(text, limit=120)
+
+        assert len(result) >= 2
+        # Every chunk must have balanced code fences (0 or 2)
+        for chunk in result:
+            fence_count = chunk.count("```")
+            assert (
+                fence_count % 2 == 0
+            ), f"Unbalanced code fences in chunk: {chunk[:80]}..."
+        # The code block should be fully contained in one chunk
+        code_chunks = [c for c in result if "```" in c]
+        assert len(code_chunks) == 1, "Code block should not be split across chunks"
+
+    def test_no_code_fences_splits_normally(self) -> None:
+        text = "word " * 100  # 500 chars
+        result = _split_text(text, limit=100)
+        assert len(result) >= 5
+        for chunk in result:
+            fence_count = chunk.count("```")
+            assert fence_count == 0
+
+    def test_code_block_exceeding_limit_falls_back_to_close_reopen(self) -> None:
+        # When the code block itself is bigger than the limit, we can't
+        # avoid splitting inside it — verify fences are still balanced.
+        code_content = "x " * 100  # ~200 chars
+        text = f"```\n{code_content}\n```"
+        result = _split_text(text, limit=80)
+
+        assert len(result) >= 2
+        for chunk in result:
+            fence_count = chunk.count("```")
+            assert (
+                fence_count % 2 == 0
+            ), f"Unbalanced code fences in chunk: {chunk[:80]}..."
+
+    def test_all_content_preserved_after_split(self) -> None:
+        text = "intro paragraph and more text here\n```\nprint('hello')\n```\nconclusion here"
+        result = _split_text(text, limit=50)
+
+        # Key content should appear somewhere across the chunks
+        joined = " ".join(result)
+        assert "intro" in joined
+        assert "print('hello')" in joined
+        assert "conclusion" in joined
