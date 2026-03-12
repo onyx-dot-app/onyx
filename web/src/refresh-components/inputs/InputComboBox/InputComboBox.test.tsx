@@ -118,6 +118,21 @@ describe("InputComboBox", () => {
       expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
     });
 
+    test("shows all options on focus when a value is already selected", () => {
+      render(
+        <InputComboBox
+          placeholder="Select"
+          value="apple"
+          options={mockOptions}
+        />
+      );
+      const input = screen.getByDisplayValue("Apple");
+      fireEvent.focus(input);
+
+      const options = screen.getAllByRole("option");
+      expect(options.length).toBe(3);
+    });
+
     test("closes dropdown on tab", async () => {
       const user = setupUser();
       render(
