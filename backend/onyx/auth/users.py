@@ -1803,18 +1803,6 @@ def get_oauth_router(
                 samesite=csrf_token_cookie_samesite,
             )
 
-        def set_pkce_cookie(
-            target_response: Response,
-            *,
-            pkce_cookie_name: str,
-            code_verifier: str,
-        ) -> None:
-            set_oauth_cookie(
-                target_response,
-                key=pkce_cookie_name,
-                value=code_verifier,
-            )
-
         response_with_cookies: Response
         if redirect:
             response_with_cookies = RedirectResponse(authorization_url, status_code=302)
@@ -1828,10 +1816,10 @@ def get_oauth_router(
         )
         if pkce_cookie is not None:
             pkce_cookie_name, code_verifier = pkce_cookie
-            set_pkce_cookie(
+            set_oauth_cookie(
                 response_with_cookies,
-                pkce_cookie_name=pkce_cookie_name,
-                code_verifier=code_verifier,
+                key=pkce_cookie_name,
+                value=code_verifier,
             )
 
         if redirect:
@@ -1941,11 +1929,18 @@ def get_oauth_router(
             if state is not None:
                 pkce_cookie_name = get_pkce_cookie_name(state)
 
-            if code is None or error is not None:
+            if error is not None:
                 return build_error_response(
                     OnyxError(
                         OnyxErrorCode.VALIDATION_ERROR,
-                        error or "Missing authorization code in OAuth callback",
+                        "Authorization request failed or was denied",
+                    )
+                )
+            if code is None:
+                return build_error_response(
+                    OnyxError(
+                        OnyxErrorCode.VALIDATION_ERROR,
+                        "Missing authorization code in OAuth callback",
                     )
                 )
             if state is None:
@@ -2083,6 +2078,14 @@ def get_oauth_router(
                 redirect_response = await complete_login_flow(token, state_data)
             except OnyxError as e:
                 return build_error_response(e)
+            except Exception:
+                logger.exception("Unexpected error during PKCE OAuth callback")
+                return build_error_response(
+                    OnyxError(
+                        OnyxErrorCode.INTERNAL_ERROR,
+                        "Unexpected error during OAuth callback",
+                    )
+                )
             delete_pkce_cookie(redirect_response)
             return redirect_response
 
