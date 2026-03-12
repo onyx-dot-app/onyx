@@ -15,10 +15,13 @@ from fastapi_users.jwt import generate_jwt
 from httpx_oauth.oauth2 import BaseOAuth2
 from httpx_oauth.oauth2 import GetAccessTokenError
 
+from onyx.auth.users import CSRF_TOKEN_COOKIE_NAME
+from onyx.auth.users import CSRF_TOKEN_KEY
 from onyx.auth.users import get_oauth_router
 from onyx.auth.users import get_pkce_cookie_name
 from onyx.auth.users import PKCE_COOKIE_NAME_PREFIX
 from onyx.auth.users import STATE_TOKEN_AUDIENCE
+from onyx.error_handling.exceptions import register_onyx_exception_handlers
 
 
 class _StubOAuthClient:
@@ -107,6 +110,7 @@ def _build_test_client(
     )
     app = FastAPI()
     app.include_router(router, prefix="/auth/oidc")
+    register_onyx_exception_handlers(app)
 
     client = TestClient(app, raise_server_exceptions=False)
     return client, oauth_client, user_manager
@@ -181,7 +185,16 @@ def test_oidc_callback_rejects_bad_state_before_token_exchange() -> None:
 def test_oidc_callback_rejects_wrongly_signed_state_before_token_exchange() -> None:
     client, oauth_client, _ = _build_test_client(enable_pkce=True)
     client.get("/auth/oidc/authorize")
-    tampered_state = generate_jwt({"aud": STATE_TOKEN_AUDIENCE}, "wrong-secret", 3600)
+    csrf_token = client.cookies.get(CSRF_TOKEN_COOKIE_NAME)
+    assert csrf_token is not None
+    tampered_state = generate_jwt(
+        {
+            "aud": STATE_TOKEN_AUDIENCE,
+            CSRF_TOKEN_KEY: csrf_token,
+        },
+        "wrong-secret",
+        3600,
+    )
     client.cookies.set(get_pkce_cookie_name(tampered_state), "verifier123")
 
     response = client.get(
@@ -191,6 +204,7 @@ def test_oidc_callback_rejects_wrongly_signed_state_before_token_exchange() -> N
 
     assert response.status_code == 400
     assert response.json()["error_code"] == "VALIDATION_ERROR"
+    assert response.json()["detail"] == "ACCESS_TOKEN_DECODE_ERROR"
     assert oauth_client.access_token_calls == []
     assert "Max-Age=0" in response.headers.get("set-cookie", "")
 
@@ -247,7 +261,7 @@ def test_oidc_callback_cleans_pkce_cookie_on_idp_error_with_state() -> None:
     assert "Max-Age=0" in response.headers.get("set-cookie", "")
 
 
-def test_oidc_callback_cleans_pkce_cookie_on_late_http_exception() -> None:
+def test_oidc_callback_cleans_pkce_cookie_on_missing_email() -> None:
     client, oauth_client, _ = _build_test_client(enable_pkce=True)
     authorize_response = client.get("/auth/oidc/authorize")
     state = _extract_state_from_authorize_response(authorize_response)
