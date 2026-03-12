@@ -20,7 +20,7 @@ logger = setup_logger()
 def _read_secret_from_file(file_path: str, file_env_var_name: str) -> str:
     try:
         with open(file_path, encoding="utf-8") as file:
-            return file.read().rstrip("\r\n")
+            return file.read().rstrip()
     except OSError as e:
         raise RuntimeError(
             f"Unable to read secret file '{file_path}' from {file_env_var_name}"
@@ -57,6 +57,10 @@ def get_secret_env(
             )
 
     return default
+
+
+def _use_iam_auth() -> bool:
+    return os.getenv("USE_IAM_AUTH", "False").lower() == "true"
 
 
 #####
@@ -407,7 +411,7 @@ MAX_DRIVE_WORKERS = int(os.environ.get("MAX_DRIVE_WORKERS", 4))
 # https://hub.docker.com/_/postgres
 POSTGRES_USER = get_secret_env("POSTGRES_USER", default="postgres") or "postgres"
 _POSTGRES_PASSWORD = get_secret_env("POSTGRES_PASSWORD")
-if _POSTGRES_PASSWORD is None and os.getenv("USE_IAM_AUTH", "False").lower() != "true":
+if _POSTGRES_PASSWORD is None and not _use_iam_auth():
     logger.warning(
         "POSTGRES_PASSWORD is not set. Falling back to legacy default password. "
         "Set POSTGRES_PASSWORD or POSTGRES_PASSWORD_FILE in production."
@@ -451,7 +455,7 @@ except ValueError:
     POSTGRES_POOL_RECYCLE = POSTGRES_POOL_RECYCLE_DEFAULT
 
 # RDS IAM authentication - enables IAM-based authentication for PostgreSQL
-USE_IAM_AUTH = os.getenv("USE_IAM_AUTH", "False").lower() == "true"
+USE_IAM_AUTH = _use_iam_auth()
 
 # Redis IAM authentication - enables IAM-based authentication for Redis ElastiCache
 # Note: This is separate from RDS IAM auth as they use different authentication mechanisms

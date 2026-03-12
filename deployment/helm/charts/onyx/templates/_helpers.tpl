@@ -69,6 +69,17 @@ Set secret name
 {{- end }}
 
 {{/*
+Validate path segments used for projected secret file paths.
+*/}}
+{{- define "onyx.secretPathSegment" -}}
+{{- $segment := . | toString -}}
+{{- if or (contains "/" $segment) (contains "\\" $segment) (contains ".." $segment) -}}
+{{- fail (printf "Invalid secret path segment %q: must not contain '/', '\\\\', or '..'" $segment) -}}
+{{- end -}}
+{{- $segment -}}
+{{- end }}
+
+{{/*
 Create env vars from secrets
 */}}
 {{- define "onyx.envSecrets" -}}
@@ -79,9 +90,11 @@ Create env vars from secrets
     {{- range $name, $key := $secretContent.secretKeys }}
     {{- $envVarName := $name | upper | replace "-" "_" }}
     {{- $secretKey := default $name $key }}
+    {{- $safeSecretSuffix := include "onyx.secretPathSegment" $secretSuffix }}
+    {{- $safeSecretKey := include "onyx.secretPathSegment" $secretKey }}
     {{- if $secretFilesEnabled }}
 - name: {{ printf "%s_FILE" $envVarName | quote }}
-  value: {{ printf "%s/%s/%s" $secretFilesMountPath $secretSuffix $secretKey | quote }}
+  value: {{ printf "%s/%s/%s" $secretFilesMountPath $safeSecretSuffix $safeSecretKey | quote }}
     {{- else }}
 - name: {{ $envVarName | quote }}
   valueFrom:
@@ -114,8 +127,9 @@ Secret file mounting helpers.
 {{- $mountPath := include "onyx.secretsAsFiles.mountPath" . }}
 {{- range $secretSuffix, $secretContent := .Values.auth }}
 {{- if and (kindIs "map" $secretContent) (ne $secretContent.enabled false) ($secretContent.secretKeys) }}
+{{- $safeSecretSuffix := include "onyx.secretPathSegment" $secretSuffix }}
 - name: {{ printf "auth-secret-%s" ($secretSuffix | lower | replace "_" "-") }}
-  mountPath: {{ printf "%s/%s" $mountPath $secretSuffix | quote }}
+  mountPath: {{ printf "%s/%s" $mountPath $safeSecretSuffix | quote }}
   readOnly: true
 {{- end }}
 {{- end }}
@@ -131,8 +145,9 @@ Secret file mounting helpers.
     secretName: {{ include "onyx.secretName" $secretContent }}
     items:
     {{- range $name, $key := $secretContent.secretKeys }}
+    {{- $safeSecretKey := include "onyx.secretPathSegment" (default $name $key) }}
       - key: {{ default $name $key }}
-        path: {{ default $name $key }}
+        path: {{ $safeSecretKey }}
     {{- end }}
 {{- end }}
 {{- end }}
