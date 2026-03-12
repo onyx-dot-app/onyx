@@ -194,6 +194,7 @@ jobs:
               --set=vespa.enabled=false \
               --set=opensearch.enabled=true \
               --set=auth.opensearch.enabled=true \
+              --set=auth.userauth.values.user_auth_secret=test-secret \
               --set=slackbot.enabled=false \
               --set=postgresql.enabled=true \
               --set=postgresql.cluster.storage.storageClass=standard \
