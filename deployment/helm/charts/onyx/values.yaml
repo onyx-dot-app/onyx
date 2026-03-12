@@ -1200,7 +1200,7 @@ auth:
 
 configMap:
   # Auth type: "basic" (default), "google_oauth", "oidc", or "saml"
-  # UPGRADE NOTE: Default changed from "disabled" to "basic" in 0.4.30.
+  # UPGRADE NOTE: Default changed from "disabled" to "basic" in 0.4.34.
   # You must also set auth.userauth.values.user_auth_secret.
   AUTH_TYPE: "basic"
   # 1 Day Default
