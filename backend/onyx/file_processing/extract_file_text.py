@@ -20,7 +20,6 @@ from zipfile import BadZipFile
 
 import chardet
 import openpyxl
-from openpyxl.worksheet._read_only import ReadOnlyWorksheet
 from openpyxl.worksheet.worksheet import Worksheet
 from PIL import Image
 
@@ -356,7 +355,7 @@ def pptx_to_text(file: IO[Any], file_name: str = "") -> str:
 
 
 def _worksheet_to_matrix(
-    worksheet: Worksheet | ReadOnlyWorksheet,
+    worksheet: Worksheet,
 ) -> list[list[str]]:
     """
     Converts a singular worksheet to a matrix of values
@@ -374,7 +373,7 @@ def _clean_worksheet_matrix(matrix: list[list[str]]) -> list[list[str]]:
     Cleans a worksheet matrix by removing rows if there are N consecutive empty
     rows and removing cols if there are M consecutive empty columns
     """
-    MAX_EMPTY_ROWS = 2  # After this many empty rows, we expect a value row. Otherwise we clear all empty rows
+    MAX_EMPTY_ROWS = 2  # Runs longer than this are capped to max_empty; shorter runs are preserved as-is
     MAX_EMPTY_COLS = 2
 
     # Row cleanup
@@ -392,7 +391,11 @@ def _remove_empty_runs(
     rows: list[list[str]],
     max_empty: int,
 ) -> list[list[str]]:
-    """Removes entire runs of empty rows when the run length exceeds max_empty."""
+    """Removes entire runs of empty rows when the run length exceeds max_empty.
+
+    Leading and trailing empty rows are always dropped regardless of run length,
+    since there is no adjacent non-empty row to bound the run.
+    """
     result: list[list[str]] = []
     empty_buffer: list[list[str]] = []
 
@@ -456,7 +459,7 @@ def xlsx_to_text(file: IO[Any], file_name: str = "") -> str:
         buf = io.StringIO()
         writer = csv.writer(buf, lineterminator="\n")
         writer.writerows(sheet_matrix)
-        text_content.append(buf.getvalue())
+        text_content.append(buf.getvalue().rstrip("\n"))
     return TEXT_SECTION_SEPARATOR.join(text_content)
 
 
