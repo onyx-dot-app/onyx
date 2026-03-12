@@ -57,6 +57,10 @@ _PROCESS_RSS: Gauge = Gauge(
 )
 
 
+_process: psutil.Process | None = None
+_process_pid: int | None = None
+
+
 def _get_process() -> psutil.Process:
     """Return a psutil.Process for the *current* PID.
 
@@ -71,10 +75,6 @@ def _get_process() -> psutil.Process:
         _process = psutil.Process(pid)
         _process_pid = pid
     return _process
-
-
-_process: psutil.Process | None = None
-_process_pid: int | None = None
 
 
 def _build_route_map(app: FastAPI) -> list[tuple[re.Pattern[str], str]]:

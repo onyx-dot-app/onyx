@@ -65,8 +65,8 @@ For metrics that attach to engines, pools, or background systems, add a setup fu
 |----------|-------------|---------|
 | `setup_prometheus_metrics(app)` | `get_application()` | HTTP request instrumentation (middleware) |
 | `setup_app_observability(app)` | `get_application()` | App-scoped components (middleware registered after routers) |
-| `start_observability()` | `lifespan()` startup | Lifespan-scoped probes and collectors |
-| `stop_observability()` | `lifespan()` shutdown | Async cleanup for probes |
+
+For lifespan-scoped metrics (probes, collectors that need engines/pools ready), add a setup function and call it from `start_observability()` in `metrics/prometheus_setup.py`:
 
 ```python
 # metrics/my_metric.py
@@ -79,9 +79,7 @@ def setup_my_metrics(resource: SomeResource) -> None:
 # metrics/prometheus_setup.py — inside start_observability()
 from onyx.server.metrics.my_metric import setup_my_metrics
 
-def start_observability() -> None:
-    setup_my_metrics(resource)  # Add your call here
-    ...
+setup_my_metrics(resource)
 ```
 
 All metrics initialization is funneled through `metrics/prometheus_setup.py`. Do not add separate setup calls to `main.py`.
