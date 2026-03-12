@@ -5,6 +5,10 @@ on:
     types:
       - closed
 
+# SECURITY NOTE:
+# This workflow intentionally uses pull_request_target so post-merge automation can
+# use base-repo credentials. Do not checkout PR head refs in this workflow
+# (e.g. github.event.pull_request.head.sha). Only trusted base refs are allowed.
 permissions:
   contents: read
 
@@ -24,6 +28,8 @@ jobs:
         id: gate
         env:
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          # SECURITY: keep PR body in env/plain-text handling; avoid directly
+          # inlining github.event.pull_request.body into shell commands.
           PR_BODY: ${{ github.event.pull_request.body }}
           MERGE_COMMIT_SHA: ${{ github.event.pull_request.merge_commit_sha }}
           MERGED_BY: ${{ github.event.pull_request.merged_by.login }}
@@ -64,6 +70,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout repository
+        # SECURITY: keep checkout pinned to trusted base branch; do not switch to PR head refs.
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
         with:
           fetch-depth: 0
