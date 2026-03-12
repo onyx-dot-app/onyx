@@ -76,11 +76,38 @@ def get_feedback_reminder_blocks(thread_link: str, include_followup: bool) -> Bl
     return SectionBlock(text=text)
 
 
+def _find_unclosed_fence(text: str) -> tuple[bool, int, str]:
+    """Scan *text* line-by-line to determine code-fence state.
+
+    Returns (is_open, fence_line_start, lang) where:
+      - *is_open* is True when the text ends inside an unclosed code fence
+      - *fence_line_start* is the char offset of the opening fence line
+        (only meaningful when *is_open* is True)
+      - *lang* is the language specifier on the opening fence (e.g. "python")
+    """
+    in_fence = False
+    fence_start = 0
+    lang = ""
+    offset = 0
+    for line in text.splitlines(True):  # keep line endings
+        stripped = line.lstrip()
+        if stripped.startswith("```"):
+            if not in_fence:
+                in_fence = True
+                fence_start = offset
+                lang = stripped[3:].strip()
+            else:
+                in_fence = False
+                lang = ""
+        offset += len(line)
+    return in_fence, fence_start, lang
+
+
 def _split_text(text: str, limit: int = 3000) -> list[str]:
     if len(text) <= limit:
         return [text]
 
-    chunks = []
+    chunks: list[str] = []
     while text:
         if len(text) <= limit:
             chunks.append(text)
@@ -93,22 +120,25 @@ def _split_text(text: str, limit: int = 3000) -> list[str]:
 
         chunk = text[:split_at]
 
-        # If splitting inside an unclosed code fence, try to back up and
-        # split before the opening ``` so the code block stays in one piece.
-        open_fences = chunk.count("```")
-        if open_fences % 2 == 1:
-            last_fence = chunk.rfind("```")
-            # Find a newline before the fence to get a clean break
-            split_before = text.rfind("\n", 0, last_fence)
-            if split_before > 0:
-                # Back up to before the code block
+        # Check whether the chunk ends inside an unclosed code fence.
+        is_open, fence_start, lang = _find_unclosed_fence(chunk)
+        if is_open:
+            # Tier 1: try to back up to before the opening fence so the
+            # entire code block stays in the next chunk.
+            split_before = text.rfind("\n", 0, fence_start)
+            if split_before > 0 and text[:split_before].strip():
                 chunk = text[:split_before]
                 text = text[split_before:].lstrip()
             else:
-                # Code block itself exceeds the limit — no choice but to
-                # split inside it. Close the fence here, reopen in the next.
+                # Tier 2: the code block itself exceeds the limit — split
+                # inside it. Close the fence here, reopen in the next.
                 chunk += "\n```"
-                text = "```\n" + text[split_at:].lstrip()
+                remainder = text[split_at:]
+                # Strip only the single boundary character (space/newline)
+                # to avoid eating meaningful indentation inside code.
+                if remainder and remainder[0] in " \n":
+                    remainder = remainder[1:]
+                text = f"```{lang}\n" + remainder
         else:
             text = text[split_at:].lstrip()
 

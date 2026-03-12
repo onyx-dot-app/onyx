@@ -7,6 +7,7 @@ import timeago  # type: ignore
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SavedSearchDoc
 from onyx.onyxbot.slack.blocks import _build_documents_blocks
+from onyx.onyxbot.slack.blocks import _find_unclosed_fence
 from onyx.onyxbot.slack.blocks import _split_text
 
 
@@ -145,3 +146,62 @@ class TestSplitText:
         assert "intro" in joined
         assert "print('hello')" in joined
         assert "conclusion" in joined
+
+    def test_language_specifier_preserved_on_reopen(self) -> None:
+        # When a ```python block exceeds the limit and must be split,
+        # the continuation chunk should reopen with ```python, not ```.
+        code_content = "x " * 100  # ~200 chars
+        text = f"```python\n{code_content}\n```"
+        result = _split_text(text, limit=80)
+
+        assert len(result) >= 2
+        for chunk in result[1:]:
+            stripped = chunk.lstrip()
+            if stripped.startswith("```"):
+                assert stripped.startswith(
+                    "```python"
+                ), f"Language specifier lost in continuation: {chunk[:40]}"
+
+    def test_inline_backticks_inside_code_block_ignored(self) -> None:
+        # Triple backticks appearing mid-line inside a code block should
+        # not be mistaken for fence boundaries.
+        before = "some text here " * 6 + "\n"  # ~90 chars
+        text = f"{before}```bash\necho '```'\necho done\n```\nafter"
+        result = _split_text(text, limit=110)
+
+        assert len(result) >= 2
+        for chunk in result:
+            is_open, _, _ = _find_unclosed_fence(chunk)
+            assert not is_open, f"Chunk has unclosed fence: {chunk[:80]}..."
+
+
+# ---------------------------------------------------------------------------
+# _find_unclosed_fence tests
+# ---------------------------------------------------------------------------
+
+
+class TestFindUnclosedFence:
+    def test_no_fences(self) -> None:
+        is_open, _, _ = _find_unclosed_fence("just plain text")
+        assert not is_open
+
+    def test_balanced_fences(self) -> None:
+        is_open, _, _ = _find_unclosed_fence("```\ncode\n```")
+        assert not is_open
+
+    def test_unclosed_fence(self) -> None:
+        is_open, start, lang = _find_unclosed_fence("before\n```\ncode here")
+        assert is_open
+        assert start == len("before\n")
+        assert lang == ""
+
+    def test_unclosed_fence_with_lang(self) -> None:
+        is_open, _, lang = _find_unclosed_fence("intro\n```python\ncode")
+        assert is_open
+        assert lang == "python"
+
+    def test_inline_backticks_not_counted(self) -> None:
+        # Backticks mid-line should not toggle fence state
+        text = "```bash\necho '```'\necho done\n```"
+        is_open, _, _ = _find_unclosed_fence(text)
+        assert not is_open
