@@ -14,7 +14,10 @@ permissions:
 
 jobs:
   resolve-cherry-pick-request:
-    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main'
+    if: >-
+      github.event.pull_request.merged == true
+      && github.event.pull_request.base.ref == 'main'
+      && github.event.pull_request.head.repo.full_name == github.repository
     outputs:
       should_cherrypick: ${{ steps.gate.outputs.should_cherrypick }}
       pr_number: ${{ steps.gate.outputs.pr_number }}
@@ -27,15 +30,27 @@ jobs:
       - name: Resolve merged PR and checkbox state
         id: gate
         env:
+          GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           # SECURITY: keep PR body in env/plain-text handling; avoid directly
           # inlining github.event.pull_request.body into shell commands.
           PR_BODY: ${{ github.event.pull_request.body }}
           MERGE_COMMIT_SHA: ${{ github.event.pull_request.merge_commit_sha }}
           MERGED_BY: ${{ github.event.pull_request.merged_by.login }}
+          # GitHub team slug authorized to trigger cherry-picks (e.g. "core-eng").
+          # For private/secret teams the GITHUB_TOKEN may need org:read scope;
+          # visible teams work with the default token.
+          ALLOWED_TEAM: "onyx-core-team"
         run: |
           echo "pr_number=${PR_NUMBER}" >> "$GITHUB_OUTPUT"
           echo "merged_by=${MERGED_BY}" >> "$GITHUB_OUTPUT"
+
+          member_state=$(gh api "orgs/${GITHUB_REPOSITORY_OWNER}/teams/${ALLOWED_TEAM}/memberships/${MERGED_BY}" --jq '.state' 2>/dev/null) || member_state=""
+          if [ "${member_state}" != "active" ]; then
+            echo "should_cherrypick=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::${MERGED_BY} is not an active member of team ${ALLOWED_TEAM}. Skipping cherry-pick."
+            exit 0
+          fi
 
           if echo "${PR_BODY}" | grep -qiE "\\[x\\][[:space:]]*(\\[[^]]+\\][[:space:]]*)?Please cherry-pick this PR to the latest release version"; then
             # Keep should_cherrypick output before any possible exit 1 below so
