@@ -133,7 +133,7 @@ jobs:
           echo "=== Validating chart dependencies ==="
           cd deployment/helm/charts/onyx
           helm dependency update
-          helm lint .
+          helm lint . --set auth.userauth.values.user_auth_secret=placeholder
 
       - name: Run chart-testing (install) with enhanced monitoring
         timeout-minutes: 25
