@@ -12,6 +12,7 @@ import type { StatusFilter } from "./UsersPage/interfaces";
 
 import UsersSummary from "./UsersPage/UsersSummary";
 import UsersTable from "./UsersPage/UsersTable";
+import InviteUsersModal from "./UsersPage/InviteUsersModal";
 
 // ---------------------------------------------------------------------------
 // Users page content
@@ -63,19 +64,24 @@ function UsersContent() {
 // ---------------------------------------------------------------------------
 
 export default function UsersPage() {
+  const [inviteOpen, setInviteOpen] = useState(false);
+
   return (
     <SettingsLayouts.Root width="lg">
       <SettingsLayouts.Header
         title="Users & Requests"
         icon={SvgUser}
         rightChildren={
-          // TODO (ENG-3806): Wire up invite modal
-          <Button icon={SvgUserPlus}>Invite Users</Button>
+          <Button icon={SvgUserPlus} onClick={() => setInviteOpen(true)}>
+            Invite Users
+          </Button>
         }
       />
       <SettingsLayouts.Body>
         <UsersContent />
       </SettingsLayouts.Body>
+
+      <InviteUsersModal open={inviteOpen} onOpenChange={setInviteOpen} />
     </SettingsLayouts.Root>
   );
 }

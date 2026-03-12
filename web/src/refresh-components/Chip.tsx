@@ -6,6 +6,8 @@ import type { IconProps } from "@opal/types";
 export interface ChipProps {
   children?: string;
   icon?: React.FunctionComponent<IconProps>;
+  /** Icon rendered after the label (e.g. a warning indicator) */
+  rightIcon?: React.FunctionComponent<IconProps>;
   onRemove?: () => void;
   smallLabel?: boolean;
 }
@@ -24,6 +26,7 @@ export interface ChipProps {
 export default function Chip({
   children,
   icon: Icon,
+  rightIcon: RightIcon,
   onRemove,
   smallLabel = true,
 }: ChipProps) {
@@ -35,6 +38,7 @@ export default function Chip({
           {children}
         </Text>
       )}
+      {RightIcon && <RightIcon size={14} className="text-text-03" />}
       {onRemove && (
         <Button
           onClick={(e) => {
