@@ -46,10 +46,17 @@ _TASK_DURATION: Histogram = Histogram(
 )
 
 
+_process: psutil.Process | None = None
+_process_pid: int | None = None
+
+
 def _get_process() -> psutil.Process:
     """Return a psutil.Process for the *current* PID.
 
     Lazily created and invalidated when PID changes (fork).
+    Not locked — worst case on a benign race is creating two Process
+    objects for the same PID; one gets discarded. The default
+    CollectorRegistry serializes collect() calls anyway.
     """
     global _process, _process_pid
     pid = os.getpid()
@@ -57,10 +64,6 @@ def _get_process() -> psutil.Process:
         _process = psutil.Process(pid)
         _process_pid = pid
     return _process
-
-
-_process: psutil.Process | None = None
-_process_pid: int | None = None
 
 
 class InstrumentedThreadPoolExecutor(ThreadPoolExecutor):
