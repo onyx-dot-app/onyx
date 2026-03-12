@@ -100,7 +100,11 @@ jobs:
           set +e
           uv run --no-sync --with onyx-devtools ods cherry-pick "${MERGE_COMMIT_SHA}" --yes --no-verify 2>&1 | tee "$output_file"
           exit_code="${PIPESTATUS[0]}"
+          tee_exit="${PIPESTATUS[1]}"
           set -e
+          if [ "${tee_exit}" -ne 0 ]; then
+            echo "::warning::tee failed to write to output_file; cherry-pick reason/excerpt may be incomplete."
+          fi
 
           if [ "${exit_code}" -eq 0 ]; then
             echo "status=success" >> "$GITHUB_OUTPUT"
