@@ -39,7 +39,7 @@ def get_secret_env(
 
     for current_env_var in env_var_names:
         env_value = os.environ.get(current_env_var)
-        if env_value:
+        if env_value is not None:
             return env_value
 
         file_env_var = f"{current_env_var}_FILE"
@@ -312,8 +312,24 @@ DEFAULT_OPENSEARCH_CLIENT_TIMEOUT_S = int(
 DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S = int(
     os.environ.get("DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S") or 50
 )
-OPENSEARCH_ADMIN_USERNAME = get_secret_env("OPENSEARCH_ADMIN_USERNAME") or ""
-OPENSEARCH_ADMIN_PASSWORD = get_secret_env("OPENSEARCH_ADMIN_PASSWORD") or ""
+_OPENSEARCH_ADMIN_USERNAME = get_secret_env("OPENSEARCH_ADMIN_USERNAME")
+if _OPENSEARCH_ADMIN_USERNAME is None:
+    logger.warning(
+        "OPENSEARCH_ADMIN_USERNAME is not set. Falling back to legacy default username "
+        "'admin'. Set OPENSEARCH_ADMIN_USERNAME or OPENSEARCH_ADMIN_USERNAME_FILE in "
+        "production."
+    )
+    _OPENSEARCH_ADMIN_USERNAME = "admin"
+OPENSEARCH_ADMIN_USERNAME = _OPENSEARCH_ADMIN_USERNAME
+
+_OPENSEARCH_ADMIN_PASSWORD = get_secret_env("OPENSEARCH_ADMIN_PASSWORD")
+if _OPENSEARCH_ADMIN_PASSWORD is None:
+    logger.warning(
+        "OPENSEARCH_ADMIN_PASSWORD is not set. Falling back to legacy default password. "
+        "Set OPENSEARCH_ADMIN_PASSWORD or OPENSEARCH_ADMIN_PASSWORD_FILE in production."
+    )
+    _OPENSEARCH_ADMIN_PASSWORD = "StrongPassword123!"
+OPENSEARCH_ADMIN_PASSWORD = _OPENSEARCH_ADMIN_PASSWORD
 USING_AWS_MANAGED_OPENSEARCH = (
     os.environ.get("USING_AWS_MANAGED_OPENSEARCH", "").lower() == "true"
 )
