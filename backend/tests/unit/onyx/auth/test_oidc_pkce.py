@@ -175,6 +175,24 @@ def test_oidc_callback_rejects_bad_state_before_token_exchange() -> None:
     assert "Max-Age=0" in response.headers.get("set-cookie", "")
 
 
+def test_oidc_callback_rejects_csrf_mismatch_in_pkce_path() -> None:
+    client, oauth_client, _ = _build_test_client(enable_pkce=True)
+    authorize_response = client.get("/auth/oidc/authorize")
+    state = _extract_state_from_authorize_response(authorize_response)
+
+    # Keep PKCE verifier cookie intact, but invalidate CSRF match against state JWT.
+    client.cookies.set("fastapiusersoauthcsrf", "wrong-csrf-token")
+
+    response = client.get(
+        "/auth/oidc/callback",
+        params={"code": "abc123", "state": state},
+    )
+
+    assert response.status_code == 400
+    assert oauth_client.access_token_calls == []
+    assert "Max-Age=0" in response.headers.get("set-cookie", "")
+
+
 def test_oidc_callback_get_access_token_error_is_400() -> None:
     client, oauth_client, _ = _build_test_client(enable_pkce=True)
     authorize_response = client.get("/auth/oidc/authorize")

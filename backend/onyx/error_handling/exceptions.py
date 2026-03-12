@@ -60,8 +60,7 @@ class OnyxError(Exception):
 
 
 def _get_onyx_error_detail(exc: OnyxError) -> str:
-    # Keep this compatible with older/newer OnyxError shapes.
-    detail = getattr(exc, "detail", None) or getattr(exc, "message", None)
+    detail = getattr(exc, "detail", None)
     return str(detail or exc.error_code.code)
 
 
