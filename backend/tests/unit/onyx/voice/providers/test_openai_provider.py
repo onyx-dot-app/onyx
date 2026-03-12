@@ -27,9 +27,9 @@ def test_http_to_ws_url_passes_through_ws() -> None:
 
 
 def test_realtime_message_type_compares_as_string() -> None:
-    assert OpenAIRealtimeMessageType.ERROR == "error"
+    assert str(OpenAIRealtimeMessageType.ERROR) == "error"
     assert (
-        OpenAIRealtimeMessageType.TRANSCRIPTION_DELTA
+        str(OpenAIRealtimeMessageType.TRANSCRIPTION_DELTA)
         == "conversation.item.input_audio_transcription.delta"
     )
     assert isinstance(OpenAIRealtimeMessageType.ERROR, str)

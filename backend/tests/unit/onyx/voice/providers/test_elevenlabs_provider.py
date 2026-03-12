@@ -33,7 +33,7 @@ def test_http_to_ws_url_preserves_path() -> None:
 
 def test_stt_message_type_compares_as_string() -> None:
     """StrEnum members should work in string comparisons (e.g. from JSON)."""
-    assert ElevenLabsSTTMessageType.COMMITTED_TRANSCRIPT == "committed_transcript"
+    assert str(ElevenLabsSTTMessageType.COMMITTED_TRANSCRIPT) == "committed_transcript"
     assert isinstance(ElevenLabsSTTMessageType.ERROR, str)
 
 
