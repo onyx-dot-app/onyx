@@ -87,7 +87,6 @@ jobs:
           CHERRY_PICK_ASSIGNEE: ${{ needs.resolve-cherry-pick-request.outputs.merged_by }}
           MERGE_COMMIT_SHA: ${{ needs.resolve-cherry-pick-request.outputs.merge_commit_sha }}
         run: |
-          set -o pipefail
           set +e
           output_file="$(mktemp)"
           uv run --no-sync --with onyx-devtools ods cherry-pick "${MERGE_COMMIT_SHA}" --yes --no-verify 2>&1 | tee "$output_file"
@@ -125,7 +124,7 @@ jobs:
     needs:
       - resolve-cherry-pick-request
       - cherry-pick-to-latest-release
-    if: always() && needs.resolve-cherry-pick-request.outputs.should_cherrypick == 'true' && (needs.resolve-cherry-pick-request.result != 'success' || needs.cherry-pick-to-latest-release.result != 'success')
+    if: always() && needs.resolve-cherry-pick-request.outputs.should_cherrypick == 'true' && (needs.resolve-cherry-pick-request.result == 'failure' || needs.cherry-pick-to-latest-release.result == 'failure')
     runs-on: ubuntu-slim
     timeout-minutes: 10
     steps:
