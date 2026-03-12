@@ -90,8 +90,17 @@ class OnyxErrorCode(Enum):
     def detail(self, message: str | None = None) -> dict[str, str]:
         """Build a structured error detail dict.
 
-        Returns a dict like:
-            {"error_code": "UNAUTHENTICATED", "message": "Token expired"}
+        Returns a dict like::
+
+            {
+                "error_code": "UNAUTHENTICATED",
+                "message": "Token expired",
+                "detail": "Token expired",   # backward-compat alias
+            }
+
+        The ``detail`` key mirrors ``message`` for backward compatibility with
+        clients that read the ``detail`` field from FastAPI's default
+        ``HTTPException`` response shape.
 
         If no message is supplied, the error code itself is used as the message.
         """

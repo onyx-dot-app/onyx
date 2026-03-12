@@ -3,7 +3,9 @@
 Raise ``OnyxError`` instead of ``HTTPException`` in business code.  A global
 FastAPI exception handler (registered via ``register_onyx_exception_handlers``)
 converts it into a JSON response with the standard
-``{"error_code": "...", "message": "..."}`` shape.
+``{"error_code": "...", "message": "...", "detail": "..."}`` shape.  The
+``detail`` key mirrors ``message`` for backward compatibility with clients
+that expect FastAPI's default ``HTTPException`` response format.
 
 Usage::
 
