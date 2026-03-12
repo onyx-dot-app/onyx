@@ -23,6 +23,7 @@ import {
   SvgExpand,
   SvgFold,
   SvgExternalLink,
+  SvgRefreshCw,
 } from "@opal/icons";
 import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
 import { Content } from "@opal/layouts";
@@ -53,6 +54,7 @@ import * as ExpandableCard from "@/layouts/expandable-card-layouts";
 import * as ActionsLayouts from "@/layouts/actions-layouts";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 import { Disabled } from "@opal/core";
+import IconButton from "@/refresh-components/buttons/IconButton";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import useFilter from "@/hooks/useFilter";
 import { MCPServer } from "@/lib/tools/interfaces";
@@ -80,6 +82,10 @@ interface ChatPreferencesFormValues {
   maximum_chat_retention_days: string;
   anonymous_user_enabled: boolean;
   disable_default_assistant: boolean;
+
+  // File limits
+  user_file_max_upload_size_mb: string;
+  file_token_count_threshold_k: string;
 }
 
 interface MCPServerCardTool {
@@ -174,6 +180,111 @@ function MCPServerCard({
   );
 }
 
+type FileLimitFieldName =
+  | "user_file_max_upload_size_mb"
+  | "file_token_count_threshold_k";
+
+interface NumericLimitFieldProps {
+  name: FileLimitFieldName;
+  defaultValue: string;
+  saveSettings: (updates: Partial<Settings>) => Promise<void>;
+}
+
+function NumericLimitField({
+  name,
+  defaultValue,
+  saveSettings,
+}: NumericLimitFieldProps) {
+  const { values, setFieldValue } =
+    useFormikContext<ChatPreferencesFormValues>();
+  const initialValue = useRef(values[name]);
+  const value = values[name];
+
+  const handleRestore = () => {
+    void setFieldValue(name, defaultValue);
+    void saveSettings({ [name]: parseInt(defaultValue, 10) });
+    initialValue.current = defaultValue;
+  };
+
+  const handleBlur = () => {
+    const parsed = parseInt(value, 10);
+    if (isNaN(parsed) || parsed === 0) {
+      void setFieldValue(name, "");
+    }
+    if (value !== initialValue.current) {
+      void saveSettings({
+        [name]: value === "" || isNaN(parsed) || parsed === 0 ? 0 : parsed,
+      });
+      initialValue.current = isNaN(parsed) || parsed === 0 ? "" : value;
+    }
+  };
+
+  return (
+    <div className="group w-full">
+      <InputTypeInField
+        name={name}
+        inputMode="numeric"
+        showClearButton={false}
+        pattern="[0-9]*"
+        placeholder="No limit"
+        rightSection={
+          value !== "" && value !== defaultValue ? (
+            <div className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+              <IconButton
+                icon={SvgRefreshCw}
+                tooltip="Restore default"
+                internal
+                type="button"
+                onClick={handleRestore}
+              />
+            </div>
+          ) : undefined
+        }
+        onBlur={handleBlur}
+      />
+    </div>
+  );
+}
+
+interface FileSizeLimitFieldsProps {
+  saveSettings: (updates: Partial<Settings>) => Promise<void>;
+  vectorDbEnabled: boolean;
+}
+
+function FileSizeLimitFields({
+  saveSettings,
+  vectorDbEnabled,
+}: FileSizeLimitFieldsProps) {
+  const DEFAULT_UPLOAD_SIZE_MB = "100";
+  const DEFAULT_TOKEN_THRESHOLD_K = vectorDbEnabled ? "200" : "10000";
+
+  return (
+    <div className="flex gap-4 w-full">
+      <div className="flex-1">
+        <InputLayouts.Vertical title="File Size Limit (MB)" nonInteractive>
+          <NumericLimitField
+            name="user_file_max_upload_size_mb"
+            defaultValue={DEFAULT_UPLOAD_SIZE_MB}
+            saveSettings={saveSettings}
+          />
+        </InputLayouts.Vertical>
+      </div>
+      <div className="flex-1">
+        <InputLayouts.Vertical
+          title="File Token Limit (thousand tokens)"
+          nonInteractive
+        >
+          <NumericLimitField
+            name="file_token_count_threshold_k"
+            defaultValue={DEFAULT_TOKEN_THRESHOLD_K}
+            saveSettings={saveSettings}
+          />
+        </InputLayouts.Vertical>
+      </div>
+    </div>
+  );
+}
+
 /**
  * Inner form component that uses useFormikContext to access values
  * and create save handlers for settings fields.
@@ -181,7 +292,8 @@ function MCPServerCard({
 function ChatPreferencesForm() {
   const router = useRouter();
   const settings = useSettingsContext();
-  const { values } = useFormikContext<ChatPreferencesFormValues>();
+  const { values, setFieldValue } =
+    useFormikContext<ChatPreferencesFormValues>();
 
   // Track initial text values to avoid unnecessary saves on blur
   const initialCompanyName = useRef(values.company_name);
@@ -190,6 +302,7 @@ function ChatPreferencesForm() {
   // Tools availability
   const { tools: availableTools } = useAvailableTools();
   const vectorDbEnabled = useVectorDbEnabled();
+
   const searchTool = availableTools.find(
     (t) => t.in_code_tool_id === SEARCH_TOOL_ID
   );
@@ -721,6 +834,18 @@ function ChatPreferencesForm() {
                 </Card>
 
                 <Card>
+                  <InputLayouts.Vertical
+                    title="File Attachment Size Limit"
+                    description="Files attached in chats and projects must fit within both limits to be accepted. Larger files increase latency, memory usage, and token costs."
+                  >
+                    <FileSizeLimitFields
+                      saveSettings={saveSettings}
+                      vectorDbEnabled={vectorDbEnabled}
+                    />
+                  </InputLayouts.Vertical>
+                </Card>
+
+                <Card>
                   <InputLayouts.Horizontal
                     title="Allow Anonymous Users"
                     description="Allow anyone to start chats without logging in. They do not see any other chats and cannot create agents or update settings."
@@ -832,6 +957,18 @@ export default function ChatPreferencesPage() {
     anonymous_user_enabled: settings.settings.anonymous_user_enabled ?? false,
     disable_default_assistant:
       settings.settings.disable_default_assistant ?? false,
+
+    // File limits — 0 means "no limit", show as empty string
+    user_file_max_upload_size_mb:
+      settings.settings.user_file_max_upload_size_mb === 0 ||
+      settings.settings.user_file_max_upload_size_mb == null
+        ? ""
+        : settings.settings.user_file_max_upload_size_mb.toString(),
+    file_token_count_threshold_k:
+      settings.settings.file_token_count_threshold_k === 0 ||
+      settings.settings.file_token_count_threshold_k == null
+        ? ""
+        : settings.settings.file_token_count_threshold_k.toString(),
   };
 
   return (
