@@ -1964,9 +1964,7 @@ def get_oauth_router(
                 callback_path = request.app.url_path_for(callback_route_name)
                 callback_redirect_url = f"{WEB_DOMAIN}{callback_path}"
 
-            pkce_cookie_name_for_lookup = get_pkce_cookie_name(state_value)
-            pkce_cookie_name = pkce_cookie_name_for_lookup
-            code_verifier = request.cookies.get(pkce_cookie_name_for_lookup)
+            code_verifier = request.cookies.get(cast(str, pkce_cookie_name))
             if not code_verifier:
                 return build_error_response(
                     OnyxError(

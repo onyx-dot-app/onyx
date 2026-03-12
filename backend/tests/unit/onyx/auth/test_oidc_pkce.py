@@ -336,4 +336,6 @@ def test_oidc_callback_non_pkce_rejects_csrf_mismatch() -> None:
     assert response.status_code == 400
     assert response.json()["error_code"] == "VALIDATION_ERROR"
     assert response.json()["detail"] == "OAUTH_INVALID_STATE"
+    # NOTE: In the non-PKCE path, oauth2_authorize_callback exchanges the code
+    # before route-body CSRF validation runs. This is a known ordering trade-off.
     assert oauth_client.access_token_calls
