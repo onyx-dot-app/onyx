@@ -17,6 +17,7 @@ import type { IconFunctionComponent } from "@opal/types";
 import Text from "@/refresh-components/texts/Text";
 import Popover from "@/refresh-components/Popover";
 import LineItem from "@/refresh-components/buttons/LineItem";
+import { toast } from "@/hooks/useToast";
 import { setUserRole } from "./svc";
 import type { UserRow } from "./interfaces";
 
@@ -40,7 +41,7 @@ interface UserRoleCellProps {
 export default function UserRoleCell({ user, onMutate }: UserRoleCellProps) {
   const [isUpdating, setIsUpdating] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [pendingRole, setPendingRole] = useState<string | null>(null);
+  const [pendingRole, setPendingRole] = useState<UserRole | null>(null);
   const [open, setOpen] = useState(false);
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
 
@@ -52,12 +53,23 @@ export default function UserRoleCell({ user, onMutate }: UserRoleCellProps) {
     );
   }
 
-  const applyRole = async (newRole: string) => {
+  if (user.is_scim_synced) {
+    return (
+      <div className="flex items-center gap-1.5">
+        <Text as="span" mainUiBody text03>
+          {USER_ROLE_LABELS[user.role] ?? user.role}
+        </Text>
+      </div>
+    );
+  }
+
+  const applyRole = async (newRole: UserRole) => {
     setIsUpdating(true);
     try {
       await setUserRole(user.email, newRole);
       onMutate();
-    } catch {
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update role");
       onMutate();
     } finally {
       setIsUpdating(false);
@@ -74,13 +86,13 @@ export default function UserRoleCell({ user, onMutate }: UserRoleCellProps) {
       setPendingRole(role);
       setShowConfirmModal(true);
     } else {
-      applyRole(role);
+      void applyRole(role);
     }
   };
 
   const handleConfirm = () => {
     if (pendingRole) {
-      applyRole(pendingRole);
+      void applyRole(pendingRole);
     }
     setShowConfirmModal(false);
     setPendingRole(null);
@@ -101,7 +113,10 @@ export default function UserRoleCell({ user, onMutate }: UserRoleCellProps) {
             USER_ROLE_LABELS[pendingRole as UserRole] ??
             USER_ROLE_LABELS[user.role]
           }`}
-          onClose={() => setShowConfirmModal(false)}
+          onClose={() => {
+            setShowConfirmModal(false);
+            setPendingRole(null);
+          }}
           onConfirm={handleConfirm}
         />
       )}
