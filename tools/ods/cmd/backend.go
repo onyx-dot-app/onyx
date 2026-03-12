@@ -17,7 +17,14 @@ import (
 
 // NewBackendCommand creates the parent "backend" command with subcommands for
 // running backend services.
+// BackendOptions holds options shared across backend subcommands.
+type BackendOptions struct {
+	NoEE bool
+}
+
 func NewBackendCommand() *cobra.Command {
+	opts := &BackendOptions{}
+
 	cmd := &cobra.Command{
 		Use:   "backend",
 		Short: "Run backend services (api, model_server)",
@@ -26,18 +33,23 @@ func NewBackendCommand() *cobra.Command {
 On first run, copies .vscode/env_template.txt to .vscode/.env if the
 .env file does not already exist.
 
+Enterprise Edition features are enabled by default for development,
+with license enforcement disabled.
+
 Available subcommands:
   api            Start the FastAPI backend server
   model_server   Start the model server`,
 	}
 
-	cmd.AddCommand(newBackendAPICommand())
-	cmd.AddCommand(newBackendModelServerCommand())
+	cmd.PersistentFlags().BoolVar(&opts.NoEE, "no-ee", false, "Disable Enterprise Edition features (enabled by default)")
+
+	cmd.AddCommand(newBackendAPICommand(opts))
+	cmd.AddCommand(newBackendModelServerCommand(opts))
 
 	return cmd
 }
 
-func newBackendAPICommand() *cobra.Command {
+func newBackendAPICommand(opts *BackendOptions) *cobra.Command {
 	var port string
 
 	cmd := &cobra.Command{
@@ -47,9 +59,10 @@ func newBackendAPICommand() *cobra.Command {
 
 Examples:
   ods backend api
-  ods backend api --port 9090`,
+  ods backend api --port 9090
+  ods backend api --no-ee`,
 		Run: func(cmd *cobra.Command, args []string) {
-			runBackendService("api", "onyx.main:app", port)
+			runBackendService("api", "onyx.main:app", port, opts)
 		},
 	}
 
@@ -58,7 +71,7 @@ Examples:
 	return cmd
 }
 
-func newBackendModelServerCommand() *cobra.Command {
+func newBackendModelServerCommand(opts *BackendOptions) *cobra.Command {
 	var port string
 
 	cmd := &cobra.Command{
@@ -70,7 +83,7 @@ Examples:
   ods backend model_server
   ods backend model_server --port 9001`,
 		Run: func(cmd *cobra.Command, args []string) {
-			runBackendService("model_server", "model_server.main:app", port)
+			runBackendService("model_server", "model_server.main:app", port, opts)
 		},
 	}
 
@@ -79,7 +92,7 @@ Examples:
 	return cmd
 }
 
-func runBackendService(name, module, port string) {
+func runBackendService(name, module, port string, opts *BackendOptions) {
 	root, err := paths.GitRoot()
 	if err != nil {
 		log.Fatalf("Failed to find git root: %v", err)
@@ -87,6 +100,9 @@ func runBackendService(name, module, port string) {
 
 	envFile := ensureBackendEnvFile(root)
 	fileVars := loadBackendEnvFile(envFile)
+
+	eeDefaults := eeEnvDefaults(opts.NoEE)
+	fileVars = append(fileVars, eeDefaults...)
 
 	backendDir := filepath.Join(root, "backend")
 
@@ -96,6 +112,9 @@ func runBackendService(name, module, port string) {
 		"--port", port,
 	}
 	log.Infof("Starting %s on port %s...", name, port)
+	if !opts.NoEE {
+		log.Info("Enterprise Edition enabled (use --no-ee to disable)")
+	}
 	log.Debugf("Running in %s: uv %v", backendDir, uvicornArgs)
 
 	mergedEnv := mergeEnv(os.Environ(), fileVars)
@@ -116,6 +135,21 @@ func runBackendService(name, module, port string) {
 			}
 		}
 		log.Fatalf("Failed to run %s: %v", name, err)
+	}
+}
+
+// eeEnvDefaults returns env entries for EE and license enforcement settings.
+// These are appended to the file vars so they act as defaults — shell env
+// and .env file values still take precedence via mergeEnv.
+func eeEnvDefaults(noEE bool) []string {
+	if noEE {
+		return []string{
+			"ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=false",
+		}
+	}
+	return []string{
+		"ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true",
+		"LICENSE_ENFORCEMENT_ENABLED=false",
 	}
 }
 
