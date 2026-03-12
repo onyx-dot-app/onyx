@@ -1,8 +1,7 @@
 import Text from "@/refresh-components/texts/Text";
 import { Section } from "@/layouts/general-layouts";
-import { getDataLanguage } from "@/lib/languages";
+import { getDataLanguage, getLanguageByMime } from "@/lib/languages";
 import { PreviewVariant } from "@/sections/modals/PreviewModal/interfaces";
-import { getMimeLanguage } from "@/sections/modals/PreviewModal/mimeUtils";
 import { CodePreview } from "@/sections/modals/PreviewModal/variants/CodePreview";
 import {
   CopyButton,
@@ -22,10 +21,11 @@ function formatContent(language: string, content: string): string {
 
 export const dataVariant: PreviewVariant = {
   matches: (name, mime) =>
-    !!getDataLanguage(name || "") || !!getMimeLanguage(mime),
+    !!getDataLanguage(name || "") || !!getLanguageByMime(mime),
   width: "md",
   height: "lg",
   needsTextContent: true,
+  codeBackground: true,
 
   headerDescription: (ctx) =>
     ctx.fileContent
@@ -36,7 +36,9 @@ export const dataVariant: PreviewVariant = {
 
   renderContent: (ctx) => {
     const formatted = formatContent(ctx.language, ctx.fileContent);
-    return <CodePreview content={formatted} language={ctx.language} />;
+    return (
+      <CodePreview normalize content={formatted} language={ctx.language} />
+    );
   },
 
   renderFooterLeft: (ctx) => (

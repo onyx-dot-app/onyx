@@ -7,13 +7,14 @@ import Text from "@/refresh-components/texts/Text";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { cn } from "@/lib/utils";
 import { Section } from "@/layouts/general-layouts";
-import { getCodeLanguage, getDataLanguage } from "@/lib/languages";
+import mime from "mime";
+import {
+  getCodeLanguage,
+  getDataLanguage,
+  getLanguageByMime,
+} from "@/lib/languages";
 import { fetchChatFile } from "@/lib/chat/svc";
 import { PreviewContext } from "@/sections/modals/PreviewModal/interfaces";
-import {
-  getMimeLanguage,
-  resolveMimeType,
-} from "@/sections/modals/PreviewModal/mimeUtils";
 import { resolveVariant } from "@/sections/modals/PreviewModal/variants";
 
 interface PreviewModalProps {
@@ -41,7 +42,7 @@ export default function PreviewModal({
   const language = useMemo(
     () =>
       getCodeLanguage(presentingDocument.semantic_identifier || "") ||
-      getMimeLanguage(mimeType) ||
+      getLanguageByMime(mimeType) ||
       getDataLanguage(presentingDocument.semantic_identifier || "") ||
       "plaintext",
     [mimeType, presentingDocument.semantic_identifier]
@@ -86,7 +87,10 @@ export default function PreviewModal({
 
       const rawContentType =
         response.headers.get("Content-Type") || "application/octet-stream";
-      const resolvedMime = resolveMimeType(rawContentType, originalFileName);
+      const resolvedMime =
+        rawContentType === "application/octet-stream"
+          ? mime.getType(originalFileName) ?? rawContentType
+          : rawContentType;
       setMimeType(resolvedMime);
 
       const resolved = resolveVariant(
@@ -166,24 +170,24 @@ export default function PreviewModal({
           onClose={onClose}
         />
 
-        {/* Body + floating footer wrapper */}
-        <Modal.Body padding={0} gap={0}>
-          <Section padding={0} gap={0}>
-            {isLoading ? (
-              <Section>
-                <SimpleLoader className="h-8 w-8" />
-              </Section>
-            ) : loadError ? (
-              <Section padding={1}>
-                <Text text03 mainUiBody>
-                  {loadError}
-                </Text>
-              </Section>
-            ) : (
-              variant.renderContent(ctx)
-            )}
-          </Section>
-        </Modal.Body>
+        {/* Body — uses flex-1/min-h-0/overflow-hidden (not Modal.Body)
+            so that child ScrollIndicatorDivs become the actual scroll
+            container instead of the body stealing it via overflow-y-auto. */}
+        <div className="flex flex-col flex-1 min-h-0 overflow-hidden w-full bg-background-tint-01">
+          {isLoading ? (
+            <Section>
+              <SimpleLoader className="h-8 w-8" />
+            </Section>
+          ) : loadError ? (
+            <Section padding={1}>
+              <Text text03 mainUiBody>
+                {loadError}
+              </Text>
+            </Section>
+          ) : (
+            variant.renderContent(ctx)
+          )}
+        </div>
 
         {/* Floating footer */}
         {!isLoading && !loadError && (
@@ -194,8 +198,9 @@ export default function PreviewModal({
               "p-4 pointer-events-none w-full"
             )}
             style={{
-              background:
-                "linear-gradient(to top, var(--background-code-01) 40%, transparent)",
+              background: `linear-gradient(to top, var(--background-${
+                variant.codeBackground ? "code-01" : "tint-01"
+              }) 40%, transparent)`,
             }}
           >
             {/* Left slot */}

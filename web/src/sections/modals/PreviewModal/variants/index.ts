@@ -15,10 +15,10 @@ const PREVIEW_VARIANTS: PreviewVariant[] = [
   imageVariant,
   pdfVariant,
   csvVariant,
-  dataVariant,
-  textVariant,
   markdownVariant,
   docxVariant,
+  textVariant,
+  dataVariant,
 ];
 
 export function resolveVariant(
