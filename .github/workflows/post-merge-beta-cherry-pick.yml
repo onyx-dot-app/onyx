@@ -45,31 +45,42 @@ jobs:
           echo "pr_number=${PR_NUMBER}" >> "$GITHUB_OUTPUT"
           echo "merged_by=${MERGED_BY}" >> "$GITHUB_OUTPUT"
 
-          member_state=$(gh api "orgs/${GITHUB_REPOSITORY_OWNER}/teams/${ALLOWED_TEAM}/memberships/${MERGED_BY}" --jq '.state' 2>/dev/null) || member_state=""
+          if ! echo "${PR_BODY}" | grep -qiE "\\[x\\][[:space:]]*(\\[[^]]+\\][[:space:]]*)?Please cherry-pick this PR to the latest release version"; then
+            echo "should_cherrypick=false" >> "$GITHUB_OUTPUT"
+            echo "Cherry-pick checkbox not checked for PR #${PR_NUMBER}. Skipping."
+            exit 0
+          fi
+
+          # Keep should_cherrypick output before any possible exit 1 below so
+          # notify-slack can still gate on this output even if this job fails.
+          echo "should_cherrypick=true" >> "$GITHUB_OUTPUT"
+          echo "Cherry-pick checkbox checked for PR #${PR_NUMBER}."
+
+          if [ -z "${MERGE_COMMIT_SHA}" ] || [ "${MERGE_COMMIT_SHA}" = "null" ]; then
+            echo "gate_error=missing-merge-commit-sha" >> "$GITHUB_OUTPUT"
+            echo "::error::PR #${PR_NUMBER} requested cherry-pick, but merge_commit_sha is missing."
+            exit 1
+          fi
+
+          echo "merge_commit_sha=${MERGE_COMMIT_SHA}" >> "$GITHUB_OUTPUT"
+
+          member_state_file="$(mktemp)"
+          member_err_file="$(mktemp)"
+          if ! gh api "orgs/${GITHUB_REPOSITORY_OWNER}/teams/${ALLOWED_TEAM}/memberships/${MERGED_BY}" --jq '.state' >"${member_state_file}" 2>"${member_err_file}"; then
+            api_err="$(tr '\n' ' ' < "${member_err_file}" | sed 's/[[:space:]]\+/ /g' | cut -c1-300)"
+            echo "gate_error=team-api-error" >> "$GITHUB_OUTPUT"
+            echo "::error::Team membership API call failed for ${MERGED_BY} in ${ALLOWED_TEAM}: ${api_err}"
+            exit 1
+          fi
+
+          member_state="$(cat "${member_state_file}")"
           if [ "${member_state}" != "active" ]; then
             echo "should_cherrypick=false" >> "$GITHUB_OUTPUT"
             echo "::notice::${MERGED_BY} is not an active member of team ${ALLOWED_TEAM}. Skipping cherry-pick."
             exit 0
           fi
 
-          if echo "${PR_BODY}" | grep -qiE "\\[x\\][[:space:]]*(\\[[^]]+\\][[:space:]]*)?Please cherry-pick this PR to the latest release version"; then
-            # Keep should_cherrypick output before any possible exit 1 below so
-            # notify-slack can still gate on this output even if this job fails.
-            echo "should_cherrypick=true" >> "$GITHUB_OUTPUT"
-            echo "Cherry-pick checkbox checked for PR #${PR_NUMBER}."
-
-            if [ -z "${MERGE_COMMIT_SHA}" ] || [ "${MERGE_COMMIT_SHA}" = "null" ]; then
-              echo "gate_error=missing-merge-commit-sha" >> "$GITHUB_OUTPUT"
-              echo "::error::PR #${PR_NUMBER} requested cherry-pick, but merge_commit_sha is missing."
-              exit 1
-            fi
-
-            echo "merge_commit_sha=${MERGE_COMMIT_SHA}" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          echo "should_cherrypick=false" >> "$GITHUB_OUTPUT"
-          echo "Cherry-pick checkbox not checked for PR #${PR_NUMBER}. Skipping."
+          exit 0
 
   cherry-pick-to-latest-release:
     needs:
@@ -185,6 +196,8 @@ jobs:
           reason_text="cherry-pick command failed"
           if [ "${GATE_ERROR}" = "missing-merge-commit-sha" ]; then
             reason_text="requested cherry-pick but merge commit SHA was missing"
+          elif [ "${GATE_ERROR}" = "team-api-error" ]; then
+            reason_text="team membership lookup failed while validating cherry-pick permissions"
           elif [ "${CHERRY_PICK_REASON}" = "merge-conflict" ]; then
             reason_text="merge conflict during cherry-pick"
           fi
