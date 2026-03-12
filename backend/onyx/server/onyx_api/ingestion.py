@@ -193,7 +193,7 @@ def delete_ingestion_doc(
 
     if not document.from_ingestion_api:
         raise OnyxError(
-            OnyxErrorCode.VALIDATION_ERROR,
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "Document was not created via the ingestion API",
         )
 
