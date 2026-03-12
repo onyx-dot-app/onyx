@@ -15,8 +15,8 @@
 #                  -f docker-compose.dev.yml up -d --wait
 #
 # This overlay:
-#   - Moves Vespa (index), both model servers, code-interpreter, OpenSearch,
-#     MinIO, Redis (cache), and the background worker to profiles so they do
+#   - Moves Vespa (index), both model servers, OpenSearch, MinIO,
+#     Redis (cache), and the background worker to profiles so they do
 #     not start by default
 #   - Makes depends_on references to removed services optional
 #   - Sets DISABLE_VECTOR_DB=true on the api_server
@@ -30,7 +30,6 @@
 #   --profile redis             Redis cache
 #   --profile opensearch        OpenSearch
 #   --profile s3-filestore      MinIO (S3-compatible file store)
-#   --profile code-interpreter  Code interpreter
 # =============================================================================
 
 name: onyx
@@ -97,6 +96,3 @@ services:
   # MinIO is not needed in lite mode (Postgres handles file storage).
   minio:
     profiles: ["s3-filestore"]
-
-  code-interpreter:
-    profiles: ["code-interpreter"]
