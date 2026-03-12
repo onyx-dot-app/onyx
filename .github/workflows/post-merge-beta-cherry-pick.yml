@@ -32,6 +32,8 @@ jobs:
           echo "merged_by=${MERGED_BY}" >> "$GITHUB_OUTPUT"
 
           if echo "${PR_BODY}" | grep -qiE "\\[x\\][[:space:]]*(\\[[^]]+\\][[:space:]]*)?Please cherry-pick this PR to the latest release version"; then
+            # Keep should_cherrypick output before any possible exit 1 below so
+            # notify-slack can still gate on this output even if this job fails.
             echo "should_cherrypick=true" >> "$GITHUB_OUTPUT"
             echo "Cherry-pick checkbox checked for PR #${PR_NUMBER}."
 
@@ -156,8 +158,7 @@ jobs:
           reason_text="cherry-pick command failed"
           if [ "${GATE_ERROR}" = "missing-merge-commit-sha" ]; then
             reason_text="requested cherry-pick but merge commit SHA was missing"
-          fi
-          if [ "${CHERRY_PICK_REASON}" = "merge-conflict" ]; then
+          elif [ "${CHERRY_PICK_REASON}" = "merge-conflict" ]; then
             reason_text="merge conflict during cherry-pick"
           fi
 
