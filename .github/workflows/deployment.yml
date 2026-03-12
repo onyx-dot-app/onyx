@@ -54,6 +54,7 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
         run: |
+          set -eo pipefail
           TAG="${GITHUB_REF_NAME}"
           # Sanitize tag name by replacing slashes with hyphens (for Docker tag compatibility)
           SANITIZED_TAG=$(echo "$TAG" | tr '/' '-')
