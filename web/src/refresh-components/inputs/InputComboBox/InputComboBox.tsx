@@ -322,24 +322,32 @@ const InputComboBox = ({
 
   const handleFocus = useCallback(() => {
     if (hasOptions) {
+      setInputValue("");
       setIsOpen(true);
-      setHighlightedIndex(-1); // Start with no highlight on focus
-      setIsKeyboardNav(false); // Start with mouse mode
+      setHighlightedIndex(-1);
+      setIsKeyboardNav(false);
     }
-  }, [hasOptions, setIsOpen, setHighlightedIndex, setIsKeyboardNav]);
+  }, [
+    hasOptions,
+    setInputValue,
+    setIsOpen,
+    setHighlightedIndex,
+    setIsKeyboardNav,
+  ]);
 
   const toggleDropdown = useCallback(() => {
     if (!disabled && hasOptions) {
       setIsOpen((prev) => {
         const newOpen = !prev;
         if (newOpen) {
-          setHighlightedIndex(-1); // Reset highlight when opening
+          setInputValue("");
+          setHighlightedIndex(-1);
         }
         return newOpen;
       });
       inputRef.current?.focus();
     }
-  }, [disabled, hasOptions, setIsOpen, setHighlightedIndex]);
+  }, [disabled, hasOptions, setIsOpen, setInputValue, setHighlightedIndex]);
 
   const autoId = useId();
   const fieldId = fieldContext?.baseId || name || `combo-box-${autoId}`;
