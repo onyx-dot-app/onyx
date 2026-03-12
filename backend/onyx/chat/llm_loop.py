@@ -630,7 +630,12 @@ def run_llm_loop(
             )
             citation_processor.update_citation_mapping(project_citation_mapping)
 
-        llm_step_result: LlmStepResult | None = None
+        llm_step_result = LlmStepResult(
+            reasoning=None,
+            answer=None,
+            tool_calls=None,
+            raw_answer=None,
+        )
 
         # Pass the total budget to construct_message_history, which will handle token allocation
         available_tokens = llm.config.max_input_tokens
@@ -1100,13 +1105,6 @@ def run_llm_loop(
             ):
                 # As long as 1 tool with citeable documents is called at any point, we ask the LLM to try to cite
                 should_cite_documents = True
-
-        if not llm_step_result:
-            raise EmptyLLMResponseError(
-                provider=llm.config.model_provider,
-                model=llm.config.model_name,
-                tool_choice=tool_choice,
-            )
 
         if not llm_step_result.answer and not llm_step_result.tool_calls:
             raise EmptyLLMResponseError(
