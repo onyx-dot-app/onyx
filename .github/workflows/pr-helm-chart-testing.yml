@@ -65,7 +65,7 @@ jobs:
       # lint all charts if any changes were detected
       - name: Run chart-testing (lint)
         if: steps.list-changed.outputs.changed == 'true'
-        run: ct lint --config ct.yaml --all
+        run: ct lint --config ct.yaml --all --helm-extra-set-args="--set=auth.userauth.values.user_auth_secret=placeholder"
         # the following would lint only changed charts, but linting isn't expensive
         # run: ct lint --config ct.yaml --target-branch ${{ github.event.repository.default_branch }}
 
