@@ -99,8 +99,9 @@ jobs:
           output_file="$(mktemp)"
           set +e
           uv run --no-sync --with onyx-devtools ods cherry-pick "${MERGE_COMMIT_SHA}" --yes --no-verify 2>&1 | tee "$output_file"
-          exit_code="${PIPESTATUS[0]}"
-          tee_exit="${PIPESTATUS[1]}"
+          pipe_statuses=("${PIPESTATUS[@]}")
+          exit_code="${pipe_statuses[0]}"
+          tee_exit="${pipe_statuses[1]:-0}"
           set -e
           if [ "${tee_exit}" -ne 0 ]; then
             echo "::warning::tee failed to write to output_file; cherry-pick reason/excerpt may be incomplete."
