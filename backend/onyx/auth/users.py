@@ -1974,13 +1974,8 @@ def get_oauth_router(
                 callback_path = request.app.url_path_for(callback_route_name)
                 callback_redirect_url = f"{WEB_DOMAIN}{callback_path}"
 
-            if pkce_cookie_name is None:
-                return build_error_response(
-                    OnyxError(
-                        OnyxErrorCode.INTERNAL_ERROR,
-                        "PKCE state was not initialized",
-                    )
-                )
+            # `pkce_cookie_name` is initialized when `state` is present above.
+            assert pkce_cookie_name is not None
             code_verifier = request.cookies.get(pkce_cookie_name)
             if not code_verifier:
                 return build_error_response(
