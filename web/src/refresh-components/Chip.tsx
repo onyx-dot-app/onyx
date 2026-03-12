@@ -8,7 +8,6 @@ export interface ChipProps {
   icon?: React.FunctionComponent<IconProps>;
   /** Icon rendered after the label (e.g. a warning indicator) */
   rightIcon?: React.FunctionComponent<IconProps>;
-  rightIconClassName?: string;
   onRemove?: () => void;
   smallLabel?: boolean;
 }
@@ -28,7 +27,6 @@ export default function Chip({
   children,
   icon: Icon,
   rightIcon: RightIcon,
-  rightIconClassName,
   onRemove,
   smallLabel = true,
 }: ChipProps) {
@@ -40,9 +38,7 @@ export default function Chip({
           {children}
         </Text>
       )}
-      {RightIcon && (
-        <RightIcon size={14} className={rightIconClassName ?? "text-text-03"} />
-      )}
+      {RightIcon && <RightIcon size={14} className="text-text-03" />}
       {onRemove && (
         <Button
           onClick={(e) => {

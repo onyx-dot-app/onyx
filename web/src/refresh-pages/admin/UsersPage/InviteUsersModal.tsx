@@ -1,16 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { Button } from "@opal/components";
-import { SvgUsers, SvgUser } from "@opal/icons";
+import { SvgUsers } from "@opal/icons";
 import { Disabled } from "@opal/core";
 import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
 import InputChipField from "@/refresh-components/inputs/InputChipField";
 import type { ChipItem } from "@/refresh-components/inputs/InputChipField";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
-import Text from "@/refresh-components/texts/Text";
 import { toast } from "@/hooks/useToast";
-import { UserRole, USER_ROLE_LABELS } from "@/lib/types";
 import { inviteUsers } from "./svc";
 
 // ---------------------------------------------------------------------------
@@ -18,13 +15,6 @@ import { inviteUsers } from "./svc";
 // ---------------------------------------------------------------------------
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-/** Roles available for invite — excludes curator-specific and system roles */
-const INVITE_ROLES = [
-  UserRole.BASIC,
-  UserRole.ADMIN,
-  UserRole.GLOBAL_CURATOR,
-] as const;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -45,11 +35,10 @@ export default function InviteUsersModal({
 }: InviteUsersModalProps) {
   const [chips, setChips] = useState<ChipItem[]>([]);
   const [inputValue, setInputValue] = useState("");
-  const [role, setRole] = useState<string>(UserRole.BASIC);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  function addEmail(value: string) {
-    // Split on commas so pasted lists like "a@b.com, c@d.com" still work
+  /** Parse a comma-separated string into de-duped ChipItems */
+  function parseEmails(value: string, existing: ChipItem[]): ChipItem[] {
     const entries = value
       .split(",")
       .map((e) => e.trim().toLowerCase())
@@ -57,7 +46,9 @@ export default function InviteUsersModal({
 
     const newChips: ChipItem[] = [];
     for (const email of entries) {
-      const alreadyAdded = chips.some((c) => c.label === email);
+      const alreadyAdded =
+        existing.some((c) => c.label === email) ||
+        newChips.some((c) => c.label === email);
       if (!alreadyAdded) {
         newChips.push({
           id: email,
@@ -66,7 +57,11 @@ export default function InviteUsersModal({
         });
       }
     }
+    return newChips;
+  }
 
+  function addEmail(value: string) {
+    const newChips = parseEmails(value, chips);
     if (newChips.length > 0) {
       setChips((prev) => [...prev, ...newChips]);
     }
@@ -77,20 +72,40 @@ export default function InviteUsersModal({
     setChips((prev) => prev.filter((c) => c.id !== id));
   }
 
-  function handleClose() {
+  const handleClose = useCallback(() => {
     onOpenChange(false);
     // Reset state after close animation
     setTimeout(() => {
       setChips([]);
       setInputValue("");
-      setRole(UserRole.BASIC);
     }, 200);
-  }
+  }, [onOpenChange]);
+
+  /** Intercept backdrop/ESC closes so state is always reset */
+  const handleOpenChange = useCallback(
+    (next: boolean) => {
+      if (!next) {
+        handleClose();
+      } else {
+        onOpenChange(next);
+      }
+    },
+    [handleClose, onOpenChange]
+  );
 
   async function handleInvite() {
-    const validEmails = chips
-      .map((c) => c.label)
-      .filter((e) => EMAIL_REGEX.test(e));
+    // Flush any pending text in the input into chips synchronously
+    const pending = inputValue.trim();
+    const allChips = pending
+      ? [...chips, ...parseEmails(pending, chips)]
+      : chips;
+
+    if (pending) {
+      setChips(allChips);
+      setInputValue("");
+    }
+
+    const validEmails = allChips.filter((c) => !c.error).map((c) => c.label);
 
     if (validEmails.length === 0) {
       toast.error("Please add at least one valid email address");
@@ -114,12 +129,12 @@ export default function InviteUsersModal({
   }
 
   return (
-    <Modal open={open} onOpenChange={onOpenChange}>
+    <Modal open={open} onOpenChange={handleOpenChange}>
       <Modal.Content width="sm" height="fit">
         <Modal.Header
           icon={SvgUsers}
           title="Invite Users"
-          onClose={handleClose}
+          onClose={isSubmitting ? undefined : handleClose}
         />
 
         <Modal.Body>
@@ -130,42 +145,27 @@ export default function InviteUsersModal({
             value={inputValue}
             onChange={setInputValue}
             placeholder="Add emails to invite, comma separated"
+            layout="stacked"
           />
-
-          <div className="flex items-start justify-between w-full gap-4">
-            <div className="flex flex-col gap-0.5">
-              <Text as="p" mainUiAction text04>
-                User Role
-              </Text>
-              <Text as="p" secondaryBody text03>
-                Invite new users as
-              </Text>
-            </div>
-
-            <div className="w-[200px]">
-              <InputSelect value={role} onValueChange={setRole}>
-                <InputSelect.Trigger />
-                <InputSelect.Content>
-                  {INVITE_ROLES.map((r) => (
-                    <InputSelect.Item key={r} value={r} icon={SvgUser}>
-                      {USER_ROLE_LABELS[r]}
-                    </InputSelect.Item>
-                  ))}
-                </InputSelect.Content>
-              </InputSelect>
-            </div>
-          </div>
         </Modal.Body>
 
         <Modal.Footer>
           <BasicModalFooter
             cancel={
-              <Button prominence="tertiary" onClick={handleClose}>
-                Cancel
-              </Button>
+              <Disabled disabled={isSubmitting}>
+                <Button prominence="tertiary" onClick={handleClose}>
+                  Cancel
+                </Button>
+              </Disabled>
             }
             submit={
-              <Disabled disabled={isSubmitting || chips.length === 0}>
+              <Disabled
+                disabled={
+                  isSubmitting ||
+                  chips.length === 0 ||
+                  chips.every((c) => c.error)
+                }
+              >
                 <Button onClick={handleInvite}>Invite</Button>
               </Disabled>
             }

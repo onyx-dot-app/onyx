@@ -50,7 +50,6 @@ export async function inviteUsers(emails: string[]): Promise<void> {
     body: JSON.stringify({ emails }),
   });
   if (!res.ok) {
-    const detail = (await res.json()).detail;
-    throw new Error(detail ?? "Failed to invite users");
+    throw new Error(await parseErrorDetail(res, "Failed to invite users"));
   }
 }

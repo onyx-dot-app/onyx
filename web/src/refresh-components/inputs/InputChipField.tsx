@@ -32,6 +32,8 @@ export interface InputChipFieldProps {
   variant?: Variants;
   icon?: React.FunctionComponent<IconProps>;
   className?: string;
+  /** "inline" renders chips and input in one row; "stacked" puts chips above the input */
+  layout?: "inline" | "stacked";
 }
 
 /**
@@ -64,6 +66,7 @@ function InputChipField({
   variant = "primary",
   icon: Icon,
   className,
+  layout = "inline",
 }: InputChipFieldProps) {
   const inputRef = React.useRef<HTMLInputElement>(null);
 
@@ -88,49 +91,76 @@ function InputChipField({
     }
   }
 
+  const chipElements =
+    chips.length > 0
+      ? chips.map((chip) => (
+          <Chip
+            key={chip.id}
+            onRemove={disabled ? undefined : () => onRemoveChip(chip.id)}
+            rightIcon={
+              chip.error
+                ? (props) => (
+                    <SvgAlertTriangle
+                      {...props}
+                      className="text-status-warning-text"
+                    />
+                  )
+                : undefined
+            }
+            smallLabel={layout === "inline"}
+          >
+            {chip.label}
+          </Chip>
+        ))
+      : null;
+
+  const inputElement = (
+    <>
+      {Icon && <Icon size={16} className="text-text-04 shrink-0" />}
+      <input
+        ref={inputRef}
+        type="text"
+        disabled={disabled}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={handleKeyDown}
+        placeholder={chips.length === 0 ? placeholder : undefined}
+        className={cn(
+          "flex-1 min-w-[80px] h-[1.5rem] bg-transparent p-0.5 focus:outline-none",
+          innerClasses[variant],
+          textClasses[variant]
+        )}
+      />
+    </>
+  );
+
   return (
     <div
       className={cn(
-        "flex flex-col gap-1 p-1.5 rounded-08 cursor-text w-full",
+        "flex p-1.5 rounded-08 cursor-text w-full",
+        layout === "stacked"
+          ? "flex-col gap-1"
+          : "flex-row flex-wrap items-center gap-1",
         wrapperClasses[variant],
         className
       )}
       onClick={() => inputRef.current?.focus()}
     >
-      {chips.length > 0 && (
-        <div className="flex flex-row items-center flex-wrap gap-1">
-          {chips.map((chip) => (
-            <Chip
-              key={chip.id}
-              onRemove={disabled ? undefined : () => onRemoveChip(chip.id)}
-              rightIcon={chip.error ? SvgAlertTriangle : undefined}
-              rightIconClassName={
-                chip.error ? "text-status-warning-text" : undefined
-              }
-              smallLabel={false}
-            >
-              {chip.label}
-            </Chip>
-          ))}
-        </div>
-      )}
-      <div className="flex flex-row items-center gap-1">
-        {Icon && <Icon size={16} className="text-text-04 shrink-0" />}
-        <input
-          ref={inputRef}
-          type="text"
-          disabled={disabled}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={placeholder}
-          className={cn(
-            "flex-1 min-w-[80px] h-[1.5rem] bg-transparent p-0.5 focus:outline-none",
-            innerClasses[variant],
-            textClasses[variant]
+      {layout === "stacked" ? (
+        <>
+          {chipElements && (
+            <div className="flex flex-row items-center flex-wrap gap-1">
+              {chipElements}
+            </div>
           )}
-        />
-      </div>
+          <div className="flex flex-row items-center gap-1">{inputElement}</div>
+        </>
+      ) : (
+        <>
+          {chipElements}
+          {inputElement}
+        </>
+      )}
     </div>
   );
 }
