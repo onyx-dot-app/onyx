@@ -26,3 +26,11 @@ export interface GroupOption {
 
 /** Empty array = no filter (show all). */
 export type StatusFilter = UserStatus[];
+
+/** Keys match the UserStatus-derived labels used in filter badges. */
+export type StatusCountMap = {
+  active?: number;
+  inactive?: number;
+  invited?: number;
+  requested?: number;
+};

@@ -72,6 +72,7 @@ export default function useAdminUsers() {
   const {
     data: acceptedData,
     isLoading: acceptedLoading,
+    error: acceptedError,
     mutate: acceptedMutate,
   } = useSWR<FullUserSnapshot[]>(
     "/api/manage/users/accepted/all",
@@ -81,6 +82,7 @@ export default function useAdminUsers() {
   const {
     data: invitedData,
     isLoading: invitedLoading,
+    error: invitedError,
     mutate: invitedMutate,
   } = useSWR<InvitedUserSnapshot[]>(
     "/api/manage/users/invited",
@@ -90,6 +92,7 @@ export default function useAdminUsers() {
   const {
     data: requestedData,
     isLoading: requestedLoading,
+    error: requestedError,
     mutate: requestedMutate,
   } = useSWR<InvitedUserSnapshot[]>(
     NEXT_PUBLIC_CLOUD_ENABLED ? "/api/tenants/users/pending" : null,
@@ -107,6 +110,7 @@ export default function useAdminUsers() {
   const users = [...invitedRows, ...requestedRows, ...acceptedRows];
 
   const isLoading = acceptedLoading || invitedLoading || requestedLoading;
+  const error = acceptedError ?? invitedError ?? requestedError;
 
   function refresh() {
     acceptedMutate();
@@ -114,5 +118,5 @@ export default function useAdminUsers() {
     requestedMutate();
   }
 
-  return { users, isLoading, refresh };
+  return { users, isLoading, error, refresh };
 }

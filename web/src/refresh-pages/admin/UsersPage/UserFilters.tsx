@@ -16,7 +16,7 @@ import {
   USER_STATUS_LABELS,
 } from "@/lib/types";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
-import type { GroupOption, StatusFilter } from "./interfaces";
+import type { GroupOption, StatusFilter, StatusCountMap } from "./interfaces";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -31,7 +31,7 @@ interface UserFiltersProps {
   selectedStatuses: StatusFilter;
   onStatusesChange: (statuses: StatusFilter) => void;
   roleCounts: Record<string, number>;
-  statusCounts: Record<string, number>;
+  statusCounts: StatusCountMap;
 }
 
 // ---------------------------------------------------------------------------
@@ -53,7 +53,7 @@ const ROLE_ICONS: Partial<Record<UserRole, IconFunctionComponent>> = {
 };
 
 /** Map UserStatus enum values to the keys returned by the counts endpoint. */
-const STATUS_COUNT_KEY: Record<UserStatus, string> = {
+const STATUS_COUNT_KEY: Record<UserStatus, keyof StatusCountMap> = {
   [UserStatus.ACTIVE]: "active",
   [UserStatus.INACTIVE]: "inactive",
   [UserStatus.INVITED]: "invited",
@@ -91,6 +91,7 @@ export default function UserFilters({
   const hasGroupFilter = selectedGroups.length > 0;
   const hasStatusFilter = selectedStatuses.length > 0;
   const [groupSearch, setGroupSearch] = useState("");
+  const [groupPopoverOpen, setGroupPopoverOpen] = useState(false);
 
   const toggleRole = (role: UserRole) => {
     if (selectedRoles.includes(role)) {
@@ -192,7 +193,13 @@ export default function UserFilters({
       </Popover>
 
       {/* Groups filter */}
-      <Popover>
+      <Popover
+        open={groupPopoverOpen}
+        onOpenChange={(open) => {
+          setGroupPopoverOpen(open);
+          if (!open) setGroupSearch("");
+        }}
+      >
         <Popover.Trigger asChild>
           <FilterButton
             leftIcon={SvgUsers}
@@ -259,7 +266,7 @@ export default function UserFilters({
         <Popover.Content align="start">
           <div className="flex flex-col gap-1 p-1 min-w-[200px]">
             <LineItem
-              icon={SvgCheck}
+              icon={!hasStatusFilter ? SvgCheck : undefined}
               selected={!hasStatusFilter}
               onClick={() => onStatusesChange([])}
             >

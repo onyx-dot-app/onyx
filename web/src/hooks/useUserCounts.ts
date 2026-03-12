@@ -4,6 +4,7 @@ import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import type { InvitedUserSnapshot } from "@/lib/types";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
+import type { StatusCountMap } from "@/refresh-pages/admin/UsersPage/interfaces";
 
 type UserCountsResponse = {
   role_counts: Record<string, number>;
@@ -15,7 +16,7 @@ type UserCounts = {
   invitedCount: number | null;
   pendingCount: number | null;
   roleCounts: Record<string, number>;
-  statusCounts: Record<string, number>;
+  statusCounts: StatusCountMap;
   refreshCounts: () => void;
 };
 
@@ -49,7 +50,7 @@ export default function useUserCounts(): UserCounts {
       ...(inactiveCount !== null ? { inactive: inactiveCount } : {}),
       ...(invitedUsers ? { invited: invitedUsers.length } : {}),
       ...(pendingUsers ? { requested: pendingUsers.length } : {}),
-    } as Record<string, number>,
+    } satisfies StatusCountMap,
     refreshCounts,
   };
 }

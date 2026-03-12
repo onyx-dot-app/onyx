@@ -21,7 +21,13 @@ import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import useAdminUsers from "@/hooks/useAdminUsers";
 import useGroups from "@/hooks/useGroups";
 import UserFilters from "./UserFilters";
-import type { UserRow, UserGroupInfo, GroupOption, StatusFilter } from "./interfaces";
+import type {
+  UserRow,
+  UserGroupInfo,
+  GroupOption,
+  StatusFilter,
+  StatusCountMap,
+} from "./interfaces";
 import { getInitials } from "./utils";
 
 // ---------------------------------------------------------------------------
@@ -118,7 +124,7 @@ function renderStatusColumn(value: UserStatus, row: UserRow) {
   );
 }
 
-function renderLastUpdatedColumn(value: string) {
+function renderLastUpdatedColumn(value: string | null) {
   return (
     <Text as="span" secondaryBody text03>
       {timeAgo(value) ?? "\u2014"}
@@ -182,7 +188,7 @@ interface UsersTableProps {
   selectedStatuses: StatusFilter;
   onStatusesChange: (statuses: StatusFilter) => void;
   roleCounts: Record<string, number>;
-  statusCounts: Record<string, number>;
+  statusCounts: StatusCountMap;
 }
 
 export default function UsersTable({
@@ -271,11 +277,7 @@ export default function UsersTable({
         <IllustrationContent
           illustration={SvgNoResult}
           title="No users found"
-          description={
-            searchTerm
-              ? "Try a different search term or adjust your filters."
-              : "No users match the current filters."
-          }
+          description="No users match the current filters."
         />
       ) : (
         <DataTable

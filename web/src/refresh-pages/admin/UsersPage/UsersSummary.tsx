@@ -22,7 +22,9 @@ function StatCell({ value, label, onFilter }: StatCellProps) {
 
   return (
     <div
-      className="group/stat relative flex flex-col items-start gap-0.5 w-full p-2 rounded-08 transition-colors cursor-pointer hover:bg-background-tint-02"
+      className={`group/stat relative flex flex-col items-start gap-0.5 w-full p-2 rounded-08 transition-colors ${
+        onFilter ? "cursor-pointer hover:bg-background-tint-02" : ""
+      }`}
       onClick={onFilter}
     >
       <Text as="span" mainUiAction text04>
@@ -31,12 +33,14 @@ function StatCell({ value, label, onFilter }: StatCellProps) {
       <Text as="span" secondaryBody text03>
         {label}
       </Text>
-      <div className="absolute right-2 top-2 flex items-center gap-1 opacity-0 group-hover/stat:opacity-100 transition-opacity">
-        <Text as="span" secondaryBody text03>
-          Filter
-        </Text>
-        <SvgFilter size={16} className="text-text-03" />
-      </div>
+      {onFilter && (
+        <div className="absolute right-2 top-2 flex items-center gap-1 opacity-0 group-hover/stat:opacity-100 transition-opacity">
+          <Text as="span" secondaryBody text03>
+            Filter
+          </Text>
+          <SvgFilter size={16} className="text-text-03" />
+        </div>
+      )}
     </div>
   );
 }

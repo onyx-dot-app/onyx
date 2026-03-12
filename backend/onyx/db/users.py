@@ -4,6 +4,7 @@ from uuid import UUID
 
 from fastapi import HTTPException
 from fastapi_users.password import PasswordHelper
+from sqlalchemy import case
 from sqlalchemy import func
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -196,12 +197,12 @@ def get_all_accepted_users(
     return db_session.scalars(stmt).unique().all()
 
 
-_USER_SORTABLE_COLUMNS: dict[str, KeyedColumnElement[Any]] = {
-    "email": User.email,
-    "role": User.role,
-    "is_active": User.is_active,
-    "created_at": User.created_at,
-    "updated_at": User.updated_at,
+_USER_SORTABLE_COLUMNS = {
+    "email": User.__table__.c.email,
+    "role": User.__table__.c.role,
+    "is_active": User.__table__.c.is_active,
+    "created_at": User.__table__.c.created_at,
+    "updated_at": User.__table__.c.updated_at,
 }
 
 
@@ -266,26 +267,31 @@ def get_user_counts_by_role_and_status(
     """Returns user counts grouped by role and by active/inactive status.
 
     Excludes API key users, anonymous users, and no-auth placeholder users.
+    Uses a single query with conditional aggregation.
     """
     base_where = _get_accepted_user_where_clause()
-
-    # Counts by role
     role_col = User.__table__.c.role
-    role_stmt = select(role_col, func.count()).where(*base_where).group_by(role_col)
-    role_counts: dict[str, int] = {}
-    for role_val, count in db_session.execute(role_stmt).all():
-        key = role_val.value if hasattr(role_val, "value") else str(role_val)
-        role_counts[key] = count
-
-    # Counts by is_active
     is_active_col = User.__table__.c.is_active
-    status_stmt = (
-        select(is_active_col, func.count()).where(*base_where).group_by(is_active_col)
+
+    stmt = (
+        select(
+            role_col,
+            func.count().label("total"),
+            func.sum(case((is_active_col.is_(True), 1), else_=0)).label("active"),
+            func.sum(case((is_active_col.is_(False), 1), else_=0)).label("inactive"),
+        )
+        .where(*base_where)
+        .group_by(role_col)
     )
-    status_counts: dict[str, int] = {}
-    for is_active_val, count in db_session.execute(status_stmt).all():
-        key = "active" if is_active_val else "inactive"
-        status_counts[key] = count
+
+    role_counts: dict[str, int] = {}
+    status_counts: dict[str, int] = {"active": 0, "inactive": 0}
+
+    for role_val, total, active, inactive in db_session.execute(stmt).all():
+        key = role_val.value if hasattr(role_val, "value") else str(role_val)
+        role_counts[key] = total
+        status_counts["active"] += active or 0
+        status_counts["inactive"] += inactive or 0
 
     return {"role_counts": role_counts, "status_counts": status_counts}
 

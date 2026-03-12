@@ -5,6 +5,7 @@ from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
 from typing import cast
+from typing import Literal
 from uuid import UUID
 
 import jwt
@@ -183,8 +184,10 @@ def list_accepted_users(
     page_size: int = Query(10, ge=1, le=1000),
     roles: list[UserRole] = Query(default=[]),
     is_active: bool | None = Query(default=None),
-    sort_by: str | None = Query(default=None),
-    sort_dir: str | None = Query(default=None),
+    sort_by: (
+        Literal["email", "role", "is_active", "created_at", "updated_at"] | None
+    ) = Query(default=None),
+    sort_dir: Literal["asc", "desc"] | None = Query(default=None),
     _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> PaginatedReturn[FullUserSnapshot]:
