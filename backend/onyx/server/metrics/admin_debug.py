@@ -5,6 +5,7 @@ and event loop lag. Only included when ENABLE_ADMIN_DEBUG_ENDPOINTS=true.
 Requires admin authentication.
 """
 
+import os
 import threading
 import time
 from typing import Any
@@ -25,8 +26,27 @@ router = APIRouter(
     dependencies=[Depends(current_admin_user)],
 )
 
-_process: psutil.Process = psutil.Process()
 _start_time: float | None = None
+
+
+def _get_process() -> psutil.Process:
+    """Return a psutil.Process for the *current* PID.
+
+    Lazily created and invalidated when PID changes (fork).
+    """
+    global _process, _process_pid
+    pid = os.getpid()
+    if _process is None or _process_pid != pid:
+        _process = psutil.Process(pid)
+        # Prime cpu_percent() so the first real call returns a
+        # meaningful value instead of 0.0.
+        _process.cpu_percent()
+    _process_pid = pid
+    return _process
+
+
+_process: psutil.Process | None = None
+_process_pid: int | None = None
 
 
 def set_start_time() -> None:
@@ -34,23 +54,28 @@ def set_start_time() -> None:
     global _start_time
     if _start_time is None:
         _start_time = time.monotonic()
+        # Warm the process handle so cpu_percent() is primed.
+        _get_process()
 
 
 @router.get("/process-info")
 def get_process_info() -> dict[str, Any]:
     """Return process-level resource info."""
-    mem = _process.memory_info()
-    uptime = round(time.monotonic() - _start_time, 1) if _start_time is not None else 0
+    proc = _get_process()
+    mem = proc.memory_info()
+    uptime: float | None = (
+        round(time.monotonic() - _start_time, 1) if _start_time is not None else None
+    )
     info: dict[str, Any] = {
         "rss_bytes": mem.rss,
         "vms_bytes": mem.vms,
-        "cpu_percent": _process.cpu_percent(),
-        "num_threads": _process.num_threads(),
+        "cpu_percent": proc.cpu_percent(),
+        "num_threads": proc.num_threads(),
         "uptime_seconds": uptime,
     }
     # num_fds() is Linux-only; skip gracefully on macOS/Windows
     try:
-        info["num_fds"] = _process.num_fds()
+        info["num_fds"] = proc.num_fds()
     except (AttributeError, psutil.Error):
         pass
     return info
@@ -85,6 +110,10 @@ def get_pool_state() -> dict[str, Any]:
     # Redis pools — uses private redis-py attributes (_in_use_connections, etc.)
     # because there is no public API for pool statistics.  Wrapped per-pool so
     # one failure doesn't block the other.
+    # NOTE: RedisPool is a singleton — RedisPool() returns the existing instance.
+    # NOTE: _in_use_connections, _available_connections, _created_connections are
+    # private attrs on BlockingConnectionPool. If redis-py changes these in a
+    # future version, the per-pool except block catches AttributeError gracefully.
     try:
         from redis import BlockingConnectionPool
 
