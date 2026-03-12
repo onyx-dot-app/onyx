@@ -24,6 +24,7 @@ from onyx.db.models import Persona__User
 from onyx.db.models import SamlAccount
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
+from onyx.db.models import UserGroup
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
 
@@ -171,6 +172,21 @@ def _get_accepted_user_where_clause(
         where_clause.append(is_active_col.is_(is_active_filter))
 
     return where_clause
+
+
+def get_all_accepted_users(
+    db_session: Session,
+    include_external: bool = False,
+) -> Sequence[User]:
+    """Returns all accepted users without pagination.
+    Uses the same filtering as the paginated endpoint but without
+    search, role, or active filters."""
+    stmt = select(User)
+    where_clause = _get_accepted_user_where_clause(
+        include_external=include_external,
+    )
+    stmt = stmt.where(*where_clause).order_by(User.email)
+    return db_session.scalars(stmt).unique().all()
 
 
 def get_page_of_filtered_users(
@@ -358,3 +374,28 @@ def delete_user_from_db(
     # NOTE: edge case may exist with race conditions
     # with this `invited user` scheme generally.
     remove_user_from_invited_users(user_to_delete.email)
+
+
+def batch_get_user_groups(
+    db_session: Session,
+    user_ids: list[UUID],
+) -> dict[UUID, list[tuple[int, str]]]:
+    """Fetch group memberships for a batch of users in a single query.
+    Returns a mapping of user_id -> list of (group_id, group_name) tuples."""
+    if not user_ids:
+        return {}
+
+    rows = db_session.execute(
+        select(
+            User__UserGroup.user_id,
+            UserGroup.id,
+            UserGroup.name,
+        )
+        .join(UserGroup, UserGroup.id == User__UserGroup.user_group_id)
+        .where(User__UserGroup.user_id.in_(user_ids))
+    ).all()
+
+    result: dict[UUID, list[tuple[int, str]]] = {uid: [] for uid in user_ids}
+    for user_id, group_id, group_name in rows:
+        result[user_id].append((group_id, group_name))
+    return result
