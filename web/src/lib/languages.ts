@@ -22,6 +22,7 @@ const EXTENSION_OVERRIDES: Record<string, string> = {
   ".inc": "php",
   ".m": "objective-c",
   ".re": "reason",
+  ".rs": "rust",
 };
 
 // Sort so that languages with more extensions (i.e. more general-purpose) win
