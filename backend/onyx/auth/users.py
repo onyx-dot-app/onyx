@@ -2074,13 +2074,6 @@ def get_oauth_router(
                 else:
                     redirect_response.headers[header_name] = header_value
 
-            if hasattr(response, "body"):
-                redirect_response.body = response.body
-            if hasattr(response, "status_code"):
-                redirect_response.status_code = response.status_code
-            if hasattr(response, "media_type"):
-                redirect_response.media_type = response.media_type
-
             return redirect_response
 
         if enable_pkce:

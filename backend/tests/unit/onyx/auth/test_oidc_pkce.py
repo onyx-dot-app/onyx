@@ -71,6 +71,7 @@ class _StubOAuthClient:
 
 def _build_test_client(
     enable_pkce: bool,
+    login_status_code: int = 302,
 ) -> tuple[TestClient, _StubOAuthClient, MagicMock]:
     oauth_client = _StubOAuthClient()
     transport = CookieTransport(cookie_name="testsession")
@@ -84,8 +85,9 @@ def _build_test_client(
         get_strategy=get_strategy,
     )
 
-    login_response = Response(status_code=302)
-    login_response.headers["location"] = "/app"
+    login_response = Response(status_code=login_status_code)
+    if login_status_code in {301, 302, 303, 307, 308}:
+        login_response.headers["location"] = "/app"
     login_response.set_cookie("testsession", "session-token")
     backend.login = AsyncMock(return_value=login_response)  # type: ignore[method-assign]
 
@@ -319,6 +321,33 @@ def test_oidc_callback_works_without_pkce_when_flag_disabled() -> None:
     assert response.status_code == 302
     assert oauth_client.access_token_calls[0]["code_verifier"] is None
     user_manager.oauth_callback.assert_awaited_once()
+
+
+def test_oidc_callback_pkce_preserves_redirect_when_backend_login_is_non_redirect() -> (
+    None
+):
+    client, oauth_client, user_manager = _build_test_client(
+        enable_pkce=True,
+        login_status_code=200,
+    )
+    authorize_response = client.get("/auth/oidc/authorize")
+    state = _extract_state_from_authorize_response(authorize_response)
+
+    with patch(
+        "onyx.auth.users.fetch_ee_implementation_or_noop",
+        return_value=lambda _email: "tenant_1",
+    ):
+        response = client.get(
+            "/auth/oidc/callback",
+            params={"code": "abc123", "state": state},
+            follow_redirects=False,
+        )
+
+    assert response.status_code == 302
+    assert response.headers.get("location") == "/"
+    assert oauth_client.access_token_calls[0]["code_verifier"] is not None
+    user_manager.oauth_callback.assert_awaited_once()
+    assert "Max-Age=0" in response.headers.get("set-cookie", "")
 
 
 def test_oidc_callback_non_pkce_rejects_csrf_mismatch() -> None:
