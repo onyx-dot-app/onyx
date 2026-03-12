@@ -159,7 +159,11 @@ func ensureBackendEnvFile(root string) string {
 	envFile := filepath.Join(vscodeDir, ".env")
 	templateFile := filepath.Join(vscodeDir, "env_template.txt")
 
-	if _, err := os.Stat(envFile); err == nil {
+	if _, err := os.Stat(envFile); err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			log.Fatalf("Failed to stat env file %s: %v", envFile, err)
+		}
+	} else {
 		log.Debugf("Using existing env file: %s", envFile)
 		return envFile
 	}
