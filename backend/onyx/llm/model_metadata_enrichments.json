@@ -3782,16 +3782,6 @@
     "display_name": "Claude Sonnet 3.5",
     "model_vendor": "anthropic"
   },
-  "vertex_ai/claude-3-5-sonnet-v2": {
-    "display_name": "Claude Sonnet 3.5",
-    "model_vendor": "anthropic",
-    "model_version": "v2"
-  },
-  "vertex_ai/claude-3-5-sonnet-v2@20241022": {
-    "display_name": "Claude Sonnet 3.5 v2",
-    "model_vendor": "anthropic",
-    "model_version": "20241022"
-  },
   "vertex_ai/claude-3-5-sonnet@20240620": {
     "display_name": "Claude Sonnet 3.5",
     "model_vendor": "anthropic",
