@@ -1,4 +1,5 @@
 import React from "react";
+import { Card } from "@opal/components/cards/card/components";
 import { ContentAction } from "@opal/layouts";
 import type { IconFunctionComponent } from "@opal/types";
 
@@ -35,7 +36,7 @@ export function NameCard({
   rightChildren,
 }: NameCardProps) {
   return (
-    <div className="bg-background-tint-01 p-2 w-full rounded-08">
+    <Card backgroundVariant="heavy" borderVariant="none">
       <ContentAction
         icon={customIcon ? () => <>{customIcon}</> : icon}
         title={title}
@@ -45,6 +46,6 @@ export function NameCard({
         rightChildren={rightChildren}
         paddingVariant="fit"
       />
-    </div>
+    </Card>
   );
 }
