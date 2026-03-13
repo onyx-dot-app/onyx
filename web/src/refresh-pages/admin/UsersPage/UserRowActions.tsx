@@ -93,29 +93,19 @@ export default function UserRowActions({
 
       case UserStatus.REQUESTED:
         return (
-          <>
-            <Button
-              prominence="tertiary"
-              icon={SvgCheck}
-              onClick={() => {
-                setPopoverOpen(false);
-                handleAction(
-                  () => approveRequest(user.email),
-                  "Request approved"
-                );
-              }}
-            >
-              Approve
-            </Button>
-            <Button
-              prominence="tertiary"
-              variant="danger"
-              icon={SvgXCircle}
-              onClick={() => openModal("cancelInvite")}
-            >
-              Reject
-            </Button>
-          </>
+          <Button
+            prominence="tertiary"
+            icon={SvgCheck}
+            onClick={() => {
+              setPopoverOpen(false);
+              handleAction(
+                () => approveRequest(user.email),
+                "Request approved"
+              );
+            }}
+          >
+            Approve
+          </Button>
         );
 
       case UserStatus.ACTIVE:
@@ -205,11 +195,7 @@ export default function UserRowActions({
       {modal === "cancelInvite" && (
         <ConfirmationModalLayout
           icon={SvgXCircle}
-          title={
-            user.status === UserStatus.REQUESTED
-              ? "Reject Request"
-              : "Cancel Invite"
-          }
+          title="Cancel Invite"
           onClose={() => setModal(null)}
           submit={
             <Disabled disabled={isSubmitting}>
@@ -218,13 +204,11 @@ export default function UserRowActions({
                 onClick={() => {
                   handleAction(
                     () => cancelInvite(user.email),
-                    user.status === UserStatus.REQUESTED
-                      ? "Request rejected"
-                      : "Invite cancelled"
+                    "Invite cancelled"
                   );
                 }}
               >
-                {user.status === UserStatus.REQUESTED ? "Reject" : "Cancel"}
+                Cancel
               </Button>
             </Disabled>
           }
@@ -233,9 +217,7 @@ export default function UserRowActions({
             <Text as="span" text05>
               {user.email}
             </Text>{" "}
-            {user.status === UserStatus.REQUESTED
-              ? "will be removed from the pending requests list."
-              : "will no longer be able to join Onyx with this invite."}
+            will no longer be able to join Onyx with this invite.
           </Text>
         </ConfirmationModalLayout>
       )}

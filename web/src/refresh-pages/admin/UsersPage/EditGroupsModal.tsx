@@ -23,7 +23,11 @@ import type { UserRow } from "./interfaces";
 // Constants
 // ---------------------------------------------------------------------------
 
-const ASSIGNABLE_ROLES: UserRole[] = [UserRole.ADMIN, UserRole.BASIC];
+const ASSIGNABLE_ROLES: UserRole[] = [
+  UserRole.ADMIN,
+  UserRole.GLOBAL_CURATOR,
+  UserRole.BASIC,
+];
 
 // ---------------------------------------------------------------------------
 // Types
