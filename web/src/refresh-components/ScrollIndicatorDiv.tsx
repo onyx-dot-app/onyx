@@ -119,6 +119,11 @@ export default function ScrollIndicatorDiv({
     // DOM after initial render, which changes scrollHeight without firing
     // resize or scroll events on the container).
     const mutationObserver = new MutationObserver(handleScroll);
+    mutationObserver.observe(container, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
 
     return () => {
       container.removeEventListener("scroll", handleScroll);

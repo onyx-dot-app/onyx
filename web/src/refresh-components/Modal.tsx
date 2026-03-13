@@ -61,6 +61,7 @@ interface ModalContextValue {
   hasAttemptedClose: boolean;
   setHasAttemptedClose: (value: boolean) => void;
   height: keyof typeof heightClasses;
+  deferScrollingToChildren: boolean;
   hasDescription: boolean;
   setHasDescription: (value: boolean) => void;
 }
@@ -84,9 +85,9 @@ const widthClasses = {
 
 const heightClasses = {
   fit: "h-fit",
-  sm: "max-h-[30rem] overflow-y-auto",
-  lg: "max-h-[calc(100dvh-4rem)] overflow-y-auto",
-  full: "h-[80dvh] overflow-y-auto",
+  sm: "max-h-[30rem]",
+  lg: "max-h-[calc(100dvh-4rem)]",
+  full: "h-[80dvh]",
 };
 
 /**
@@ -120,6 +121,8 @@ export interface ModalContentProps
   > {
   width?: keyof typeof widthClasses;
   height?: keyof typeof heightClasses;
+  /** Lets nested children like ScrollIndicatorDiv own vertical scrolling. */
+  deferScrollingToChildren?: boolean;
   preventAccidentalClose?: boolean;
   skipOverlay?: boolean;
   background?: "default" | "gray";
@@ -136,6 +139,7 @@ const ModalContent = React.forwardRef<
       children,
       width = "md",
       height = "fit",
+      deferScrollingToChildren = false,
       preventAccidentalClose = true,
       skipOverlay = false,
       background = "default",
@@ -290,6 +294,11 @@ const ModalContent = React.forwardRef<
       !hasContainerCenter && "left-1/2 top-1/2"
     );
 
+    const contentOverflowClasses =
+      deferScrollingToChildren || height === "fit"
+        ? "overflow-hidden"
+        : "overflow-y-auto";
+
     const dialogEventHandlers = {
       onOpenAutoFocus: (e: Event) => {
         resetState();
@@ -320,6 +329,7 @@ const ModalContent = React.forwardRef<
           hasAttemptedClose,
           setHasAttemptedClose,
           height,
+          deferScrollingToChildren,
           hasDescription,
           setHasDescription,
         }}
@@ -344,7 +354,13 @@ const ModalContent = React.forwardRef<
                   widthClasses[width]
                 )}
               >
-                <div className={cn(cardClasses, "w-full min-h-0")}>
+                <div
+                  className={cn(
+                    cardClasses,
+                    contentOverflowClasses,
+                    "w-full min-h-0"
+                  )}
+                >
                   {children}
                 </div>
                 <div className="w-full flex-shrink-0">{bottomSlot}</div>
@@ -357,7 +373,6 @@ const ModalContent = React.forwardRef<
               style={containerStyle}
               className={cn(
                 positionClasses,
-                "overflow-hidden",
                 "z-modal",
                 background === "gray"
                   ? "bg-background-tint-01"
@@ -367,7 +382,8 @@ const ModalContent = React.forwardRef<
                 "max-w-[calc(100dvw-2rem)] max-h-[calc(100dvh-2rem)]",
                 animationClasses,
                 widthClasses[width],
-                heightClasses[height]
+                heightClasses[height],
+                contentOverflowClasses
               )}
               {...dialogEventHandlers}
             >
@@ -510,16 +526,20 @@ interface ModalBodyProps extends WithoutStyles<SectionProps> {
 }
 const ModalBody = React.forwardRef<HTMLDivElement, ModalBodyProps>(
   ({ twoTone = true, children, ...props }, ref) => {
+    const { deferScrollingToChildren } = useModalContext();
+
     return (
       <div
         ref={ref}
         className={cn(
           twoTone && "bg-background-tint-01",
-          "flex-auto min-h-0 overflow-y-auto w-full"
+          "flex-auto min-h-0 w-full",
+          deferScrollingToChildren ? "overflow-hidden" : "overflow-y-auto"
         )}
       >
         <Section
-          height="auto"
+          height={deferScrollingToChildren ? "full" : "auto"}
+          justifyContent="start"
           padding={1}
           gap={1}
           alignItems="start"

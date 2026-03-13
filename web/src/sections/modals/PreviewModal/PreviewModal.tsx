@@ -161,6 +161,7 @@ export default function PreviewModal({
       <Modal.Content
         width={variant.width}
         height={variant.height}
+        deferScrollingToChildren
         preventAccidentalClose={false}
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
@@ -170,10 +171,7 @@ export default function PreviewModal({
           onClose={onClose}
         />
 
-        {/* Body — uses flex-1/min-h-0/overflow-hidden (not Modal.Body)
-            so that child ScrollIndicatorDivs become the actual scroll
-            container instead of the body stealing it via overflow-y-auto. */}
-        <div className="flex flex-col flex-1 min-h-0 overflow-hidden w-full bg-background-tint-01">
+        <Modal.Body padding={0} gap={0}>
           {isLoading ? (
             <Section>
               <SimpleLoader className="h-8 w-8" />
@@ -187,7 +185,7 @@ export default function PreviewModal({
           ) : (
             variant.renderContent(ctx)
           )}
-        </div>
+        </Modal.Body>
 
         {/* Floating footer */}
         {!isLoading && !loadError && (
