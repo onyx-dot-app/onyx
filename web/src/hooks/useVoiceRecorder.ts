@@ -287,6 +287,7 @@ class VoiceRecorderSession {
           // VAD detected silence - trigger callback (only once per utterance)
           const now = Date.now();
           const isLikelyDuplicateFinal =
+            this.autoStopOnSilence &&
             this.lastDeliveredFinalText === data.text &&
             now - this.lastDeliveredFinalAtMs <
               DUPLICATE_FINAL_TRANSCRIPT_WINDOW_MS;

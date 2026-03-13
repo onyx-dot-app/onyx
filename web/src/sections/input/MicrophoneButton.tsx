@@ -79,6 +79,11 @@ function MicrophoneButton({
   const suppressTranscriptUpdatesRef = useRef(false);
   // Snapshot of existing message text when recording starts (for append mode)
   const messagePrefixRef = useRef("");
+  const currentMessageRef = useRef(currentMessage);
+
+  useEffect(() => {
+    currentMessageRef.current = currentMessage;
+  }, [currentMessage]);
 
   // Helper to combine prefix with new transcript
   const withPrefix = useCallback((text: string) => {
@@ -245,7 +250,7 @@ function MicrophoneButton({
         ) {
           return;
         }
-        messagePrefixRef.current = currentMessage;
+        messagePrefixRef.current = currentMessageRef.current;
         startRecording().catch((err) => {
           console.error("Auto-start microphone failed:", err);
           toast.error("Could not auto-start microphone");
@@ -274,7 +279,6 @@ function MicrophoneButton({
     isRecording,
     startRecording,
     manualStopCount,
-    currentMessage,
   ]);
 
   // New sessions must start with an explicit manual mic press.
