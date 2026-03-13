@@ -2,7 +2,7 @@
 
 import { useCallback, useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { usePostHog } from "posthog-js/react";
+import { track, AnalyticsEvent } from "@/lib/analytics";
 import {
   useSession,
   useSessionId,
@@ -61,7 +61,6 @@ export default function BuildChatPanel({
   existingSessionId,
 }: BuildChatPanelProps) {
   const router = useRouter();
-  const posthog = usePostHog();
   const outputPanelOpen = useOutputPanelOpen();
   const session = useSession();
   const sessionId = useSessionId();
@@ -254,7 +253,7 @@ export default function BuildChatPanel({
         return;
       }
 
-      posthog?.capture("sent_craft_message");
+      track(AnalyticsEvent.SENT_CRAFT_MESSAGE);
 
       if (hasSession && sessionId) {
         // Existing session flow
@@ -367,7 +366,6 @@ export default function BuildChatPanel({
       hasUploadingFiles,
       limits,
       refreshLimits,
-      posthog,
     ]
   );
 

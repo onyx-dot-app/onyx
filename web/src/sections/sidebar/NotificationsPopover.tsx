@@ -3,7 +3,7 @@
 import useSWR from "swr";
 import { useRouter } from "next/navigation";
 import { Route } from "next";
-import { usePostHog } from "posthog-js/react";
+import { track, AnalyticsEvent } from "@/lib/analytics";
 import { Notification, NotificationType } from "@/interfaces/settings";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import Text from "@/refresh-components/texts/Text";
@@ -38,7 +38,6 @@ export default function NotificationsPopover({
   onShowBuildIntro,
 }: NotificationsPopoverProps) {
   const router = useRouter();
-  const posthog = usePostHog();
   const {
     data: notifications,
     mutate,
@@ -62,7 +61,7 @@ export default function NotificationsPopover({
 
     // Track release notes clicks
     if (notification.notif_type === NotificationType.RELEASE_NOTES) {
-      posthog?.capture("release_notification_clicked", {
+      track(AnalyticsEvent.RELEASE_NOTIFICATION_CLICKED, {
         version: notification.additional_data?.version,
       });
     }

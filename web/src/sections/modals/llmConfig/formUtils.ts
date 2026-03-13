@@ -1,4 +1,5 @@
 import {
+  LLMProviderName,
   LLMProviderView,
   ModelConfiguration,
   WellKnownLLMProviderDescriptor,
@@ -12,6 +13,11 @@ import { toast } from "@/hooks/useToast";
 import * as Yup from "yup";
 import isEqual from "lodash/isEqual";
 import { ScopedMutator } from "swr";
+import {
+  track,
+  AnalyticsEvent,
+  LLMProviderConfiguredSource,
+} from "@/lib/analytics";
 
 // Common class names for the Form component across all LLM provider forms
 export const LLM_FORM_CLASS_NAME = "flex flex-col gap-y-4 items-stretch mt-6";
@@ -298,6 +304,13 @@ export const submitLLMProvider = async <T extends BaseLLMFormValues>({
       : "Provider enabled successfully!";
     toast.success(successMsg);
   }
+
+  const knownProviders = new Set<string>(Object.values(LLMProviderName));
+  track(AnalyticsEvent.CONFIGURED_LLM_PROVIDER, {
+    provider: knownProviders.has(providerName) ? providerName : "custom",
+    is_creation: !existingLlmProvider,
+    source: LLMProviderConfiguredSource.ADMIN_PAGE,
+  });
 
   setSubmitting(false);
 };
