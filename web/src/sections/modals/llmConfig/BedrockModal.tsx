@@ -38,6 +38,7 @@ import { Card } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { SvgAlertCircle, SvgKey, SvgLock, SvgShield } from "@opal/icons";
 import { Content } from "@opal/layouts";
+import { toast } from "@/hooks/useToast";
 
 export const BEDROCK_PROVIDER_NAME = "bedrock";
 
@@ -57,7 +58,7 @@ const AWS_REGION_OPTIONS = [
   { name: "eu-west-2", value: "eu-west-2" },
 ];
 
-const AUTH_METHOD_IAM = "iam";
+const AUTH_METHOD_ENVIRONMENT_IAM = "environment_iam";
 const AUTH_METHOD_ACCESS_KEY = "access_key";
 const AUTH_METHOD_LONG_TERM_API_KEY = "long_term_api_key";
 
@@ -101,7 +102,7 @@ function BedrockModalInternals({
   const authMethod = formikProps.values.custom_config?.BEDROCK_AUTH_METHOD;
 
   useEffect(() => {
-    if (authMethod === AUTH_METHOD_IAM) {
+    if (authMethod === AUTH_METHOD_ENVIRONMENT_IAM) {
       formikProps.setFieldValue(FIELD_AWS_ACCESS_KEY_ID, "");
       formikProps.setFieldValue(FIELD_AWS_SECRET_ACCESS_KEY, "");
       formikProps.setFieldValue(FIELD_AWS_BEARER_TOKEN_BEDROCK, "");
@@ -120,7 +121,7 @@ function BedrockModalInternals({
       : existingLlmProvider?.model_configurations || modelConfigurations;
 
   const isAuthComplete =
-    authMethod === AUTH_METHOD_IAM ||
+    authMethod === AUTH_METHOD_ENVIRONMENT_IAM ||
     (authMethod === AUTH_METHOD_ACCESS_KEY &&
       formikProps.values.custom_config?.AWS_ACCESS_KEY_ID &&
       formikProps.values.custom_config?.AWS_SECRET_ACCESS_KEY) ||
@@ -131,7 +132,7 @@ function BedrockModalInternals({
     !formikProps.values.custom_config?.AWS_REGION_NAME || !isAuthComplete;
 
   const handleFetchModels = async () => {
-    const { models } = await fetchBedrockModels({
+    const { models, error } = await fetchBedrockModels({
       aws_region_name: formikProps.values.custom_config?.AWS_REGION_NAME ?? "",
       aws_access_key_id: formikProps.values.custom_config?.AWS_ACCESS_KEY_ID,
       aws_secret_access_key:
@@ -140,13 +141,20 @@ function BedrockModalInternals({
         formikProps.values.custom_config?.AWS_BEARER_TOKEN_BEDROCK,
       provider_name: existingLlmProvider?.name,
     });
+    if (error) {
+      throw new Error(error);
+    }
     setFetchedModels(models);
   };
 
   // Auto-fetch models on initial load when editing an existing provider
   useEffect(() => {
     if (existingLlmProvider && !isFetchDisabled) {
-      handleFetchModels();
+      handleFetchModels().catch((err) => {
+        toast.error(
+          err instanceof Error ? err.message : "Failed to fetch models"
+        );
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -190,15 +198,24 @@ function BedrockModalInternals({
               formikProps.setFieldValue(FIELD_BEDROCK_AUTH_METHOD, value)
             }
           >
-            <InputSelect.Trigger defaultValue={AUTH_METHOD_ACCESS_KEY} />
+            <InputSelect.Trigger defaultValue={AUTH_METHOD_ENVIRONMENT_IAM} />
             <InputSelect.Content>
-              <InputSelect.Item value={AUTH_METHOD_ACCESS_KEY}>
+              <InputSelect.Item
+                value={AUTH_METHOD_ENVIRONMENT_IAM}
+                description="Recommended for AWS environments"
+              >
+                Environment IAM Role
+              </InputSelect.Item>
+              <InputSelect.Item
+                value={AUTH_METHOD_ACCESS_KEY}
+                description="For non-AWS environments"
+              >
                 Access Key
               </InputSelect.Item>
-              <InputSelect.Item value={AUTH_METHOD_IAM}>
-                IAM Role
-              </InputSelect.Item>
-              <InputSelect.Item value={AUTH_METHOD_LONG_TERM_API_KEY}>
+              <InputSelect.Item
+                value={AUTH_METHOD_LONG_TERM_API_KEY}
+                description="For non-AWS environments"
+              >
                 Long-term API Key
               </InputSelect.Item>
             </InputSelect.Content>
@@ -206,22 +223,9 @@ function BedrockModalInternals({
         </InputLayouts.Vertical>
       </FieldWrapper>
 
-      {authMethod === AUTH_METHOD_IAM && (
-        <FieldWrapper>
-          <Card backgroundVariant="none" borderVariant="solid">
-            <Content
-              icon={SvgAlertCircle}
-              title="Onyx will use the IAM role attached to the environment it’s running in to authenticate."
-              variant="body"
-              sizePreset="main-ui"
-            />
-          </Card>
-        </FieldWrapper>
-      )}
-
       {authMethod === AUTH_METHOD_ACCESS_KEY && (
         <Card backgroundVariant="light" borderVariant="none" sizeVariant="lg">
-          <Section gap={0.5}>
+          <Section gap={1}>
             <InputLayouts.Vertical
               name={FIELD_AWS_ACCESS_KEY_ID}
               title="AWS Access Key ID"
@@ -244,12 +248,25 @@ function BedrockModalInternals({
         </Card>
       )}
 
+      {authMethod === AUTH_METHOD_ENVIRONMENT_IAM && (
+        <FieldWrapper>
+          <Card backgroundVariant="none" borderVariant="solid">
+            <Content
+              icon={SvgAlertCircle}
+              title="Onyx will use the IAM role attached to the environment it’s running in to authenticate."
+              variant="body"
+              sizePreset="main-ui"
+            />
+          </Card>
+        </FieldWrapper>
+      )}
+
       {authMethod === AUTH_METHOD_LONG_TERM_API_KEY && (
         <Card backgroundVariant="light" borderVariant="none" sizeVariant="lg">
           <Section gap={0.5}>
             <InputLayouts.Vertical
               name={FIELD_AWS_BEARER_TOKEN_BEDROCK}
-              title="AWS Bedrock Long-term API Key"
+              title="Long-term API Key"
             >
               <PasswordInputTypeInField
                 name={FIELD_AWS_BEARER_TOKEN_BEDROCK}

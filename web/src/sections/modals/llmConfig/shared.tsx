@@ -35,6 +35,7 @@ import { NameCard } from "@/refresh-components/cards";
 import { Card, EmptyMessageCard } from "@opal/components";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import useUsers from "@/hooks/useUsers";
+import { toast } from "@/hooks/useToast";
 import { UserRole } from "@/lib/types";
 
 export function FieldSeparator() {
@@ -430,7 +431,7 @@ export interface ModelsFieldProps<T> {
   recommendedDefaultModel: SimpleKnownModel | null;
   shouldShowAutoUpdateToggle: boolean;
   /** Called when the user clicks the refresh button to re-fetch models. */
-  onRefetch?: () => void;
+  onRefetch?: () => Promise<void> | void;
 }
 
 export function ModelsField<T extends BaseLLMFormValues>({
@@ -528,7 +529,17 @@ export function ModelsField<T extends BaseLLMFormValues>({
               <OpalButton
                 prominence="tertiary"
                 icon={SvgRefreshCw}
-                onClick={onRefetch}
+                onClick={async () => {
+                  try {
+                    await onRefetch();
+                  } catch (err) {
+                    toast.error(
+                      err instanceof Error
+                        ? err.message
+                        : "Failed to fetch models"
+                    );
+                  }
+                }}
               />
             )}
           </Section>
