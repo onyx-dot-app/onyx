@@ -31,6 +31,7 @@ import {
   isValidAzureTargetUri,
   parseAzureTargetUri,
 } from "@/lib/azureTargetUri";
+import { toast } from "@/hooks/useToast";
 
 const AZURE_PROVIDER_NAME = "azure";
 
@@ -65,8 +66,8 @@ const processValues = (values: AzureModalValues): AzureModalValues => {
         api_version: apiVersion,
         deployment_name: deploymentName || processedValues.deployment_name,
       };
-    } catch (error) {
-      console.warn("Failed to parse target_uri; using original values", error);
+    } catch {
+      toast.warning("Failed to parse target URI — using original values.");
     }
   }
   return processedValues;
