@@ -256,7 +256,6 @@ def test_multiple_tool_calls(default_multi_llm: LitellmLLM) -> None:
                 {"role": "user", "content": "What's the weather and time in New York?"}
             ],
             tools=tools,
-            tool_choice=None,
             stream=True,
             temperature=0.0,  # Default value from GEN_AI_TEMPERATURE
             timeout=30,
@@ -412,7 +411,6 @@ def test_multiple_tool_calls_streaming(default_multi_llm: LitellmLLM) -> None:
                 {"role": "user", "content": "What's the weather and time in New York?"}
             ],
             tools=tools,
-            tool_choice=None,
             stream=True,
             temperature=0.0,  # Default value from GEN_AI_TEMPERATURE
             timeout=30,
@@ -1431,3 +1429,37 @@ def test_strip_tool_content_merges_consecutive_tool_results() -> None:
     assert "sunny 72F" in merged
     assert "tc_2" in merged
     assert "headline news" in merged
+
+
+def test_no_tool_choice_sent_when_no_tools(default_multi_llm: LitellmLLM) -> None:
+    """Regression test for providers (e.g. Fireworks) that reject tool_choice=null.
+
+    When no tools are provided, tool_choice must not be forwarded to
+    litellm.completion() at all — not even as None.
+    """
+    messages: LanguageModelInput = [UserMessage(content="Hello!")]
+
+    mock_stream_chunks = [
+        litellm.ModelResponse(
+            id="chatcmpl-123",
+            choices=[
+                litellm.Choices(
+                    delta=_create_delta(role="assistant", content="Hello!"),
+                    finish_reason="stop",
+                    index=0,
+                )
+            ],
+            model="gpt-3.5-turbo",
+        ),
+    ]
+
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = mock_stream_chunks
+
+        default_multi_llm.invoke(messages, tools=None)
+
+        _, kwargs = mock_completion.call_args
+        assert (
+            "tool_choice" not in kwargs
+        ), "tool_choice must not be sent to providers when no tools are provided"
+       
