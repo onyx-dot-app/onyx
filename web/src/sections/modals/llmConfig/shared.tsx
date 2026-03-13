@@ -16,7 +16,7 @@ import Switch from "@/refresh-components/inputs/Switch";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import Text from "@/refresh-components/texts/Text";
 import { Button as OpalButton, LineItemButton, Tag } from "@opal/components";
-import { BaseLLMFormValues } from "./formUtils";
+import { BaseLLMFormValues } from "@/sections/modals/llmConfig/formUtils";
 import { WithoutStyles } from "@opal/types";
 import Separator from "@/refresh-components/Separator";
 import { Section } from "@/layouts/general-layouts";
@@ -46,7 +46,7 @@ export type FieldWrapperProps = WithoutStyles<
 >;
 
 export function FieldWrapper(props: FieldWrapperProps) {
-  return <div {...props} className="p-2 w-full" />;
+  return <div {...props} className="px-2 w-full" />;
 }
 
 // ─── DisplayNameField ────────────────────────────────────────────────────────

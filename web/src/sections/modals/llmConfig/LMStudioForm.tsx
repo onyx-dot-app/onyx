@@ -14,7 +14,7 @@ import {
 } from "@/interfaces/llm";
 import * as Yup from "yup";
 import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
-import { LLMConfigurationModalWrapper } from "./LLMConfigurationModalWrapper";
+import { LLMConfigurationModalWrapper } from "@/sections/modals/llmConfig/LLMConfigurationModalWrapper";
 import {
   buildDefaultInitialValues,
   buildDefaultValidationSchema,
@@ -23,13 +23,13 @@ import {
   submitOnboardingProvider,
   buildOnboardingInitialValues,
   BaseLLMFormValues,
-} from "./formUtils";
+} from "@/sections/modals/llmConfig/formUtils";
 import {
   ModelsField,
   DisplayNameField,
   ModelsAccessField,
   SingleDefaultModelField,
-} from "./shared";
+} from "@/sections/modals/llmConfig/shared";
 import { fetchModels } from "@/app/admin/configuration/llm/utils";
 import debounce from "lodash/debounce";
 import { ScopedMutator } from "swr";

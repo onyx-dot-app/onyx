@@ -1,16 +1,16 @@
 import { LLMProviderName, LLMProviderView } from "@/interfaces/llm";
-import { AnthropicModal } from "./AnthropicModal";
-import { OpenAIModal } from "./OpenAIModal";
-import { OllamaModal } from "./OllamaModal";
-import { AzureModal } from "./AzureModal";
-import { VertexAIModal } from "./VertexAIModal";
-import { OpenRouterModal } from "./OpenRouterModal";
-import { CustomModal } from "./CustomModal";
-import { BedrockModal } from "./BedrockModal";
-import { LMStudioForm } from "./LMStudioForm";
-import { LiteLLMProxyModal } from "./LiteLLMProxyModal";
+import { AnthropicModal } from "@/sections/modals/llmConfig/AnthropicModal";
+import { OpenAIModal } from "@/sections/modals/llmConfig/OpenAIModal";
+import { OllamaModal } from "@/sections/modals/llmConfig/OllamaModal";
+import { AzureModal } from "@/sections/modals/llmConfig/AzureModal";
+import { VertexAIModal } from "@/sections/modals/llmConfig/VertexAIModal";
+import { OpenRouterModal } from "@/sections/modals/llmConfig/OpenRouterModal";
+import { CustomModal } from "@/sections/modals/llmConfig/CustomModal";
+import { BedrockModal } from "@/sections/modals/llmConfig/BedrockModal";
+import { LMStudioForm } from "@/sections/modals/llmConfig/LMStudioForm";
+import { LiteLLMProxyModal } from "@/sections/modals/llmConfig/LiteLLMProxyModal";
 
-export function detectIfRealOpenAIProvider(provider: LLMProviderView) {
+function detectIfRealOpenAIProvider(provider: LLMProviderView) {
   return (
     provider.provider === LLMProviderName.OPENAI &&
     provider.api_key &&

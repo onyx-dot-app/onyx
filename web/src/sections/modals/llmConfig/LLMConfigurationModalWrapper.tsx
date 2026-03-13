@@ -52,8 +52,8 @@ export function LLMConfigurationModalWrapper({
             description={description}
             onClose={onClose}
           />
-          <Modal.Body padding={0.5} gap={0.5}>
-            {children}
+          <Modal.Body padding={0.5}>
+            <div className="py-2 w-full flex flex-col gap-4">{children}</div>
           </Modal.Body>
           <Modal.Footer>
             <Button prominence="secondary" onClick={onClose} type="button">

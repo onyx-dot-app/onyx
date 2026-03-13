@@ -7,7 +7,7 @@
  */
 import React from "react";
 import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
-import { CustomModal } from "./CustomModal";
+import { CustomModal } from "@/sections/modals/llmConfig/CustomModal";
 import { toast } from "@/hooks/useToast";
 
 // Mock SWR's mutate function and useSWR

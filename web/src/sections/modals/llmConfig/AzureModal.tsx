@@ -8,7 +8,7 @@ import * as InputLayouts from "@/layouts/input-layouts";
 import { LLMProviderFormProps, LLMProviderView } from "@/interfaces/llm";
 import * as Yup from "yup";
 import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
-import { LLMConfigurationModalWrapper } from "./LLMConfigurationModalWrapper";
+import { LLMConfigurationModalWrapper } from "@/sections/modals/llmConfig/LLMConfigurationModalWrapper";
 import {
   buildDefaultInitialValues,
   buildDefaultValidationSchema,
@@ -17,14 +17,14 @@ import {
   submitOnboardingProvider,
   buildOnboardingInitialValues,
   BaseLLMFormValues,
-} from "./formUtils";
+} from "@/sections/modals/llmConfig/formUtils";
 import {
   APIKeyField,
   DisplayNameField,
   FieldSeparator,
   ModelsAccessField,
   SingleDefaultModelField,
-} from "./shared";
+} from "@/sections/modals/llmConfig/shared";
 import {
   isValidAzureTargetUri,
   parseAzureTargetUri,

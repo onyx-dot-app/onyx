@@ -15,7 +15,7 @@ import {
 } from "@/interfaces/llm";
 import * as Yup from "yup";
 import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
-import { LLMConfigurationModalWrapper } from "./LLMConfigurationModalWrapper";
+import { LLMConfigurationModalWrapper } from "@/sections/modals/llmConfig/LLMConfigurationModalWrapper";
 import {
   buildDefaultInitialValues,
   buildDefaultValidationSchema,
@@ -24,21 +24,24 @@ import {
   submitOnboardingProvider,
   buildOnboardingInitialValues,
   BaseLLMFormValues,
-} from "./formUtils";
+} from "@/sections/modals/llmConfig/formUtils";
 import {
   ModelsField,
   DisplayNameField,
   FieldSeparator,
+  FieldWrapper,
   ModelsAccessField,
   FetchModelsButton,
   SingleDefaultModelField,
-} from "./shared";
+} from "@/sections/modals/llmConfig/shared";
 import { fetchBedrockModels } from "@/app/admin/configuration/llm/utils";
 import Text from "@/refresh-components/texts/Text";
-import Tabs from "@/refresh-components/Tabs";
+import { Card } from "@opal/components";
+import { Section } from "@/layouts/general-layouts";
+import { SvgAlertCircle, SvgKey, SvgLock, SvgShield } from "@opal/icons";
+import { Content } from "@opal/layouts";
 
 export const BEDROCK_PROVIDER_NAME = "bedrock";
-const BEDROCK_DISPLAY_NAME = "AWS Bedrock";
 
 const AWS_REGION_OPTIONS = [
   { name: "us-east-1", value: "us-east-1" },
@@ -132,99 +135,111 @@ function BedrockModalInternals({
   return (
     <LLMConfigurationModalWrapper
       providerEndpoint={BEDROCK_PROVIDER_NAME}
-      providerName={BEDROCK_DISPLAY_NAME}
       existingProviderName={existingLlmProvider?.name}
       onClose={onClose}
       isFormValid={formikProps.isValid}
       isTesting={isTesting}
     >
-      {!isOnboarding && <DisplayNameField disabled={!!existingLlmProvider} />}
-
-      <InputLayouts.Vertical
-        name={FIELD_AWS_REGION_NAME}
-        title="AWS Region"
-        description="Region where your Amazon Bedrock models are hosted."
-      >
-        <InputSelectField name={FIELD_AWS_REGION_NAME}>
-          <InputSelect.Trigger placeholder="Select a region" />
-          <InputSelect.Content>
-            {AWS_REGION_OPTIONS.map((option) => (
-              <InputSelect.Item key={option.value} value={option.value}>
-                {option.name}
-              </InputSelect.Item>
-            ))}
-          </InputSelect.Content>
-        </InputSelectField>
-      </InputLayouts.Vertical>
-
-      <div>
-        <Text as="p" mainUiAction>
-          Authentication Method
-        </Text>
-        <Text as="p" secondaryBody text03>
-          Choose how Onyx should authenticate with Bedrock.
-        </Text>
-        <Tabs
-          value={authMethod || AUTH_METHOD_ACCESS_KEY}
-          onValueChange={(value) =>
-            formikProps.setFieldValue(FIELD_BEDROCK_AUTH_METHOD, value)
-          }
+      <FieldWrapper>
+        <InputLayouts.Vertical
+          name={FIELD_AWS_REGION_NAME}
+          title="AWS Region"
+          subDescription="Region where your Amazon Bedrock models are hosted."
         >
-          <Tabs.List>
-            <Tabs.Trigger value={AUTH_METHOD_IAM}>IAM Role</Tabs.Trigger>
-            <Tabs.Trigger value={AUTH_METHOD_ACCESS_KEY}>
-              Access Key
-            </Tabs.Trigger>
-            <Tabs.Trigger value={AUTH_METHOD_LONG_TERM_API_KEY}>
-              Long-term API Key
-            </Tabs.Trigger>
-          </Tabs.List>
+          <InputSelectField name={FIELD_AWS_REGION_NAME}>
+            <InputSelect.Trigger placeholder="Select a region" />
+            <InputSelect.Content>
+              {AWS_REGION_OPTIONS.map((option) => (
+                <InputSelect.Item key={option.value} value={option.value}>
+                  {option.name}
+                </InputSelect.Item>
+              ))}
+            </InputSelect.Content>
+          </InputSelectField>
+        </InputLayouts.Vertical>
+      </FieldWrapper>
 
-          <Tabs.Content value={AUTH_METHOD_IAM}>
-            <Text as="p" text03>
-              Uses the IAM role attached to your AWS environment. Recommended
-              for EC2, ECS, Lambda, or other AWS services.
-            </Text>
-          </Tabs.Content>
+      <FieldWrapper>
+        <InputLayouts.Vertical
+          name={FIELD_BEDROCK_AUTH_METHOD}
+          title="Authentication Method"
+          subDescription="Choose how Onyx should authenticate with Bedrock."
+        >
+          <InputSelect
+            value={authMethod || AUTH_METHOD_ACCESS_KEY}
+            onValueChange={(value) =>
+              formikProps.setFieldValue(FIELD_BEDROCK_AUTH_METHOD, value)
+            }
+          >
+            <InputSelect.Trigger defaultValue={AUTH_METHOD_ACCESS_KEY} />
+            <InputSelect.Content>
+              <InputSelect.Item value={AUTH_METHOD_ACCESS_KEY}>
+                Access Key
+              </InputSelect.Item>
+              <InputSelect.Item value={AUTH_METHOD_IAM}>
+                IAM Role
+              </InputSelect.Item>
+              <InputSelect.Item value={AUTH_METHOD_LONG_TERM_API_KEY}>
+                Long-term API Key
+              </InputSelect.Item>
+            </InputSelect.Content>
+          </InputSelect>
+        </InputLayouts.Vertical>
+      </FieldWrapper>
 
-          <Tabs.Content value={AUTH_METHOD_ACCESS_KEY}>
-            <div className="flex flex-col gap-4 w-full">
-              <InputLayouts.Vertical
+      {authMethod === AUTH_METHOD_IAM && (
+        <Section padding={0.5}>
+          <Card backgroundVariant="none" borderVariant="solid">
+            <Content
+              icon={SvgAlertCircle}
+              title="Onyx will use the IAM role attached to the environment it’s running in to authenticate."
+              variant="body"
+              sizePreset="main-ui"
+            />
+          </Card>
+        </Section>
+      )}
+
+      {authMethod === AUTH_METHOD_ACCESS_KEY && (
+        <Card backgroundVariant="light" borderVariant="none" sizeVariant="lg">
+          <Section gap={0.5}>
+            <InputLayouts.Vertical
+              name={FIELD_AWS_ACCESS_KEY_ID}
+              title="AWS Access Key ID"
+            >
+              <InputTypeInField
                 name={FIELD_AWS_ACCESS_KEY_ID}
-                title="AWS Access Key ID"
-              >
-                <InputTypeInField
-                  name={FIELD_AWS_ACCESS_KEY_ID}
-                  placeholder="AKIAIOSFODNN7EXAMPLE"
-                />
-              </InputLayouts.Vertical>
-              <InputLayouts.Vertical
+                placeholder="AKIAIOSFODNN7EXAMPLE"
+              />
+            </InputLayouts.Vertical>
+            <InputLayouts.Vertical
+              name={FIELD_AWS_SECRET_ACCESS_KEY}
+              title="AWS Secret Access Key"
+            >
+              <PasswordInputTypeInField
                 name={FIELD_AWS_SECRET_ACCESS_KEY}
-                title="AWS Secret Access Key"
-              >
-                <PasswordInputTypeInField
-                  name={FIELD_AWS_SECRET_ACCESS_KEY}
-                  placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
-                />
-              </InputLayouts.Vertical>
-            </div>
-          </Tabs.Content>
+                placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+              />
+            </InputLayouts.Vertical>
+          </Section>
+        </Card>
+      )}
 
-          <Tabs.Content value={AUTH_METHOD_LONG_TERM_API_KEY}>
-            <div className="flex flex-col gap-4 w-full">
-              <InputLayouts.Vertical
+      {authMethod === AUTH_METHOD_LONG_TERM_API_KEY && (
+        <Card backgroundVariant="light" borderVariant="none" sizeVariant="lg">
+          <Section gap={0.5}>
+            <InputLayouts.Vertical
+              name={FIELD_AWS_BEARER_TOKEN_BEDROCK}
+              title="AWS Bedrock Long-term API Key"
+            >
+              <PasswordInputTypeInField
                 name={FIELD_AWS_BEARER_TOKEN_BEDROCK}
-                title="AWS Bedrock Long-term API Key"
-              >
-                <PasswordInputTypeInField
-                  name={FIELD_AWS_BEARER_TOKEN_BEDROCK}
-                  placeholder="Your long-term API key"
-                />
-              </InputLayouts.Vertical>
-            </div>
-          </Tabs.Content>
-        </Tabs>
-      </div>
+                placeholder="Your long-term API key"
+              />
+            </InputLayouts.Vertical>
+          </Section>
+        </Card>
+      )}
 
       <FetchModelsButton
         onFetch={() =>
@@ -251,6 +266,13 @@ function BedrockModalInternals({
         onModelsFetched={setFetchedModels}
         autoFetchOnInitialLoad={!!existingLlmProvider}
       />
+
+      {!isOnboarding && (
+        <>
+          <FieldSeparator />
+          <DisplayNameField disabled={!!existingLlmProvider} />
+        </>
+      )}
 
       <FieldSeparator />
 

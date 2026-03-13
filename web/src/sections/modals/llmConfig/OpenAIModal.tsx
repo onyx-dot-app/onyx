@@ -6,7 +6,7 @@ import { Formik } from "formik";
 import { LLMProviderFormProps } from "@/interfaces/llm";
 import * as Yup from "yup";
 import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
-import { LLMConfigurationModalWrapper } from "./LLMConfigurationModalWrapper";
+import { LLMConfigurationModalWrapper } from "@/sections/modals/llmConfig/LLMConfigurationModalWrapper";
 import {
   buildDefaultInitialValues,
   buildDefaultValidationSchema,
@@ -14,7 +14,7 @@ import {
   submitLLMProvider,
   submitOnboardingProvider,
   buildOnboardingInitialValues,
-} from "./formUtils";
+} from "@/sections/modals/llmConfig/formUtils";
 import {
   APIKeyField,
   ModelsField,
@@ -22,7 +22,7 @@ import {
   FieldSeparator,
   ModelsAccessField,
   SingleDefaultModelField,
-} from "./shared";
+} from "@/sections/modals/llmConfig/shared";
 
 export const OPENAI_PROVIDER_NAME = "openai";
 const DEFAULT_DEFAULT_MODEL_NAME = "gpt-5.2";

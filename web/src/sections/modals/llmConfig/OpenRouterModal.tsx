@@ -12,7 +12,7 @@ import {
 } from "@/interfaces/llm";
 import * as Yup from "yup";
 import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
-import { LLMConfigurationModalWrapper } from "./LLMConfigurationModalWrapper";
+import { LLMConfigurationModalWrapper } from "@/sections/modals/llmConfig/LLMConfigurationModalWrapper";
 import {
   buildDefaultInitialValues,
   buildDefaultValidationSchema,
@@ -21,7 +21,7 @@ import {
   submitOnboardingProvider,
   buildOnboardingInitialValues,
   BaseLLMFormValues,
-} from "./formUtils";
+} from "@/sections/modals/llmConfig/formUtils";
 import {
   APIKeyField,
   ModelsField,
@@ -30,7 +30,7 @@ import {
   FieldSeparator,
   FetchModelsButton,
   SingleDefaultModelField,
-} from "./shared";
+} from "@/sections/modals/llmConfig/shared";
 
 export const OPENROUTER_PROVIDER_NAME = "openrouter";
 const OPENROUTER_DISPLAY_NAME = "OpenRouter";

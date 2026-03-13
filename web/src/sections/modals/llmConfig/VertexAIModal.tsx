@@ -9,7 +9,7 @@ import * as InputLayouts from "@/layouts/input-layouts";
 import { LLMProviderFormProps } from "@/interfaces/llm";
 import * as Yup from "yup";
 import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
-import { LLMConfigurationModalWrapper } from "./LLMConfigurationModalWrapper";
+import { LLMConfigurationModalWrapper } from "@/sections/modals/llmConfig/LLMConfigurationModalWrapper";
 import {
   buildDefaultInitialValues,
   buildDefaultValidationSchema,
@@ -18,7 +18,7 @@ import {
   submitOnboardingProvider,
   buildOnboardingInitialValues,
   BaseLLMFormValues,
-} from "./formUtils";
+} from "@/sections/modals/llmConfig/formUtils";
 import {
   ModelsField,
   DisplayNameField,
@@ -26,8 +26,7 @@ import {
   FieldWrapper,
   ModelsAccessField,
   SingleDefaultModelField,
-} from "./shared";
-import { Section } from "@/layouts/general-layouts";
+} from "@/sections/modals/llmConfig/shared";
 
 export const VERTEXAI_PROVIDER_NAME = "vertex_ai";
 const VERTEXAI_DISPLAY_NAME = "Google Cloud Vertex AI";
@@ -178,33 +177,31 @@ export function VertexAIModal({
           isFormValid={formikProps.isValid}
           isTesting={isTesting}
         >
-          <Section gap={0}>
-            <FieldWrapper>
-              <InputLayouts.Vertical
+          <FieldWrapper>
+            <InputLayouts.Vertical
+              name="custom_config.vertex_location"
+              title="Google Cloud Region Name"
+              subDescription="Region where your Google Vertex AI models are hosted. See full list of regions supported at Google Cloud."
+            >
+              <InputTypeInField
                 name="custom_config.vertex_location"
-                title="Google Cloud Region Name"
-                subDescription="Region where your Google Vertex AI models are hosted. See full list of regions supported at Google Cloud."
-              >
-                <InputTypeInField
-                  name="custom_config.vertex_location"
-                  placeholder={VERTEXAI_DEFAULT_LOCATION}
-                />
-              </InputLayouts.Vertical>
-            </FieldWrapper>
+                placeholder={VERTEXAI_DEFAULT_LOCATION}
+              />
+            </InputLayouts.Vertical>
+          </FieldWrapper>
 
-            <FieldWrapper>
-              <InputLayouts.Vertical
+          <FieldWrapper>
+            <InputLayouts.Vertical
+              name="custom_config.vertex_credentials"
+              title="API Key"
+              subDescription="Attach your API key JSON from Google Cloud to access your models."
+            >
+              <FileUploadFormField
                 name="custom_config.vertex_credentials"
-                title="API Key"
-                subDescription="Attach your API key JSON from Google Cloud to access your models."
-              >
-                <FileUploadFormField
-                  name="custom_config.vertex_credentials"
-                  label=""
-                />
-              </InputLayouts.Vertical>
-            </FieldWrapper>
-          </Section>
+                label=""
+              />
+            </InputLayouts.Vertical>
+          </FieldWrapper>
 
           <FieldSeparator />
 

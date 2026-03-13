@@ -13,7 +13,7 @@ import {
 import { fetchLiteLLMProxyModels } from "@/app/admin/configuration/llm/utils";
 import * as Yup from "yup";
 import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
-import { LLMConfigurationModalWrapper } from "./LLMConfigurationModalWrapper";
+import { LLMConfigurationModalWrapper } from "@/sections/modals/llmConfig/LLMConfigurationModalWrapper";
 import {
   buildDefaultInitialValues,
   buildDefaultValidationSchema,
@@ -22,7 +22,7 @@ import {
   submitOnboardingProvider,
   buildOnboardingInitialValues,
   BaseLLMFormValues,
-} from "./formUtils";
+} from "@/sections/modals/llmConfig/formUtils";
 import {
   APIKeyField,
   ModelsField,
@@ -31,7 +31,7 @@ import {
   FieldSeparator,
   FetchModelsButton,
   SingleDefaultModelField,
-} from "./shared";
+} from "@/sections/modals/llmConfig/shared";
 
 const LITELLM_PROXY_DISPLAY_NAME = "LiteLLM Proxy";
 const DEFAULT_API_BASE = "http://localhost:4000";

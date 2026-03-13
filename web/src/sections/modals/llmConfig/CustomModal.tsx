@@ -5,20 +5,20 @@ import { useSWRConfig } from "swr";
 import { ArrayHelpers, FieldArray, Formik } from "formik";
 import { LLMProviderFormProps } from "@/interfaces/llm";
 import * as Yup from "yup";
-import { LLMConfigurationModalWrapper } from "./LLMConfigurationModalWrapper";
+import { LLMConfigurationModalWrapper } from "@/sections/modals/llmConfig/LLMConfigurationModalWrapper";
 import {
   submitLLMProvider,
   submitOnboardingProvider,
   buildDefaultInitialValues,
   buildDefaultValidationSchema,
   buildOnboardingInitialValues,
-} from "./formUtils";
+} from "@/sections/modals/llmConfig/formUtils";
 import {
   APIKeyField,
   DisplayNameField,
   FieldSeparator,
   ModelsAccessField,
-} from "./shared";
+} from "@/sections/modals/llmConfig/shared";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import * as InputLayouts from "@/layouts/input-layouts";
 import { ModelConfigurationField } from "@/app/admin/configuration/llm/ModelConfigurationField";
