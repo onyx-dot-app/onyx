@@ -71,7 +71,6 @@ export function DisplayNameField({ disabled = false }: DisplayNameFieldProps) {
         name="name"
         title="Display Name"
         subDescription="Used to identify this provider in the app."
-        optional
       >
         <InputTypeInField
           name="name"
