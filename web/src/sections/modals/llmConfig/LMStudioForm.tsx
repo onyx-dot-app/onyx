@@ -14,7 +14,6 @@ import {
 } from "@/interfaces/llm";
 import * as Yup from "yup";
 import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
-import { LLMConfigurationModalWrapper } from "@/sections/modals/llmConfig/LLMConfigurationModalWrapper";
 import {
   buildDefaultInitialValues,
   buildDefaultValidationSchema,
@@ -31,6 +30,7 @@ import {
   FieldSeparator,
   FieldWrapper,
   SingleDefaultModelField,
+  LLMConfigurationModalWrapper,
 } from "@/sections/modals/llmConfig/shared";
 import { fetchModels } from "@/app/admin/configuration/llm/utils";
 import debounce from "lodash/debounce";

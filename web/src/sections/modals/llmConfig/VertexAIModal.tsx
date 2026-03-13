@@ -9,7 +9,6 @@ import * as InputLayouts from "@/layouts/input-layouts";
 import { LLMProviderFormProps } from "@/interfaces/llm";
 import * as Yup from "yup";
 import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
-import { LLMConfigurationModalWrapper } from "@/sections/modals/llmConfig/LLMConfigurationModalWrapper";
 import {
   buildDefaultInitialValues,
   buildDefaultValidationSchema,
@@ -26,6 +25,7 @@ import {
   FieldWrapper,
   ModelsAccessField,
   SingleDefaultModelField,
+  LLMConfigurationModalWrapper,
 } from "@/sections/modals/llmConfig/shared";
 
 export const VERTEXAI_PROVIDER_NAME = "vertex_ai";

@@ -13,7 +13,6 @@ import {
 } from "@/interfaces/llm";
 import * as Yup from "yup";
 import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
-import { LLMConfigurationModalWrapper } from "@/sections/modals/llmConfig/LLMConfigurationModalWrapper";
 import {
   buildDefaultInitialValues,
   buildDefaultValidationSchema,
@@ -29,6 +28,7 @@ import {
   ModelsAccessField,
   FieldSeparator,
   SingleDefaultModelField,
+  LLMConfigurationModalWrapper,
 } from "@/sections/modals/llmConfig/shared";
 import { fetchOllamaModels } from "@/app/admin/configuration/llm/utils";
 import debounce from "lodash/debounce";

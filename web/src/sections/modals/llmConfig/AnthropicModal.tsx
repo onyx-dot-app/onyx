@@ -6,7 +6,6 @@ import { Formik } from "formik";
 import { LLMProviderFormProps } from "@/interfaces/llm";
 import * as Yup from "yup";
 import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
-import { LLMConfigurationModalWrapper } from "@/sections/modals/llmConfig/LLMConfigurationModalWrapper";
 import {
   buildDefaultInitialValues,
   buildDefaultValidationSchema,
@@ -22,6 +21,7 @@ import {
   ModelsAccessField,
   FieldSeparator,
   SingleDefaultModelField,
+  LLMConfigurationModalWrapper,
 } from "@/sections/modals/llmConfig/shared";
 
 export const ANTHROPIC_PROVIDER_NAME = "anthropic";

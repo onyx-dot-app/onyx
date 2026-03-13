@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { FormikProps } from "formik";
+import { ReactNode, useState, useEffect } from "react";
+import { Form, FormikProps } from "formik";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { useAgents } from "@/hooks/useAgents";
 import { useUserGroups } from "@/lib/hooks";
@@ -15,7 +15,7 @@ import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTyp
 import Switch from "@/refresh-components/inputs/Switch";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import Text from "@/refresh-components/texts/Text";
-import { Button as OpalButton, LineItemButton, Tag } from "@opal/components";
+import { Button, LineItemButton, Tag } from "@opal/components";
 import { BaseLLMFormValues } from "@/sections/modals/llmConfig/formUtils";
 import { WithoutStyles } from "@opal/types";
 import Separator from "@/refresh-components/Separator";
@@ -23,6 +23,7 @@ import { Section } from "@/layouts/general-layouts";
 import { Disabled, Hoverable } from "@opal/core";
 import { Content } from "@opal/layouts";
 import {
+  SvgArrowExchange,
   SvgOnyxOctagon,
   SvgOrganization,
   SvgRefreshCw,
@@ -31,12 +32,19 @@ import {
   SvgUsers,
   SvgX,
 } from "@opal/icons";
+import SvgOnyxLogo from "@opal/icons/onyx-logo";
 import { NameCard } from "@/refresh-components/cards";
 import { Card, EmptyMessageCard } from "@opal/components";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import useUsers from "@/hooks/useUsers";
 import { toast } from "@/hooks/useToast";
 import { UserRole } from "@/lib/types";
+import Modal from "@/refresh-components/Modal";
+import {
+  getProviderIcon,
+  getProviderDisplayName,
+  getProviderProductName,
+} from "@/lib/llmConfig/providers";
 
 export function FieldSeparator() {
   return <Separator noPadding className="px-2" />;
@@ -284,7 +292,7 @@ export function ModelsAccessField<T extends BaseLLMFormValues>({
                           memberCount === 1 ? "member" : "members"
                         }`}
                         rightChildren={
-                          <OpalButton
+                          <Button
                             size="sm"
                             prominence="internal"
                             icon={SvgX}
@@ -317,7 +325,7 @@ export function ModelsAccessField<T extends BaseLLMFormValues>({
                         title={agent?.name ?? `Agent ${id}`}
                         description="Agent"
                         rightChildren={
-                          <OpalButton
+                          <Button
                             size="sm"
                             prominence="internal"
                             icon={SvgX}
@@ -406,9 +414,9 @@ export function FetchModelsButton({
       <SimpleTooltip tooltip={isDisabled ? disabledHint : undefined} side="top">
         <div className="w-fit">
           <Disabled disabled={isFetchingModels || isDisabled}>
-            <OpalButton type="button" onClick={handleFetchModels}>
+            <Button type="button" onClick={handleFetchModels}>
               Fetch Available Models
-            </OpalButton>
+            </Button>
           </Disabled>
         </div>
       </SimpleTooltip>
@@ -517,16 +525,16 @@ export function ModelsField<T extends BaseLLMFormValues>({
         >
           <Section flexDirection="row" gap={0}>
             <Disabled disabled={isAutoMode || modelConfigurations.length === 0}>
-              <OpalButton
+              <Button
                 prominence="tertiary"
                 size="md"
                 onClick={handleToggleSelectAll}
               >
                 {allSelected ? "Unselect All" : "Select All"}
-              </OpalButton>
+              </Button>
             </Disabled>
             {onRefetch && (
-              <OpalButton
+              <Button
                 prominence="tertiary"
                 icon={SvgRefreshCw}
                 onClick={async () => {
@@ -611,7 +619,7 @@ export function ModelsField<T extends BaseLLMFormValues>({
                                 group="LLMConfigurationButton"
                                 variant="opacity-on-hover"
                               >
-                                <OpalButton
+                                <Button
                                   size="sm"
                                   prominence="internal"
                                   onClick={(e) => {
@@ -621,7 +629,7 @@ export function ModelsField<T extends BaseLLMFormValues>({
                                   type="button"
                                 >
                                   Set as default
-                                </OpalButton>
+                                </Button>
                               </Hoverable.Item>
                             )
                           ) : undefined
@@ -646,5 +654,69 @@ export function ModelsField<T extends BaseLLMFormValues>({
         )}
       </Section>
     </Card>
+  );
+}
+
+// ============================================================================
+// LLMConfigurationModalWrapper
+// ============================================================================
+
+interface LLMConfigurationModalWrapperProps {
+  providerEndpoint: string;
+  providerName?: string;
+  existingProviderName?: string;
+  onClose: () => void;
+  isFormValid: boolean;
+  isTesting?: boolean;
+  children: ReactNode;
+}
+
+export function LLMConfigurationModalWrapper({
+  providerEndpoint,
+  providerName,
+  existingProviderName,
+  onClose,
+  isFormValid,
+  isTesting,
+  children,
+}: LLMConfigurationModalWrapperProps) {
+  const providerIcon = getProviderIcon(providerEndpoint);
+  const providerDisplayName =
+    providerName ?? getProviderDisplayName(providerEndpoint);
+  const providerProductName = getProviderProductName(providerEndpoint);
+
+  const title = existingProviderName
+    ? `Configure "${existingProviderName}"`
+    : `Set up ${providerProductName}`;
+  const description = `Connect to ${providerDisplayName} and set up your ${providerProductName} models.`;
+
+  return (
+    <Modal open onOpenChange={onClose}>
+      <Modal.Content width="md-sm" height="lg">
+        <Form className="flex flex-col h-full min-h-0">
+          <Modal.Header
+            icon={providerIcon}
+            moreIcon1={SvgArrowExchange}
+            moreIcon2={SvgOnyxLogo}
+            title={title}
+            description={description}
+            onClose={onClose}
+          />
+          <Modal.Body padding={0.5}>
+            <div className="py-2 w-full flex flex-col gap-4">{children}</div>
+          </Modal.Body>
+          <Modal.Footer>
+            <Button prominence="secondary" onClick={onClose} type="button">
+              Cancel
+            </Button>
+            <Disabled disabled={!isFormValid || isTesting}>
+              <Button type="submit">
+                {isTesting ? "Connecting..." : "Connect"}
+              </Button>
+            </Disabled>
+          </Modal.Footer>
+        </Form>
+      </Modal.Content>
+    </Modal>
   );
 }

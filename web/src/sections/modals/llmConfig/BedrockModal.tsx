@@ -15,7 +15,6 @@ import {
 } from "@/interfaces/llm";
 import * as Yup from "yup";
 import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
-import { LLMConfigurationModalWrapper } from "@/sections/modals/llmConfig/LLMConfigurationModalWrapper";
 import {
   buildDefaultInitialValues,
   buildDefaultValidationSchema,
@@ -32,6 +31,7 @@ import {
   FieldWrapper,
   ModelsAccessField,
   SingleDefaultModelField,
+  LLMConfigurationModalWrapper,
 } from "@/sections/modals/llmConfig/shared";
 import { fetchBedrockModels } from "@/app/admin/configuration/llm/utils";
 import { Card } from "@opal/components";

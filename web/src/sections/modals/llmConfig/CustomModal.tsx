@@ -5,7 +5,6 @@ import { useSWRConfig } from "swr";
 import { ArrayHelpers, FieldArray, Formik } from "formik";
 import { LLMProviderFormProps } from "@/interfaces/llm";
 import * as Yup from "yup";
-import { LLMConfigurationModalWrapper } from "@/sections/modals/llmConfig/LLMConfigurationModalWrapper";
 import {
   submitLLMProvider,
   submitOnboardingProvider,
@@ -18,6 +17,7 @@ import {
   DisplayNameField,
   FieldSeparator,
   ModelsAccessField,
+  LLMConfigurationModalWrapper,
 } from "@/sections/modals/llmConfig/shared";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import * as InputLayouts from "@/layouts/input-layouts";
