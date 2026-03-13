@@ -180,6 +180,10 @@ inferenceCapability:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  # Additional volumes on the output Deployment definition.
+  volumes: []
+  # Additional volumeMounts on the output Deployment definition.
+  volumeMounts: []
   # Deployment strategy - use Recreate or RollingUpdate with maxSurge: 0 to terminate old pod first
   # This prevents pending pods when cluster resources are constrained
   strategy: {}
@@ -235,6 +239,10 @@ indexCapability:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  # Additional volumes on the output Deployment definition.
+  volumes: []
+  # Additional volumeMounts on the output Deployment definition.
+  volumeMounts: []
   # Deployment strategy - use Recreate or RollingUpdate with maxSurge: 0 to terminate old pod first
   # This prevents pending pods when cluster resources are constrained
   strategy: {}
@@ -1066,6 +1074,11 @@ ingress:
 letsencrypt:
   enabled: false
   email: "abc@abc.com"
+
+# -- Optional: expose auth secrets as mounted files + *_FILE env vars instead of secret-backed env vars.
+secretsAsFiles:
+  enabled: false
+  mountPath: /etc/onyx-secrets
 
 # -- Governs all Secrets created or used by this chart. Values set by this chart will be base64 encoded in the k8s cluster.
 auth:

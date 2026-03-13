@@ -82,12 +82,12 @@ spec:
                 name: {{ .Values.config.envConfigMapName }}
           env:
             {{- include "onyx.envSecrets" . | nindent 12}}
-          {{- with .Values.webserver.volumeMounts }}
-          volumeMounts:
-            {{- toYaml . | nindent 12 }}
+          {{- $webserverVolumeMounts := include "onyx.renderVolumeMounts" (dict "ctx" . "volumeMounts" .Values.webserver.volumeMounts) }}
+          {{- if $webserverVolumeMounts }}
+          {{- $webserverVolumeMounts | nindent 10 }}
           {{- end }}
-      {{- with .Values.webserver.volumes }}
-      volumes:
-        {{- toYaml . | nindent 8 }}
+      {{- $webserverVolumes := include "onyx.renderVolumes" (dict "ctx" . "volumes" .Values.webserver.volumes) }}
+      {{- if $webserverVolumes }}
+      {{- $webserverVolumes | nindent 6 }}
       {{- end }}
 {{- end }}

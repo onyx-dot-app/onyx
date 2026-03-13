@@ -87,12 +87,12 @@ spec:
             - name: DISCORD_BOT_INVOKE_CHAR
               value: {{ .Values.discordbot.invokeChar | quote }}
             {{- end }}
-          {{- with .Values.discordbot.volumeMounts }}
-          volumeMounts:
-            {{- toYaml . | nindent 12 }}
+          {{- $discordbotVolumeMounts := include "onyx.renderVolumeMounts" (dict "ctx" . "volumeMounts" .Values.discordbot.volumeMounts) }}
+          {{- if $discordbotVolumeMounts }}
+          {{- $discordbotVolumeMounts | nindent 10 }}
           {{- end }}
-      {{- with .Values.discordbot.volumes }}
-      volumes:
-        {{- toYaml . | nindent 8 }}
+      {{- $discordbotVolumes := include "onyx.renderVolumes" (dict "ctx" . "volumes" .Values.discordbot.volumes) }}
+      {{- if $discordbotVolumes }}
+      {{- $discordbotVolumes | nindent 6 }}
       {{- end }}
 {{- end }}

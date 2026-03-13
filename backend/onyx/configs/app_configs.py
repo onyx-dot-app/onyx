@@ -4,6 +4,7 @@ import urllib.parse
 from datetime import datetime
 from datetime import timezone
 from typing import cast
+from typing import overload
 
 from onyx.auth.schemas import AuthBackend
 from onyx.cache.interface import CacheBackendType
@@ -15,6 +16,78 @@ from onyx.prompts.image_analysis import DEFAULT_IMAGE_SUMMARIZATION_USER_PROMPT
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+
+def _read_secret_from_file(file_path: str, file_env_var_name: str) -> str:
+    try:
+        with open(file_path, encoding="utf-8") as file:
+            return file.read().strip()
+    except OSError as e:
+        raise RuntimeError(
+            f"Unable to read secret file '{file_path}' from {file_env_var_name}"
+        ) from e
+
+
+@overload
+def get_secret_env(
+    env_var_name: str,
+    *,
+    default: str,
+    fallback_env_var_names: list[str] | None = None,
+) -> str: ...
+
+
+@overload
+def get_secret_env(
+    env_var_name: str,
+    *,
+    default: None = None,
+    fallback_env_var_names: list[str] | None = None,
+) -> str | None: ...
+
+
+def get_secret_env(
+    env_var_name: str,
+    *,
+    default: str | None = None,
+    fallback_env_var_names: list[str] | None = None,
+) -> str | None:
+    env_var_names = [env_var_name]
+    if fallback_env_var_names:
+        env_var_names.extend(fallback_env_var_names)
+
+    for current_env_var in env_var_names:
+        env_value = os.environ.get(current_env_var)
+        if env_value is not None:
+            return env_value
+
+        file_env_var = f"{current_env_var}_FILE"
+        file_path = os.environ.get(file_env_var)
+        if file_path is not None:
+            if not file_path:
+                logger.warning(
+                    "%s is set to an empty string; skipping file lookup.",
+                    file_env_var,
+                )
+                continue
+
+            file_value = _read_secret_from_file(
+                file_path=file_path, file_env_var_name=file_env_var
+            )
+            if file_value:
+                return file_value
+            logger.warning(
+                "Secret file at '%s' (from %s) is empty; falling back to next source.",
+                file_path,
+                file_env_var,
+            )
+
+    return default
+
+
+def _use_iam_auth() -> bool:
+    return os.getenv("USE_IAM_AUTH", "False").lower() == "true"
+
 
 #####
 # App Configs
@@ -168,12 +241,15 @@ DISPOSABLE_EMAIL_DOMAINS_URL = os.environ.get(
 
 # OAuth Login Flow
 # Used for both Google OAuth2 and OIDC flows
-OAUTH_CLIENT_ID = (
-    os.environ.get("OAUTH_CLIENT_ID", os.environ.get("GOOGLE_OAUTH_CLIENT_ID")) or ""
+OAUTH_CLIENT_ID = get_secret_env(
+    "OAUTH_CLIENT_ID",
+    fallback_env_var_names=["GOOGLE_OAUTH_CLIENT_ID"],
+    default="",
 )
-OAUTH_CLIENT_SECRET = (
-    os.environ.get("OAUTH_CLIENT_SECRET", os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET"))
-    or ""
+OAUTH_CLIENT_SECRET = get_secret_env(
+    "OAUTH_CLIENT_SECRET",
+    fallback_env_var_names=["GOOGLE_OAUTH_CLIENT_SECRET"],
+    default="",
 )
 
 # Whether Google OAuth is enabled (requires both client ID and secret)
@@ -227,7 +303,7 @@ REQUIRE_EMAIL_VERIFICATION = (
 SMTP_SERVER = os.environ.get("SMTP_SERVER") or ""
 SMTP_PORT = int(os.environ.get("SMTP_PORT") or "587")
 SMTP_USER = os.environ.get("SMTP_USER") or ""
-SMTP_PASS = os.environ.get("SMTP_PASS") or ""
+SMTP_PASS = get_secret_env("SMTP_PASS", default="")
 EMAIL_FROM = os.environ.get("EMAIL_FROM") or SMTP_USER
 
 SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY") or ""
@@ -264,10 +340,24 @@ DEFAULT_OPENSEARCH_CLIENT_TIMEOUT_S = int(
 DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S = int(
     os.environ.get("DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S") or 50
 )
-OPENSEARCH_ADMIN_USERNAME = os.environ.get("OPENSEARCH_ADMIN_USERNAME", "admin")
-OPENSEARCH_ADMIN_PASSWORD = os.environ.get(
-    "OPENSEARCH_ADMIN_PASSWORD", "StrongPassword123!"
-)
+_OPENSEARCH_ADMIN_USERNAME = get_secret_env("OPENSEARCH_ADMIN_USERNAME")
+if _OPENSEARCH_ADMIN_USERNAME is None:
+    logger.warning(
+        "OPENSEARCH_ADMIN_USERNAME is not set. Falling back to legacy default username "
+        "'admin'. Set OPENSEARCH_ADMIN_USERNAME or OPENSEARCH_ADMIN_USERNAME_FILE in "
+        "production."
+    )
+    _OPENSEARCH_ADMIN_USERNAME = "admin"
+OPENSEARCH_ADMIN_USERNAME = _OPENSEARCH_ADMIN_USERNAME
+
+_OPENSEARCH_ADMIN_PASSWORD = get_secret_env("OPENSEARCH_ADMIN_PASSWORD")
+if _OPENSEARCH_ADMIN_PASSWORD is None:
+    logger.warning(
+        "OPENSEARCH_ADMIN_PASSWORD is not set. Falling back to legacy default password. "
+        "Set OPENSEARCH_ADMIN_PASSWORD or OPENSEARCH_ADMIN_PASSWORD_FILE in production."
+    )
+    _OPENSEARCH_ADMIN_PASSWORD = "StrongPassword123!"
+OPENSEARCH_ADMIN_PASSWORD = _OPENSEARCH_ADMIN_PASSWORD
 USING_AWS_MANAGED_OPENSEARCH = (
     os.environ.get("USING_AWS_MANAGED_OPENSEARCH", "").lower() == "true"
 )
@@ -343,11 +433,16 @@ MAX_DRIVE_WORKERS = int(os.environ.get("MAX_DRIVE_WORKERS", 4))
 
 # Below are intended to match the env variables names used by the official postgres docker image
 # https://hub.docker.com/_/postgres
-POSTGRES_USER = os.environ.get("POSTGRES_USER") or "postgres"
+POSTGRES_USER = get_secret_env("POSTGRES_USER", default="postgres") or "postgres"
+_POSTGRES_PASSWORD = get_secret_env("POSTGRES_PASSWORD")
+if _POSTGRES_PASSWORD is None and not _use_iam_auth():
+    logger.warning(
+        "POSTGRES_PASSWORD is not set. Falling back to legacy default password. "
+        "Set POSTGRES_PASSWORD or POSTGRES_PASSWORD_FILE in production."
+    )
+    _POSTGRES_PASSWORD = "password"
 # URL-encode the password for asyncpg to avoid issues with special characters on some machines.
-POSTGRES_PASSWORD = urllib.parse.quote_plus(
-    os.environ.get("POSTGRES_PASSWORD") or "password"
-)
+POSTGRES_PASSWORD = urllib.parse.quote_plus(_POSTGRES_PASSWORD or "")
 POSTGRES_HOST = os.environ.get("POSTGRES_HOST") or "127.0.0.1"
 POSTGRES_PORT = os.environ.get("POSTGRES_PORT") or "5432"
 POSTGRES_DB = os.environ.get("POSTGRES_DB") or "postgres"
@@ -384,7 +479,7 @@ except ValueError:
     POSTGRES_POOL_RECYCLE = POSTGRES_POOL_RECYCLE_DEFAULT
 
 # RDS IAM authentication - enables IAM-based authentication for PostgreSQL
-USE_IAM_AUTH = os.getenv("USE_IAM_AUTH", "False").lower() == "true"
+USE_IAM_AUTH = _use_iam_auth()
 
 # Redis IAM authentication - enables IAM-based authentication for Redis ElastiCache
 # Note: This is separate from RDS IAM auth as they use different authentication mechanisms
@@ -392,7 +487,7 @@ USE_REDIS_IAM_AUTH = os.getenv("USE_REDIS_IAM_AUTH", "False").lower() == "true"
 REDIS_SSL = os.getenv("REDIS_SSL", "").lower() == "true"
 REDIS_HOST = os.environ.get("REDIS_HOST") or "localhost"
 REDIS_PORT = int(os.environ.get("REDIS_PORT", 6379))
-REDIS_PASSWORD = os.environ.get("REDIS_PASSWORD") or ""
+REDIS_PASSWORD = get_secret_env("REDIS_PASSWORD", default="") or ""
 
 # this assumes that other redis settings remain the same as the primary
 REDIS_REPLICA_HOST = os.environ.get("REDIS_REPLICA_HOST") or REDIS_HOST
@@ -1088,9 +1183,11 @@ IMAGE_SUMMARIZATION_USER_PROMPT = os.environ.get(
 )
 
 # Knowledge Graph Read Only User Configuration
-DB_READONLY_USER: str = os.environ.get("DB_READONLY_USER", "db_readonly_user")
+DB_READONLY_USER: str = (
+    get_secret_env("DB_READONLY_USER", default="db_readonly_user") or "db_readonly_user"
+)
 DB_READONLY_PASSWORD: str = urllib.parse.quote_plus(
-    os.environ.get("DB_READONLY_PASSWORD") or "password"
+    get_secret_env("DB_READONLY_PASSWORD", default="password") or "password"
 )
 
 # File Store Configuration
@@ -1106,8 +1203,8 @@ S3_ENDPOINT_URL = os.environ.get("S3_ENDPOINT_URL")
 S3_VERIFY_SSL = os.environ.get("S3_VERIFY_SSL", "").lower() == "true"
 
 # S3/MinIO Access Keys
-S3_AWS_ACCESS_KEY_ID = os.environ.get("S3_AWS_ACCESS_KEY_ID")
-S3_AWS_SECRET_ACCESS_KEY = os.environ.get("S3_AWS_SECRET_ACCESS_KEY")
+S3_AWS_ACCESS_KEY_ID = get_secret_env("S3_AWS_ACCESS_KEY_ID")
+S3_AWS_SECRET_ACCESS_KEY = get_secret_env("S3_AWS_SECRET_ACCESS_KEY")
 
 # Should we force S3 local checksumming
 S3_GENERATE_LOCAL_CHECKSUM = (

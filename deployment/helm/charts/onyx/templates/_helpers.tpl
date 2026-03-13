@@ -69,20 +69,89 @@ Set secret name
 {{- end }}
 
 {{/*
+Validate path segments used for projected secret file paths.
+*/}}
+{{- define "onyx.secretPathSegment" -}}
+{{- $segment := . | toString -}}
+{{- if or (contains "/" $segment) (contains "\\" $segment) (eq $segment "..") -}}
+{{- fail (printf "Invalid secret path segment %q: must not contain '/', '\\\\', or equal '..'" $segment) -}}
+{{- end -}}
+{{- $segment -}}
+{{- end }}
+
+{{/*
 Create env vars from secrets
 */}}
 {{- define "onyx.envSecrets" -}}
+    {{- $secretFilesEnabled := include "onyx.secretsAsFiles.enabled" . }}
+    {{- $secretFilesMountPath := include "onyx.secretsAsFiles.mountPath" . }}
     {{- range $secretSuffix, $secretContent := .Values.auth }}
-    {{- if and (ne $secretContent.enabled false) ($secretContent.secretKeys) }}
+    {{- if and (kindIs "map" $secretContent) (ne $secretContent.enabled false) ($secretContent.secretKeys) }}
     {{- range $name, $key := $secretContent.secretKeys }}
-- name: {{ $name | upper | replace "-" "_" | quote }}
+    {{- $envVarName := $name | upper | replace "-" "_" }}
+    {{- $secretKey := default $name $key }}
+    {{- $safeSecretSuffix := include "onyx.secretPathSegment" $secretSuffix }}
+    {{- $safeSecretKey := include "onyx.secretPathSegment" $secretKey }}
+    {{- if $secretFilesEnabled }}
+- name: {{ printf "%s_FILE" $envVarName | quote }}
+  value: {{ printf "%s/%s/%s" $secretFilesMountPath $safeSecretSuffix $safeSecretKey | quote }}
+    {{- else }}
+- name: {{ $envVarName | quote }}
   valueFrom:
     secretKeyRef:
       name: {{ include "onyx.secretName" $secretContent }}
-      key: {{ default $name $key }}
+      key: {{ $secretKey }}
     {{- end }}
     {{- end }}
     {{- end }}
+    {{- end }}
+{{- end }}
+
+{{/*
+Secret file mounting helpers.
+*/}}
+{{- define "onyx.secretsAsFiles.enabled" -}}
+{{- if and .Values.secretsAsFiles .Values.secretsAsFiles.enabled }}true{{- end }}
+{{- end }}
+
+{{- define "onyx.secretsAsFiles.mountPath" -}}
+{{- if and .Values.secretsAsFiles .Values.secretsAsFiles.mountPath -}}
+{{- .Values.secretsAsFiles.mountPath -}}
+{{- else -}}
+/etc/onyx-secrets
+{{- end }}
+{{- end }}
+
+{{- define "onyx.secretsAsFiles.volumeMounts" -}}
+{{- if (include "onyx.secretsAsFiles.enabled" .) }}
+{{- $mountPath := include "onyx.secretsAsFiles.mountPath" . }}
+{{- range $secretSuffix, $secretContent := .Values.auth }}
+{{- if and (kindIs "map" $secretContent) (ne $secretContent.enabled false) ($secretContent.secretKeys) }}
+{{- $safeSecretSuffix := include "onyx.secretPathSegment" $secretSuffix }}
+- name: {{ printf "auth-secret-%s" ($secretSuffix | lower | replace "_" "-") }}
+  mountPath: {{ printf "%s/%s" $mountPath $safeSecretSuffix | quote }}
+  readOnly: true
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+
+{{- define "onyx.secretsAsFiles.volumes" -}}
+{{- if (include "onyx.secretsAsFiles.enabled" .) }}
+{{- range $secretSuffix, $secretContent := .Values.auth }}
+{{- if and (kindIs "map" $secretContent) (ne $secretContent.enabled false) ($secretContent.secretKeys) }}
+- name: {{ printf "auth-secret-%s" ($secretSuffix | lower | replace "_" "-") }}
+  secret:
+    secretName: {{ include "onyx.secretName" $secretContent }}
+    items:
+    {{- range $name, $key := $secretContent.secretKeys }}
+    {{- $safeSecretKey := include "onyx.secretPathSegment" (default $name $key) }}
+      - key: {{ default $name $key }}
+        path: {{ $safeSecretKey }}
+    {{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
 {{- end }}
 
 {{/*
@@ -122,11 +191,15 @@ checksum/pginto: {{ include (print $.Template.BasePath "/tooling-pginto-configma
 
 {{- define "onyx.renderVolumeMounts" -}}
 {{- $pginto := include "onyx.pgInto.volumeMount" .ctx -}}
+{{- $secretFiles := include "onyx.secretsAsFiles.volumeMounts" .ctx -}}
 {{- $existing := .volumeMounts -}}
-{{- if or $pginto $existing -}}
+{{- if or $pginto $secretFiles $existing -}}
 volumeMounts:
 {{- if $pginto }}
 {{ $pginto | nindent 2 }}
+{{- end }}
+{{- if $secretFiles }}
+{{ $secretFiles | nindent 2 }}
 {{- end }}
 {{- if $existing }}
 {{ toYaml $existing | nindent 2 }}
@@ -136,11 +209,15 @@ volumeMounts:
 
 {{- define "onyx.renderVolumes" -}}
 {{- $pginto := include "onyx.pgInto.volume" .ctx -}}
+{{- $secretFiles := include "onyx.secretsAsFiles.volumes" .ctx -}}
 {{- $existing := .volumes -}}
-{{- if or $pginto $existing -}}
+{{- if or $pginto $secretFiles $existing -}}
 volumes:
 {{- if $pginto }}
 {{ $pginto | nindent 2 }}
+{{- end }}
+{{- if $secretFiles }}
+{{ $secretFiles | nindent 2 }}
 {{- end }}
 {{- if $existing }}
 {{ toYaml $existing | nindent 2 }}

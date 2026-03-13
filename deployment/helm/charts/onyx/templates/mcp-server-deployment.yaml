@@ -99,13 +99,12 @@ spec:
             - name: API_SERVER_URL_OVERRIDE_FOR_HTTP_REQUESTS
               value: "http://{{ include "onyx.fullname" . }}-api-service:{{ .Values.api.service.servicePort }}"
             {{- include "onyx.envSecrets" . | nindent 12 }}
-          {{- with .Values.mcpServer.volumeMounts }}
-          volumeMounts:
-            {{- toYaml . | nindent 12 }}
+          {{- $mcpServerVolumeMounts := include "onyx.renderVolumeMounts" (dict "ctx" . "volumeMounts" .Values.mcpServer.volumeMounts) }}
+          {{- if $mcpServerVolumeMounts }}
+          {{- $mcpServerVolumeMounts | nindent 10 }}
           {{- end }}
-      {{- with .Values.mcpServer.volumes }}
-      volumes:
-        {{- toYaml . | nindent 8 }}
+      {{- $mcpServerVolumes := include "onyx.renderVolumes" (dict "ctx" . "volumes" .Values.mcpServer.volumes) }}
+      {{- if $mcpServerVolumes }}
+      {{- $mcpServerVolumes | nindent 6 }}
       {{- end }}
 {{- end }}
-
