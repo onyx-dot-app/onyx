@@ -526,6 +526,11 @@ export const connectorConfigs: Record<
     values: [],
     advanced_values: [],
   },
+  google_chat: {
+    description: "Configure Google Chat connector",
+    values: [],
+    advanced_values: [],
+  },
   bookstack: {
     description: "Configure Bookstack connector",
     values: [],
@@ -1913,6 +1918,8 @@ export interface GoogleDriveConfig {
 }
 
 export interface GmailConfig {}
+
+export interface GoogleChatConfig {}
 
 export interface BookstackConfig {}
 

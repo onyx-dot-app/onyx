@@ -16,6 +16,12 @@ GOOGLE_SCOPES = {
         "https://www.googleapis.com/auth/admin.directory.user.readonly",
         "https://www.googleapis.com/auth/admin.directory.group.readonly",
     ],
+    DocumentSource.GOOGLE_CHAT: [
+        "https://www.googleapis.com/auth/chat.spaces.readonly",
+        "https://www.googleapis.com/auth/chat.messages.readonly",
+        "https://www.googleapis.com/auth/admin.directory.user.readonly",
+        "https://www.googleapis.com/auth/admin.directory.group.readonly",
+    ],
 }
 
 # This is the Oauth token
