@@ -732,7 +732,7 @@ def get_webapp_info(
     return WebappInfo(**webapp_info)
 
 
-@router.get("/{session_id}/webapp/download")
+@router.get("/{session_id}/webapp-download")
 def download_webapp(
     session_id: UUID,
     user: User = Depends(current_user),

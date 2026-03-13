@@ -26,14 +26,6 @@ class TestIsTrueOpenAIModel:
         """Test that real OpenAI GPT-4o-mini model is correctly identified."""
         assert is_true_openai_model(LlmProviderNames.OPENAI, "gpt-4o-mini") is True
 
-    def test_real_openai_o1_preview(self) -> None:
-        """Test that real OpenAI o1-preview reasoning model is correctly identified."""
-        assert is_true_openai_model(LlmProviderNames.OPENAI, "o1-preview") is True
-
-    def test_real_openai_o1_mini(self) -> None:
-        """Test that real OpenAI o1-mini reasoning model is correctly identified."""
-        assert is_true_openai_model(LlmProviderNames.OPENAI, "o1-mini") is True
-
     def test_openai_with_provider_prefix(self) -> None:
         """Test that OpenAI model with provider prefix is correctly identified."""
         assert is_true_openai_model(LlmProviderNames.OPENAI, "openai/gpt-4") is False

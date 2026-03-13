@@ -7,6 +7,7 @@ export const pdfVariant: PreviewVariant = {
   width: "lg",
   height: "full",
   needsTextContent: false,
+  codeBackground: false,
   headerDescription: () => "",
 
   renderContent: (ctx) => (

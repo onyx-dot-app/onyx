@@ -196,6 +196,10 @@ if _OIDC_SCOPE_OVERRIDE:
     except Exception:
         pass
 
+# Enables PKCE for OIDC login flow. Disabled by default to preserve
+# backwards compatibility for existing OIDC deployments.
+OIDC_PKCE_ENABLED = os.environ.get("OIDC_PKCE_ENABLED", "").lower() == "true"
+
 # Applicable for SAML Auth
 SAML_CONF_DIR = os.environ.get("SAML_CONF_DIR") or "/app/onyx/configs/saml_config"
 

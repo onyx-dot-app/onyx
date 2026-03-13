@@ -5,13 +5,14 @@ import { DownloadButton } from "@/sections/modals/PreviewModal/variants/shared";
 
 export const unsupportedVariant: PreviewVariant = {
   matches: () => true,
-  width: "lg",
+  width: "md",
   height: "full",
   needsTextContent: false,
+  codeBackground: false,
   headerDescription: () => "",
 
   renderContent: (ctx) => (
-    <div className="flex flex-col items-center justify-center flex-1 min-h-0 gap-4 p-6">
+    <div className="flex flex-col items-center justify-center flex-1 w-full min-h-0 gap-4 p-6">
       <Text as="p" text03 mainUiBody>
         This file format is not supported for preview.
       </Text>
