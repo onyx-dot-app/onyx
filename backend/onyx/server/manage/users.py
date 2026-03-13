@@ -14,7 +14,6 @@ from email_validator import validate_email
 from fastapi import APIRouter
 from fastapi import Body
 from fastapi import Depends
-from fastapi import HTTPException
 from fastapi import Query
 from fastapi import Request
 from fastapi.responses import StreamingResponse
@@ -78,6 +77,8 @@ from onyx.db.users import get_total_filtered_users_count
 from onyx.db.users import get_user_by_email
 from onyx.db.users import get_user_counts_by_role_and_status
 from onyx.db.users import validate_user_role_update
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.key_value_store.factory import get_kv_store
 from onyx.redis.redis_pool import get_raw_redis_client
 from onyx.server.documents.models import PaginatedReturn
@@ -130,7 +131,7 @@ def set_user_role(
         email=user_role_update_request.user_email, db_session=db_session
     )
     if not user_to_update:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise OnyxError(OnyxErrorCode.USER_NOT_FOUND, "User not found")
 
     current_role = user_to_update.role
     requested_role = user_role_update_request.new_role
@@ -145,9 +146,9 @@ def set_user_role(
     )
 
     if user_to_update.id == current_user.id:
-        raise HTTPException(
-            status_code=400,
-            detail="An admin cannot demote themselves from admin role!",
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "An admin cannot demote themselves from admin role!",
         )
 
     if requested_role == UserRole.CURATOR:
@@ -439,9 +440,9 @@ def bulk_invite_users(
             new_invited_emails.append(email_info.normalized)
 
     except (EmailUndeliverableError, EmailNotValidError) as e:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid email address: {email} - {str(e)}",
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            f"Invalid email address: {email} - {str(e)}",
         )
 
     # Count only new users (not already invited or existing) that need seats
@@ -458,9 +459,9 @@ def bulk_invite_users(
     if MULTI_TENANT and is_tenant_on_trial_fn(tenant_id):
         current_invited = len(already_invited)
         if current_invited + len(emails_needing_seats) > NUM_FREE_TRIAL_USER_INVITES:
-            raise HTTPException(
-                status_code=403,
-                detail="You have hit your invite limit. "
+            raise OnyxError(
+                OnyxErrorCode.SEAT_LIMIT_EXCEEDED,
+                "You have hit your invite limit. "
                 "Please upgrade for unlimited invites.",
             )
 
@@ -555,14 +556,16 @@ def deactivate_user_api(
     db_session: Session = Depends(get_session),
 ) -> None:
     if current_user.email == user_email.user_email:
-        raise HTTPException(status_code=400, detail="You cannot deactivate yourself")
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR, "You cannot deactivate yourself"
+        )
 
     user_to_deactivate = get_user_by_email(
         email=user_email.user_email, db_session=db_session
     )
 
     if not user_to_deactivate:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise OnyxError(OnyxErrorCode.USER_NOT_FOUND, "User not found")
 
     if user_to_deactivate.is_active is False:
         logger.warning("{} is already deactivated".format(user_to_deactivate.email))
@@ -587,14 +590,15 @@ async def delete_user(
         email=user_email.user_email, db_session=db_session
     )
     if not user_to_delete:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise OnyxError(OnyxErrorCode.USER_NOT_FOUND, "User not found")
 
     if user_to_delete.is_active is True:
         logger.warning(
             "{} must be deactivated before deleting".format(user_to_delete.email)
         )
-        raise HTTPException(
-            status_code=400, detail="User must be deactivated before deleting"
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "User must be deactivated before deleting",
         )
 
     # Detach the user from the current session
@@ -618,7 +622,7 @@ async def delete_user(
     except Exception as e:
         db_session.rollback()
         logger.error(f"Error deleting user {user_to_delete.email}: {str(e)}")
-        raise HTTPException(status_code=500, detail="Error deleting user")
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, "Error deleting user")
 
 
 @router.patch("/manage/admin/activate-user", tags=PUBLIC_API_TAGS)
@@ -631,7 +635,7 @@ def activate_user_api(
         email=user_email.user_email, db_session=db_session
     )
     if not user_to_activate:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise OnyxError(OnyxErrorCode.USER_NOT_FOUND, "User not found")
 
     if user_to_activate.is_active is True:
         logger.warning("{} is already activated".format(user_to_activate.email))

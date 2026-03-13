@@ -1,6 +1,5 @@
 from fastapi import APIRouter
 from fastapi import Depends
-from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_admin_user
@@ -21,6 +20,8 @@ from onyx.db.slack_channel_config import fetch_slack_channel_configs
 from onyx.db.slack_channel_config import insert_slack_channel_config
 from onyx.db.slack_channel_config import remove_slack_channel_config
 from onyx.db.slack_channel_config import update_slack_channel_config
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.onyxbot.slack.config import validate_channel_name
 from onyx.server.manage.models import SlackBot
 from onyx.server.manage.models import SlackBotCreationRequest
@@ -63,10 +64,7 @@ def _form_channel_config(
             current_slack_bot_id=slack_channel_config_creation_request.slack_bot_id,
         )
     except ValueError as e:
-        raise HTTPException(
-            status_code=400,
-            detail=str(e),
-        )
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
 
     if respond_tag_only and respond_member_group_list:
         raise ValueError(
@@ -123,10 +121,7 @@ def create_slack_channel_config(
     )
 
     if channel_config["channel_name"] is None:
-        raise HTTPException(
-            status_code=400,
-            detail="Channel name is required",
-        )
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, "Channel name is required")
 
     persona_id = None
     if slack_channel_config_creation_request.persona_id is not None:
@@ -171,10 +166,7 @@ def patch_slack_channel_config(
             db_session=db_session, slack_channel_config_id=slack_channel_config_id
         )
         if existing_slack_channel_config is None:
-            raise HTTPException(
-                status_code=404,
-                detail="Slack channel config not found",
-            )
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "Slack channel config not found")
 
         existing_persona_id = existing_slack_channel_config.persona_id
         if existing_persona_id is not None:
