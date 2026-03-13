@@ -32,7 +32,8 @@ import {
   SvgX,
 } from "@opal/icons";
 import SvgOnyxLogo from "@opal/icons/onyx-logo";
-import { Card, EmptyMessageCard, NameCard } from "@opal/components";
+import { Card, EmptyMessageCard } from "@opal/components";
+import { ContentAction } from "@opal/layouts";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import useUsers from "@/hooks/useUsers";
@@ -264,18 +265,23 @@ export function ModelsAccessField<T extends BaseLLMFormValues>({
               leftSearchIcon
             />
 
-            <NameCard
-              icon={SvgUserManage}
-              title="Admin"
-              description={`${adminCount} ${
-                adminCount === 1 ? "member" : "members"
-              }`}
-              rightChildren={
-                <Text secondaryBody text03>
-                  Always shared
-                </Text>
-              }
-            />
+            <Card backgroundVariant="light" borderVariant="none">
+              <ContentAction
+                icon={SvgUserManage}
+                title="Admin"
+                description={`${adminCount} ${
+                  adminCount === 1 ? "member" : "members"
+                }`}
+                sizePreset="main-ui"
+                variant="section"
+                rightChildren={
+                  <Text secondaryBody text03>
+                    Always shared
+                  </Text>
+                }
+                paddingVariant="fit"
+              />
+            </Card>
             {selectedGroupIds.length > 0 && (
               <div className="grid grid-cols-2 gap-1 w-full">
                 {selectedGroupIds.map((id) => {
@@ -283,22 +289,27 @@ export function ModelsAccessField<T extends BaseLLMFormValues>({
                   const memberCount = group?.users.length ?? 0;
                   return (
                     <div key={`group-${id}`} className="min-w-0">
-                      <NameCard
-                        icon={SvgUsers}
-                        title={group?.name ?? `Group ${id}`}
-                        description={`${memberCount} ${
-                          memberCount === 1 ? "member" : "members"
-                        }`}
-                        rightChildren={
-                          <Button
-                            size="sm"
-                            prominence="internal"
-                            icon={SvgX}
-                            onClick={() => handleRemoveGroup(id)}
-                            type="button"
-                          />
-                        }
-                      />
+                      <Card backgroundVariant="light" borderVariant="none">
+                        <ContentAction
+                          icon={SvgUsers}
+                          title={group?.name ?? `Group ${id}`}
+                          description={`${memberCount} ${
+                            memberCount === 1 ? "member" : "members"
+                          }`}
+                          sizePreset="main-ui"
+                          variant="section"
+                          rightChildren={
+                            <Button
+                              size="sm"
+                              prominence="internal"
+                              icon={SvgX}
+                              onClick={() => handleRemoveGroup(id)}
+                              type="button"
+                            />
+                          }
+                          paddingVariant="fit"
+                        />
+                      </Card>
                     </div>
                   );
                 })}
@@ -313,25 +324,29 @@ export function ModelsAccessField<T extends BaseLLMFormValues>({
                   const agent = agentMap.get(id);
                   return (
                     <div key={`agent-${id}`} className="min-w-0">
-                      <NameCard
-                        customIcon={
-                          agent ? (
-                            <AgentAvatar agent={agent} size={20} />
-                          ) : undefined
-                        }
-                        icon={!agent ? SvgSparkle : undefined}
-                        title={agent?.name ?? `Agent ${id}`}
-                        description="Agent"
-                        rightChildren={
-                          <Button
-                            size="sm"
-                            prominence="internal"
-                            icon={SvgX}
-                            onClick={() => handleRemoveAgent(id)}
-                            type="button"
-                          />
-                        }
-                      />
+                      <Card backgroundVariant="light" borderVariant="none">
+                        <ContentAction
+                          icon={
+                            agent
+                              ? () => <AgentAvatar agent={agent} size={20} />
+                              : SvgSparkle
+                          }
+                          title={agent?.name ?? `Agent ${id}`}
+                          description="Agent"
+                          sizePreset="main-ui"
+                          variant="section"
+                          rightChildren={
+                            <Button
+                              size="sm"
+                              prominence="internal"
+                              icon={SvgX}
+                              onClick={() => handleRemoveAgent(id)}
+                              type="button"
+                            />
+                          }
+                          paddingVariant="fit"
+                        />
+                      </Card>
                     </div>
                   );
                 })}
