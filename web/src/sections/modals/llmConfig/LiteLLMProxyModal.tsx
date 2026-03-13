@@ -227,8 +227,6 @@ export default function LiteLLMProxyModal({
             isCustomProvider: false,
             onClose,
             setIsSubmitting: setSubmitting,
-            setApiStatus: () => {},
-            setShowApiMessage: () => {},
           });
         } else {
           await submitLLMProvider({

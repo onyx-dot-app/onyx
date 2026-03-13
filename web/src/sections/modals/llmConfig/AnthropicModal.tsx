@@ -103,8 +103,6 @@ export default function AnthropicModal({
             isCustomProvider: false,
             onClose,
             setIsSubmitting: setSubmitting,
-            setApiStatus: () => {},
-            setShowApiMessage: () => {},
           });
         } else {
           await submitLLMProvider({

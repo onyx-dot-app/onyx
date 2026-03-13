@@ -1,3 +1,4 @@
+import React from "react";
 import { ContentAction } from "@opal/layouts";
 import type { IconProps } from "@opal/types";
 

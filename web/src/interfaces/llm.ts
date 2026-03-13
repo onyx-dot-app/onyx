@@ -1,3 +1,8 @@
+import type {
+  OnboardingState,
+  OnboardingActions,
+} from "@/interfaces/onboarding";
+
 export enum LLMProviderName {
   OPENAI = "openai",
   ANTHROPIC = "anthropic",
@@ -119,8 +124,8 @@ export interface LLMProviderFormProps {
   onOpenChange?: (open: boolean) => void;
 
   // Onboarding-specific (only when variant === "onboarding")
-  onboardingState?: import("@/interfaces/onboarding").OnboardingState;
-  onboardingActions?: import("@/interfaces/onboarding").OnboardingActions;
+  onboardingState?: OnboardingState;
+  onboardingActions?: OnboardingActions;
   llmDescriptor?: WellKnownLLMProviderDescriptor;
 }
 

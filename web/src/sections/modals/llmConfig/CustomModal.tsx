@@ -291,8 +291,6 @@ export default function CustomModal({
             isCustomProvider: true,
             onClose,
             setIsSubmitting: setSubmitting,
-            setApiStatus: () => {},
-            setShowApiMessage: () => {},
           });
         } else {
           const selectedModelNames = modelConfigurations.map(

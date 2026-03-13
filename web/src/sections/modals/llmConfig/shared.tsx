@@ -306,7 +306,7 @@ export function ModelsAccessField<T extends BaseLLMFormValues>({
               </div>
             )}
 
-            <FieldSeparator />
+            {selectedGroupIds.length > 0 && <FieldSeparator />}
 
             {selectedAgentIds.length > 0 ? (
               <div className="grid grid-cols-2 gap-1 w-full">
@@ -561,7 +561,7 @@ export function ModelsField<T extends BaseLLMFormValues>({
                 visibleModels.map((model) => (
                   <Hoverable.Root
                     key={model.name}
-                    group="asdf"
+                    group="LLMConfigurationButton"
                     widthVariant="full"
                   >
                     <LineItemButton
@@ -590,11 +590,11 @@ export function ModelsField<T extends BaseLLMFormValues>({
 
                   return (
                     <Hoverable.Root
+                      key={modelConfiguration.name}
                       group="LLMConfigurationButton"
                       widthVariant="full"
                     >
                       <LineItemButton
-                        key={modelConfiguration.name}
                         variant="section"
                         sizePreset="main-ui"
                         selectVariant="select-heavy"

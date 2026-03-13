@@ -157,8 +157,6 @@ export default function AzureModal({
             isCustomProvider: false,
             onClose,
             setIsSubmitting: setSubmitting,
-            setApiStatus: () => {},
-            setShowApiMessage: () => {},
           });
         } else {
           await submitLLMProvider({

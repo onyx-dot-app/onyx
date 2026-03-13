@@ -421,8 +421,6 @@ export interface SubmitOnboardingProviderParams {
   isCustomProvider: boolean;
   onClose: () => void;
   setIsSubmitting: (submitting: boolean) => void;
-  setApiStatus: (status: string) => void;
-  setShowApiMessage: (show: boolean) => void;
 }
 
 /**
@@ -440,12 +438,8 @@ export const submitOnboardingProvider = async ({
   isCustomProvider,
   onClose,
   setIsSubmitting,
-  setApiStatus,
-  setShowApiMessage,
 }: SubmitOnboardingProviderParams): Promise<void> => {
   setIsSubmitting(true);
-  setApiStatus("loading");
-  setShowApiMessage(true);
 
   // Test credentials
   let result: TestApiKeyResult;
@@ -457,11 +451,9 @@ export const submitOnboardingProvider = async ({
 
   if (!result.ok) {
     toast.error(result.errorMessage);
-    setApiStatus("error");
     setIsSubmitting(false);
     return;
   }
-  setApiStatus("success");
 
   // Create provider
   const response = await fetch(`${LLM_PROVIDERS_ADMIN_URL}?is_creation=true`, {
@@ -472,9 +464,7 @@ export const submitOnboardingProvider = async ({
 
   if (!response.ok) {
     const errorMsg = (await response.json()).detail;
-    console.error("Failed to create LLM provider", errorMsg);
     toast.error(errorMsg);
-    setApiStatus("error");
     setIsSubmitting(false);
     return;
   }
@@ -505,14 +495,13 @@ export const submitOnboardingProvider = async ({
           if (!setDefaultResponse.ok) {
             const err = await setDefaultResponse.json().catch(() => ({}));
             toast.error(err?.detail ?? "Failed to set provider as default");
-            setApiStatus("error");
             setIsSubmitting(false);
             return;
           }
         }
       }
     } catch (_e) {
-      console.error("Failed to set new provider as default", _e);
+      toast.error("Failed to set new provider as default");
     }
   }
 

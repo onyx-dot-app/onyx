@@ -302,8 +302,6 @@ export default function OllamaModal({
             isCustomProvider: false,
             onClose,
             setIsSubmitting: setSubmitting,
-            setApiStatus: () => {},
-            setShowApiMessage: () => {},
           });
         } else {
           await submitLLMProvider({
