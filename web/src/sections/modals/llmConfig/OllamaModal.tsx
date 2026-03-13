@@ -124,11 +124,7 @@ function OllamaModalContent({
         placeholder={DEFAULT_API_BASE}
       />
 
-      <PasswordInputTypeInField
-        name="custom_config.OLLAMA_API_KEY"
-        label="API Key (Optional)"
-        subtext="Optional API key for Ollama Cloud (https://ollama.com). Leave blank for local instances."
-      />
+      <PasswordInputTypeInField name="custom_config.OLLAMA_API_KEY" />
 
       <DisplayModels
         modelConfigurations={currentModels}
