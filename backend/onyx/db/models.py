@@ -26,6 +26,7 @@ from sqlalchemy import Enum
 from sqlalchemy import Float
 from sqlalchemy import ForeignKey
 from sqlalchemy import ForeignKeyConstraint
+from sqlalchemy import CheckConstraint
 from sqlalchemy import func
 from sqlalchemy import Index
 from sqlalchemy import Integer
@@ -3500,6 +3501,9 @@ class Persona(Base):
         secondary=Persona__Tool.__table__,
         back_populates="personas",
     )
+    input_prompts: Mapped[list["InputPrompt"]] = relationship(
+        "InputPrompt", back_populates="persona"
+    )
     # Owner
     user: Mapped[User | None] = relationship("User", back_populates="personas")
     # Other users with access
@@ -4324,20 +4328,40 @@ class InputPrompt(Base):
     content: Mapped[str] = mapped_column(String)
     active: Mapped[bool] = mapped_column(Boolean)
     user: Mapped[User | None] = relationship("User", back_populates="input_prompts")
+    persona: Mapped[Persona | None] = relationship(
+        "Persona", back_populates="input_prompts"
+    )
     is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     user_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("user.id", ondelete="CASCADE"), nullable=True
+    )
+    persona_id: Mapped[int | None] = mapped_column(
+        ForeignKey("persona.id", ondelete="CASCADE"), nullable=True
     )
 
     __table_args__ = (
         # Unique constraint on (prompt, user_id) for user-owned prompts
         UniqueConstraint("prompt", "user_id", name="uq_inputprompt_prompt_user_id"),
+        # Unique constraint on (prompt, persona_id) for persona-owned prompts
+        UniqueConstraint(
+            "prompt", "persona_id", name="uq_inputprompt_prompt_persona_id"
+        ),
         # Partial unique index for public prompts (user_id IS NULL)
         Index(
             "uq_inputprompt_prompt_public",
             "prompt",
             unique=True,
-            postgresql_where=text("user_id IS NULL"),
+            postgresql_where=text(
+                "is_public = TRUE AND user_id IS NULL AND persona_id IS NULL"
+            ),
+        ),
+        CheckConstraint(
+            "(user_id IS NULL) OR (persona_id IS NULL)",
+            name="ck_inputprompt_only_one_owner",
+        ),
+        CheckConstraint(
+            "(is_public = FALSE) OR (user_id IS NULL AND persona_id IS NULL)",
+            name="ck_inputprompt_public_has_no_owner",
         ),
     )
 

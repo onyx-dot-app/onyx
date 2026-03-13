@@ -53,6 +53,7 @@ import {
 import { Button, SelectButton } from "@opal/components";
 import Popover from "@/refresh-components/Popover";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
+import Text from "@/refresh-components/texts/Text";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { Section } from "@/layouts/general-layouts";
 import Spacer from "@/refresh-components/Spacer";
@@ -324,7 +325,7 @@ const AppInputBar = React.memo(
       [setCurrentMessageFiles]
     );
 
-    const { activePromptShortcuts } = usePromptShortcuts();
+    const { activePromptShortcuts } = usePromptShortcuts(selectedAgent?.id);
     const vectorDbEnabled = useVectorDbEnabled();
     const { ccPairs, isLoading: ccPairsLoading } = useCCPairs(vectorDbEnabled);
     const { data: federatedConnectorsData, isLoading: federatedLoading } =
@@ -369,6 +370,28 @@ const AppInputBar = React.memo(
     const sortedFilteredPrompts = useMemo(
       () => [...filteredPrompts].sort((a, b) => a.id - b.id),
       [filteredPrompts]
+    );
+    const filteredAgentPrompts = useMemo(
+      () =>
+        sortedFilteredPrompts.filter(
+          (prompt) =>
+            selectedAgent?.id !== undefined &&
+            prompt.persona_id === selectedAgent.id
+        ),
+      [sortedFilteredPrompts, selectedAgent?.id]
+    );
+    const filteredUserPrompts = useMemo(
+      () =>
+        sortedFilteredPrompts.filter(
+          (prompt) =>
+            prompt.persona_id === undefined || prompt.persona_id === null
+        ),
+      [sortedFilteredPrompts]
+    );
+
+    const displayedPrompts = useMemo(
+      () => [...filteredAgentPrompts, ...filteredUserPrompts],
+      [filteredAgentPrompts, filteredUserPrompts]
     );
 
     // Reset tabbingIconIndex when filtered prompts change to avoid out-of-bounds
@@ -455,11 +478,11 @@ const AppInputBar = React.memo(
 
       if (e.key === "Enter") {
         e.preventDefault();
-        if (tabbingIconIndex === sortedFilteredPrompts.length) {
+        if (tabbingIconIndex === displayedPrompts.length) {
           // "Create a new prompt" is selected
           window.open("/app/settings/chat-preferences", "_self");
         } else {
-          const selectedPrompt = sortedFilteredPrompts[tabbingIconIndex];
+          const selectedPrompt = displayedPrompts[tabbingIconIndex];
           if (selectedPrompt) {
             updateInputPrompt(selectedPrompt);
           }
@@ -472,12 +495,12 @@ const AppInputBar = React.memo(
         // Tab: cycle forward
         e.preventDefault();
         setTabbingIconIndex((prev) =>
-          Math.min(prev + 1, sortedFilteredPrompts.length)
+          Math.min(prev + 1, displayedPrompts.length)
         );
       } else if (e.key === "ArrowDown") {
         e.preventDefault();
         setTabbingIconIndex((prev) =>
-          Math.min(prev + 1, sortedFilteredPrompts.length)
+          Math.min(prev + 1, displayedPrompts.length)
         );
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
@@ -826,33 +849,63 @@ const AppInputBar = React.memo(
                 width="xl"
               >
                 <Popover.Menu>
-                  {[
-                    ...sortedFilteredPrompts.map((prompt, index) => (
-                      <LineItem
-                        key={prompt.id}
-                        selected={tabbingIconIndex === index}
-                        emphasized={tabbingIconIndex === index}
-                        description={prompt.content?.trim()}
-                        onClick={() => updateInputPrompt(prompt)}
-                      >
-                        {prompt.prompt}
-                      </LineItem>
-                    )),
-                    sortedFilteredPrompts.length > 0 ? null : undefined,
-                    <LineItem
-                      key="create-new"
-                      href="/app/settings/chat-preferences"
-                      icon={SvgPlus}
-                      selected={
-                        tabbingIconIndex === sortedFilteredPrompts.length
-                      }
-                      emphasized={
-                        tabbingIconIndex === sortedFilteredPrompts.length
-                      }
-                    >
-                      Create New Prompt
-                    </LineItem>,
-                  ]}
+                  {filteredAgentPrompts.length > 0 && (
+                    <>
+                      <div className="px-2 py-1">
+                        <Text text03>Agent Shortcuts</Text>
+                      </div>
+                      {filteredAgentPrompts.map((prompt) => {
+                        const flatIndex = displayedPrompts.findIndex(
+                          (p) => p.id === prompt.id
+                        );
+                        return (
+                          <LineItem
+                            key={prompt.id}
+                            selected={tabbingIconIndex === flatIndex}
+                            emphasized={tabbingIconIndex === flatIndex}
+                            description={prompt.content?.trim()}
+                            onClick={() => updateInputPrompt(prompt)}
+                          >
+                            {prompt.prompt}
+                          </LineItem>
+                        );
+                      })}
+                    </>
+                  )}
+
+                  {filteredUserPrompts.length > 0 && (
+                    <>
+                      <div className="px-2 py-1">
+                        <Text text03>Your Shortcuts</Text>
+                      </div>
+                      {filteredUserPrompts.map((prompt) => {
+                        const flatIndex = displayedPrompts.findIndex(
+                          (p) => p.id === prompt.id
+                        );
+                        return (
+                          <LineItem
+                            key={prompt.id}
+                            selected={tabbingIconIndex === flatIndex}
+                            emphasized={tabbingIconIndex === flatIndex}
+                            description={prompt.content?.trim()}
+                            onClick={() => updateInputPrompt(prompt)}
+                          >
+                            {prompt.prompt}
+                          </LineItem>
+                        );
+                      })}
+                    </>
+                  )}
+
+                  <LineItem
+                    key="create-new"
+                    href="/app/settings/chat-preferences"
+                    icon={SvgPlus}
+                    selected={tabbingIconIndex === displayedPrompts.length}
+                    emphasized={tabbingIconIndex === displayedPrompts.length}
+                  >
+                    Create New Prompt
+                  </LineItem>
                 </Popover.Menu>
               </Popover.Content>
             </Popover>
