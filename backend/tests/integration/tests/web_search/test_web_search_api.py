@@ -267,7 +267,7 @@ def _activate_exa_provider(admin_user: DATestUser) -> int:
 @pytestmark_exa
 @pytest.mark.skip(reason="Temporarily disabled")
 def test_web_search_endpoints_with_exa(
-    reset: None,  # noqa: ARG001, W291
+    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     provider_id = _activate_exa_provider(admin_user)

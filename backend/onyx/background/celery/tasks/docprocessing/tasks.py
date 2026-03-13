@@ -1055,10 +1055,10 @@ def check_for_checkpoint_cleanup(self: Task, *, tenant_id: str) -> None:
     bind=True,
 )
 def cleanup_checkpoint_task(
-    self: Task,  # noqa: ARG001, W291
+    self: Task,  # noqa: ARG001
     *,
     index_attempt_id: int,
-    tenant_id: str | None,  # noqa: W291
+    tenant_id: str | None,
 ) -> None:
     """Clean up a checkpoint for a given index attempt"""
 
@@ -1144,10 +1144,10 @@ def check_for_index_attempt_cleanup(self: Task, *, tenant_id: str) -> None:
     bind=True,
 )
 def cleanup_index_attempt_task(
-    self: Task,  # noqa: ARG001, W291
+    self: Task,  # noqa: ARG001
     *,
     index_attempt_ids: list[int],
-    tenant_id: str,  # noqa: W291
+    tenant_id: str,
 ) -> None:
     """Clean up an index attempt"""
     start = time.monotonic()
@@ -1251,7 +1251,7 @@ def _resolve_indexing_document_errors(
     bind=True,
 )
 def docprocessing_task(
-    self: Task,  # noqa: ARG001, W291
+    self: Task,  # noqa: ARG001
     index_attempt_id: int,
     cc_pair_id: int,
     tenant_id: str,

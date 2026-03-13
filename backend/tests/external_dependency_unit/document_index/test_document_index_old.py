@@ -74,7 +74,7 @@ def httpx_client() -> Generator[httpx.Client, None, None]:
 @pytest.fixture(scope="module")
 def vespa_document_index(
     httpx_client: httpx.Client,
-    tenant_context: None,  # noqa: ARG001, W291
+    tenant_context: None,  # noqa: ARG001
     test_index_name: str,
 ) -> Generator[VespaIndex, None, None]:
     vespa_index = VespaIndex(
@@ -160,8 +160,8 @@ def vespa_document_index(
 
 @pytest.fixture(scope="module")
 def opensearch_document_index(
-    opensearch_available: None,  # noqa: ARG001, W291
-    tenant_context: None,  # noqa: ARG001, W291
+    opensearch_available: None,  # noqa: ARG001
+    tenant_context: None,  # noqa: ARG001
     test_index_name: str,
 ) -> Generator[OpenSearchOldDocumentIndex, None, None]:
     opensearch_index = OpenSearchOldDocumentIndex(
@@ -200,7 +200,7 @@ def document_indices(
 
 @pytest.fixture(scope="function")
 def chunks(
-    tenant_context: None,  # noqa: ARG001, W291
+    tenant_context: None,  # noqa: ARG001
 ) -> Generator[list[DocMetadataAwareIndexChunk], None, None]:
     result = []
     chunk_count = 5
@@ -274,7 +274,7 @@ def chunks(
 
 @pytest.fixture(scope="function")
 def index_batch_params(
-    tenant_context: None,  # noqa: ARG001, W291
+    tenant_context: None,  # noqa: ARG001
 ) -> Generator[IndexBatchParams, None, None]:
     # WARNING: doc_id_to_previous_chunk_cnt={"test_doc": 0} is hardcoded to 0,
     # which is only correct on the very first index call. The document_indices

@@ -64,7 +64,7 @@ def _get_user_is_active(email: str, admin_user: DATestUser) -> bool:
 
 def test_slack_user_deactivate_and_reactivate(
     reset: None,  # noqa: ARG001
-) -> None:  # noqa: ARG001, W291
+) -> None:  # noqa: ARG001
     """Admin can deactivate and then reactivate a Slack user."""
     admin_user = UserManager.create(name="admin_user")
 
@@ -90,7 +90,7 @@ def test_slack_user_deactivate_and_reactivate(
 
 
 def test_slack_user_reactivation_blocked_by_seat_limit(
-    reset: None,  # noqa: ARG001, W291
+    reset: None,  # noqa: ARG001
 ) -> None:
     """Reactivating a deactivated Slack user returns 402 when seats are full."""
     r = _redis()

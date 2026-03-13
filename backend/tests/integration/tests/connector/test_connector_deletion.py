@@ -34,8 +34,8 @@ from tests.integration.common_utils.vespa import vespa_fixture
 
 
 def test_connector_deletion(
-    reset: None,  # noqa: ARG001, W291
-    vespa_client: vespa_fixture,  # noqa: W291
+    reset: None,  # noqa: ARG001
+    vespa_client: vespa_fixture,
 ) -> None:
     user_group_1: DATestUserGroup
     user_group_2: DATestUserGroup
@@ -227,8 +227,8 @@ def test_connector_deletion(
 
 
 def test_connector_deletion_for_overlapping_connectors(
-    reset: None,  # noqa: ARG001, W291
-    vespa_client: vespa_fixture,  # noqa: W291
+    reset: None,  # noqa: ARG001
+    vespa_client: vespa_fixture,
 ) -> None:
     """Checks to make sure that connectors with overlapping documents work properly. Specifically, that the overlapping
     document (1) still exists and (2) has the right document set / group post-deletion of one of the connectors.

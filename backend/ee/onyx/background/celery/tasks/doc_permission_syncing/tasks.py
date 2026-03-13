@@ -1001,8 +1001,8 @@ class PermissionSyncCallback(IndexingHeartbeatInterface):
 def monitor_ccpair_permissions_taskset(
     tenant_id: str,
     key_bytes: bytes,
-    r: Redis,  # noqa: ARG001, W291
-    db_session: Session,  # noqa: W291
+    r: Redis,  # noqa: ARG001
+    db_session: Session,
 ) -> None:
     fence_key = key_bytes.decode("utf-8")
     cc_pair_id_str = RedisConnector.get_id_from_fence_key(fence_key)

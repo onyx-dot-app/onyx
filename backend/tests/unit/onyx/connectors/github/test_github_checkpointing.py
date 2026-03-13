@@ -740,7 +740,7 @@ def test_load_from_checkpoint_cursor_pagination_completion(
                     pl_for_offset_failure = MagicMock(spec=PaginatedList)
 
                     def get_page_raises_exception(
-                        page_num: int,  # noqa: ARG001, W291
+                        page_num: int,  # noqa: ARG001
                     ) -> list[PullRequest]:
                         raise GithubException(422, message="use cursor pagination")
 
@@ -794,7 +794,7 @@ def test_load_from_checkpoint_cursor_pagination_completion(
 
     def to_repository_side_effect(
         self_serialized_repo: SerializedRepository,
-        requester_arg: Requester,  # noqa: ARG001, W291
+        requester_arg: Requester,  # noqa: ARG001
     ) -> Repository:
         if self_serialized_repo.id == mock_repo1.id:
             return mock_repo1

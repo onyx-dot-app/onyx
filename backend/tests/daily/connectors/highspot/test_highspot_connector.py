@@ -49,8 +49,8 @@ def highspot_connector() -> HighspotConnector:
     return_value=None,
 )
 def test_highspot_connector_basic(
-    mock_get_api_key: MagicMock,  # noqa: ARG001, W291
-    highspot_connector: HighspotConnector,  # noqa: W291
+    mock_get_api_key: MagicMock,  # noqa: ARG001
+    highspot_connector: HighspotConnector,
 ) -> None:
     """Test basic functionality of the Highspot connector."""
     all_docs: list[Document] = []
@@ -91,8 +91,8 @@ def test_highspot_connector_basic(
     return_value=None,
 )
 def test_highspot_connector_slim(
-    mock_get_api_key: MagicMock,  # noqa: ARG001, W291
-    highspot_connector: HighspotConnector,  # noqa: W291
+    mock_get_api_key: MagicMock,  # noqa: ARG001
+    highspot_connector: HighspotConnector,
 ) -> None:
     """Test slim document retrieval."""
     # Get all doc IDs from the full connector
@@ -125,8 +125,8 @@ def test_highspot_connector_slim(
     return_value=None,
 )
 def test_highspot_connector_poll_source(
-    mock_get_api_key: MagicMock,  # noqa: ARG001, W291
-    highspot_connector: HighspotConnector,  # noqa: W291
+    mock_get_api_key: MagicMock,  # noqa: ARG001
+    highspot_connector: HighspotConnector,
 ) -> None:
     """Test poll_source functionality with date range filtering."""
     # Define date range: April 3, 2025 to April 4, 2025

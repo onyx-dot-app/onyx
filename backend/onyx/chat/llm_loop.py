@@ -525,7 +525,7 @@ def _create_file_tool_metadata_message(
 
 def _create_context_files_message(
     context_files: ExtractedContextFiles,
-    token_counter: Callable[[str], int] | None,  # noqa: ARG001, W291
+    token_counter: Callable[[str], int] | None,  # noqa: ARG001
 ) -> ChatMessageSimple:
     """Convert context files to a ChatMessageSimple message.
 

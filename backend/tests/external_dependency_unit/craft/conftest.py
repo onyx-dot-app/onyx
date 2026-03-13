@@ -36,7 +36,7 @@ def tenant_context() -> Generator[None, None, None]:
 
 
 @pytest.fixture(scope="function")
-def test_user(db_session: Session, tenant_context: None) -> User:  # noqa: ARG001, W291
+def test_user(db_session: Session, tenant_context: None) -> User:  # noqa: ARG001
     """Create a test user for build session tests."""
     unique_email = f"build_test_{uuid4().hex[:8]}@example.com"
 
@@ -63,7 +63,7 @@ def test_user(db_session: Session, tenant_context: None) -> User:  # noqa: ARG00
 def build_session(
     db_session: Session,
     test_user: User,
-    tenant_context: None,  # noqa: ARG001, W291
+    tenant_context: None,  # noqa: ARG001
 ) -> BuildSession:
     """Create a test build session."""
     session = BuildSession(

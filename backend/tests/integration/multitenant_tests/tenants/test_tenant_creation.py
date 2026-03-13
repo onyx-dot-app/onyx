@@ -17,7 +17,7 @@ from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
 
 
-def test_first_user_is_admin(reset_multitenant: None) -> None:  # noqa: ARG001, W291
+def test_first_user_is_admin(reset_multitenant: None) -> None:  # noqa: ARG001
     """Test that the first user of a tenant is automatically assigned ADMIN role."""
     unique = uuid4().hex
     test_user: DATestUser = UserManager.create(
@@ -28,7 +28,7 @@ def test_first_user_is_admin(reset_multitenant: None) -> None:  # noqa: ARG001, 
 
 def test_admin_can_create_credential(
     reset_multitenant: None,  # noqa: ARG001
-) -> None:  # noqa: ARG001, W291
+) -> None:  # noqa: ARG001
     """Test that an admin user can create a credential in their tenant."""
     # Create admin user
     unique = uuid4().hex
@@ -49,7 +49,7 @@ def test_admin_can_create_credential(
 
 def test_admin_can_create_connector(
     reset_multitenant: None,  # noqa: ARG001
-) -> None:  # noqa: ARG001, W291
+) -> None:  # noqa: ARG001
     """Test that an admin user can create a connector in their tenant."""
     # Create admin user
     unique = uuid4().hex
@@ -69,7 +69,7 @@ def test_admin_can_create_connector(
 
 
 def test_admin_can_create_and_verify_cc_pair(
-    reset_multitenant: None,  # noqa: ARG001, W291
+    reset_multitenant: None,  # noqa: ARG001
 ) -> None:
     """Test that an admin user can create and verify a connector-credential pair in their tenant."""
     # Create admin user
@@ -118,7 +118,7 @@ def test_settings_access() -> None:
 
 
 def test_image_gen_config_created_on_tenant_provision(
-    reset_multitenant: None,  # noqa: ARG001, W291
+    reset_multitenant: None,  # noqa: ARG001
 ) -> None:
     """Test that image generation config is automatically created when a tenant is provisioned."""
     unique = uuid4().hex

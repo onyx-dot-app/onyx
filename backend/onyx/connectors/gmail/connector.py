@@ -321,7 +321,7 @@ def _full_thread_from_id(
 def _slim_thread_from_id(
     thread_id: str,
     user_email: str,
-    gmail_service: GmailService,  # noqa: ARG001, W291
+    gmail_service: GmailService,  # noqa: ARG001
 ) -> SlimDocument:
     return SlimDocument(
         id=thread_id,

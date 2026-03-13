@@ -110,8 +110,8 @@ def _get_all_backend_configs() -> List[BackendConfig]:
 )
 def file_store(
     request: pytest.FixtureRequest,
-    db_session: Session,  # noqa: ARG001, W291
-    tenant_context: None,  # noqa: ARG001, W291
+    db_session: Session,  # noqa: ARG001
+    tenant_context: None,  # noqa: ARG001
 ) -> Generator[S3BackedFileStore, None, None]:
     """Create an S3BackedFileStore instance for testing with parametrized backend"""
     backend_config: BackendConfig = request.param

@@ -116,13 +116,13 @@ def _setup_connector(monkeypatch: pytest.MonkeyPatch) -> SharepointConnector:
     connector.include_site_pages = False
 
     def fake_resolve_drive(
-        self: SharepointConnector,  # noqa: ARG001, W291
-        site_descriptor: SiteDescriptor,  # noqa: ARG001, W291
-        drive_name: str,  # noqa: ARG001, W291
+        self: SharepointConnector,  # noqa: ARG001
+        site_descriptor: SiteDescriptor,  # noqa: ARG001
+        drive_name: str,  # noqa: ARG001
     ) -> tuple[str, str | None]:
         return (DRIVE_ID, DRIVE_WEB_URL)
 
-    def fake_get_access_token(self: SharepointConnector) -> str:  # noqa: ARG001, W291
+    def fake_get_access_token(self: SharepointConnector) -> str:  # noqa: ARG001
         return "fake-access-token"
 
     monkeypatch.setattr(SharepointConnector, "_resolve_drive", fake_resolve_drive)
@@ -138,13 +138,13 @@ def _mock_convert(monkeypatch: pytest.MonkeyPatch) -> None:
 
     def fake_convert(
         driveitem: DriveItemData,
-        drive_name: str,  # noqa: ARG001, W291
-        ctx: Any = None,  # noqa: ARG001, W291
-        graph_client: Any = None,  # noqa: ARG001, W291
-        graph_api_base: str = "",  # noqa: ARG001, W291
-        include_permissions: bool = False,  # noqa: ARG001, W291
-        parent_hierarchy_raw_node_id: str | None = None,  # noqa: ARG001, W291
-        access_token: str | None = None,  # noqa: ARG001, W291
+        drive_name: str,  # noqa: ARG001
+        ctx: Any = None,  # noqa: ARG001
+        graph_client: Any = None,  # noqa: ARG001
+        graph_api_base: str = "",  # noqa: ARG001
+        include_permissions: bool = False,  # noqa: ARG001
+        parent_hierarchy_raw_node_id: str | None = None,  # noqa: ARG001
+        access_token: str | None = None,  # noqa: ARG001
     ) -> Document:
         return _make_document(driveitem)
 
@@ -176,12 +176,12 @@ class TestDeltaPerPageCheckpointing:
         call_count = 0
 
         def fake_fetch_page(
-            self: SharepointConnector,  # noqa: ARG001, W291
-            page_url: str,  # noqa: ARG001, W291
-            drive_id: str,  # noqa: ARG001, W291
-            start: datetime | None = None,  # noqa: ARG001, W291
-            end: datetime | None = None,  # noqa: ARG001, W291
-            page_size: int = 200,  # noqa: ARG001, W291
+            self: SharepointConnector,  # noqa: ARG001
+            page_url: str,  # noqa: ARG001
+            drive_id: str,  # noqa: ARG001
+            start: datetime | None = None,  # noqa: ARG001
+            end: datetime | None = None,  # noqa: ARG001
+            page_size: int = 200,  # noqa: ARG001
         ) -> tuple[list[DriveItemData], str | None]:
             nonlocal call_count
             call_count += 1
@@ -243,12 +243,12 @@ class TestDeltaPerPageCheckpointing:
         call_count = 0
 
         def fake_fetch_page(
-            self: SharepointConnector,  # noqa: ARG001, W291
+            self: SharepointConnector,  # noqa: ARG001
             page_url: str,
-            drive_id: str,  # noqa: ARG001, W291
-            start: datetime | None = None,  # noqa: ARG001, W291
-            end: datetime | None = None,  # noqa: ARG001, W291
-            page_size: int = 200,  # noqa: ARG001, W291
+            drive_id: str,  # noqa: ARG001
+            start: datetime | None = None,  # noqa: ARG001
+            end: datetime | None = None,  # noqa: ARG001
+            page_size: int = 200,  # noqa: ARG001
         ) -> tuple[list[DriveItemData], str | None]:
             nonlocal call_count
             call_count += 1
@@ -305,12 +305,12 @@ class TestDeltaPerPageCheckpointing:
         _mock_convert(monkeypatch)
 
         def fake_fetch_page(
-            self: SharepointConnector,  # noqa: ARG001, W291
-            page_url: str,  # noqa: ARG001, W291
-            drive_id: str,  # noqa: ARG001, W291
-            start: datetime | None = None,  # noqa: ARG001, W291
-            end: datetime | None = None,  # noqa: ARG001, W291
-            page_size: int = 200,  # noqa: ARG001, W291
+            self: SharepointConnector,  # noqa: ARG001
+            page_url: str,  # noqa: ARG001
+            drive_id: str,  # noqa: ARG001
+            start: datetime | None = None,  # noqa: ARG001
+            end: datetime | None = None,  # noqa: ARG001
+            page_size: int = 200,  # noqa: ARG001
         ) -> tuple[list[DriveItemData], str | None]:
             return [_make_item("only")], None
 
@@ -341,12 +341,12 @@ class TestBfsPathNoCheckpointing:
         items = [_make_item("x"), _make_item("y"), _make_item("z")]
 
         def fake_iter_paged(
-            self: SharepointConnector,  # noqa: ARG001, W291
-            drive_id: str,  # noqa: ARG001, W291
-            folder_path: str | None = None,  # noqa: ARG001, W291
-            start: datetime | None = None,  # noqa: ARG001, W291
-            end: datetime | None = None,  # noqa: ARG001, W291
-            page_size: int = 200,  # noqa: ARG001, W291
+            self: SharepointConnector,  # noqa: ARG001
+            drive_id: str,  # noqa: ARG001
+            folder_path: str | None = None,  # noqa: ARG001
+            start: datetime | None = None,  # noqa: ARG001
+            end: datetime | None = None,  # noqa: ARG001
+            page_size: int = 200,  # noqa: ARG001
         ) -> Generator[DriveItemData, None, None]:
             yield from items
 
@@ -377,11 +377,11 @@ class TestDelta410GoneResync:
         call_count = 0
 
         def fake_fetch_page(
-            self: SharepointConnector,  # noqa: ARG001, W291
-            page_url: str,  # noqa: ARG001, W291
+            self: SharepointConnector,  # noqa: ARG001
+            page_url: str,  # noqa: ARG001
             drive_id: str,
-            start: datetime | None = None,  # noqa: ARG001, W291
-            end: datetime | None = None,  # noqa: ARG001, W291
+            start: datetime | None = None,  # noqa: ARG001
+            end: datetime | None = None,  # noqa: ARG001
             page_size: int = 200,
         ) -> tuple[list[DriveItemData], str | None]:
             nonlocal call_count
@@ -429,12 +429,12 @@ class TestDeltaPageFetchFailure:
         _mock_convert(monkeypatch)
 
         def fake_fetch_page(
-            self: SharepointConnector,  # noqa: ARG001, W291
-            page_url: str,  # noqa: ARG001, W291
-            drive_id: str,  # noqa: ARG001, W291
-            start: datetime | None = None,  # noqa: ARG001, W291
-            end: datetime | None = None,  # noqa: ARG001, W291
-            page_size: int = 200,  # noqa: ARG001, W291
+            self: SharepointConnector,  # noqa: ARG001
+            page_url: str,  # noqa: ARG001
+            drive_id: str,  # noqa: ARG001
+            start: datetime | None = None,  # noqa: ARG001
+            end: datetime | None = None,  # noqa: ARG001
+            page_size: int = 200,  # noqa: ARG001
         ) -> tuple[list[DriveItemData], str | None]:
             raise RuntimeError("network blip")
 
@@ -472,12 +472,12 @@ class TestDeltaDuplicateDocumentDedup:
         call_count = 0
 
         def fake_fetch_page(
-            self: SharepointConnector,  # noqa: ARG001, W291
-            page_url: str,  # noqa: ARG001, W291
-            drive_id: str,  # noqa: ARG001, W291
-            start: datetime | None = None,  # noqa: ARG001, W291
-            end: datetime | None = None,  # noqa: ARG001, W291
-            page_size: int = 200,  # noqa: ARG001, W291
+            self: SharepointConnector,  # noqa: ARG001
+            page_url: str,  # noqa: ARG001
+            drive_id: str,  # noqa: ARG001
+            start: datetime | None = None,  # noqa: ARG001
+            end: datetime | None = None,  # noqa: ARG001
+            page_size: int = 200,  # noqa: ARG001
         ) -> tuple[list[DriveItemData], str | None]:
             nonlocal call_count
             call_count += 1
@@ -517,12 +517,12 @@ class TestDeltaDuplicateDocumentDedup:
         _mock_convert(monkeypatch)
 
         def fake_fetch_page(
-            self: SharepointConnector,  # noqa: ARG001, W291
-            page_url: str,  # noqa: ARG001, W291
-            drive_id: str,  # noqa: ARG001, W291
-            start: datetime | None = None,  # noqa: ARG001, W291
-            end: datetime | None = None,  # noqa: ARG001, W291
-            page_size: int = 200,  # noqa: ARG001, W291
+            self: SharepointConnector,  # noqa: ARG001
+            page_url: str,  # noqa: ARG001
+            drive_id: str,  # noqa: ARG001
+            start: datetime | None = None,  # noqa: ARG001
+            end: datetime | None = None,  # noqa: ARG001
+            page_size: int = 200,  # noqa: ARG001
         ) -> tuple[list[DriveItemData], str | None]:
             return [_make_item("x"), _make_item("x"), _make_item("y")], None
 
@@ -549,12 +549,12 @@ class TestDeltaDuplicateDocumentDedup:
         call_count = 0
 
         def fake_fetch_page(
-            self: SharepointConnector,  # noqa: ARG001, W291
-            page_url: str,  # noqa: ARG001, W291
-            drive_id: str,  # noqa: ARG001, W291
-            start: datetime | None = None,  # noqa: ARG001, W291
-            end: datetime | None = None,  # noqa: ARG001, W291
-            page_size: int = 200,  # noqa: ARG001, W291
+            self: SharepointConnector,  # noqa: ARG001
+            page_url: str,  # noqa: ARG001
+            drive_id: str,  # noqa: ARG001
+            start: datetime | None = None,  # noqa: ARG001
+            end: datetime | None = None,  # noqa: ARG001
+            page_size: int = 200,  # noqa: ARG001
         ) -> tuple[list[DriveItemData], str | None]:
             nonlocal call_count
             call_count += 1
@@ -604,12 +604,12 @@ class TestDeltaDuplicateDocumentDedup:
         _mock_convert(monkeypatch)
 
         def fake_fetch_page(
-            self: SharepointConnector,  # noqa: ARG001, W291
-            page_url: str,  # noqa: ARG001, W291
-            drive_id: str,  # noqa: ARG001, W291
-            start: datetime | None = None,  # noqa: ARG001, W291
-            end: datetime | None = None,  # noqa: ARG001, W291
-            page_size: int = 200,  # noqa: ARG001, W291
+            self: SharepointConnector,  # noqa: ARG001
+            page_url: str,  # noqa: ARG001
+            drive_id: str,  # noqa: ARG001
+            start: datetime | None = None,  # noqa: ARG001
+            end: datetime | None = None,  # noqa: ARG001
+            page_size: int = 200,  # noqa: ARG001
         ) -> tuple[list[DriveItemData], str | None]:
             return [_make_item("a")], None
 
@@ -644,12 +644,12 @@ class TestDeltaDuplicateDocumentDedup:
         _mock_convert(monkeypatch)
 
         def fake_fetch_page(
-            self: SharepointConnector,  # noqa: ARG001, W291
-            page_url: str,  # noqa: ARG001, W291
-            drive_id: str,  # noqa: ARG001, W291
-            start: datetime | None = None,  # noqa: ARG001, W291
-            end: datetime | None = None,  # noqa: ARG001, W291
-            page_size: int = 200,  # noqa: ARG001, W291
+            self: SharepointConnector,  # noqa: ARG001
+            page_url: str,  # noqa: ARG001
+            drive_id: str,  # noqa: ARG001
+            start: datetime | None = None,  # noqa: ARG001
+            end: datetime | None = None,  # noqa: ARG001
+            page_size: int = 200,  # noqa: ARG001
         ) -> tuple[list[DriveItemData], str | None]:
             return [_make_item("shared-id")], None
 

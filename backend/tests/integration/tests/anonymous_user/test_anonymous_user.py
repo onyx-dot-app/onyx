@@ -8,7 +8,7 @@ from tests.integration.common_utils.test_models import DATestUser
 
 
 def test_me_endpoint_returns_anonymous_user_when_enabled(
-    reset: None,  # noqa: ARG001, W291
+    reset: None,  # noqa: ARG001
 ) -> None:
     """Unauthenticated /me returns anonymous user info when anonymous access is enabled."""
     admin_user: DATestUser = UserManager.create(name="admin_user")
@@ -28,7 +28,7 @@ def test_me_endpoint_returns_anonymous_user_when_enabled(
 
 
 def test_me_endpoint_returns_403_when_anonymous_disabled(
-    reset: None,  # noqa: ARG001, W291
+    reset: None,  # noqa: ARG001
 ) -> None:
     """Unauthenticated /me returns 403 when anonymous access is disabled."""
     admin_user: DATestUser = UserManager.create(name="admin_user")
@@ -45,7 +45,7 @@ def test_me_endpoint_returns_403_when_anonymous_disabled(
 
 
 def test_me_endpoint_returns_authenticated_user_info(
-    reset: None,  # noqa: ARG001, W291
+    reset: None,  # noqa: ARG001
 ) -> None:
     """Authenticated /me returns the actual user's info."""
     admin_user: DATestUser = UserManager.create(name="admin_user")
@@ -63,7 +63,7 @@ def test_me_endpoint_returns_authenticated_user_info(
 
 
 def test_anonymous_user_can_access_persona_when_enabled(
-    reset: None,  # noqa: ARG001, W291
+    reset: None,  # noqa: ARG001
 ) -> None:
     """Verify that anonymous users can access limited endpoints when enabled."""
     admin_user: DATestUser = UserManager.create(name="admin_user")
@@ -83,7 +83,7 @@ def test_anonymous_user_can_access_persona_when_enabled(
 
 
 def test_anonymous_user_denied_persona_when_disabled(
-    reset: None,  # noqa: ARG001, W291
+    reset: None,  # noqa: ARG001
 ) -> None:
     """Verify that anonymous users cannot access endpoints when disabled."""
     admin_user: DATestUser = UserManager.create(name="admin_user")

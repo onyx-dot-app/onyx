@@ -658,7 +658,7 @@ def test_citation_not_in_mapping_skipped(
 
 def test_invalid_citation_format_skipped(
     mock_search_docs: CitationMapping,
-    caplog: pytest.LogCaptureFixture,  # noqa: ARG001, W291
+    caplog: pytest.LogCaptureFixture,  # noqa: ARG001
 ) -> None:
     """Test that invalid citation number formats are skipped."""
     processor = DynamicCitationProcessor()
@@ -685,7 +685,7 @@ def test_empty_citation_content_handled(mock_search_docs: CitationMapping) -> No
 
 def test_citation_with_non_integer_skipped(
     mock_search_docs: CitationMapping,
-    caplog: pytest.LogCaptureFixture,  # noqa: ARG001, W291
+    caplog: pytest.LogCaptureFixture,  # noqa: ARG001
 ) -> None:
     """Test that citations with non-integer content are skipped."""
     processor = DynamicCitationProcessor()
@@ -793,7 +793,7 @@ def test_citation_inside_code_block_not_processed(
 
 
 def test_code_block_plaintext_added(
-    mock_search_docs: CitationMapping,  # noqa: ARG001, W291
+    mock_search_docs: CitationMapping,  # noqa: ARG001
 ) -> None:
     """Test that code blocks with ``` followed by \\n get 'plaintext' added."""
     processor = DynamicCitationProcessor()
@@ -958,7 +958,7 @@ def test_none_token_flushes_remaining_segment(
 
 
 def test_very_long_citation_numbers(
-    mock_search_docs: CitationMapping,  # noqa: ARG001, W291
+    mock_search_docs: CitationMapping,  # noqa: ARG001
 ) -> None:
     """Test citations with very long citation numbers."""
     processor = DynamicCitationProcessor()

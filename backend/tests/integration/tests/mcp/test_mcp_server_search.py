@@ -121,8 +121,8 @@ def _seed_document_and_wait_for_indexing(
 
 
 def test_mcp_document_search_flow(
-    reset: None,  # noqa: ARG001, W291
-    admin_user: DATestUser,  # noqa: W291
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
 ) -> None:
     """Test the complete MCP search flow: initialization, resources, tools, and search."""
     # LLM provider is required for the document-search endpoint
@@ -188,8 +188,8 @@ def test_mcp_document_search_flow(
     reason="User group permissions are Enterprise-only",
 )
 def test_mcp_search_respects_acl_filters(
-    reset: None,  # noqa: ARG001, W291
-    admin_user: DATestUser,  # noqa: W291
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
 ) -> None:
     """Test that search respects ACL filters - privileged users can access, others cannot."""
     # LLM provider is required for the document-search endpoint

@@ -105,8 +105,8 @@ def _create_mock_slack_request(
 
 
 def _create_mock_slack_client(
-    channel_id: str = "C1234567890",  # noqa: ARG001, W291
-    slack_bot_id: int = 12345,  # noqa: W291
+    channel_id: str = "C1234567890",  # noqa: ARG001
+    slack_bot_id: int = 12345,
 ) -> Mock:
     """Create a mock Slack client"""
     mock_client = Mock()
@@ -367,15 +367,15 @@ class TestSlackBotFederatedSearch:
         from onyx.context.search.federated.slack_search import SlackQueryResult
 
         def mock_query_slack_capture_params(
-            query_string: str,  # noqa: ARG001, W291
-            access_token: str,  # noqa: ARG001, W291
-            limit: int | None = None,  # noqa: ARG001, W291
+            query_string: str,  # noqa: ARG001
+            access_token: str,  # noqa: ARG001
+            limit: int | None = None,  # noqa: ARG001
             allowed_private_channel: str | None = None,
-            bot_token: str | None = None,  # noqa: ARG001, W291
+            bot_token: str | None = None,  # noqa: ARG001
             include_dm: bool = False,
-            entities: dict | None = None,  # noqa: ARG001, W291
-            available_channels: list | None = None,  # noqa: ARG001, W291
-            channel_metadata_dict: dict | None = None,  # noqa: ARG001, W291
+            entities: dict | None = None,  # noqa: ARG001
+            available_channels: list | None = None,  # noqa: ARG001
+            channel_metadata_dict: dict | None = None,  # noqa: ARG001
         ) -> SlackQueryResult:
             self._captured_filtering_params = {
                 "allowed_private_channel": allowed_private_channel,
@@ -395,8 +395,8 @@ class TestSlackBotFederatedSearch:
         """Setup get_channel_type_from_id mock to return correct channel types"""
 
         def mock_channel_type_response(
-            web_client: Mock,  # noqa: ARG001, W291
-            channel_id: str,  # noqa: W291
+            web_client: Mock,  # noqa: ARG001
+            channel_id: str,
         ) -> ChannelType:
             if channel_id == "C1234567890":  # general - public
                 return ChannelType.PUBLIC_CHANNEL
@@ -647,7 +647,7 @@ def test_missing_scope_resilience(
 
     def mock_conversations_list(
         types: str | None = None,
-        **kwargs: Any,  # noqa: ARG001, W291
+        **kwargs: Any,  # noqa: ARG001
     ) -> MagicMock:
         if types:
             attempted_types.append(types)
@@ -738,7 +738,7 @@ def test_multiple_missing_scopes_resilience(
 
     def mock_conversations_list(
         types: str | None = None,
-        **kwargs: Any,  # noqa: ARG001, W291
+        **kwargs: Any,  # noqa: ARG001
     ) -> MagicMock:
         if types:
             attempted_types.append(types)

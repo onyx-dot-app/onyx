@@ -89,10 +89,10 @@ def get_sqlalchemy_async_engine() -> AsyncEngine:
 
             @event.listens_for(_ASYNC_ENGINE.sync_engine, "do_connect")
             def provide_iam_token_async(
-                dialect: Any,  # noqa: ARG001, W291
-                conn_rec: Any,  # noqa: ARG001, W291
-                cargs: Any,  # noqa: ARG001, W291
-                cparams: Any,  # noqa: W291
+                dialect: Any,  # noqa: ARG001
+                conn_rec: Any,  # noqa: ARG001
+                cargs: Any,  # noqa: ARG001
+                cparams: Any,
             ) -> None:
                 # For async engine using asyncpg, we still need to set the IAM token here.
                 host = POSTGRES_HOST

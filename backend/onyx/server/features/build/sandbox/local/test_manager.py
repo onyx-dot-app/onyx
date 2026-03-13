@@ -90,7 +90,7 @@ def actual_sandbox_path(sandbox_record: Sandbox) -> Path:
 @pytest.fixture
 def test_user(
     db_session: Session,
-    tenant_context: None,  # noqa: ARG001, W291
+    tenant_context: None,  # noqa: ARG001
 ) -> Generator[User, None, None]:
     """Create or get a test user for sandbox tests."""
     from sqlalchemy import select
@@ -126,8 +126,8 @@ def test_user(
 @pytest.fixture
 def sandbox_record(
     db_session: Session,
-    tenant_context: None,  # noqa: ARG001, W291
-    test_user: User,  # noqa: W291
+    tenant_context: None,  # noqa: ARG001
+    test_user: User,
 ) -> Generator[Sandbox, None, None]:
     """Create a real Sandbox record in the database and set up sandbox directory."""
     from sqlalchemy import select
@@ -167,8 +167,8 @@ def sandbox_record(
 @pytest.fixture
 def build_session_record(
     db_session: Session,
-    tenant_context: None,  # noqa: ARG001, W291
-    test_user: User,  # noqa: W291
+    tenant_context: None,  # noqa: ARG001
+    test_user: User,
 ) -> Generator[BuildSession, None, None]:
     """Create a BuildSession record for testing session-specific operations."""
     build_session = BuildSession(

@@ -529,10 +529,10 @@ def process_user_file_impl(
     ignore_result=True,
 )
 def process_single_user_file(
-    self: Task,  # noqa: ARG001, W291
+    self: Task,  # noqa: ARG001
     *,
     user_file_id: str,
-    tenant_id: str,  # noqa: W291
+    tenant_id: str,
 ) -> None:
     process_user_file_impl(
         user_file_id=user_file_id, tenant_id=tenant_id, redis_locking=True
@@ -688,10 +688,10 @@ def delete_user_file_impl(
     ignore_result=True,
 )
 def process_single_user_file_delete(
-    self: Task,  # noqa: ARG001, W291
+    self: Task,  # noqa: ARG001
     *,
     user_file_id: str,
-    tenant_id: str,  # noqa: W291
+    tenant_id: str,
 ) -> None:
     delete_user_file_impl(
         user_file_id=user_file_id, tenant_id=tenant_id, redis_locking=True
@@ -875,10 +875,10 @@ def project_sync_user_file_impl(
     ignore_result=True,
 )
 def process_single_user_file_project_sync(
-    self: Task,  # noqa: ARG001, W291
+    self: Task,  # noqa: ARG001
     *,
     user_file_id: str,
-    tenant_id: str,  # noqa: W291
+    tenant_id: str,
 ) -> None:
     project_sync_user_file_impl(
         user_file_id=user_file_id, tenant_id=tenant_id, redis_locking=True

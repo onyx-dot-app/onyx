@@ -75,21 +75,21 @@ def test_scim_token_rotation_revokes_previous(admin_user: DATestUser) -> None:
 
 
 def test_scim_request_without_token_rejected(
-    admin_user: DATestUser,  # noqa: ARG001, W291
+    admin_user: DATestUser,  # noqa: ARG001
 ) -> None:
     """SCIM endpoints reject requests with no Authorization header."""
     assert ScimClient.get_no_auth("/Users").status_code == 401
 
 
 def test_scim_request_with_bad_token_rejected(
-    admin_user: DATestUser,  # noqa: ARG001, W291
+    admin_user: DATestUser,  # noqa: ARG001
 ) -> None:
     """SCIM endpoints reject requests with an invalid token."""
     assert ScimClient.get("/Users", "onyx_scim_bogus_token_value").status_code == 401
 
 
 def test_non_admin_cannot_create_token(
-    admin_user: DATestUser,  # noqa: ARG001, W291
+    admin_user: DATestUser,  # noqa: ARG001
 ) -> None:
     """Non-admin users get 403 when trying to create a SCIM token."""
     basic_user = UserManager.create(name="scim_basic_user")
@@ -104,7 +104,7 @@ def test_non_admin_cannot_create_token(
 
 
 def test_non_admin_cannot_get_token(
-    admin_user: DATestUser,  # noqa: ARG001, W291
+    admin_user: DATestUser,  # noqa: ARG001
 ) -> None:
     """Non-admin users get 403 when trying to retrieve SCIM token metadata."""
     basic_user = UserManager.create(name="scim_basic_user2")
@@ -133,7 +133,7 @@ def test_no_active_token_returns_404(new_admin_user: DATestUser) -> None:
 
 
 def test_service_discovery_no_auth_required(
-    admin_user: DATestUser,  # noqa: ARG001, W291
+    admin_user: DATestUser,  # noqa: ARG001
 ) -> None:
     """Service discovery endpoints work without any authentication."""
     for path in ["/ServiceProviderConfig", "/ResourceTypes", "/Schemas"]:

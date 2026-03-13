@@ -168,7 +168,7 @@ def test_slim_docs_retrieval_from_teams_connector(
 
 def test_load_from_checkpoint_with_perm_sync(
     teams_connector: TeamsConnector,
-    enable_ee: None,  # noqa: ARG001, W291
+    enable_ee: None,  # noqa: ARG001
 ) -> None:
     """Test that load_from_checkpoint_with_perm_sync returns documents with external_access.
 

@@ -1164,8 +1164,8 @@ def warm_up_retry(
     func: Callable[..., Any],
     tries: int = 20,
     delay: int = 5,
-    *args: Any,  # noqa: ARG001, W291
-    **kwargs: Any,  # noqa: ARG001, W291
+    *args: Any,  # noqa: ARG001
+    **kwargs: Any,  # noqa: ARG001
 ) -> Callable[..., Any]:
     @wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> Any:

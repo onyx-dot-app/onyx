@@ -24,7 +24,7 @@ def get_sharepoint_external_access(
     # Get external access using the EE implementation
     def noop_fallback(
         *args: Any, **kwargs: Any  # noqa: ARG001
-    ) -> ExternalAccess:  # noqa: ARG001, W291
+    ) -> ExternalAccess:  # noqa: ARG001
         return ExternalAccess.empty()
 
     get_external_access_func = fetch_versioned_implementation_with_fallback(

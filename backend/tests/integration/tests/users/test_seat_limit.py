@@ -58,7 +58,7 @@ def _redis() -> redis.Redis:
 
 def test_registration_blocked_when_seats_full(
     reset: None,  # noqa: ARG001
-) -> None:  # noqa: ARG001, W291
+) -> None:  # noqa: ARG001
     """POST /auth/register returns 402 when the seat limit is reached."""
     r = _redis()
 
@@ -88,7 +88,7 @@ def test_registration_blocked_when_seats_full(
 # ------------------------------------------------------------------
 
 
-def test_invite_blocked_when_seats_full(reset: None) -> None:  # noqa: ARG001, W291
+def test_invite_blocked_when_seats_full(reset: None) -> None:  # noqa: ARG001
     """PUT /manage/admin/users returns 402 when the seat limit is reached."""
     r = _redis()
 
@@ -114,7 +114,7 @@ def test_invite_blocked_when_seats_full(reset: None) -> None:  # noqa: ARG001, W
 
 def test_reactivation_blocked_when_seats_full(
     reset: None,  # noqa: ARG001
-) -> None:  # noqa: ARG001, W291
+) -> None:  # noqa: ARG001
     """PATCH /manage/admin/activate-user returns 402 when seats are full."""
     r = _redis()
 
@@ -147,7 +147,7 @@ def test_reactivation_blocked_when_seats_full(
 
 def test_registration_allowed_without_license(
     reset: None,  # noqa: ARG001
-) -> None:  # noqa: ARG001, W291
+) -> None:  # noqa: ARG001
     """Without a license in Redis, registration is unrestricted."""
     r = _redis()
 

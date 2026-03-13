@@ -124,7 +124,7 @@ def opensearch_available() -> None:
 
 @pytest.fixture(scope="function")
 def test_client(
-    opensearch_available: None,  # noqa: ARG001, W291
+    opensearch_available: None,  # noqa: ARG001
 ) -> Generator[OpenSearchIndexClient, None, None]:
     """Creates an OpenSearch client for testing with automatic cleanup."""
     test_index_name = f"test_index_{uuid.uuid4().hex[:8]}"

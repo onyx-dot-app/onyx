@@ -5,7 +5,7 @@ from tests.integration.common_utils.test_models import DATestUser
 
 
 def test_migration_status_returns_defaults_when_no_record(
-    reset: None,  # noqa: ARG001, W291
+    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     """When no migration record exists, status should return zeros/nulls."""
@@ -25,7 +25,7 @@ def test_migration_status_returns_defaults_when_no_record(
 
 
 def test_retrieval_status_returns_false_when_no_record(
-    reset: None,  # noqa: ARG001, W291
+    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     """When no migration record exists, retrieval should default to disabled."""
@@ -42,7 +42,7 @@ def test_retrieval_status_returns_false_when_no_record(
 
 
 def test_set_and_get_retrieval_status(
-    reset: None,  # noqa: ARG001, W291
+    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     """Setting retrieval to True should persist and be readable."""
@@ -86,7 +86,7 @@ def test_set_and_get_retrieval_status(
 
 
 def test_migration_status_after_record_created(
-    reset: None,  # noqa: ARG001, W291
+    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     """After toggling retrieval (which creates the record), status should
@@ -115,8 +115,8 @@ def test_migration_status_after_record_created(
 
 
 def test_endpoints_require_admin(
-    reset: None,  # noqa: ARG001, W291
-    admin_user: DATestUser,  # noqa: ARG001, W291
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,  # noqa: ARG001
 ) -> None:
     """Endpoints should reject unauthenticated requests."""
     for url in [

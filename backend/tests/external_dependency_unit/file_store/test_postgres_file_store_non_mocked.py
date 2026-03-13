@@ -36,7 +36,7 @@ logger = setup_logger()
 @pytest.fixture(scope="function")
 def pg_file_store(
     db_session: Session,  # noqa: ARG001 — ensures engine is ready
-    tenant_context: None,  # noqa: ARG001, W291
+    tenant_context: None,  # noqa: ARG001
 ) -> Generator[PostgresBackedFileStore, None, None]:
     """Provide a PostgresBackedFileStore wired to the real test database."""
     store = PostgresBackedFileStore()

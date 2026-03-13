@@ -82,7 +82,7 @@ def is_continuation_token_done_for_all_slices(
     bind=True,
 )
 def migrate_chunks_from_vespa_to_opensearch_task(
-    self: Task,  # noqa: ARG001, W291
+    self: Task,  # noqa: ARG001
     *,
     tenant_id: str,
 ) -> bool | None:

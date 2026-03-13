@@ -175,7 +175,7 @@ def test_contextual_rag(
 
     def mock_llm_invoke(
         *args: Any, **kwargs: Any  # noqa: ARG001
-    ) -> ModelResponse:  # noqa: ARG001, W291
+    ) -> ModelResponse:  # noqa: ARG001
         nonlocal mock_llm_invoke_count
         with counter_lock:
             mock_llm_invoke_count += 1

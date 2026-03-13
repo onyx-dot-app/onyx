@@ -33,7 +33,7 @@ if TYPE_CHECKING:
 def sandbox(
     db_session: Session,
     test_user: User,
-    tenant_context: None,  # noqa: ARG001, W291
+    tenant_context: None,  # noqa: ARG001
 ) -> Sandbox:
     """Create a test sandbox for the user (sandboxes are per-user, not per-session)."""
     sandbox = Sandbox(
@@ -51,8 +51,8 @@ def sandbox(
 def build_session_with_user(
     db_session: Session,
     test_user: User,
-    sandbox: Sandbox,  # noqa: ARG001, W291
-    tenant_context: None,  # noqa: ARG001, W291
+    sandbox: Sandbox,  # noqa: ARG001
+    tenant_context: None,  # noqa: ARG001
 ) -> BuildSession:
     """Create a test build session for a user who has a sandbox."""
     session = BuildSession(

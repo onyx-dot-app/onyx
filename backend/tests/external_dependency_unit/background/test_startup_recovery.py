@@ -59,8 +59,8 @@ def _create_user_file(
 
 def _fake_delete_impl(
     user_file_id: str,
-    tenant_id: str,  # noqa: ARG001, W291
-    redis_locking: bool,  # noqa: ARG001, W291
+    tenant_id: str,  # noqa: ARG001
+    redis_locking: bool,  # noqa: ARG001
 ) -> None:
     """Mock side-effect: delete the row so the drain loop terminates."""
     from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -72,8 +72,8 @@ def _fake_delete_impl(
 
 def _fake_sync_impl(
     user_file_id: str,
-    tenant_id: str,  # noqa: ARG001, W291
-    redis_locking: bool,  # noqa: ARG001, W291
+    tenant_id: str,  # noqa: ARG001
+    redis_locking: bool,  # noqa: ARG001
 ) -> None:
     """Mock side-effect: clear sync flags so the drain loop terminates."""
     from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -271,8 +271,8 @@ class TestTransientFailures:
         def side_effect(
             *,
             user_file_id: str,
-            tenant_id: str,  # noqa: ARG001, W291
-            redis_locking: bool,  # noqa: ARG001, W291
+            tenant_id: str,  # noqa: ARG001
+            redis_locking: bool,  # noqa: ARG001
         ) -> None:
             if user_file_id == fail_id:
                 raise RuntimeError("transient failure")

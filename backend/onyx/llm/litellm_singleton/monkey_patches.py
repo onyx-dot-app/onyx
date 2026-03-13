@@ -578,10 +578,10 @@ def _patch_azure_responses_should_fake_stream() -> None:
         return
 
     def _patched_should_fake_stream(
-        self: Any,  # noqa: ARG001, W291
-        model: Optional[str],  # noqa: ARG001, W291
-        stream: Optional[bool],  # noqa: ARG001, W291
-        custom_llm_provider: Optional[str] = None,  # noqa: ARG001, W291
+        self: Any,  # noqa: ARG001
+        model: Optional[str],  # noqa: ARG001
+        stream: Optional[bool],  # noqa: ARG001
+        custom_llm_provider: Optional[str] = None,  # noqa: ARG001
     ) -> bool:
         # Azure Responses API supports native streaming - never fake it
         return False
@@ -683,12 +683,12 @@ def _patch_logging_assembled_streaming_response() -> None:
         return
 
     def _patched_get_assembled_streaming_response(
-        self: Any,  # noqa: ARG001, W291
+        self: Any,  # noqa: ARG001
         result: Any,
-        start_time: Any,  # noqa: ARG001, W291
-        end_time: Any,  # noqa: ARG001, W291
-        is_async: bool,  # noqa: ARG001, W291
-        streaming_chunks: List[Any],  # noqa: ARG001, W291
+        start_time: Any,  # noqa: ARG001
+        end_time: Any,  # noqa: ARG001
+        is_async: bool,  # noqa: ARG001
+        streaming_chunks: List[Any],  # noqa: ARG001
     ) -> Any:
         """
         Patched version that creates a copy before modifying usage.

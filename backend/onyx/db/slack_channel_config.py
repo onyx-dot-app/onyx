@@ -84,8 +84,8 @@ def create_slack_channel_persona(
 
 
 def _no_ee_standard_answer_categories(
-    *args: Any,  # noqa: ARG001, W291
-    **kwargs: Any,  # noqa: ARG001, W291
+    *args: Any,  # noqa: ARG001
+    **kwargs: Any,  # noqa: ARG001
 ) -> list:
     return []
 
@@ -157,7 +157,7 @@ def update_slack_channel_config(
     channel_config: ChannelConfig,
     standard_answer_category_ids: list[int],
     enable_auto_filters: bool,
-    disabled: bool,  # noqa: ARG001, W291
+    disabled: bool,  # noqa: ARG001
 ) -> SlackChannelConfig:
     slack_channel_config = db_session.scalar(
         select(SlackChannelConfig).where(

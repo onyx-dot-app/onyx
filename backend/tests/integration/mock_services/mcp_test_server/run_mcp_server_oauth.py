@@ -39,7 +39,7 @@ Enable authorization code and store the client id and secret.
 def make_many_tools(mcp: FastMCP) -> None:
     def make_tool(i: int) -> None:
         @mcp.tool(name=f"tool_{i}", description=f"Get secret value {i}")
-        def tool_name(name: str) -> str:  # noqa: ARG001, W291
+        def tool_name(name: str) -> str:  # noqa: ARG001
             """Get secret value."""
             return f"Secret value {500 - i}!"
 

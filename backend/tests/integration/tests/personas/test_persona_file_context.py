@@ -66,7 +66,7 @@ def _poll_file_statuses(
 
 def test_persona_with_files_chat_no_error(
     admin_user: DATestUser,
-    llm_provider: DATestLLMProvider,  # noqa: ARG001, W291
+    llm_provider: DATestLLMProvider,  # noqa: ARG001
 ) -> None:
     """Upload files, attach them to a persona, wait for processing,
     then send a chat message.  Verify no error is returned."""
@@ -120,7 +120,7 @@ def test_persona_with_files_chat_no_error(
 
 def test_persona_without_files_still_works(
     admin_user: DATestUser,
-    llm_provider: DATestLLMProvider,  # noqa: ARG001, W291
+    llm_provider: DATestLLMProvider,  # noqa: ARG001
 ) -> None:
     """A persona with no attached files should still chat normally."""
     persona = PersonaManager.create(
@@ -147,7 +147,7 @@ def test_persona_without_files_still_works(
 
 def test_persona_files_override_project_files(
     admin_user: DATestUser,
-    llm_provider: DATestLLMProvider,  # noqa: ARG001, W291
+    llm_provider: DATestLLMProvider,  # noqa: ARG001
 ) -> None:
     """When a custom persona (with its own files) is used inside a project,
     the persona's files take precedence — the project's files are invisible.
@@ -216,7 +216,7 @@ def test_persona_files_override_project_files(
 
 def test_default_persona_in_project_uses_project_files(
     admin_user: DATestUser,
-    llm_provider: DATestLLMProvider,  # noqa: ARG001, W291
+    llm_provider: DATestLLMProvider,  # noqa: ARG001
 ) -> None:
     """When the default persona (id=0) is used inside a project,
     the project's files should be used for context."""
@@ -259,7 +259,7 @@ def test_default_persona_in_project_uses_project_files(
 
 def test_custom_persona_no_files_in_project_ignores_project(
     admin_user: DATestUser,
-    llm_provider: DATestLLMProvider,  # noqa: ARG001, W291
+    llm_provider: DATestLLMProvider,  # noqa: ARG001
 ) -> None:
     """A custom persona with NO files, used inside a project with files,
     should NOT see the project's files.  The project is purely organizational.

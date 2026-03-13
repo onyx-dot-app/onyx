@@ -24,7 +24,7 @@ from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
 
 
-def test_pat_lifecycle_happy_path(reset: None) -> None:  # noqa: ARG001, W291
+def test_pat_lifecycle_happy_path(reset: None) -> None:  # noqa: ARG001
     """Complete PAT lifecycle: create, authenticate, revoke."""
     user: DATestUser = UserManager.create(name="pat_user")
 
@@ -77,7 +77,7 @@ def test_pat_lifecycle_happy_path(reset: None) -> None:  # noqa: ARG001, W291
 
 def test_pat_user_isolation_and_authentication(
     reset: None,  # noqa: ARG001
-) -> None:  # noqa: ARG001, W291
+) -> None:  # noqa: ARG001
     """
     PATs authenticate as real users, and users can only see/manage their own tokens.
     """
@@ -141,7 +141,7 @@ def test_pat_user_isolation_and_authentication(
     assert delete_fake.status_code == 404
 
 
-def test_pat_expiration_flow(reset: None) -> None:  # noqa: ARG001, W291
+def test_pat_expiration_flow(reset: None) -> None:  # noqa: ARG001
     """Expiration timestamp is end-of-day (23:59:59 UTC); never-expiring tokens work; revoked tokens fail."""
     user: DATestUser = UserManager.create(name="expiration_user")
 
@@ -190,7 +190,7 @@ def test_pat_expiration_flow(reset: None) -> None:  # noqa: ARG001, W291
     assert revoked_auth_response.status_code == 403
 
 
-def test_pat_validation_errors(reset: None) -> None:  # noqa: ARG001, W291
+def test_pat_validation_errors(reset: None) -> None:  # noqa: ARG001
     """Validate input errors: empty name, name too long, negative/zero expiration."""
     user: DATestUser = UserManager.create(name="validation_user")
 
@@ -250,7 +250,7 @@ def test_pat_validation_errors(reset: None) -> None:  # noqa: ARG001, W291
     assert missing_name_response.status_code == 422
 
 
-def test_pat_sorting_and_last_used(reset: None) -> None:  # noqa: ARG001, W291
+def test_pat_sorting_and_last_used(reset: None) -> None:  # noqa: ARG001
     """PATs are sorted by created_at DESC; last_used_at updates after authentication."""
     user: DATestUser = UserManager.create(name="sorting_user")
 
@@ -308,7 +308,7 @@ def test_pat_sorting_and_last_used(reset: None) -> None:  # noqa: ARG001, W291
     assert token3_after_use.last_used_at is None
 
 
-def test_pat_role_based_access_control(reset: None) -> None:  # noqa: ARG001, W291
+def test_pat_role_based_access_control(reset: None) -> None:  # noqa: ARG001
     """
     PATs inherit user roles and permissions:
     - Admin PAT: Full access to admin-only endpoints

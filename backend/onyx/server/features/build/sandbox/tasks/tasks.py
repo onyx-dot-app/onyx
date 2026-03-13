@@ -47,9 +47,7 @@ TIMEOUT_SECONDS = 6000
     bind=True,
     ignore_result=True,
 )
-def cleanup_idle_sandboxes_task(
-    self: Task, *, tenant_id: str  # noqa: ARG001, W291
-) -> None:
+def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa: ARG001
     """Put idle sandboxes to sleep after snapshotting all sessions.
 
     This task:
@@ -320,7 +318,7 @@ def _get_disabled_user_library_paths(db_session: "Session", user_id: str) -> lis
     ignore_result=True,
 )
 def sync_sandbox_files(
-    self: Task,  # noqa: ARG001, W291
+    self: Task,  # noqa: ARG001
     *,
     user_id: str,
     tenant_id: str,

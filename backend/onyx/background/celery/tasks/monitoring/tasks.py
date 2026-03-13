@@ -881,7 +881,7 @@ def cloud_monitor_celery_queues(
 
 
 @shared_task(name=OnyxCeleryTask.MONITOR_CELERY_QUEUES, ignore_result=True, bind=True)
-def monitor_celery_queues(self: Task, *, tenant_id: str) -> None:  # noqa: ARG001, W291
+def monitor_celery_queues(self: Task, *, tenant_id: str) -> None:  # noqa: ARG001
     return monitor_celery_queues_helper(self)
 
 
@@ -990,7 +990,7 @@ def _get_cmdline_for_process(process: psutil.Process) -> str | None:
     queue=OnyxCeleryQueues.MONITORING,
     bind=True,
 )
-def monitor_process_memory(self: Task, *, tenant_id: str) -> None:  # noqa: ARG001, W291
+def monitor_process_memory(self: Task, *, tenant_id: str) -> None:  # noqa: ARG001
     """
     Task to monitor memory usage of supervisor-managed processes.
     This periodically checks the memory usage of processes and logs information

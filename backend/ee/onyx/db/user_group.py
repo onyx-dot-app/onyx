@@ -711,7 +711,7 @@ def add_users_to_user_group(
 
 def update_user_group(
     db_session: Session,
-    user: User,  # noqa: ARG001, W291
+    user: User,  # noqa: ARG001
     user_group_id: int,
     user_group_update: UserGroupUpdate,
 ) -> UserGroup:

@@ -100,7 +100,7 @@ def _get_group_member_emails(
 
 
 def jira_group_sync(
-    tenant_id: str,  # noqa: ARG001, W291
+    tenant_id: str,  # noqa: ARG001
     cc_pair: ConnectorCredentialPair,
 ) -> Generator[ExternalUserGroup, None, None]:
     """Sync Jira groups and their members, yielding one group at a time.

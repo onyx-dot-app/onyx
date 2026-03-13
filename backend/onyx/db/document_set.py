@@ -171,10 +171,10 @@ def get_document_sets_by_ids(
 
 
 def make_doc_set_private(
-    document_set_id: int,  # noqa: ARG001, W291
+    document_set_id: int,  # noqa: ARG001
     user_ids: list[UUID] | None,
     group_ids: list[int] | None,
-    db_session: Session,  # noqa: ARG001, W291
+    db_session: Session,  # noqa: ARG001
 ) -> None:
     # May cause error if someone switches down to MIT from EE
     if user_ids or group_ids:
@@ -491,7 +491,7 @@ def delete_document_set_cc_pair_relationship__no_commit(
 
 
 def fetch_document_sets(
-    user_id: UUID | None,  # noqa: ARG001, W291
+    user_id: UUID | None,  # noqa: ARG001
     db_session: Session,
     include_outdated: bool = False,
 ) -> list[tuple[DocumentSetDBModel, list[ConnectorCredentialPair]]]:

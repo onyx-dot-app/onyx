@@ -46,8 +46,8 @@ async def test_cloud_embedding_explicit_close() -> None:
 
 @pytest.mark.asyncio
 async def test_openai_embedding(
-    mock_http_client: AsyncMock,  # noqa: ARG001, W291
-    sample_embeddings: List[List[float]],  # noqa: W291
+    mock_http_client: AsyncMock,  # noqa: ARG001
+    sample_embeddings: List[List[float]],
 ) -> None:
     with patch("openai.AsyncOpenAI") as mock_openai:
         mock_client = AsyncMock()

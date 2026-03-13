@@ -248,10 +248,10 @@ def _register_sensitive_value_set_events(
 
                 @event.listens_for(attr, "set", retval=True)
                 def _wrap_value(
-                    target: Any,  # noqa: ARG001, W291
+                    target: Any,  # noqa: ARG001
                     value: Any,
-                    oldvalue: Any,  # noqa: ARG001, W291
-                    initiator: Any,  # noqa: ARG001, W291
+                    oldvalue: Any,  # noqa: ARG001
+                    initiator: Any,  # noqa: ARG001
                     _col_type: _EncryptedBase = col_type,
                 ) -> Any:
                     if value is not None and not isinstance(value, SensitiveValue):

@@ -1029,7 +1029,7 @@ def get_mcp_servers_for_user(
 
 def _get_connection_config(
     mcp_server: DbMCPServer,
-    is_admin: bool,  # noqa: ARG001, W291
+    is_admin: bool,  # noqa: ARG001
     user: User,
     db_session: Session,
 ) -> MCPConnectionConfig | None:
@@ -1597,7 +1597,7 @@ def get_mcp_server_detail(
 @admin_router.get("/tools")
 def get_all_mcp_tools(
     db: Session = Depends(get_session),
-    user: User = Depends(current_curator_or_admin_user),  # noqa: ARG001, W291
+    user: User = Depends(current_curator_or_admin_user),  # noqa: ARG001
 ) -> list:
     """Get all tools associated with MCP servers, including both enabled and disabled tools"""
     from sqlalchemy import select

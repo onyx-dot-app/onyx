@@ -84,7 +84,7 @@ def _cancel_new_embedding(user: DATestUser) -> None:
 
 
 def test_get_current_search_settings(
-    reset: None,  # noqa: ARG001, W291
+    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     """Verify that GET current search settings returns expected fields."""
@@ -100,7 +100,7 @@ def test_get_current_search_settings(
 
 
 def test_get_all_search_settings(
-    reset: None,  # noqa: ARG001, W291
+    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     """Verify that GET all search settings returns current and secondary."""
@@ -113,7 +113,7 @@ def test_get_all_search_settings(
 
 
 def test_get_secondary_search_settings_none_by_default(
-    reset: None,  # noqa: ARG001, W291
+    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     """Verify that no secondary search settings exist by default."""
@@ -122,7 +122,7 @@ def test_get_secondary_search_settings_none_by_default(
 
 
 def test_set_contextual_rag_model(
-    reset: None,  # noqa: ARG001, W291
+    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,
 ) -> None:
@@ -140,7 +140,7 @@ def test_set_contextual_rag_model(
 
 
 def test_unset_contextual_rag_model(
-    reset: None,  # noqa: ARG001, W291
+    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,
 ) -> None:
@@ -169,7 +169,7 @@ def test_unset_contextual_rag_model(
 
 
 def test_change_contextual_rag_model(
-    reset: None,  # noqa: ARG001, W291
+    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,
 ) -> None:
@@ -202,7 +202,7 @@ def test_change_contextual_rag_model(
 
 
 def test_change_contextual_rag_provider_only(
-    reset: None,  # noqa: ARG001, W291
+    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,
 ) -> None:
@@ -231,7 +231,7 @@ def test_change_contextual_rag_provider_only(
 
 
 def test_enable_contextual_rag_preserved_on_inference_update(
-    reset: None,  # noqa: ARG001, W291
+    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     """Verify that enable_contextual_rag cannot be toggled via update-inference-settings
@@ -250,7 +250,7 @@ def test_enable_contextual_rag_preserved_on_inference_update(
 
 
 def test_model_name_preserved_on_inference_update(
-    reset: None,  # noqa: ARG001, W291
+    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     """Verify that model_name cannot be changed via update-inference-settings
@@ -266,7 +266,7 @@ def test_model_name_preserved_on_inference_update(
 
 
 def test_contextual_rag_settings_reflected_in_get_all(
-    reset: None,  # noqa: ARG001, W291
+    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,
 ) -> None:
@@ -284,7 +284,7 @@ def test_contextual_rag_settings_reflected_in_get_all(
 
 
 def test_update_contextual_rag_nonexistent_provider(
-    reset: None,  # noqa: ARG001, W291
+    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     """Updating with a provider that does not exist should return 400."""
@@ -303,7 +303,7 @@ def test_update_contextual_rag_nonexistent_provider(
 
 
 def test_update_contextual_rag_nonexistent_model(
-    reset: None,  # noqa: ARG001, W291
+    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,
 ) -> None:
@@ -326,7 +326,7 @@ def test_update_contextual_rag_nonexistent_model(
 
 
 def test_update_contextual_rag_missing_provider_name(
-    reset: None,  # noqa: ARG001, W291
+    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     """Providing a model name without a provider name should return 400."""
@@ -345,7 +345,7 @@ def test_update_contextual_rag_missing_provider_name(
 
 
 def test_update_contextual_rag_missing_model_name(
-    reset: None,  # noqa: ARG001, W291
+    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,
 ) -> None:
@@ -365,7 +365,7 @@ def test_update_contextual_rag_missing_model_name(
 
 
 def test_set_new_search_settings_with_contextual_rag(
-    reset: None,  # noqa: ARG001, W291
+    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,
 ) -> None:
@@ -393,7 +393,7 @@ def test_set_new_search_settings_with_contextual_rag(
 
 
 def test_set_new_search_settings_without_contextual_rag(
-    reset: None,  # noqa: ARG001, W291
+    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     """Create new search settings with contextual RAG disabled and verify
@@ -417,7 +417,7 @@ def test_set_new_search_settings_without_contextual_rag(
 
 
 def test_set_new_then_update_inference_settings(
-    reset: None,  # noqa: ARG001, W291
+    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,
 ) -> None:
@@ -454,7 +454,7 @@ def test_set_new_then_update_inference_settings(
 
 
 def test_set_new_search_settings_replaces_previous_secondary(
-    reset: None,  # noqa: ARG001, W291
+    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,
 ) -> None:

@@ -88,7 +88,7 @@ def reset() -> None:
 
 
 @pytest.fixture
-def new_admin_user(reset: None) -> DATestUser:  # noqa: ARG001, W291
+def new_admin_user(reset: None) -> DATestUser:  # noqa: ARG001
     return UserManager.create(name=ADMIN_USER_NAME)
 
 
@@ -133,7 +133,7 @@ def admin_user() -> DATestUser:
 def basic_user(
     # make sure the admin user exists first to ensure this new user
     # gets the BASIC role
-    admin_user: DATestUser,  # noqa: ARG001, W291
+    admin_user: DATestUser,  # noqa: ARG001
 ) -> DATestUser:
     try:
         user = UserManager.create(name=BASIC_USER_NAME)
@@ -224,13 +224,13 @@ def document_builder(admin_user: DATestUser) -> DocumentBuilderType:
 
 def pytest_runtest_logstart(
     nodeid: str,
-    location: tuple[str, int | None, str],  # noqa: ARG001, W291
+    location: tuple[str, int | None, str],  # noqa: ARG001
 ) -> None:
     print(f"\nTest start: {nodeid}")
 
 
 def pytest_runtest_logfinish(
     nodeid: str,
-    location: tuple[str, int | None, str],  # noqa: ARG001, W291
+    location: tuple[str, int | None, str],  # noqa: ARG001
 ) -> None:
     print(f"\nTest end: {nodeid}")

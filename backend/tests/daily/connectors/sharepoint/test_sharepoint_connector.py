@@ -148,7 +148,7 @@ def sharepoint_credentials() -> dict[str, str]:
 
 
 def test_sharepoint_connector_all_sites__docs_only(
-    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001, W291
+    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
     mock_store_image: MagicMock,
     sharepoint_credentials: dict[str, str],
 ) -> None:
@@ -175,7 +175,7 @@ def test_sharepoint_connector_all_sites__docs_only(
 
 
 def test_sharepoint_connector_all_sites__pages_only(
-    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001, W291
+    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
     mock_store_image: MagicMock,
     sharepoint_credentials: dict[str, str],
 ) -> None:
@@ -202,7 +202,7 @@ def test_sharepoint_connector_all_sites__pages_only(
 
 
 def test_sharepoint_connector_specific_folder(
-    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001, W291
+    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
     mock_store_image: MagicMock,
     sharepoint_credentials: dict[str, str],
 ) -> None:
@@ -244,7 +244,7 @@ def test_sharepoint_connector_specific_folder(
 
 
 def test_sharepoint_connector_root_folder__docs_only(
-    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001, W291
+    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
     mock_store_image: MagicMock,
     sharepoint_credentials: dict[str, str],
 ) -> None:
@@ -280,7 +280,7 @@ def test_sharepoint_connector_root_folder__docs_only(
 
 
 def test_sharepoint_connector_other_library(
-    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001, W291
+    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
     mock_store_image: MagicMock,
     sharepoint_credentials: dict[str, str],
 ) -> None:
@@ -322,7 +322,7 @@ def test_sharepoint_connector_other_library(
 
 
 def test_sharepoint_connector_poll(
-    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001, W291
+    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
     mock_store_image: MagicMock,
     sharepoint_credentials: dict[str, str],
 ) -> None:
@@ -364,7 +364,7 @@ def test_sharepoint_connector_poll(
 
 
 def test_sharepoint_connector_pages(
-    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001, W291
+    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
     mock_store_image: MagicMock,
     sharepoint_credentials: dict[str, str],
 ) -> None:
@@ -465,7 +465,7 @@ def verify_hierarchy_nodes(
 
 
 def test_sharepoint_connector_hierarchy_nodes(
-    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001, W291
+    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
     mock_store_image: MagicMock,
     sharepoint_credentials: dict[str, str],
 ) -> None:

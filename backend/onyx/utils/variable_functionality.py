@@ -185,7 +185,7 @@ def fetch_ee_implementation_or_noop(
 
         else:
 
-            def sync_noop(*args: Any, **kwargs: Any) -> Any:  # noqa: ARG001, W291
+            def sync_noop(*args: Any, **kwargs: Any) -> Any:  # noqa: ARG001
                 return noop_return_value
 
             return sync_noop

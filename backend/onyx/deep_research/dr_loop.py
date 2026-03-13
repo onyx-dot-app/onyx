@@ -190,7 +190,7 @@ def run_deep_research_llm_loop(
     state_container: ChatStateContainer,
     simple_chat_history: list[ChatMessageSimple],
     tools: list[Tool],
-    custom_agent_prompt: str | None,  # noqa: ARG001, W291
+    custom_agent_prompt: str | None,  # noqa: ARG001
     llm: LLM,
     token_counter: Callable[[str], int],
     db_session: Session,

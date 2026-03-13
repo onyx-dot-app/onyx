@@ -459,8 +459,8 @@ def get_all_hierarchy_nodes_for_source(
 def _get_accessible_hierarchy_nodes_for_source(
     db_session: Session,
     source: DocumentSource,
-    user_email: str,  # noqa: ARG001, W291
-    external_group_ids: list[str],  # noqa: ARG001, W291
+    user_email: str,  # noqa: ARG001
+    external_group_ids: list[str],  # noqa: ARG001
 ) -> list[HierarchyNode]:
     """
     MIT version: Returns all hierarchy nodes for the source without permission filtering.

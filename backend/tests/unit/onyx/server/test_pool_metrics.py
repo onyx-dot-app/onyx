@@ -90,7 +90,7 @@ def test_checkout_event_stores_endpoint_and_increments_gauge() -> None:
     # Capture event listeners
     with patch("onyx.server.metrics.postgres_connection_pool.event") as mock_event:
 
-        def capture_listener(target: Any, event_name: str) -> Any:  # noqa: ARG001, W291
+        def capture_listener(target: Any, event_name: str) -> Any:  # noqa: ARG001
             def decorator(fn: Any) -> Any:
                 listeners[event_name] = fn
                 return fn
@@ -137,7 +137,7 @@ def test_checkin_event_observes_hold_duration() -> None:
 
     with patch("onyx.server.metrics.postgres_connection_pool.event") as mock_event:
 
-        def capture_listener(target: Any, event_name: str) -> Any:  # noqa: ARG001, W291
+        def capture_listener(target: Any, event_name: str) -> Any:  # noqa: ARG001
             def decorator(fn: Any) -> Any:
                 listeners[event_name] = fn
                 return fn
@@ -192,7 +192,7 @@ def test_checkin_with_missing_endpoint_uses_unknown() -> None:
 
     with patch("onyx.server.metrics.postgres_connection_pool.event") as mock_event:
 
-        def capture_listener(target: Any, event_name: str) -> Any:  # noqa: ARG001, W291
+        def capture_listener(target: Any, event_name: str) -> Any:  # noqa: ARG001
             def decorator(fn: Any) -> Any:
                 listeners[event_name] = fn
                 return fn
@@ -251,7 +251,7 @@ def test_build_route_map_extracts_api_routes() -> None:
         return {}
 
     @app.get("/api/items/{item_id}")
-    def get_item(item_id: str) -> dict:  # noqa: ARG001, W291
+    def get_item(item_id: str) -> dict:  # noqa: ARG001
         return {}
 
     route_map = _build_route_map(app)
@@ -266,7 +266,7 @@ def test_match_route_resolves_parameterized_paths() -> None:
     app = FastAPI()
 
     @app.get("/api/items/{item_id}")
-    def get_item(item_id: str) -> dict:  # noqa: ARG001, W291
+    def get_item(item_id: str) -> dict:  # noqa: ARG001
         return {}
 
     route_map = _build_route_map(app)

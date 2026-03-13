@@ -136,7 +136,7 @@ class TestLLMConfigurationEndpoint:
         """
         error_message = "Invalid API key: Authentication failed"
 
-        def mock_test_llm_failure(llm: LLM) -> str | None:  # noqa: ARG001, W291
+        def mock_test_llm_failure(llm: LLM) -> str | None:  # noqa: ARG001
             """Mock test_llm that always fails."""
             return error_message
 
@@ -555,7 +555,7 @@ class TestDefaultProviderEndpoint:
         provider_name = f"test-provider-{uuid4().hex[:8]}"
         error_message = "Connection to LLM provider failed"
 
-        def mock_test_llm_failure(llm: LLM) -> str | None:  # noqa: ARG001, W291
+        def mock_test_llm_failure(llm: LLM) -> str | None:  # noqa: ARG001
             """Mock test_llm that always fails."""
             return error_message
 

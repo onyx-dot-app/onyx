@@ -45,9 +45,9 @@ logger = setup_logger()
 
 @router.post("/set-new-search-settings", dependencies=[Depends(require_vector_db)])
 def set_new_search_settings(
-    search_settings_new: SearchSettingsCreationRequest,  # noqa: W291
+    search_settings_new: SearchSettingsCreationRequest,
     _: User = Depends(current_admin_user),
-    db_session: Session = Depends(get_session),  # noqa: W291
+    db_session: Session = Depends(get_session),
 ) -> IdReturn:
     """
     Creates a new SearchSettings row and cancels the previous secondary indexing

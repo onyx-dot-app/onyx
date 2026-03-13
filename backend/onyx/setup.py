@@ -62,8 +62,8 @@ logger = setup_logger()
 
 def setup_onyx(
     db_session: Session,
-    tenant_id: str,  # noqa: ARG001, W291
-    cohere_enabled: bool = False,  # noqa: ARG001, W291
+    tenant_id: str,  # noqa: ARG001
+    cohere_enabled: bool = False,  # noqa: ARG001
 ) -> None:
     """
     Setup Onyx for a particular tenant. In the Single Tenant case, it will set it up for the default schema

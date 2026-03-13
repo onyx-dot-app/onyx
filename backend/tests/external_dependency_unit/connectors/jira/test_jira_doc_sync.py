@@ -96,7 +96,7 @@ def test_jira_doc_sync(
 
         # Mock functions - we don't have existing docs in the test DB
         def fetch_all_existing_docs_fn(
-            sort_order: SortOrder | None = None,  # noqa: ARG001, W291
+            sort_order: SortOrder | None = None,  # noqa: ARG001
         ) -> list[DocumentRow]:
             return []
 
@@ -191,7 +191,7 @@ def test_jira_doc_sync_with_specific_permissions(
 
         # Mock functions
         def fetch_all_existing_docs_fn(
-            sort_order: SortOrder | None = None,  # noqa: ARG001, W291
+            sort_order: SortOrder | None = None,  # noqa: ARG001
         ) -> list[DocumentRow]:
             return []
 

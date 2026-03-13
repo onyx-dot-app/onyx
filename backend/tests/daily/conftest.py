@@ -30,7 +30,7 @@ load_dotenv()
 @asynccontextmanager
 async def test_lifespan(
     app: FastAPI,  # noqa: ARG001
-) -> AsyncGenerator[None, None]:  # noqa: ARG001, W291
+) -> AsyncGenerator[None, None]:  # noqa: ARG001
     """No-op lifespan for tests that don't need database or other services."""
     yield
 

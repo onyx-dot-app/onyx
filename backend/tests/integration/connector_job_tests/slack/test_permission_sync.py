@@ -35,8 +35,8 @@ from tests.integration.connector_job_tests.slack.slack_api_utils import SlackMan
     reason="Permission tests are enterprise only",
 )
 def test_slack_permission_sync(
-    reset: None,  # noqa: ARG001, W291
-    vespa_client: vespa_fixture,  # noqa: ARG001, W291
+    reset: None,  # noqa: ARG001
+    vespa_client: vespa_fixture,  # noqa: ARG001
     slack_perm_sync_test_setup: tuple[ChannelType, ChannelType],
 ) -> None:
     public_channel, private_channel = slack_perm_sync_test_setup
@@ -205,8 +205,8 @@ def test_slack_permission_sync(
     reason="Permission tests are enterprise only",
 )
 def test_slack_group_permission_sync(
-    reset: None,  # noqa: ARG001, W291
-    vespa_client: vespa_fixture,  # noqa: ARG001, W291
+    reset: None,  # noqa: ARG001
+    vespa_client: vespa_fixture,  # noqa: ARG001
     slack_perm_sync_test_setup: tuple[ChannelType, ChannelType],
 ) -> None:
     """

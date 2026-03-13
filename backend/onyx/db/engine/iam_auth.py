@@ -38,10 +38,10 @@ def configure_psycopg2_iam_auth(
 
 
 def provide_iam_token(
-    dialect: Any,  # noqa: ARG001, W291
-    conn_rec: Any,  # noqa: ARG001, W291
-    cargs: Any,  # noqa: ARG001, W291
-    cparams: Any,  # noqa: W291
+    dialect: Any,  # noqa: ARG001
+    conn_rec: Any,  # noqa: ARG001
+    cargs: Any,  # noqa: ARG001
+    cparams: Any,
 ) -> None:
     if USE_IAM_AUTH:
         host = POSTGRES_HOST

@@ -128,7 +128,7 @@ def wait_for_model_sync(
 
 
 def test_auto_mode_provider_gets_synced_from_github_config(
-    reset: None,  # noqa: ARG001, W291
+    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     """
@@ -217,7 +217,7 @@ def test_auto_mode_provider_gets_synced_from_github_config(
 
 
 def test_manual_mode_provider_not_affected_by_auto_sync(
-    reset: None,  # noqa: ARG001, W291
+    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     """

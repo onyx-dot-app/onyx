@@ -193,7 +193,7 @@ def compare_documents(
 
 
 def test_airtable_connector_basic(
-    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001, W291
+    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
     airtable_config: AirtableConfig,
 ) -> None:
     """Test behavior when all non-attachment fields are treated as metadata."""
@@ -260,7 +260,7 @@ def test_airtable_connector_basic(
 
 
 def test_airtable_connector_url(
-    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001, W291
+    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
     airtable_config: AirtableConfig,
 ) -> None:
     """Test that passing an Airtable URL produces the same results as base_id + table_id."""
@@ -326,7 +326,7 @@ def test_airtable_connector_url(
 
 
 def test_airtable_connector_index_all(
-    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001, W291
+    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
     airtable_config: AirtableConfig,
 ) -> None:
     """Test index_all mode discovers all bases/tables and returns documents.
@@ -399,7 +399,7 @@ def test_airtable_connector_index_all(
 
 
 def test_airtable_connector_all_metadata(
-    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001, W291
+    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
     airtable_config: AirtableConfig,
 ) -> None:
     connector = AirtableConnector(
@@ -454,7 +454,7 @@ def test_airtable_connector_all_metadata(
 
 
 def test_airtable_connector_with_share_and_view(
-    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001, W291
+    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
     airtable_config: AirtableConfig,
 ) -> None:
     """Test behavior when using share_id and view_id for URL generation."""

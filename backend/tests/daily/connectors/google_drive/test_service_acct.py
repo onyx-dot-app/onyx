@@ -111,7 +111,7 @@ from tests.daily.connectors.google_drive.consts_and_utils import (
     return_value=None,
 )
 def test_include_all(
-    mock_get_api_key: MagicMock,  # noqa: ARG001, W291
+    mock_get_api_key: MagicMock,  # noqa: ARG001
     google_drive_service_acct_connector_factory: Callable[..., GoogleDriveConnector],
 ) -> None:
     print("\n\nRunning test_include_all")
@@ -186,7 +186,7 @@ def test_include_all(
     return_value=None,
 )
 def test_include_shared_drives_only_with_size_threshold(
-    mock_get_api_key: MagicMock,  # noqa: ARG001, W291
+    mock_get_api_key: MagicMock,  # noqa: ARG001
     google_drive_service_acct_connector_factory: Callable[..., GoogleDriveConnector],
 ) -> None:
     print("\n\nRunning test_include_shared_drives_only_with_size_threshold")
@@ -243,7 +243,7 @@ def test_include_shared_drives_only_with_size_threshold(
     return_value=None,
 )
 def test_include_shared_drives_only(
-    mock_get_api_key: MagicMock,  # noqa: ARG001, W291
+    mock_get_api_key: MagicMock,  # noqa: ARG001
     google_drive_service_acct_connector_factory: Callable[..., GoogleDriveConnector],
 ) -> None:
     print("\n\nRunning test_include_shared_drives_only")
@@ -311,7 +311,7 @@ def test_include_shared_drives_only(
     return_value=None,
 )
 def test_include_my_drives_only(
-    mock_get_api_key: MagicMock,  # noqa: ARG001, W291
+    mock_get_api_key: MagicMock,  # noqa: ARG001
     google_drive_service_acct_connector_factory: Callable[..., GoogleDriveConnector],
 ) -> None:
     print("\n\nRunning test_include_my_drives_only")
@@ -361,7 +361,7 @@ def test_include_my_drives_only(
     return_value=None,
 )
 def test_drive_one_only(
-    mock_get_api_key: MagicMock,  # noqa: ARG001, W291
+    mock_get_api_key: MagicMock,  # noqa: ARG001
     google_drive_service_acct_connector_factory: Callable[..., GoogleDriveConnector],
 ) -> None:
     print("\n\nRunning test_drive_one_only")
@@ -406,7 +406,7 @@ def test_drive_one_only(
     return_value=None,
 )
 def test_folder_and_shared_drive(
-    mock_get_api_key: MagicMock,  # noqa: ARG001, W291
+    mock_get_api_key: MagicMock,  # noqa: ARG001
     google_drive_service_acct_connector_factory: Callable[..., GoogleDriveConnector],
 ) -> None:
     print("\n\nRunning test_folder_and_shared_drive")
@@ -456,7 +456,7 @@ def test_folder_and_shared_drive(
     return_value=None,
 )
 def test_folders_only(
-    mock_get_api_key: MagicMock,  # noqa: ARG001, W291
+    mock_get_api_key: MagicMock,  # noqa: ARG001
     google_drive_service_acct_connector_factory: Callable[..., GoogleDriveConnector],
 ) -> None:
     print("\n\nRunning test_folders_only")
@@ -569,7 +569,7 @@ def test_shared_with_me(
     return_value=None,
 )
 def test_specific_emails(
-    mock_get_api_key: MagicMock,  # noqa: ARG001, W291
+    mock_get_api_key: MagicMock,  # noqa: ARG001
     google_drive_service_acct_connector_factory: Callable[..., GoogleDriveConnector],
 ) -> None:
     print("\n\nRunning test_specific_emails")
@@ -600,7 +600,7 @@ def test_specific_emails(
     return_value=None,
 )
 def get_specific_folders_in_my_drive(
-    mock_get_api_key: MagicMock,  # noqa: ARG001, W291
+    mock_get_api_key: MagicMock,  # noqa: ARG001
     google_drive_service_acct_connector_factory: Callable[..., GoogleDriveConnector],
 ) -> None:
     print("\n\nRunning get_specific_folders_in_my_drive")
@@ -630,7 +630,7 @@ def get_specific_folders_in_my_drive(
     return_value=None,
 )
 def test_specific_user_emails_restricted_folder(
-    mock_get_api_key: MagicMock,  # noqa: ARG001, W291
+    mock_get_api_key: MagicMock,  # noqa: ARG001
     google_drive_service_acct_connector_factory: Callable[..., GoogleDriveConnector],
 ) -> None:
     print("\n\nRunning test_specific_user_emails_restricted_folder")
@@ -670,7 +670,7 @@ def test_specific_user_emails_restricted_folder(
     return_value=None,
 )
 def test_specific_user_email_shared_with_me(
-    mock_get_api_key: MagicMock,  # noqa: ARG001, W291
+    mock_get_api_key: MagicMock,  # noqa: ARG001
     google_drive_service_acct_connector_factory: Callable[..., GoogleDriveConnector],
 ) -> None:
     print("\n\nRunning test_specific_user_email_shared_with_me")

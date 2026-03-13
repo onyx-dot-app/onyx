@@ -5,8 +5,8 @@ from onyx.utils.variable_functionality import fetch_versioned_implementation
 
 
 def _get_user_external_group_ids(
-    db_session: Session,  # noqa: ARG001, W291
-    user: User,  # noqa: ARG001, W291
+    db_session: Session,  # noqa: ARG001
+    user: User,  # noqa: ARG001
 ) -> list[str]:
     return []
 
