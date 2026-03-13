@@ -66,31 +66,23 @@ function OllamaModalInternals({
   onClose,
   isOnboarding,
 }: OllamaModalInternalsProps) {
-  const [isLoadingModels, setIsLoadingModels] = useState(false);
   const isInitialMount = useRef(true);
 
   const doFetchModels = useCallback(
     (apiBase: string, signal: AbortSignal) => {
-      setIsLoadingModels(true);
       fetchOllamaModels({
         api_base: apiBase,
         provider_name: existingLlmProvider?.name,
         signal,
-      })
-        .then((data) => {
-          if (signal.aborted) return;
-          if (data.error) {
-            console.error("Error fetching models:", data.error);
-            setFetchedModels([]);
-            return;
-          }
-          setFetchedModels(data.models);
-        })
-        .finally(() => {
-          if (!signal.aborted) {
-            setIsLoadingModels(false);
-          }
-        });
+      }).then((data) => {
+        if (signal.aborted) return;
+        if (data.error) {
+          console.error("Error fetching models:", data.error);
+          setFetchedModels([]);
+          return;
+        }
+        setFetchedModels(data.models);
+      });
     },
     [existingLlmProvider?.name, setFetchedModels]
   );
@@ -117,7 +109,6 @@ function OllamaModalInternals({
         controller.abort();
       };
     } else {
-      setIsLoadingModels(false);
       setFetchedModels([]);
     }
   }, [

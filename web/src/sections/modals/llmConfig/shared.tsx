@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode, useState, useEffect } from "react";
+import { ReactNode } from "react";
 import { Form, FormikProps } from "formik";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { useAgents } from "@/hooks/useAgents";
@@ -13,7 +13,6 @@ import InputComboBox from "@/refresh-components/inputs/InputComboBox";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import Switch from "@/refresh-components/inputs/Switch";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import Text from "@/refresh-components/texts/Text";
 import { Button, LineItemButton, Tag } from "@opal/components";
 import { BaseLLMFormValues } from "@/sections/modals/llmConfig/formUtils";
@@ -351,79 +350,6 @@ export function ModelsAccessField<T extends BaseLLMFormValues>({
             )}
           </Section>
         </Card>
-      )}
-    </div>
-  );
-}
-
-// ─── FetchModelsButton ───────────────────────────────────────────────────────
-
-interface FetchModelsButtonProps {
-  onFetch: () => Promise<{ models: ModelConfiguration[]; error?: string }>;
-  isDisabled?: boolean;
-  disabledHint?: string;
-  onModelsFetched: (models: ModelConfiguration[]) => void;
-  onLoadingChange?: (isLoading: boolean) => void;
-  autoFetchOnInitialLoad?: boolean;
-}
-
-export function FetchModelsButton({
-  onFetch,
-  isDisabled = false,
-  disabledHint,
-  onModelsFetched,
-  onLoadingChange,
-  autoFetchOnInitialLoad = false,
-}: FetchModelsButtonProps) {
-  const [isFetchingModels, setIsFetchingModels] = useState(false);
-  const [fetchModelsError, setFetchModelsError] = useState("");
-
-  const handleFetchModels = async () => {
-    setIsFetchingModels(true);
-    onLoadingChange?.(true);
-    setFetchModelsError("");
-
-    try {
-      const { models, error } = await onFetch();
-
-      if (error) {
-        setFetchModelsError(error);
-      } else {
-        onModelsFetched(models);
-      }
-    } catch (err) {
-      const errorMessage =
-        err instanceof Error ? err.message : "Unknown error occurred";
-      setFetchModelsError(errorMessage);
-    } finally {
-      setIsFetchingModels(false);
-      onLoadingChange?.(false);
-    }
-  };
-
-  // Auto-fetch models on initial load if enabled and not disabled
-  useEffect(() => {
-    if (autoFetchOnInitialLoad && !isDisabled) {
-      handleFetchModels();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  return (
-    <div className="flex flex-col gap-y-1">
-      <SimpleTooltip tooltip={isDisabled ? disabledHint : undefined} side="top">
-        <div className="w-fit">
-          <Disabled disabled={isFetchingModels || isDisabled}>
-            <Button type="button" onClick={handleFetchModels}>
-              Fetch Available Models
-            </Button>
-          </Disabled>
-        </div>
-      </SimpleTooltip>
-      {fetchModelsError && (
-        <Text as="p" className="text-xs text-status-error-05 mt-1">
-          {fetchModelsError}
-        </Text>
       )}
     </div>
   );
