@@ -4,6 +4,8 @@ import { useMemo, useState } from "react";
 import DataTable from "@/refresh-components/table/DataTable";
 import { createTableColumns } from "@/refresh-components/table/columns";
 import { Content } from "@opal/layouts";
+import { Button } from "@opal/components";
+import { SvgDownload } from "@opal/icons";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { IllustrationContent } from "@opal/layouts";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
@@ -14,11 +16,11 @@ import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import useAdminUsers from "@/hooks/useAdminUsers";
 import useGroups from "@/hooks/useGroups";
 import UserFilters from "./UserFilters";
+import GroupsCell from "./GroupsCell";
 import UserRowActions from "./UserRowActions";
 import UserRoleCell from "./UserRoleCell";
 import type {
   UserRow,
-  UserGroupInfo,
   GroupOption,
   StatusFilter,
   StatusCountMap,
@@ -37,37 +39,6 @@ function renderNameColumn(email: string, row: UserRow) {
       title={row.personal_name ?? email}
       description={row.personal_name ? email : undefined}
     />
-  );
-}
-
-function renderGroupsColumn(groups: UserGroupInfo[]) {
-  if (!groups.length) {
-    return (
-      <Text as="span" secondaryBody text03>
-        {"\u2014"}
-      </Text>
-    );
-  }
-  const visible = groups.slice(0, 2);
-  const overflow = groups.length - visible.length;
-  return (
-    <div className="flex items-center gap-1 flex-nowrap overflow-hidden min-w-0">
-      {visible.map((g) => (
-        <span
-          key={g.id}
-          className="inline-flex items-center flex-shrink-0 rounded-md bg-background-tint-02 px-2 py-0.5 whitespace-nowrap"
-        >
-          <Text as="span" secondaryBody text03>
-            {g.name}
-          </Text>
-        </span>
-      ))}
-      {overflow > 0 && (
-        <Text as="span" secondaryBody text03>
-          +{overflow}
-        </Text>
-      )}
-    </div>
   );
 }
 
@@ -118,7 +89,9 @@ function buildColumns(onMutate: () => void) {
       weight: 24,
       minWidth: 200,
       enableSorting: false,
-      cell: renderGroupsColumn,
+      cell: (value, row) => (
+        <GroupsCell groups={value} user={row} onMutate={onMutate} />
+      ),
     }),
     tc.column("role", {
       header: "Account Type",
@@ -254,7 +227,20 @@ export default function UsersTable({
           getRowId={(row) => row.id ?? row.email}
           pageSize={PAGE_SIZE}
           searchTerm={searchTerm}
-          footer={{ mode: "summary" }}
+          footer={{
+            mode: "summary",
+            leftExtra: (
+              <Button
+                icon={SvgDownload}
+                prominence="tertiary"
+                size="sm"
+                tooltip="Download CSV"
+                onClick={() => {
+                  window.open("/api/manage/users/download", "_blank");
+                }}
+              />
+            ),
+          }}
         />
       )}
     </div>
