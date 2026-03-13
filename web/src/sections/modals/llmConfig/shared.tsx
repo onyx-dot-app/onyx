@@ -36,6 +36,7 @@ import SvgOnyxLogo from "@opal/icons/onyx-logo";
 import { NameCard } from "@/refresh-components/cards";
 import { Card, EmptyMessageCard } from "@opal/components";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
+import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import useUsers from "@/hooks/useUsers";
 import { toast } from "@/hooks/useToast";
 import { UserRole } from "@/lib/types";
@@ -710,14 +711,8 @@ export function LLMConfigurationModalWrapper({
               Cancel
             </Button>
             <Disabled disabled={!isFormValid || isTesting}>
-              <Button type="submit">
-                {existingProviderName
-                  ? isTesting
-                    ? "Updating..."
-                    : "Update"
-                  : isTesting
-                    ? "Connecting..."
-                    : "Connect"}
+              <Button type="submit" icon={isTesting ? SimpleLoader : undefined}>
+                {existingProviderName ? "Update" : "Connect"}
               </Button>
             </Disabled>
           </Modal.Footer>
