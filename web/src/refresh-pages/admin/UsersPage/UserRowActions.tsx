@@ -208,7 +208,7 @@ export default function UserRowActions({
                   );
                 }}
               >
-                Cancel
+                Cancel Invite
               </Button>
             </Disabled>
           }
