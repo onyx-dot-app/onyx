@@ -1,11 +1,11 @@
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { CUSTOM_ANALYTICS_ENABLED } from "@/lib/constants";
 import { Callout } from "@/components/ui/callout";
-import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import Text from "@/components/ui/text";
 import { CustomAnalyticsUpdateForm } from "./CustomAnalyticsUpdateForm";
 
-const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.CUSTOM_ANALYTICS]!;
+const route = ADMIN_ROUTES.CUSTOM_ANALYTICS;
 
 function Main() {
   if (!CUSTOM_ANALYTICS_ENABLED) {

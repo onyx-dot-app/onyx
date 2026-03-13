@@ -16,8 +16,8 @@ import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import SidebarBody from "@/sections/sidebar/SidebarBody";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { Disabled } from "@opal/core";
-import { SvgAudio, SvgX } from "@opal/icons";
-import { ADMIN_PATHS, sidebarItem } from "@/lib/admin-routes";
+import { SvgX } from "@opal/icons";
+import { ADMIN_ROUTES, sidebarItem } from "@/lib/admin-routes";
 import UserAvatarPopover from "@/sections/sidebar/UserAvatarPopover";
 import useFilter from "@/hooks/useFilter";
 import { IconFunctionComponent } from "@opal/types";
@@ -50,31 +50,27 @@ function buildCollections(
   // 1. No header — core configuration + all remaining tabs
   {
     const items: SidebarItemEntry[] = [
-      sidebarItem(ADMIN_PATHS.LLM_MODELS),
-      sidebarItem(ADMIN_PATHS.WEB_SEARCH),
-      sidebarItem(ADMIN_PATHS.IMAGE_GENERATION),
-      {
-        name: "Voice",
-        icon: SvgAudio,
-        link: "/admin/configuration/voice",
-      },
-      sidebarItem(ADMIN_PATHS.CODE_INTERPRETER),
-      sidebarItem(ADMIN_PATHS.CHAT_PREFERENCES),
+      sidebarItem(ADMIN_ROUTES.LLM_MODELS),
+      sidebarItem(ADMIN_ROUTES.WEB_SEARCH),
+      sidebarItem(ADMIN_ROUTES.IMAGE_GENERATION),
+      sidebarItem(ADMIN_ROUTES.VOICE),
+      sidebarItem(ADMIN_ROUTES.CODE_INTERPRETER),
+      sidebarItem(ADMIN_ROUTES.CHAT_PREFERENCES),
     ];
 
     if (vectorDbEnabled && kgExposed) {
-      items.push(sidebarItem(ADMIN_PATHS.KNOWLEDGE_GRAPH));
+      items.push(sidebarItem(ADMIN_ROUTES.KNOWLEDGE_GRAPH));
     }
 
     if (!enableCloud && customAnalyticsEnabled) {
       items.push({
-        ...sidebarItem(ADMIN_PATHS.CUSTOM_ANALYTICS),
+        ...sidebarItem(ADMIN_ROUTES.CUSTOM_ANALYTICS),
         disabled: !enableEnterprise,
       });
     }
 
     if (settings?.settings.opensearch_indexing_enabled) {
-      items.push(sidebarItem(ADMIN_PATHS.INDEX_MIGRATION));
+      items.push(sidebarItem(ADMIN_ROUTES.INDEX_MIGRATION));
     }
 
     collections.push({ name: "", items });
@@ -84,22 +80,22 @@ function buildCollections(
   collections.push({
     name: "Agents & Actions",
     items: [
-      sidebarItem(ADMIN_PATHS.AGENTS),
-      sidebarItem(ADMIN_PATHS.MCP_ACTIONS),
-      sidebarItem(ADMIN_PATHS.OPENAPI_ACTIONS),
+      sidebarItem(ADMIN_ROUTES.AGENTS),
+      sidebarItem(ADMIN_ROUTES.MCP_ACTIONS),
+      sidebarItem(ADMIN_ROUTES.OPENAPI_ACTIONS),
     ],
   });
 
   // 3. Documents & Knowledge
   if (vectorDbEnabled) {
     const docsItems: SidebarItemEntry[] = [
-      sidebarItem(ADMIN_PATHS.INDEXING_STATUS),
-      sidebarItem(ADMIN_PATHS.ADD_CONNECTOR),
-      sidebarItem(ADMIN_PATHS.DOCUMENT_SETS),
+      sidebarItem(ADMIN_ROUTES.INDEXING_STATUS),
+      sidebarItem(ADMIN_ROUTES.ADD_CONNECTOR),
+      sidebarItem(ADMIN_ROUTES.DOCUMENT_SETS),
     ];
     if (!enableCloud) {
       docsItems.push({
-        ...sidebarItem(ADMIN_PATHS.SEARCH_SETTINGS),
+        ...sidebarItem(ADMIN_ROUTES.SEARCH_SETTINGS),
         error: settings?.settings.needs_reindexing,
       });
     }
@@ -111,18 +107,9 @@ function buildCollections(
     collections.push({
       name: "Integrations",
       items: [
-        {
-          ...sidebarItem(ADMIN_PATHS.API_KEYS),
-          name: "Service Accounts",
-        },
-        {
-          ...sidebarItem(ADMIN_PATHS.SLACK_BOTS),
-          name: "Slack Integration",
-        },
-        {
-          ...sidebarItem(ADMIN_PATHS.DISCORD_BOTS),
-          name: "Discord Integration",
-        },
+        sidebarItem(ADMIN_ROUTES.API_KEYS),
+        sidebarItem(ADMIN_ROUTES.SLACK_BOTS),
+        sidebarItem(ADMIN_ROUTES.DISCORD_BOTS),
       ],
     });
   }
@@ -132,13 +119,13 @@ function buildCollections(
     collections.push({
       name: "Permissions",
       items: [
-        sidebarItem(ADMIN_PATHS.USERS),
+        sidebarItem(ADMIN_ROUTES.USERS),
         {
-          ...sidebarItem(ADMIN_PATHS.GROUPS),
+          ...sidebarItem(ADMIN_ROUTES.GROUPS),
           disabled: !enableEnterprise,
         },
         {
-          ...sidebarItem(ADMIN_PATHS.SCIM),
+          ...sidebarItem(ADMIN_ROUTES.SCIM),
           disabled: !enableEnterprise,
         },
       ],
@@ -146,7 +133,7 @@ function buildCollections(
   } else if (enableEnterprise) {
     collections.push({
       name: "Permissions",
-      items: [sidebarItem(ADMIN_PATHS.GROUPS)],
+      items: [sidebarItem(ADMIN_ROUTES.GROUPS)],
     });
   }
 
@@ -155,9 +142,9 @@ function buildCollections(
     collections.push({
       name: "Organization",
       items: [
-        sidebarItem(ADMIN_PATHS.BILLING),
+        sidebarItem(ADMIN_ROUTES.BILLING),
         {
-          ...sidebarItem(ADMIN_PATHS.THEME),
+          ...sidebarItem(ADMIN_ROUTES.THEME),
           disabled: !enableEnterprise,
         },
       ],
@@ -170,14 +157,14 @@ function buildCollections(
       name: "Usage",
       items: [
         {
-          ...sidebarItem(ADMIN_PATHS.USAGE),
+          ...sidebarItem(ADMIN_ROUTES.USAGE),
           disabled: !enableEnterprise,
         },
         {
-          ...sidebarItem(ADMIN_PATHS.QUERY_HISTORY),
+          ...sidebarItem(ADMIN_ROUTES.QUERY_HISTORY),
           disabled: !enableEnterprise,
         },
-        sidebarItem(ADMIN_PATHS.TOKEN_RATE_LIMITS),
+        sidebarItem(ADMIN_ROUTES.TOKEN_RATE_LIMITS),
       ],
     });
   }

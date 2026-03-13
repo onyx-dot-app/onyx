@@ -9,10 +9,10 @@ import { useTimeRange } from "@/app/ee/admin/performance/lib";
 import UsageReports from "@/app/ee/admin/performance/usage/UsageReports";
 import Separator from "@/refresh-components/Separator";
 import { useAdminPersonas } from "@/hooks/useAdminPersonas";
-import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 
-const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.USAGE]!;
+const route = ADMIN_ROUTES.USAGE;
 
 export default function AnalyticsPage() {
   const [timeRange, setTimeRange] = useTimeRange();

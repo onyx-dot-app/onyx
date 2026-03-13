@@ -3,6 +3,7 @@ import {
   SvgActions,
   SvgActivity,
   SvgArrowExchange,
+  SvgAudio,
   SvgBarChart,
   SvgBookOpen,
   SvgBubbleText,
@@ -10,6 +11,7 @@ import {
   SvgCpu,
   SvgDiscordMono,
   SvgDownload,
+  SvgEmpty,
   SvgFileText,
   SvgFolder,
   SvgGlobe,
@@ -19,7 +21,6 @@ import {
   SvgNetworkGraph,
   SvgOnyxOctagon,
   SvgPaintBrush,
-  SvgSearch,
   SvgSearchMenu,
   SvgServer,
   SvgShield,
@@ -34,220 +35,230 @@ import {
   SvgZoomIn,
 } from "@opal/icons";
 
-/**
- * Canonical path constants for every admin route.
- */
-export const ADMIN_PATHS = {
-  INDEXING_STATUS: "/admin/indexing/status",
-  ADD_CONNECTOR: "/admin/add-connector",
-  DOCUMENT_SETS: "/admin/documents/sets",
-  DOCUMENT_EXPLORER: "/admin/documents/explorer",
-  DOCUMENT_FEEDBACK: "/admin/documents/feedback",
-  AGENTS: "/admin/agents",
-  SLACK_BOTS: "/admin/bots",
-  DISCORD_BOTS: "/admin/discord-bot",
-  MCP_ACTIONS: "/admin/actions/mcp",
-  OPENAPI_ACTIONS: "/admin/actions/open-api",
-  STANDARD_ANSWERS: "/admin/standard-answer",
-  GROUPS: "/admin/groups",
-  CHAT_PREFERENCES: "/admin/configuration/chat-preferences",
-  LLM_MODELS: "/admin/configuration/llm",
-  WEB_SEARCH: "/admin/configuration/web-search",
-  IMAGE_GENERATION: "/admin/configuration/image-generation",
-  CODE_INTERPRETER: "/admin/configuration/code-interpreter",
-  SEARCH_SETTINGS: "/admin/configuration/search",
-  DOCUMENT_PROCESSING: "/admin/configuration/document-processing",
-  KNOWLEDGE_GRAPH: "/admin/kg",
-  USERS: "/admin/users",
-  API_KEYS: "/admin/api-key",
-  TOKEN_RATE_LIMITS: "/admin/token-rate-limits",
-  USAGE: "/admin/performance/usage",
-  QUERY_HISTORY: "/admin/performance/query-history",
-  CUSTOM_ANALYTICS: "/admin/performance/custom-analytics",
-  THEME: "/admin/theme",
-  BILLING: "/admin/billing",
-  INDEX_MIGRATION: "/admin/document-index-migration",
-  SCIM: "/admin/scim",
-  DEBUG: "/admin/debug",
-  // Prefix-only entries (used in SETTINGS_LAYOUT_PREFIXES but have no
-  // single page header of their own)
-  DOCUMENTS: "/admin/documents",
-  PERFORMANCE: "/admin/performance",
-} as const;
-
-interface AdminRouteConfig {
+export interface AdminRouteEntry {
+  path: string;
   icon: IconFunctionComponent;
   title: string;
   sidebarLabel: string;
 }
 
 /**
- * Single source of truth for icon, page-header title, and sidebar label
- * for every admin route. Keyed by path from `ADMIN_PATHS`.
+ * Single source of truth for every admin route: path, icon, page-header
+ * title, and sidebar label.
  */
-export const ADMIN_ROUTE_CONFIG: Record<string, AdminRouteConfig> = {
-  [ADMIN_PATHS.INDEXING_STATUS]: {
+export const ADMIN_ROUTES = {
+  INDEXING_STATUS: {
+    path: "/admin/indexing/status",
     icon: SvgBookOpen,
     title: "Existing Connectors",
     sidebarLabel: "Existing Connectors",
   },
-  [ADMIN_PATHS.ADD_CONNECTOR]: {
+  ADD_CONNECTOR: {
+    path: "/admin/add-connector",
     icon: SvgUploadCloud,
     title: "Add Connector",
     sidebarLabel: "Add Connector",
   },
-  [ADMIN_PATHS.DOCUMENT_SETS]: {
+  DOCUMENT_SETS: {
+    path: "/admin/documents/sets",
     icon: SvgFolder,
     title: "Document Sets",
     sidebarLabel: "Document Sets",
   },
-  [ADMIN_PATHS.DOCUMENT_EXPLORER]: {
+  DOCUMENT_EXPLORER: {
+    path: "/admin/documents/explorer",
     icon: SvgZoomIn,
     title: "Document Explorer",
     sidebarLabel: "Explorer",
   },
-  [ADMIN_PATHS.DOCUMENT_FEEDBACK]: {
+  DOCUMENT_FEEDBACK: {
+    path: "/admin/documents/feedback",
     icon: SvgThumbsUp,
     title: "Document Feedback",
     sidebarLabel: "Feedback",
   },
-  [ADMIN_PATHS.AGENTS]: {
+  AGENTS: {
+    path: "/admin/agents",
     icon: SvgOnyxOctagon,
     title: "Agents",
     sidebarLabel: "Agents",
   },
-  [ADMIN_PATHS.SLACK_BOTS]: {
+  SLACK_BOTS: {
+    path: "/admin/bots",
     icon: SvgSlack,
-    title: "Slack Bots",
-    sidebarLabel: "Slack Bots",
+    title: "Slack Integration",
+    sidebarLabel: "Slack Integration",
   },
-  [ADMIN_PATHS.DISCORD_BOTS]: {
+  DISCORD_BOTS: {
+    path: "/admin/discord-bot",
     icon: SvgDiscordMono,
-    title: "Discord Bots",
-    sidebarLabel: "Discord Bots",
+    title: "Discord Integration",
+    sidebarLabel: "Discord Integration",
   },
-  [ADMIN_PATHS.MCP_ACTIONS]: {
+  MCP_ACTIONS: {
+    path: "/admin/actions/mcp",
     icon: SvgMcp,
     title: "MCP Actions",
     sidebarLabel: "MCP Actions",
   },
-  [ADMIN_PATHS.OPENAPI_ACTIONS]: {
+  OPENAPI_ACTIONS: {
+    path: "/admin/actions/open-api",
     icon: SvgActions,
     title: "OpenAPI Actions",
     sidebarLabel: "OpenAPI Actions",
   },
-  [ADMIN_PATHS.STANDARD_ANSWERS]: {
+  STANDARD_ANSWERS: {
+    path: "/admin/standard-answer",
     icon: SvgClipboard,
     title: "Standard Answers",
     sidebarLabel: "Standard Answers",
   },
-  [ADMIN_PATHS.GROUPS]: {
+  GROUPS: {
+    path: "/admin/groups",
     icon: SvgUsers,
     title: "Manage User Groups",
     sidebarLabel: "Groups",
   },
-  [ADMIN_PATHS.CHAT_PREFERENCES]: {
+  CHAT_PREFERENCES: {
+    path: "/admin/configuration/chat-preferences",
     icon: SvgBubbleText,
     title: "Chat Preferences",
     sidebarLabel: "Chat Preferences",
   },
-  [ADMIN_PATHS.LLM_MODELS]: {
+  LLM_MODELS: {
+    path: "/admin/configuration/llm",
     icon: SvgCpu,
     title: "Language Models",
     sidebarLabel: "Language Models",
   },
-  [ADMIN_PATHS.WEB_SEARCH]: {
+  WEB_SEARCH: {
+    path: "/admin/configuration/web-search",
     icon: SvgGlobe,
     title: "Web Search",
     sidebarLabel: "Web Search",
   },
-  [ADMIN_PATHS.IMAGE_GENERATION]: {
+  IMAGE_GENERATION: {
+    path: "/admin/configuration/image-generation",
     icon: SvgImage,
     title: "Image Generation",
     sidebarLabel: "Image Generation",
   },
-  [ADMIN_PATHS.CODE_INTERPRETER]: {
+  VOICE: {
+    path: "/admin/configuration/voice",
+    icon: SvgAudio,
+    title: "Voice",
+    sidebarLabel: "Voice",
+  },
+  CODE_INTERPRETER: {
+    path: "/admin/configuration/code-interpreter",
     icon: SvgTerminal,
     title: "Code Interpreter",
     sidebarLabel: "Code Interpreter",
   },
-  [ADMIN_PATHS.SEARCH_SETTINGS]: {
+  SEARCH_SETTINGS: {
+    path: "/admin/configuration/search",
     icon: SvgSearchMenu,
     title: "Search Settings",
     sidebarLabel: "Search Settings",
   },
-  [ADMIN_PATHS.DOCUMENT_PROCESSING]: {
+  DOCUMENT_PROCESSING: {
+    path: "/admin/configuration/document-processing",
     icon: SvgFileText,
     title: "Document Processing",
     sidebarLabel: "Document Processing",
   },
-  [ADMIN_PATHS.KNOWLEDGE_GRAPH]: {
+  KNOWLEDGE_GRAPH: {
+    path: "/admin/kg",
     icon: SvgNetworkGraph,
     title: "Knowledge Graph",
     sidebarLabel: "Knowledge Graph",
   },
-  [ADMIN_PATHS.USERS]: {
+  USERS: {
+    path: "/admin/users",
     icon: SvgUser,
     title: "Users & Requests",
     sidebarLabel: "Users",
   },
-  [ADMIN_PATHS.API_KEYS]: {
+  API_KEYS: {
+    path: "/admin/api-key",
     icon: SvgKey,
-    title: "API Keys",
-    sidebarLabel: "API Keys",
+    title: "Service Accounts",
+    sidebarLabel: "Service Accounts",
   },
-  [ADMIN_PATHS.TOKEN_RATE_LIMITS]: {
+  TOKEN_RATE_LIMITS: {
+    path: "/admin/token-rate-limits",
     icon: SvgShield,
     title: "Token Rate Limits",
     sidebarLabel: "Token Rate Limits",
   },
-  [ADMIN_PATHS.USAGE]: {
+  USAGE: {
+    path: "/admin/performance/usage",
     icon: SvgActivity,
     title: "Usage Statistics",
     sidebarLabel: "Usage Statistics",
   },
-  [ADMIN_PATHS.QUERY_HISTORY]: {
+  QUERY_HISTORY: {
+    path: "/admin/performance/query-history",
     icon: SvgServer,
     title: "Query History",
     sidebarLabel: "Query History",
   },
-  [ADMIN_PATHS.CUSTOM_ANALYTICS]: {
+  CUSTOM_ANALYTICS: {
+    path: "/admin/performance/custom-analytics",
     icon: SvgBarChart,
     title: "Custom Analytics",
     sidebarLabel: "Custom Analytics",
   },
-  [ADMIN_PATHS.THEME]: {
+  THEME: {
+    path: "/admin/theme",
     icon: SvgPaintBrush,
     title: "Appearance & Theming",
     sidebarLabel: "Appearance & Theming",
   },
-  [ADMIN_PATHS.BILLING]: {
+  BILLING: {
+    path: "/admin/billing",
     icon: SvgWallet,
     title: "Plans & Billing",
     sidebarLabel: "Plans & Billing",
   },
-  [ADMIN_PATHS.INDEX_MIGRATION]: {
+  INDEX_MIGRATION: {
+    path: "/admin/document-index-migration",
     icon: SvgArrowExchange,
     title: "Document Index Migration",
     sidebarLabel: "Document Index Migration",
   },
-  [ADMIN_PATHS.SCIM]: {
+  SCIM: {
+    path: "/admin/scim",
     icon: SvgUserSync,
     title: "SCIM",
     sidebarLabel: "SCIM",
   },
-  [ADMIN_PATHS.DEBUG]: {
+  DEBUG: {
+    path: "/admin/debug",
     icon: SvgDownload,
     title: "Debug Logs",
     sidebarLabel: "Debug Logs",
   },
-};
+  // Prefix-only entries used for layout matching — not rendered as sidebar
+  // items or page headers.
+  DOCUMENTS: {
+    path: "/admin/documents",
+    icon: SvgEmpty,
+    title: "",
+    sidebarLabel: "",
+  },
+  PERFORMANCE: {
+    path: "/admin/performance",
+    icon: SvgEmpty,
+    title: "",
+    sidebarLabel: "",
+  },
+} as const satisfies Record<string, AdminRouteEntry>;
 
 /**
- * Helper that converts a route config entry into the `{ name, icon, link }`
- * shape expected by the sidebar. Extra fields (e.g. `error`) can be spread in.
+ * Helper that converts a route entry into the `{ name, icon, link }`
+ * shape expected by the sidebar.
  */
-export function sidebarItem(path: string) {
-  const config = ADMIN_ROUTE_CONFIG[path]!;
-  return { name: config.sidebarLabel, icon: config.icon, link: path };
+export function sidebarItem(route: AdminRouteEntry) {
+  return { name: route.sidebarLabel, icon: route.icon, link: route.path };
 }

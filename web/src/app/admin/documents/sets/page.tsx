@@ -20,7 +20,7 @@ import { ConnectorTitle } from "@/components/admin/connectors/ConnectorTitle";
 import { deleteDocumentSet } from "./lib";
 import { toast } from "@/hooks/useToast";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
-import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import {
   FiAlertTriangle,
   FiCheckCircle,
@@ -422,7 +422,7 @@ function Main() {
 }
 
 export default function Page() {
-  const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.DOCUMENT_SETS]!;
+  const route = ADMIN_ROUTES.DOCUMENT_SETS;
 
   return (
     <SettingsLayouts.Root>

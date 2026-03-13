@@ -1,7 +1,7 @@
 "use client";
 
 import * as SettingsLayouts from "@/layouts/settings-layouts";
-import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { Explorer } from "./Explorer";
 import { Connector } from "@/lib/connectors/connectors";
 import { DocumentSetSummary } from "@/lib/types";
@@ -17,7 +17,7 @@ export default function DocumentExplorerPage({
   connectors,
   documentSets,
 }: DocumentExplorerPageProps) {
-  const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.DOCUMENT_EXPLORER]!;
+  const route = ADMIN_ROUTES.DOCUMENT_EXPLORER;
 
   return (
     <SettingsLayouts.Root>

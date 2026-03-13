@@ -2,10 +2,10 @@ import { StandardAnswerCreationForm } from "@/app/ee/admin/standard-answer/Stand
 import { fetchSS } from "@/lib/utilsSS";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
-import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { StandardAnswerCategory } from "@/lib/types";
 
-const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.STANDARD_ANSWERS]!;
+const route = ADMIN_ROUTES.STANDARD_ANSWERS;
 
 async function Page() {
   const standardAnswerCategoriesResponse = await fetchSS(

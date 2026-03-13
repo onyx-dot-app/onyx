@@ -11,7 +11,7 @@ import { useAdminPersonas } from "@/hooks/useAdminPersonas";
 import { Persona } from "./interfaces";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { useState, useEffect } from "react";
 import Pagination from "@/refresh-components/Pagination";
 
@@ -120,7 +120,7 @@ function MainContent({
 }
 
 export default function Page() {
-  const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.AGENTS]!;
+  const route = ADMIN_ROUTES.AGENTS;
   const [currentPage, setCurrentPage] = useState(1);
   const { personas, totalItems, isLoading, error, refresh } = useAdminPersonas({
     pageNum: currentPage - 1, // Backend uses 0-indexed pages

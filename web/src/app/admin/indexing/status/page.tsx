@@ -4,7 +4,7 @@ import { CCPairIndexingStatusTable } from "./CCPairIndexingStatusTable";
 import { SearchAndFilterControls } from "./SearchAndFilterControls";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import Link from "next/link";
-import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import Text from "@/components/ui/text";
 import { useConnectorIndexingStatusWithPagination } from "@/lib/hooks";
 import { useToastFromQuery } from "@/hooks/useToast";
@@ -204,7 +204,7 @@ function Main() {
 }
 
 export default function Status() {
-  const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.INDEXING_STATUS]!;
+  const route = ADMIN_ROUTES.INDEXING_STATUS;
 
   useToastFromQuery({
     "connector-created": {
