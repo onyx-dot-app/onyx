@@ -9,7 +9,6 @@ import {
   submitLLMProvider,
   submitOnboardingProvider,
   buildDefaultInitialValues,
-  buildDefaultValidationSchema,
   buildOnboardingInitialValues,
 } from "@/sections/modals/llmConfig/formUtils";
 import {
@@ -19,6 +18,8 @@ import {
   LLMConfigurationModalWrapper,
   FieldWrapper,
 } from "@/sections/modals/llmConfig/shared";
+import InputTypeInField from "@/refresh-components/form/InputTypeInField";
+import * as InputLayouts from "@/layouts/input-layouts";
 import KeyValueInput, {
   KeyValue,
 } from "@/refresh-components/inputs/InputKeyValue";
@@ -209,9 +210,6 @@ export default function CustomModal({
     ...buildDefaultInitialValues(existingLlmProvider),
     ...(isOnboarding ? buildOnboardingInitialValues() : {}),
     provider: existingLlmProvider?.provider ?? "",
-    api_key: existingLlmProvider?.api_key ?? "",
-    api_base: existingLlmProvider?.api_base ?? "",
-    api_version: existingLlmProvider?.api_version ?? "",
     model_configurations: existingLlmProvider?.model_configurations.map(
       (mc) => ({
         name: mc.name,
@@ -232,12 +230,10 @@ export default function CustomModal({
           ([key, value]) => ({ key, value: String(value) })
         )
       : [],
-    deployment_name: existingLlmProvider?.deployment_name ?? null,
   };
 
   const modelConfigurationSchema = Yup.object({
     name: Yup.string().required("Model name is required"),
-    is_visible: Yup.boolean().required("Visibility is required"),
     max_input_tokens: Yup.number()
       .transform((value, originalValue) =>
         originalValue === "" || originalValue === undefined ? null : value
@@ -250,16 +246,11 @@ export default function CustomModal({
     ? Yup.object().shape({
         provider: Yup.string().required("Provider Name is required"),
         model_configurations: Yup.array(modelConfigurationSchema),
-        default_model_name: Yup.string().required("Default model is required"),
       })
-    : buildDefaultValidationSchema().shape({
+    : Yup.object().shape({
+        name: Yup.string().required("Display Name is required"),
         provider: Yup.string().required("Provider Name is required"),
-        api_key: Yup.string(),
-        api_base: Yup.string(),
-        api_version: Yup.string(),
         model_configurations: Yup.array(modelConfigurationSchema),
-        custom_config_list: Yup.array(),
-        deployment_name: Yup.string().nullable(),
       });
 
   return (
@@ -341,7 +332,23 @@ export default function CustomModal({
           isTesting={isTesting}
         >
           {!isOnboarding && (
-            <DisplayNameField disabled={!!existingLlmProvider} />
+            <Section gap={0}>
+              <DisplayNameField disabled={!!existingLlmProvider} />
+
+              <FieldWrapper>
+                <InputLayouts.Vertical
+                  name="provider"
+                  title="Provider Name"
+                  subDescription="Should be one of the providers listed at https://docs.litellm.ai/docs/providers."
+                >
+                  <InputTypeInField
+                    name="provider"
+                    placeholder="Provider Name"
+                    variant={existingLlmProvider ? "disabled" : undefined}
+                  />
+                </InputLayouts.Vertical>
+              </FieldWrapper>
+            </Section>
           )}
 
           <FieldSeparator />
