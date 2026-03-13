@@ -34,6 +34,7 @@ import {
 } from "@/sections/modals/llmConfig/shared";
 import { fetchModels } from "@/app/admin/configuration/llm/utils";
 import debounce from "lodash/debounce";
+import { toast } from "@/hooks/useToast";
 
 const DEFAULT_API_BASE = "http://localhost:1234";
 
@@ -80,6 +81,7 @@ function LMStudioFormInternals({
       ).then((data) => {
         if (signal.aborted) return;
         if (data.error) {
+          toast.error(data.error);
           setFetchedModels([]);
           return;
         }

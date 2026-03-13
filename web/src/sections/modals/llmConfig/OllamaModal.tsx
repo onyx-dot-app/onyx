@@ -34,6 +34,7 @@ import { fetchOllamaModels } from "@/app/admin/configuration/llm/utils";
 import debounce from "lodash/debounce";
 import Tabs from "@/refresh-components/Tabs";
 import { Card } from "@opal/components";
+import { toast } from "@/hooks/useToast";
 
 const OLLAMA_PROVIDER_NAME = "ollama_chat";
 const DEFAULT_API_BASE = "http://127.0.0.1:11434";
@@ -77,7 +78,7 @@ function OllamaModalInternals({
       }).then((data) => {
         if (signal.aborted) return;
         if (data.error) {
-          console.error("Error fetching models:", data.error);
+          toast.error(data.error);
           setFetchedModels([]);
           return;
         }
