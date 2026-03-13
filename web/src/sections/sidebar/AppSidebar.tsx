@@ -72,6 +72,7 @@ import BuildModeIntroBackground from "@/app/craft/components/IntroBackground";
 import BuildModeIntroContent from "@/app/craft/components/IntroContent";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
 import { usePostHog } from "posthog-js/react";
+import { autoCapture, AutoCaptureAction } from "@/lib/analytics";
 import { motion, AnimatePresence } from "motion/react";
 import { Notification, NotificationType } from "@/interfaces/settings";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -527,7 +528,7 @@ const MemoizedAppSidebarInner = memo(
             icon={SvgDevKit}
             folded={folded}
             href={CRAFT_PATH}
-            onClick={() => posthog?.capture("clicked_craft_in_sidebar")}
+            {...autoCapture(AutoCaptureAction.CLICKED_CRAFT_IN_SIDEBAR)}
           >
             Craft
           </SidebarTab>

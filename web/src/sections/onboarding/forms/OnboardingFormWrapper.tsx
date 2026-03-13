@@ -2,7 +2,8 @@
 
 import React, { useState, useMemo, ReactNode } from "react";
 import {
-  trackLLMProviderConfigured,
+  track,
+  AnalyticsEvent,
   LLMProviderConfiguredSource,
 } from "@/lib/analytics";
 import { Form, Formik, FormikProps } from "formik";
@@ -268,7 +269,7 @@ export function OnboardingFormWrapper<T extends Record<string, any>>({
       }
     }
 
-    trackLLMProviderConfigured({
+    track(AnalyticsEvent.CONFIGURED_LLM_PROVIDER, {
       provider: isCustomProvider ? "custom" : llmDescriptor?.name ?? "",
       is_creation: true,
       source: LLMProviderConfiguredSource.CHAT_ONBOARDING,

@@ -13,7 +13,8 @@ import * as Yup from "yup";
 import isEqual from "lodash/isEqual";
 import { ScopedMutator } from "swr";
 import {
-  trackLLMProviderConfigured,
+  track,
+  AnalyticsEvent,
   LLMProviderConfiguredSource,
 } from "@/lib/analytics";
 
@@ -303,7 +304,7 @@ export const submitLLMProvider = async <T extends BaseLLMFormValues>({
     toast.success(successMsg);
   }
 
-  trackLLMProviderConfigured({
+  track(AnalyticsEvent.CONFIGURED_LLM_PROVIDER, {
     provider: providerName,
     is_creation: !existingLlmProvider,
     source: LLMProviderConfiguredSource.ADMIN_PAGE,
