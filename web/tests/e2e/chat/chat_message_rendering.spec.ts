@@ -459,7 +459,7 @@ for (const theme of THEMES) {
         );
       });
 
-      test.only("AI response with LaTeX math renders correctly", async ({
+      test("AI response with LaTeX math renders correctly", async ({
         page,
       }) => {
         await openChat(page);
