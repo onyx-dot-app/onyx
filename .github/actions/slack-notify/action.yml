@@ -36,8 +36,8 @@ runs:
         GITHUB_REF_NAME: ${{ github.ref_name }}
       run: |
         if [ -z "$SLACK_WEBHOOK_URL" ]; then
-          echo "webhook-url input or SLACK_WEBHOOK_URL env var is not set, skipping notification"
-          exit 0
+          echo "::error::SLACK_WEBHOOK_URL is not configured."
+          exit 1
         fi
 
         # Build workflow URL
@@ -51,6 +51,14 @@ runs:
         if [ -z "$DETAILS" ]; then
           DETAILS="$FAILED_JOBS"
         fi
+
+        normalize_multiline() {
+          printf '%s' "$1" | awk 'BEGIN { ORS=""; first=1 } { if (!first) printf "\\n"; printf "%s", $0; first=0 }'
+        }
+
+        DETAILS="$(normalize_multiline "$DETAILS")"
+        REF_NAME="$(normalize_multiline "$REF_NAME")"
+        TITLE="$(normalize_multiline "$TITLE")"
 
         # Escape JSON special characters
         escape_json() {

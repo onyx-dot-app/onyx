@@ -138,7 +138,7 @@ jobs:
           fi
 
           if [ "${exit_code}" -eq 0 ]; then
-            pr_url="$(grep -Eo 'https://github.com/[^[:space:]]+/pull/[0-9]+' "$output_file" | tail -n 1)"
+            pr_url="$(sed -n 's/^.*PR created successfully: \(https:\/\/github\.com\/[^[:space:]]\+\/pull\/[0-9]\+\).*$/\1/p' "$output_file" | tail -n 1)"
             echo "status=success" >> "$GITHUB_OUTPUT"
             if [ -n "${pr_url}" ]; then
               echo "pr_url=${pr_url}" >> "$GITHUB_OUTPUT"
