@@ -99,6 +99,7 @@ jobs:
       contents: write
       pull-requests: write
     outputs:
+      cherry_pick_pr_url: ${{ steps.run_cherry_pick.outputs.pr_url }}
       cherry_pick_reason: ${{ steps.run_cherry_pick.outputs.reason }}
       cherry_pick_details: ${{ steps.run_cherry_pick.outputs.details }}
     runs-on: ubuntu-latest
@@ -146,7 +147,11 @@ jobs:
           fi
 
           if [ "${exit_code}" -eq 0 ]; then
+            pr_url="$(sed -n 's/^.*PR created successfully: \(https:\/\/github\.com\/[^[:space:]]\+\/pull\/[0-9]\+\).*$/\1/p' "$output_file" | tail -n 1)"
             echo "status=success" >> "$GITHUB_OUTPUT"
+            if [ -n "${pr_url}" ]; then
+              echo "pr_url=${pr_url}" >> "$GITHUB_OUTPUT"
+            fi
             exit 0
           fi
 
@@ -171,6 +176,54 @@ jobs:
         run: |
           echo "::error::Automated cherry-pick failed (${CHERRY_PICK_REASON})."
           exit 1
+
+  notify-slack-on-cherry-pick-success:
+    needs:
+      - resolve-cherry-pick-request
+      - cherry-pick-to-latest-release
+    if: needs.resolve-cherry-pick-request.outputs.should_cherrypick == 'true' && needs.resolve-cherry-pick-request.result == 'success' && needs.cherry-pick-to-latest-release.result == 'success'
+    runs-on: ubuntu-slim
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Fail if Slack webhook secret is missing
+        env:
+          CHERRY_PICK_PRS_WEBHOOK: ${{ secrets.CHERRY_PICK_PRS_WEBHOOK }}
+        run: |
+          if [ -z "${CHERRY_PICK_PRS_WEBHOOK}" ]; then
+            echo "::error::CHERRY_PICK_PRS_WEBHOOK is not configured."
+            exit 1
+          fi
+
+      - name: Build cherry-pick success summary
+        id: success-summary
+        env:
+          SOURCE_PR_NUMBER: ${{ needs.resolve-cherry-pick-request.outputs.pr_number }}
+          MERGE_COMMIT_SHA: ${{ needs.resolve-cherry-pick-request.outputs.merge_commit_sha }}
+          CHERRY_PICK_PR_URL: ${{ needs.cherry-pick-to-latest-release.outputs.cherry_pick_pr_url }}
+        run: |
+          source_pr_url="https://github.com/${GITHUB_REPOSITORY}/pull/${SOURCE_PR_NUMBER}"
+          details="*Cherry-pick PR opened successfully.*\\n• source PR: ${source_pr_url}"
+          if [ -n "${CHERRY_PICK_PR_URL}" ]; then
+            details="${details}\\n• cherry-pick PR: ${CHERRY_PICK_PR_URL}"
+          fi
+          if [ -n "${MERGE_COMMIT_SHA}" ]; then
+            details="${details}\\n• merge SHA: ${MERGE_COMMIT_SHA}"
+          fi
+
+          echo "details=${details}" >> "$GITHUB_OUTPUT"
+
+      - name: Notify #cherry-pick-prs about cherry-pick success
+        uses: ./.github/actions/slack-notify
+        with:
+          webhook-url: ${{ secrets.CHERRY_PICK_PRS_WEBHOOK }}
+          details: ${{ steps.success-summary.outputs.details }}
+          title: "✅ Automated Cherry-Pick PR Opened"
+          ref-name: ${{ github.event.pull_request.base.ref }}
 
   notify-slack-on-cherry-pick-failure:
     needs:
@@ -236,6 +289,6 @@ jobs:
         uses: ./.github/actions/slack-notify
         with:
           webhook-url: ${{ secrets.CHERRY_PICK_PRS_WEBHOOK }}
-          failed-jobs: ${{ steps.failure-summary.outputs.jobs }}
+          details: ${{ steps.failure-summary.outputs.jobs }}
           title: "🚨 Automated Cherry-Pick Failed"
           ref-name: ${{ github.event.pull_request.base.ref }}
