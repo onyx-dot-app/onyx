@@ -29,9 +29,6 @@ export class UsersAdminPage {
   readonly paginationSummary: Locator;
   readonly downloadCsvButton: Locator;
 
-  /** Locator for the currently-open Radix popover content. */
-  readonly popover: Locator;
-
   constructor(page: Page) {
     this.page = page;
     this.inviteButton = page.getByRole("button", { name: "Invite Users" });
@@ -50,7 +47,19 @@ export class UsersAdminPage {
     this.downloadCsvButton = page.getByRole("button", {
       name: "Download CSV",
     });
-    this.popover = page.locator("[data-radix-popper-content-wrapper]");
+  }
+
+  // ---------------------------------------------------------------------------
+  // Popover helper
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Returns a locator scoped to the first visible Radix popper wrapper.
+   * React StrictMode can duplicate these elements; `.first()` avoids
+   * strict-mode violations when interacting with popover content.
+   */
+  get popover(): Locator {
+    return this.page.locator("[data-radix-popper-content-wrapper]").first();
   }
 
   // ---------------------------------------------------------------------------
@@ -98,7 +107,7 @@ export class UsersAdminPage {
   }
 
   async selectAccountType(label: string) {
-    await this.popover.getByText(label, { exact: false }).click();
+    await this.popover.getByText(label, { exact: false }).first().click();
   }
 
   async openStatusFilter() {
@@ -107,7 +116,7 @@ export class UsersAdminPage {
   }
 
   async selectStatus(label: string) {
-    await this.popover.getByText(label, { exact: false }).click();
+    await this.popover.getByText(label, { exact: false }).first().click();
   }
 
   async openGroupsFilter() {
@@ -116,7 +125,7 @@ export class UsersAdminPage {
   }
 
   async selectGroup(label: string) {
-    await this.popover.getByText(label, { exact: false }).click();
+    await this.popover.getByText(label, { exact: false }).first().click();
   }
 
   async closePopover() {
@@ -161,6 +170,19 @@ export class UsersAdminPage {
   }
 
   // ---------------------------------------------------------------------------
+  // Pagination
+  // ---------------------------------------------------------------------------
+
+  /** Click a numbered page button in the table footer. */
+  async goToPage(pageNumber: number) {
+    const footer = this.page.locator(".table-footer");
+    await footer
+      .getByRole("button")
+      .filter({ hasText: String(pageNumber) })
+      .click();
+  }
+
+  // ---------------------------------------------------------------------------
   // Row actions
   // ---------------------------------------------------------------------------
 
@@ -172,7 +194,7 @@ export class UsersAdminPage {
   }
 
   async clickRowAction(actionName: string) {
-    await this.popover.getByText(actionName).click();
+    await this.popover.getByText(actionName).first().click();
   }
 
   // ---------------------------------------------------------------------------
@@ -184,11 +206,11 @@ export class UsersAdminPage {
   }
 
   async confirmModalAction(buttonName: string) {
-    await this.dialog.getByRole("button", { name: buttonName }).click();
+    await this.dialog.getByRole("button", { name: buttonName }).first().click();
   }
 
   async cancelModal() {
-    await this.dialog.getByRole("button", { name: "Cancel" }).click();
+    await this.dialog.getByRole("button", { name: "Cancel" }).first().click();
   }
 
   async expectToast(message: string | RegExp) {
@@ -208,7 +230,8 @@ export class UsersAdminPage {
     const input = this.dialog.getByPlaceholder(
       "Add emails to invite, comma separated"
     );
-    await input.fill(email + ",");
+    await input.pressSequentially(email, { delay: 20 });
+    await input.press("Enter");
     // Wait for the chip to appear in the dialog
     await expect(this.dialog.getByText(email)).toBeVisible();
   }
@@ -231,7 +254,7 @@ export class UsersAdminPage {
   }
 
   async selectRole(roleName: string) {
-    await this.popover.last().getByText(roleName).click();
+    await this.popover.getByText(roleName).first().click();
     await this.waitForTableRefresh();
   }
 
