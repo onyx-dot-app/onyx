@@ -141,6 +141,5 @@ export async function downloadUsersCsv(): Promise<void> {
   const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
   a.download = `onyx_users_${ts}.csv`;
   a.click();
-  // Defer revocation so Firefox has time to start the download
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  URL.revokeObjectURL(url);
 }
