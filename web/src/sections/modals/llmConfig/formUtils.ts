@@ -12,6 +12,10 @@ import { toast } from "@/hooks/useToast";
 import * as Yup from "yup";
 import isEqual from "lodash/isEqual";
 import { ScopedMutator } from "swr";
+import {
+  trackLLMProviderConfigured,
+  LLMProviderConfiguredSource,
+} from "@/lib/analytics";
 
 // Common class names for the Form component across all LLM provider forms
 export const LLM_FORM_CLASS_NAME = "flex flex-col gap-y-4 items-stretch mt-6";
@@ -298,6 +302,12 @@ export const submitLLMProvider = async <T extends BaseLLMFormValues>({
       : "Provider enabled successfully!";
     toast.success(successMsg);
   }
+
+  trackLLMProviderConfigured({
+    provider: providerName,
+    is_creation: !existingLlmProvider,
+    source: LLMProviderConfiguredSource.ADMIN_PAGE,
+  });
 
   setSubmitting(false);
 };

@@ -1,6 +1,10 @@
 "use client";
 
 import React, { useState, useMemo, ReactNode } from "react";
+import {
+  trackLLMProviderConfigured,
+  LLMProviderConfiguredSource,
+} from "@/lib/analytics";
 import { Form, Formik, FormikProps } from "formik";
 import * as Yup from "yup";
 import ProviderModal from "@/components/modals/ProviderModal";
@@ -263,6 +267,12 @@ export function OnboardingFormWrapper<T extends Record<string, any>>({
         console.error("Failed to set new provider as default", _e);
       }
     }
+
+    trackLLMProviderConfigured({
+      provider: isCustomProvider ? "custom" : llmDescriptor?.name ?? "",
+      is_creation: true,
+      source: LLMProviderConfiguredSource.CHAT_ONBOARDING,
+    });
 
     // Update onboarding state
     onboardingActions?.updateData({

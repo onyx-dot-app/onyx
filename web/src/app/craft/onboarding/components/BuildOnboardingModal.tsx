@@ -2,6 +2,10 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { usePostHog } from "posthog-js/react";
+import {
+  trackLLMProviderConfigured,
+  LLMProviderConfiguredSource,
+} from "@/lib/analytics";
 import { SvgArrowRight, SvgArrowLeft, SvgX } from "@opal/icons";
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
@@ -281,6 +285,12 @@ export default function BuildOnboardingModal({
         providerName: providerName,
         provider: currentProviderConfig.providerName,
         modelName: selectedModel,
+      });
+
+      trackLLMProviderConfigured({
+        provider: currentProviderConfig.providerName,
+        is_creation: true,
+        source: LLMProviderConfiguredSource.CRAFT_ONBOARDING,
       });
 
       setConnectionStatus("success");
