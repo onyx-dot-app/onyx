@@ -134,7 +134,7 @@ const collections = (
               sidebarItem(ADMIN_PATHS.WEB_SEARCH),
               sidebarItem(ADMIN_PATHS.IMAGE_GENERATION),
               {
-                name: "Voice",
+                name: "Voice Mode",
                 icon: SvgAudio,
                 link: "/admin/configuration/voice",
               },

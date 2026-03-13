@@ -977,7 +977,7 @@ function ChatPreferencesSettings() {
 
       <Section gap={0.75}>
         <Content
-          title="Voice"
+          title="Voice Mode"
           sizePreset="main-content"
           variant="section"
           widthVariant="full"

@@ -79,7 +79,7 @@ interface SelectedConnectorState {
 }
 
 /**
- * Build Admin Panel - Connector configuration page
+ * Build Admin Settings - Connector configuration page
  *
  * Renders in the center panel area (replacing ChatPanel + OutputPanel).
  * Uses SettingsLayouts like AgentEditorPage does.

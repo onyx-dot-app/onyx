@@ -649,9 +649,9 @@ const AppInputBar = React.memo(
               <Disabled disabled>
                 <Button
                   icon={SvgMicrophone}
-                  aria-label="Set up voice"
+                  aria-label="Configure Voice Mode"
                   prominence="tertiary"
-                  tooltip="Voice not configured. Set up in admin settings."
+                  tooltip="Configure Voice Mode in Admin Settings."
                 />
               </Disabled>
             ))}

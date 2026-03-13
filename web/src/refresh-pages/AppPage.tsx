@@ -766,6 +766,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     {(appFocus.isNewSession() || appFocus.isAgent()) &&
                       (state.phase === "idle" ||
                         state.phase === "classifying") &&
+                      !isLoadingOnboarding &&
                       (showOnboarding || !user?.personalization?.name) &&
                       !onboardingDismissed && (
                         <OnboardingFlow

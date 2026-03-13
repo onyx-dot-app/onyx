@@ -957,7 +957,7 @@ ENTERPRISE_EDITION_ENABLED = (
 #####
 # Image Generation Configuration (DEPRECATED)
 # These environment variables will be deprecated soon.
-# To configure image generation, please visit the Image Generation page in the Admin Panel.
+# To configure image generation, please visit the Image Generation page in the Admin Settings.
 #####
 # Azure Image Configurations
 AZURE_IMAGE_API_VERSION = os.environ.get("AZURE_IMAGE_API_VERSION") or os.environ.get(
