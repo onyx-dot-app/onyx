@@ -265,7 +265,7 @@ export function ModelsAccessField<T extends BaseLLMFormValues>({
               leftSearchIcon
             />
 
-            <Card backgroundVariant="light" borderVariant="none">
+            <Card backgroundVariant="heavy" borderVariant="none">
               <ContentAction
                 icon={SvgUserManage}
                 title="Admin"
@@ -289,7 +289,7 @@ export function ModelsAccessField<T extends BaseLLMFormValues>({
                   const memberCount = group?.users.length ?? 0;
                   return (
                     <div key={`group-${id}`} className="min-w-0">
-                      <Card backgroundVariant="light" borderVariant="none">
+                      <Card backgroundVariant="heavy" borderVariant="none">
                         <ContentAction
                           icon={SvgUsers}
                           title={group?.name ?? `Group ${id}`}
@@ -316,7 +316,7 @@ export function ModelsAccessField<T extends BaseLLMFormValues>({
               </div>
             )}
 
-            {selectedGroupIds.length > 0 && <FieldSeparator />}
+            <FieldSeparator />
 
             {selectedAgentIds.length > 0 ? (
               <div className="grid grid-cols-2 gap-1 w-full">
@@ -324,7 +324,7 @@ export function ModelsAccessField<T extends BaseLLMFormValues>({
                   const agent = agentMap.get(id);
                   return (
                     <div key={`agent-${id}`} className="min-w-0">
-                      <Card backgroundVariant="light" borderVariant="none">
+                      <Card backgroundVariant="heavy" borderVariant="none">
                         <ContentAction
                           icon={
                             agent
